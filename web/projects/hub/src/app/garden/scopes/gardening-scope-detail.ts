@@ -1,15 +1,15 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
-import { errorMessage, injectPendingMutationVariables, restingAsyncState, type KitAsyncStateValue, type ScopeView } from 'fleet';
+import { errorMessage, injectPendingMutationVariables, isPendingFor, restingAsyncState, type KitAsyncStateValue, type ScopeView } from 'fleet';
 import { FleetScopePanel, type RelatedRoutineVm, type ScopePanelVm } from './scope-panel';
 import { relatedRoutineRows, scopeBySlug, scopeOverrideRetired, scopePanelVm } from './gardening-scope-detail.model';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
-import { injectEditScopeMutation } from './scope-edit.mutations';
+import { injectEditScopeMutation, type ScopeEditVars } from './scope-edit.mutations';
 import { injectHubRoutinesQuery } from '../core/routines.query';
 import { injectHubScopeRoutinesQuery, injectHubScopesQuery } from '../core/scopes.query';
 import { injectScopeLifecycleMutation, type ScopeLifecycleVars } from './scope-lifecycle.mutations';
-import { scopeLifecycleMutationKey } from '../../core/mutation-keys';
+import { editScopeMutationKey, scopeLifecycleMutationKey } from '../../core/mutation-keys';
 import { type ScopeDescriptionEditEvent } from './scope-list';
 import { map } from 'rxjs';
 
@@ -57,6 +57,9 @@ export class GardeningScopeDetail {
    * override while Retire is pending…" and "renders the enabled override while Enable
    * is pending…". */
   private readonly pendingScopeLifecycle = injectPendingMutationVariables<ScopeLifecycleVars>(scopeLifecycleMutationKey);
+
+  /** Every scope slug a description edit is currently pending for. */
+  private readonly pendingScopeEdits = injectPendingMutationVariables<ScopeEditVars>(editScopeMutationKey);
 
   private readonly scopes = computed<readonly ScopeView[]>(() => this.scopesQuery.data() ?? []);
 
@@ -116,16 +119,20 @@ export class GardeningScopeDetail {
   /** Set on a failed edit/retire/enable; cleared at the start of the next attempt. */
   protected readonly scopeActionError = signal<string | null>(null);
 
-  /** Whether the edit-description mutation is in flight for this scope, threaded to
-   * {@link FleetScopePanel}'s Set button (`graph-detail.ts`'s own `.isPending()`
-   * shape, transliterated to scopes). */
-  protected readonly editPending = computed(() => this.editScopeMutation.isPending());
+  /** Whether a description edit is in flight for the selected scope, threaded to
+   * {@link FleetScopePanel}'s Set button — scoped to the selected slug, since this
+   * detail persists across a scope-to-scope nav. */
+  protected readonly editPending = computed(() =>
+    isPendingFor(this.pendingScopeEdits(), (v) => v.slug === this.selectedScope()?.slug),
+  );
 
-  /** Whether the retire/enable mutation is in flight for this scope, threaded to
+  /** Whether a retire/enable is in flight for the selected scope, threaded to
    * {@link FleetScopePanel}'s Re-enable/Retire buttons — only one of the two is ever
    * shown for the scope's current lifecycle state, so disabling both while either is
    * in flight is correct. */
-  protected readonly lifecyclePending = computed(() => this.scopeLifecycleMutation.isPending());
+  protected readonly lifecyclePending = computed(() =>
+    isPendingFor(this.pendingScopeLifecycle(), (v) => v.slug === this.selectedScope()?.slug),
+  );
 
   protected onEditScopeDescription(event: ScopeDescriptionEditEvent): void {
     this.scopeActionError.set(null);

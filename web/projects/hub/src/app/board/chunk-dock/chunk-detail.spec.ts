@@ -23,6 +23,9 @@ const ROUTED_DETAIL: ChunkDetailModel = {
   route: { runner_id: 'rn_01', workspace_id: 'ws_01', environment_ids: [] },
 };
 
+// A second routed chunk, so a selection change can land on another chunk carrying Detach.
+const ROUTED_B_DETAIL: ChunkDetailModel = { ...ROUTED_DETAIL, chunk_id: 'ch_routed_b' };
+
 const GATE_DETAIL: ChunkDetailModel = {
   chunk_id: 'ch_gate',
   graph_id: 'gr_1',
@@ -182,6 +185,7 @@ describe('ChunkDetail container', () => {
       if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
       if (method === 'GET' && path === '/api/chunks/ch_gate') return GATE_DETAIL;
       if (method === 'GET' && path === '/api/chunks/ch_routed') return ROUTED_DETAIL;
+      if (method === 'GET' && path === '/api/chunks/ch_routed_b') return ROUTED_B_DETAIL;
       if (method === 'GET' && path === '/api/chunks/ch_paused') return PAUSED_ASKING_DETAIL;
       if (method === 'GET' && path === '/api/chunks/ch_ready') return NOT_READY_DETAIL;
       if (method === 'GET' && path === '/api/chunks/ch_deletable') return DELETABLE_DETAIL;
@@ -746,6 +750,82 @@ describe('ChunkDetail container', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     fixture.detectChanges();
     expect(document.body.querySelector('[data-testid="detach-chunk"]')?.getAttribute('aria-disabled')).toBe('true');
+
+    resolveInvalidate();
+    await settle(fixture);
+  });
+
+  // --- Per-chunk pending scope -----------------------------------------------
+  //
+  // The dock stays mounted across selection changes, so a pending flag is scoped to the
+  // open chunk: an action held on chunk A leaves chunk B's control enabled, and A's
+  // control is still disabled when A is re-selected.
+
+  async function tick(fixture: ReturnType<typeof TestBed.createComponent<ChunkDetail>>): Promise<void> {
+    for (let i = 0; i < 3; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      fixture.detectChanges();
+    }
+  }
+
+  it('scopes a pending Pause to its own chunk across a selection change', async () => {
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_routed');
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+    const queryClient = TestBed.inject(QueryClient);
+    let resolveInvalidate!: () => void;
+    vi.spyOn(queryClient, 'invalidateQueries').mockReturnValue(
+      new Promise<void>((resolve) => (resolveInvalidate = resolve)),
+    );
+
+    el.querySelector<HTMLButtonElement>('[data-testid="pause-chunk"]')?.click();
+    await confirmAction(fixture);
+    await tick(fixture);
+    expect(el.querySelector<HTMLButtonElement>('[data-testid="pause-chunk"]')?.disabled).toBe(true);
+
+    fixture.componentRef.setInput('chunkId', 'ch_gate');
+    await tick(fixture);
+    expect(el.querySelector('[data-testid="detail-status"]')?.textContent?.trim()).toBe('waiting_on_human');
+    expect(el.querySelector<HTMLButtonElement>('[data-testid="pause-chunk"]')?.disabled).toBe(false);
+
+    fixture.componentRef.setInput('chunkId', 'ch_routed');
+    await tick(fixture);
+    expect(el.querySelector<HTMLButtonElement>('[data-testid="pause-chunk"]')?.disabled).toBe(true);
+
+    resolveInvalidate();
+    await settle(fixture);
+  });
+
+  it('scopes a pending Detach to its own chunk across a selection change', async () => {
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_routed');
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+    const queryClient = TestBed.inject(QueryClient);
+    let resolveInvalidate!: () => void;
+    vi.spyOn(queryClient, 'invalidateQueries').mockReturnValue(
+      new Promise<void>((resolve) => (resolveInvalidate = resolve)),
+    );
+    const detachDisabled = async (): Promise<string | null | undefined> => {
+      el.querySelector<HTMLButtonElement>('[data-testid="chunk-actions-menu"]')?.click();
+      await tick(fixture);
+      const value = document.body.querySelector('[data-testid="detach-chunk"]')?.getAttribute('aria-disabled');
+      el.querySelector<HTMLButtonElement>('[data-testid="chunk-actions-menu"]')?.click();
+      await tick(fixture);
+      return value;
+    };
+    await clickMenuAction(fixture, 'detach-chunk');
+    await confirmAction(fixture);
+    await tick(fixture);
+
+    fixture.componentRef.setInput('chunkId', 'ch_routed_b');
+    await tick(fixture);
+    expect(await detachDisabled()).not.toBe('true');
+
+    fixture.componentRef.setInput('chunkId', 'ch_routed');
+    await tick(fixture);
+    expect(await detachDisabled()).toBe('true');
 
     resolveInvalidate();
     await settle(fixture);

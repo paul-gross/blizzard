@@ -11,6 +11,7 @@ export function injectPendingMutationVariables<TVars>(mutationKey: readonly unkn
   }));
 }
 
-export function isPendingFor<TVars>(pending: TVars[], predicate: (vars: TVars) => boolean): boolean {
+/** Whether any of `pending` satisfies `predicate` — the per-item scoping of a pending-variables list. */
+export function isPendingFor<TVars>(pending: readonly TVars[], predicate: (vars: TVars) => boolean): boolean {
   return pending.some(predicate);
 }

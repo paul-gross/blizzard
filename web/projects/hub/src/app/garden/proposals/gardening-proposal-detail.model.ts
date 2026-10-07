@@ -1,5 +1,6 @@
 import {
   asyncState,
+  isPendingFor,
   type AsyncStateQuery,
   type FindingView,
   type GardenProposalClosureView,
@@ -123,6 +124,6 @@ export function proposalEvidenceRows(
     state: f.state,
     exit: f.exit ?? null,
     workItem,
-    pending: pendingTriage.some((vars) => vars.findingIds.includes(f.finding_id)),
+    pending: isPendingFor(pendingTriage, (vars) => vars.findingIds.includes(f.finding_id)),
   }));
 }

@@ -1,21 +1,30 @@
 import { ChangeDetectionStrategy, Component, computed, effect, input, output, signal } from '@angular/core';
 
-import { type ChunkDetail as ChunkDetailAggregate, type ChunkStatus, injectHubChunkDetailQuery, injectHubChunkWorkItemsQuery, errorMessage, KitAsyncState, type KitAsyncStateValue, injectPendingMutationVariables, asyncState, type WorkItemsState, type AnswerQuestionEvent, type EditGraphEvent, type ResolveDecisionEvent } from 'fleet';
+import { type ChunkDetail as ChunkDetailAggregate, type ChunkStatus, injectHubChunkDetailQuery, injectHubChunkWorkItemsQuery, errorMessage, KitAsyncState, type KitAsyncStateValue, injectPendingMutationVariables, isPendingFor, asyncState, type WorkItemsState, type AnswerQuestionEvent, type EditGraphEvent, type ResolveDecisionEvent } from 'fleet';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { injectCompleteChunkMutation, type CompleteVars } from '../chunks/complete.mutations';
-import { injectDeleteChunkMutation } from '../chunks/delete.mutations';
-import { injectDetachChunkMutation } from '../chunks/detach.mutations';
-import { injectSetChunkGraphMutation } from '../chunks/edit.mutations';
+import { type DeleteVars, injectDeleteChunkMutation } from '../chunks/delete.mutations';
+import { type DetachVars, injectDetachChunkMutation } from '../chunks/detach.mutations';
+import { type ChunkGraphEditVars, injectSetChunkGraphMutation } from '../chunks/edit.mutations';
 import {
   type AnswerFailure,
   type AnswerVars,
+  type ResolveVars,
   injectAnswerQuestionMutation,
   injectResolveDecisionMutation,
   readAnswerFailure,
   readDecisionFailure,
 } from '../chunks/human.mutations';
 import { injectChunkPauseMutation, type ChunkPauseVars } from '../chunks/pause.mutations';
-import { answerQuestionMutationKey, chunkCompleteMutationKey, chunkPauseMutationKey } from '../../core/mutation-keys';
+import {
+  answerQuestionMutationKey,
+  chunkCompleteMutationKey,
+  chunkDeleteMutationKey,
+  chunkDetachMutationKey,
+  chunkPauseMutationKey,
+  chunkSetGraphMutationKey,
+  resolveDecisionMutationKey,
+} from '../../core/mutation-keys';
 import { openDetail, openWorkItems, pendingQuestionIds, pendingStatusOverride } from './chunk-detail.model';
 import { ChunkDetailPanel } from './chunk-detail-panel';
 
@@ -87,30 +96,52 @@ export class ChunkDetail {
   /** Whether the current identity may resolve an open gate decision (`gate:resolve`). */
   protected readonly canResolve = computed(() => hasPermission(this.meQuery.data(), 'gate:resolve'));
 
-  /** Whether the pause/resume mutation is in flight for this chunk — read straight off
-   * the mutation's own `.isPending()` and threaded to the header's Pause/Resume button,
-   * so a double click cannot fire the request twice while the first still settles. This
-   * dock shows exactly one chunk at a time, so there is no sibling row to distinguish
-   * pending mutations by variables — a plain `.isPending()` read is the whole answer. */
-  protected readonly pausePending = computed(() => this.pauseMutation.isPending());
+  /** Every chunk id a Detach mutation is currently pending for, with its variables
+   * (`bzh:frontend-pending-override`). */
+  private readonly pendingChunkDetaches = injectPendingMutationVariables<DetachVars>(chunkDetachMutationKey);
 
-  /** Whether the detach mutation is in flight for this chunk, threaded to the header's
-   * Detach menu item. */
-  protected readonly detachPending = computed(() => this.detachMutation.isPending());
+  /** The same, for Delete. */
+  private readonly pendingChunkDeletes = injectPendingMutationVariables<DeleteVars>(chunkDeleteMutationKey);
 
-  /** Whether the complete mutation is in flight for this chunk, threaded to the header's
+  /** The same, for Resolve decision. */
+  private readonly pendingResolves = injectPendingMutationVariables<ResolveVars>(resolveDecisionMutationKey);
+
+  /** The same, for Set graph. */
+  private readonly pendingGraphEdits = injectPendingMutationVariables<ChunkGraphEditVars>(chunkSetGraphMutationKey);
+
+  /** Whether a Pause/Resume is in flight for the open chunk, threaded to the header's
+   * Pause/Resume button. Scoped to `chunkId` because the dock stays mounted across a
+   * selection change: a pause fired on one chunk must not disable another's controls,
+   * and must still disable its own when that chunk is re-selected. */
+  protected readonly pausePending = computed(() =>
+    isPendingFor(this.pendingChunkPauses(), (v) => v.chunkId === this.chunkId()),
+  );
+
+  /** Whether a Detach is in flight for the open chunk, threaded to the header's Detach menu item. */
+  protected readonly detachPending = computed(() =>
+    isPendingFor(this.pendingChunkDetaches(), (v) => v.chunkId === this.chunkId()),
+  );
+
+  /** Whether a Complete is in flight for the open chunk, threaded to the header's
    * Complete menu item (combined there with {@link ChunkDetailHeader.completable}). */
-  protected readonly completePending = computed(() => this.completeMutation.isPending());
+  protected readonly completePending = computed(() =>
+    isPendingFor(this.pendingChunkCompletes(), (v) => v.chunkId === this.chunkId()),
+  );
 
-  /** Whether the delete mutation is in flight for this chunk, threaded to the header's
+  /** Whether a Delete is in flight for the open chunk, threaded to the header's
    * Delete menu item (combined there with {@link ChunkDetailHeader.deleteDisabled}). */
-  protected readonly deletePending = computed(() => this.deleteMutation.isPending());
+  protected readonly deletePending = computed(() =>
+    isPendingFor(this.pendingChunkDeletes(), (v) => v.chunkId === this.chunkId()),
+  );
+
+  /** Whether a Set graph is in flight for the open chunk. */
+  protected readonly graphPending = computed(() =>
+    isPendingFor(this.pendingGraphEdits(), (v) => v.chunkId === this.chunkId()),
+  );
 
   /** Every chunk id a Pause/Resume mutation is currently pending for, and its own
-   * variables — read through the shared helper (`bzh:frontend-pending-override`)
-   * rather than this component's own `pauseMutation.isPending()` alone, since the
-   * override below needs the fired *direction* (`paused: true` vs. `false`), not just
-   * pending-ness. */
+   * variables — read through the shared helper (`bzh:frontend-pending-override`), so
+   * the override below reads the fired *direction* (`paused: true` vs. `false`). */
   private readonly pendingChunkPauses = injectPendingMutationVariables<ChunkPauseVars>(chunkPauseMutationKey);
 
   /** The same, for Complete. */
@@ -144,9 +175,11 @@ export class ChunkDetail {
     return this.overrideStatus() ?? detail.status;
   }
 
-  /** Whether the resolve-decision mutation is in flight for this chunk, threaded to the
+  /** Whether a resolve-decision is in flight for the open chunk, threaded to the
    * awaiting-human gate's choice chips. */
-  protected readonly resolvePending = computed(() => this.resolveMutation.isPending());
+  protected readonly resolvePending = computed(() =>
+    isPendingFor(this.pendingResolves(), (v) => v.chunkId === this.chunkId()),
+  );
 
   /** The ids of the questions an answer mutation is in flight for, threaded to the
    * awaiting-human gate's option chips and Answer buttons. */

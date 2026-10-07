@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
-import { asyncState, errorMessage, injectPendingMutationVariables, type GraphSummaryView, type KitAsyncStateValue, type RoutineView } from 'fleet';
+import { asyncState, errorMessage, injectPendingMutationVariables, isPendingFor, type GraphSummaryView, type KitAsyncStateValue, type RoutineView } from 'fleet';
 import { defaultRoutineWindow } from '../core/routine-window';
 import { FleetRoutinePanel, type LastSweptRowVm, type MeasurementReadingVm, type RelatedScopeVm, type RoutinePanelVm, type StrategyStepVm } from './routine-panel';
 import {
@@ -204,10 +204,12 @@ export class GardeningRoutineDetail {
    * `GardeningScopeDetail.scopeActionError`'s own shape. */
   protected readonly lifecycleActionError = signal<string | null>(null);
 
-  /** Whether the retire/enable mutation is in flight for this routine, threaded to
+  /** Whether a retire/enable is in flight for the selected routine, threaded to
    * {@link FleetRoutinePanel}'s Re-enable/Retire buttons — only one of the two is ever
    * shown for the routine's current lifecycle state. */
-  protected readonly lifecyclePending = computed(() => this.routineLifecycleMutation.isPending());
+  protected readonly lifecyclePending = computed(() =>
+    isPendingFor(this.pendingRoutineLifecycle(), (v) => v.routineId === this.selectedRoutine()?.routine_id),
+  );
 
   protected onRetireRoutine(name: string): void {
     const routineId = this.routines().find((r) => r.name === name)?.routine_id;
