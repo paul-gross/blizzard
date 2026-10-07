@@ -341,6 +341,29 @@ def test_attach_an_accepted_proposal_is_409(tmp_path: Path) -> None:
     assert resp.status_code == 409, resp.text
 
 
+def test_attach_an_unknown_finding_id_on_a_closed_proposal_is_409(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _seed_scope(hub)
+    _seed_finding(hub, "fin_1")
+    _seed_proposal(hub, findings=["fin_1"], closed=True)
+
+    resp = hub.client.post("/api/garden-proposals/gprop_1/attach", json={"findings": ["fin_ghost"]})
+
+    assert resp.status_code == 409, resp.text
+
+
+def test_attach_an_unknown_finding_id_on_an_accepted_proposal_is_409(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _seed_scope(hub)
+    _seed_finding(hub, "fin_1")
+    _seed_proposal(hub, findings=["fin_1"])
+    hub.client.post("/api/garden-proposals/gprop_1/accept", json={"mint_work_item": False})
+
+    resp = hub.client.post("/api/garden-proposals/gprop_1/attach", json={"findings": ["fin_ghost"]})
+
+    assert resp.status_code == 409, resp.text
+
+
 def test_attach_an_unknown_finding_id_is_422_and_links_nothing(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _seed_scope(hub)
@@ -454,6 +477,29 @@ def test_detach_an_accepted_proposal_is_409(tmp_path: Path) -> None:
     hub.client.post("/api/garden-proposals/gprop_1/accept", json={"mint_work_item": False})
 
     resp = hub.client.post("/api/garden-proposals/gprop_1/detach", json={"findings": ["fin_1"]})
+
+    assert resp.status_code == 409, resp.text
+
+
+def test_detach_an_unknown_finding_id_on_a_closed_proposal_is_409(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _seed_scope(hub)
+    _seed_finding(hub, "fin_1")
+    _seed_proposal(hub, findings=["fin_1"], closed=True)
+
+    resp = hub.client.post("/api/garden-proposals/gprop_1/detach", json={"findings": ["fin_ghost"]})
+
+    assert resp.status_code == 409, resp.text
+
+
+def test_detach_an_unknown_finding_id_on_an_accepted_proposal_is_409(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _seed_scope(hub)
+    _seed_finding(hub, "fin_1")
+    _seed_proposal(hub, findings=["fin_1"])
+    hub.client.post("/api/garden-proposals/gprop_1/accept", json={"mint_work_item": False})
+
+    resp = hub.client.post("/api/garden-proposals/gprop_1/detach", json={"findings": ["fin_ghost"]})
 
     assert resp.status_code == 409, resp.text
 
