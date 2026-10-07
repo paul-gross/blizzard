@@ -42,7 +42,7 @@ from blizzard.runner.lifecycle.takeover import (
     TakeoverOpenScope,
     TakeoverService,
 )
-from blizzard.runner.loop.steps import Advance, Fill, Reap
+from blizzard.runner.loop.steps import Advance, Fill, Pull, Reap, Resume
 from blizzard.runner.node_steps.chunk_state import ChunkState
 from tests.runner_fakes import (
     FakeHarness,
@@ -422,7 +422,7 @@ def test_forced_takeover_orders_fact_before_kill_fences_the_epoch_and_consumes_n
     # No escalation recorded: a live worker attempt under takeover is superseded, not
     # failed, so the lease is not closed at all.
     assert store.open_escalations() == []
-    assert store.lease("lease_1") is not None
+    assert store.active_lease("lease_1") is not None
 
 
 def test_forced_takeover_refuses_a_lease_with_a_pending_submission(tmp_path) -> None:  # type: ignore[no-untyped-def]
@@ -656,41 +656,49 @@ def test_fill_reclaims_a_park_the_hub_superseded_even_under_an_open_takeover(tmp
     assert store.active_lease_for_chunk("ch_1") is not None
 
 
-def test_fill_adopts_a_restart_against_a_lease_the_escalation_already_closed(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """A restart against a lease an escalation already closed reaches this reconcile arm;
-    the adopt holds while the takeover stands open over the chunk and proceeds once it ends."""
+def _force_taken_over(store):  # type: ignore[no-untyped-def]
+    """An open forced takeover over an active lease, reached through the service's own verb."""
+    probe = FakeProbe(alive={(100, "start-100")})
+    _seed_lease(store, pid=100)
+    _service(store, probe=probe).open(_open_scope(store), force=True)
+    assert store.open_takeover_for_chunk("ch_1") is not None
+    return probe
+
+
+def test_pull_releases_the_environments_of_a_force_taken_chunk_the_hub_detached(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """Detach reconciliation takes no takeover skip: the route is gone, so the person's chunk is released."""
     store = _store(tmp_path)
-    _seed_lease(store)
-    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=_NOW)
-    store.set_route_token("ch_1", token="tok_x", at=_NOW)
-    store.record_takeover(
-        takeover_id="tko_1",
-        chunk_id="ch_1",
-        lease_id="lease_1",
-        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
-        workdir="/ws/e1",
-        fence_epoch=2,
-        opened_at=_NOW,
-    )
+    probe = _force_taken_over(store)
     hub = FakeHub()
-    hub.chunks["ch_1"] = ChunkState(
-        chunk_id="ch_1", status=ChunkStatus.RUNNING, latest_epoch=2, route_runner_id="r1", restart_epochs=[2]
+    hub.chunks["ch_1"] = ChunkState(chunk_id="ch_1", status=ChunkStatus.READY, latest_epoch=2, route_runner_id=None)
+    provider = FakeProvider({"e1": "/ws/e1"})
+    ctx = make_context(
+        store, hub=hub, provider=provider, harness=FakeHarness(handle=_HANDLE, verdict=None), probe=probe
     )
-    hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")], epoch=2)
-    hub.queue = []
+
+    Pull(ctx).run()
+
+    assert provider.released == ["e1"]
+    assert store.active_lease("lease_1") is None
+
+
+def test_resume_spawns_no_attempt_on_a_lease_a_force_taken_chunk_still_holds(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """A resume intent waits for the takeover to end rather than resuming a session a person holds."""
+    store = _store(tmp_path)
+    probe = _force_taken_over(store)
+    store.record_resume_intent(lease_id="lease_1", marked_at=_NOW)
+    hub = FakeHub()
+    hub.chunks["ch_1"] = ChunkState(chunk_id="ch_1", status=ChunkStatus.RUNNING, latest_epoch=1, route_runner_id="r1")
     harness = FakeHarness(handle=_HANDLE, verdict=None)
-    ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
+    ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=probe)
 
-    Fill(ctx).run()
+    Resume(ctx).run()
 
-    assert harness.spawns == []  # the person's workdir is not spawned into
-    assert store.active_lease_for_chunk("ch_1") is None
-
-    store.record_takeover_end(takeover_id="tko_1", ended_at=_NOW)
-    Fill(ctx).run()
-
-    assert len(harness.spawns) == 1  # adopted once the takeover ended
-    assert store.active_lease_for_chunk("ch_1") is not None
+    assert harness.spawns == []
+    assert harness.resumed == []
+    assert store.resume_intent_lease_ids() == {"lease_1"}  # the intent waits for the takeover to end
+    assert store.active_lease("lease_1") is not None
+    assert store.attempt_count("ch_1", "nd_build") == 1
 
 
 # The takeover reads the session's stamps.
