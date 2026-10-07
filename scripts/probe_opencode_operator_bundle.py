@@ -30,7 +30,7 @@ from blizzard.runner.harness.opencode.declaration import OPENCODE_DECLARATION
 from blizzard.runner.harness.opencode.section import OpenCodeSection
 from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.wiring import publish_harness_bundle
-from blizzard.runner.process.probe import LinuxProcessProbe
+from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from blizzard.wire.envelope import NodeConfig, NodeEnvelope
 from blizzard.wire.graph import SessionMode
 

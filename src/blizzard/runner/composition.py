@@ -46,7 +46,7 @@ from blizzard.runner.harness.wiring import (
     configured_tiers,
 )
 from blizzard.runner.hub.identity import ICurrentRunnerIdentity, RunnerIdentityHolder
-from blizzard.runner.process.probe import LinuxProcessProbe
+from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from blizzard.runner.runtime import migration_runner
 from blizzard.runner.store.errors import RunnerStoreConnections, RunnerStoreErrorFactory
 from blizzard.runner.store.internal.ask_store import AskStore

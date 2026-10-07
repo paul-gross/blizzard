@@ -121,7 +121,7 @@ _MOVED_HOMES = {
     "TranscriptUnavailable": "blizzard.foundation.transcripts",
     "TranscriptProvenance": "blizzard.foundation.transcripts",
     # ``IProcessProbe`` is left out: the leases domain declares its own narrower protocol by that name.
-    "LinuxProcessProbe": "blizzard.runner.process.probe",
+    "LinuxProcessProbe": "blizzard.runner.process.internal.linux_process_probe",
     "HarnessTelemetryPlan": "blizzard.runner.harness.harness_telemetry_plan",
     "HEARTBEAT_HOOK_COMMAND": "blizzard.runner.harness.worker_hooks",
     "SESSION_END_HOOK_COMMAND": "blizzard.runner.harness.worker_hooks",
@@ -715,6 +715,7 @@ def test_internal_check_admits_the_owner_and_public_imports(tmp_path: Path, impo
 
 _ADAPTER_PACKAGES = ("claude_code", "opencode")
 _PROCESS_PROBE_FILE = _RUNNER_DIR / "process" / "probe.py"
+_LINUX_PROCESS_PROBE_FILE = _RUNNER_DIR / "process" / "internal" / "linux_process_probe.py"
 
 
 def _adapter_breach(module: str, *, harness: str, in_harness: bool, own: str | None, may_name: bool) -> str | None:
@@ -843,12 +844,17 @@ def test_adapter_isolation_admits_wiring_roots_and_own_adapter(tmp_path: Path, i
 
 
 def test_the_process_probe_is_declared_under_runner_process() -> None:
-    """``IProcessProbe`` and ``LinuxProcessProbe`` live in ``runner/process/`` beside the
-    owned-process seam they extend, so a harness reaches the probe without importing
-    ``runner/loop``; :data:`_MOVED_HOMES` routes every import of the concrete probe there."""
-    tree = ast.parse(_PROCESS_PROBE_FILE.read_text(), filename=str(_PROCESS_PROBE_FILE))
-    declared = {node.name for node in tree.body if isinstance(node, ast.ClassDef)}
-    assert {"IProcessProbe", "LinuxProcessProbe"} <= declared
+    """``IProcessProbe`` lives in ``runner/process/`` beside the owned-process seam it extends,
+    so a harness reaches the probe without importing ``runner/loop``; the ``/proc`` driver
+    ``LinuxProcessProbe`` lives under ``runner/process/internal/``, and :data:`_MOVED_HOMES`
+    routes every import of it there."""
+
+    def declared(path: Path) -> set[str]:
+        tree = ast.parse(path.read_text(), filename=str(path))
+        return {node.name for node in tree.body if isinstance(node, ast.ClassDef)}
+
+    assert "IProcessProbe" in declared(_PROCESS_PROBE_FILE)
+    assert "LinuxProcessProbe" in declared(_LINUX_PROCESS_PROBE_FILE)
 
 
 _LOOP_DIR = _RUNNER_DIR / "loop"

@@ -30,7 +30,7 @@ from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryPlan
 from blizzard.runner.harness.opencode.section import OPENCODE_SECTION
 from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
-from blizzard.runner.process.probe import LinuxProcessProbe
+from blizzard.runner.process.probe import IProcessProbe
 
 #: The catalog order: Claude Code first, so it is the default harness whenever it is enabled.
 HARNESS_SECTION_KINDS: tuple[IHarnessSectionKind, ...] = (CLAUDE_CODE_SECTION, OPENCODE_SECTION)
@@ -170,7 +170,7 @@ def build_production_harness_registry(
     settings: HarnessSettings,
     *,
     executor: Executor,
-    process: LinuxProcessProbe,
+    process: IProcessProbe,
     bundle: BundleSnapshot | None = None,
     harness_telemetry: HarnessTelemetryPlan | None = None,
 ) -> HarnessRegistry:

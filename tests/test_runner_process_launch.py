@@ -21,7 +21,7 @@ import pytest
 
 import blizzard.runner.harness.process_launch as process_launch
 from blizzard.runner.harness.process_launch import LaunchedProcess, ProcessLauncher, _ensure_executable
-from blizzard.runner.process.probe import LinuxProcessProbe
+from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 
 
 def _is_alive(pid: int) -> bool:
@@ -84,7 +84,7 @@ def test_launch_forks_off_the_calling_thread_onto_a_persistent_one(
 _GRANDCHILD_LAUNCH_SCRIPT = """
 import sys
 sys.path.insert(0, {src!r})
-from blizzard.runner.process.probe import LinuxProcessProbe
+from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from blizzard.runner.harness.process_launch import ProcessLauncher
 from concurrent.futures import ThreadPoolExecutor
 import os, time

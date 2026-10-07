@@ -40,7 +40,7 @@ from blizzard.runner.harness.transcript import IHarnessTranscriptSource, NullTra
 from blizzard.runner.harness.usage import UsageKind, UsageLimit, UsageSample
 from blizzard.runner.harness.wiring import build_production_harness_registry
 from blizzard.runner.listeners import Listeners, Uds
-from blizzard.runner.process.probe import LinuxProcessProbe
+from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from blizzard.runner.selftest.checks import SelfTest
 from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessScratchGit
 from blizzard.runner.selftest.scratch_git import ScratchRepo
