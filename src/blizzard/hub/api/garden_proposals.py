@@ -37,6 +37,7 @@ from blizzard.hub.domain.garden.proposals.model import (
     GardenProposalFindingExitedError,
     GardenProposalFindingNotLinkedError,
     GardenProposalNoFindingsError,
+    GardenProposalVerb,
 )
 from blizzard.hub.domain.garden.proposals.resolution import resolve_proposal_findings
 from blizzard.hub.domain.graph.authoring import DefaultGraphRetired
@@ -97,6 +98,15 @@ def _get_or_404(proposal_id: str, services: HubServices) -> GardenProposal:
     if proposal is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown garden proposal {proposal_id}")
     return proposal
+
+
+def _require_open_for(verb: GardenProposalVerb, proposal: GardenProposal, services: HubServices) -> None:
+    """409 when `verb` is refused as closed — checked before any finding id is resolved,
+    since a closed proposal refuses every verb as closed ahead of any other refusal."""
+    try:
+        proposal.require_legal(verb, services.garden_proposal_closures.get(proposal.proposal_id))
+    except GardenProposalAlreadyClosed as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
 
 def _resolve_findings_or_422(finding_ids: list[str], services: HubServices) -> list[Finding]:
@@ -295,6 +305,7 @@ def attach_garden_proposal_findings(
     exited, or duplicate finding id, or one already linked to this proposal — the whole
     call is refused, nothing is linked."""
     proposal = _get_or_404(proposal_id, services)
+    _require_open_for(GardenProposalVerb.ATTACH, proposal, services)
     findings = _resolve_findings_or_422(request.findings, services)
     try:
         updated = services.garden_proposal_authoring.attach(proposal, findings)
@@ -324,6 +335,7 @@ def detach_garden_proposal_findings(
     origin while open. 404 unknown proposal, 409 already closed, 422 no finding id, an
     unknown or duplicate id, or one not linked to this proposal."""
     proposal = _get_or_404(proposal_id, services)
+    _require_open_for(GardenProposalVerb.DETACH, proposal, services)
     findings = _resolve_findings_or_422(request.findings, services)
     try:
         updated = services.garden_proposal_authoring.detach(proposal, findings)
