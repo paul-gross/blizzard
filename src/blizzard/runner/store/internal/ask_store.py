@@ -64,9 +64,15 @@ class AskStore:
     def open_asks(self) -> list[OpenAsk]:
         # An ask whose lease has closed is never open — a backstop independent of which
         # path writes the retiring `park_resumes` row.
-        stmt = select(asks).where(asks.c.lease_id.not_in(select(lease_closures.c.lease_id))).order_by(asks.c.id.desc())
-        forwarded = {str(r.question_id) for r in self._store.all(select(park_facts.c.question_id))}
-        answered = {str(r.question_id) for r in self._store.all(select(park_resumes.c.question_id))}
+        live = asks.c.lease_id.not_in(select(lease_closures.c.lease_id))
+        stmt = select(asks).where(live).order_by(asks.c.id.desc())
+        # Park rows are read only for the candidate asks, so the cost tracks the live fleet, not the
+        # deployment's history.
+        candidates = select(asks.c.question_id).where(live)
+        forwarded_stmt = select(park_facts.c.question_id).where(park_facts.c.question_id.in_(candidates))
+        answered_stmt = select(park_resumes.c.question_id).where(park_resumes.c.question_id.in_(candidates))
+        forwarded = {str(r.question_id) for r in self._store.all(forwarded_stmt)}
+        answered = {str(r.question_id) for r in self._store.all(answered_stmt)}
         return open_asks_of(
             [self._row_to_ask(r) for r in self._store.all(stmt)], forwarded=forwarded, answered=answered
         )
