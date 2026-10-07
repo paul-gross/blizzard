@@ -194,6 +194,44 @@ def test_events_feed_cap_keeps_the_newest_rows(tmp_path: Path) -> None:
     ]
 
 
+def test_a_filter_applies_before_the_limit_truncates(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    store = chunk_stores(hub.engine, hub.clock)
+    t0 = hub.clock.now()
+    with hub.engine.begin() as conn:
+        seed_graph(conn, "gr_1", at=t0)
+        seed_chunk(conn, "ch_a", graph_id="gr_1", at=t0)
+
+    store.events.record_event(
+        severity=EventLogSeverity.CRITICAL,
+        kind="worker-lost",
+        runner_id="r1",
+        chunk_id="ch_a",
+        lease_id=None,
+        node_name=None,
+        message="old-critical",
+        detail=None,
+        at=t0 + timedelta(seconds=1),
+    )
+    for sec in (2, 3, 4, 5):
+        store.events.record_event(
+            severity=EventLogSeverity.WARNING,
+            kind="attempt-failed",
+            runner_id="r1",
+            chunk_id="ch_a",
+            lease_id=None,
+            node_name=None,
+            message=f"warning-{sec}",
+            detail=None,
+            at=t0 + timedelta(seconds=sec),
+        )
+
+    # The critical row is older than every warning, so capping the unfiltered rows to one
+    # before filtering would keep only warning-5 and return nothing.
+    feed = _events(hub, severity="critical", limit=1)
+    assert [e["message"] for e in feed] == ["old-critical"]
+
+
 def test_limit_above_the_cap_is_refused(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     assert hub.client.get("/api/events", params={"limit": 200}).status_code == 200

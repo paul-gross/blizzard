@@ -459,6 +459,30 @@ def test_a_restart_during_an_outage_does_not_announce_it_again(tmp_path: Path) -
     assert _kinds(hub) == ["egress-write-failed", "egress-write-recovered"]
 
 
+def test_an_empty_pass_after_a_failure_announces_nothing_until_a_pass_places_files(tmp_path: Path) -> None:
+    hub, graph = _hub(tmp_path)
+    writer = InMemoryEgressWriter()
+    _anchored(hub, writer)
+    _closed_step(hub, graph, 1)
+    writer.fail = _IO
+    _sweep(hub, writer).sweep()
+    assert _kinds(hub) == ["egress-write-failed"]
+
+    # The held row is still inside a long settle window, so the next due pass writes nothing:
+    # an empty pass proves nothing about the directory and must not announce a recovery.
+    writer.fail = None
+    settling = _sweep(hub, writer, EgressConfig(directory=Path("unused"), settle_seconds=600, sweep_seconds=60))
+    hub.clock.advance(timedelta(seconds=60))
+    settling.sweep()
+    assert writer.batches == []
+    assert _kinds(hub) == ["egress-write-failed"]
+
+    hub.clock.advance(timedelta(seconds=600))
+    settling.sweep()
+    assert len(_rows(writer, "steps")) == 1
+    assert _kinds(hub) == ["egress-write-failed", "egress-write-recovered"]
+
+
 def test_a_failure_in_the_second_dataset_keeps_the_first_datasets_cursor_advanced(tmp_path: Path) -> None:
     hub, graph = _hub(tmp_path)
 

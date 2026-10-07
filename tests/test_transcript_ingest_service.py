@@ -283,6 +283,25 @@ def test_an_oversized_record_is_rejected_acked_and_advances_the_high_water(tmp_p
     assert entry.truncated is True
 
 
+def test_a_cap_rejected_seq_replayed_with_a_record_that_now_fits_still_reports_capped(tmp_path: Path) -> None:
+    """The recorded decision answers a replayed seq — the replay is never re-adjudicated, so a
+    record that would now fit under the cap does not turn a rejection into an apply."""
+    hub = build_hub(tmp_path)
+    _seed_chunk(hub)
+    store = TranscriptSegmentStore(hub_store_connections(hub.engine))
+    service = TranscriptIngestService(retired=_NO_RETIREMENTS, store=store, clock=hub.clock)
+    big = "x" * (RECORD_MAX_BYTES + 1)
+    service.ingest("r1", [_record(1, turn_range_start=0, turn_range_end=0, turns_json=big)])
+
+    replay = service.ingest("r1", [_record(1, turn_range_start=0, turn_range_end=0)])
+
+    assert replay.capped == [1]
+    assert replay.applied == []
+    [content] = store.records_for_segment("ch_1", "sg_1")
+    assert content.rejected is True
+    assert content.turns_json == "[]"
+
+
 def test_the_three_caps_are_the_magnitudes_that_govern_today() -> None:
     """Every cap-behavior test below monkeypatches these to tens of bytes, so the shipped
     magnitudes — 10 MB a record (the backstop, not the epic's 4 MB), 64 MB, 2 GB — pin here."""

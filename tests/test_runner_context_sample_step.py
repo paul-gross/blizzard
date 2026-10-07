@@ -162,6 +162,28 @@ def test_crossing_the_line_warns_exactly_once_while_sampling_continues(tmp_path)
 
 
 @pytest.mark.unit
+def test_a_second_lease_on_the_same_session_and_chunk_warns_again(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """The crossing is remembered per lease: a later lease resuming the same session on the same
+    chunk has not yet reported its own crossing, so it warns once in its own right."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    clock = FixedClock(_NOW)
+    ctx, _ = _ctx(store, tokens=420_000, clock=clock)
+
+    ContextSample(ctx).run()
+    assert [w["lease_id"] for w in _warnings(store)] == ["lease_1"]
+
+    _seed_running_lease(store, lease_id="lease_2")
+    clock.advance(timedelta(seconds=120))
+    ContextSample(ctx).run()
+
+    warnings = _warnings(store)
+    assert [w["lease_id"] for w in warnings] == ["lease_1", "lease_2"]
+    assert warnings[1]["chunk_id"] == "ch_1"
+    assert warnings[1]["detail"]["session_id"] == _SESSION
+
+
+@pytest.mark.unit
 def test_the_cadence_gate_holds_a_second_read_inside_the_interval(tmp_path) -> None:  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     _seed_running_lease(store)

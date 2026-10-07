@@ -136,3 +136,12 @@ def test_a_scope_re_derive_excludes_an_unresolvable_pin_candidate_from_derived(t
     outcome = service.re_derive(ReDeriveScope(), limit=10)
 
     assert outcome.derived == 1
+
+
+def test_a_re_derive_naming_an_unknown_chunk_derives_nothing(tmp_path: Path) -> None:
+    hub, _chunk_id = _hub_with_one_segment(tmp_path)
+
+    resp = hub.client.post("/api/analytics/re-derive", json={"chunk_id": "ch_unknown"})
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {"derived": 0, "remaining": 0, "not_visible": False}
