@@ -2,8 +2,8 @@
 
 Reuses the acceptance loop's live-stack scaffolding with a low
 ``annotation_interval_seconds``. Covers: ingested -> in-progress -> cleared on done; a
-stopped chunk's marker clearing; a hand-deleted label re-asserted (no annotation state
-lives in the hub); a down forge degrading to a logged skip and re-converging."""
+stopped chunk's marker clearing; a hand-deleted label re-asserted within the
+full-pass floor (the hub keeps only in-memory probe state); a down forge degrading to a logged skip and re-converging."""
 
 from __future__ import annotations
 
@@ -159,8 +159,8 @@ def test_forge_status_projection_e2e(tmp_path: Path) -> None:
         assert hub.post(f"/api/chunks/{chunk_b}/stop", json={"by": "e2e-test"}).status_code == 202
         assert _poll_until(lambda: _labels(forge, number_b) == set(), timeout=15.0), _labels(forge, number_b)
 
-        # -- a label deleted by hand is re-asserted, since the hub holds no annotation
-        #    state of its own and every sweep re-derives desired state from scratch --
+        # -- a label deleted by hand is re-asserted by the next full pass: the hub's
+        #    probe sees no hub-side change, so the floor (5x the 1 s interval) bounds it --
         _chunk_c, number_c = _ingest_and_promote(hub, forge, "re-assert my hand-deleted label")
         assert _poll_until(lambda: _labels(forge, number_c) == {"blizzard:ingested"}, timeout=15.0), _labels(
             forge, number_c
@@ -169,7 +169,7 @@ def test_forge_status_projection_e2e(tmp_path: Path) -> None:
         assert deleted.status_code == 200, deleted.text
         assert _labels(forge, number_c) == set()
         assert _poll_until(lambda: _labels(forge, number_c) == {"blizzard:ingested"}, timeout=15.0), (
-            "the sweep did not re-assert the hand-deleted label"
+            "the full pass did not re-assert the hand-deleted label"
         )
 
         # The `unreachable` lever stands in for a process kill, which would also wipe the
@@ -181,7 +181,9 @@ def test_forge_status_projection_e2e(tmp_path: Path) -> None:
 
         assert forge.post("/_levers/unreachable", json={}).status_code == 200
         try:
-            time.sleep(3)  # a few sweep intervals' worth of real time, forge down throughout
+            # Longer than the 5 s full-pass floor: only a full pass reads the forge, so only one
+            # landing inside the outage logs the skip.
+            time.sleep(8)
             # The hub itself is unaffected — chunk transitions and reads are never
             # blocked on the forge being reachable.
             assert hub.get("/api/health").status_code == 200

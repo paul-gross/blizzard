@@ -490,6 +490,7 @@ def build_hosted_app(
         platform_tracer=platform_tracing.tracer,
         egress=config.egress,
         egress_path_key=_egress_path_key(config.egress),
+        annotation_interval_seconds=config.annotation_interval_seconds,
     )
     # Only once the store is at the expected schema head: a store mid-migration must
     # fail *readiness*, not *boot* (pinned: `test_ready_probe_false_on_unmigrated_store`).

@@ -5,10 +5,12 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
 from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.model import WorkRef, holds_work_refs
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 
@@ -40,6 +42,17 @@ def resolve_live_holders(
     return result
 
 
+@domain_model
+@dataclass(frozen=True)
+class WorkRefsSignature:
+    """A cheap aggregate fingerprint of every input :meth:`IReadChunkWorkRefsRepository.live_work_refs`
+    reads: per table, its row count and, where it has an integer ``id``, its highest. Every table
+    is append-only, so two equal signatures mean no live work ref or status moved. No per-row
+    content is read."""
+
+    marks: tuple[tuple[str, int, int | None], ...]
+
+
 class IReadChunkWorkRefsRepository(Protocol):
     """Read-only chunk-work-refs access."""
 
@@ -56,6 +69,11 @@ class IReadChunkWorkRefsRepository(Protocol):
     def live_work_refs(self) -> dict[WorkRef, ChunkStatus]:
         """Every work ref held by a live (non-terminal) chunk, with that chunk's
         derived status — the inverse of :meth:`find_live_holder`."""
+        ...
+
+    def live_work_refs_signature(self) -> WorkRefsSignature:
+        """A one-statement fingerprint of what :meth:`live_work_refs` reads — the change probe
+        that lets a standing sweep skip the unbounded read while it is unchanged."""
         ...
 
 

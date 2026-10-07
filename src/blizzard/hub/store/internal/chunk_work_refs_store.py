@@ -10,17 +10,21 @@ from collections import defaultdict
 from collections.abc import Iterable, Mapping
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.chunk.model import ChunkFacts, WorkRef, holds_work_refs
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
-from blizzard.hub.domain.chunk.ports.work_refs import IWriteChunkWorkRefsRepository, resolve_live_holders
+from blizzard.hub.domain.chunk.ports.work_refs import (
+    IWriteChunkWorkRefsRepository,
+    WorkRefsSignature,
+    resolve_live_holders,
+)
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
-from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
+from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore, status_family_tables
 from blizzard.hub.store.internal.chunk_rows import conn_of, ephemeral_ids, ephemeral_ids_in
 from blizzard.hub.store.internal.chunk_terminal_predicates import maybe_live
 
@@ -55,6 +59,29 @@ class ChunkWorkRefsStore:
                 continue
             result[WorkRef(source=row.source, ref=row.ref)] = status
         return result
+
+    def live_work_refs_signature(self) -> WorkRefsSignature:
+        """One statement of append-only aggregates over every table :meth:`live_work_refs` reads:
+        the status families' tables, ``chunk_work_refs``, and the ephemeral ``chunk_grouped`` /
+        ``chunk_deleted`` — a count each, plus the highest ``id`` where the table has one."""
+        tables = sorted(
+            (*status_family_tables(), s.chunk_work_refs, s.chunk_grouped, s.chunk_deleted), key=lambda t: t.name
+        )
+        columns = []
+        for table in tables:
+            columns.append(select(func.count()).select_from(table).scalar_subquery().label(f"{table.name}__count"))
+            if "id" in table.c:
+                columns.append(
+                    select(func.max(table.c.id)).select_from(table).scalar_subquery().label(f"{table.name}__max_id")
+                )
+        with self._store.read("live_work_refs_signature") as conn:
+            row = conn.execute(select(*columns)).one()
+        return WorkRefsSignature(
+            marks=tuple(
+                (table.name, row._mapping[f"{table.name}__count"], row._mapping.get(f"{table.name}__max_id"))
+                for table in tables
+            )
+        )
 
     def live_holders(self, pointers: Iterable[WorkRef]) -> dict[WorkRef, str]:
         """`find_live_holder`'s batched sibling — every pointer with a live (non-terminal)

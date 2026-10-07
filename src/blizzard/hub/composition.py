@@ -14,6 +14,7 @@ import tempfile
 import threading
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
+from datetime import timedelta
 from pathlib import Path
 
 import httpx
@@ -115,7 +116,7 @@ from blizzard.hub.domain.observability.egress.event_rows import FilePathPolicy
 from blizzard.hub.domain.observability.egress.reset import EgressReset
 from blizzard.hub.domain.observability.egress.status import EgressStatusReader
 from blizzard.hub.domain.observability.egress.sweep import EgressSweep
-from blizzard.hub.domain.observability.forge_status import AnnotationReconciler
+from blizzard.hub.domain.observability.forge_status import FULL_PASS_FLOOR_INTERVALS, AnnotationReconciler
 from blizzard.hub.domain.observability.tracing.replay import TraceReplay
 from blizzard.hub.domain.observability.tracing.status import TraceStatusReader
 from blizzard.hub.domain.observability.tracing.sweep import TraceExportSweep
@@ -565,6 +566,7 @@ def build_services(
     platform_tracer: IPlatformTracer | None = None,
     egress: EgressConfig | None = None,
     egress_path_key: bytes | None = None,
+    annotation_interval_seconds: int = 120,
 ) -> HubServices:
     """Construct and wire every fleet service over the shared :class:`HubCore`.
     ``hub_command_runner``/``hub_workdir`` are the hub command node's mechanism seams
@@ -1011,5 +1013,6 @@ def build_services(
             work_sources=work_sources,
             memory=ForgeAnnotationStore(store_connections),
             clock=clock,
+            full_pass_floor=timedelta(seconds=FULL_PASS_FLOOR_INTERVALS * annotation_interval_seconds),
         ),
     )

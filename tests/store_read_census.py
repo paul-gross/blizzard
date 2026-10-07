@@ -85,6 +85,7 @@ from blizzard.hub.domain.observability.egress.repository import (
     IReadEgressEvents,
     UsagePosition,
 )
+from blizzard.hub.domain.observability.forge_status import IReadAnnotatedSources
 from blizzard.hub.domain.observability.tracing.cursor import CursorKey
 from blizzard.hub.domain.observability.tracing.repository import (
     IReadRunnerNames,
@@ -104,6 +105,7 @@ from blizzard.hub.store.internal.config_revisions_store import ConfigRevisionsSt
 from blizzard.hub.store.internal.egress_event_store import EgressEventStore
 from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.finding_store import FindingSetStore, FindingStore
+from blizzard.hub.store.internal.forge_annotation_store import ForgeAnnotationStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
 from blizzard.hub.store.internal.garden_run_store import GardenRunStore
 from blizzard.hub.store.internal.garden_sweeps_store import GardenSweepsStore
@@ -965,6 +967,7 @@ class HubWorld:
     auth_facts: IReadAuthFactsRepository
     superuser_bootstrap: IReadSuperuserBootstrapRepository
     transcript_events: IReadTranscriptEvents
+    annotated_sources: IReadAnnotatedSources
     garden_run: IReadGardenRunRepository
     garden_sweeps: IReadGardenSweepsRepository
     garden_trend: IReadGardenTrendRepository
@@ -1033,6 +1036,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     superuser_bootstrap_store = SuperuserBootstrapRepository(store_connections)
     identity_store = IdentityRepository(store_connections, auth_errors)
     transcript_events = TranscriptEventStore(store_connections)
+    annotated_sources = ForgeAnnotationStore(store_connections)
     garden_run_store = GardenRunStore(store_connections)
     garden_sweeps_store = GardenSweepsStore(store_connections)
     garden_trend_store = GardenTrendStore(store_connections)
@@ -1781,6 +1785,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         auth_facts=auth_facts_store,
         superuser_bootstrap=superuser_bootstrap_store,
         transcript_events=transcript_events,
+        annotated_sources=annotated_sources,
         garden_run=garden_run_store,
         garden_sweeps=garden_sweeps_store,
         garden_trend=garden_trend_store,
@@ -2010,6 +2015,8 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
         [WorkRef(source="default", ref="1001"), WorkRef(source="default", ref="1002")]
     ),
     (IReadChunkWorkRefsRepository, "live_work_refs"): lambda w: w.read.work_refs.live_work_refs(),
+    (IReadChunkWorkRefsRepository, "live_work_refs_signature"): lambda w: w.read.work_refs.live_work_refs_signature(),
+    (IReadAnnotatedSources, "annotated_sources"): lambda w: w.annotated_sources.annotated_sources(),
     (IReadFindingRepository, "get"): lambda w: w.hub.services.findings.get(w.finding_1),
     (IReadFindingRepository, "get_many"): lambda w: w.hub.services.findings.get_many([w.finding_1, w.finding_2]),
     (IReadFindingRepository, "get_with_facts"): lambda w: w.hub.services.findings.get_with_facts(w.finding_1),
