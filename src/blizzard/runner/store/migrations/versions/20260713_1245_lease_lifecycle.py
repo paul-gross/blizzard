@@ -13,7 +13,6 @@ import sqlalchemy as sa
 from alembic import op
 
 from blizzard.foundation.store.utc import UtcDateTime
-from blizzard.runner.store.schema import lease_closures
 
 revision: str = "20260713_1245_runner_lease_lifecycle"
 down_revision: str | None = "20260713_1218_runner_walking_skeleton"
@@ -33,6 +32,16 @@ _lease_context = sa.Table(
     sa.Column("retries_max", sa.Integer, nullable=False),
     sa.Column("recorded_at", UtcDateTime, nullable=False),
 )
+_lease_closures = sa.Table(
+    "lease_closures",
+    _frozen_metadata,
+    sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
+    sa.Column("lease_id", sa.String, nullable=False),
+    sa.Column("chunk_id", sa.String, nullable=False),
+    sa.Column("node_id", sa.String, nullable=False),
+    sa.Column("reason", sa.String, nullable=False),
+    sa.Column("closed_at", UtcDateTime, nullable=False),
+)
 _binding_releases = sa.Table(
     "binding_releases",
     _frozen_metadata,
@@ -42,7 +51,7 @@ _binding_releases = sa.Table(
     sa.Column("released_at", UtcDateTime, nullable=False),
 )
 
-_TABLES = [_lease_context, lease_closures, _binding_releases]
+_TABLES = [_lease_context, _lease_closures, _binding_releases]
 
 
 def upgrade() -> None:
