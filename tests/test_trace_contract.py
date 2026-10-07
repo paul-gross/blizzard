@@ -407,7 +407,7 @@ def test_the_cli_golden_spans_are_the_declared_platform_shape() -> None:
     for name, payload in golden.items():
         for resource_spans in payload["resourceSpans"]:
             for scope_spans in resource_spans["scopeSpans"]:
-                assert scope_spans["scope"]["name"] == platform_attr.CLI_SCOPE, name
+                assert scope_spans["scope"]["name"] == cli_spans.SCOPE_NAME, name
                 assert scope_spans["spans"], name
                 for span in scope_spans["spans"]:
                     for entry in span["attributes"]:
@@ -606,14 +606,14 @@ def test_the_platform_section_is_the_code_constants() -> None:
             "name": runner_platform.PLATFORM_INSTRUMENTATION_SCOPE,
             "version": runner_platform.PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
         },
-        {"name": platform_attr.CLI_SCOPE, "version": "1"},
+        {"name": cli_spans.SCOPE_NAME, "version": "1"},
     ]
     assert platform["http_semconv_version"] == HTTP_SEMCONV_VERSION
     assert platform["database_semconv_version"] == DATABASE_SEMCONV_VERSION
     assert {a["name"] for a in platform["attributes"]} == {
         platform_attr.CALLER,
         shared.CHUNK_ID,
-        platform_attr.LEASE_ID,
+        cli_spans.ATTR_LEASE_ID,
         hub_platform.RUN_STEP_EXIT_CODE,
         hub_platform.RUN_STEP_NAME,
         attr.RUNNER_ID,
@@ -623,9 +623,6 @@ def test_the_platform_section_is_the_code_constants() -> None:
     }
     assert attr.RUNNER_ID == runner_attr.RUNNER_ID
     assert attr.RUNNER_NAME == runner_attr.RUNNER_NAME
-    assert cli_spans.SCOPE_NAME == platform_attr.CLI_SCOPE
-    assert (cli_spans.ATTR_COMMAND, cli_spans.ATTR_EXIT_CODE) == (platform_attr.CLI_COMMAND, platform_attr.EXIT_CODE)
-    assert (cli_spans.ATTR_LEASE_ID, cli_spans.ATTR_CHUNK_ID) == (platform_attr.LEASE_ID, shared.CHUNK_ID)
     declared = {a["name"]: a["type"] for a in platform["attributes"]}
     assert declared.pop(hub_platform.RUN_STEP_EXIT_CODE) == "int"
     assert all(declared[name] == type_ for name, type_ in platform_attr.CLI_ATTRIBUTES.items())

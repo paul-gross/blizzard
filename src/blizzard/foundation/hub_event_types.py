@@ -46,7 +46,7 @@ ActivityChunkChangeCause = Literal[
 
 #: What fact family drove a ``chunk-changed`` frame — each emit site names
 #: its own cause statically. ``edited`` is the one cause with no durable fact behind it.
-ChunkChangeCause = Literal[ActivityChunkChangeCause, Literal["edited"]]
+ChunkChangeCause = Literal[ActivityChunkChangeCause, "edited"]
 
 #: What a ``runner-changed`` frame reports — see
 #: the hub event broker's ``publish_runner_changed``.

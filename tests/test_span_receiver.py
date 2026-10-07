@@ -9,8 +9,9 @@ import pytest
 from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import ExportTraceServiceRequest
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
+from blizzard.foundation.cli_spans import SCOPE_NAME
 from blizzard.foundation.clock import FixedClock
-from blizzard.foundation.platform_tracing.attributes import CLI_ATTRIBUTES, CLI_SCOPE
+from blizzard.foundation.platform_tracing.attributes import CLI_ATTRIBUTES
 from blizzard.foundation.platform_tracing.handle import DisabledPlatformTracing, build_platform_tracing
 from blizzard.foundation.platform_tracing.received import (
     JSON_CONTENT_TYPE,
@@ -34,7 +35,7 @@ from tests.runner_fakes import REGISTERED_AT
 pytestmark = pytest.mark.unit
 
 _NOW = datetime(2026, 7, 21, 12, 0, 0, tzinfo=UTC)
-_ALLOWLIST = Allowlist(scope=CLI_SCOPE, attributes=CLI_ATTRIBUTES)
+_ALLOWLIST = Allowlist(scope=SCOPE_NAME, attributes=CLI_ATTRIBUTES)
 _RUNNER = RunnerIdentity(runner_id="rn_01J9ZRUNNER", runner_name="r-claude", registered_at=REGISTERED_AT)
 _SPAN_ID = 0x00F067AA0BA902B7
 
@@ -66,7 +67,7 @@ def _span(**changes: object) -> ReceivedSpan:
         "start_time_ns": 1_000,
         "end_time_ns": 2_000,
         "status_code": 1,
-        "scope_name": CLI_SCOPE,
+        "scope_name": SCOPE_NAME,
         "scope_version": "1",
         "attributes": {"blizzard.cli.command": "artifact create", "process.exit.code": 0},
     }
@@ -93,7 +94,7 @@ def _otlp_json(trace: int, *, parent: int | None = _SPAN_ID) -> bytes:
     }
     if parent is not None:
         span["parentSpanId"] = f"{parent:016x}"
-    document = {"resourceSpans": [{"scopeSpans": [{"scope": {"name": CLI_SCOPE, "version": "1"}, "spans": [span]}]}]}
+    document = {"resourceSpans": [{"scopeSpans": [{"scope": {"name": SCOPE_NAME, "version": "1"}, "spans": [span]}]}]}
     return json.dumps(document).encode()
 
 
@@ -121,7 +122,7 @@ def test_both_encodings_decode_to_the_same_spans_with_hex_ids_round_tripped() ->
     (span,) = from_json
     assert (span.trace_id, span.span_id, span.parent_span_id) == (_trace(), _SPAN_ID, _SPAN_ID)
     assert (span.kind, span.status_code, span.start_time_ns, span.end_time_ns) == (3, 2, 1000, 2000)
-    assert (span.scope_name, span.scope_version) == (CLI_SCOPE, "1")
+    assert (span.scope_name, span.scope_version) == (SCOPE_NAME, "1")
     assert span.attributes == {
         "blizzard.cli.command": "artifact create",
         "process.exit.code": 0,
@@ -194,7 +195,7 @@ def test_a_protobuf_span_with_a_short_id_is_a_decode_error() -> None:
 
 
 def test_admit_checks_each_declared_value_type() -> None:
-    allowlist = Allowlist(scope=CLI_SCOPE, attributes={"i": "int", "d": "double", "s": "string", "u": "other"})
+    allowlist = Allowlist(scope=SCOPE_NAME, attributes={"i": "int", "d": "double", "s": "string", "u": "other"})
     attributes = {"i": True, "d": 1, "s": 1, "u": "x"}
     (kept,) = admit([_span(attributes=attributes)], _lease(), allowlist, runner=_RUNNER).kept
     assert set(kept.attributes) == {"blizzard.caller", "blizzard.chunk.id", "blizzard.lease.id"}
@@ -299,14 +300,14 @@ def test_admit_keeps_only_allowlisted_attributes_of_their_declared_type() -> Non
 
 def test_admit_overwrites_a_planted_caller_chunk_and_lease() -> None:
     planted = {"blizzard.caller": "operator", "blizzard.chunk.id": "ch_9", "blizzard.lease.id": "lease_9"}
-    allowlist = Allowlist(scope=CLI_SCOPE, attributes={**CLI_ATTRIBUTES, **dict.fromkeys(planted, "string")})
+    allowlist = Allowlist(scope=SCOPE_NAME, attributes={**CLI_ATTRIBUTES, **dict.fromkeys(planted, "string")})
     (kept,) = admit([_span(attributes=planted)], _lease(), allowlist, runner=_RUNNER).kept
     assert kept.attributes == {"blizzard.caller": "worker", "blizzard.chunk.id": "ch_1", "blizzard.lease.id": "lease_1"}
 
 
 def test_admit_truncates_long_strings_and_caps_the_attribute_count() -> None:
     many = {f"k{i}": "v" for i in range(MAX_ATTRIBUTES + 10)}
-    allowlist = Allowlist(scope=CLI_SCOPE, attributes=dict.fromkeys(many, "string"))
+    allowlist = Allowlist(scope=SCOPE_NAME, attributes=dict.fromkeys(many, "string"))
     long = "x" * (MAX_STRING_CHARS + 5)
     (kept,) = admit([_span(name=long, scope_version=long, attributes=many)], _lease(), allowlist, runner=_RUNNER).kept
     assert len(kept.name) == len(kept.scope_version) == MAX_STRING_CHARS
@@ -369,7 +370,7 @@ def test_a_forwarded_span_reaches_the_exporter_rebuilt_and_redacted() -> None:
     assert out.resource.attributes["service.name"] == "blizzard-cli"
     assert out.context is not None and out.context.trace_id == _trace() and out.context.span_id == _SPAN_ID
     assert out.parent is not None and out.parent.span_id == 7
-    assert out.instrumentation_scope is not None and out.instrumentation_scope.name == CLI_SCOPE
+    assert out.instrumentation_scope is not None and out.instrumentation_scope.name == SCOPE_NAME
     assert out.attributes is not None
     assert out.attributes["url.full"] == "http://runner/api"
     assert "url.query" not in out.attributes

@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from blizzard.foundation.roles import collaborator
+from blizzard.foundation.trace_attributes import CHUNK_ID
 from blizzard.foundation.trace_ids import SAMPLED, DerivedContext, format_traceparent
 
 SCOPE_NAME = "blizzard.cli"
@@ -26,7 +27,6 @@ SCOPE_VERSION = "1"
 ATTR_COMMAND = "blizzard.cli.command"
 ATTR_EXIT_CODE = "process.exit.code"
 ATTR_LEASE_ID = "blizzard.lease.id"
-ATTR_CHUNK_ID = "blizzard.chunk.id"
 
 SERVICE_NAME = "blizzard-cli"
 
@@ -142,7 +142,7 @@ class CliSpan:
         epoch nanoseconds, and no attribute that could carry an argument or a message."""
         attributes = {ATTR_COMMAND: self.command}
         if self.chunk_id:
-            attributes[ATTR_CHUNK_ID] = self.chunk_id
+            attributes[CHUNK_ID] = self.chunk_id
         if self.lease_id:
             attributes[ATTR_LEASE_ID] = self.lease_id
         encoded = [_string(key, value) for key, value in attributes.items()]

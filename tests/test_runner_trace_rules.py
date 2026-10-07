@@ -9,7 +9,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from blizzard.foundation.platform_tracing.attributes import CLI_SCOPE
+from blizzard.foundation.cli_spans import SCOPE_NAME
 from blizzard.foundation.platform_tracing.handle import DisabledPlatformTracing
 from blizzard.foundation.platform_tracing.received import ReceivedDataPoint, ReceivedMetrics, ReceivedSpan
 from blizzard.foundation.trace_export.cursor import CursorJump, JumpReason
@@ -173,17 +173,17 @@ _OTHER_NAMES = HarnessTelemetryNames(
 
 def test_route_spans_keeps_the_cli_and_refuses_other_programs_by_default() -> None:
     routing = route_spans(
-        [_span(CLI_SCOPE), _span("some.library")], _lease(), runner=_RUNNER, programs=False, harness=False, names=_NAMES
+        [_span(SCOPE_NAME), _span("some.library")], _lease(), runner=_RUNNER, programs=False, harness=False, names=_NAMES
     )
-    assert ([s.scope_name for s in routing.cli], routing.others) == ([CLI_SCOPE], [])
+    assert ([s.scope_name for s in routing.cli], routing.others) == ([SCOPE_NAME], [])
     assert (routing.accepted, routing.dropped, routing.kept, routing.refused, routing.rest_received) == (1, 1, 1, 1, 2)
 
 
 def test_route_spans_admits_other_programs_under_worker_programs() -> None:
     routing = route_spans(
-        [_span(CLI_SCOPE), _span("some.library")], _lease(), runner=_RUNNER, programs=True, harness=False, names=_NAMES
+        [_span(SCOPE_NAME), _span("some.library")], _lease(), runner=_RUNNER, programs=True, harness=False, names=_NAMES
     )
-    assert [s.scope_name for s in routing.cli] == [CLI_SCOPE]
+    assert [s.scope_name for s in routing.cli] == [SCOPE_NAME]
     assert [s.scope_name for s in routing.others] == ["some.library"]
     assert (routing.accepted, routing.dropped) == (2, 0)
 
@@ -254,7 +254,7 @@ def test_receiver_off_when_platform_disabled() -> None:
 def test_span_rate_refused_counts_every_span_dropped() -> None:
     receiver = _receiver(enabled=True, capacity=1)
     with pytest.raises(RateExceeded, match="span rate exceeded"):
-        receiver.receive_spans(_lease(), [_span(CLI_SCOPE), _span(CLAUDE_CODE_TRACING_SCOPE)])
+        receiver.receive_spans(_lease(), [_span(SCOPE_NAME), _span(CLAUDE_CODE_TRACING_SCOPE)])
     assert (receiver.span_counter.count().dropped, receiver.harness_span_counter.count().dropped) == (1, 1)
 
 

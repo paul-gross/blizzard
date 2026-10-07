@@ -10,9 +10,11 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 
-from blizzard.foundation.platform_tracing.attributes import CALLER, CHUNK_ID, CLI_ATTRIBUTES, CLI_SCOPE, LEASE_ID
+from blizzard.foundation.cli_spans import ATTR_LEASE_ID, SCOPE_NAME
+from blizzard.foundation.platform_tracing.attributes import CALLER, CLI_ATTRIBUTES
 from blizzard.foundation.platform_tracing.received import ReceivedDataPoint, ReceivedLogRecord, ReceivedSpan, Scalar
 from blizzard.foundation.roles import adapter_model, domain_model
+from blizzard.foundation.trace_attributes import CHUNK_ID
 from blizzard.foundation.trace_ids import DerivedContext, SpanRole, StepKey, chunk_span_id, chunk_trace_id, step_root
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryNames
 from blizzard.runner.hub.identity import RunnerIdentity
@@ -175,7 +177,7 @@ def _stamped_attributes(sent: Mapping[str, Scalar], lease: Lease, runner: Runner
 def _stamp(attributes: dict[str, Scalar], lease: Lease) -> None:
     attributes[CALLER] = _WORKER
     attributes[CHUNK_ID] = lease.chunk_id
-    attributes[LEASE_ID] = lease.lease_id
+    attributes[ATTR_LEASE_ID] = lease.lease_id
 
 
 def _stamp_runner(attributes: dict[str, Scalar], runner: RunnerIdentity) -> None:
@@ -202,7 +204,7 @@ CLI_SERVICE_NAME = "blizzard-cli"
 #: ``service.name`` on every other worker program's spans, kept only under ``[tracing] worker_programs``.
 PROGRAM_SERVICE_NAME = "blizzard-worker-program"
 
-_CLI_ALLOWLIST = Allowlist(scope=CLI_SCOPE, attributes=CLI_ATTRIBUTES)
+_CLI_ALLOWLIST = Allowlist(scope=SCOPE_NAME, attributes=CLI_ATTRIBUTES)
 _PROGRAM_ALLOWLIST = Allowlist(scope=None, attributes=None)
 _HARNESS_ALLOWLIST = Allowlist(scope=None, attributes=None, stamp_runner=True)
 
@@ -251,11 +253,11 @@ def route_spans(
     own = [span for span in spans if span.scope_name in tracing_scopes]
     rest = [span for span in spans if span.scope_name not in tracing_scopes]
     own_admission = admit(own, lease, _HARNESS_ALLOWLIST, runner=runner)
-    cli_spans = [span for span in rest if programs and span.scope_name == CLI_SCOPE]
-    program_spans = [span for span in rest if not (programs and span.scope_name == CLI_SCOPE)]
+    cli_spans = [span for span in rest if programs and span.scope_name == SCOPE_NAME]
+    program_spans = [span for span in rest if not (programs and span.scope_name == SCOPE_NAME)]
     admission = admit(program_spans, lease, _PROGRAM_ALLOWLIST if programs else _CLI_ALLOWLIST, runner=runner)
     cli_admission = admit(cli_spans, lease, _CLI_ALLOWLIST, runner=runner)
-    cli = [*cli_admission.kept, *(span for span in admission.kept if not programs and span.scope_name == CLI_SCOPE)]
+    cli = [*cli_admission.kept, *(span for span in admission.kept if not programs and span.scope_name == SCOPE_NAME)]
     return SpanRouting(
         harness=own_admission,
         harness_received=len(own),
