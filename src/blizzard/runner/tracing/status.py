@@ -11,10 +11,10 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.platform_tracing.signals import TelemetrySignal
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.trace_export.settings import TracingSettings, TracingState
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryPlan
+from blizzard.runner.harness.telemetry_signals import TelemetrySignal
 from blizzard.runner.tracing.cursor import LeaseCursorKey
 from blizzard.runner.tracing.receiver_limits import ReceiverCount, ReceiverCounter
 from blizzard.runner.tracing.repository import IReadLeaseTraceCursor, LeaseTraceExportFailure

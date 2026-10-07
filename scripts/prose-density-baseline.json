@@ -1492,7 +1492,7 @@
    "over_cap": 0,
    "total": 47
   },
-  "blizzard/foundation/platform_tracing/exclusion.py": {
+  "blizzard/runner/tracing/exclusion.py": {
    "comments": 0,
    "docstrings": 3,
    "over_cap": 0,
@@ -1552,7 +1552,7 @@
    "over_cap": 0,
    "total": 178
   },
-  "blizzard/foundation/platform_tracing/received_export.py": {
+  "blizzard/runner/tracing/received_export.py": {
    "comments": 0,
    "docstrings": 11,
    "over_cap": 0,
@@ -1564,7 +1564,7 @@
    "over_cap": 0,
    "total": 7
   },
-  "blizzard/foundation/platform_tracing/signals.py": {
+  "blizzard/runner/harness/telemetry_signals.py": {
    "comments": 0,
    "docstrings": 6,
    "over_cap": 0,

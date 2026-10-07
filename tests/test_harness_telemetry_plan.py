@@ -10,7 +10,6 @@ from typing import IO, NoReturn
 import pytest
 
 from blizzard.foundation.harness_telemetry_outcome import HarnessTelemetryOutcome
-from blizzard.foundation.platform_tracing.signals import TelemetrySignal
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.adapter import AcquiredEnvironment, WorkerPreamble
 from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
@@ -19,6 +18,7 @@ from blizzard.runner.harness.claude_code.telemetry_plan import plan_harness_tele
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryPlan
 from blizzard.runner.harness.process_launch import LaunchedProcess
+from blizzard.runner.harness.telemetry_signals import TelemetrySignal
 from blizzard.runner.harness.wiring import claude_code_section, publish_harness_bundle
 from blizzard.runner.runtime import Runtime
 from tests.harness_sections import sections

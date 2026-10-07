@@ -8,8 +8,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from blizzard.foundation.harness_telemetry_outcome import HarnessTelemetryOutcome
-from blizzard.foundation.platform_tracing.signals import TelemetrySignal
 from blizzard.foundation.roles import domain_model
+from blizzard.runner.harness.telemetry_signals import TelemetrySignal
 
 CLAUDE_CODE_METRICS_SCOPE = "com.anthropic.claude_code"
 CLAUDE_CODE_LOGS_SCOPE = "com.anthropic.claude_code.events"

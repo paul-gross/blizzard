@@ -7,16 +7,12 @@ it a destination, and the whole handle is off unless ``[tracing] platform`` and 
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import TYPE_CHECKING, Protocol
+from typing import Any, Protocol
 
 from blizzard.foundation.platform_tracing.handle import platform_tracing_enabled
 from blizzard.foundation.platform_tracing.received import ReceivedDataPoint, ReceivedLogRecord
-from blizzard.foundation.platform_tracing.signals import TelemetrySignal, signal_exportable
 from blizzard.foundation.trace_export.config import TracingConfig
-
-if TYPE_CHECKING:
-    from opentelemetry.sdk._logs.export import LogRecordExporter
-    from opentelemetry.sdk.metrics.export import MetricExporter
+from blizzard.runner.harness.telemetry_signals import TelemetrySignal, signal_exportable
 
 
 class IReceivedTelemetryExport(Protocol):
@@ -50,16 +46,16 @@ def build_received_telemetry_export(
     environ: Mapping[str, str],
     *,
     resource: Mapping[str, str],
-    metric_exporter: MetricExporter | None = None,
-    log_exporter: LogRecordExporter | None = None,
+    metric_exporter: Any | None = None,
+    log_exporter: Any | None = None,
 ) -> IReceivedTelemetryExport:
     """The process's handle. ``metric_exporter`` and ``log_exporter`` replace the OTLP exporters, and each
     counts as that signal's destination — tests pass in-memory ones."""
     if not (config.harness_telemetry and platform_tracing_enabled(config, environ)):
         return DisabledReceivedTelemetryExport()
-    from blizzard.foundation.platform_tracing.internal.received_pipeline import EnabledReceivedTelemetryExport
+    from blizzard.foundation.platform_tracing.received_pipeline import build_enabled_received_export
 
-    return EnabledReceivedTelemetryExport.build(
+    return build_enabled_received_export(
         resource=resource,
         metric_exporter=metric_exporter,
         log_exporter=log_exporter,

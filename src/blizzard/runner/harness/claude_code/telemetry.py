@@ -8,9 +8,9 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 
-from blizzard.foundation.platform_tracing.signals import TelemetrySignal
 from blizzard.foundation.trace_export.settings import ENV_ENDPOINT
 from blizzard.runner.harness.harness_shared import receiver_env
+from blizzard.runner.harness.telemetry_signals import TelemetrySignal
 
 #: Claude Code's undocumented detailed-beta tracing path: its own endpoint, live only with the second name.
 BETA_TRACING_ENDPOINT = "BETA_TRACING_ENDPOINT"

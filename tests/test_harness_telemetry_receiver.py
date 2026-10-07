@@ -9,7 +9,6 @@ from datetime import UTC, datetime
 import pytest
 from google.protobuf.json_format import MessageToDict
 
-from blizzard.foundation.platform_tracing.exclusion import is_excluded
 from blizzard.foundation.platform_tracing.received import (
     JSON_CONTENT_TYPE,
     PROTOBUF_CONTENT_TYPE,
@@ -22,16 +21,17 @@ from blizzard.foundation.platform_tracing.received import (
     rejected_data_points,
     rejected_log_records,
 )
-from blizzard.foundation.platform_tracing.received_export import (
-    DisabledReceivedTelemetryExport,
-    build_received_telemetry_export,
-)
-from blizzard.foundation.platform_tracing.signals import TelemetrySignal, signal_exportable
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.foundation.trace_ids import chunk_trace_id
+from blizzard.runner.harness.telemetry_signals import TelemetrySignal, signal_exportable
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.leases import Lease
+from blizzard.runner.tracing.exclusion import is_excluded
+from blizzard.runner.tracing.received_export import (
+    DisabledReceivedTelemetryExport,
+    build_received_telemetry_export,
+)
 from blizzard.runner.tracing.receiver import (
     MAX_ATTRIBUTES,
     MAX_STRING_CHARS,
