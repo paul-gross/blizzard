@@ -169,8 +169,7 @@ class ClaimAdmission:
     """Whether a runner may claim a chunk, judged on what the claim lock read. Refusals run in a fixed order,
     each its own error: unregistered (never connected included), retired, ended, held route, not ``ready``,
     unmet prerequisite, then incapable runner (a registration reporting no capabilities is incapable of
-    everything) — the runner's own standing before any chunk refusal, its fit to the chunk's node last. The
-    runner-paused brake is judged before the lock (:func:`refuse_paused_runner`)."""
+    everything). The runner-paused brake is judged before the lock (:func:`refuse_paused_runner`)."""
 
     chunk: Chunk
     graph: Graph

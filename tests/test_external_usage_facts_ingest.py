@@ -765,7 +765,6 @@ def test_a_miss_with_an_unknown_reason_lands_and_supersedes_a_lapsed_condition(t
 
     assert ack["rejected"] == []
     assert _miss_row(hub.engine, "r1").reason == "credential_expired"  # type: ignore[union-attr]
-    # Not lapsing, and no sample on record: absent, exactly as any other non-lapsed miss.
     assert hub.client.get("/api/runners/r1").json()["subscriptions"] == []
 
 

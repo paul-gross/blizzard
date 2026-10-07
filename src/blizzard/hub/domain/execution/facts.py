@@ -138,8 +138,7 @@ def subscription_identity(fact: Payload) -> tuple[str, str] | None:
 
 
 def usage_miss_reason(fact: Payload) -> str | None:
-    """An external-subscription usage miss's reason — ``None`` unless a non-blank string. A reason
-    the hub does not recognize is kept raw: it is a miss for any other reason."""
+    """A usage miss's reason, kept raw whether or not the hub recognizes it; ``None`` unless a non-blank string."""
     reason = fact.get("reason")
     if not isinstance(reason, str) or not reason.strip():
         return None
