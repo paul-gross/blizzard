@@ -23,6 +23,12 @@ export class PendingLobby {
    * shows the lobby once `/api/me` resolved authenticated-but-permissionless). */
   readonly me = input<MeResponse | null>(null);
 
+  /** Whether the logout is in flight; disables the button. */
+  readonly logoutPending = input(false);
+
+  /** The failed logout's message, `null` while none. */
+  readonly logoutError = input<string | null>(null);
+
   /** Fired when the operator clicks "Log out"; the container owns the mutation. */
   readonly logout = output<void>();
 }

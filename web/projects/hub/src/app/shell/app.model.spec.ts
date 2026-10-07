@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { authState, connectionLabel } from './app.model';
+import { authState, connectionLabel, logoutErrorText } from './app.model';
 
 describe('authState', () => {
   it('is loading while the identity read is pending', () => {
@@ -37,5 +37,17 @@ describe('connectionLabel', () => {
   it("reports the health read's own status, defaulting to ok", () => {
     expect(connectionLabel('open', false, false, 'degraded')).toBe('degraded');
     expect(connectionLabel('open', false, false, undefined)).toBe('ok');
+  });
+});
+
+describe('logoutErrorText', () => {
+  it('is null without an error', () => {
+    expect(logoutErrorText(null)).toBeNull();
+    expect(logoutErrorText(undefined)).toBeNull();
+  });
+
+  it("reads the failure's own detail through errorMessage, falling back to a generic line", () => {
+    expect(logoutErrorText({ detail: 'session store down' })).toBe('session store down');
+    expect(logoutErrorText(new Error('network'))).toBe('Log out failed');
   });
 });

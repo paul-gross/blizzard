@@ -43,3 +43,6 @@
   border-left: none;
   padding: 4px 12px;
 }
+.logout-error {
+  color: var(--red);
+}

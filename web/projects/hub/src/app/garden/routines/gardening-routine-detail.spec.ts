@@ -1,6 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { ActivatedRoute, convertToParamMap } from '@angular/router';
+import { ActivatedRoute, convertToParamMap, type ParamMap } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { hubClient, type MeResponse } from 'fleet';
 import { OPERATOR_ME_RESPONSE, settle, stubError, stubRequestClient, type RequestClientStub } from 'fleet/testing';
@@ -93,6 +93,7 @@ const PROPOSAL_COUNTS = {
  */
 describe('GardeningRoutineDetail', () => {
   let stub: RequestClientStub;
+  let paramMap$: BehaviorSubject<ParamMap>;
 
   afterEach(() => stub?.restore());
 
@@ -126,7 +127,7 @@ describe('GardeningRoutineDetail', () => {
       if (method === 'GET' && path === '/api/me') return me;
       return {};
     });
-    const paramMap$ = new BehaviorSubject(convertToParamMap(opts.params ?? {}));
+    paramMap$ = new BehaviorSubject(convertToParamMap(opts.params ?? {}));
     await TestBed.configureTestingModule({
       imports: [GardeningRoutineDetail],
       providers: [
@@ -312,6 +313,43 @@ describe('GardeningRoutineDetail', () => {
     expect(el.querySelector('[data-testid="gardening-routine-retired-notice"]')).not.toBeNull();
     expect(el.querySelector('[data-testid="gardening-routine-panel-enable"]')).toBeTruthy();
     expect(el.querySelector('[data-testid="gardening-routine-panel-retire"]')).toBeNull();
+  });
+
+  it('leaves another routine’s Retire enabled while one routine’s Retire is pending, and re-disables on re-select', async () => {
+    const OTHER_ROUTINE = { ...ROUTINE, routine_id: 'rtn_2', name: 'weekly' };
+    const fixture = await render({
+      me: OPERATOR_ME_RESPONSE,
+      routines: [ROUTINE, OTHER_ROUTINE],
+      params: { routineName: 'nightly' },
+      routeOverride: (method, path) => {
+        if (method === 'GET' && path === '/api/routines/rtn_2/sweeps') return { ...SWEEPS, routine_name: 'weekly' };
+        if (method === 'GET' && path === '/api/routines/rtn_2/scopes') return [];
+        return undefined;
+      },
+    });
+    vi.spyOn(TestBed.inject(QueryClient), 'invalidateQueries').mockReturnValue(new Promise<void>(() => undefined));
+    const el = fixture.nativeElement as HTMLElement;
+    const retire = () => el.querySelector<HTMLButtonElement>('[data-testid="gardening-routine-panel-retire"]');
+    const tick = async (): Promise<void> => {
+      for (let i = 0; i < 4; i += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        fixture.detectChanges();
+      }
+    };
+
+    retire()?.click();
+    await fixture.whenStable();
+    el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-confirm"]')?.click();
+    await tick();
+    expect(retire()?.disabled).toBe(true);
+
+    paramMap$.next(convertToParamMap({ routineName: 'weekly' }));
+    await tick();
+    expect(retire()?.disabled).toBe(false);
+
+    paramMap$.next(convertToParamMap({ routineName: 'nightly' }));
+    await tick();
+    expect(retire()?.disabled).toBe(true);
   });
 
   it('renders the retired override while Retire is pending, reverting to the real state on rejection', async () => {

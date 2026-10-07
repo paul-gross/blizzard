@@ -236,4 +236,39 @@ describe('GraphDetail', () => {
     expect(el.querySelector('[data-testid="graph-detail-graph-id"]')?.textContent).toContain('gr_other');
     expect(el.querySelector('[data-testid="graph-detail-lifecycle-badge"]')?.textContent).toContain('enabled');
   });
+
+  it('scopes the disabled lifecycle control to the pending graph across a graph change', async () => {
+    const fixture = await mount('gr_build_v2', (method, path) => {
+      if (method === 'GET' && path === '/api/graphs/gr_build_v2') return GRAPH;
+      if (method === 'GET' && path === '/api/graphs/gr_other') return { ...GRAPH, graph_id: 'gr_other', retired: false };
+      return {};
+    });
+    const el = fixture.nativeElement as HTMLElement;
+    const queryClient = TestBed.inject(QueryClient);
+    vi.spyOn(queryClient, 'invalidateQueries').mockReturnValue(new Promise<void>(() => undefined));
+    const tick = async (): Promise<void> => {
+      for (let i = 0; i < 4; i += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        fixture.detectChanges();
+      }
+    };
+    const lifecycleDisabled = (): boolean | undefined =>
+      el.querySelector<HTMLButtonElement>('[data-testid="graph-detail-enable"], [data-testid="graph-detail-retire"]')
+        ?.disabled;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="graph-detail-retire"]')?.click();
+    await fixture.whenStable();
+    el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-confirm"]')?.click();
+    await tick();
+    expect(lifecycleDisabled()).toBe(true);
+
+    fixture.componentRef.setInput('graphId', 'gr_other');
+    await tick();
+    expect(el.querySelector('[data-testid="graph-detail-graph-id"]')?.textContent).toContain('gr_other');
+    expect(lifecycleDisabled()).toBe(false);
+
+    fixture.componentRef.setInput('graphId', 'gr_build_v2');
+    await tick();
+    expect(lifecycleDisabled()).toBe(true);
+  });
 });

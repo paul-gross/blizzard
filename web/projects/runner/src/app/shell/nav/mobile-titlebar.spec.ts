@@ -4,7 +4,7 @@ import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { runnerClient } from 'fleet';
 import { type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
-import { LocalIdentity } from '../../core/identity/app-identity';
+import { RunnerLogout } from '../../core/identity/runner-logout';
 import { vi } from 'vitest';
 
 import { MobileTitlebar } from './mobile-titlebar';
@@ -143,7 +143,7 @@ describe('MobileTitlebar (runner)', () => {
       // prototype because the identity block lives inside the CDK overlay, out of
       // the fixture's own DebugElement tree.
       const reload = vi
-        .spyOn(LocalIdentity.prototype as unknown as { reload: () => void }, 'reload')
+        .spyOn(RunnerLogout.prototype as unknown as { reload: () => void }, 'reload')
         .mockImplementation(() => undefined);
       const fixture = await render();
       const panel = await openMenu(fixture);

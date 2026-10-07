@@ -148,6 +148,20 @@ describe('UsersTable', () => {
     expect(pendingSelect?.value).toBe('pending');
   });
 
+  it("disables only the selector of a row whose own assignment is in flight", async () => {
+    const fixture = mount({ currentUserId: 'usr_other', actor: 'superuser' });
+    fixture.componentRef.setInput('pendingUserIds', ['usr_pending']);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector<HTMLSelectElement>('[data-user-id="usr_pending"] select')?.disabled).toBe(true);
+    const others = Array.from(el.querySelectorAll<HTMLSelectElement>('[data-testid="users-table-role-select"]')).filter(
+      (select) => select.closest('tr')?.getAttribute('data-user-id') !== 'usr_pending',
+    );
+    expect(others.length).toBeGreaterThan(0);
+    expect(others.some((select) => !select.disabled)).toBe(true);
+  });
+
   it('renders a pending row with an enabled selector, not as static text', async () => {
     const fixture = mount({ currentUserId: 'usr_other', actor: 'superuser' });
     await fixture.whenStable();

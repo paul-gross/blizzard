@@ -43,4 +43,16 @@ describe('PendingLobby', () => {
 
     expect(logout).toHaveBeenCalledTimes(1);
   });
+
+  it('disables the control while the logout is in flight and renders its failure', async () => {
+    const fixture = TestBed.createComponent(PendingLobby);
+    fixture.componentRef.setInput('me', PENDING);
+    fixture.componentRef.setInput('logoutPending', true);
+    fixture.componentRef.setInput('logoutError', 'session store down');
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector<HTMLButtonElement>('[data-testid="pending-lobby-logout"]')?.disabled).toBe(true);
+    expect(el.querySelector('[data-testid="pending-lobby-logout-error"]')?.textContent).toContain('session store down');
+  });
 });

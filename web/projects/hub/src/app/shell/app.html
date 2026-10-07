@@ -11,7 +11,7 @@
     }
   }
   @case ('lobby') {
-    <app-pending-lobby [me]="me()" (logout)="onLogout()" />
+    <app-pending-lobby [me]="me()" [logoutPending]="logoutPending()" [logoutError]="logoutError()" (logout)="onLogout()" />
   }
   @case ('ready') {
     <fleet-app-shell>
@@ -48,13 +48,16 @@
         >
           <ng-container ngProjectAs="[header-trailing]">
             @defer (on immediate) {
-              <app-nav-menu (logout)="onLogout()" />
+              <app-nav-menu [logoutPending]="logoutPending()" (logout)="onLogout()" />
             }
           </ng-container>
         </fleet-board-header>
       }
       @if (!mobile()) {
         <app-nav shell-nav [showAdmin]="canManageUsers()" />
+      }
+      @if (logoutError(); as error) {
+        <p class="logout-error" role="alert" data-testid="logout-error">{{ error }}</p>
       }
       <router-outlet />
       @if (mobile()) {

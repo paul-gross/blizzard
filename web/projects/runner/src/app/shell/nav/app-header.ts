@@ -3,6 +3,7 @@ import { CdkMenuTrigger } from '@angular/cdk/menu';
 import { BoardHeader, KitAvatar, KitMenu, KitMenuItem, KitMenuPanel, type StatCell, ViewportMenu } from 'fleet';
 import { injectRunnerDashboardQuery } from '../../core/status.query';
 import { LocalIdentity } from '../../core/identity/app-identity';
+import { RunnerLogout } from '../../core/identity/runner-logout';
 import { LocalPauseControl } from '../../machine/app-pause-control';
 import { RunnerLiveUpdates } from '../../core/live/runner-live-updates';
 import { headerConnectionLabel, headerStatCells } from './app-header.model';
@@ -50,6 +51,9 @@ import { headerConnectionLabel, headerStatCells } from './app-header.model';
 export class AppHeader {
   private readonly dashboardQuery = injectRunnerDashboardQuery();
   private readonly liveUpdates = inject(RunnerLiveUpdates);
+
+  /** The shell's one logout owner; the menu item's pending flag and trigger bind to it. */
+  protected readonly logout = inject(RunnerLogout);
 
   /** The header's connection cell — folds in the live stream's own state,
    * mirroring the hub app root's own `connection` computed

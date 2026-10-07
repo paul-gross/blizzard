@@ -23,7 +23,7 @@
         placeholder="New graph id…"
         [attr.aria-label]="'Set graph for chunk ' + detail().chunk_id"
       />
-      <fleet-kit-button testid="graph-submit" (click)="submitGraph(graphInput.value); graphInput.value = ''">
+      <fleet-kit-button testid="graph-submit" [disabled]="graphPending()" (click)="submitGraph(graphInput.value); graphInput.value = ''">
         Set
       </fleet-kit-button>
     </span>

@@ -1,4 +1,4 @@
-import { deriveWorkItemsState, type ChunkDetail, type ChunkStatus, type WorkItemsQuery, type WorkItemsState } from 'fleet';
+import { deriveWorkItemsState, isPendingFor, type ChunkDetail, type ChunkStatus, type WorkItemsQuery, type WorkItemsState } from 'fleet';
 
 /**
  * The status `detail` will read once a pending Pause or Complete on it settles, when that outcome is total
@@ -13,8 +13,8 @@ export function pendingStatusOverride(
   pendingPauses: readonly { readonly chunkId: string; readonly paused: boolean }[],
 ): ChunkStatus | null {
   if (detail === undefined) return null;
-  if (pendingCompletes.some((vars) => vars.chunkId === detail.chunk_id)) return 'done';
-  const pausing = pendingPauses.some((vars) => vars.chunkId === detail.chunk_id && vars.paused);
+  if (isPendingFor(pendingCompletes, (vars) => vars.chunkId === detail.chunk_id)) return 'done';
+  const pausing = isPendingFor(pendingPauses, (vars) => vars.chunkId === detail.chunk_id && vars.paused);
   if (pausing && detail.status_if_paused === 'paused') return 'paused';
   return null;
 }

@@ -1,6 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { ActivatedRoute, convertToParamMap } from '@angular/router';
+import { ActivatedRoute, convertToParamMap, type ParamMap } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { hubClient, type MeResponse } from 'fleet';
 import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
@@ -39,6 +39,7 @@ const ROUTINE = {
  */
 describe('GardeningScopeDetail', () => {
   let stub: RequestClientStub;
+  let paramMap$: BehaviorSubject<ParamMap>;
 
   afterEach(() => stub?.restore());
 
@@ -63,7 +64,7 @@ describe('GardeningScopeDetail', () => {
       if (method === 'GET' && path === '/api/me') return me;
       return {};
     });
-    const paramMap$ = new BehaviorSubject(convertToParamMap(opts.params ?? {}));
+    paramMap$ = new BehaviorSubject(convertToParamMap(opts.params ?? {}));
     await TestBed.configureTestingModule({
       imports: [GardeningScopeDetail],
       providers: [
@@ -157,6 +158,69 @@ describe('GardeningScopeDetail', () => {
     await settle(fixture);
 
     expect(stub.forRoute('/api/scopes/blizzard/retire', 'POST')).toHaveLength(1);
+  });
+
+  describe('pending scoped to the selected scope', () => {
+    const OTHER_SCOPE = { ...SCOPE, slug: 'other', description: 'another scope' };
+
+    async function renderTwo() {
+      const fixture = await render({
+        me: OPERATOR_ME_RESPONSE,
+        scopes: [SCOPE, OTHER_SCOPE],
+        params: { scopeSlug: 'blizzard' },
+        routeOverride: (method, path) => (method === 'GET' && path === '/api/scopes/other/routines' ? [] : undefined),
+      });
+      vi.spyOn(TestBed.inject(QueryClient), 'invalidateQueries').mockReturnValue(new Promise<void>(() => undefined));
+      return fixture;
+    }
+
+    async function tick(fixture: Awaited<ReturnType<typeof render>>): Promise<void> {
+      for (let i = 0; i < 4; i += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        fixture.detectChanges();
+      }
+    }
+
+    async function select(fixture: Awaited<ReturnType<typeof render>>, slug: string): Promise<void> {
+      paramMap$.next(convertToParamMap({ scopeSlug: slug }));
+      await tick(fixture);
+    }
+
+    it('leaves another scope’s Retire enabled while one scope’s Retire is pending, and re-disables on re-select', async () => {
+      const fixture = await renderTwo();
+      const el = fixture.nativeElement as HTMLElement;
+      const retire = () => el.querySelector<HTMLButtonElement>('[data-testid="gardening-scope-panel-retire"]');
+
+      retire()?.click();
+      await fixture.whenStable();
+      el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-confirm"]')?.click();
+      await tick(fixture);
+      expect(retire()?.disabled).toBe(true);
+
+      await select(fixture, 'other');
+      expect(retire()?.disabled).toBe(false);
+
+      await select(fixture, 'blizzard');
+      expect(retire()?.disabled).toBe(true);
+    });
+
+    it('leaves another scope’s description Set enabled while one scope’s edit is pending, and re-disables on re-select', async () => {
+      const fixture = await renderTwo();
+      const el = fixture.nativeElement as HTMLElement;
+      const submit = () =>
+        el.querySelector<HTMLButtonElement>('[data-testid="gardening-scope-panel-description-submit"]');
+
+      el.querySelector<HTMLInputElement>('[data-testid="gardening-scope-panel-description-input"]')!.value = 'changed';
+      submit()?.click();
+      await tick(fixture);
+      expect(submit()?.disabled).toBe(true);
+
+      await select(fixture, 'other');
+      expect(submit()?.disabled).toBe(false);
+
+      await select(fixture, 'blizzard');
+      expect(submit()?.disabled).toBe(true);
+    });
   });
 
   it('renders the retired override while Retire is pending, reverting to the real state on rejection', async () => {

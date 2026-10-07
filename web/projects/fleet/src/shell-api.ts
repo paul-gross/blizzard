@@ -16,6 +16,7 @@ export { KitTab, KitTabStrip } from './lib/kit/kit-tab';
 export { MobileTabBar, type MobileTabItem } from './lib/shell/mobile-chrome/mobile-tab-bar';
 
 export { KitButton } from './lib/kit/kit-button';
+export { errorMessage } from './lib/core/error-message';
 export { LIVE_COVERED_POLL_BACKSTOP_MS } from './lib/core/polling';
 export {
   hubAuthProvidersKey,

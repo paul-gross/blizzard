@@ -1,9 +1,10 @@
-import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { CdkMenuTrigger } from '@angular/cdk/menu';
 import { KitMenuItem, KitMenuPanel, MobileTitlebar as FleetMobileTitlebar, ViewportMenu } from 'fleet';
 import { injectRunnerDashboardQuery } from '../../core/status.query';
 import { injectRunnerSessionQuery, signedInUsername } from '../../core/identity/auth.query';
 import { LocalIdentity } from '../../core/identity/app-identity';
+import { RunnerLogout } from '../../core/identity/runner-logout';
 
 /**
  * The runner's mobile titlebar sits at the app root (`../app.ts`),
@@ -28,6 +29,7 @@ import { LocalIdentity } from '../../core/identity/app-identity';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [CdkMenuTrigger, FleetMobileTitlebar, KitMenuItem, KitMenuPanel, LocalIdentity, ViewportMenu],
   templateUrl: './mobile-titlebar.html',
+  styleUrl: './mobile-titlebar.css',
 })
 export class MobileTitlebar {
   /** The titlebar's own severable read (`app-info.ts`'s own instance dedupes
@@ -39,6 +41,9 @@ export class MobileTitlebar {
    * malformed body (e.g. a misrouted proxy) must degrade to `false`, not
    * throw mid-render — the same guard `app-info.ts`'s own `view` takes. */
   protected readonly hubReachable = computed(() => this.dashboardQuery.data()?.runner?.hub?.reachable ?? false);
+
+  /** The shell's one logout owner: the menu item's pending flag and the error rendered beside the titlebar. */
+  protected readonly logout = inject(RunnerLogout);
 
   private readonly sessionQuery = injectRunnerSessionQuery();
 

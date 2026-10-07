@@ -1,4 +1,7 @@
 <fleet-mobile-titlebar [live]="hubReachable()" testid="local-panel-mobile-titlebar" [menu]="shellMenu" />
+@if (logout.error(); as error) {
+  <p class="logout-error" role="alert" data-testid="local-panel-mobile-logout-error">{{ error }}</p>
+}
 <ng-template #shellMenu>
   <fleet-kit-menu-panel testid="local-panel-mobile-titlebar-menu-panel">
     <!-- The identity block renders label-only in here: a role=menu may own
@@ -11,7 +14,7 @@
          keyboard has already skipped past. -->
     <app-identity #identity variant="label" />
     @if (signedIn()) {
-      <fleet-kit-menu-item testid="local-panel-mobile-logout" (triggered)="identity.logout()">
+      <fleet-kit-menu-item testid="local-panel-mobile-logout" [disabled]="logout.pending()" (triggered)="logout.logout()">
         Log out
       </fleet-kit-menu-item>
     }

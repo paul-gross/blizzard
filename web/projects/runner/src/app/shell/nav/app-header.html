@@ -17,7 +17,7 @@
 <ng-template #profileMenu>
   <fleet-kit-menu-panel testid="local-panel-menu-panel">
     @if (identity.username()) {
-      <fleet-kit-menu-item testid="local-panel-logout" (triggered)="identity.logout()">Log out</fleet-kit-menu-item>
+      <fleet-kit-menu-item testid="local-panel-logout" [disabled]="logout.pending()" (triggered)="logout.logout()">Log out</fleet-kit-menu-item>
     }
     <fleet-kit-menu-item testid="local-panel-appearance" submenu [cdkMenuTriggerFor]="appearanceMenu">
       Appearance
