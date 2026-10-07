@@ -47,8 +47,7 @@ _COMMANDS = {
 class _RunnerGroup(OperatorGroup):
     """The root of a runner command: it owns the process's :class:`WorkerSession`, so the one
     HTTP client and the command's span are finished — and the span sent — as the command ends,
-    before click reports any error. An operator's command is traced by the :class:`OperatorGroup`
-    beneath it; the two never both open a span, since a worker's environment is never an operator's."""
+    before click reports any error."""
 
     def invoke(self, ctx: click.Context) -> object:
         return WorkerSession.begin(ctx, CliCollaborators.of(ctx)).run(lambda: super(_RunnerGroup, self).invoke(ctx))

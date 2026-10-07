@@ -666,7 +666,7 @@
           "short_help": "Declare that CHUNK_ID depends on PREREQUISITE_CHUNK_ID."
         },
         "detach": {
-          "help": "Forcibly release CHUNK from its runner.\n\nA pure client of ``POST /api/chunks/{id}/detach``. The chunk re-derives ready at its current node; the\nholding runner releases it on its next tick. 409 when no live route holds a claim \u2014 a stopped or done\nchunk's leftover route holds none.",
+          "help": "Forcibly release CHUNK from its runner.\n\nThe chunk is released from its runner and can be claimed again at its current node. Refused when\nnothing holds the chunk \u2014 a stopped or done chunk is held by nothing.",
           "params": [
             {
               "hidden": false,

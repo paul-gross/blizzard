@@ -253,7 +253,7 @@ def start(ctx: click.Context, directory: str, runner_url: str | None, by: str) -
     is_flag=True,
     default=False,
     help="End the chunk's open takeover instead of starting a session — the recovery for a stranded one. "
-    "The loop may then touch the chunk's session again, and `runner requeue` is no longer refused for a takeover. "
+    "The runner resumes driving the chunk's session, and `runner requeue` is no longer refused for a takeover. "
     "Reports nothing open, exiting 0, when none is.",
 )
 @click.option(
