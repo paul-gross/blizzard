@@ -2384,10 +2384,9 @@ export type ReceiverStatus = {
 /**
  * RenewalFailureReason
  *
- * The closed set of reasons a due renewal attempt did not succeed: ``RENEWER_UNAVAILABLE``,
- * the vendor CLI missing or unrunnable; ``TIMED_OUT``, the bounded subprocess overrunning its
- * timeout; ``VENDOR_REFUSED``, a non-zero exit or a response saying it could not refresh;
- * ``PROTOCOL_ERROR``, a response this binding could not make sense of at all.
+ * The closed set of reasons a due renewal attempt did not succeed: ``renewer_unavailable``,
+ * no renewer could be run; ``timed_out``, the attempt overran its bound; ``vendor_refused``,
+ * the vendor declined to refresh; ``protocol_error``, the vendor's answer was unintelligible.
  */
 export const RenewalFailureReason = {
     RENEWER_UNAVAILABLE: 'renewer_unavailable',
@@ -2399,10 +2398,9 @@ export const RenewalFailureReason = {
 /**
  * RenewalFailureReason
  *
- * The closed set of reasons a due renewal attempt did not succeed: ``RENEWER_UNAVAILABLE``,
- * the vendor CLI missing or unrunnable; ``TIMED_OUT``, the bounded subprocess overrunning its
- * timeout; ``VENDOR_REFUSED``, a non-zero exit or a response saying it could not refresh;
- * ``PROTOCOL_ERROR``, a response this binding could not make sense of at all.
+ * The closed set of reasons a due renewal attempt did not succeed: ``renewer_unavailable``,
+ * no renewer could be run; ``timed_out``, the attempt overran its bound; ``vendor_refused``,
+ * the vendor declined to refresh; ``protocol_error``, the vendor's answer was unintelligible.
  */
 export type RenewalFailureReason = typeof RenewalFailureReason[keyof typeof RenewalFailureReason];
 
@@ -2752,9 +2750,9 @@ export type RunnerTraceStatusResponse = {
  * SampleMissReason
  *
  * The closed set of reasons one sampling attempt produced nothing:
- * ``CREDENTIAL_LAPSED``, a token past its own expiry or a 401; ``CREDENTIAL_UNREADABLE``, a
- * missing, malformed, or incomplete credential file; ``ENDPOINT_UNREACHABLE``, any other
- * non-2xx or a request-level failure; ``RESPONSE_UNPARSEABLE``, a 2xx body without windows.
+ * ``credential_lapsed``, a token past its own expiry or a 401; ``credential_unreadable``, a
+ * missing, malformed, or incomplete credential file; ``endpoint_unreachable``, any other
+ * non-2xx or a request-level failure; ``response_unparseable``, a 2xx body without windows.
  */
 export const SampleMissReason = {
     CREDENTIAL_LAPSED: 'credential_lapsed',
@@ -2767,9 +2765,9 @@ export const SampleMissReason = {
  * SampleMissReason
  *
  * The closed set of reasons one sampling attempt produced nothing:
- * ``CREDENTIAL_LAPSED``, a token past its own expiry or a 401; ``CREDENTIAL_UNREADABLE``, a
- * missing, malformed, or incomplete credential file; ``ENDPOINT_UNREACHABLE``, any other
- * non-2xx or a request-level failure; ``RESPONSE_UNPARSEABLE``, a 2xx body without windows.
+ * ``credential_lapsed``, a token past its own expiry or a 401; ``credential_unreadable``, a
+ * missing, malformed, or incomplete credential file; ``endpoint_unreachable``, any other
+ * non-2xx or a request-level failure; ``response_unparseable``, a 2xx body without windows.
  */
 export type SampleMissReason = typeof SampleMissReason[keyof typeof SampleMissReason];
 

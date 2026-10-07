@@ -1,4 +1,4 @@
-"""A chunk migration's attribution — one definition, shared by the hub's facts and the wire."""
+"""A chunk migration's attribution — one definition, shared by both daemons."""
 
 from __future__ import annotations
 

@@ -1,5 +1,4 @@
-"""The runner-minted fact kinds — ``noun.verb`` names, one definition shared by the runner that
-mints a fact and the hub that ingests it."""
+"""The runner-minted fact kinds, ``noun.verb`` names — one definition, shared by both daemons."""
 
 from __future__ import annotations
 
@@ -22,8 +21,7 @@ USAGE_RECORDED = "usage.recorded"
 # chunk_id|null, lease_id|null, node_name|null, message, detail|null}. Never token-gated.
 EVENT_RECORDED = "event.recorded"
 # An advisory sample of subscription rate-limit utilization, never one a
-# status derives from. Payload: {slug, sampled_at, windows: [...], name|null}; upserted
-# per (runner_id, slug), not appended.
+# status derives from. Payload: {slug, sampled_at, windows: [...], name|null}.
 EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED = "external_subscription_usage.sampled"
-# A sampler miss, upserted per (runner_id, slug) beside the sample. Payload: {slug, name, missed_at, reason} only.
+# A sampler miss. Payload: {slug, name, missed_at, reason} only.
 EXTERNAL_SUBSCRIPTION_USAGE_MISSED = "external_subscription_usage.missed"

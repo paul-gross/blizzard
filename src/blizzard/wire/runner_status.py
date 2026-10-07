@@ -114,8 +114,8 @@ class EscalationView(BaseModel):
     #: The escalated generation's own recorded harness build version,
     #: beside ``harness_id``. ``None`` when the generation recorded none.
     harness_version: str | None = None
-    #: The ``blizzard runner takeover`` invocation — the primary command; ``resume_command`` stays the
-    #: raw fallback. ``None`` when the runner cannot compose it. Holds only the chunk id and runner dir.
+    #: The ``blizzard runner takeover`` invocation. ``None`` when the runner cannot compose it.
+    #: Holds only the chunk id and runner dir.
     wrapped_takeover_command: str | None = None
     cause: str | None = None
 

@@ -178,7 +178,7 @@ def routine_trend(
     `period_days`-wide period, findings created and per-kind exit counts, the outflow/
     withdrawn roll-ups, and the age cut against `introduced_boundary`. 404 on an
     unknown routine name; 422 on a malformed instant, a non-positive `period_days`, a
-    non-positive span, or a span/`period_days` pair bucketing past `TrendWindow.MAX_PERIODS`."""
+    non-positive span, or a span/`period_days` pair bucketing past the period cap."""
     if services.routines.get_by_name(routine) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine!r}")
     parsed_since = _parse_instant(since, field="since")
@@ -275,8 +275,7 @@ def _baseline_view(baseline: RoutineBaseline) -> RoutineBaselineView:
 def routine_baselines(
     routine_id: str, services: Annotated[HubServices, Depends(get_services)]
 ) -> list[RoutineBaselineView]:
-    """Every scope `routine_id` has swept — see
-    `IReadFindingSetRepository.newest_by_scope_for_routine` for what absence means.
+    """Every scope `routine_id` has swept; a scope it never swept has no row.
     404 on an unknown routine id."""
     routine = services.routines.get(routine_id)
     if routine is None:

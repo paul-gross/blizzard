@@ -194,7 +194,7 @@ class FindingsPageView(BaseModel):
 
 
 class FindingFactView(BaseModel):
-    """One entry in a finding's fact chain, oldest-first — `FindingFact` on the wire."""
+    """One entry in a finding's fact chain, oldest-first."""
 
     kind: FindingFactKind
     recorded_at: str

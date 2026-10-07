@@ -1,8 +1,7 @@
 """The worker-facing chunk-asks wire shapes.
 
 ``ChunkAskView`` is the row a later session reads for a question asked on its chunk, with its
-answer. The projection from the hub's ``QuestionView`` is not here: a wire model declares shape
-only, never a projection into another model."""
+answer."""
 
 from __future__ import annotations
 

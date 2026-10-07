@@ -1,5 +1,4 @@
-"""The gardening run's mode vocabulary — one definition, shared by the hub domain that settles a
-run's baseline and the wire that reports it."""
+"""The gardening run's mode vocabulary — one definition, shared by both daemons."""
 
 from __future__ import annotations
 

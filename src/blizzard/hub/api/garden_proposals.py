@@ -165,7 +165,7 @@ def pass_garden_proposal(
     services: Annotated[HubServices, Depends(get_services)],
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
 ) -> GardenProposalView:
-    """Pass the proposal at PROPOSAL_ID, recording the given reason. Passing is not a
+    """Pass the proposal at `{proposal_id}`, recording the given reason. Passing is not a
     dismissal — it is the note that stops a later run raising the same response as
     though it were new. 404 for an unknown proposal, 409 when the proposal already
     carries a closure — closure is terminal, so it wins over every other refusal — and
@@ -187,7 +187,7 @@ def accept_garden_proposal(
     services: Annotated[HubServices, Depends(get_services)],
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
 ) -> object:
-    """Accept the proposal at PROPOSAL_ID. When `mint_work_item` is true, mints a linked
+    """Accept the proposal at `{proposal_id}`. When `mint_work_item` is true, mints a linked
     hub work item from `body` (or the proposal's own), wrapped in the "Related findings"
     template when the proposal names findings and bare when it names none. When it is
     false, mints nothing and records the decline. Promotes nothing and changes no
@@ -272,7 +272,7 @@ def create_garden_proposal(
 def edit_garden_proposal(
     proposal_id: str, request: GardenProposalEditRequest, services: Annotated[HubServices, Depends(get_services)]
 ) -> GardenProposalView:
-    """Replace the given fields of PROPOSAL_ID in place, all-or-nothing
+    """Replace the given fields of `{proposal_id}` in place, all-or-nothing
     — works on either origin while open. 404 unknown proposal, 409 already closed,
     422 a blank title/class/body or an edit naming no field."""
     proposal = _get_or_404(proposal_id, services)
@@ -300,7 +300,7 @@ def attach_garden_proposal_findings(
     request: GardenProposalFindingsRequest,
     services: Annotated[HubServices, Depends(get_services)],
 ) -> GardenProposalView:
-    """Link the given finding ids to PROPOSAL_ID — works on either origin
+    """Link the given finding ids to `{proposal_id}` — works on either origin
     while open. 404 unknown proposal, 409 already closed, 422 no finding id, an unknown,
     exited, or duplicate finding id, or one already linked to this proposal — the whole
     call is refused, nothing is linked."""
@@ -331,7 +331,7 @@ def detach_garden_proposal_findings(
     request: GardenProposalFindingsRequest,
     services: Annotated[HubServices, Depends(get_services)],
 ) -> GardenProposalView:
-    """Unlink the given finding ids from PROPOSAL_ID — works on either
+    """Unlink the given finding ids from `{proposal_id}` — works on either
     origin while open. 404 unknown proposal, 409 already closed, 422 no finding id, an
     unknown or duplicate id, or one not linked to this proposal."""
     proposal = _get_or_404(proposal_id, services)

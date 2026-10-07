@@ -2592,7 +2592,7 @@ export type EscalationCause = typeof EscalationCause[keyof typeof EscalationCaus
 /**
  * EventLogSeverity
  *
- * The closed severity vocabulary; every wire severity field is typed with it.
+ * The closed severity vocabulary.
  */
 export const EventLogSeverity = {
     CRITICAL: 'critical',
@@ -2603,7 +2603,7 @@ export const EventLogSeverity = {
 /**
  * EventLogSeverity
  *
- * The closed severity vocabulary; every wire severity field is typed with it.
+ * The closed severity vocabulary.
  */
 export type EventLogSeverity = typeof EventLogSeverity[keyof typeof EventLogSeverity];
 
@@ -2955,7 +2955,7 @@ export type FindingFactKind = typeof FindingFactKind[keyof typeof FindingFactKin
 /**
  * FindingFactView
  *
- * One entry in a finding's fact chain, oldest-first — `FindingFact` on the wire.
+ * One entry in a finding's fact chain, oldest-first.
  */
 export type FindingFactView = {
     /**
@@ -5355,8 +5355,7 @@ export type Role = typeof Role[keyof typeof Role];
 /**
  * RoleAssignmentRequest
  *
- * ``POST /api/users/{id}/role`` body — the target role, by its ``auth_core.Role``
- * value.
+ * ``POST /api/users/{id}/role`` body — the target role, by its wire value.
  */
 export type RoleAssignmentRequest = {
     /**
@@ -5504,8 +5503,7 @@ export type RoutineBaselineRepoView = {
 /**
  * RoutineBaselineView
  *
- * One scope a routine has swept — see
- * `IReadFindingSetRepository.newest_by_scope_for_routine` for what absence means.
+ * One scope a routine has swept; a scope it never swept has no row.
  */
 export type RoutineBaselineView = {
     /**
@@ -5990,9 +5988,9 @@ export type RunnerChangedPayload = {
 /**
  * RunnerConnection
  *
- * An added runner's connection condition, derived at read time: ``NEVER_CONNECTED``, added
+ * An added runner's connection condition, derived at read time: ``never_connected``, added
  * at the hub but never registered, so it has no workspace, capabilities, or liveness yet;
- * ``ONLINE``, registered and heard from within the liveness threshold; ``OFFLINE``, registered
+ * ``online``, registered and heard from within the liveness threshold; ``offline``, registered
  * but not heard from within it.
  */
 export const RunnerConnection = {
@@ -6004,9 +6002,9 @@ export const RunnerConnection = {
 /**
  * RunnerConnection
  *
- * An added runner's connection condition, derived at read time: ``NEVER_CONNECTED``, added
+ * An added runner's connection condition, derived at read time: ``never_connected``, added
  * at the hub but never registered, so it has no workspace, capabilities, or liveness yet;
- * ``ONLINE``, registered and heard from within the liveness threshold; ``OFFLINE``, registered
+ * ``online``, registered and heard from within the liveness threshold; ``offline``, registered
  * but not heard from within it.
  */
 export type RunnerConnection = typeof RunnerConnection[keyof typeof RunnerConnection];
@@ -6491,9 +6489,9 @@ export type RunnerView = {
  * SampleMissReason
  *
  * The closed set of reasons one sampling attempt produced nothing:
- * ``CREDENTIAL_LAPSED``, a token past its own expiry or a 401; ``CREDENTIAL_UNREADABLE``, a
- * missing, malformed, or incomplete credential file; ``ENDPOINT_UNREACHABLE``, any other
- * non-2xx or a request-level failure; ``RESPONSE_UNPARSEABLE``, a 2xx body without windows.
+ * ``credential_lapsed``, a token past its own expiry or a 401; ``credential_unreadable``, a
+ * missing, malformed, or incomplete credential file; ``endpoint_unreachable``, any other
+ * non-2xx or a request-level failure; ``response_unparseable``, a 2xx body without windows.
  */
 export const SampleMissReason = {
     CREDENTIAL_LAPSED: 'credential_lapsed',
@@ -6506,9 +6504,9 @@ export const SampleMissReason = {
  * SampleMissReason
  *
  * The closed set of reasons one sampling attempt produced nothing:
- * ``CREDENTIAL_LAPSED``, a token past its own expiry or a 401; ``CREDENTIAL_UNREADABLE``, a
- * missing, malformed, or incomplete credential file; ``ENDPOINT_UNREACHABLE``, any other
- * non-2xx or a request-level failure; ``RESPONSE_UNPARSEABLE``, a 2xx body without windows.
+ * ``credential_lapsed``, a token past its own expiry or a 401; ``credential_unreadable``, a
+ * missing, malformed, or incomplete credential file; ``endpoint_unreachable``, any other
+ * non-2xx or a request-level failure; ``response_unparseable``, a 2xx body without windows.
  */
 export type SampleMissReason = typeof SampleMissReason[keyof typeof SampleMissReason];
 

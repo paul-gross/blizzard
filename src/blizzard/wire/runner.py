@@ -86,7 +86,7 @@ class RunnerAddRequest(BaseModel):
     """Add a runner under an initial display name. The hub mints the runner's id and bearer
     token together; the runner's own registrations set its name from then on."""
 
-    #: A blank name is refused (422): it would render as nothing beside the runner's id.
+    #: A blank name is refused (422).
     name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
 
@@ -160,8 +160,8 @@ class RunnerView(BaseModel):
     registered_at: str
     last_seen_at: str
     online: bool
-    hub_paused: bool  # the fleet paused it — `blizzard hub runner pause`, cleared by `hub runner resume`
-    locally_paused: bool = False  # it paused itself — spawns nothing, `blizzard runner pause`/`start`
+    hub_paused: bool  # the fleet paused it — the hub routes it no new claims
+    locally_paused: bool = False  # it paused itself — it spawns nothing
     # The local pause's own cause, populated only alongside a true `locally_paused`;
     # `reason` is `None` for a manual pause.
     locally_paused_by: str | None = None
@@ -197,8 +197,8 @@ class RunnerRegistryView(BaseModel):
     workspace_id: str | None = None
     registered_at: str | None = None
     last_seen_at: str | None = None
-    hub_paused: bool  # the fleet paused it — `blizzard hub runner pause`, cleared by `hub runner resume`
-    locally_paused: bool = False  # it paused itself — spawns nothing, `blizzard runner pause`/`start`
+    hub_paused: bool  # the fleet paused it — the hub routes it no new claims
+    locally_paused: bool = False  # it paused itself — it spawns nothing
     # The local pause's own cause; `reason` is `None` for a manual pause.
     locally_paused_by: str | None = None
     locally_paused_reason: str | None = None

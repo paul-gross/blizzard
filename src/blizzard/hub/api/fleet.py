@@ -223,8 +223,8 @@ def peek_matched_queue(
     principal: Annotated[RunnerPrincipal, Depends(require_runner_principal)],
 ) -> QueuePeekResponse:
     """The matched fleet peek — at most one ready entry the calling principal can both
-    work (declared capabilities against ``EligibilityCheck``) and claim (not
-    dependency-blocked), with ``request.policy`` applied to both."""
+    work (its declared capabilities admit the entry) and claim (not dependency-blocked),
+    with the request's match policy applied to both."""
     statuses = services.chunks.facts.load_live_statuses()
     return queue_api.MatchedPeek.of(services, statuses, request).view
 
@@ -350,7 +350,7 @@ def _routine_run_or_404(chunk_id: str, services: HubServices) -> RunContext:
 
 @router.get("/chunks/{chunk_id}/garden/findings", response_model=list[FindingView])
 def get_garden_findings(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> list[FindingView]:
-    """A worker's finding bucket — exactly what its delivery may cite (`FindingBucket`); the
+    """A worker's finding bucket — exactly the findings its delivery may cite; the
     chunk's own run context derives the routine and scope, no caller flag can name another.
     404 for an unknown chunk or one with no run context (not a routine run)."""
     run = _routine_run_or_404(chunk_id, services)

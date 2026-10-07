@@ -22,12 +22,45 @@ pytestmark = pytest.mark.unit
 
 _SPECS = sorted((repo_root() / "openapi").glob("*.openapi.json"))
 
+_SCHEMAS = {name for spec in _SPECS for name in json.loads(spec.read_text())["components"]["schemas"]}
+
+# Public names a description may carry though they look internal.
+_ADMITTED = {"BLIZZARD_LEASE_ID"}
+
+_INTERNAL_PATH = re.compile(
+    r":(?:class|mod|func|meth|attr|data):|(?:src|tests)/|\.py\b|::test_|``[A-Z]\w+\.\w+``|``\w+\.\w+\(\)``|\bbzh:\S+"
+)
+# A backticked name of two or more capitalized humps (a leading acronym counts), a backticked
+# dotted path, or an UPPER_SNAKE token. Single-hump words, hyphenated headers and lowercase
+# names fall outside by shape.
+_HUMPS = re.compile(r"`{1,2}((?=\w*[a-z])(?:[A-Z][a-z0-9]*){2,})`{1,2}")
+_DOTTED = re.compile(r"`{1,2}(\w+(?:\.\w+)+)`{1,2}")
+_UPPER_SNAKE = re.compile(r"\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b")
+
+
+def _internal_identifiers(text: str) -> list[str]:
+    humps = [name for name in _HUMPS.findall(text) if name not in _SCHEMAS]
+    dotted = [
+        path
+        for path in _DOTTED.findall(text)
+        if path.split(".")[0] not in _SCHEMAS and any(segment[:1].isupper() for segment in path.split("."))
+    ]
+    snake = [name for name in _UPPER_SNAKE.findall(text) if name not in _ADMITTED]
+    return [*humps, *dotted, *snake]
+
+
+def _carries_internal_identifier(text: str) -> bool:
+    return bool(_INTERNAL_PATH.search(text) or _internal_identifiers(text))
+
+
 _FORBIDDEN = {
-    "client-surface claim": re.compile(r"\bboards?\b|\bthe UI\b|\bfrontend\b|\bdocks?\b|\bkiosk\b", re.IGNORECASE),
-    "internal identifier": re.compile(
-        r":(?:class|mod|func|meth|attr|data):|(?:src|tests)/|\.py\b|::test_|``[A-Z]\w+\.\w+``|``\w+\.\w+\(\)``|\bbzh:\S+"
+    "client-surface claim": lambda text: bool(
+        re.search(r"\bboards?\b|\bthe UI\b|\bfrontend\b|\bdocks?\b|\bkiosk\b", text, re.IGNORECASE)
     ),
-    "workspace path notation": re.compile(r"\b(?:blizzard-context|blizzard-mock|blizzard-product|winter-\w+):"),
+    "internal identifier": _carries_internal_identifier,
+    "workspace path notation": lambda text: bool(
+        re.search(r"\b(?:blizzard-context|blizzard-mock|blizzard-product|winter-\w+):", text)
+    ),
 }
 
 
@@ -48,8 +81,8 @@ def test_descriptions_state_only_consumer_resolvable_facts(spec: Path) -> None:
     offenders = [
         f"{spec.name}{pointer} [{kind}]: {text!r}"
         for pointer, text in _descriptions(json.loads(spec.read_text()))
-        for kind, pattern in _FORBIDDEN.items()
-        if pattern.search(text)
+        for kind, matches in _FORBIDDEN.items()
+        if matches(text)
     ]
     assert not offenders, "\n".join(["descriptions carry unresolvable prose:", *offenders])
 
@@ -69,14 +102,13 @@ def _unschemaed_wire_models() -> list[tuple[str, str, str]]:
     `SseFramePayload`, not `BaseModel` directly, and is as publishable as one. A private
     class is skipped — a `_`-prefixed Protocol is a structural alias no route can name, and
     its internal references are the point of it."""
-    schemas = {name for spec in _SPECS for name in json.loads(spec.read_text())["components"]["schemas"]}
     found = []
     for path in sorted(_WIRE.glob("*.py")):
         for node in ast.walk(ast.parse(path.read_text())):
             if not isinstance(node, ast.ClassDef) or node.name.startswith("_"):
                 continue
             doc = ast.get_docstring(node)
-            if doc is None or node.name in schemas or any(s.endswith(node.name) for s in schemas):
+            if doc is None or node.name in _SCHEMAS or any(s.endswith(node.name) for s in _SCHEMAS):
                 continue
             found.append((path.name, node.name, doc))
     return found
@@ -89,8 +121,8 @@ def test_wire_models_no_spec_reaches_are_held_to_the_same_bar() -> None:
     offenders = [
         f"{file}::{name} [{kind}]"
         for file, name, doc in _unschemaed_wire_models()
-        for kind, pattern in _FORBIDDEN.items()
-        if pattern.search(doc)
+        for kind, matches in _FORBIDDEN.items()
+        if matches(doc)
     ]
     assert not offenders, "\n".join(["un-schema'd wire models carrying unresolvable prose:", *offenders])
 

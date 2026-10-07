@@ -71,7 +71,6 @@ def repo_identity(origin_url: str | None, name: str) -> str:
     """The one identity a commit pointer's repository is known by.
 
     The ``owner/name`` coordinate ``origin_url`` encodes when it names an owner; otherwise ``name``
-    as given, so a name already qualified (a stored row with no origin) passes through unchanged.
-    Delivery addresses a repo by this coordinate alone."""
+    as given, so a name already qualified (a stored row with no origin) passes through unchanged."""
     ref = RepoRef.parse(origin_url) if origin_url else None
     return ref.qualified if ref else name

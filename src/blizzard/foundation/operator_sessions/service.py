@@ -13,8 +13,7 @@ from blizzard.foundation.operator_sessions import IReadSessionStore, IWriteSessi
 
 @dataclass(frozen=True)
 class SessionService:
-    """Wraps the write seam; also delegates ``load`` so the same instance can serve as the
-    hub group's shared ``ctx.obj`` for every other (read-only) verb."""
+    """Wraps the write seam, and delegates ``load`` so one instance also serves as a read seam."""
 
     _store: IWriteSessionStore
 
@@ -25,9 +24,7 @@ class SessionService:
         self._store.save(hub_url, token)
 
     def logout(self, hub_url: str, revoke: Callable[[], object]) -> None:
-        """``revoke`` is best-effort — the controller supplies it, and any
-        failure from it must never skip the local delete."""
-        with contextlib.suppress(Exception):  # best-effort hub revoke — the local delete must still happen
+        with contextlib.suppress(Exception):
             revoke()
         self._store.delete(hub_url)
 

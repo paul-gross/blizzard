@@ -1,8 +1,8 @@
 """Fleet-trace enablement, read only from OpenTelemetry's own environment variables.
 
-A pure parse: no exporter is built here, and endpoint, headers, timeout, compression and
-certificates stay the SDK's own concern — this module reads only what decides whether
-a daemon can export at all (``blizzard-product:/delivered/tracing/fleet-spans/spec/emission.md``
+A pure parse: no exporter is built here (the SDK's own settings: ``internal/otlp.py``); this module
+reads only what decides whether a daemon can export at all
+(``blizzard-product:/delivered/tracing/fleet-spans/spec/emission.md``
 §Configuration)."""
 
 from __future__ import annotations

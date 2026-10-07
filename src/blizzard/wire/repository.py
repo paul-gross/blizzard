@@ -1,6 +1,5 @@
 """Repository record wire models — the ``/api/repositories`` record verbs. Request models
-are ``extra="forbid"``; every field is required, so the patch model refuses an explicit
-``null`` on any field."""
+are ``extra="forbid"``."""
 
 from __future__ import annotations
 

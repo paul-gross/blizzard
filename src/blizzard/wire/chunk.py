@@ -156,7 +156,7 @@ class ChunkSummary(BaseModel):
     chunk_id: str
     graph_id: str
     status: ChunkStatus
-    # The chunk's status is terminal — the hub's judgment, so no surface restates which statuses finish.
+    # The chunk's status is terminal.
     terminal: bool = False
     current_node_id: str | None
     current_node_name: str | None = None
@@ -531,8 +531,6 @@ class ChunkDetail(BaseModel):
     # The operator's per-chunk pause brake — non-None iff currently paused, and carried
     # independently of ``status`` so a gated-and-paused chunk stays legible (see PauseView).
     pause: PauseView | None = None
-    # The chunk's blocked marking — non-None only when it both waits on an
-    # unmet prerequisite and this read derives it; null otherwise, regardless of block state.
     #: The chunk's status admits an operator pause.
     pausable: bool = False
     #: The status the chunk derives once a pause settles; its current status where a pause is refused or outranked.
@@ -547,6 +545,8 @@ class ChunkDetail(BaseModel):
     terminal: bool = False
     #: The chunk's current node is the graph's reserved terminal.
     current_node_terminal: bool = False
+    # The chunk's blocked marking — non-None only when it both waits on an
+    # unmet prerequisite and this read derives it; null otherwise, regardless of block state.
     blocked: BlockedView | None = None
     # The chunk's standing dependency edges one hop each way — always present,
     # unlike ``blocked``; see ChunkNeighborhoodView.

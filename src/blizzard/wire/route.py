@@ -2,8 +2,7 @@
 
 ``POST /routes`` *is* acquisition: the claimant posts the **complete** route — chunk, workspace, and the acquired env
 ids — and its bearer token names the runner. Exactly one claim per chunk is accepted; a second races and loses with
-**409**; an unregistered or paused claimant is refused with **403**, as is a retired one whose token still resolves —
-retiring revokes the token, so a retired runner's claim usually stops at **401**."""
+**409**; an unregistered or paused claimant is refused with **403**, as is a retired one whose token still resolves."""
 
 from __future__ import annotations
 
