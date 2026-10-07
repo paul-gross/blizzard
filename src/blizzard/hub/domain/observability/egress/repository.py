@@ -1,8 +1,5 @@
 """The egress export's store seams — the usage read, the cursor's fact rows, the failure latch, and the ``events``
-dataset's read-only projection of the derivation markers, their events and the drop facts.
-
-Closed steps are read through the trace sweep's own seam (``IReadTraceSteps``), so the two exports never
-disagree about a step."""
+dataset's read-only projection of the derivation markers, their events and the drop facts."""
 
 from __future__ import annotations
 
@@ -109,15 +106,14 @@ class IWriteEgressCursor(IReadEgress, Protocol):
 @domain_model
 @dataclass(frozen=True, order=True)
 class EpochKey:
-    """One chunk epoch, the events backfill's keyset order."""
+    """One chunk epoch, ordered by chunk id then epoch."""
 
     chunk_id: str
     epoch: int
 
 
 class IReadEgressEvents(Protocol):
-    """The ``events`` dataset's reads. Read-only: the markers, events and drops belong to the derivation seam,
-    which writes them; this projects them in the export's cursor order."""
+    """The ``events`` dataset's reads, read-only, in cursor order."""
 
     def markers_after(
         self, position: EventsPosition, until: datetime, limit: int, *, extractor_version: str | None

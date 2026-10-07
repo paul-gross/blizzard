@@ -290,8 +290,7 @@ class IReadTranscriptEvents(Protocol):
 
 
 class IWriteTranscriptEvents(IReadTranscriptEvents, Protocol):
-    """Read-write variant. Only :class:`~blizzard.hub.domain.observability.analytics.derivation.EventDerivationService`
-    depends on this."""
+    """Read-write variant."""
 
     def replace_segment_events(
         self,

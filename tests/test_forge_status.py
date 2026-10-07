@@ -7,12 +7,17 @@ tier), not the HTTP shaping ``tests/test_work_source.py`` already covers."""
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from datetime import timedelta
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
 
 from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.hub import app as hub_app
+from blizzard.hub import runtime as hub_runtime
+from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.observability.forge_status import AnnotationReconciler
 from blizzard.hub.store.internal.forge_annotation_store import ForgeAnnotationStore
@@ -24,9 +29,14 @@ from tests.support import (
     WorkSourceRegistry,
     build_hub,
     count_queries,
+    forge_state,
     hub_store_connections,
     ingest,
 )
+from tests.test_store_work_source_registry import _create, _promote, forge
+
+# Re-exported so pytest resolves the registry suite's `forge` fixture here; the tests request it by name.
+_FIXTURES = (forge,)
 
 # --- WorkStatusMarker.of — pure, exhaustive over ChunkStatus ---
 
@@ -295,16 +305,64 @@ def test_a_hub_that_never_annotated_clears_nothing(tmp_path: Path) -> None:
     assert labelled.set_calls == []
 
 
+@pytest.fixture
+def hosted(
+    tmp_path: Path, request: pytest.FixtureRequest
+) -> Iterator[tuple[TestClient, HubServices, ForgeAnnotationStore, TestClient, str]]:
+    """A hosted hub whose work sources are store records the registry reads on use, so retiring a
+    source or its secret through the hub's own routes reaches the very next sweep — beside the
+    served forge double its sources talk HTTP to."""
+    double, forge_url = request.getfixturevalue("forge")
+    config = hub_runtime.init_environment(tmp_path / "hub")
+    app = hub_app.build_hosted_app(config)
+    # Never entered as a context manager: no lifespan, so no background sweep races the test's own passes.
+    client = TestClient(app)
+    yield client, app.state.services, ForgeAnnotationStore(hub_store_connections(app.state.engine)), double, forge_url
+    app.state.engine.dispose()
+
+
 @pytest.mark.component
-def test_a_source_removed_from_config_is_forgotten_without_a_clear(tmp_path: Path) -> None:
-    hub = build_hub(tmp_path, work_sources={"default": FakeWorkSource(name="default")})
-    annotator = FakeAnnotator()
-    _reconciler(hub, WorkSourceRegistry({}, {"default": annotator})).sweep()
-    memory = ForgeAnnotationStore(hub_store_connections(hub.engine))
-    assert memory.annotated_sources() == {"default"}
+def test_a_retired_source_has_its_labels_cleared_once(
+    hosted: tuple[TestClient, HubServices, ForgeAnnotationStore, TestClient, str],
+) -> None:
+    client, services, memory, double, forge_url = hosted
+    _create(client, forge_url, annotate=True)
+    _promote(client, "widget:1")
+    assert services.annotation is not None
+    services.annotation.sweep()
+    assert forge_state(double)["issue_labels"]["acme/widget#1"] == {"blizzard:ingested"}  # type: ignore[index]
+    assert memory.annotated_sources() == {"widget"}
 
-    _reconciler(hub, WorkSourceRegistry({}, {})).sweep()
+    assert client.post("/api/work-sources/widget/retire").status_code == 200
+    services.annotation.sweep()
 
+    assert forge_state(double)["issue_labels"]["acme/widget#1"] == set()  # type: ignore[index]
+    assert memory.annotated_sources() == frozenset()
+
+    # Once: a label put back by hand after the departure is never cleared again.
+    forge_state(double)["issue_labels"]["acme/widget#1"] = {"blizzard:ingested"}  # type: ignore[index]
+    services.annotation.sweep()
+    assert forge_state(double)["issue_labels"]["acme/widget#1"] == {"blizzard:ingested"}  # type: ignore[index]
+
+
+@pytest.mark.component
+def test_a_retired_source_whose_secret_is_also_retired_keeps_its_labels(
+    hosted: tuple[TestClient, HubServices, ForgeAnnotationStore, TestClient, str],
+) -> None:
+    """With no credential left there is no clearer to reach the forge: the departure is
+    forgotten rather than retried forever, and the labels stay as they were."""
+    client, services, memory, double, forge_url = hosted
+    _create(client, forge_url, annotate=True)
+    _promote(client, "widget:1")
+    assert services.annotation is not None
+    services.annotation.sweep()
+    assert memory.annotated_sources() == {"widget"}
+
+    assert client.post("/api/work-sources/widget/retire").status_code == 200
+    assert client.post("/api/secrets/gh/retire").status_code == 200
+    services.annotation.sweep()
+
+    assert forge_state(double)["issue_labels"]["acme/widget#1"] == {"blizzard:ingested"}  # type: ignore[index]
     assert memory.annotated_sources() == frozenset()
 
 

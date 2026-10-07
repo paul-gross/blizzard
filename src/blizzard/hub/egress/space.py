@@ -1,4 +1,4 @@
-"""The one measure of a directory's free space — the writer's disk guard and the operator's status read it alike."""
+"""The one measure of a directory's free space."""
 
 from __future__ import annotations
 

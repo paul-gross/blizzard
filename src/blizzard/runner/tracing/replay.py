@@ -9,7 +9,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
+from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.operator_window import OperatorWindow, fault_message
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.exporter import ITraceExporter
@@ -23,7 +25,7 @@ _log = get_logger("blizzard.runner.trace_export")
 
 
 class ReplayWindowRefused(ValueError):
-    """The window is inverted, empty, or wider than ``replay_max_window``."""
+    """The window is inverted, empty, wider than ``replay_max_window``, or ends in the future."""
 
 
 @domain_model
@@ -35,12 +37,13 @@ class ReplayWindow:
     until: datetime
 
     @classmethod
-    def of(cls, since: datetime, until: datetime, *, max_window_seconds: float) -> ReplayWindow:
-        """The window, or :class:`ReplayWindowRefused` when it is inverted, empty, or too wide."""
-        if until <= since:
-            raise ReplayWindowRefused("until must be after since")
-        if until - since > timedelta(seconds=max_window_seconds):
-            raise ReplayWindowRefused(f"window is wider than replay_max_window ({max_window_seconds} seconds)")
+    def of(cls, since: datetime, until: datetime, *, max_window_seconds: float, now: datetime) -> ReplayWindow:
+        """The window, or :class:`ReplayWindowRefused` when it is inverted, empty, too wide, or ends after ``now``."""
+        fault = OperatorWindow(since, until).fault(max_window=timedelta(seconds=max_window_seconds), now=now)
+        if fault is not None:
+            raise ReplayWindowRefused(
+                fault_message(fault, max_window_name="replay_max_window", max_window_seconds=int(max_window_seconds))
+            )
         return cls(since=since, until=until)
 
     @property
@@ -79,8 +82,10 @@ class LeaseTraceReplay:
         leases: IReadLeaseTraces,
         exporter: ITraceExporter | None,
         identity: ICurrentRunnerIdentity,
+        clock: IClock,
         config: TracingConfig,
     ) -> None:
+        self._clock = clock
         self._leases = leases
         self._exporter = exporter
         self._identity = identity
@@ -88,7 +93,7 @@ class LeaseTraceReplay:
         self._max_window_seconds = config.replay_max_window
 
     def replay(self, since: datetime, until: datetime, *, dry_run: bool) -> ReplayResult:
-        window = ReplayWindow.of(since, until, max_window_seconds=self._max_window_seconds)
+        window = ReplayWindow.of(since, until, max_window_seconds=self._max_window_seconds, now=self._clock.now())
         if not dry_run and self._exporter is None:
             raise ReplayUnavailable("runner tracing is off; a replay without --dry-run has nowhere to send spans")
         if self._identity.current() is None:

@@ -37,7 +37,7 @@ class ClosingCandidates:
 
 
 class IReadRunnerNames(Protocol):
-    """The runners' names, for the spans that carry their ids."""
+    """The runners' registered names."""
 
     def names_for(self, runner_ids: Iterable[str]) -> dict[str, str]:
         """Each runner's latest registered name, keyed by its id, in one batched read; an id with no
@@ -74,8 +74,7 @@ class IReadTraceSteps(Protocol):
 
 
 class IReadTraceStatus(Protocol):
-    """What the operator status reads beyond the cursor and latch :class:`IReadTraceSteps` already holds —
-    facts the sweep left behind, never process memory."""
+    """The trace export's newest told cursor and failure, read from stored facts."""
 
     def newest_export_cursor(self) -> TraceCheckpoint | None:
         """The newest ``trace_cursor`` row that told at least one span, or ``None`` if none ever did."""

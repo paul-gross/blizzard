@@ -22,9 +22,8 @@ from blizzard.hub.domain.observability.tracing.window import oldest_unsent
 @dataclass(frozen=True)
 class TraceStatus:
     """``endpoint`` is the redacted origin; ``lag_seconds`` is the age of the oldest closed step or finished
-    chunk the cursor has not passed, ``None`` when nothing waits. ``last_error_at`` is when the newest failure
-    began — the sweep records only the first failure after a success — and ``last_error_ongoing`` whether no
-    export has succeeded since."""
+    chunk the cursor has not passed, ``None`` when nothing waits. ``last_error_at`` is when the newest recorded
+    failure began, and ``last_error_ongoing`` whether no export has succeeded since."""
 
     state: TracingState
     endpoint: str | None

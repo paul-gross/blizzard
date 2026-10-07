@@ -1,6 +1,6 @@
 """The Parquet binding: zstd-compressed, the Arrow schema built from the dataset schema, never inferred.
 
-The one module that imports ``pyarrow``; only the factory loads it."""
+The one module that imports ``pyarrow``."""
 
 from __future__ import annotations
 

@@ -593,6 +593,10 @@ DEFAULT_EVENT_LIST_LIMIT = 200
 
 _EVENT_NEEDS_HUMAN: EventLogKind = "needs-human"
 
+#: The kinds the feed shows only as a projection of other state — a runner's ``event.recorded``
+#: fact of one is refused at intake rather than stored beside its own projection.
+PROJECTED_EVENT_KINDS: frozenset[EventLogKind] = frozenset({_EVENT_NEEDS_HUMAN})
+
 
 @domain_model
 @dataclass(frozen=True)

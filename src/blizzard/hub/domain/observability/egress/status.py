@@ -49,9 +49,9 @@ class DatasetStatus:
 @dataclass(frozen=True)
 class EgressStatus:
     """``last_pass_*`` is the newest cursor row of any dataset; ``last_file`` the last data file the newest
-    writing pass placed, never its manifest. ``last_error_at`` is when the newest failure began — the sweep
-    records only the first failure after a success — and ``last_error_ongoing`` whether no write has succeeded
-    since. ``free_bytes`` is ``None`` when the directory cannot be read."""
+    writing pass placed, never its manifest. ``last_error_at`` is when the newest recorded failure began, and
+    ``last_error_ongoing`` whether no write has succeeded since. ``free_bytes`` is ``None`` when the
+    directory cannot be read."""
 
     state: EgressState
     rejected_setting: str | None
@@ -108,7 +108,7 @@ class EgressStatusReader:
         ongoing = failure_ongoing(failure, self._egress.newest_egress_latch(), failed_kind=_FAILED)
         return EgressStatus(
             state="on",
-            # A missing path hash key drops only the events dataset; the export stays on and names the variable.
+            # A missing path hash key leaves the export on and names the variable.
             rejected_setting="egress.path_key_env" if self._missing_path_key is not None else None,
             rejected_value=self._missing_path_key,
             directory=str(config.directory),
@@ -179,7 +179,7 @@ def _lag(now: datetime, oldest: datetime | None) -> float | None:
 
 
 def _last_data_file(record: EgressCheckpoint | None) -> str | None:
-    """A cursor row's files end with its manifest; the file before it is the last data file."""
+    """The last data file ``record`` placed, or ``None`` when it placed none."""
     if record is None or len(record.files) < 2:
         return None
     return record.files[-2]

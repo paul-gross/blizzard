@@ -56,7 +56,11 @@ class _Runner:
             config=_CONFIG,
         )
         self.replayer = LeaseTraceReplay(
-            leases=self.store, exporter=self.exporter if on else None, identity=self.identity, config=_CONFIG
+            leases=self.store,
+            exporter=self.exporter if on else None,
+            identity=self.identity,
+            clock=self.clock,
+            config=_CONFIG,
         )
         self.status = LeaseTraceStatusReader(
             settings=self.settings, leases=self.store, clock=self.clock, replay_max_window=_CONFIG.replay_max_window
@@ -71,8 +75,10 @@ class _Runner:
         return lease_id
 
     def window(self, back: int = 60) -> tuple[datetime, datetime]:
+        """A window ending at the clock, one second on from the last lease it closed."""
+        self.clock.advance(timedelta(seconds=1))
         now = self.clock.now()
-        return now - timedelta(seconds=back), now + timedelta(seconds=1)
+        return now - timedelta(seconds=back), now
 
 
 def _client(runner: _Runner, tmp_path: Path) -> TestClient:
@@ -120,6 +126,7 @@ def test_a_window_is_half_open_and_pages_by_the_batch_limit(tmp_path: Path) -> N
         leases=runner.store,
         exporter=runner.exporter,
         identity=runner.identity,
+        clock=runner.clock,
         config=TracingConfig(batch_limit=1, replay_max_window=3600),
     )
     runner.close_lease()
@@ -200,10 +207,20 @@ def test_the_routes_serve_and_refuse_an_unwired_runner(tmp_path: Path) -> None:
             "/api/traces/replay",
             json={"since": since.isoformat(), "until": (since + timedelta(days=2)).isoformat()},
         )
+        future = client.post(
+            "/api/traces/replay",
+            json={
+                "since": until.isoformat(),
+                "until": (until + timedelta(hours=1)).isoformat(),
+                "dry_run": False,
+            },
+        )
 
     assert ok.status_code == 200 and ok.json()["endpoint"] == "https://collector.example:4318"
     assert told.status_code == 200 and told.json()["leases"] == 1 and told.json()["dry_run"] is True
     assert bad.status_code == 422
+    assert future.status_code == 422 and "future" in future.json()["detail"]
+    assert runner.exporter.batches == []
     unwired = TestClient(create_app(_config(tmp_path)))
     assert unwired.get("/api/traces/status").status_code == 503
     assert unwired.post("/api/traces/replay", json=body).status_code == 503
@@ -227,8 +244,9 @@ def test_cli_status_and_replay_are_pure_clients(tmp_path: Path, monkeypatch: pyt
         return daemon_module.RunnerDaemon(verb, _client(runner, tmp_path), "test")  # type: ignore[arg-type]
 
     monkeypatch.setattr(daemon_module.RunnerDaemon, "reach", staticmethod(reach))
+    runner.clock.advance(timedelta(seconds=1))
     since = (runner.clock.now() - timedelta(seconds=60)).astimezone().replace(tzinfo=None)
-    until = (runner.clock.now() + timedelta(seconds=1)).astimezone().replace(tzinfo=None)
+    until = runner.clock.now().astimezone().replace(tzinfo=None)
 
     shown = CliRunner().invoke(traces_group, ["status"])
     replayed = CliRunner().invoke(
@@ -258,7 +276,8 @@ def test_cli_splits_a_wide_range_into_windows_and_reports_each(tmp_path: Path, m
     runner = _Runner(tmp_path)
     runner.close_lease()
     _reach_the_runner(runner, tmp_path, monkeypatch)
-    until = runner.clock.now() + timedelta(seconds=1)
+    runner.clock.advance(timedelta(seconds=1))
+    until = runner.clock.now()
     since = until - timedelta(seconds=3600 * 2 + 1800)
 
     result = CliRunner().invoke(
@@ -277,7 +296,8 @@ def test_cli_stops_on_a_failing_window_and_names_where_to_resume(
     runner.close_lease()
     runner.exporter.fail = True
     _reach_the_runner(runner, tmp_path, monkeypatch)
-    until = runner.clock.now() + timedelta(seconds=1)
+    runner.clock.advance(timedelta(seconds=1))
+    until = runner.clock.now()
     since = until - timedelta(seconds=3600 * 2 + 1800)
     failing = since + timedelta(seconds=3600 * 2)
 
@@ -294,7 +314,11 @@ def test_cli_reports_a_replay_before_the_first_registration_as_unavailable_not_a
     runner = _Runner(tmp_path)
     runner.close_lease()
     runner.replayer = LeaseTraceReplay(
-        leases=runner.store, exporter=runner.exporter, identity=RunnerIdentityHolder(), config=_CONFIG
+        leases=runner.store,
+        exporter=runner.exporter,
+        identity=RunnerIdentityHolder(),
+        clock=runner.clock,
+        config=_CONFIG,
     )
     _reach_the_runner(runner, tmp_path, monkeypatch)
     since, until = runner.window()
@@ -327,7 +351,8 @@ def test_cli_names_where_to_resume_when_a_window_request_itself_fails(
 
     monkeypatch.setattr(daemon_module.RunnerDaemon, "reach", staticmethod(reach))
     monkeypatch.setattr(client, "post", post)
-    until = runner.clock.now() + timedelta(seconds=1)
+    runner.clock.advance(timedelta(seconds=1))
+    until = runner.clock.now()
     since = until - timedelta(seconds=3600 + 1800)
 
     result = CliRunner().invoke(traces_group, ["replay", "--since", _local(since), "--until", _local(until)])

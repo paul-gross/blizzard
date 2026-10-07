@@ -195,7 +195,7 @@ class TracedPromotion:
 @domain_model
 @dataclass(frozen=True)
 class TracedPrerequisiteMet:
-    """The instant a prerequisite completed, resolved by the hydrator from the prerequisite's own facts."""
+    """The instant a prerequisite completed."""
 
     met_at: datetime
 
@@ -206,7 +206,7 @@ class StepFacts:
     """Everything step identification reads about one chunk.
 
     ``graphs`` holds the graphs the facts reference, keyed by ``graph_id``. ``pin_graph_id`` is the
-    chunk's current pin, read only for a chunk with no movement fact at all."""
+    chunk's current pin."""
 
     chunk_id: str
     graphs: dict[str, Graph] = field(default_factory=dict)
@@ -234,7 +234,7 @@ class StepFacts:
     promotions: tuple[TracedPromotion, ...] = ()
     prerequisites_met: tuple[TracedPrerequisiteMet, ...] = ()
     usage: tuple[UsageFact, ...] = ()
-    #: Source-native work-ref tokens (``acme#42``), rendered by the hydrator's configured binding.
+    #: Source-native work-ref tokens (``acme#42``).
     work_refs: tuple[str, ...] = ()
     #: The distinct work sources behind ``work_refs``, in ref order — read from the rows, never parsed from labels.
     work_sources: tuple[str, ...] = ()

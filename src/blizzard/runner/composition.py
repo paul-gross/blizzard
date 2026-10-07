@@ -288,7 +288,7 @@ def build_runner_process(
         )
         credential_renewal = _credential_renewal_pass(config, stores, clock)
         trace_replay = LeaseTraceReplay(
-            leases=stores.lease_traces, exporter=exporter, identity=identity, config=config.tracing
+            leases=stores.lease_traces, exporter=exporter, identity=identity, clock=clock, config=config.tracing
         )
         span_limiter = SpanRateLimiter(clock)
         receiver_counter = ReceiverCounter()

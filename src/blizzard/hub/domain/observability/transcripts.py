@@ -58,17 +58,12 @@ class CapBreach:
 @domain_model
 @dataclass(frozen=True)
 class TranscriptCaps:
-    """The three ceilings a record is adjudicated against, resolved
-    from configuration rather than read as constants — an operator widens them for a backfill
-    window (a re-ship spends the per-chunk budget a second time) and restores them after. The
-    defaults ARE the module constants above, so an unconfigured hub is unchanged."""
+    """The three ceilings a record is adjudicated against, resolved from configuration; the
+    defaults are the module constants above."""
 
     record_max_bytes: int = RECORD_MAX_BYTES
     chunk_budget_max_bytes: int = CHUNK_BUDGET_MAX_BYTES
     runner_daily_rate_max_bytes: int = RUNNER_DAILY_RATE_MAX_BYTES
-
-    # The ladder is three steps, first breach wins: record ceiling, per-chunk budget, per-runner rate;
-    # each step takes only the sum it needs, read only once every earlier step has passed.
 
     def record_breach(self, byte_count: int) -> CapBreach | None:
         if byte_count > self.record_max_bytes:
@@ -215,8 +210,7 @@ class IWriteTranscriptSegments(IReadTranscriptSegments, Protocol):
 
 class SegmentWrite(StrEnum):
     """What one record's natural-key state and cap verdict write. First write wins: an
-    accepted key is never rewritten, even by a re-ship carrying different content (a changed
-    re-ship opens a superseding segment instead). A rejected key is re-adjudicated."""
+    accepted key is never rewritten, even by a re-ship carrying different content. A rejected key is re-adjudicated."""
 
     KEEP = "keep"
     INSERT_ACCEPTED = "insert_accepted"
@@ -244,9 +238,7 @@ class LeaseSegmentsNotOwned(Exception):
 
 def refuse_foreign_lease_read(owning_runner_id: str | None, *, requesting_runner_id: str) -> None:
     """Refuse a runner's read-back of a lease's segments when another runner shipped them
-    (:class:`LeaseSegmentsNotOwned`). Keyed on stored-segment authorship on purpose — the read
-    answers whose stored segments these are, which ingest's :func:`ships_from_lease_holder` keeps
-    equal to the epoch's holder. ``None`` (the hub holds nothing) is no refusal."""
+    (:class:`LeaseSegmentsNotOwned`). ``None`` (the hub holds nothing) is no refusal."""
     if owning_runner_id is not None and owning_runner_id != requesting_runner_id:
         raise LeaseSegmentsNotOwned(owning_runner_id=owning_runner_id, requesting_runner_id=requesting_runner_id)
 
@@ -505,8 +497,7 @@ class TurnSidechain:
 @domain_model
 @dataclass(frozen=True)
 class TranscriptTurn:
-    """One normalized turn as the hub stored it, in full. The ingest route validated it against
-    the segment wire, so reading it back trusts its shape."""
+    """One normalized turn as the hub stored it, in full; reading it back trusts its stored shape."""
 
     index: int
     kind: TurnKind
