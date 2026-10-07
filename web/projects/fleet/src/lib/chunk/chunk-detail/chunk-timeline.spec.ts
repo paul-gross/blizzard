@@ -174,7 +174,7 @@ const FORENSICS_DETAIL: ChunkDetail = {
   history: [
     { from_node_id: 'nd_build', to_node_id: 'nd_review', choice_name: 'pass', epoch: 1, recorded_at: '2026-07-13T00:00:01Z' },
   ],
-  bounces: [{ cause: 'malformed-result', envelope: '{"raw":true}', recorded_at: '2026-07-13T00:00:02Z' }],
+  bounces: [{ cause: 'failure', envelope: '{"cause":"failure","detail":"hub node `deliver` routed `failure` to `resolve` \\u2014 delivery incomplete"}', recorded_at: '2026-07-13T00:00:02Z' }],
   restarts: [
     {
       epoch: 2,
@@ -216,9 +216,12 @@ describe('ChunkTimeline', () => {
     expect(ids).toEqual(['history-step', 'history-bounce-step', 'history-restart-step']);
 
     const bounce = el.querySelector<HTMLElement>('[data-testid="history-bounce-step"]')!;
-    expect(bounce.getAttribute('title')).toBe('{"raw":true}');
+    expect(bounce.getAttribute('title')).toBe('hub node deliver routed failure to resolve — delivery incomplete');
+    expect(bounce.querySelector('[data-testid="history-bounce-reason"]')?.textContent).toBe('hub node deliver routed failure to resolve — delivery incomplete');
+    expect(bounce.querySelector('svg.bounce-icon')).not.toBeNull();
+    expect(bounce.querySelector('.att')?.textContent).not.toContain('\u21A9');
     expect(bounce.getAttribute('data-choice')).toBe('bounced');
-    expect(bounce.querySelector('[data-testid="history-choice"]')?.textContent).toContain('malformed-result');
+    expect(bounce.querySelector('[data-testid="history-choice"]')?.textContent).toContain('failure');
     expect(bounce.querySelector('.jg-to')).toBeNull();
 
     const restart = el.querySelector<HTMLElement>('[data-testid="history-restart-step"]')!;
@@ -232,6 +235,27 @@ describe('ChunkTimeline', () => {
       row.click();
     }
     expect(picks).toEqual([]);
+  });
+
+  it('reads a poll-timeout envelope and an unparseable one as plain text', async () => {
+    const detail: ChunkDetail = {
+      ...FORENSICS_DETAIL,
+      bounces: [
+        { cause: 'poll-timeout', envelope: '{"cause":"poll-timeout","detail":"no verdict within 600s"}', recorded_at: '2026-07-13T00:00:02Z' },
+        { cause: 'unknown', envelope: 'not json {', recorded_at: '2026-07-13T00:00:03Z' },
+      ],
+      restarts: [],
+    };
+    const fixture = TestBed.createComponent(ChunkTimeline);
+    fixture.componentRef.setInput('detail', detail);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    const bounces = [...el.querySelectorAll<HTMLElement>('[data-testid="history-bounce-step"]')];
+    expect(bounces.map((b) => b.querySelector('[data-testid="history-bounce-reason"]')?.textContent)).toEqual([
+      'no verdict within 600s',
+      'not json {',
+    ]);
+    expect(bounces.map((b) => b.getAttribute('title'))).toEqual(['no verdict within 600s', 'not json {']);
   });
 
   it('renders the review-fail loop (MVP criterion 9/11)', async () => {

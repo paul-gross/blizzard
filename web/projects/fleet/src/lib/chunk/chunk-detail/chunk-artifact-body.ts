@@ -2,8 +2,10 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 
 import { ArtifactKind, type ArtifactView, type FindingDelta, type FindingSurvey } from '../../api/hub';
 import { formatAbsolute, formatWhen } from '../../core/when';
+import { ChunkArtifactBounce } from './chunk-artifact-bounce';
 import { ChunkArtifactDelta } from './chunk-artifact-delta';
 import { ChunkArtifactSurvey } from './chunk-artifact-survey';
+import { type BounceEnvelope, parseBounceEnvelope } from './parse-bounce-envelope';
 import { parseFindingDelta } from './parse-finding-delta';
 import { parseFindingSurvey } from './parse-finding-survey';
 
@@ -48,7 +50,7 @@ import { parseFindingSurvey } from './parse-finding-survey';
 @Component({
   selector: 'fleet-chunk-detail-artifact-body',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ChunkArtifactDelta, ChunkArtifactSurvey],
+  imports: [ChunkArtifactBounce, ChunkArtifactDelta, ChunkArtifactSurvey],
   templateUrl: './chunk-artifact-body.html',
   styleUrl: './chunk-artifact-body.css',
 })
@@ -99,6 +101,15 @@ export class ChunkArtifactBody {
     if (this.parsedDelta() !== null) return null;
     const content = this.structuredCandidate();
     return content === null ? null : parseFindingSurvey(content);
+  });
+
+  /** The `bounce-envelope` asset's content, parsed — `null` for any other artifact or an
+   * envelope that is not a JSON object, which falls through to the verbatim `<pre>`.
+   * Unlike the garden shapes this one is keyed by name: an envelope's `cause`/`detail`
+   * carry no shape that tells it from any other small JSON asset. */
+  protected readonly parsedBounce = computed<BounceEnvelope | null>(() => {
+    const content = this.structuredCandidate();
+    return content === null || this.artifact().key !== 'bounce-envelope' ? null : parseBounceEnvelope(content);
   });
 
   /** The asset content a structured reading may be attempted on, or `null` when there

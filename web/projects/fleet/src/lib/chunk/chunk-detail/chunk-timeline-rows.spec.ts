@@ -26,7 +26,7 @@ const BASE: ChunkDetail = {
       recorded_at: '2026-07-13T00:00:03Z',
     },
   ],
-  bounces: [{ cause: 'schema-mismatch', envelope: '{"verdict":"???"}', recorded_at: '2026-07-13T00:00:02Z' }],
+  bounces: [{ cause: 'schema-mismatch', envelope: '{"cause":"schema-mismatch","detail":"verdict `???` is not a choice"}', recorded_at: '2026-07-13T00:00:02Z' }],
   restarts: [
     {
       epoch: 3,
@@ -52,10 +52,10 @@ describe('deriveHistoryRows', () => {
     expect(rows.map((r) => r.key)).toEqual([null, null]);
   });
 
-  it('reads a bounce as its cause with the raw envelope as its title, routing nowhere', () => {
+  it('reads a bounce as its cause with the readable reason as its title, routing nowhere', () => {
     const bounce = deriveHistoryRows(BASE).find((r) => r.kind === 'bounce')!;
-    expect(bounce).toMatchObject({ verdict: 'schema-mismatch', title: '{"verdict":"???"}', toName: null, epoch: null });
-    expect(rowMark(bounce)).toBe('\u21A9\uFE0E');
+    expect(bounce).toMatchObject({ verdict: 'schema-mismatch', title: 'verdict ??? is not a choice', toName: null, epoch: null });
+    expect(rowMark(bounce)).toBe('');
     expect(rowChoice(bounce)).toBe('bounced');
   });
 

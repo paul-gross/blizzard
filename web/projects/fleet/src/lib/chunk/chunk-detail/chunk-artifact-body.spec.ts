@@ -172,4 +172,25 @@ describe('ChunkArtifactBody', () => {
     expect(el.querySelector('[data-testid="artifact-survey"]')).toBeNull();
     expect(el.querySelector('[data-testid="artifact-content"]')).toBeNull();
   });
+
+  it('renders a bounce-envelope as labelled fields with the raw JSON behind the disclosure', async () => {
+    const raw = '{"cause":"poll-timeout","detail":"no verdict","waited_s":600}';
+    const fixture = TestBed.createComponent(ChunkArtifactBody);
+    fixture.componentRef.setInput('artifact', { ...ASSET, key: 'bounce-envelope', name: 'bounce-envelope', content: raw });
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[data-testid="artifact-bounce-cause"]')?.textContent).toContain('poll-timeout');
+    expect(el.querySelector('[data-testid="artifact-bounce-detail"]')?.textContent).toContain('no verdict');
+    expect(el.querySelector('[data-testid="artifact-bounce-facts"]')?.textContent).toContain('600');
+    el.querySelector<HTMLElement>('[data-testid="artifact-bounce-raw-toggle"]')!.click();
+    await fixture.whenStable();
+    expect(el.querySelector('[data-testid="artifact-bounce-raw"]')?.textContent).toBe(raw);
+  });
+
+  it('renders an unparseable bounce-envelope verbatim', async () => {
+    const fixture = TestBed.createComponent(ChunkArtifactBody);
+    fixture.componentRef.setInput('artifact', { ...ASSET, key: 'bounce-envelope', name: 'bounce-envelope', content: 'not json {' });
+    await fixture.whenStable();
+    expect(fixture.nativeElement.querySelector('[data-testid="artifact-content"]')?.textContent).toBe('not json {');
+  });
 });

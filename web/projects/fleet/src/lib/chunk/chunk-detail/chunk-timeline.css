@@ -256,9 +256,26 @@ a.gr:focus-visible {
   font-size: var(--fs-label);
 }
 /* A bounce's cause is free text, not a short graph choice name — it ellipsizes (the
-   row's own title carries the envelope) rather than widening the row past the panel. */
+   row's own title carries the full reason) rather than widening the row past the panel. */
 .step[data-choice='bounced'] .verdict {
   overflow: hidden;
   text-overflow: ellipsis;
   min-width: 0;
+}
+/* The bounce mark is an inline SVG stroked in the row's own text color, so it follows
+   the selected and default states alike. */
+.step .bounce-icon {
+  display: block;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+/* The bounce's reason reads in full, wrapping rather than hiding behind a hover. */
+.step .bounce-reason {
+  color: var(--label-dim);
+  font-size: var(--fs-label);
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
