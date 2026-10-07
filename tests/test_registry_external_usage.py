@@ -281,6 +281,19 @@ def test_a_roster_lapsed_condition_never_blanks_the_surviving_sample_and_a_non_l
     assert silent_view.windows == sample.windows
 
 
+def test_a_roster_sample_newer_than_a_lapsed_miss_clears_the_condition_however_old_both_are() -> None:
+    stale = _NOW - EXTERNAL_USAGE_STALE_AFTER - timedelta(days=2)
+    registration = _registration(
+        records=(_record("openai", stale + timedelta(days=1)),),
+        misses=(_miss("openai", stale),),
+        roster=_declared("openai"),
+    )
+    (view,) = PerSubscriptionUsageView.every(registration, now=_NOW)
+
+    assert view.condition is None
+    assert view.sampled_at == stale + timedelta(days=1)
+
+
 def test_a_dropped_slugs_reports_persist_and_resume_when_redeclared() -> None:
     sample = _record("openai", _NOW - timedelta(minutes=1))
     miss = _miss("openai", _NOW - timedelta(minutes=2))

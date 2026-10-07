@@ -18,6 +18,7 @@ from typing import Any
 
 import pytest
 
+from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import HarnessSpawnError, ResumeHandle, WorkerIdentityError, WorkerPreamble
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
@@ -41,6 +42,7 @@ from blizzard.runner.harness.opencode.usage.price_cache import (
 )
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.lifecycle.session import HarnessSelection, HarnessSelector, SkippedHarness
+from blizzard.runner.node_steps.envelope import GraphArtifact
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from tests.opencode_usage_limit_fixture import USAGE_LIMIT_EVENT
 from tests.repo_files import repo_root
@@ -1811,3 +1813,34 @@ def test_classify_provider_overload_is_none_for_a_429_usage_limit_refusal(spawn_
 @pytest.mark.unit
 def test_classify_provider_overload_tolerates_malformed_capture(spawn_executor: Executor) -> None:
     assert _adapter(spawn_executor).classify_provider_overload("not json at all", []) is None
+
+
+@pytest.mark.unit
+def test_spawn_never_splices_graph_artifact_content_into_the_prompt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor
+) -> None:
+    workdir = tmp_path / "project"
+    workdir.mkdir()
+    captured: list[list[str]] = []
+
+    class FakeProcess:
+        pid = 9999999
+
+    def launch(cmd: list[str], **kwargs: Any) -> FakeProcess:
+        captured.append(cmd)
+        return FakeProcess()
+
+    monkeypatch.setattr(subprocess, "Popen", launch)
+    envelope = make_envelope(
+        "ch_1",
+        "build",
+        node_id="nd_build",
+        choices=[("pass", "ok")],
+        graph_artifacts=[GraphArtifact(name="rubric", kind=ArtifactKind.ASSET, content="RUBRIC-BODY-7f3a")],
+    )
+
+    _adapter(spawn_executor).spawn(envelope, _preamble(str(workdir), stdout_path=str(tmp_path / "spawn.out")), None)
+
+    (cmd,) = captured
+    assert envelope.prompt in cmd
+    assert not any("RUBRIC-BODY-7f3a" in part or "rubric" in part for part in cmd)

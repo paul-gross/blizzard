@@ -409,3 +409,68 @@ def test_list_runners_query_count_does_not_grow_with_runner_count(tmp_path: Path
         assert runner.locally_paused_by == "runner-ceiling"
         assert [u.slug for u in runner.subscription_usage] == ["anthropic"]
         assert [m.slug for m in runner.subscription_usage_misses] == ["openai"]
+
+
+def _declare(hub: HubHarness, *slugs: str) -> None:
+    resp = hub.client.post(
+        "/api/fleet/runners",
+        json={
+            "runner_id": "runner-a",
+            "workspace_id": "ws-a",
+            "subscriptions": [{"slug": slug, "name": slug.title(), "provider": "p"} for slug in slugs],
+        },
+    )
+    assert resp.status_code == 201, resp.text
+
+
+def _subscriptions(hub: HubHarness) -> dict[str, dict]:
+    view = hub.client.get("/api/fleet/runners/runner-a").json()
+    return {item["slug"]: item for item in view["subscriptions"]}
+
+
+def test_a_dropped_subscription_slugs_reports_survive_re_registration_and_resume_on_redeclare(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _declare(hub, "anthropic", "openai")
+    reported_at = hub.clock.now().isoformat()
+    hub.client.post(
+        "/api/fleet/events",
+        json={
+            "runner_id": "runner-a",
+            "facts": [
+                {
+                    "seq": 1,
+                    "kind": "external_subscription_usage.sampled",
+                    "payload": {
+                        "slug": "openai",
+                        "sampled_at": reported_at,
+                        "windows": [
+                            {
+                                "window": "5h",
+                                "utilization_pct": 25.0,
+                                "resets_at": "2099-01-01T00:00:00+00:00",
+                                "window_seconds": 18000,
+                            }
+                        ],
+                    },
+                },
+                {
+                    "seq": 2,
+                    "kind": "external_subscription_usage.missed",
+                    "payload": {"slug": "anthropic", "missed_at": reported_at, "reason": "credential_lapsed"},
+                },
+            ],
+        },
+    )
+    before = _subscriptions(hub)
+    assert set(before) == {"anthropic", "openai"}
+    assert before["anthropic"]["condition"] == "credential_lapsed"
+    assert before["openai"]["windows"]
+
+    _declare(hub, "other")
+    assert set(_subscriptions(hub)) == {"other"}
+
+    _declare(hub, "anthropic", "openai", "other")
+    after = _subscriptions(hub)
+    assert after["anthropic"]["condition"] == "credential_lapsed"
+    assert after["openai"]["windows"] == before["openai"]["windows"]
+    assert after["openai"]["sampled_at"] == before["openai"]["sampled_at"]
