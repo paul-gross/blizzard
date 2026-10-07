@@ -47,7 +47,7 @@ export interface ScopePanelVm {
 @Component({
   selector: 'app-scope-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitBadge, KitButton, KitConfirmDialog],
+  imports: [KitAsyncState, KitBadge, KitButton, KitConfirmDialog, KitTextInput],
   templateUrl: './scope-panel.html',
   styleUrl: './scope-panel.css',
 })

@@ -57,7 +57,7 @@ const SEVERITY_TONE: Readonly<Record<EventView['severity'], Tone>> = {
 @Component({
   selector: 'app-events-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitPanel, KitBadge, KitChips, KitSelect, FleetWhen],
+  imports: [KitAsyncState, KitPanel, KitBadge, KitButton, KitChips, KitSelect, FleetWhen],
   templateUrl: './events-view.html',
   styleUrl: './events-view.css',
 })
