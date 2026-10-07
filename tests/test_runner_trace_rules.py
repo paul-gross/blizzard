@@ -173,7 +173,12 @@ _OTHER_NAMES = HarnessTelemetryNames(
 
 def test_route_spans_keeps_the_cli_and_refuses_other_programs_by_default() -> None:
     routing = route_spans(
-        [_span(SCOPE_NAME), _span("some.library")], _lease(), runner=_RUNNER, programs=False, harness=False, names=_NAMES
+        [_span(SCOPE_NAME), _span("some.library")],
+        _lease(),
+        runner=_RUNNER,
+        programs=False,
+        harness=False,
+        names=_NAMES,
     )
     assert ([s.scope_name for s in routing.cli], routing.others) == ([SCOPE_NAME], [])
     assert (routing.accepted, routing.dropped, routing.kept, routing.refused, routing.rest_received) == (1, 1, 1, 1, 2)
