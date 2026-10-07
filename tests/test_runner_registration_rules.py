@@ -95,8 +95,9 @@ def test_an_active_runners_contact_passes(registration: RunnerRegistration) -> N
 
 
 def test_a_retired_runners_contact_is_refused_naming_the_action() -> None:
-    with pytest.raises(RunnerRetired, match="heartbeat refused"):
+    with pytest.raises(RunnerRetired) as refused:
         _RETIRED.refuse_if_retired(action="heartbeat")
+    assert str(refused.value) == "runner runner-a is retired — heartbeat refused; `reinstate` it first"
 
 
 # enroll
@@ -113,8 +114,9 @@ def test_enroll_over_an_enrolled_runner_is_a_rotation() -> None:
 
 
 def test_enroll_refuses_a_retired_runner() -> None:
-    with pytest.raises(RunnerRetired, match="enrollment refused"):
+    with pytest.raises(RunnerRetired) as refused:
         _RETIRED.enroll("hash-new", by="operator", at=_AT)
+    assert str(refused.value) == "runner runner-a is retired — enrollment refused; `reinstate` it first"
 
 
 # revoke-token

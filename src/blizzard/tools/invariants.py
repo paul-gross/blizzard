@@ -11,7 +11,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from sqlalchemy import Connection, Engine, and_, func, literal, select
+from sqlalchemy import Connection, Engine, and_, func, select
 
 from blizzard.foundation.clock import IClock, SystemClock
 from blizzard.foundation.logging import get_logger
@@ -507,9 +507,10 @@ class EpochConsistentTransitions(QueryCheck):
 
 
 class EpochsOwned(QueryCheck):
-    """Every epoch a lease fact or a restart took has an owner row, and a runner's lease
-    fact sits at an epoch that runner owns — a lease level with another owner's epoch means
-    a displaced attempt's mint landed."""
+    """Every epoch a lease fact or a restart took has an owner row, and that row names the
+    epoch's first taker — the rule the owner backfill applied: restarts first, in id order,
+    hub-owned, then lease facts in id order, a ``hub`` lease hub-owned. A different first
+    taker means a displaced attempt's mint landed at an epoch reserved for another owner."""
 
     def run(self) -> list[Violation]:
         owners = {
@@ -518,21 +519,24 @@ class EpochsOwned(QueryCheck):
                 select(hub.epoch_owners.c.chunk_id, hub.epoch_owners.c.epoch, hub.epoch_owners.c.runner_id)
             )
         }
-        violations: list[Violation] = []
         leases = hub.lease_facts.c
         restarts = hub.chunk_restarts.c
-        taken = [
-            *self.conn.execute(select(leases.chunk_id, leases.epoch, leases.runner_id)),
-            *self.conn.execute(select(restarts.chunk_id, restarts.epoch, literal(None))),
-        ]
-        for chunk_id, epoch, runner_id in taken:
+        first_taker: dict[tuple[str, int], str | None] = {}
+        for chunk_id, epoch in self.conn.execute(select(restarts.chunk_id, restarts.epoch).order_by(restarts.id)):
+            first_taker.setdefault((chunk_id, epoch), None)
+        for chunk_id, epoch, runner_id in self.conn.execute(
+            select(leases.chunk_id, leases.epoch, leases.runner_id).order_by(leases.id)
+        ):
+            first_taker.setdefault((chunk_id, epoch), None if runner_id == _HUB_LEASE_RUNNER_ID else runner_id)
+        violations: list[Violation] = []
+        for (chunk_id, epoch), taker in first_taker.items():
             if (chunk_id, epoch) not in owners:
                 violations.append(Violation("hub:epochs-owned", f"chunk {chunk_id} epoch {epoch} has no owner"))
-            elif runner_id not in (None, _HUB_LEASE_RUNNER_ID) and owners[(chunk_id, epoch)] != runner_id:
+            elif owners[(chunk_id, epoch)] != taker:
                 violations.append(
                     Violation(
                         "hub:epochs-owned",
-                        f"chunk {chunk_id} epoch {epoch} lease by {runner_id} but owned by "
+                        f"chunk {chunk_id} epoch {epoch} taken by {taker or 'the hub'} but owned by "
                         f"{owners[(chunk_id, epoch)] or 'the hub'}",
                     )
                 )

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import stat
 from pathlib import Path
 
@@ -41,6 +42,61 @@ def test_the_directory_provider_mints_a_generation_with_the_signing_key_layout(t
     assert _mode(keys_dir / "meta.json") == 0o600
     assert _mode(keys_dir / f"{current.key_id}.key") == 0o600
     assert provider.available_ids() == {current.key_id}
+
+
+def test_promote_replaces_meta_whole_at_mode_0600_leaving_no_temp_file(tmp_path: Path) -> None:
+    keys_dir = tmp_path / "secret-keys"
+    provider = DirectoryKeyProvider(keys_dir)
+    first = provider.current()
+    second = provider.mint()
+
+    provider.promote(second.key_id)
+
+    meta = keys_dir / "meta.json"
+    assert json.loads(meta.read_text()) == {"current": second.key_id, "previous": first.key_id}
+    assert _mode(meta) == 0o600
+    assert sorted(path.name for path in keys_dir.glob("meta.json*")) == ["meta.json"]
+
+
+def test_a_reader_at_the_moment_meta_is_replaced_sees_the_previous_whole_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    keys_dir = tmp_path / "secret-keys"
+    provider = DirectoryKeyProvider(keys_dir)
+    first = provider.current()
+    second = provider.mint()
+    seen: list[dict[str, str | None]] = []
+    replace = os.replace
+
+    def spying_replace(src: object, dst: object) -> None:
+        seen.append(json.loads((keys_dir / "meta.json").read_text()))
+        replace(src, dst)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(os, "replace", spying_replace)
+    provider.promote(second.key_id)
+
+    assert seen == [{"current": first.key_id, "previous": None}]
+
+
+@pytest.mark.parametrize("failing", ["fsync", "replace"])
+def test_a_failed_meta_write_keeps_the_previous_meta_and_leaves_no_temp_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failing: str
+) -> None:
+    keys_dir = tmp_path / "secret-keys"
+    provider = DirectoryKeyProvider(keys_dir)
+    first = provider.current()
+    second = provider.mint()
+
+    def boom(*_args: object) -> None:
+        raise OSError("injected")
+
+    monkeypatch.setattr(os, failing, boom)
+    with pytest.raises(OSError, match="injected"):
+        provider.promote(second.key_id)
+    monkeypatch.undo()
+
+    assert json.loads((keys_dir / "meta.json").read_text()) == {"current": first.key_id, "previous": None}
+    assert sorted(path.name for path in keys_dir.glob("meta.json*")) == ["meta.json"]
 
 
 def test_the_directory_provider_reuses_an_existing_generation(tmp_path: Path) -> None:

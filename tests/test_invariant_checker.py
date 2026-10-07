@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+import sqlalchemy as sa
 from sqlalchemy import insert
 
 from blizzard.foundation.store.engine import create_engine_from_url
@@ -21,6 +22,7 @@ from blizzard.runner.runtime import init_environment as init_runner
 from blizzard.runner.store import schema as runner
 from blizzard.tools.invariants import HubInvariants, RunnerInvariants
 from tests.runner_fakes import FakeProbe
+from tests.support import migrate_to, seed_chunk, seed_graph
 
 pytestmark = pytest.mark.component
 
@@ -825,8 +827,8 @@ def test_a_runner_lease_level_with_another_owners_epoch_is_a_violation(tmp_path:
         conn.execute(insert(hub.epoch_owners).values(chunk_id="ch_1", epoch=2, runner_id=None, recorded_at=_NOW))
         conn.execute(insert(hub.lease_facts).values(chunk_id="ch_1", epoch=2, runner_id="r_a", minted_at=_NOW))
     assert [v.detail for v in HubInvariants(engine).run() if v.invariant == "hub:epochs-owned"] == [
-        "chunk ch_1 epoch 1 lease by r_b but owned by r_a",
-        "chunk ch_1 epoch 2 lease by r_a but owned by the hub",
+        "chunk ch_1 epoch 1 taken by r_b but owned by r_a",
+        "chunk ch_1 epoch 2 taken by r_a but owned by the hub",
     ]
 
 
@@ -1539,3 +1541,26 @@ def test_a_released_edge_onto_an_ephemeral_chunk_is_not_a_violation(tmp_path: Pa
     slugs = {v.invariant for v in HubInvariants(engine).run()}
 
     assert "hub:no-standing-dependency-onto-ephemeral-chunk" not in slugs
+
+
+def test_a_backfilled_epoch_with_two_runners_lease_rows_is_clean(tmp_path: Path) -> None:
+    """The real backfill owns an epoch by its first lease row, so a later level row from
+    another runner — legacy data — is not a violation."""
+    runner, engine = migrate_to(tmp_path, "20260930_1000_artifact_seq")
+    at = "2026-09-29 12:00:00"
+    with engine.begin() as conn:
+        seed_graph(conn, "gr_1", at=datetime(2026, 9, 29, tzinfo=UTC))
+        seed_chunk(conn, "ch_1", graph_id="gr_1", at=datetime(2026, 9, 29, tzinfo=UTC))
+        for runner_id in ("r_a", "r_b"):
+            conn.execute(
+                sa.text(
+                    "insert into lease_facts (chunk_id, epoch, runner_id, minted_at) "
+                    "values ('ch_1', 1, :runner_id, :at)"
+                ),
+                {"runner_id": runner_id, "at": at},
+            )
+    runner.upgrade("head")
+    try:
+        assert [v for v in HubInvariants(engine).run() if v.invariant == "hub:epochs-owned"] == []
+    finally:
+        engine.dispose()
