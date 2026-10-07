@@ -11,7 +11,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.ids import ARTIFACT_PREFIX, DECISION_PREFIX, WORK_ITEM_PROPOSAL_PREFIX, Id
+from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.artifact.model import StoredArtifact
@@ -155,9 +155,9 @@ class DecisionService:
         except CompletionRefused as refused:
             return DecisionSubmitResult.failure(refused.detail)
 
-        decision_id = Id.mint(DECISION_PREFIX, self._clock).value
-        artifact_ids = [Id.mint(ARTIFACT_PREFIX, self._clock).value for _ in submission.artifacts]
-        proposal_ids = [Id.mint(WORK_ITEM_PROPOSAL_PREFIX, self._clock).value for _ in submission.proposals]
+        decision_id = Id.mint(IdPrefix.DECISION, self._clock).value
+        artifact_ids = [Id.mint(IdPrefix.ARTIFACT, self._clock).value for _ in submission.artifacts]
+        proposal_ids = [Id.mint(IdPrefix.WORK_ITEM_PROPOSAL, self._clock).value for _ in submission.proposals]
         artifact_rows = self._artifact_rows(chunk, node, submission.epoch, submission.artifacts, artifact_ids)
         proposal_rows = stamped_proposals(
             chunk.chunk_id,

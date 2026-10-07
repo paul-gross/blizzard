@@ -13,7 +13,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from blizzard.foundation.ids import FINDING_PREFIX, Id
+from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.hub.api.garden_formats import GardenFormats
 from blizzard.hub.domain.garden.delivery.validation import (
     CommitResolution,
@@ -46,7 +46,7 @@ _RUN = RunContext(routine_name="nightly", scope_slug="runner", mode="full")
 
 
 def _fin() -> str:
-    return Id.mint_at(FINDING_PREFIX, _T0).value
+    return Id.mint_at(IdPrefix.FINDING, _T0).value
 
 
 _FIN1 = _fin()

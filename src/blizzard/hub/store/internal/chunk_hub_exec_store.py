@@ -16,7 +16,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import func, select, update
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.ids import HUB_EXEC_SLOT_PREFIX, Id
+from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.hub_exec import IWriteChunkHubExecRepository
@@ -67,7 +67,7 @@ class ChunkHubExecStore:
                 conn.execute(
                     update(s.hub_exec_slot).where(s.hub_exec_slot.c.slot_id == row.slot_id).values(released_at=at)
                 )
-            slot_id = Id.mint(HUB_EXEC_SLOT_PREFIX, self._clock).value
+            slot_id = Id.mint(IdPrefix.HUB_EXEC_SLOT, self._clock).value
             conn.execute(
                 s.hub_exec_slot.insert().values(
                     slot_id=slot_id, holder_chunk_id=chunk_id, node_id=node_id, acquired_at=at, released_at=None

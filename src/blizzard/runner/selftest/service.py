@@ -10,7 +10,7 @@ from __future__ import annotations
 import threading
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.ids import SELFTEST_PREFIX, Id
+from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.runner.harness.adapter import IHarnessSelfTestSeam
 from blizzard.runner.harness.selftest_result import IWriteSelfTestResultRepository
 from blizzard.runner.lifecycle.judgement.elicitation_files import IElicitationReplyReader
@@ -54,7 +54,7 @@ class SelfTestService:
     def start(self, harness: str, adapter: IHarnessSelfTestSeam) -> SelfTestRun:
         """Mint a run against ``harness``, whose resolved seam is ``adapter``, and begin it in a
         background thread; returns immediately."""
-        run = SelfTestRun(id=Id.mint(SELFTEST_PREFIX, self._clock).value, harness=harness)
+        run = SelfTestRun(id=Id.mint(IdPrefix.SELFTEST, self._clock).value, harness=harness)
         with self._lock:
             self._runs[run.id] = run
         threading.Thread(target=self._execute, args=(run.id, adapter), daemon=True).start()

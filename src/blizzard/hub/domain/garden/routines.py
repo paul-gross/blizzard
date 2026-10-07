@@ -14,7 +14,7 @@ from enum import StrEnum
 from typing import ClassVar, Protocol
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.ids import ROUTINE_PREFIX, Id
+from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.config.changes import (
     FIELDED_RECORD_TRANSITIONS,
@@ -398,7 +398,7 @@ class RoutineAuthoring:
         require_graph_resolves(self._graphs.get_enabled_by_name(graph_name), graph_name)
         scope, scope_mint = self._scope_registry.resolve(default_scope_slug, ctx)
         routine, change = Routine.new(
-            routine_id=Id.mint(ROUTINE_PREFIX, self._clock).value,
+            routine_id=Id.mint(IdPrefix.ROUTINE, self._clock).value,
             name=name,
             graph_name=graph_name,
             default_scope_slug=scope.slug,

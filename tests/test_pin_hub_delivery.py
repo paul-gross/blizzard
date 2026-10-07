@@ -14,7 +14,7 @@ from typing import Any, cast
 import pytest
 
 from blizzard.foundation.artifacts import ArtifactKind
-from blizzard.foundation.ids import ARTIFACT_PREFIX, Id
+from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.hub.delivery.hub_node import UnconvergedDeliveryError
 from blizzard.hub.delivery.marker_auth import MarkerAuthority
 from blizzard.hub.domain.artifact.model import StoredArtifact
@@ -155,7 +155,7 @@ def _seed_at_deliver_with_two_branches_for_one_repo(hub: HubHarness, chunk_id: s
             data=f"{branch}:{commit * 40}",
             repo="acme/widget",
             forge=None,
-            artifact_id=Id.mint(ARTIFACT_PREFIX, hub.clock).value,
+            artifact_id=Id.mint(IdPrefix.ARTIFACT, hub.clock).value,
             chunk_id=chunk_id,
             node_id=nodes["build"],
             node_name="build",

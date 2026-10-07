@@ -15,7 +15,7 @@ from starlette.concurrency import run_in_threadpool
 
 from blizzard.auth_core import CONFIG_EDIT, FLEET_VIEW
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.ids import ROUTINE_PREFIX, Id, IdPrefix
+from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
@@ -166,7 +166,7 @@ def _declaration(document: ConfigDocument, clock: IClock) -> ConfigDeclaration:
         routines.append(
             RoutineDeclaration(
                 name=routine.name,
-                routine_id=Id.mint(ROUTINE_PREFIX, clock).value,
+                routine_id=Id.mint(IdPrefix.ROUTINE, clock).value,
                 graph_name=routine.graph_name,
                 default_scope_slug=routine.default_scope_slug,
                 default_model=routine.default_model,

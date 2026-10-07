@@ -16,7 +16,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.event_log import EventLogKind
-from blizzard.foundation.ids import ARTIFACT_PREFIX, TRANSITION_PREFIX, Id
+from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.platform_tracing.attributes import annotate
 from blizzard.foundation.platform_tracing.tracer import IPlatformTracer, NoopPlatformTracer
 from blizzard.foundation.repo_ref import repo_identity
@@ -751,7 +751,7 @@ class HubNodeExecutor:
             data=envelope_payload,
             repo=None,
             forge=None,
-            artifact_id=Id.mint(ARTIFACT_PREFIX, self._clock).value,
+            artifact_id=Id.mint(IdPrefix.ARTIFACT, self._clock).value,
             chunk_id=chunk.chunk_id,
             node_id=node.node_id,
             node_name=node.name,
@@ -875,7 +875,7 @@ class HubNodeExecutor:
                     data=envelope_payload,
                     repo=None,
                     forge=None,
-                    artifact_id=Id.mint(ARTIFACT_PREFIX, self._clock).value,
+                    artifact_id=Id.mint(IdPrefix.ARTIFACT, self._clock).value,
                     chunk_id=chunk.chunk_id,
                     node_id=node.node_id,
                     node_name=node.name,
@@ -883,7 +883,7 @@ class HubNodeExecutor:
                 )
                 extra_artifacts = [*(extra_artifacts or []), envelope_artifact]
 
-        fresh_transition_id = Id.mint(TRANSITION_PREFIX, self._clock).value
+        fresh_transition_id = Id.mint(IdPrefix.TRANSITION, self._clock).value
         wrote = self._hub_exec.record_hub_step_transition(
             chunk.chunk_id,
             from_node_id=node.node_id,

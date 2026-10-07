@@ -14,7 +14,7 @@ from datetime import timedelta
 
 from blizzard.auth_core import Role, expand
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.ids import USER_PREFIX, Id
+from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.auth.auth_state import IWriteAuthStateRepository
@@ -222,7 +222,7 @@ class AuthService:
                 return matched
 
         user = User(
-            user_id=Id.mint(USER_PREFIX, self._clock).value,
+            user_id=Id.mint(IdPrefix.USER, self._clock).value,
             username=self.mint_username(identity.handle),
             display_name=identity.handle,
             email=identity.email if identity.email_verified else None,

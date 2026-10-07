@@ -12,7 +12,7 @@ from typing import Any
 
 from sqlalchemy import CompoundSelect, Select, func, select, tuple_, union
 
-from blizzard.foundation.ids import CHUNK_PREFIX, Id
+from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.node_steps import Executor
 from blizzard.hub.domain.chunk.model import UsageTotal
 from blizzard.hub.domain.kernel.pagination import MalformedCursor, decode_cursor, encode_cursor
@@ -134,7 +134,7 @@ def _decode_chunk_cursor(cursor: str) -> str:
     if len(parts) != _CURSOR_ARITY or not isinstance(parts[0], str):
         raise MalformedCursor(cursor)
     parsed = Id.parse(parts[0])
-    if parsed is None or not parsed.has_prefix(CHUNK_PREFIX):
+    if parsed is None or not parsed.has_prefix(IdPrefix.CHUNK):
         raise MalformedCursor(cursor)
     return parts[0]
 

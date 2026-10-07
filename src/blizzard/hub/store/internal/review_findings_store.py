@@ -10,7 +10,7 @@ from sqlalchemy import insert, select
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.artifacts import ArtifactKind
-from blizzard.foundation.ids import ARTIFACT_PREFIX, Id
+from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.garden.review.materialize import (
     IWriteReviewFindingsRepository,
@@ -110,7 +110,7 @@ class ReviewFindingsStore:
 
             conn.execute(
                 insert(artifacts).values(
-                    artifact_id=Id.mint_at(ARTIFACT_PREFIX, plan.at).value,
+                    artifact_id=Id.mint_at(IdPrefix.ARTIFACT, plan.at).value,
                     chunk_id=plan.chunk_id,
                     node_id=plan.node_id,
                     node_name=plan.node_name,

@@ -13,7 +13,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.foundation.ids import CHUNK_PREFIX, Id
+from blizzard.foundation.ids import Id, IdPrefix
 
 pytestmark = pytest.mark.unit
 
@@ -23,37 +23,37 @@ def _clock(seconds: int = 0) -> FixedClock:
 
 
 def test_mint_is_prefixed_and_well_formed() -> None:
-    chunk_id = Id.mint(CHUNK_PREFIX, _clock())
+    chunk_id = Id.mint(IdPrefix.CHUNK, _clock())
     assert chunk_id.value.startswith("ch_")
-    assert chunk_id.has_prefix(CHUNK_PREFIX)
+    assert chunk_id.has_prefix(IdPrefix.CHUNK)
 
 
 def test_has_prefix_rejects_wrong_prefix_and_malformed() -> None:
-    assert not Id.mint(CHUNK_PREFIX, _clock()).has_prefix("gr")
+    assert not Id.mint(IdPrefix.CHUNK, _clock()).has_prefix("gr")
     assert Id.parse("ch_tooshort") is None
     assert Id.parse("nounderscore") is None
 
 
 def test_ulid_is_lexically_time_ordered() -> None:
-    earlier = Id.mint(CHUNK_PREFIX, _clock(0)).ulid
-    later = Id.mint(CHUNK_PREFIX, _clock(60)).ulid
+    earlier = Id.mint(IdPrefix.CHUNK, _clock(0)).ulid
+    later = Id.mint(IdPrefix.CHUNK, _clock(60)).ulid
     # The leading 10 chars encode the millisecond timestamp, so a later instant
     # sorts strictly after an earlier one regardless of the random tail.
     assert earlier[:10] < later[:10]
 
 
 def test_ulid_is_26_chars() -> None:
-    assert len(Id.mint(CHUNK_PREFIX, _clock()).ulid) == 26
+    assert len(Id.mint(IdPrefix.CHUNK, _clock()).ulid) == 26
 
 
 def test_minted_at_round_trips_the_mint_instant() -> None:
     instant = datetime(2026, 1, 1, tzinfo=UTC) + timedelta(seconds=42)
     # The ULID keeps millisecond precision, so the decode lands on the instant exactly.
-    assert Id.mint(CHUNK_PREFIX, FixedClock(instant)).minted_at == instant
+    assert Id.mint(IdPrefix.CHUNK, FixedClock(instant)).minted_at == instant
 
 
 def test_minted_at_accepts_lowercase_ids() -> None:
-    chunk_id = Id.mint(CHUNK_PREFIX, _clock())
+    chunk_id = Id.mint(IdPrefix.CHUNK, _clock())
     lowered = Id.parse(chunk_id.value.lower())
     assert lowered is not None
     assert lowered.minted_at == chunk_id.minted_at
@@ -79,7 +79,8 @@ def test_mint_at_reads_a_naive_instant_as_utc_not_the_hosts_local_zone() -> None
     time.tzset()
     try:
         assert (
-            Id.mint_at(CHUNK_PREFIX, aware.replace(tzinfo=None)).ulid[:10] == Id.mint_at(CHUNK_PREFIX, aware).ulid[:10]
+            Id.mint_at(IdPrefix.CHUNK, aware.replace(tzinfo=None)).ulid[:10]
+            == Id.mint_at(IdPrefix.CHUNK, aware).ulid[:10]
         )
     finally:
         if previous is None:

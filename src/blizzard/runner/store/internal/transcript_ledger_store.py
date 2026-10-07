@@ -9,7 +9,7 @@ from typing import Any
 
 from sqlalchemy import Connection, func, select
 
-from blizzard.foundation.ids import SEGMENT_PREFIX, Id
+from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.batching import id_batches
 from blizzard.runner.harness.identity import SessionReference
@@ -288,7 +288,7 @@ class TranscriptLedgerStore:
         supersedes: str | None = None,
         spawn_cwd: str | None = None,
     ) -> str:
-        segment_id = Id.mint_at(SEGMENT_PREFIX, stamped_at).value
+        segment_id = Id.mint_at(IdPrefix.SEGMENT, stamped_at).value
         with self._store.begin() as conn:
             conn.execute(
                 transcript_segments.insert().values(

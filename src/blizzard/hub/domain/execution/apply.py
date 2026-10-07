@@ -13,14 +13,7 @@ from typing import Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
-from blizzard.foundation.ids import (
-    ARTIFACT_PREFIX,
-    DECISION_PREFIX,
-    MIGRATION_PREFIX,
-    TRANSITION_PREFIX,
-    WORK_ITEM_PROPOSAL_PREFIX,
-    Id,
-)
+from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.artifact.model import StoredArtifact
@@ -316,7 +309,7 @@ class ApplyService:
         proposals: Sequence[ItemProposal],
     ) -> ApplyResult:
         assert plan.to_node_id is not None
-        fresh_transition_id = Id.mint(TRANSITION_PREFIX, self._clock).value
+        fresh_transition_id = Id.mint(IdPrefix.TRANSITION, self._clock).value
         artifact_rows = self._artifact_rows(chunk, from_node, submission.epoch, artifacts)
         proposal_rows = self._proposal_rows(chunk, from_node, submission, proposals)
         with self._exclusive.locked([chunk.chunk_id]) as handle:
@@ -411,7 +404,7 @@ class ApplyService:
         release/retain + intent clear), then govern by the landed node's executor."""
         artifact_rows = self._artifact_rows(chunk, from_node, submission.epoch, artifacts)
         proposal_rows = self._proposal_rows(chunk, from_node, submission, proposals)
-        migration_id = Id.mint(MIGRATION_PREFIX, self._clock).value
+        migration_id = Id.mint(IdPrefix.MIGRATION, self._clock).value
         with self._exclusive.locked([chunk.chunk_id]) as handle:
             locked = handle.facts(chunk.chunk_id)
             if locked is None:
@@ -533,7 +526,7 @@ class ApplyService:
         # A refusal — the chunk was stopped or restarted since the arrival was recorded —
         # leaves the decision unopened: it would gate a superseded visit.
         self._decisions.record_decision(
-            decision_id=Id.mint(DECISION_PREFIX, self._clock).value,
+            decision_id=Id.mint(IdPrefix.DECISION, self._clock).value,
             chunk_id=chunk.chunk_id,
             node_id=gate_node.node_id,
             node_name=gate_node.name,
@@ -562,13 +555,13 @@ class ApplyService:
     def _artifact_rows(
         self, chunk: Chunk, node: Node, epoch: int, artifacts: Sequence[CompletionArtifact]
     ) -> list[StoredArtifact]:
-        ids = [Id.mint(ARTIFACT_PREFIX, self._clock).value for _ in artifacts]
+        ids = [Id.mint(IdPrefix.ARTIFACT, self._clock).value for _ in artifacts]
         return stored_artifacts(chunk.chunk_id, node, epoch, artifacts, artifact_ids=ids)
 
     def _proposal_rows(
         self, chunk: Chunk, node: Node, submission: Completion, proposals: Sequence[ItemProposal]
     ) -> list[StampedWorkItemProposal]:
-        ids = [Id.mint(WORK_ITEM_PROPOSAL_PREFIX, self._clock).value for _ in proposals]
+        ids = [Id.mint(IdPrefix.WORK_ITEM_PROPOSAL, self._clock).value for _ in proposals]
         return stamped_proposals(
             chunk.chunk_id, node, submission.epoch, proposals, proposal_ids=ids, runner_id=submission.runner_id
         )

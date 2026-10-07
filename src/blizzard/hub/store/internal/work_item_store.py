@@ -14,7 +14,7 @@ from sqlalchemy import Connection, desc, insert, select, update
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.garden_proposals import GardenProposalClosureKind, GardenProposalItemOutcome
-from blizzard.foundation.ids import WORK_ITEM_PREFIX, Id
+from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.store.batching import id_batches
 from blizzard.foundation.work_items import WorkItemClosure
 from blizzard.hub.domain.chunk.model import (
@@ -198,7 +198,7 @@ class WorkItemStore:
         """Insert one ``work_items`` row on ``conn``, open, and return its minted id.
         ``routine_name``/``scope_slug``/``run_mode`` are a routine run's own indexed
         values — ``None`` for every other item."""
-        work_item_id = Id.mint_at(WORK_ITEM_PREFIX, at).value
+        work_item_id = Id.mint_at(IdPrefix.WORK_ITEM, at).value
         author_payload = (
             {"user_id": author.user_id}
             if author.kind is WorkItemAuthorKind.USER

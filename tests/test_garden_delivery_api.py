@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 from sqlalchemy import insert, select
 
-from blizzard.foundation.ids import FINDING_PREFIX, Id
+from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.hub.domain.chunk.model import WorkItemAuthor
 from blizzard.hub.domain.garden.run_context import RunContext
@@ -189,7 +189,7 @@ def test_transformations_only_mints_no_new_finding(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _seed_scope(hub, _SCOPE)
     chunk_id = _seed_chunk(hub)
-    finding_id = Id.mint(FINDING_PREFIX, hub.clock).value
+    finding_id = Id.mint(IdPrefix.FINDING, hub.clock).value
     _seed_finding(hub, finding_id)
     _record_artifact(hub, chunk_id, name="delta", content=_delta(findings=[_observed_op(finding_id)]))
 
@@ -204,7 +204,7 @@ def test_a_mixed_delta_with_proposals_is_recorded(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _seed_scope(hub, _SCOPE)
     chunk_id = _seed_chunk(hub)
-    finding_id = Id.mint(FINDING_PREFIX, hub.clock).value
+    finding_id = Id.mint(IdPrefix.FINDING, hub.clock).value
     _seed_finding(hub, finding_id)
     _record_artifact(hub, chunk_id, name="delta", content=_delta(findings=[_add_op(), _gone_op(finding_id)]))
     _record_artifact(hub, chunk_id, name="docket", content=_proposals(findings=[finding_id]))
@@ -243,7 +243,7 @@ def test_a_docket_citing_a_prior_runs_live_id_still_works_unchanged(tmp_path: Pa
     hub = build_hub(tmp_path)
     _seed_scope(hub, _SCOPE)
     chunk_id = _seed_chunk(hub)
-    finding_id = Id.mint(FINDING_PREFIX, hub.clock).value
+    finding_id = Id.mint(IdPrefix.FINDING, hub.clock).value
     _seed_finding(hub, finding_id)
     _record_artifact(hub, chunk_id, name="delta", content=_delta())
     _record_artifact(hub, chunk_id, name="docket", content=_proposals(findings=[finding_id]))
@@ -296,7 +296,7 @@ def test_an_observed_op_admits_a_review_sourced_finding_on_the_runs_own_scope(tm
     hub = build_hub(tmp_path)
     _seed_scope(hub, _SCOPE)
     chunk_id = _seed_chunk(hub)
-    finding_id = Id.mint(FINDING_PREFIX, hub.clock).value
+    finding_id = Id.mint(IdPrefix.FINDING, hub.clock).value
     _seed_review_finding(hub, finding_id)
     _record_artifact(hub, chunk_id, name="delta", content=_delta(findings=[_observed_op(finding_id)]))
 
@@ -310,7 +310,7 @@ def test_a_docket_can_cite_a_review_sourced_finding_on_the_runs_own_scope(tmp_pa
     hub = build_hub(tmp_path)
     _seed_scope(hub, _SCOPE)
     chunk_id = _seed_chunk(hub)
-    finding_id = Id.mint(FINDING_PREFIX, hub.clock).value
+    finding_id = Id.mint(IdPrefix.FINDING, hub.clock).value
     _seed_review_finding(hub, finding_id)
     _record_artifact(hub, chunk_id, name="delta", content=_delta())
     _record_artifact(hub, chunk_id, name="docket", content=_proposals(findings=[finding_id]))
@@ -329,7 +329,7 @@ def test_a_review_sourced_finding_on_another_scope_is_out_of_scope(tmp_path: Pat
     _seed_scope(hub, _SCOPE)
     _seed_scope(hub, "other-scope")
     chunk_id = _seed_chunk(hub)
-    finding_id = Id.mint(FINDING_PREFIX, hub.clock).value
+    finding_id = Id.mint(IdPrefix.FINDING, hub.clock).value
     _seed_review_finding(hub, finding_id, scope_slug="other-scope")
     _record_artifact(hub, chunk_id, name="delta", content=_delta(findings=[_observed_op(finding_id)]))
 
@@ -407,7 +407,7 @@ def test_an_observed_op_revives_a_previously_gone_finding(tmp_path: Path) -> Non
     hub = build_hub(tmp_path)
     _seed_scope(hub, _SCOPE)
     chunk_id = _seed_chunk(hub)
-    finding_id = Id.mint(FINDING_PREFIX, hub.clock).value
+    finding_id = Id.mint(IdPrefix.FINDING, hub.clock).value
     # Both prior facts precede the delivering run's instant, so the delivered `observed`
     # is genuinely newest — `derive_liveness` resolves on `recorded_at`, not row order.
     before = hub.clock.now() - timedelta(days=1)
@@ -429,7 +429,7 @@ def test_an_unknown_finding_id_is_invalid(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _seed_scope(hub, _SCOPE)
     chunk_id = _seed_chunk(hub)
-    ghost = Id.mint(FINDING_PREFIX, hub.clock).value
+    ghost = Id.mint(IdPrefix.FINDING, hub.clock).value
     _record_artifact(hub, chunk_id, name="delta", content=_delta(findings=[_observed_op(ghost)]))
 
     resp = _post(hub, chunk_id, delta=["delta"])
@@ -446,7 +446,7 @@ def test_an_out_of_scope_transformation_is_invalid(tmp_path: Path) -> None:
     _seed_scope(hub, _SCOPE)
     _seed_scope(hub, "other-scope")
     chunk_id = _seed_chunk(hub)
-    finding_id = Id.mint(FINDING_PREFIX, hub.clock).value
+    finding_id = Id.mint(IdPrefix.FINDING, hub.clock).value
     _seed_finding(hub, finding_id, scope_slug="other-scope")
     _record_artifact(hub, chunk_id, name="delta", content=_delta(scope=_SCOPE, findings=[_observed_op(finding_id)]))
 
@@ -478,7 +478,7 @@ def test_a_proposals_artifact_naming_one_ref_twice_is_invalid(tmp_path: Path) ->
     hub = build_hub(tmp_path)
     _seed_scope(hub, _SCOPE)
     chunk_id = _seed_chunk(hub)
-    finding_id = Id.mint(FINDING_PREFIX, hub.clock).value
+    finding_id = Id.mint(IdPrefix.FINDING, hub.clock).value
     _seed_finding(hub, finding_id)
     twice = json.dumps(
         [
@@ -505,7 +505,7 @@ def test_a_docket_citing_the_same_finding_twice_is_invalid(tmp_path: Path) -> No
     hub = build_hub(tmp_path)
     _seed_scope(hub, _SCOPE)
     chunk_id = _seed_chunk(hub)
-    finding_id = Id.mint(FINDING_PREFIX, hub.clock).value
+    finding_id = Id.mint(IdPrefix.FINDING, hub.clock).value
     _seed_finding(hub, finding_id)
     _record_artifact(hub, chunk_id, name="delta", content=_delta())
     _record_artifact(hub, chunk_id, name="docket", content=_proposals(findings=[finding_id, finding_id]))
@@ -542,7 +542,7 @@ def test_an_add_ops_ref_shaped_like_a_finding_id_is_invalid(tmp_path: Path) -> N
     hub = build_hub(tmp_path)
     _seed_scope(hub, _SCOPE)
     chunk_id = _seed_chunk(hub)
-    disguised_ref = Id.mint(FINDING_PREFIX, hub.clock).value
+    disguised_ref = Id.mint(IdPrefix.FINDING, hub.clock).value
     _record_artifact(hub, chunk_id, name="delta", content=_delta(findings=[_add_op(ref=disguised_ref)]))
 
     resp = _post(hub, chunk_id, delta=["delta"])
@@ -599,7 +599,7 @@ def test_a_replayed_delivery_stays_recorded_even_after_one_of_its_findings_exits
     hub = build_hub(tmp_path)
     _seed_scope(hub, _SCOPE)
     chunk_id = _seed_chunk(hub)
-    finding_id = Id.mint(FINDING_PREFIX, hub.clock).value
+    finding_id = Id.mint(IdPrefix.FINDING, hub.clock).value
     _seed_finding(hub, finding_id, at=hub.clock.now())
     _record_artifact(hub, chunk_id, name="delta", content=_delta(findings=[_observed_op(finding_id)]))
 
@@ -648,7 +648,7 @@ def test_a_later_delivery_re_carrying_the_same_proposals_mints_no_duplicate(tmp_
     hub = build_hub(tmp_path)
     _seed_scope(hub, _SCOPE)
     chunk_id = _seed_chunk(hub)
-    finding_id = Id.mint(FINDING_PREFIX, hub.clock).value
+    finding_id = Id.mint(IdPrefix.FINDING, hub.clock).value
     _seed_finding(hub, finding_id)
     _record_artifact(hub, chunk_id, name="delta", content=_delta())  # a clean delta
     _record_artifact(hub, chunk_id, name="docket", content=_proposals(findings=[finding_id]))
@@ -746,7 +746,7 @@ def test_the_script_delivers_through_the_route_and_prints_recorded(
     hub = build_hub(tmp_path)
     _seed_scope(hub, _SCOPE)
     chunk_id = _seed_chunk(hub)
-    finding_id = Id.mint(FINDING_PREFIX, hub.clock).value
+    finding_id = Id.mint(IdPrefix.FINDING, hub.clock).value
     _seed_finding(hub, finding_id)
     _record_artifact(hub, chunk_id, name="delta", content=_delta(findings=[_add_op(), _observed_op(finding_id)]))
     _record_artifact(hub, chunk_id, name="docket", content=_proposals(findings=[finding_id]))
@@ -811,9 +811,9 @@ def test_every_finding_the_worker_read_shows_is_a_citable_proposal_finding(tmp_p
     hub = build_hub(tmp_path)
     _seed_scope(hub, _SCOPE)
     chunk_id = _seed_chunk(hub)
-    own = Id.mint(FINDING_PREFIX, hub.clock).value
-    neighbour = Id.mint(FINDING_PREFIX, hub.clock).value
-    review = Id.mint(FINDING_PREFIX, hub.clock).value
+    own = Id.mint(IdPrefix.FINDING, hub.clock).value
+    neighbour = Id.mint(IdPrefix.FINDING, hub.clock).value
+    review = Id.mint(IdPrefix.FINDING, hub.clock).value
     _seed_finding(hub, own)
     _seed_finding(hub, neighbour, scope_slug="other-scope")
     _seed_review_finding(hub, review)
