@@ -167,8 +167,8 @@ def first_unmet_prerequisite(
 @dataclass(frozen=True)
 class ClaimAdmission:
     """Whether a runner may claim a chunk, judged on what the claim lock read. Refusals run in a fixed order,
-    each its own error: ended, held route, not ``ready``, unmet prerequisite, unregistered (never connected
-    included), retired, then incapable runner (a registration reporting no capabilities is incapable of
+    each its own error: unregistered (never connected included), retired, ended, held route, not ``ready``,
+    unmet prerequisite, then incapable runner (a registration reporting no capabilities is incapable of
     everything). The runner-paused brake is judged before the lock (:func:`refuse_paused_runner`)."""
 
     chunk: Chunk
@@ -184,6 +184,9 @@ class ClaimAdmission:
         registration: RunnerRegistration | None,
     ) -> Node:
         """The node the claim lands the chunk at, or the refusal. Its envelope is built from it."""
+        if registration is None or registration.never_connected():
+            raise ClaimDeniedUnregistered(runner_id=runner_id)
+        registration.refuse_if_retired(action="claim")
         chunk_id = self.chunk.chunk_id
         facts = ChunkFacts.or_default(self.facts)
         status = facts.status() if self.facts is not None else ChunkStatus.NOT_READY
@@ -198,9 +201,6 @@ class ClaimAdmission:
         node = facts.current_node(self.graph)
         if node is None:  # pragma: no cover - a pinned graph always resolves its own node
             raise ClaimConflict(held_by_runner_id=runner_id)
-        if registration is None or registration.never_connected():
-            raise ClaimDeniedUnregistered(runner_id=runner_id)
-        registration.refuse_if_retired(action="claim")
         if not EligibilityCheck(self.chunk, self.graph, node, registration.capabilities).eligible:
             raise ClaimDeniedIncompatible(chunk_id=chunk_id, runner_id=runner_id)
         return node

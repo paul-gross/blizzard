@@ -28,7 +28,6 @@ from blizzard.foundation.fact_kinds import (
 )
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
-from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.chunk.model import ChunkFacts, NodeQuestion, QuestionDelivery
 from blizzard.hub.domain.chunk.ports.escalations import IWriteChunkEscalationsRepository
@@ -136,6 +135,14 @@ def subscription_identity(fact: Payload) -> tuple[str, str] | None:
     if not isinstance(slug, str) or not slug:
         return None
     return slug, fact.text("name") or slug
+
+
+def usage_miss_reason(fact: Payload) -> str | None:
+    """A usage miss's reason, kept raw whether or not the hub recognizes it; ``None`` unless a non-blank string."""
+    reason = fact.get("reason")
+    if not isinstance(reason, str) or not reason.strip():
+        return None
+    return reason
 
 
 @domain_model
@@ -415,7 +422,7 @@ class FactIngestService:
             # Advisory sibling to the sampled fact above — refresh-in-place per
             # (runner_id, slug), in its own table, never touching the sample row.
             identity = subscription_identity(fact)
-            reason = SampleMissReason.recognized(fact.get("reason"))
+            reason = usage_miss_reason(fact)
             if identity is None or reason is None:
                 return False, None
             slug, name = identity

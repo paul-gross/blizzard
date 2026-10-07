@@ -710,10 +710,10 @@ def test_a_missed_fact_with_an_invalid_slug_is_rejected_without_writing_a_row(
 
 @pytest.mark.parametrize(
     "reason",
-    [None, "", "credential_expired", 7],
-    ids=["missing-reason", "empty-reason", "unknown-reason", "non-string-reason"],
+    [None, "", "  ", 7],
+    ids=["missing-reason", "empty-reason", "blank-reason", "non-string-reason"],
 )
-def test_a_missed_fact_with_an_unrecognized_reason_is_rejected_without_writing_a_row(
+def test_a_missed_fact_without_a_usable_reason_is_rejected_without_writing_a_row(
     tmp_path: Path, reason: object
 ) -> None:
     hub = build_hub(tmp_path)
@@ -733,6 +733,39 @@ def test_a_missed_fact_with_an_unrecognized_reason_is_rejected_without_writing_a
     assert response.status_code == 200, response.text
     assert response.json()["rejected"] == [1]
     assert _miss_row(hub.engine, "r1") is None
+
+
+def test_a_miss_with_an_unknown_reason_lands_and_supersedes_a_lapsed_condition(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    assert hub.client.post("/api/fleet/runners", json={"runner_id": "r1", "workspace_id": "w1"}).status_code == 201
+    now = hub.clock.now()
+
+    def _post(seq: int, reason: str, at: datetime) -> dict:
+        resp = hub.client.post(
+            "/api/fleet/events",
+            json={
+                "runner_id": "r1",
+                "facts": [
+                    {
+                        "seq": seq,
+                        "kind": "external_subscription_usage.missed",
+                        "payload": _miss_payload(slug="openai", missed_at=at, reason=reason, name="OpenAI"),
+                    }
+                ],
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        return resp.json()
+
+    _post(1, "credential_lapsed", now - timedelta(minutes=2))
+    [lapsed] = hub.client.get("/api/runners/r1").json()["subscriptions"]
+    assert lapsed["condition"] == "credential_lapsed"
+
+    ack = _post(2, "credential_expired", now - timedelta(minutes=1))
+
+    assert ack["rejected"] == []
+    assert _miss_row(hub.engine, "r1").reason == "credential_expired"  # type: ignore[union-attr]
+    assert hub.client.get("/api/runners/r1").json()["subscriptions"] == []
 
 
 def test_a_stored_unrecognized_miss_reason_reads_as_none_instead_of_breaking_runner_reads(
