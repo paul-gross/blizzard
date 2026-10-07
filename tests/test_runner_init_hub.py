@@ -10,7 +10,7 @@ import stat
 from pathlib import Path
 
 import pytest
-from click.testing import CliRunner, Result
+from click.testing import Result
 
 from blizzard.cli.main import blizzard
 from blizzard.foundation.operator_sessions.internal.session_file import SessionFile
@@ -26,14 +26,14 @@ from blizzard.runner.hub.client import (
 )
 from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.runner.hub.token_file import ENV_FILENAME, assigned_token, with_token
-from tests.runner_init_fakes import FakeInitHub, FakeTokenIdentityReader
+from tests.runner_init_fakes import FakeInitHub, FakeTokenIdentityReader, init_runner
 
 _HUB = "http://hub.test:8421"
 _FROM_FILE = HeldToken("t", from_process_env=False)
 
 
-def _init(root: Path, *args: str) -> Result:
-    return CliRunner().invoke(blizzard, ["runner", "init", str(root), "--hub", _HUB, *args])
+def _init(hub: FakeInitHub, root: Path, *args: str) -> Result:
+    return init_runner(hub).invoke(blizzard, ["runner", "init", str(root), "--hub", _HUB, *args])
 
 
 def _joined(tmp_path: Path, fake_init_hub: FakeInitHub) -> tuple[Path, bytes]:
@@ -42,7 +42,7 @@ def _joined(tmp_path: Path, fake_init_hub: FakeInitHub) -> tuple[Path, bytes]:
     root = tmp_path / "runner"
     root.mkdir()
     (root / ENV_FILENAME).write_text("OTEL_EXPORTER_OTLP_ENDPOINT=http://collector:4318\n")
-    result = _init(root)
+    result = _init(fake_init_hub, root)
     assert result.exit_code == 0, result.output
     assert [i.runner_id for i in fake_init_hub.admin.added] == ["rn_init1"]
     return root, (root / ENV_FILENAME).read_bytes()
@@ -149,10 +149,10 @@ def test_a_text_with_the_token_replaced_keeps_every_other_line(text: str, expect
 
 @pytest.mark.component
 def test_a_runner_verb_reads_the_token_file_and_the_environment_overrides_it(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    fake_init_hub: FakeInitHub, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = tmp_path / "runner"
-    assert _init(root).exit_code == 0
+    assert _init(fake_init_hub, root).exit_code == 0
     assert RunnerConfig.load(root).hub_token == "init-token-1"
     monkeypatch.setenv(DEFAULT_TOKEN_ENV, "from-env")
     assert RunnerConfig.load(root).hub_token == "from-env"
@@ -164,7 +164,7 @@ def test_a_runner_verb_reads_the_token_file_and_the_environment_overrides_it(
 @pytest.mark.component
 def test_init_adds_the_runner_under_its_name_and_writes_its_token(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
     root = tmp_path / "runner"
-    result = _init(root)
+    result = _init(fake_init_hub, root)
     assert result.exit_code == 0, result.output
     assert [(i.runner_id, i.runner_name) for i in fake_init_hub.admin.added] == [("rn_init1", "runner-local")]
     assert [(c.hub_url, c.runner_token, c.operator_token) for c in fake_init_hub.calls] == [(_HUB, "", None)]
@@ -177,7 +177,7 @@ def test_init_adds_the_runner_under_its_name_and_writes_its_token(tmp_path: Path
 @pytest.mark.component
 def test_init_reuses_a_token_the_hub_accepts_and_adds_nothing(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
     root, env_bytes = _joined(tmp_path, fake_init_hub)
-    result = _init(root)
+    result = _init(fake_init_hub, root)
     assert result.exit_code == 0, result.output
     assert len(fake_init_hub.admin.added) == 1
     assert fake_init_hub.calls[-1].runner_token == "init-token-1"
@@ -196,7 +196,7 @@ def test_init_keeping_a_hand_written_token_makes_its_file_owner_only_bytes_uncha
     env.write_text(f"OTEL_EXPORTER_OTLP_ENDPOINT=http://collector:4318\n{DEFAULT_TOKEN_ENV}={issued.token}\n")
     env.chmod(0o644)
     env_bytes = env.read_bytes()
-    result = _init(root)
+    result = _init(fake_init_hub, root)
     assert result.exit_code == 0, result.output
     assert "keeps its token" in result.output and "owner-only" in result.output
     assert stat.S_IMODE(env.stat().st_mode) == 0o600
@@ -215,7 +215,7 @@ def test_init_that_cannot_restrict_a_kept_token_file_warns_naming_it(
         raise PermissionError(errno.EPERM, os.strerror(errno.EPERM), str(self.path))
 
     monkeypatch.setattr(HubTokenFile, "restrict", owned_by_another_account)
-    result = _init(root)
+    result = _init(fake_init_hub, root)
     assert result.exit_code == 0, result.output
     assert f"warning: other accounts may read {root / ENV_FILENAME}" in result.output
     assert f"chmod 600 {root / ENV_FILENAME}" in result.output
@@ -247,7 +247,7 @@ def test_init_with_a_wiped_store_and_a_current_token_adds_nothing(tmp_path: Path
     root, _ = _joined(tmp_path, fake_init_hub)
     for path in RunnerConfig.load(root).data_dir.iterdir():
         path.unlink()
-    result = _init(root)
+    result = _init(fake_init_hub, root)
     assert result.exit_code == 0, result.output
     assert len(fake_init_hub.admin.added) == 1
 
@@ -256,7 +256,7 @@ def test_init_with_a_wiped_store_and_a_current_token_adds_nothing(tmp_path: Path
 def test_init_after_a_hub_reset_re_adds_the_runner_with_allow_readd(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
     root, _ = _joined(tmp_path, fake_init_hub)
     fake_init_hub.admin.added.clear()  # the hub's data is reset; the runtime dir survives
-    result = _init(root, "--allow-readd")
+    result = _init(fake_init_hub, root, "--allow-readd")
     assert result.exit_code == 0, result.output
     assert [i.runner_id for i in fake_init_hub.admin.added] == ["rn_init1"]
     assert (root / ENV_FILENAME).read_text() == (
@@ -270,7 +270,7 @@ def test_init_after_a_hub_reset_stops_without_allow_readd_leaving_the_env_file_a
 ) -> None:
     root, env_bytes = _joined(tmp_path, fake_init_hub)
     fake_init_hub.admin.added.clear()
-    result = _init(root)
+    result = _init(fake_init_hub, root)
     assert result.exit_code != 0
     assert _HUB in result.output
     assert "--allow-readd" in result.output
@@ -293,7 +293,7 @@ def test_init_stops_on_a_revoked_token_or_a_retired_runner_naming_each_verb_and_
     """Retiring revokes the token, so a reinstated runner still needs a new one before init keeps it."""
     root, env_bytes = _joined(tmp_path, fake_init_hub)
     fake_init_hub.identity = FakeTokenIdentityReader(TokenRefusal(reason=reason, runner_id="rn_init1"))
-    result = _init(root, "--allow-readd")
+    result = _init(fake_init_hub, root, "--allow-readd")
     assert result.exit_code != 0
     assert all(verb in result.output for verb in verbs)
     assert result.output.find(verbs[0]) <= result.output.find(verbs[-1])
@@ -312,7 +312,7 @@ def test_init_stopping_on_a_token_the_environment_supplies_says_to_replace_the_v
     root, env_bytes = _joined(tmp_path, fake_init_hub)
     monkeypatch.setenv(DEFAULT_TOKEN_ENV, "revoked-in-env")
     fake_init_hub.identity = FakeTokenIdentityReader(TokenRefusal(reason=reason, runner_id="rn_init1"))
-    result = _init(root)
+    result = _init(fake_init_hub, root)
     assert result.exit_code != 0
     assert fake_init_hub.calls[-1].runner_token == "revoked-in-env"
     assert f"set {DEFAULT_TOKEN_ENV} to it, or unset {DEFAULT_TOKEN_ENV} and put it in {root / ENV_FILENAME}" in (
@@ -325,7 +325,7 @@ def test_init_stopping_on_a_token_the_environment_supplies_says_to_replace_the_v
 def test_init_fails_and_adds_nothing_when_the_hub_is_unreachable(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
     root, env_bytes = _joined(tmp_path, fake_init_hub)
     fake_init_hub.identity = FakeTokenIdentityReader(HubClientError("GET /api/fleet/identity failed: refused"))
-    result = _init(root, "--allow-readd")
+    result = _init(fake_init_hub, root, "--allow-readd")
     assert result.exit_code != 0
     assert _HUB in result.output
     assert len(fake_init_hub.admin.added) == 1
@@ -337,7 +337,7 @@ def test_init_with_no_token_fails_and_writes_nothing_when_the_add_cannot_reach_t
     tmp_path: Path, fake_init_hub: FakeInitHub
 ) -> None:
     fake_init_hub.admin.refusal = HubClientError("POST /api/runners -> 503")
-    result = _init(tmp_path / "runner")
+    result = _init(fake_init_hub, tmp_path / "runner")
     assert result.exit_code != 0
     assert not (tmp_path / "runner" / ENV_FILENAME).exists()
 
@@ -350,7 +350,7 @@ def test_init_that_cannot_write_an_added_runners_token_fails_naming_the_runner_t
         raise PermissionError(errno.EACCES, os.strerror(errno.EACCES), str(self.path))
 
     monkeypatch.setattr(HubTokenFile, "write", unwritable)
-    result = _init(tmp_path / "runner")
+    result = _init(fake_init_hub, tmp_path / "runner")
     assert result.exit_code != 0
     assert [i.runner_id for i in fake_init_hub.admin.added] == ["rn_init1"]
     assert f"retire it with `blizzard hub runner retire rn_init1 --hub-url {_HUB}`" in result.output
@@ -361,7 +361,7 @@ def test_init_against_a_hub_requiring_sign_in_says_to_log_in(tmp_path: Path, fak
     fake_init_hub.admin.refusal = RunnerAddRefused(
         "POST /api/runners -> 401", reason=RunnerAddRefusalReason.SIGN_IN_REQUIRED, detail="not authenticated"
     )
-    result = _init(tmp_path / "runner")
+    result = _init(fake_init_hub, tmp_path / "runner")
     assert result.exit_code != 0
     assert "blizzard hub login" in result.output
     assert not (tmp_path / "runner" / ENV_FILENAME).exists()
@@ -370,14 +370,16 @@ def test_init_against_a_hub_requiring_sign_in_says_to_log_in(tmp_path: Path, fak
 @pytest.mark.component
 def test_init_adds_under_the_operator_session_held_for_its_hub(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
     SessionFile.of().save(f"{_HUB}/", "operator-session")
-    assert _init(tmp_path / "runner").exit_code == 0
+    assert _init(fake_init_hub, tmp_path / "runner").exit_code == 0
     assert fake_init_hub.calls[-1].operator_token == "operator-session"
 
 
 @pytest.mark.component
 def test_init_refuses_an_existing_config_naming_another_hub(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
     root, _ = _joined(tmp_path, fake_init_hub)
-    result = CliRunner().invoke(blizzard, ["runner", "init", str(root), "--hub", "http://elsewhere:8421"])
+    result = init_runner(fake_init_hub).invoke(
+        blizzard, ["runner", "init", str(root), "--hub", "http://elsewhere:8421"]
+    )
     assert result.exit_code != 0
     assert "http://elsewhere:8421" in result.output
     assert len(fake_init_hub.calls) == 1
@@ -390,7 +392,7 @@ def test_init_stops_when_the_environment_overrides_a_token_it_must_replace(
 ) -> None:
     root, env_bytes = _joined(tmp_path, fake_init_hub)
     monkeypatch.setenv(DEFAULT_TOKEN_ENV, "stale-from-env")
-    result = _init(root, "--allow-readd")
+    result = _init(fake_init_hub, root, "--allow-readd")
     assert result.exit_code != 0
     assert DEFAULT_TOKEN_ENV in result.output
     assert len(fake_init_hub.admin.added) == 1
@@ -402,10 +404,10 @@ def test_init_adds_a_legacy_runner_id_only_config_under_that_id_as_its_name(
     tmp_path: Path, fake_init_hub: FakeInitHub
 ) -> None:
     root = tmp_path / "runner"
-    assert _init(root).exit_code == 0
+    assert _init(fake_init_hub, root).exit_code == 0
     config = root / CONFIG_FILENAME
     config.write_text(config.read_text().replace('name = "runner-local"', 'runner_id = "r-legacy"'))
     (root / ENV_FILENAME).unlink()
-    result = _init(root)
+    result = _init(fake_init_hub, root)
     assert result.exit_code == 0, result.output
     assert fake_init_hub.admin.added[-1].runner_name == "r-legacy"

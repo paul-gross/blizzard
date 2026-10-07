@@ -10,7 +10,6 @@ from pathlib import Path
 
 import httpx
 import pytest
-from click.testing import CliRunner
 from fastapi.testclient import TestClient
 
 from blizzard.runner.app import create_app
@@ -205,8 +204,8 @@ def test_verb_gets_the_local_proxy_with_inherited_identity(monkeypatch: pytest.M
         calls.append((url, timeout))
         return _FakeLocalResponse('{"body": "please fix the flake"}')
 
-    bind_stubs(monkeypatch, get=fake_get)
-    result = CliRunner().invoke(
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(
         runner_group,
         ["work-items", _CHUNK],
         env={"BLIZZARD_RUNNER_URL": "http://127.0.0.1:8431/"},
@@ -227,8 +226,8 @@ def test_verb_errors_without_a_runner_url(monkeypatch: pytest.MonkeyPatch) -> No
         attempted = True
         return _FakeLocalResponse("")
 
-    bind_stubs(monkeypatch, get=fake_get)
-    result = CliRunner().invoke(runner_group, ["work-items", _CHUNK], env={"BLIZZARD_RUNNER_URL": ""})
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(runner_group, ["work-items", _CHUNK], env={"BLIZZARD_RUNNER_URL": ""})
 
     assert result.exit_code != 0
     assert "no BLIZZARD_RUNNER_URL" in result.output

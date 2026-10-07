@@ -47,6 +47,7 @@ from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessS
 from blizzard.runner.selftest.scratch_git import ScratchRepo
 from blizzard.runner.selftest.service import SelfTestService
 from tests.harness_sections import sections
+from tests.runner_init_fakes import init_runner
 
 # A fake harness binary mimicking `mock-claude-code`'s CLI surface, extended to actually
 # perform the trivial task: on a fresh spawn it edits and commits a file in its cwd.
@@ -704,7 +705,7 @@ def test_resume_check_reaps_the_resumed_pid_before_the_scratch_repo_is_torn_down
 
 def _init_runner_with_binary(tmp_path: Path, binary: str) -> Path:
     root = tmp_path / "runner"
-    result = CliRunner().invoke(runner_group, ["init", str(root)], env={"BZ_HARNESS_BINARY": binary})
+    result = init_runner().invoke(runner_group, ["init", str(root)], env={"BZ_HARNESS_BINARY": binary})
     assert result.exit_code == 0, result.output
     return root
 

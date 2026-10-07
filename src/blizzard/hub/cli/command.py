@@ -6,6 +6,7 @@ from typing import Any
 
 import click
 
+from blizzard.cli.operator_trace import ITraceHeaders, OperatorTrace
 from blizzard.foundation.operator_sessions import IReadSessionStore
 from blizzard.hub.cli.context import DEFAULT_HUB_URL, ENV_HUB_URL, CliContext
 
@@ -35,13 +36,13 @@ class HubCommand(click.Command):
         """This verb's own parameters, with the connection options where the verb renders them."""
         raise NotImplementedError
 
-    def context(self, params: dict[str, Any], session_reader: IReadSessionStore) -> CliContext:
+    def context(self, params: dict[str, Any], session_reader: IReadSessionStore, trace: ITraceHeaders) -> CliContext:
         """The context those options resolve to, consumed out of ``params``."""
         raise NotImplementedError
 
     def invoke(self, ctx: click.Context) -> Any:
         # `ctx.obj` is the session-store seam the `hub` group's own callback built.
-        ctx.params["cli"] = self.context(ctx.params, ctx.obj)
+        ctx.params["cli"] = self.context(ctx.params, ctx.obj, OperatorTrace.source(ctx))
         return super().invoke(ctx)
 
 
@@ -51,8 +52,8 @@ class FleetCommand(HubCommand):
     def connected(self, params: list[click.Parameter]) -> list[click.Parameter]:
         return [*params, self.json_option, self.hub_url_option]
 
-    def context(self, params: dict[str, Any], session_reader: IReadSessionStore) -> CliContext:
-        return CliContext.of(params.pop("hub_url"), session_reader, params.pop("as_json"))
+    def context(self, params: dict[str, Any], session_reader: IReadSessionStore, trace: ITraceHeaders) -> CliContext:
+        return CliContext.of(params.pop("hub_url"), session_reader, trace, params.pop("as_json"))
 
 
 class AuthCommand(HubCommand):
@@ -61,8 +62,8 @@ class AuthCommand(HubCommand):
     def connected(self, params: list[click.Parameter]) -> list[click.Parameter]:
         return [self.hub_url_option, *params]
 
-    def context(self, params: dict[str, Any], session_reader: IReadSessionStore) -> CliContext:
-        return CliContext.of(params.pop("hub_url"), session_reader)
+    def context(self, params: dict[str, Any], session_reader: IReadSessionStore, trace: ITraceHeaders) -> CliContext:
+        return CliContext.of(params.pop("hub_url"), session_reader, trace)
 
 
 class SessionServiceCommand(AuthCommand):

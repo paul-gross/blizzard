@@ -18,6 +18,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.workspace_prompts import WORKSPACE_PROMPT_FILENAME
 from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
+from tests.runner_init_fakes import init_runner
 
 pytestmark = pytest.mark.unit
 
@@ -25,7 +26,7 @@ pytestmark = pytest.mark.unit
 def _runtime(tmp_path: Path) -> Path:
     root = tmp_path / "runner"
     root.mkdir()
-    result = CliRunner().invoke(blizzard, ["runner", "init", str(root)])
+    result = init_runner().invoke(blizzard, ["runner", "init", str(root)])
     assert result.exit_code == 0, result.output
     return root
 

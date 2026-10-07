@@ -312,7 +312,7 @@ def test_the_cli_refuses_a_future_until_before_sending(tmp_path: Path, monkeypat
     sent: list[object] = []
     monkeypatch.setattr(httpx, "post", lambda *a, **k: sent.append(a))
     now = hub.clock.now()
-    monkeypatch.setattr("blizzard.cli.window.SystemClock", lambda: hub.clock)
+    monkeypatch.setattr("blizzard.hub.cli.egress.SystemClock", lambda: hub.clock)
 
     result = CliRunner().invoke(
         hub_group,

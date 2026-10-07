@@ -14,14 +14,14 @@ from collections.abc import Mapping
 
 import httpx
 import pytest
-from click.testing import CliRunner
 from google.protobuf.json_format import Parse
 from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import ExportTraceServiceRequest
 
 from blizzard.foundation import cli_spans
+from blizzard.foundation.span_clock import Clock
 from blizzard.foundation.trace_ids import format_traceparent, parse_traceparent
 from blizzard.runner.cli import runner as runner_group
-from tests.worker_http import bind_transport
+from tests.worker_http import Bound, bind_transport
 
 pytestmark = pytest.mark.unit
 
@@ -56,15 +56,15 @@ class _Recorder:
         return [r for r in self.requests if r.url.path != "/v1/traces"]
 
 
-def _run(argv: list[str], env: dict[str, str], input: str | None = None):
-    return CliRunner().invoke(runner_group, argv, env=env, input=input)
+def _run(bound: Bound, argv: list[str], env: dict[str, str], input: str | None = None):
+    return bound.runner.invoke(runner_group, argv, env=env, input=input)
 
 
 def test_a_traced_command_injects_a_child_context_and_posts_one_span(monkeypatch: pytest.MonkeyPatch) -> None:
     recorder = _Recorder()
-    bind_transport(monkeypatch, recorder)
+    bound = bind_transport(recorder)
 
-    result = _run(["artifact", "list"], _ENV)
+    result = _run(bound, ["artifact", "list"], _ENV)
 
     assert result.exit_code == 0, result.output
     assert recorder.others(), "the command made requests"
@@ -84,8 +84,8 @@ def test_a_traced_command_injects_a_child_context_and_posts_one_span(monkeypatch
 
 def test_the_payload_parses_as_an_otlp_export_request(monkeypatch: pytest.MonkeyPatch) -> None:
     recorder = _Recorder()
-    bind_transport(monkeypatch, recorder)
-    _run(["artifact", "list"], _ENV)
+    bound = bind_transport(recorder)
+    _run(bound, ["artifact", "list"], _ENV)
 
     body = json.loads(recorder.traces()[0].content)
     span = body["resourceSpans"][0]["scopeSpans"][0]["spans"][0]
@@ -107,9 +107,9 @@ def test_the_payload_parses_as_an_otlp_export_request(monkeypatch: pytest.Monkey
 
 def test_the_command_name_carries_no_argument_value(monkeypatch: pytest.MonkeyPatch) -> None:
     recorder = _Recorder()
-    bind_transport(monkeypatch, recorder)
+    bound = bind_transport(recorder)
 
-    _run(["ask", _PLANTED], _ENV)
+    _run(bound, ["ask", _PLANTED], _ENV)
 
     posts = recorder.traces()
     assert len(posts) == 1
@@ -119,9 +119,10 @@ def test_the_command_name_carries_no_argument_value(monkeypatch: pytest.MonkeyPa
 
 def test_one_client_serves_every_request_and_the_span_post(monkeypatch: pytest.MonkeyPatch) -> None:
     recorder = _Recorder()
-    clients = bind_transport(monkeypatch, recorder)
+    bound = bind_transport(recorder)
+    clients = bound.built
 
-    _run(["artifact", "list"], _ENV)
+    _run(bound, ["artifact", "list"], _ENV)
 
     assert len(clients) == 1
     assert len(recorder.others()) >= 2
@@ -130,9 +131,9 @@ def test_one_client_serves_every_request_and_the_span_post(monkeypatch: pytest.M
 
 def test_heartbeat_opens_no_span_and_injects_no_context(monkeypatch: pytest.MonkeyPatch) -> None:
     recorder = _Recorder()
-    bind_transport(monkeypatch, recorder)
+    bound = bind_transport(recorder)
 
-    result = _run(["heartbeat"], _ENV)
+    result = _run(bound, ["heartbeat"], _ENV)
 
     assert result.exit_code == 0, result.output
     assert len(recorder.requests) == 1
@@ -142,9 +143,9 @@ def test_heartbeat_opens_no_span_and_injects_no_context(monkeypatch: pytest.Monk
 
 def test_session_end_is_traced(monkeypatch: pytest.MonkeyPatch) -> None:
     recorder = _Recorder()
-    bind_transport(monkeypatch, recorder)
+    bound = bind_transport(recorder)
 
-    _run(["session-end"], _ENV)
+    _run(bound, ["session-end"], _ENV)
 
     assert len(recorder.traces()) == 1
     assert "traceparent" in recorder.others()[0].headers
@@ -163,9 +164,9 @@ def test_an_absent_malformed_or_unsampled_parent_runs_untraced(
     monkeypatch: pytest.MonkeyPatch, env: dict[str, str]
 ) -> None:
     recorder = _Recorder()
-    bind_transport(monkeypatch, recorder)
+    bound = bind_transport(recorder)
 
-    result = _run(["artifact", "list"], {**_ENV, **env})
+    result = _run(bound, ["artifact", "list"], {**_ENV, **env})
 
     assert result.exit_code == 0, result.output
     assert not recorder.traces()
@@ -174,10 +175,10 @@ def test_an_absent_malformed_or_unsampled_parent_runs_untraced(
 
 def test_the_unprefixed_traceparent_is_never_read(monkeypatch: pytest.MonkeyPatch) -> None:
     recorder = _Recorder()
-    bind_transport(monkeypatch, recorder)
+    bound = bind_transport(recorder)
     env = {k: v for k, v in _ENV.items() if k != "BLIZZARD_TRACEPARENT"}
 
-    _run(["artifact", "list"], {**env, "TRACEPARENT": _PARENT})
+    _run(bound, ["artifact", "list"], {**env, "TRACEPARENT": _PARENT})
 
     assert not recorder.traces()
     assert all("traceparent" not in r.headers for r in recorder.requests)
@@ -192,9 +193,9 @@ def test_a_failing_command_records_its_exit_code_and_error_status(monkeypatch: p
             return httpx.Response(200)
         return httpx.Response(500, json={"detail": "boom"})
 
-    bind_transport(monkeypatch, handler)
+    bound = bind_transport(handler)
 
-    result = _run(["artifact", "list"], _ENV)
+    result = _run(bound, ["artifact", "list"], _ENV)
 
     assert result.exit_code == 1
     assert "boom" in result.output
@@ -205,21 +206,21 @@ def test_a_failing_command_records_its_exit_code_and_error_status(monkeypatch: p
 
 def test_a_refused_send_changes_neither_output_nor_exit_code(monkeypatch: pytest.MonkeyPatch) -> None:
     untraced = _Recorder()
-    bind_transport(monkeypatch, untraced)
-    plain = _run(["artifact", "list"], {k: v for k, v in _ENV.items() if k != "BLIZZARD_TRACEPARENT"})
+    bound = bind_transport(untraced)
+    plain = _run(bound, ["artifact", "list"], {k: v for k, v in _ENV.items() if k != "BLIZZARD_TRACEPARENT"})
 
     traced = _Recorder(status=404)
-    bind_transport(monkeypatch, traced)
-    result = _run(["artifact", "list"], _ENV)
+    bound = bind_transport(traced)
+    result = _run(bound, ["artifact", "list"], _ENV)
 
     assert (result.exit_code, result.stdout) == (plain.exit_code, plain.stdout)
     assert "trace send failed" not in result.stderr
 
 
 def test_a_refused_send_is_reported_only_under_the_debug_flag(monkeypatch: pytest.MonkeyPatch) -> None:
-    bind_transport(monkeypatch, _Recorder(status=404))
+    bound = bind_transport(_Recorder(status=404))
 
-    result = _run(["artifact", "list"], {**_ENV, "BLIZZARD_TRACE_DEBUG": "1"})
+    result = _run(bound, ["artifact", "list"], {**_ENV, "BLIZZARD_TRACE_DEBUG": "1"})
 
     assert result.exit_code == 0
     assert "trace send failed" in result.stderr
@@ -229,7 +230,7 @@ def test_the_send_stops_at_the_total_cap_against_a_listener_that_never_answers()
     listener = socket.socket()
     listener.bind(("127.0.0.1", 0))
     listener.listen(8)
-    span = cli_spans.CliSpan.open(parse_traceparent(_PARENT), "runner ask")  # type: ignore[arg-type]
+    span = cli_spans.CliSpan.open(parse_traceparent(_PARENT), "runner ask", clock=Clock())  # type: ignore[arg-type]
     span.finish(0)
     try:
         with httpx.Client() as client:
@@ -248,7 +249,7 @@ def test_the_send_stops_at_the_total_cap_against_a_listener_that_never_answers()
 def test_the_clock_is_one_wall_anchor_plus_monotonic_deltas() -> None:
     wall = iter([1_000, 9_999_999])
     monotonic = iter([50, 80])
-    clock = cli_spans.Clock(wall_ns=lambda: next(wall), monotonic_ns=lambda: next(monotonic))
+    clock = Clock(wall_ns=lambda: next(wall), monotonic_ns=lambda: next(monotonic))
 
     assert clock.now_ns() == 1_030
 
@@ -256,8 +257,8 @@ def test_the_clock_is_one_wall_anchor_plus_monotonic_deltas() -> None:
 def test_the_span_id_is_fresh_and_hex_encoded() -> None:
     parent = parse_traceparent(_PARENT)
     assert parent is not None
-    first = cli_spans.CliSpan.open(parent, "runner ask")
-    second = cli_spans.CliSpan.open(parent, "runner ask")
+    first = cli_spans.CliSpan.open(parent, "runner ask", clock=Clock())
+    second = cli_spans.CliSpan.open(parent, "runner ask", clock=Clock())
     assert first.span_id != second.span_id
     assert len(first.payload()["resourceSpans"][0]["scopeSpans"][0]["spans"][0]["spanId"]) == 16
 
@@ -302,6 +303,14 @@ def test_the_module_set_after_import_is_the_same_with_tracing_on_and_off() -> No
     assert "blizzard.foundation.cli_spans" not in on
 
 
+def test_an_untraced_command_invocation_never_loads_the_span_emitter() -> None:
+    from tests.test_layering import _loaded_after_running
+
+    for argv in (["runner", "chunk", "--help"], ["hub", "chunk", "--help"]):
+        loaded = _loaded_after_running(argv, {"BLIZZARD_TRACEPARENT": "", "BLIZZARD_RUNNER_URL": ""})
+        assert "blizzard.foundation.cli_spans" not in loaded, argv
+
+
 class _Post:
     """A Poster that records the call it is handed and answers a canned status."""
 
@@ -319,7 +328,7 @@ class _Post:
 
 
 def _open_span() -> cli_spans.CliSpan:
-    span = cli_spans.CliSpan.open(parse_traceparent(_PARENT), "runner ask")  # type: ignore[arg-type]
+    span = cli_spans.CliSpan.open(parse_traceparent(_PARENT), "runner ask", clock=Clock())  # type: ignore[arg-type]
     span.finish(0)
     return span
 
@@ -410,7 +419,7 @@ def test_a_post_that_outlasts_the_cap_is_abandoned_and_reported(capsys: pytest.C
 
 def test_an_open_span_carries_its_chunk_lease_and_start_time_and_parent() -> None:
     wall, ticks = iter([7_000]), iter([100, 100, 130])
-    clock = cli_spans.Clock(wall_ns=lambda: next(wall), monotonic_ns=lambda: next(ticks))
+    clock = Clock(wall_ns=lambda: next(wall), monotonic_ns=lambda: next(ticks))
     parent = parse_traceparent(_PARENT)
     assert parent is not None
 
@@ -431,8 +440,8 @@ def test_an_open_span_carries_its_chunk_lease_and_start_time_and_parent() -> Non
 def test_a_zero_random_id_is_replaced_by_one(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(cli_spans.secrets, "randbits", lambda _bits: 0)
 
-    root = cli_spans.CliSpan.root("hub chunk list")
-    child = cli_spans.CliSpan.open(parse_traceparent(_PARENT), "runner ask")  # type: ignore[arg-type]
+    root = cli_spans.CliSpan.root("hub chunk list", clock=Clock())
+    child = cli_spans.CliSpan.open(parse_traceparent(_PARENT), "runner ask", clock=Clock())  # type: ignore[arg-type]
 
     assert (root.trace_id, root.span_id) == (1, 1)
     assert child.span_id == 1
@@ -441,6 +450,6 @@ def test_a_zero_random_id_is_replaced_by_one(monkeypatch: pytest.MonkeyPatch) ->
 def test_a_nonzero_random_id_is_kept(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(cli_spans.secrets, "randbits", lambda bits: (1 << bits) - 1)
 
-    root = cli_spans.CliSpan.root("hub chunk list")
+    root = cli_spans.CliSpan.root("hub chunk list", clock=Clock())
 
     assert (root.trace_id, root.span_id) == ((1 << 128) - 1, (1 << 64) - 1)

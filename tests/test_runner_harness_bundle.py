@@ -23,6 +23,7 @@ from blizzard.runner.harness.opencode.bundle import check_ambient_plugins, plugi
 from blizzard.runner.harness.opencode.section import OpenCodeSection
 from blizzard.runner.harness.wiring import publish_harness_bundle
 from tests.harness_sections import sections
+from tests.runner_init_fakes import FakeInitHub, init_runner
 
 pytestmark = pytest.mark.component
 
@@ -189,9 +190,9 @@ def _bundle(tmp_path: Path) -> Path:
     return root
 
 
-def _runtime(tmp_path: Path, config_dir: Path | str | None = None) -> Path:
+def _runtime(tmp_path: Path, config_dir: Path | str | None = None, hub: FakeInitHub | None = None) -> Path:
     runtime = tmp_path / "runner"
-    assert CliRunner().invoke(runner_group, ["init", str(runtime)]).exit_code == 0
+    assert init_runner(hub).invoke(runner_group, ["init", str(runtime)]).exit_code == 0
     if config_dir is not None:
         path = runtime / CONFIG_FILENAME
         path.write_text(path.read_text().replace("[harness]\n", f'[harness]\nconfig_dir = "{config_dir}"\n', 1))
@@ -478,14 +479,14 @@ def test_no_config_dir_creates_no_effective_directory(tmp_path: Path) -> None:
     assert not (runtime / "harness-config").exists(), result.output
 
 
-def test_bundle_is_untouched_by_publish_and_init(tmp_path: Path) -> None:
+def test_bundle_is_untouched_by_publish_and_init(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
     bundle = _bundle(tmp_path)
-    runtime = _runtime(tmp_path, bundle)
+    runtime = _runtime(tmp_path, bundle, fake_init_hub)
     before = _fingerprint(bundle)
 
     CliRunner().invoke(runner_group, ["tick", "--dir", str(runtime)])
     assert published_snapshot(runtime) is not None
-    assert CliRunner().invoke(runner_group, ["init", str(runtime)]).exit_code == 0
+    assert init_runner(fake_init_hub).invoke(runner_group, ["init", str(runtime)]).exit_code == 0
 
     assert _fingerprint(bundle) == before
 

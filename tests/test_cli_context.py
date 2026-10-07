@@ -10,6 +10,7 @@ import click
 import httpx
 import pytest
 
+from blizzard.cli.operator_trace import UNTRACED
 from blizzard.hub.cli import context as cli_context
 from blizzard.hub.cli.context import CliContext
 
@@ -21,7 +22,7 @@ class _FakeSessionReader:
         return None
 
 
-_CTX = CliContext(hub_url="http://hub.local:8421", session_reader=_FakeSessionReader())
+_CTX = CliContext(hub_url="http://hub.local:8421", session_reader=_FakeSessionReader(), trace=UNTRACED)
 
 
 class _FakeResponse:

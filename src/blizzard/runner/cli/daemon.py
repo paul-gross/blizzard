@@ -10,7 +10,7 @@ from typing import Literal
 import click
 import httpx
 
-from blizzard.cli.operator_trace import OperatorTrace
+from blizzard.cli.operator_trace import ITraceHeaders
 from blizzard.cli.param_rank import ParamSource
 from blizzard.runner.config import RunnerConfig
 
@@ -18,7 +18,7 @@ from blizzard.runner.config import RunnerConfig
 LOCAL_CLIENT_TIMEOUT = 5.0
 
 
-def uds_client(sock: Path) -> httpx.Client:
+def uds_client(sock: Path, trace: ITraceHeaders) -> httpx.Client:
     """A client whose transport reaches the runner over ``sock`` — the base_url host is a
     placeholder, since the UDS transport decides where the bytes go."""
     transport = httpx.HTTPTransport(uds=str(sock))
@@ -26,7 +26,7 @@ def uds_client(sock: Path) -> httpx.Client:
         transport=transport,
         base_url="http://runner",
         timeout=LOCAL_CLIENT_TIMEOUT,
-        headers=OperatorTrace.headers(),
+        headers=trace.headers(),
     )
 
 
@@ -43,7 +43,7 @@ class RunnerDaemon:
     where: str
 
     @classmethod
-    def reach(cls, verb: str, directory: str, runner_url: str | None) -> RunnerDaemon:
+    def reach(cls, verb: str, directory: str, runner_url: str | None, trace: ITraceHeaders) -> RunnerDaemon:
         """Ranked by where each value came from, see ``src/blizzard/cli/param_rank.py`` —
         only a tie on the command line between the two is ambiguous."""
         dir_source = ParamSource.of("directory")
@@ -54,7 +54,7 @@ class RunnerDaemon:
                 "--dir and --runner-url are mutually exclusive: --dir names the socket, --runner-url TCP"
             )
         if url_source is not None and url_source > dir_source and runner_url is not None:
-            client = httpx.Client(base_url=runner_url, timeout=LOCAL_CLIENT_TIMEOUT, headers=OperatorTrace.headers())
+            client = httpx.Client(base_url=runner_url, timeout=LOCAL_CLIENT_TIMEOUT, headers=trace.headers())
             return cls(verb, client, runner_url)
 
         sock = RunnerConfig.socket_path_for(Path(directory))
@@ -64,7 +64,7 @@ class RunnerDaemon:
             raise click.ClickException(
                 f"no runner daemon is serving at {sock} — start one with `blizzard runner host --dir {directory}`"
             )
-        return cls(verb, uds_client(sock), str(sock))
+        return cls(verb, uds_client(sock, trace), str(sock))
 
     def __enter__(self) -> RunnerDaemon:
         return self

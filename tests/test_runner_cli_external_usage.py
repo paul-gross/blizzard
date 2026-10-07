@@ -13,6 +13,7 @@ from click.testing import CliRunner, Result
 from blizzard.cli.main import blizzard
 from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.runner.subscriptions.subscription_sampler import SampleMiss
+from tests.runner_init_fakes import init_runner
 
 pytestmark = pytest.mark.unit
 
@@ -20,7 +21,7 @@ pytestmark = pytest.mark.unit
 def _runtime(tmp_path: Path) -> Path:
     root = tmp_path / "runner"
     root.mkdir()
-    result = CliRunner().invoke(blizzard, ["runner", "init", str(root)])
+    result = init_runner().invoke(blizzard, ["runner", "init", str(root)])
     assert result.exit_code == 0, result.output
     return root
 

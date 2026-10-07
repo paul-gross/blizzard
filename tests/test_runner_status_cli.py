@@ -33,6 +33,7 @@ from blizzard.runner.subscriptions.credential_renewer import (
     RenewalOutcomeKind,
 )
 from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
+from tests.runner_init_fakes import init_runner
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 
@@ -43,7 +44,7 @@ def _store(root: Path) -> SqlAlchemyRunnerStore:
 
 def _init_runner(tmp_path: Path) -> Path:
     root = tmp_path / "runner"
-    result = CliRunner().invoke(runner_group, ["init", str(root)])
+    result = init_runner().invoke(runner_group, ["init", str(root)])
     assert result.exit_code == 0, result.output
     # These fixtures seed winter-style /ws/e* workdirs, rather than the new basic
     # provider's per-chunk folders. Pin the provider so takeover cwd stays /ws/e*.

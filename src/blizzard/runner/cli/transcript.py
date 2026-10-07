@@ -5,6 +5,7 @@ from pathlib import Path
 import click
 import httpx
 
+from blizzard.cli.operator_trace import ITraceHeaders, OperatorTrace
 from blizzard.foundation.store.migrations import RevisionMismatchError
 from blizzard.runner.cli.daemon import uds_client
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
@@ -19,7 +20,7 @@ def transcript_group() -> None:
     """Operator: maintenance over this runner's own transcript lane."""
 
 
-def _daemon_holding(config: RunnerConfig) -> str | None:
+def _daemon_holding(config: RunnerConfig, trace: ITraceHeaders) -> str | None:
     """What is holding this runtime's socket, or ``None`` when nothing is — the single-writer
     guard's probe. Fail-closed by design (pinned by
     tests/test_cli.py::test_an_ambiguous_liveness_answer_fails_closed)."""
@@ -27,7 +28,7 @@ def _daemon_holding(config: RunnerConfig) -> str | None:
     if not sock.exists():
         return None
     try:
-        with uds_client(sock) as client:
+        with uds_client(sock, trace) as client:
             response = client.get("/api/health")
     except httpx.ConnectError:
         return None  # a socket file an ungraceful exit left behind — nothing is listening on the corpse
@@ -38,7 +39,7 @@ def _daemon_holding(config: RunnerConfig) -> str | None:
     return f"a runner daemon is serving at {sock}"
 
 
-def _transcript_config(directory: str, *, verb: str) -> RunnerConfig:
+def _transcript_config(directory: str, *, verb: str, trace: ITraceHeaders) -> RunnerConfig:
     """Every store-writing transcript verb's guards — shared so a second verb cannot ship
     with fewer of them than the first."""
     try:
@@ -47,7 +48,7 @@ def _transcript_config(directory: str, *, verb: str) -> RunnerConfig:
         raise click.ClickException(str(exc)) from exc
     if not config.transcripts_ship:
         raise click.ClickException(f"[transcripts] ship is false — enable the lane before {verb} into it")
-    holding = _daemon_holding(config)
+    holding = _daemon_holding(config, trace)
     if holding is not None:
         raise click.ClickException(f"{holding} — stop it first: this verb writes the store, which is single-writer")
     try:
@@ -66,13 +67,14 @@ def _transcript_config(directory: str, *, verb: str) -> RunnerConfig:
     envvar=ENV_RUNNER_DIR,
     help="Runner runtime directory (overrides $BZ_RUNNER_DIR).",
 )
-def transcript_reship(segment_id: str, directory: str) -> None:
+@click.pass_context
+def transcript_reship(ctx: click.Context, segment_id: str, directory: str) -> None:
     """Re-read SEGMENT_ID's session and ship it again under a new segment id.
 
     For a segment the hub holds in a form this runner has outgrown — most often one an older,
     smaller per-record cap shrank. The hub never overwrites an accepted record, so superseding
     one means a second segment: BOTH then show on the board. Same operating rules as `backfill`."""
-    config = _transcript_config(directory, verb="reshipping")
+    config = _transcript_config(directory, verb="reshipping", trace=OperatorTrace.source(ctx))
     try:
         report = LoopWiring.of(config).reship_transcript(segment_id)
     except TranscriptReshipError as exc:
@@ -113,7 +115,8 @@ def transcript_reship(segment_id: str, directory: str) -> None:
 )
 @click.option("--dry-run", is_flag=True, help="Report what would import; open, drain and ship nothing.")
 @click.option("--limit", type=int, default=None, help="Import at most this many sessions; defer the rest.")
-def transcript_backfill(directory: str, dry_run: bool, limit: int | None) -> None:
+@click.pass_context
+def transcript_backfill(ctx: click.Context, directory: str, dry_run: bool, limit: int | None) -> None:
     """Import worker transcripts predating the outbound lane, best-effort.
 
     Driven from this runner's own lease records, never a sweep of the harness directory. Rerunnable:
@@ -121,7 +124,7 @@ def transcript_backfill(directory: str, dry_run: bool, limit: int | None) -> Non
     directly, so run it as the runner's own user with its environment, and with the daemon stopped."""
     if limit is not None and limit < 1:
         raise click.UsageError("--limit must be at least 1")
-    config = _transcript_config(directory, verb="backfilling")
+    config = _transcript_config(directory, verb="backfilling", trace=OperatorTrace.source(ctx))
     report = LoopWiring.of(config).backfill_transcripts(dry_run=dry_run, limit=limit)
     prefix = "would import" if dry_run else "imported"
     click.echo(f"{prefix} {report.imported}, already present {report.already_present}, gone {report.gone}")

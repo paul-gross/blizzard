@@ -6,6 +6,7 @@ from pathlib import Path
 
 import click
 
+from blizzard.cli.operator_trace import OperatorTrace
 from blizzard.runner.cli.control import ENV_LOCAL_API_URL
 from blizzard.runner.cli.daemon import RunnerDaemon
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
@@ -145,12 +146,13 @@ def prompt_status(directory: str) -> None:
     envvar=ENV_LOCAL_API_URL,
     help="Runner local API over TCP (overrides $BZ_RUNNER_URL).",
 )
-def prompt_clear(directory: str, runner_url: str | None) -> None:
+@click.pass_context
+def prompt_clear(ctx: click.Context, directory: str, runner_url: str | None) -> None:
     """Drop the store override so the configured workspace prompt resolves again.
 
     The one `prompt` verb that needs the running runner: the override lives in the runner's store,
     which only the daemon writes. Takes effect on subsequent spawns."""
-    with RunnerDaemon.reach("prompt clear", directory, runner_url) as daemon:
+    with RunnerDaemon.reach("prompt clear", directory, runner_url, OperatorTrace.source(ctx)) as daemon:
         daemon.send("delete", "/api/workspace-prompt").raise_for_status()
     click.echo("workspace-prompt override cleared — the configured prompt applies on subsequent spawns")
 

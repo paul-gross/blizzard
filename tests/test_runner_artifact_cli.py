@@ -76,14 +76,12 @@ def _fake_get_by_suffix(routes: dict[str, _FakeResponse], calls: list[tuple[str,
 
 
 @pytest.mark.unit
-def test_list_gets_the_lease_scoped_route_with_inherited_identity_and_token(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_list_gets_the_lease_scoped_route_with_inherited_identity_and_token() -> None:
     calls: list[tuple[str, dict, dict | None]] = []
     routes = {"artifacts": _FakeResponse(payload=_ARTIFACTS_PAYLOAD), "attachments": _FakeResponse(payload=[])}
 
-    bind_stubs(monkeypatch, get=_fake_get_by_suffix(routes, calls))
-    result = CliRunner().invoke(runner_group, ["artifact", "list"], env=_ENV)
+    bound = bind_stubs(get=_fake_get_by_suffix(routes, calls))
+    result = bound.runner.invoke(runner_group, ["artifact", "list"], env=_ENV)
 
     assert result.exit_code == 0, result.output
     assert (
@@ -99,10 +97,10 @@ def test_list_gets_the_lease_scoped_route_with_inherited_identity_and_token(
 
 
 @pytest.mark.unit
-def test_list_elides_content_by_default_and_reports_byte_length(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_list_elides_content_by_default_and_reports_byte_length() -> None:
     routes = {"artifacts": _FakeResponse(payload=_ARTIFACTS_PAYLOAD), "attachments": _FakeResponse(payload=[])}
-    bind_stubs(monkeypatch, get=_fake_get_by_suffix(routes))
-    result = CliRunner().invoke(runner_group, ["artifact", "list"], env=_ENV)
+    bound = bind_stubs(get=_fake_get_by_suffix(routes))
+    result = bound.runner.invoke(runner_group, ["artifact", "list"], env=_ENV)
 
     assert result.exit_code == 0, result.output
     body = json.loads(result.output)
@@ -118,10 +116,10 @@ def test_list_elides_content_by_default_and_reports_byte_length(monkeypatch: pyt
 
 
 @pytest.mark.unit
-def test_list_content_flag_restores_the_full_raw_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_list_content_flag_restores_the_full_raw_payload() -> None:
     routes = {"artifacts": _FakeResponse(payload=_ARTIFACTS_PAYLOAD), "attachments": _FakeResponse(payload=[])}
-    bind_stubs(monkeypatch, get=_fake_get_by_suffix(routes))
-    result = CliRunner().invoke(runner_group, ["artifact", "list", "--content"], env=_ENV)
+    bound = bind_stubs(get=_fake_get_by_suffix(routes))
+    result = bound.runner.invoke(runner_group, ["artifact", "list", "--content"], env=_ENV)
 
     assert result.exit_code == 0, result.output
     body = json.loads(result.output)
@@ -130,15 +128,15 @@ def test_list_content_flag_restores_the_full_raw_payload(monkeypatch: pytest.Mon
 
 
 @pytest.mark.unit
-def test_list_includes_staged_submissions_marked_as_such(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_list_includes_staged_submissions_marked_as_such() -> None:
     """A worker listing its own node's artifacts must see what it just staged,
     not just what has published into the envelope."""
     routes = {
         "artifacts": _FakeResponse(payload=_ARTIFACTS_PAYLOAD),
         "attachments": _FakeResponse(payload=[{"name": "review-findings", "content": "looks good"}]),
     }
-    bind_stubs(monkeypatch, get=_fake_get_by_suffix(routes))
-    result = CliRunner().invoke(runner_group, ["artifact", "list"], env=_ENV)
+    bound = bind_stubs(get=_fake_get_by_suffix(routes))
+    result = bound.runner.invoke(runner_group, ["artifact", "list"], env=_ENV)
 
     assert result.exit_code == 0, result.output
     body = json.loads(result.output)
@@ -160,8 +158,8 @@ def test_list_degrades_to_no_staged_entries_when_the_staged_read_fails(monkeypat
             return _RejectingResponse()
         return _FakeResponse(payload=_ARTIFACTS_PAYLOAD)
 
-    bind_stubs(monkeypatch, get=fake_get)
-    result = CliRunner().invoke(runner_group, ["artifact", "list"], env=_ENV)
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(runner_group, ["artifact", "list"], env=_ENV)
 
     assert result.exit_code == 0, result.output
     body = json.loads(result.stdout)
@@ -178,9 +176,9 @@ def test_list_omits_the_token_header_when_absent(monkeypatch: pytest.MonkeyPatch
         calls.append(headers)
         return _FakeResponse(payload=[])
 
-    bind_stubs(monkeypatch, get=fake_get)
+    bound = bind_stubs(get=fake_get)
     env = {"BLIZZARD_LEASE_ID": "lease_9", "BLIZZARD_RUNNER_URL": "http://127.0.0.1:8431/"}
-    result = CliRunner().invoke(runner_group, ["artifact", "list"], env=env)
+    result = bound.runner.invoke(runner_group, ["artifact", "list"], env=env)
 
     assert result.exit_code == 0, result.output
     assert calls == [{}, {}]
@@ -194,8 +192,8 @@ def test_list_scope_flag_is_passed_as_a_query_param(monkeypatch: pytest.MonkeyPa
         calls.append(params)
         return _FakeResponse(payload=[])
 
-    bind_stubs(monkeypatch, get=fake_get)
-    result = CliRunner().invoke(runner_group, ["artifact", "list", "--scope", "graph"], env=_ENV)
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(runner_group, ["artifact", "list", "--scope", "graph"], env=_ENV)
 
     assert result.exit_code == 0, result.output
     # `graph` scope excludes staged (node-only), so only the `artifacts` call carries params.
@@ -210,8 +208,8 @@ def test_list_scope_system_is_accepted_and_passed_as_a_query_param(monkeypatch: 
         calls.append(params)
         return _FakeResponse(payload=[])
 
-    bind_stubs(monkeypatch, get=fake_get)
-    result = CliRunner().invoke(runner_group, ["artifact", "list", "--scope", "system"], env=_ENV)
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(runner_group, ["artifact", "list", "--scope", "system"], env=_ENV)
 
     assert result.exit_code == 0, result.output
     assert calls == [{"scope": "system"}]
@@ -226,8 +224,8 @@ def test_list_scope_node_still_fetches_staged(monkeypatch: pytest.MonkeyPatch) -
         calls.append((url, params))
         return routes[url.rsplit("/", 1)[-1]]
 
-    bind_stubs(monkeypatch, get=fake_get)
-    result = CliRunner().invoke(runner_group, ["artifact", "list", "--scope", "node"], env=_ENV)
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(runner_group, ["artifact", "list", "--scope", "node"], env=_ENV)
 
     assert result.exit_code == 0, result.output
     assert ("http://127.0.0.1:8431/api/leases/lease_9/attachments", None) in calls
@@ -244,8 +242,8 @@ def test_list_omits_the_scope_param_when_unset(monkeypatch: pytest.MonkeyPatch) 
         calls.append(params)
         return routes[url.rsplit("/", 1)[-1]]
 
-    bind_stubs(monkeypatch, get=fake_get)
-    result = CliRunner().invoke(runner_group, ["artifact", "list"], env=_ENV)
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(runner_group, ["artifact", "list"], env=_ENV)
 
     assert result.exit_code == 0, result.output
     assert calls == [None, None]
@@ -260,8 +258,8 @@ def test_list_errors_without_identity(monkeypatch: pytest.MonkeyPatch) -> None:
         attempted = True
         return _FakeResponse()
 
-    bind_stubs(monkeypatch, get=fake_get)
-    result = CliRunner().invoke(
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(
         runner_group, ["artifact", "list"], env={"BLIZZARD_LEASE_ID": "", "BLIZZARD_RUNNER_URL": ""}
     )
 
@@ -281,8 +279,8 @@ def test_get_gets_the_named_route_and_prints_json(monkeypatch: pytest.MonkeyPatc
         calls.append((url, params))
         return _FakeResponse(text='{"name": "plan", "kind": "asset", "content": "hi"}')
 
-    bind_stubs(monkeypatch, get=fake_get)
-    result = CliRunner().invoke(runner_group, ["artifact", "get", "plan"], env=_ENV)
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(runner_group, ["artifact", "get", "plan"], env=_ENV)
 
     assert result.exit_code == 0, result.output
     assert calls == [("http://127.0.0.1:8431/api/leases/lease_9/artifacts/plan", None)]
@@ -298,8 +296,8 @@ def test_get_percent_encodes_a_slash_containing_name(monkeypatch: pytest.MonkeyP
         calls.append(url)
         return _FakeResponse(text='{"name": "merged/blizzard", "kind": "asset", "content": "hi"}')
 
-    bind_stubs(monkeypatch, get=fake_get)
-    result = CliRunner().invoke(runner_group, ["artifact", "get", "merged/blizzard"], env=_ENV)
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(runner_group, ["artifact", "get", "merged/blizzard"], env=_ENV)
 
     assert result.exit_code == 0, result.output
     assert calls == ["http://127.0.0.1:8431/api/leases/lease_9/artifacts/merged/blizzard"]
@@ -313,8 +311,8 @@ def test_get_percent_encodes_other_reserved_characters(monkeypatch: pytest.Monke
         calls.append(url)
         return _FakeResponse(text='{"name": "a b%c?d", "kind": "asset", "content": "hi"}')
 
-    bind_stubs(monkeypatch, get=fake_get)
-    result = CliRunner().invoke(runner_group, ["artifact", "get", "a b%c?d"], env=_ENV)
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(runner_group, ["artifact", "get", "a b%c?d"], env=_ENV)
 
     assert result.exit_code == 0, result.output
     assert calls == ["http://127.0.0.1:8431/api/leases/lease_9/artifacts/a%20b%25c%3Fd"]
@@ -328,8 +326,8 @@ def test_get_node_flag_is_passed_as_a_query_param(monkeypatch: pytest.MonkeyPatc
         calls.append(params)
         return _FakeResponse(text='{"name": "retrospective", "kind": "asset", "content": "hi"}')
 
-    bind_stubs(monkeypatch, get=fake_get)
-    result = CliRunner().invoke(runner_group, ["artifact", "get", "retrospective", "--node", "plan"], env=_ENV)
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(runner_group, ["artifact", "get", "retrospective", "--node", "plan"], env=_ENV)
 
     assert result.exit_code == 0, result.output
     assert calls == [{"node": "plan"}]
@@ -343,8 +341,8 @@ def test_get_scope_flag_is_passed_as_a_query_param(monkeypatch: pytest.MonkeyPat
         calls.append(params)
         return _FakeResponse(text='{"scope": "graph", "name": "docket", "kind": "asset", "content": "hi"}')
 
-    bind_stubs(monkeypatch, get=fake_get)
-    result = CliRunner().invoke(runner_group, ["artifact", "get", "docket", "--scope", "graph"], env=_ENV)
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(runner_group, ["artifact", "get", "docket", "--scope", "graph"], env=_ENV)
 
     assert result.exit_code == 0, result.output
     assert calls == [{"scope": "graph"}]
@@ -360,8 +358,8 @@ def test_get_scope_system_is_accepted_and_passed_as_a_query_param(monkeypatch: p
             text='{"scope": "system", "name": "garden/finding-format", "kind": "asset", "content": "hi"}'
         )
 
-    bind_stubs(monkeypatch, get=fake_get)
-    result = CliRunner().invoke(
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(
         runner_group, ["artifact", "get", "garden/finding-format", "--scope", "system"], env=_ENV
     )
 
@@ -379,8 +377,8 @@ def test_get_node_and_scope_flags_both_land_in_params(monkeypatch: pytest.Monkey
         calls.append(params)
         return _FakeResponse(text='{"scope": "node", "name": "zulu", "kind": "asset", "content": "hi"}')
 
-    bind_stubs(monkeypatch, get=fake_get)
-    result = CliRunner().invoke(
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(
         runner_group, ["artifact", "get", "zulu", "--node", "review", "--scope", "node"], env=_ENV
     )
 
@@ -393,8 +391,8 @@ def test_get_content_prints_raw_asset_text_without_added_newline(monkeypatch: py
     def fake_get(url: str, *, headers: dict, params: dict | None, timeout: float, **_: object) -> _FakeResponse:
         return _FakeResponse(payload={"name": "plan", "kind": "asset", "content": "the plan text"})
 
-    bind_stubs(monkeypatch, get=fake_get)
-    result = CliRunner().invoke(runner_group, ["artifact", "get", "plan", "--content"], env=_ENV)
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(runner_group, ["artifact", "get", "plan", "--content"], env=_ENV)
 
     assert result.exit_code == 0, result.output
     assert result.output == "the plan text"
@@ -407,17 +405,17 @@ def test_get_content_errors_on_a_git_commit_artifact(monkeypatch: pytest.MonkeyP
             payload={"name": "build-branch", "kind": "git_commit", "commit_hash": "abc123", "content": None}
         )
 
-    bind_stubs(monkeypatch, get=fake_get)
-    result = CliRunner().invoke(runner_group, ["artifact", "get", "build-branch", "--content"], env=_ENV)
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(runner_group, ["artifact", "get", "build-branch", "--content"], env=_ENV)
 
     assert result.exit_code != 0
     assert "git-commit artifact" in result.output
 
 
 @pytest.mark.unit
-def test_get_surfaces_a_404_as_a_nonzero_exit(monkeypatch: pytest.MonkeyPatch) -> None:
-    bind_stubs(monkeypatch, get=lambda *a, **k: _RejectingResponse())
-    result = CliRunner().invoke(runner_group, ["artifact", "get", "ghost"], env=_ENV)
+def test_get_surfaces_a_404_as_a_nonzero_exit() -> None:
+    bound = bind_stubs(get=lambda *a, **k: _RejectingResponse())
+    result = bound.runner.invoke(runner_group, ["artifact", "get", "ghost"], env=_ENV)
 
     assert result.exit_code != 0
     assert "could not read" in result.output
@@ -447,8 +445,8 @@ def test_get_names_artifact_staged_when_the_404d_name_is_staged(monkeypatch: pyt
             return _FakeResponse(payload=[{"name": "plan", "content": "the plan text"}])
         return _NotFoundResponse()
 
-    bind_stubs(monkeypatch, get=fake_get)
-    result = CliRunner().invoke(runner_group, ["artifact", "get", "plan"], env=_ENV)
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(runner_group, ["artifact", "get", "plan"], env=_ENV)
 
     assert result.exit_code != 0
     assert "staged" in result.output
@@ -463,8 +461,8 @@ def test_get_404_with_no_staged_match_keeps_the_plain_not_found_message(monkeypa
             return _FakeResponse(payload=[])
         return _NotFoundResponse()
 
-    bind_stubs(monkeypatch, get=fake_get)
-    result = CliRunner().invoke(runner_group, ["artifact", "get", "ghost"], env=_ENV)
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(runner_group, ["artifact", "get", "ghost"], env=_ENV)
 
     assert result.exit_code != 0
     assert "could not read" in result.output
@@ -481,8 +479,8 @@ def test_get_ambiguous_409_is_not_treated_as_a_staged_lookup(monkeypatch: pytest
         calls.append(url)
         return _RejectingResponse({"detail": "artifact 'retrospective' is ambiguous"})
 
-    bind_stubs(monkeypatch, get=fake_get)
-    result = CliRunner().invoke(runner_group, ["artifact", "get", "retrospective"], env=_ENV)
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(runner_group, ["artifact", "get", "retrospective"], env=_ENV)
 
     assert result.exit_code != 0
     assert "ambiguous" in result.output
@@ -498,8 +496,8 @@ def test_get_name_option_is_an_alias_for_the_positional_name(monkeypatch: pytest
         calls.append(url)
         return _FakeResponse(text='{"name": "plan", "kind": "asset", "content": "hi"}')
 
-    bind_stubs(monkeypatch, get=fake_get)
-    result = CliRunner().invoke(runner_group, ["artifact", "get", "--name", "plan"], env=_ENV)
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(runner_group, ["artifact", "get", "--name", "plan"], env=_ENV)
 
     assert result.exit_code == 0, result.output
     assert calls == ["http://127.0.0.1:8431/api/leases/lease_9/artifacts/plan"]
@@ -522,15 +520,13 @@ def test_get_requires_a_name_from_somewhere() -> None:
 
 
 @pytest.mark.unit
-def test_get_surfaces_an_ambiguous_name_rejection_naming_the_candidate_nodes(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_get_surfaces_an_ambiguous_name_rejection_naming_the_candidate_nodes() -> None:
     detail = (
         "artifact 'retrospective' is ambiguous — found for: node build, node plan, node review "
         "(pass --scope and/or --node to disambiguate)"
     )
-    bind_stubs(monkeypatch, get=lambda *a, **k: _RejectingResponse({"detail": detail}))
-    result = CliRunner().invoke(runner_group, ["artifact", "get", "retrospective"], env=_ENV)
+    bound = bind_stubs(get=lambda *a, **k: _RejectingResponse({"detail": detail}))
+    result = bound.runner.invoke(runner_group, ["artifact", "get", "retrospective"], env=_ENV)
 
     assert result.exit_code != 0
     assert "ambiguous" in result.output
@@ -538,14 +534,14 @@ def test_get_surfaces_an_ambiguous_name_rejection_naming_the_candidate_nodes(
 
 
 @pytest.mark.unit
-def test_get_surfaces_a_cross_scope_ambiguity_naming_both_scopes(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_surfaces_a_cross_scope_ambiguity_naming_both_scopes() -> None:
     """A bare ``get`` matching a graph declaration and a node artifact of the same name
     exits non-zero, naming both — the route's own message shape, the CLI just surfaces it."""
     detail = (
         "artifact 'docket' is ambiguous — found for: graph, node build (pass --scope and/or --node to disambiguate)"
     )
-    bind_stubs(monkeypatch, get=lambda *a, **k: _RejectingResponse({"detail": detail}))
-    result = CliRunner().invoke(runner_group, ["artifact", "get", "docket"], env=_ENV)
+    bound = bind_stubs(get=lambda *a, **k: _RejectingResponse({"detail": detail}))
+    result = bound.runner.invoke(runner_group, ["artifact", "get", "docket"], env=_ENV)
 
     assert result.exit_code != 0
     assert "ambiguous" in result.output
@@ -563,8 +559,8 @@ def test_create_posts_inherited_identity_stdin_content_and_token_header(monkeypa
         calls.append((url, json, headers))
         return _FakeResponse(payload={"recorded": True, "lease_id": "lease_9", "name": "review-findings", "bytes": 10})
 
-    bind_stubs(monkeypatch, post=fake_post)
-    result = CliRunner().invoke(
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(
         runner_group, ["artifact", "create", "--name", "review-findings"], env=_ENV, input="looks good"
     )
 
@@ -579,12 +575,11 @@ def test_create_posts_inherited_identity_stdin_content_and_token_header(monkeypa
 
 
 @pytest.mark.unit
-def test_create_prints_a_confirmation_with_name_and_byte_count(monkeypatch: pytest.MonkeyPatch) -> None:
-    bind_stubs(
-        monkeypatch,
+def test_create_prints_a_confirmation_with_name_and_byte_count() -> None:
+    bound = bind_stubs(
         post=lambda *a, **k: _FakeResponse(payload={"recorded": True, "lease_id": "lease_9", "name": "n", "bytes": 11}),
     )
-    result = CliRunner().invoke(runner_group, ["artifact", "create", "--name", "n"], env=_ENV, input="looks good!")
+    result = bound.runner.invoke(runner_group, ["artifact", "create", "--name", "n"], env=_ENV, input="looks good!")
 
     assert result.exit_code == 0, result.output
     assert "recorded" in result.output
@@ -601,8 +596,8 @@ def test_create_rejects_empty_stdin_without_posting(monkeypatch: pytest.MonkeyPa
         posted = True
         return _FakeResponse()
 
-    bind_stubs(monkeypatch, post=fake_post)
-    result = CliRunner().invoke(runner_group, ["artifact", "create", "--name", "n"], env=_ENV, input="")
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(runner_group, ["artifact", "create", "--name", "n"], env=_ENV, input="")
 
     assert result.exit_code != 0
     assert "empty stdin" in result.output
@@ -610,9 +605,9 @@ def test_create_rejects_empty_stdin_without_posting(monkeypatch: pytest.MonkeyPa
 
 
 @pytest.mark.unit
-def test_create_surfaces_a_rejection_as_a_nonzero_exit(monkeypatch: pytest.MonkeyPatch) -> None:
-    bind_stubs(monkeypatch, post=lambda *a, **k: _RejectingResponse())
-    result = CliRunner().invoke(runner_group, ["artifact", "create", "--name", "n"], env=_ENV, input="c")
+def test_create_surfaces_a_rejection_as_a_nonzero_exit() -> None:
+    bound = bind_stubs(post=lambda *a, **k: _RejectingResponse())
+    result = bound.runner.invoke(runner_group, ["artifact", "create", "--name", "n"], env=_ENV, input="c")
 
     assert result.exit_code != 0
     assert "could not record" in result.output
@@ -629,8 +624,8 @@ def test_create_refuses_graph_scope_without_posting(monkeypatch: pytest.MonkeyPa
         posted = True
         return _FakeResponse()
 
-    bind_stubs(monkeypatch, post=fake_post)
-    result = CliRunner().invoke(
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(
         runner_group, ["artifact", "create", "--name", "n", "--scope", "graph"], env=_ENV, input="content"
     )
 
@@ -650,8 +645,8 @@ def test_create_refuses_system_scope_without_posting(monkeypatch: pytest.MonkeyP
         posted = True
         return _FakeResponse()
 
-    bind_stubs(monkeypatch, post=fake_post)
-    result = CliRunner().invoke(
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(
         runner_group, ["artifact", "create", "--name", "n", "--scope", "system"], env=_ENV, input="content"
     )
 
@@ -661,14 +656,13 @@ def test_create_refuses_system_scope_without_posting(monkeypatch: pytest.MonkeyP
 
 
 @pytest.mark.unit
-def test_create_accepts_explicit_node_scope(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_create_accepts_explicit_node_scope() -> None:
     """The flag exists for the refusal above — an explicit ``node`` value is a no-op, not a
     second refusal path."""
-    bind_stubs(
-        monkeypatch,
+    bound = bind_stubs(
         post=lambda *a, **k: _FakeResponse(payload={"recorded": True, "lease_id": "lease_9", "name": "n", "bytes": 1}),
     )
-    result = CliRunner().invoke(
+    result = bound.runner.invoke(
         runner_group, ["artifact", "create", "--name", "n", "--scope", "node"], env=_ENV, input="c"
     )
 
@@ -686,8 +680,8 @@ def test_staged_gets_the_lease_scoped_attachments_route(monkeypatch: pytest.Monk
         calls.append((url, headers))
         return _FakeResponse(payload=[{"name": "review-findings", "content": "looks good"}])
 
-    bind_stubs(monkeypatch, get=fake_get)
-    result = CliRunner().invoke(runner_group, ["artifact", "staged"], env=_ENV)
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(runner_group, ["artifact", "staged"], env=_ENV)
 
     assert result.exit_code == 0, result.output
     assert calls == [
@@ -698,19 +692,19 @@ def test_staged_gets_the_lease_scoped_attachments_route(monkeypatch: pytest.Monk
 
 
 @pytest.mark.unit
-def test_staged_content_flag_restores_the_full_raw_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_staged_content_flag_restores_the_full_raw_payload() -> None:
     payload = [{"name": "review-findings", "content": "looks good"}]
-    bind_stubs(monkeypatch, get=lambda *a, **k: _FakeResponse(text=json.dumps(payload)))
-    result = CliRunner().invoke(runner_group, ["artifact", "staged", "--content"], env=_ENV)
+    bound = bind_stubs(get=lambda *a, **k: _FakeResponse(text=json.dumps(payload)))
+    result = bound.runner.invoke(runner_group, ["artifact", "staged", "--content"], env=_ENV)
 
     assert result.exit_code == 0, result.output
     assert json.loads(result.output) == payload
 
 
 @pytest.mark.unit
-def test_staged_surfaces_a_rejection_as_a_nonzero_exit(monkeypatch: pytest.MonkeyPatch) -> None:
-    bind_stubs(monkeypatch, get=lambda *a, **k: _RejectingResponse())
-    result = CliRunner().invoke(runner_group, ["artifact", "staged"], env=_ENV)
+def test_staged_surfaces_a_rejection_as_a_nonzero_exit() -> None:
+    bound = bind_stubs(get=lambda *a, **k: _RejectingResponse())
+    result = bound.runner.invoke(runner_group, ["artifact", "staged"], env=_ENV)
 
     assert result.exit_code != 0
     assert "could not read" in result.output
@@ -727,8 +721,8 @@ def test_staged_refuses_graph_scope_without_fetching(monkeypatch: pytest.MonkeyP
         fetched = True
         return _FakeResponse(payload=[])
 
-    bind_stubs(monkeypatch, get=fake_get)
-    result = CliRunner().invoke(runner_group, ["artifact", "staged", "--scope", "graph"], env=_ENV)
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(runner_group, ["artifact", "staged", "--scope", "graph"], env=_ENV)
 
     assert result.exit_code != 0
     assert "read-only" in result.output
@@ -746,8 +740,8 @@ def test_staged_refuses_system_scope_without_fetching(monkeypatch: pytest.Monkey
         fetched = True
         return _FakeResponse(payload=[])
 
-    bind_stubs(monkeypatch, get=fake_get)
-    result = CliRunner().invoke(runner_group, ["artifact", "staged", "--scope", "system"], env=_ENV)
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(runner_group, ["artifact", "staged", "--scope", "system"], env=_ENV)
 
     assert result.exit_code != 0
     assert "read-only" in result.output and "system" in result.output
@@ -765,8 +759,8 @@ def test_attach_alias_warns_on_stderr_and_delegates_to_artifact_create(monkeypat
         calls.append((url, json, headers))
         return _FakeResponse(payload={"recorded": True, "lease_id": "lease_9", "name": "review-findings", "bytes": 10})
 
-    bind_stubs(monkeypatch, post=fake_post)
-    result = CliRunner().invoke(runner_group, ["attach", "--name", "review-findings"], env=_ENV, input="looks good")
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(runner_group, ["attach", "--name", "review-findings"], env=_ENV, input="looks good")
 
     assert result.exit_code == 0, result.output
     # Identical write to `artifact create` — same route, body, and token header.

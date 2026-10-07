@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import httpx
 import pytest
-from click.testing import CliRunner
 
 from blizzard.runner.cli import runner as runner_group
 from tests.worker_http import bind_stubs
@@ -38,8 +37,8 @@ def test_attach_verb_posts_inherited_identity_stdin_content_and_token_header(
         calls.append((url, json, headers))
         return _FakeResponse()
 
-    bind_stubs(monkeypatch, post=fake_post)
-    result = CliRunner().invoke(runner_group, ["attach", "--name", "review-findings"], env=_ENV, input="looks good")
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(runner_group, ["attach", "--name", "review-findings"], env=_ENV, input="looks good")
 
     assert result.exit_code == 0, result.output
     assert calls == [
@@ -59,9 +58,9 @@ def test_attach_verb_omits_the_token_header_when_absent(monkeypatch: pytest.Monk
         calls.append(headers)
         return _FakeResponse()
 
-    bind_stubs(monkeypatch, post=fake_post)
+    bound = bind_stubs(post=fake_post)
     env = {"BLIZZARD_LEASE_ID": "lease_9", "BLIZZARD_RUNNER_URL": "http://127.0.0.1:8431/"}
-    result = CliRunner().invoke(runner_group, ["attach", "--name", "n"], env=env, input="c")
+    result = bound.runner.invoke(runner_group, ["attach", "--name", "n"], env=env, input="c")
 
     assert result.exit_code == 0, result.output
     assert calls == [{}]
@@ -76,9 +75,9 @@ def test_attach_verb_raises_without_identity(monkeypatch: pytest.MonkeyPatch) ->
         posted = True
         return _FakeResponse()
 
-    bind_stubs(monkeypatch, post=fake_post)
+    bound = bind_stubs(post=fake_post)
     env = {"BLIZZARD_LEASE_ID": "", "BLIZZARD_RUNNER_URL": ""}
-    result = CliRunner().invoke(runner_group, ["attach", "--name", "n"], env=env, input="c")
+    result = bound.runner.invoke(runner_group, ["attach", "--name", "n"], env=env, input="c")
 
     assert result.exit_code != 0  # unlike the hooks, attach must not soft-fail
     assert posted is False
@@ -99,8 +98,8 @@ def test_attach_verb_surfaces_a_rejection_as_a_nonzero_exit(monkeypatch: pytest.
     def fake_post(*args: object, **kwargs: object) -> _RejectingResponse:
         return _RejectingResponse()
 
-    bind_stubs(monkeypatch, post=fake_post)
-    result = CliRunner().invoke(runner_group, ["attach", "--name", "n"], env=_ENV, input="c")
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(runner_group, ["attach", "--name", "n"], env=_ENV, input="c")
 
     assert result.exit_code != 0
     assert "could not record" in result.output

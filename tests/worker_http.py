@@ -1,19 +1,18 @@
-"""The shared seam through which a worker-CLI test replaces the HTTP its commands make.
-
-A worker command makes every request, and posts its span, through the one client its
-``WorkerSession`` builds. A test binds that client here, instead of stubbing ``httpx`` module
-functions: either to a canned transport (:func:`bind_transport`) or, for a test that answers with
-its own response objects, to ``get``/``post`` callables (:func:`bind_stubs`)."""
+"""How a worker-CLI test hands its commands their HTTP: collaborators bound over a canned transport
+(:func:`bind_transport`) or ``get``/``post`` callables (:func:`bind_stubs`), and invoked through the
+returned :class:`Bound`'s runner."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 import httpx
-import pytest
+from click.testing import CliRunner
 
-from blizzard.runner.cli import worker_call
+from blizzard.cli.collaborators import CliCollaborators
+from blizzard.foundation.span_clock import Clock
 
 
 class StubClient:
@@ -39,11 +38,11 @@ class StubClient:
 
 
 class _StubFactory:
-    """Builds :class:`StubClient` instances; a test binds ``get`` and ``post`` in separate calls."""
+    """Builds :class:`StubClient` instances over the ``get`` and ``post`` a test supplies."""
 
-    def __init__(self) -> None:
-        self.get: Callable[..., Any] | None = None
-        self.post: Callable[..., Any] | None = None
+    def __init__(self, get: Callable[..., Any] | None, post: Callable[..., Any] | None) -> None:
+        self.get = get
+        self.post = post
         self.built: list[StubClient] = []
 
     def __call__(self) -> StubClient:
@@ -52,32 +51,42 @@ class _StubFactory:
         return client
 
 
-def bind_stubs(
-    monkeypatch: pytest.MonkeyPatch,
-    *,
-    get: Callable[..., Any] | None = None,
-    post: Callable[..., Any] | None = None,
-) -> list[StubClient]:
-    """Answer worker commands' requests with ``get``/``post``; returns the clients built."""
-    factory = worker_call.client_factory
-    if not isinstance(factory, _StubFactory):
-        factory = _StubFactory()
-        monkeypatch.setattr(worker_call, "client_factory", factory)
-    factory.get = get or factory.get
-    factory.post = post or factory.post
-    return factory.built
+class _BoundRunner(CliRunner):
+    """A ``CliRunner`` whose every invocation hands the root group the bound collaborators."""
+
+    def __init__(self, collaborators: CliCollaborators) -> None:
+        super().__init__()
+        self._collaborators = collaborators
+
+    def invoke(self, *args: Any, **kwargs: Any) -> Any:
+        kwargs.setdefault("obj", self._collaborators)
+        return super().invoke(*args, **kwargs)
 
 
-def bind_transport(
-    monkeypatch: pytest.MonkeyPatch, handler: Callable[[httpx.Request], httpx.Response]
-) -> list[httpx.Client]:
-    """Answer the next worker command's requests through an ``httpx.MockTransport``."""
-    built: list[httpx.Client] = []
+@dataclass(frozen=True)
+class Bound:
+    """The collaborators a test bound, the runner that hands them down, and the clients built from them."""
+
+    collaborators: CliCollaborators
+    runner: CliRunner
+    built: list[Any]
+
+
+def bind_stubs(*, get: Callable[..., Any] | None = None, post: Callable[..., Any] | None = None) -> Bound:
+    """Answer worker commands' requests with ``get``/``post``."""
+    factory = _StubFactory(get, post)
+    collaborators = CliCollaborators(client_factory=factory, clock=Clock())  # type: ignore[arg-type]
+    return Bound(collaborators, _BoundRunner(collaborators), factory.built)
+
+
+def bind_transport(handler: Callable[[httpx.Request], httpx.Response], *, clock: Clock | None = None) -> Bound:
+    """Answer worker commands' requests through an ``httpx.MockTransport``."""
+    built: list[Any] = []
 
     def factory() -> httpx.Client:
         client = httpx.Client(transport=httpx.MockTransport(handler))
         built.append(client)
         return client
 
-    monkeypatch.setattr(worker_call, "client_factory", factory)
-    return built
+    collaborators = CliCollaborators(client_factory=factory, clock=clock or Clock())
+    return Bound(collaborators, _BoundRunner(collaborators), built)

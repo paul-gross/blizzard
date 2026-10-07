@@ -1,20 +1,19 @@
-"""Init fakes — what ``blizzard runner init`` reaches instead of a live hub.
-
-:class:`FakeInitHub` stands in at the init CLI's ``hub_clients`` seam. The autouse
-:func:`fake_init_hub` installs one for every test, so an in-process ``runner init`` joins it,
-never a real hub — and any real hub connection the init module attempts fails the test."""
+"""Init fakes — what ``blizzard runner init`` reaches instead of a live hub: :func:`init_runner` hands a
+:class:`FakeInitHub` to the root group as ``obj``, and the autouse :func:`fake_init_hub` supplies one per test."""
 
 from __future__ import annotations
 
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from typing import Any
 
 import pytest
+from click.testing import CliRunner
 
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
-from blizzard.runner.cli import runtime as runner_cli_runtime
-from blizzard.runner.config import DEFAULT_TOKEN_ENV
+from blizzard.runner.cli.runtime import InitCollaborators
+from blizzard.runner.config import DEFAULT_TOKEN_ENV, ENV_HUB_URL
 from blizzard.runner.hub.client import (
     HubClientError,
     IHubRunnerAdmin,
@@ -23,6 +22,9 @@ from blizzard.runner.hub.client import (
     TokenIdentity,
     TokenRefusal,
 )
+
+# Nothing listens on the discard port, so a connection to it is refused at once.
+_REFUSED_HUB = "http://127.0.0.1:9"
 
 
 @dataclass
@@ -93,19 +95,29 @@ class FakeInitHub:
         return TokenRefusal(reason=RunnerTokenRefusalReason.UNKNOWN)
 
 
-class _NoHubConnections:
-    """Stands in for ``httpx`` inside the init CLI module, so a real hub connection fails the test."""
+class InitRunner(CliRunner):
+    """A ``CliRunner`` whose every invocation hands the root group the :class:`FakeInitHub` as ``obj``,
+    so an in-process ``runner init`` joins it."""
 
-    def Client(self, *_args: object, **_kwargs: object) -> None:
-        raise AssertionError("runner init reached for a real hub; script the `fake_init_hub` fixture instead")
+    def __init__(self, hub: FakeInitHub) -> None:
+        super().__init__()
+        self.hub = hub
+
+    def invoke(self, *args: Any, **kwargs: Any) -> Any:
+        kwargs.setdefault("obj", InitCollaborators(self.hub.clients))
+        return super().invoke(*args, **kwargs)
+
+
+def init_runner(hub: FakeInitHub | None = None) -> InitRunner:
+    """A runner of in-process commands whose ``runner init`` joins ``hub`` — a fresh one when none is given."""
+    return InitRunner(hub or FakeInitHub())
 
 
 @pytest.fixture(autouse=True)
 def fake_init_hub(monkeypatch: pytest.MonkeyPatch) -> FakeInitHub:
-    """Join every in-process ``runner init`` to a fresh :class:`FakeInitHub`, and strip a hub token
-    the developer's shell may carry, so no init inherits one."""
+    """The hub a test hands its in-process ``runner init`` — through :func:`init_runner` — and the guard
+    for one that forgets to: the hub URL environment points at a refused local address, so such an init
+    fails fast rather than reaching a developer's live hub. A hub token the developer's shell carries is stripped."""
     monkeypatch.delenv(DEFAULT_TOKEN_ENV, raising=False)
-    hub = FakeInitHub()
-    monkeypatch.setattr(runner_cli_runtime, "hub_clients", hub.clients)
-    monkeypatch.setattr(runner_cli_runtime, "httpx", _NoHubConnections())
-    return hub
+    monkeypatch.setenv(ENV_HUB_URL, _REFUSED_HUB)
+    return FakeInitHub()

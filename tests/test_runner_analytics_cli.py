@@ -91,9 +91,9 @@ def test_each_verb_hits_its_lease_scoped_path_with_since_converted_to_utc(
         calls.append((url, headers, params))
         return _FakeResponse(text=_COUNTS_TEXT)
 
-    bind_stubs(monkeypatch, get=fake_get)
+    bound = bind_stubs(get=fake_get)
     with _local_timezone("America/New_York"):  # UTC-5 in January, no DST
-        result = CliRunner().invoke(runner_group, [*argv, "--since", "2026-01-01T10:00:00"], env=_ENV)
+        result = bound.runner.invoke(runner_group, [*argv, "--since", "2026-01-01T10:00:00"], env=_ENV)
 
     assert result.exit_code == 0, result.output
     assert len(calls) == 1
@@ -113,9 +113,9 @@ def test_until_is_carried_through_when_given(monkeypatch: pytest.MonkeyPatch, ar
         calls.append(params)
         return _FakeResponse(text=_COUNTS_TEXT)
 
-    bind_stubs(monkeypatch, get=fake_get)
+    bound = bind_stubs(get=fake_get)
     with _local_timezone("America/New_York"):  # UTC-5 in January, no DST
-        result = CliRunner().invoke(
+        result = bound.runner.invoke(
             runner_group, [*argv, "--since", "2026-01-01T10:00:00", "--until", "2026-01-01T12:00:00"], env=_ENV
         )
 
@@ -132,8 +132,8 @@ def test_by_name_is_forwarded_as_a_query_param(monkeypatch: pytest.MonkeyPatch, 
         calls.append(params)
         return _FakeResponse(text=_COUNTS_TEXT)
 
-    bind_stubs(monkeypatch, get=fake_get)
-    result = CliRunner().invoke(runner_group, [*argv, "--since", "2026-01-01T10:00:00", "--by-name"], env=_ENV)
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(runner_group, [*argv, "--since", "2026-01-01T10:00:00", "--by-name"], env=_ENV)
 
     assert result.exit_code == 0, result.output
     assert calls[0]["by_name"] == "true"
@@ -149,8 +149,8 @@ def test_since_is_required(monkeypatch: pytest.MonkeyPatch, argv: list[str], _pa
         attempted = True
         return _FakeResponse()
 
-    bind_stubs(monkeypatch, get=fake_get)
-    result = CliRunner().invoke(runner_group, argv, env=_ENV)
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(runner_group, argv, env=_ENV)
 
     assert result.exit_code != 0
     assert "--since" in result.output
@@ -167,8 +167,8 @@ def test_errors_without_identity(monkeypatch: pytest.MonkeyPatch, argv: list[str
         attempted = True
         return _FakeResponse()
 
-    bind_stubs(monkeypatch, get=fake_get)
-    result = CliRunner().invoke(
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(
         runner_group,
         [*argv, "--since", "2026-01-01T00:00:00"],
         env={"BLIZZARD_LEASE_ID": "", "BLIZZARD_RUNNER_URL": ""},
@@ -181,9 +181,9 @@ def test_errors_without_identity(monkeypatch: pytest.MonkeyPatch, argv: list[str
 
 @pytest.mark.unit
 @pytest.mark.parametrize(("argv", "_path"), _VERBS)
-def test_surfaces_a_404_as_a_nonzero_exit(monkeypatch: pytest.MonkeyPatch, argv: list[str], _path: str) -> None:
-    bind_stubs(monkeypatch, get=lambda *a, **k: _RejectingResponse({"detail": "chunk ch_1 carries no run context"}))
-    result = CliRunner().invoke(runner_group, [*argv, "--since", "2026-01-01T00:00:00"], env=_ENV)
+def test_surfaces_a_404_as_a_nonzero_exit(argv: list[str], _path: str) -> None:
+    bound = bind_stubs(get=lambda *a, **k: _RejectingResponse({"detail": "chunk ch_1 carries no run context"}))
+    result = bound.runner.invoke(runner_group, [*argv, "--since", "2026-01-01T00:00:00"], env=_ENV)
 
     assert result.exit_code != 0
     assert "chunk ch_1 carries no run context" in result.output

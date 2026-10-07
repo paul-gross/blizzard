@@ -20,6 +20,7 @@ import pytest
 import uvicorn
 from click.testing import CliRunner
 
+from blizzard.cli.operator_trace import ITraceHeaders
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.cli import hub as hub_group
 from blizzard.runner.app import build_hosted_app
@@ -28,6 +29,7 @@ from blizzard.runner.cli.daemon import RunnerDaemon
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.listeners import Listeners, Uds
 from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
+from tests.runner_init_fakes import init_runner
 
 
 class _FakeResponse:
@@ -577,7 +579,7 @@ def _store(root: Path) -> SqlAlchemyRunnerStore:
 
 def _init_runner(tmp_path: Path) -> Path:
     root = tmp_path / "runner"
-    result = CliRunner().invoke(runner_group, ["init", str(root)])
+    result = init_runner().invoke(runner_group, ["init", str(root)])
     assert result.exit_code == 0, result.output
     return root
 
@@ -707,7 +709,9 @@ def test_start_reports_the_resume_upward(tmp_path: Path, monkeypatch: pytest.Mon
 def _daemon_answering(monkeypatch: pytest.MonkeyPatch, view: dict[str, object]) -> None:
     """Every verb's local API answers ``PATCH /api/runner`` with ``view`` — no daemon behind it."""
 
-    def reach(_cls: type[RunnerDaemon], verb: str, _directory: str, _runner_url: str | None) -> RunnerDaemon:
+    def reach(
+        _cls: type[RunnerDaemon], verb: str, _directory: str, _runner_url: str | None, _trace: ITraceHeaders
+    ) -> RunnerDaemon:
         transport = httpx.MockTransport(lambda _request: httpx.Response(200, json=view))
         return RunnerDaemon(verb, httpx.Client(transport=transport, base_url="http://runner"), "runner.sock")
 

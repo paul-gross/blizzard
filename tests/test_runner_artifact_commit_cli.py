@@ -39,8 +39,8 @@ def test_commit_verb_posts_inherited_identity_and_declaration_body(monkeypatch: 
         calls.append((url, json, headers))
         return _FakeResponse()
 
-    bind_stubs(monkeypatch, post=fake_post)
-    result = CliRunner().invoke(
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(
         runner_group,
         ["artifact", "commit", "--repo", "blizzard", "--branch", "feat/x", "--commit", "abc123"],
         env=_ENV,
@@ -57,11 +57,11 @@ def test_commit_verb_posts_inherited_identity_and_declaration_body(monkeypatch: 
 
 
 @pytest.mark.unit
-def test_commit_verb_echoes_a_confirmation_naming_repo_branch_and_sha(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_commit_verb_echoes_a_confirmation_naming_repo_branch_and_sha() -> None:
     """A silent exit 0 was indistinguishable from a no-op — the worker must see
     what was recorded without a second call."""
-    bind_stubs(monkeypatch, post=lambda *a, **k: _FakeResponse())
-    result = CliRunner().invoke(
+    bound = bind_stubs(post=lambda *a, **k: _FakeResponse())
+    result = bound.runner.invoke(
         runner_group,
         ["artifact", "commit", "--repo", "blizzard", "--branch", "feat/x", "--commit", "abc123"],
         env=_ENV,
@@ -74,9 +74,9 @@ def test_commit_verb_echoes_a_confirmation_naming_repo_branch_and_sha(monkeypatc
 
 
 @pytest.mark.unit
-def test_commit_verb_echoes_the_response_note(monkeypatch: pytest.MonkeyPatch) -> None:
-    bind_stubs(monkeypatch, post=lambda *a, **k: _FakeResponse({"note": "rides no completion"}))
-    result = CliRunner().invoke(
+def test_commit_verb_echoes_the_response_note() -> None:
+    bound = bind_stubs(post=lambda *a, **k: _FakeResponse({"note": "rides no completion"}))
+    result = bound.runner.invoke(
         runner_group,
         ["artifact", "commit", "--repo", "blizzard", "--branch", "feat/x", "--commit", "abc123"],
         env=_ENV,
@@ -95,8 +95,8 @@ def test_commit_verb_omits_the_environment_key_when_not_named(monkeypatch: pytes
         calls.append(json)
         return _FakeResponse()
 
-    bind_stubs(monkeypatch, post=fake_post)
-    CliRunner().invoke(
+    bound = bind_stubs(post=fake_post)
+    bound.runner.invoke(
         runner_group,
         ["artifact", "commit", "--repo", "r", "--branch", "b", "--commit", "c"],
         env=_ENV,
@@ -113,8 +113,8 @@ def test_commit_verb_forwards_the_named_environment(monkeypatch: pytest.MonkeyPa
         calls.append(json)
         return _FakeResponse()
 
-    bind_stubs(monkeypatch, post=fake_post)
-    result = CliRunner().invoke(
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(
         runner_group,
         ["artifact", "commit", "--env", "r2", "--repo", "r", "--branch", "b", "--commit", "c"],
         env=_ENV,
@@ -132,9 +132,9 @@ def test_commit_verb_omits_the_token_header_when_absent(monkeypatch: pytest.Monk
         calls.append(headers)
         return _FakeResponse()
 
-    bind_stubs(monkeypatch, post=fake_post)
+    bound = bind_stubs(post=fake_post)
     env = {"BLIZZARD_LEASE_ID": "lease_9", "BLIZZARD_RUNNER_URL": "http://127.0.0.1:8431/"}
-    result = CliRunner().invoke(
+    result = bound.runner.invoke(
         runner_group,
         ["artifact", "commit", "--repo", "r", "--branch", "b", "--commit", "c"],
         env=env,
@@ -153,9 +153,9 @@ def test_commit_verb_raises_without_identity(monkeypatch: pytest.MonkeyPatch) ->
         posted = True
         return _FakeResponse()
 
-    bind_stubs(monkeypatch, post=fake_post)
+    bound = bind_stubs(post=fake_post)
     env = {"BLIZZARD_LEASE_ID": "", "BLIZZARD_RUNNER_URL": ""}
-    result = CliRunner().invoke(
+    result = bound.runner.invoke(
         runner_group,
         ["artifact", "commit", "--repo", "r", "--branch", "b", "--commit", "c"],
         env=env,
@@ -172,8 +172,8 @@ def test_commit_verb_surfaces_a_transport_failure_as_a_nonzero_exit(monkeypatch:
     def fake_post(*args: object, **kwargs: object) -> _FakeResponse:
         raise httpx.ConnectError("connection refused")
 
-    bind_stubs(monkeypatch, post=fake_post)
-    result = CliRunner().invoke(
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(
         runner_group,
         ["artifact", "commit", "--repo", "r", "--branch", "b", "--commit", "c"],
         env=_ENV,
@@ -198,8 +198,8 @@ def test_commit_verb_surfaces_the_rejection_detail_so_the_worker_can_correct_its
         def raise_for_status(self) -> None:
             raise httpx.HTTPStatusError("400", request=object(), response=self)  # type: ignore[arg-type]
 
-    bind_stubs(monkeypatch, post=lambda *a, **k: _RejectingResponse())
-    result = CliRunner().invoke(
+    bound = bind_stubs(post=lambda *a, **k: _RejectingResponse())
+    result = bound.runner.invoke(
         runner_group,
         ["artifact", "commit", "--repo", "blizzrd", "--branch", "b", "--commit", "c"],
         env=_ENV,
@@ -240,8 +240,8 @@ def test_commit_verb_refuses_graph_scope_without_posting(monkeypatch: pytest.Mon
         posted = True
         return _FakeResponse()
 
-    bind_stubs(monkeypatch, post=fake_post)
-    result = CliRunner().invoke(
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(
         runner_group,
         ["artifact", "commit", "--repo", "blizzard", "--branch", "feat/x", "--commit", "abc123", "--scope", "graph"],
         env=_ENV,
@@ -263,8 +263,8 @@ def test_commit_verb_refuses_system_scope_without_posting(monkeypatch: pytest.Mo
         posted = True
         return _FakeResponse()
 
-    bind_stubs(monkeypatch, post=fake_post)
-    result = CliRunner().invoke(
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(
         runner_group,
         ["artifact", "commit", "--repo", "blizzard", "--branch", "feat/x", "--commit", "abc123", "--scope", "system"],
         env=_ENV,

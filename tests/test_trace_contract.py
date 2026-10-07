@@ -17,6 +17,7 @@ from blizzard.foundation import trace_attributes as shared
 from blizzard.foundation.node_steps import Executor
 from blizzard.foundation.platform_tracing import attributes as platform_attr
 from blizzard.foundation.platform_tracing.semconv import DATABASE_SEMCONV_VERSION, HTTP_SEMCONV_VERSION
+from blizzard.foundation.span_clock import Clock
 from blizzard.foundation.trace_ids import (
     ChunkRole,
     DerivedContext,
@@ -242,7 +243,7 @@ def _cli_payload(command: str, exit_code: int) -> dict[str, Any]:
     """A worker command's span over a fixed clock and fixed ids, so its encoding is reproducible."""
     parent = DerivedContext.of(StepKey.attempt("ch_1", 1), SpanRole.STEP)
     monotonic = iter((0, 0, 250_000_000))
-    clock = cli_spans.Clock(wall_ns=lambda: 1_700_000_000_000_000_000, monotonic_ns=lambda: next(monotonic))
+    clock = Clock(wall_ns=lambda: 1_700_000_000_000_000_000, monotonic_ns=lambda: next(monotonic))
     span = cli_spans.CliSpan.open(
         parent, command, chunk_id="ch_1", lease_id="lease_1", clock=clock, new_span_id=lambda: 0xC11C11C11C11C11C
     )
