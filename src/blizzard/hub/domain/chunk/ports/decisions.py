@@ -11,6 +11,7 @@ from typing import Protocol
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import DecisionChoice, DocketEntry, GateDecision
+from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
 from blizzard.hub.domain.chunk.proposals import StampedWorkItemProposal
 
@@ -85,6 +86,29 @@ class IWriteChunkDecisionsRepository(IReadChunkDecisionsRepository, Protocol):
 
         A graph gate passes neither artifacts nor proposals; a runner-config gate carries them
         here, with ``imposed_by_runner_id`` naming the runner — ``None`` for a graph gate."""
+        ...
+
+    def record_decision_locked(
+        self,
+        handle: ILockedChunkRead,
+        *,
+        decision_id: str,
+        chunk_id: str,
+        node_id: str,
+        node_name: str,
+        epoch: int,
+        admission: EpochAdmission,
+        claimant: Claimant | None = None,
+        choices: list[DecisionChoice],
+        at: datetime,
+        artifacts: list[StoredArtifact],
+        proposals: list[StampedWorkItemProposal],
+        imposed_by_runner_id: str | None,
+    ) -> bool | FenceRefusal:
+        """:meth:`record_decision` on ``handle``'s already-locked connection
+        (``bzh:store-exclusive-write``), so the caller's guard reads and this write share one
+        lock. A decision already open at ``(chunk_id, node_id, epoch)`` answers ``False`` — the
+        lost-ack replay, nothing written; ``True`` is a fresh write; a refusal writes nothing."""
         ...
 
     def record_decision_resolution(

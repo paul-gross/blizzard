@@ -84,6 +84,55 @@ class IWriteChunkMovementRepository(IReadChunkMovementRepository, Protocol):
         ``migration_id``, ``None`` on replay, or the :class:`FenceRefusal` that wrote nothing."""
         ...
 
+    def record_transition_locked(
+        self,
+        handle: ILockedChunkRead,
+        *,
+        transition_id: str,
+        chunk_id: str,
+        from_node_id: str | None,
+        to_node_id: str,
+        choice_name: str | None,
+        epoch: int,
+        admission: EpochAdmission,
+        claimant: Claimant | None = None,
+        runner_id: str,
+        at: datetime,
+        artifacts: list[StoredArtifact],
+        proposals: list[StampedWorkItemProposal],
+        decision_id: str | None = None,
+    ) -> FenceRefusal | None:
+        """:meth:`record_transition` on ``handle``'s already-locked connection (``bzh:store-exclusive-write``):
+        the caller's guard reads and this write share one lock."""
+        ...
+
+    def record_migration_locked(
+        self,
+        handle: ILockedChunkRead,
+        chunk_id: str,
+        *,
+        from_node_id: str | None,
+        from_graph_id: str,
+        to_graph_id: str,
+        landed_node_id: str | None,
+        choice_name: str | None,
+        decision_id: str | None = None,
+        model: str | None,
+        epoch: int,
+        admission: EpochAdmission,
+        claimant: Claimant | None = None,
+        at: datetime,
+        artifacts: list[StoredArtifact],
+        proposals: list[StampedWorkItemProposal],
+        source: MigrationSource,
+        release_route: bool = True,
+        clear_intent: bool = False,
+        migration_id: str | None = None,
+    ) -> str | FenceRefusal | None:
+        """:meth:`record_migration` on ``handle``'s already-locked connection (``bzh:store-exclusive-write``):
+        the caller's guard reads and this write share one lock."""
+        ...
+
     def record_restart_locked(
         self,
         handle: ILockedChunkRead,

@@ -58,6 +58,7 @@ class IWriteChunkEscalationsRepository(IReadChunkEscalationsRepository, Protocol
         chunk_id: str,
         *,
         epoch: int,
+        admission: EpochAdmission,
         runner_id: str,
         takeover_command: str,
         at: datetime,
@@ -67,5 +68,6 @@ class IWriteChunkEscalationsRepository(IReadChunkEscalationsRepository, Protocol
         """Escalate a chunk whose bounce count crossed its node's cap (#64), atomically and
         idempotently. The hub lease and the escalation fact land in one transaction, guarded
         by the escalation's existence at this epoch. No transition is recorded: the chunk's
-        held route and stuck node are untouched. Returns True iff it wrote."""
+        held route and stuck node are untouched. Behind the write fence (``bzh:epoch-fencing``):
+        a terminal chunk or a stale ``epoch`` writes nothing. Returns True iff it wrote."""
         ...

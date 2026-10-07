@@ -21,7 +21,7 @@ from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb, GateDe
 from blizzard.hub.domain.chunk.ports.decisions import IWriteChunkDecisionsRepository
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
-from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission
+from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.chunk.ports.route import IWriteChunkRouteRepository
 from blizzard.hub.domain.execution.auth.commit_pointer import CommitPointerPolicy
@@ -88,12 +88,15 @@ class DecisionService:
         facts: IReadChunkFactsRepository,
         route: IWriteChunkRouteRepository,
         decisions: IWriteChunkDecisionsRepository,
+        exclusive: IChunkExclusiveWrites,
         retired: RetiredRunnerGuard,
         clock: IClock,
     ) -> None:
         self._facts = facts
         self._route = route
         self._decisions = decisions
+        # Re-derives the current-node rule under the row lock (``bzh:store-exclusive-write``).
+        self._exclusive = exclusive
         self._retired = retired
         self._clock = clock
 
@@ -110,7 +113,8 @@ class DecisionService:
         submitting runner is refused with :class:`RunnerRetired` before anything lands.
 
         Order is behavior: retired → node → facts → route token → replay → attempt coherence →
-        proposals → commit pointer → produces → record."""
+        proposals → commit pointer → produces → record. Attempt coherence is re-derived under the
+        chunk's row lock, ahead of the write itself."""
         self._retired.refuse_if_retired(submission.runner_id, action="decision")
         try:
             node = gate_refusal(graph, submission.from_node_id)
@@ -155,30 +159,42 @@ class DecisionService:
         decision_id = Id.mint(DECISION_PREFIX, self._clock).value
         artifact_ids = [Id.mint(ARTIFACT_PREFIX, self._clock).value for _ in submission.artifacts]
         proposal_ids = [Id.mint(WORK_ITEM_PROPOSAL_PREFIX, self._clock).value for _ in submission.proposals]
-        refusal = self._decisions.record_decision(
-            decision_id=decision_id,
-            chunk_id=chunk.chunk_id,
-            node_id=node.node_id,
-            node_name=node.name,
-            epoch=submission.epoch,
-            admission=EpochAdmission.CURRENT,
-            claimant=Claimant(submission.runner_id, submission.lease_id),
-            choices=decision_choices(node),
-            at=self._clock.now(),
-            artifacts=self._artifact_rows(chunk, node, submission.epoch, submission.artifacts, artifact_ids),
-            proposals=stamped_proposals(
-                chunk.chunk_id,
-                node,
-                submission.epoch,
-                submission.proposals,
-                proposal_ids=proposal_ids,
-                runner_id=submission.runner_id,
-            ),
-            imposed_by_runner_id=submission.runner_id,
+        artifact_rows = self._artifact_rows(chunk, node, submission.epoch, submission.artifacts, artifact_ids)
+        proposal_rows = stamped_proposals(
+            chunk.chunk_id,
+            node,
+            submission.epoch,
+            submission.proposals,
+            proposal_ids=proposal_ids,
+            runner_id=submission.runner_id,
         )
-        if refusal is not None:
-            return DecisionSubmitResult.failure(refusal.detail)
-        return DecisionSubmitResult.parked(node, decision_id)
+        with self._exclusive.locked([chunk.chunk_id]) as handle:
+            locked = handle.facts(chunk.chunk_id)
+            if locked is None:
+                return DecisionSubmitResult.failure(f"unknown chunk {chunk.chunk_id}")
+            try:
+                refuse_incoherent_attempt(locked, graph, from_node=node, epoch=submission.epoch)
+            except CompletionRefused as refused:
+                return DecisionSubmitResult.failure(refused.detail)
+            recorded = self._decisions.record_decision_locked(
+                handle,
+                decision_id=decision_id,
+                chunk_id=chunk.chunk_id,
+                node_id=node.node_id,
+                node_name=node.name,
+                epoch=submission.epoch,
+                admission=EpochAdmission.CURRENT,
+                claimant=Claimant(submission.runner_id, submission.lease_id),
+                choices=decision_choices(node),
+                at=self._clock.now(),
+                artifacts=artifact_rows,
+                proposals=proposal_rows,
+                imposed_by_runner_id=submission.runner_id,
+            )
+        if isinstance(recorded, FenceRefusal):
+            return DecisionSubmitResult.failure(recorded.detail)
+        # `False` — a racing duplicate already opened this decision: the lost-ack replay.
+        return DecisionSubmitResult.parked(node, decision_id if recorded else None)
 
     @staticmethod
     def _artifact_rows(

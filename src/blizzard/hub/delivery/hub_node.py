@@ -725,9 +725,10 @@ class HubNodeExecutor:
             # Hub-authored escalation, no runner runtime dir to compose a wrapped
             # takeover command from — leaves wrapped_takeover_command at its store default.
             crossed = f"bounce cap ({cap}) crossed after {facts.bounce_count()} bounces"
-            self._escalations.record_bounce_escalation(
+            escalated = self._escalations.record_bounce_escalation(
                 chunk.chunk_id,
                 epoch=hub_epoch,
+                admission=EpochAdmission.ABOVE,
                 runner_id=_HUB_RUNNER_ID,
                 takeover_command="",
                 at=now,
@@ -738,7 +739,11 @@ class HubNodeExecutor:
                 outcome_choice=HUB_DEFAULT_FAILURE_CHOICE,
                 to_node_name="",
                 wrote_transition=False,
-                detail=f"poll_timeout exceeded — {crossed}, escalated",
+                detail=(
+                    f"poll_timeout exceeded — {crossed}, escalated"
+                    if escalated
+                    else f"poll_timeout exceeded — {crossed}, escalation not recorded (chunk moved on)"
+                ),
             )
         artifact = StoredArtifact(
             kind=ArtifactKind.ASSET,
@@ -844,9 +849,10 @@ class HubNodeExecutor:
                     # Hub-authored escalation, no runner runtime dir to compose a wrapped
                     # takeover command from — leaves wrapped_takeover_command at its store default.
                     crossed = f"bounce cap ({cap}) crossed after {facts.bounce_count()} bounces"
-                    self._escalations.record_bounce_escalation(
+                    escalated = self._escalations.record_bounce_escalation(
                         chunk.chunk_id,
                         epoch=hub_epoch,
+                        admission=EpochAdmission.ABOVE,
                         runner_id=_HUB_RUNNER_ID,
                         takeover_command="",
                         at=now,
@@ -857,7 +863,11 @@ class HubNodeExecutor:
                         outcome_choice=choice,
                         to_node_name="",
                         wrote_transition=False,
-                        detail=f"{crossed}, escalated",
+                        detail=(
+                            f"{crossed}, escalated"
+                            if escalated
+                            else f"{crossed}, escalation not recorded (chunk moved on)"
+                        ),
                     )
                 envelope_artifact = StoredArtifact(
                     kind=ArtifactKind.ASSET,

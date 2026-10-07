@@ -818,6 +818,7 @@ def build_services(
             movement=chunk_movement,
             decisions=chunk_decisions,
             escalations=chunk_escalations,
+            exclusive=chunk_exclusive,
             route=chunk_route,
             artifacts=chunk_artifacts,
             retired=retired,
@@ -826,7 +827,12 @@ def build_services(
             label=work_ref_label,
         ),
         decisions=DecisionService(
-            facts=chunk_facts, route=chunk_route, decisions=chunk_decisions, retired=retired, clock=clock
+            facts=chunk_facts,
+            route=chunk_route,
+            decisions=chunk_decisions,
+            exclusive=chunk_exclusive,
+            retired=retired,
+            clock=clock,
         ),
         requeue=RequeueService(movement=chunk_movement, route=chunk_route, exclusive=chunk_exclusive, clock=clock),
         restart=RestartService(movement=chunk_movement, graphs=graph_store, clock=clock, exclusive=chunk_exclusive),
