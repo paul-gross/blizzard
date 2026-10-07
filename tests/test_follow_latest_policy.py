@@ -13,9 +13,11 @@ from pathlib import Path
 
 import httpx
 import pytest
+from sqlalchemy import select
 
 from blizzard.foundation.migration_source import MigrationSource
 from blizzard.hub.domain.graph.model import FollowLatest
+from blizzard.hub.store.schema import graph_policy_facts
 from tests.support import HubHarness, build_hub, pointer_token, report_lease
 
 _POINTER = {"source": "default", "ref": "9"}
@@ -428,3 +430,19 @@ def test_the_deprecated_post_alias_still_answers_202_with_the_view(tmp_path: Pat
     assert resp.status_code == 202
     assert resp.json()["follow_latest"] is None
     assert resp.json()["graph_id"] == graph_id
+
+
+@pytest.mark.component
+def test_setting_the_same_value_twice_appends_a_duplicate_fact(tmp_path: Path) -> None:
+    # The policy is an append-only fact log: a repeated write is recorded, never deduplicated.
+    hub = build_hub(tmp_path)
+    graph_id = _mint(hub, _YAML.format(name="default-delivery", prompt="Build."))
+
+    _set_policy(hub, graph_id, True)
+    _set_policy(hub, graph_id, True)
+
+    with hub.engine.connect() as conn:
+        rows = conn.execute(
+            select(graph_policy_facts.c.follow_latest).where(graph_policy_facts.c.graph_id == graph_id)
+        ).all()
+    assert [r.follow_latest for r in rows] == [True, True]

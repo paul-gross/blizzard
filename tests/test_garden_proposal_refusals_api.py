@@ -119,3 +119,18 @@ def test_attach_or_detach_naming_no_finding_on_a_closed_proposal_is_409(tmp_path
     resp = hub.client.post(f"/api/garden-proposals/gprop_1/{verb}", json={"findings": []})
 
     assert resp.status_code == 409, resp.text
+
+
+def test_accepting_with_the_default_graph_retired_is_503_and_closes_nothing(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _seed(hub)
+    graph = hub.services.graph_mint.ensure_default(
+        hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
+    )
+    hub.services.graph_lifecycle.retire(graph, by="operator")
+
+    resp = hub.client.post("/api/garden-proposals/gprop_1/accept", json={"mint_work_item": True})
+
+    assert resp.status_code == 503, resp.text
+    assert hub.services.default_graph_doc.name in resp.json()["detail"]
+    assert hub.client.get("/api/garden-proposals/gprop_1").json()["closure"] is None

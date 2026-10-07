@@ -499,3 +499,10 @@ def test_advance_accepts_a_requires_checks_pass_when_checks_are_green(tmp_path: 
 
     assert len(hub.completions) == 1
     assert hub.completions[0][1].choice == "pass"
+
+
+@pytest.mark.unit
+def test_the_default_check_timeout_is_ten_minutes() -> None:
+    # Pinned to the literal, not the constant: every other test compares against the
+    # constant, so a changed default would pass them all.
+    assert DEFAULT_CHECK_TIMEOUT == 600
