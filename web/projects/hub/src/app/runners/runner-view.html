@@ -116,15 +116,16 @@
                   >
                 }
                 @if (row.locally_paused) {
-                  <span
-                    class="badge paused local"
+                  <fleet-kit-badge
                     data-testid="runner-locally-paused"
+                    tone="idle"
+                    variant="soft"
                     [title]="localPauseHint(row)"
-                    >LOCALLY PAUSED</span
+                    >LOCALLY PAUSED</fleet-kit-badge
                   >
                 }
                 @if (row.hub_paused) {
-                  <span class="badge paused hub" data-testid="runner-hub-paused">HUB PAUSED</span>
+                  <fleet-kit-badge data-testid="runner-hub-paused" tone="waiting" variant="soft">HUB PAUSED</fleet-kit-badge>
                 }
               </span>
               <!-- The button is the hub's brake only: the board cannot clear a brake the

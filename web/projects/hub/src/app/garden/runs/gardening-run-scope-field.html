@@ -12,7 +12,7 @@
           <span class="opt-body">
             <span class="opt-slug">{{ scope.slug }}</span>
             @if (isSweptSlug(scope.slug)) {
-              <span class="opt-swept" data-testid="run-scope-swept-badge">previously swept</span>
+              <fleet-kit-badge data-testid="run-scope-swept-badge" tone="spawning">previously swept</fleet-kit-badge>
             }
             @if (scope.description) {
               <span class="opt-desc">{{ scope.description }}</span>

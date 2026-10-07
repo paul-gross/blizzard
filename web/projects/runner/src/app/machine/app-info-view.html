@@ -27,10 +27,10 @@
     <span class="fs-age" data-testid="fleet-age">{{ fleetStale() ? 'last known' : 'live' }}</span>
   </div>
   <div class="fleet-nums">
-    <span class="fn ready" data-testid="fleet-ready">{{ fleet()?.ready ?? '—' }}<small>ready</small></span>
-    <span class="fn running" data-testid="fleet-running">{{ fleet()?.running ?? '—' }}<small>running</small></span>
-    <span class="fn waiting" data-testid="fleet-waiting">{{ fleet()?.waiting ?? '—' }}<small>waiting</small></span>
-    <span class="fn needs" data-testid="fleet-needs">{{ fleet()?.needs ?? '—' }}<small>needs</small></span>
+    <span class="fn" [style.color]="bucketColor.ready" data-testid="fleet-ready">{{ fleet()?.ready ?? '—' }}<small>ready</small></span>
+    <span class="fn" [style.color]="bucketColor.running" data-testid="fleet-running">{{ fleet()?.running ?? '—' }}<small>running</small></span>
+    <span class="fn" [style.color]="bucketColor.waiting" data-testid="fleet-waiting">{{ fleet()?.waiting ?? '—' }}<small>waiting</small></span>
+    <span class="fn" [style.color]="bucketColor.needs" data-testid="fleet-needs">{{ fleet()?.needs ?? '—' }}<small>needs</small></span>
   </div>
 </div>
 <a class="board-link" [href]="view().hub.endpoint" target="_blank" rel="noopener" data-testid="board-link">

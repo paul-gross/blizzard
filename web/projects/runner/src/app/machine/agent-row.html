@@ -13,7 +13,7 @@
     <span class="lid">
       {{ leaseRef() }} <small>· {{ chunkRef() }} · epoch {{ agent().epoch }}</small>
     </span>
-    <span class="st" [class]="stateClass()" [attr.data-testid]="'agent-state'">{{ stateLabel() }}</span>
+    <fleet-kit-badge class="st" [tone]="status().tone" data-testid="agent-state">{{ status().label }}</fleet-kit-badge>
   </div>
   <div class="l2">
     node <b>{{ agent().node_name }}</b> · env <b>{{ agent().environment_id ?? '—' }}</b> · pid

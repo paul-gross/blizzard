@@ -18,11 +18,6 @@
   color: var(--text);
 }
 
-.opt-swept {
-  font-size: var(--fs-xs);
-  color: var(--cyan);
-}
-
 .opt-desc {
   font-size: var(--fs-sm);
   color: var(--label);

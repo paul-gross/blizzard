@@ -1,10 +1,29 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { page, userEvent } from 'vitest/browser';
+import { commands, page, userEvent } from 'vitest/browser';
 
 import type { RoutineBaselineView, ScopeView } from 'fleet';
 import { GardeningRunDialogView } from './gardening-run-dialog-view';
+
+/** The design tokens are a global stylesheet the app build loads, never a standalone mount —
+ * injected so the kit badges' tone colours resolve to real colours. */
+async function loadDesignTokens(): Promise<void> {
+  const css = await commands.readFile('projects/fleet/src/lib/core/design/tokens.css');
+  const styleEl = document.createElement('style');
+  styleEl.textContent = css;
+  document.head.appendChild(styleEl);
+}
+
+/** The computed colour a design token resolves to, read off a probe element. */
+function tokenColor(token: string): string {
+  const probe = document.createElement('span');
+  probe.style.color = `var(${token})`;
+  document.body.appendChild(probe);
+  const color = getComputedStyle(probe).color;
+  probe.remove();
+  return color;
+}
 
 /**
  * The gardening run dialog's own half of `web:shell-sweep` — the
@@ -119,4 +138,24 @@ describe('GardeningRunDialogView shell sweep (web:shell-sweep, blizzard#399 D6)'
       root.remove();
     }
   });
+
+  for (const width of [390, 1024]) {
+    it(`renders the previously-swept marker as a cyan kit label inside its option at ${width}px`, async () => {
+      await loadDesignTokens();
+      const { root } = await mount(width);
+      try {
+        const host = root.querySelector<HTMLElement>('[data-testid="run-scope-swept-badge"]')!;
+        expect(host.tagName.toLowerCase()).toBe('fleet-kit-badge');
+        const badge = host.querySelector<HTMLElement>('.badge')!;
+        expect(badge.textContent?.trim()).toBe('previously swept');
+        expect(getComputedStyle(badge).color).toBe(tokenColor('--cyan'));
+        expect(getComputedStyle(badge).textTransform).toBe('uppercase');
+        const option = host.closest<HTMLElement>('label')!;
+        expect(option.textContent).toContain('web');
+        expect(badge.getBoundingClientRect().right).toBeLessThanOrEqual(option.getBoundingClientRect().right + 1);
+      } finally {
+        root.remove();
+      }
+    });
+  }
 });

@@ -1,9 +1,28 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { page } from 'vitest/browser';
+import { commands, page } from 'vitest/browser';
 
 import type { TranscriptSegmentIndexEntry, TransitionView } from '../api/hub';
 import { ChunkTranscriptsTab } from './chunk-transcripts-tab';
+
+/** The design tokens are a global stylesheet the app build loads, never a standalone mount —
+ * injected so the kit badges' tone colours resolve to real colours. */
+async function loadDesignTokens(): Promise<void> {
+  const css = await commands.readFile('projects/fleet/src/lib/core/design/tokens.css');
+  const styleEl = document.createElement('style');
+  styleEl.textContent = css;
+  document.head.appendChild(styleEl);
+}
+
+/** The computed colour a design token resolves to, read off a probe element. */
+function tokenColor(token: string): string {
+  const probe = document.createElement('span');
+  probe.style.color = `var(${token})`;
+  document.body.appendChild(probe);
+  const color = getComputedStyle(probe).color;
+  probe.remove();
+  return color;
+}
 
 /**
  * The transcript segment list's harness-provenance badges, the tooled
@@ -122,5 +141,52 @@ describe('chunk transcripts harness-provenance layout shell sweep (web:shell-swe
     }
 
     expect(pageErrors, `page errors fired during the sweep: ${pageErrors.join('; ')}`).toEqual([]);
+  });
+
+  it('renders the open and truncated segment tags as kit pills in their tone colours at ~390px', async () => {
+    await loadDesignTokens();
+    await TestBed.configureTestingModule({
+      imports: [ChunkTranscriptsTab],
+      providers: [provideZonelessChangeDetection()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(ChunkTranscriptsTab);
+    fixture.componentRef.setInput('history', HISTORY);
+    fixture.componentRef.setInput('segments', [
+      segment({ segment_id: 'sg_open', spawn_generation: 1, harness_id: 'claude_code', final: false, truncated: true }),
+    ]);
+    fixture.componentRef.setInput('indexState', 'ready');
+    fixture.componentRef.setInput('segmentState', 'ready');
+    fixture.componentRef.setInput('segmentId', 'sg_open');
+    fixture.componentRef.setInput('segmentData', { segment_id: 'sg_open', final: false, truncated: true, turns: [] });
+    await fixture.whenStable();
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    await fixture.whenStable();
+
+    try {
+      await page.viewport(390, 800);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+
+      const item = root.querySelector<HTMLElement>('[data-testid="transcript-segment-item"][data-segment-id="sg_open"]')!;
+      const pills = new Map(
+        [...item.querySelectorAll<HTMLElement>('fleet-kit-badge .badge')].map((b) => [b.textContent?.trim(), b] as const),
+      );
+      const open = pills.get('open')!;
+      const truncated = pills.get('truncated')!;
+      const harness = pills.get('claude code')!;
+      expect(getComputedStyle(open).color).toBe(tokenColor('--label-dim'));
+      expect(getComputedStyle(open).borderTopColor).toBe(tokenColor('--label-dim'));
+      expect(getComputedStyle(truncated).color).toBe(tokenColor('--amber'));
+      expect(getComputedStyle(truncated).borderTopColor).toBe(tokenColor('--amber'));
+      for (const pill of [open, truncated]) {
+        expect(getComputedStyle(pill).borderTopStyle).toBe('solid');
+        expect(getComputedStyle(pill).fontSize).toBe(getComputedStyle(harness).fontSize);
+        expect(getComputedStyle(pill).textTransform).toBe('uppercase');
+      }
+      const tab = root.querySelector<HTMLElement>('[data-testid="chunk-transcripts-tab"]')!;
+      expect(tab.scrollWidth, 'tab overflows horizontally at 390px').toBeLessThanOrEqual(tab.clientWidth);
+    } finally {
+      root.remove();
+    }
   });
 });

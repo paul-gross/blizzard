@@ -220,6 +220,10 @@
  *     session declaration table's six columns (the Harnesses column sitting between
  *     Model and Effort): all six genuinely sit side by side with no column overlap
  *     or table overflow, at 800px, graph detail's own width.
+ *   - projects/hub/src/app/graphs/graph-detail-header.shell-sweep.spec.ts — the
+ *     graph detail header's lifecycle badge, for a retired and an enabled graph: a
+ *     text-variant kit badge whose computed colour is the lifecycle tone's red/cyan,
+ *     right-aligned in the panel's header bar ahead of the retire/re-enable control.
  *   - projects/hub/src/app/runners/runners-view.shell-sweep.spec.ts — the hub's mobile
  *     Fleet screen (the bottom-nav Fleet tab): each runner card genuinely stacks below
  *     the last with no horizontal overflow at 390/320px, and a card carrying claims, a
@@ -233,6 +237,9 @@
  *   - projects/fleet/src/lib/transcripts/chunk-transcripts-provenance.shell-sweep.spec.ts —
  *     two transcript segments recording distinct harnesses (blizzard#441) render two
  *     genuinely distinct provenance badges with no horizontal overflow at 390px.
+ *   - projects/fleet/src/lib/shell/mobile-chrome/mobile-tab-bar.shell-sweep.spec.ts —
+ *     the shared mobile bottom tab bar's Asks count renders as the kit's amber count
+ *     chip, inside its tab and the bar, at 390px and 320px.
  *   - projects/fleet/src/lib/chunk/chunk-detail/chunk-timeline-provenance.shell-sweep.spec.ts —
  *     two node-history steps recording distinct harnesses (blizzard#441) render two
  *     genuinely distinct provenance badges beside their usage figures with no horizontal
@@ -294,9 +301,11 @@ const SWEEPS = [
   { project: 'fleet', spec: 'projects/fleet/src/lib/chunk/chunk-detail/chunk-artifact-structured.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/graphs/graph-explorer-list.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/graphs/graph-session-table.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/graphs/graph-detail-header.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/runners/runners-view.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-master-detail.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/transcripts/chunk-transcripts-provenance.shell-sweep.spec.ts' },
+  { project: 'fleet', spec: 'projects/fleet/src/lib/shell/mobile-chrome/mobile-tab-bar.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/chunk/chunk-detail/chunk-timeline-provenance.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/chunk/chunk-detail/chunk-timeline-forensics.shell-sweep.spec.ts' },
   { project: 'runner', spec: 'projects/runner/src/app/board/chunk-dock/chunk-detail-view-provenance.shell-sweep.spec.ts' },

@@ -87,18 +87,6 @@
   font-size: var(--fs-label);
   letter-spacing: 0.14em;
 }
-.fleet-nums .fn.ready {
-  color: var(--cyan);
-}
-.fleet-nums .fn.running {
-  color: var(--amber);
-}
-.fleet-nums .fn.waiting {
-  color: var(--amber-hi);
-}
-.fleet-nums .fn.needs {
-  color: var(--red);
-}
 /* Hub unreachable: dim the strip and banner it as last-known — the mock's
    degraded state. The rest of the panel is hub-free, so it stays lit. */
 .fleet-strip.stale {

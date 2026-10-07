@@ -14,7 +14,7 @@
         >
           <span class="sc-slug">{{ row.slug }}</span>
           @if (row.retired) {
-            <span class="sc-retired">retired</span>
+            <fleet-kit-badge class="sc-flag" [tone]="lifecycleTone(true)">retired</fleet-kit-badge>
           }
         </fleet-kit-select-row>
       </li>

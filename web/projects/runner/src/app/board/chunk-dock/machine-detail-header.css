@@ -66,23 +66,6 @@ a.iss:focus-visible {
   text-transform: uppercase;
   color: var(--label);
 }
-.st[data-tone='running'] {
-  color: var(--amber);
-}
-.st[data-tone='stale'],
-.st[data-tone='needs'] {
-  color: var(--red);
-}
-.st[data-tone='waiting'],
-.st[data-tone='takeover'] {
-  color: var(--amber-hi);
-}
-.st[data-tone='spawning'] {
-  color: var(--cyan);
-}
-.st[data-tone='done'] {
-  color: var(--green);
-}
 .d-actions {
   flex: none;
   display: flex;

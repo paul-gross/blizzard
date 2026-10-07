@@ -38,9 +38,9 @@
     <div class="step" data-testid="transcript-step">
       <div class="step-head">
         {{ stepLabel(step) }} @if (step.current) {
-        <span class="tag">in progress</span>
+        <fleet-kit-badge variant="pill" tone="idle">in progress</fleet-kit-badge>
         } @if (!step.matched) {
-        <span class="tag warn">unmatched</span>
+        <fleet-kit-badge variant="pill" tone="running">unmatched</fleet-kit-badge>
         }
       </div>
       @if (step.segments.length === 0) {
@@ -73,9 +73,9 @@
               {{ harnessName(seg.harness_id) }}
             </fleet-kit-badge>
             } @if (seg.truncated) {
-            <span class="tag warn">truncated</span>
+            <fleet-kit-badge variant="pill" tone="running">truncated</fleet-kit-badge>
             } @if (!seg.final) {
-            <span class="tag">open</span>
+            <fleet-kit-badge variant="pill" tone="idle">open</fleet-kit-badge>
             }
           </button>
         </li>

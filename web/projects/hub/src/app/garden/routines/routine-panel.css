@@ -32,11 +32,6 @@ fleet-kit-panel {
 }
 .rp-state {
   margin-left: 8px;
-  color: var(--label);
-  font-size: var(--fs-sm);
-}
-.rp-state--retired {
-  color: var(--red);
 }
 .rp-lifecycle-actions {
   display: flex;

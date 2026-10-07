@@ -10,7 +10,7 @@
       >
         {{ item.label }}
         @if (item.badge) {
-          <span class="badge" [attr.data-testid]="item.badgeTestid ?? null">{{ item.badge }}</span>
+          <fleet-kit-count-badge class="count" [count]="item.badge" [testid]="item.badgeTestid ?? null" />
         }
       </a>
     } @else {
@@ -24,7 +24,7 @@
       >
         {{ item.label }}
         @if (item.badge) {
-          <span class="badge" [attr.data-testid]="item.badgeTestid ?? null">{{ item.badge }}</span>
+          <fleet-kit-count-badge class="count" [count]="item.badge" [testid]="item.badgeTestid ?? null" />
         }
       </button>
     }

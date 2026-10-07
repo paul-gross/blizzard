@@ -43,6 +43,18 @@ describe('GraphDetailHeader', () => {
     expect(el.querySelector('[data-testid="graph-detail-lifecycle-badge"]')?.textContent).toContain('retired');
   });
 
+  it('renders the lifecycle as a text kit badge in the lifecycle tone — cyan enabled, red retired', async () => {
+    const enabled = (await mount({ retired: false })).nativeElement as HTMLElement;
+    const host = enabled.querySelector('[data-testid="graph-detail-lifecycle-badge"]');
+    expect(host?.tagName.toLowerCase()).toBe('fleet-kit-badge');
+    expect(host?.querySelector('.badge')?.getAttribute('style')).toContain('var(--cyan)');
+    expect(host?.querySelector('.badge')?.classList.contains('pill')).toBe(false);
+
+    TestBed.resetTestingModule();
+    const retired = (await mount({ retired: true })).nativeElement as HTMLElement;
+    expect(retired.querySelector('[data-testid="graph-detail-lifecycle-badge"] .badge')?.getAttribute('style')).toContain('var(--red)');
+  });
+
   it('renders a Retire button for a non-retired graph', async () => {
     const fixture = await mount({ retired: false });
     const el = fixture.nativeElement as HTMLElement;

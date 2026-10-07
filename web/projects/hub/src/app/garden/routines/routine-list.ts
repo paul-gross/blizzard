@@ -1,6 +1,8 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import { compactRef, KitAsyncState, type KitAsyncStateValue, KitSelectRow } from 'fleet';
+import { compactRef, KitAsyncState, type KitAsyncStateValue, KitBadge, KitSelectRow } from 'fleet';
+
+import { lifecycleTone } from '../../core/lifecycle-tone';
 
 /** One row of the routine list — just enough to pick a routine. Selection keys on
  * `name` (unique per routine), not `routineId`.
@@ -24,7 +26,7 @@ export interface RoutineListRowVm {
 @Component({
   selector: 'app-routine-list',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitSelectRow],
+  imports: [KitAsyncState, KitBadge, KitSelectRow],
   templateUrl: './routine-list.html',
   styleUrl: './routine-list.css',
 })
@@ -38,6 +40,9 @@ export class FleetRoutineList {
   readonly routinePick = output<string>();
 
   protected readonly compactRef = compactRef;
+
+  /** The lifecycle badge's tone, from the hub's one lifecycle owner. */
+  protected readonly lifecycleTone = lifecycleTone;
 
   protected pick(name: string): void {
     this.routinePick.emit(name);

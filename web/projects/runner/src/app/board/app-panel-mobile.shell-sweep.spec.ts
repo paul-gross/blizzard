@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { runnerClient, type runnerApi } from 'fleet';
 import { stubRequestClient } from 'fleet/testing';
-import { page } from 'vitest/browser';
+import { commands, page } from 'vitest/browser';
 
 import { LocalPanelMobile } from './app-panel-mobile';
 import type { MachineChunkRow } from './app-panel.model';
@@ -123,6 +123,25 @@ async function render(asks: unknown = { items: [] }) {
   return { fixture, stub };
 }
 
+/** The design tokens are a global stylesheet the app build loads, never a standalone mount —
+ * injected so the tone colours the agent-row and chunk-card badges bind resolve. */
+async function loadDesignTokens(): Promise<void> {
+  const css = await commands.readFile('projects/fleet/src/lib/core/design/tokens.css');
+  const styleEl = document.createElement('style');
+  styleEl.textContent = css;
+  document.head.appendChild(styleEl);
+}
+
+/** The computed colour a design token resolves to, read off a probe element. */
+function tokenColor(token: string): string {
+  const probe = document.createElement('span');
+  probe.style.color = `var(${token})`;
+  document.body.appendChild(probe);
+  const color = getComputedStyle(probe).color;
+  probe.remove();
+  return color;
+}
+
 // 390 (a typical phone) and 320 (the narrowest common phone) — the widths this
 // shell is actually reached at, beneath the persistent mobile bottom tab bar.
 const WIDTHS = [390, 320];
@@ -210,4 +229,26 @@ describe('runner mobile chunk list shell sweep (web:shell-sweep, issue #176)', (
       }
     });
   }
+
+  it('reads a running lease amber on its agent row, the same colour as its chunk card status, at width 390', async () => {
+    await loadDesignTokens();
+    const { fixture, stub } = await render();
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    await fixture.whenStable();
+
+    try {
+      await page.viewport(390, 800);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+
+      const state = root.querySelector<HTMLElement>('app-agent-row [data-testid="agent-state"] .badge');
+      const chunkStatus = root.querySelector<HTMLElement>('[data-testid="local-chunk-card-status"] .badge');
+      expect(state?.textContent?.trim()).toBe('RUNNING');
+      expect(getComputedStyle(state!).color).toBe(tokenColor('--amber'));
+      expect(getComputedStyle(state!).color).toBe(getComputedStyle(chunkStatus!).color);
+    } finally {
+      root.remove();
+      stub.restore();
+    }
+  });
 });

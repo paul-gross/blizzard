@@ -11,13 +11,9 @@
       <div class="rp-body">
         <header class="rp-record" data-testid="gardening-routine-record">
           <h3>{{ panel.record.name }}</h3>
-          <span
-            class="rp-state"
-            [class.rp-state--retired]="panel.renderedRetired"
-            data-testid="gardening-routine-panel-state"
-          >
-            {{ panel.renderedRetired ? 'retired' : 'enabled' }}
-          </span>
+          <fleet-kit-badge class="rp-state" data-testid="gardening-routine-panel-state" [tone]="lifecycleTone(panel.renderedRetired)">{{
+            panel.renderedRetired ? 'retired' : 'enabled'
+          }}</fleet-kit-badge>
           <fleet-kit-fact-list
             class="rp-record-facts"
             [rows]="recordRows(panel.record)"

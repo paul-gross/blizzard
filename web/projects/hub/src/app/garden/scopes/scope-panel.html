@@ -9,9 +9,9 @@
     <section class="sp" data-testid="gardening-scope-panel">
       <header class="sp-head">
         <h3>{{ panel.slug }}</h3>
-        <span class="sp-state" [class.sp-state--retired]="panel.renderedRetired" data-testid="gardening-scope-panel-state">
-          {{ panel.renderedRetired ? 'retired' : 'enabled' }}
-        </span>
+        <fleet-kit-badge data-testid="gardening-scope-panel-state" [tone]="lifecycleTone(panel.renderedRetired)">{{
+          panel.renderedRetired ? 'retired' : 'enabled'
+        }}</fleet-kit-badge>
       </header>
 
       @if (canEdit()) {

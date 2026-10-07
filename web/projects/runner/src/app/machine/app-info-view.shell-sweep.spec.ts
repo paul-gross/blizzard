@@ -1,7 +1,7 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import type { runnerApi } from 'fleet';
-import { page } from 'vitest/browser';
+import { commands, page } from 'vitest/browser';
 
 import { LocalInfoView } from './app-info-view';
 
@@ -13,6 +13,25 @@ import { LocalInfoView } from './app-info-view';
  * desktop hub card's value column and at ~390px. Excluded from the default `ng test` run; run it via
  * `npm run shell-sweep`.
  */
+/** The design tokens are a global stylesheet the app build loads, never a standalone mount —
+ * injected here so the fleet counts' `toneColor` bindings resolve to real colours. */
+async function loadDesignTokens(): Promise<void> {
+  const css = await commands.readFile('projects/fleet/src/lib/core/design/tokens.css');
+  const styleEl = document.createElement('style');
+  styleEl.textContent = css;
+  document.head.appendChild(styleEl);
+}
+
+/** The computed colour a design token resolves to, read off a probe element. */
+function tokenColor(token: string): string {
+  const probe = document.createElement('span');
+  probe.style.color = `var(${token})`;
+  document.body.appendChild(probe);
+  const color = getComputedStyle(probe).color;
+  probe.remove();
+  return color;
+}
+
 const STATUS: runnerApi.RunnerStatusView = {
   runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYNABF3',
   runner_name: 'runner-local',
@@ -142,4 +161,34 @@ describe('runner info view gates row shell sweep (web:shell-sweep)', () => {
       }
     });
   }
+
+  it('colours each fleet count by its chunk-status tone at ~390px', async () => {
+    await loadDesignTokens();
+    await TestBed.configureTestingModule({
+      imports: [LocalInfoView],
+      providers: [provideZonelessChangeDetection()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(LocalInfoView);
+    fixture.componentRef.setInput('view', STATUS);
+    fixture.componentRef.setInput('fleet', { ready: 4, running: 2, waiting: 1, needs: 1 });
+    fixture.componentRef.setInput('lastFlushLabel', '-30s');
+    fixture.componentRef.setInput('lastTickLabel', '-15s');
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    await fixture.whenStable();
+
+    try {
+      await page.viewport(390, 800);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+
+      const expected = { ready: '--label-dim', running: '--amber', waiting: '--amber-hi', needs: '--red' } as const;
+      for (const [bucket, token] of Object.entries(expected)) {
+        const count = root.querySelector<HTMLElement>(`[data-testid="fleet-${bucket}"]`)!;
+        expect(getComputedStyle(count).color, `${bucket} count colour`).toBe(tokenColor(token));
+      }
+      expect(tokenColor('--amber')).not.toBe(tokenColor('--amber-hi'));
+    } finally {
+      root.remove();
+    }
+  });
 });

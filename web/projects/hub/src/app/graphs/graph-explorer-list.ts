@@ -2,6 +2,8 @@ import { ChangeDetectionStrategy, Component, computed, input, output, signal } f
 
 import { type GraphSummaryView, compactRef, KitBadge, KitChip, KitSelectRow, type Tone, FleetWhen } from 'fleet';
 
+import { lifecycleTone } from '../core/lifecycle-tone';
+
 /** One graph name's lineage, grouped client-side from the flat `GraphSummaryView[]`
  * the hub serves in `created_at DESC` order. */
 interface GraphGroup {
@@ -26,18 +28,15 @@ interface ExpansionOverride {
 type VersionLabel = 'effective' | 'superseded' | 'retired';
 
 /** A version's lifecycle label → badge tone — borrows the shared `Tone` ladder for
- * its color rather than inventing a graph-lifecycle-specific one
- * (`chunk-issue-list.ts`'s own `PRIORITY_TONE`/`events-view.ts`'s `SEVERITY_TONE`
- * shape). The mapping is chosen for color, not for `Tone`'s own documented
- * meanings: `effective` reuses
- * `spawning`'s cyan (`Tone`'s only cyan), `superseded` reuses `idle`'s dim — a
- * reasonable double meaning, since a superseded version really is this lineage's
- * spent, inert entry — and `retired` reuses `stale`'s red, reading as the alarm a
- * deliberately disabled version should. */
+ * its color rather than inventing a graph-lifecycle-specific one. `effective` and
+ * `retired` are the hub's enabled/retired lifecycle, read from its one owner
+ * ({@link lifecycleTone}); `superseded` reuses `idle`'s dim — chosen for colour,
+ * a reasonable double meaning, since a superseded version really is this
+ * lineage's spent, inert entry. */
 const LIFECYCLE_TONE: Readonly<Record<VersionLabel, Tone>> = {
-  effective: 'spawning',
+  effective: lifecycleTone(false),
   superseded: 'idle',
-  retired: 'stale',
+  retired: lifecycleTone(true),
 };
 
 /**

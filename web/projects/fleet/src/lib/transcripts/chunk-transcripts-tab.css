@@ -37,18 +37,6 @@
   text-transform: uppercase;
   margin-bottom: 4px;
 }
-.tag {
-  font-size: var(--fs-label);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--label-dim);
-  border: 1px solid var(--line);
-  padding: 0 4px;
-}
-.tag.warn {
-  color: var(--amber);
-  border-color: var(--amber-dim);
-}
 .seg-list {
   list-style: none;
   margin: 0;
