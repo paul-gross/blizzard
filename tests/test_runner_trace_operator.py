@@ -354,7 +354,7 @@ def _reader_with_plan(runner: _Runner, plan: HarnessTelemetryPlan | None) -> Lea
         clock=runner.clock,
         receiver=ReceiverCounter(),
         harness_telemetry=plan,
-        claude_trace_receiver=spans,
+        harness_span_receiver=spans,
         metric_receiver=points,
         log_receiver=ReceiverCounter(),
     )

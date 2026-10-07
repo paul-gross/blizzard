@@ -40,7 +40,7 @@ async def receive_traces(request: Request) -> Response:
     """Receive one OTLP trace export. 403 for a missing, unknown or closed-lease token; 404 while platform
     tracing is off or before the runner's first registration; 415 for any encoding but identity and any body
     but OTLP JSON or protobuf; 413 past the size cap; 400 for a malformed body; 429 when the spans kept exceed
-    the lease's span rate. Otherwise 200, naming the spans refused. Under ``harness_telemetry`` Claude Code's
+    the lease's span rate. Otherwise 200, naming the spans refused. Under ``harness_telemetry`` each binding's
     tracing scope is kept too."""
     wiring = RunnerWiring.of(request)
     lease = await run_in_threadpool(_lease_for_token, wiring, presented_lease_token(request))
@@ -55,8 +55,8 @@ async def receive_traces(request: Request) -> Response:
 @router.post("/v1/metrics")
 async def receive_metrics(request: Request) -> Response:
     """Receive one OTLP metrics export, refused as :func:`receive_traces` refuses — except it is 404 unless
-    platform tracing and ``harness_telemetry`` are both on, and the rate counts data points. Only Claude Code's
-    metrics scope is kept, and a summary point is refused. Otherwise 200, naming the data points refused."""
+    platform tracing and ``harness_telemetry`` are both on, and the rate counts data points. Only the bindings'
+    metrics scopes are kept, and a summary point is refused. Otherwise 200, naming the data points refused."""
     wiring = RunnerWiring.of(request)
     lease = await run_in_threadpool(_lease_for_token, wiring, presented_lease_token(request))
     receiver = wiring.telemetry_receiver()
@@ -70,7 +70,7 @@ async def receive_metrics(request: Request) -> Response:
 @router.post("/v1/logs")
 async def receive_logs(request: Request) -> Response:
     """Receive one OTLP logs export, refused as :func:`receive_metrics` refuses, the rate counting log records.
-    Only Claude Code's events scope is kept. Otherwise 200, naming the log records refused."""
+    Only the bindings' logs scopes are kept. Otherwise 200, naming the log records refused."""
     wiring = RunnerWiring.of(request)
     lease = await run_in_threadpool(_lease_for_token, wiring, presented_lease_token(request))
     receiver = wiring.telemetry_receiver()

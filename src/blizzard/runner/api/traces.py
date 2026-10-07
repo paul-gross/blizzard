@@ -27,7 +27,7 @@ router = APIRouter(prefix="/api/traces", tags=["traces"])
 @router.get("/status", response_model=RunnerTraceStatusResponse)
 def trace_status(request: Request) -> RunnerTraceStatusResponse:
     """Tracing on or off, the redacted endpoint, the cursor and its lag, the last export and the last error,
-    and Claude Code's harness-telemetry plan with each signal's receiver counts."""
+    and the bindings' combined harness-telemetry plan with each signal's receiver counts."""
     read = RunnerWiring.of(request).trace_status().read()
     harness = read.harness_telemetry
     return RunnerTraceStatusResponse(

@@ -76,6 +76,7 @@ from blizzard.runner.composition import RunnerProcess, build_runner_process
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.provider import IWorkspaceProvider
 from blizzard.runner.events.broker import EventBroker
+from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryNames
 from blizzard.runner.harness.health_cache import HarnessHealthCache, IReadHarnessHealth
 from blizzard.runner.harness.registry import HarnessRegistry, IHarnessRegistry
 from blizzard.runner.harness.workspace_prompts import WorkspacePromptService
@@ -199,7 +200,8 @@ def create_app(
     trace_replay: LeaseTraceReplay | None = None,
     span_limiter: SpanRateLimiter | None = None,
     receiver_counter: ReceiverCounter | None = None,
-    claude_trace_counter: ReceiverCounter | None = None,
+    harness_span_counter: ReceiverCounter | None = None,
+    harness_telemetry_names: tuple[HarnessTelemetryNames, ...] = (),
     metric_bounds: ReceiverBounds | None = None,
     log_bounds: ReceiverBounds | None = None,
     received_telemetry: IReceivedTelemetryExport | None = None,
@@ -277,7 +279,8 @@ def create_app(
     # the host passes the graph's own.
     app.state.span_limiter = span_limiter or SpanRateLimiter(clock)
     app.state.receiver_counter = receiver_counter or ReceiverCounter()
-    app.state.claude_trace_counter = claude_trace_counter or ReceiverCounter()
+    app.state.harness_span_counter = harness_span_counter or ReceiverCounter()
+    app.state.harness_telemetry_names = harness_telemetry_names
     app.state.metric_bounds = metric_bounds or ReceiverBounds.fresh(clock)
     app.state.log_bounds = log_bounds or ReceiverBounds.fresh(clock)
     app.state.received_telemetry = received_telemetry
@@ -535,14 +538,15 @@ def _wire_hosted_app(
             receiver=graph.receiver_counter,
             replay_max_window=config.tracing.replay_max_window,
             harness_telemetry=graph.harness_telemetry,
-            claude_trace_receiver=graph.claude_trace_counter,
+            harness_span_receiver=graph.harness_span_counter,
             metric_receiver=graph.metric_bounds.counter,
             log_receiver=graph.log_bounds.counter,
         ),
         trace_replay=graph.trace_replay,
         span_limiter=graph.span_limiter,
         receiver_counter=graph.receiver_counter,
-        claude_trace_counter=graph.claude_trace_counter,
+        harness_span_counter=graph.harness_span_counter,
+        harness_telemetry_names=graph.harness_telemetry_names,
         metric_bounds=graph.metric_bounds,
         log_bounds=graph.log_bounds,
         received_telemetry=graph.received_telemetry,

@@ -3,7 +3,7 @@
 Contract: ``docs/deployment/tracing.md`` §Worker spans. A span is kept only inside the presenting lease's work trace
 and the allowed scope, rebuilt with allowlisted attributes plus who sent it; the work root's, a step root's and its
 queue and claim spans' ids, and a parent of the work root, are refused. A data point or log record is kept only
-under its signal's one scope, with its sender's attributes plus who sent it. Pure."""
+under one of its signal's scopes, with its sender's attributes plus who sent it. Pure."""
 
 from __future__ import annotations
 
@@ -14,11 +14,7 @@ from blizzard.foundation.platform_tracing.attributes import CALLER, CHUNK_ID, CL
 from blizzard.foundation.platform_tracing.received import ReceivedDataPoint, ReceivedLogRecord, ReceivedSpan, Scalar
 from blizzard.foundation.roles import adapter_model, domain_model
 from blizzard.foundation.trace_ids import DerivedContext, SpanRole, StepKey, chunk_span_id, chunk_trace_id, step_root
-from blizzard.runner.harness.harness_telemetry_plan import (
-    CLAUDE_CODE_SCOPES,
-    CLAUDE_CODE_SERVICE_NAME,
-    CLAUDE_CODE_TRACING_SCOPE,
-)
+from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryNames
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.leases import Lease
 from blizzard.runner.tracing.attributes import RUNNER_ID, RUNNER_NAME
@@ -121,9 +117,9 @@ def _rebuilt(span: ReceivedSpan, lease: Lease, allowlist: Allowlist, runner: Run
 
 
 def admit_data_points(
-    points: list[ReceivedDataPoint], lease: Lease, scope: str, *, runner: RunnerIdentity
+    points: list[ReceivedDataPoint], lease: Lease, scopes: frozenset[str], *, runner: RunnerIdentity
 ) -> Admission[ReceivedDataPoint]:
-    """The data points under ``scope``, each rebuilt: its sender's attributes capped, then the lease's stamps —
+    """The data points under any of ``scopes``, each rebuilt: its sender's attributes capped, then the lease's stamps —
     chunk, lease, caller, and the runner's id and name — replacing any the sender set."""
     kept = [
         replace(
@@ -135,21 +131,21 @@ def admit_data_points(
             attributes=_stamped_attributes(point.attributes, lease, runner),
         )
         for point in points
-        if point.scope_name == scope
+        if point.scope_name in scopes
     ]
     return Admission(kept=kept, dropped=len(points) - len(kept))
 
 
 def admit_log_records(
-    records: list[ReceivedLogRecord], lease: Lease, scope: str, *, runner: RunnerIdentity
+    records: list[ReceivedLogRecord], lease: Lease, scopes: frozenset[str], *, runner: RunnerIdentity
 ) -> Admission[ReceivedLogRecord]:
-    """The log records under ``scope``, each rebuilt as :func:`admit_data_points` does, with its body capped and
+    """The log records under any of ``scopes``, each rebuilt as :func:`admit_data_points` does, with its body capped and
     its trace context kept only when it names the lease's work trace."""
     expected = lease_trace_id(lease)
     kept = [
         _log_rebuilt(record, lease, runner, in_trace=record.trace_id == expected)
         for record in records
-        if record.scope_name == scope
+        if record.scope_name in scopes
     ]
     return Admission(kept=kept, dropped=len(records) - len(kept))
 
@@ -208,19 +204,19 @@ PROGRAM_SERVICE_NAME = "blizzard-worker-program"
 
 _CLI_ALLOWLIST = Allowlist(scope=CLI_SCOPE, attributes=CLI_ATTRIBUTES)
 _PROGRAM_ALLOWLIST = Allowlist(scope=None, attributes=None)
-_CLAUDE_CODE_ALLOWLIST = Allowlist(scope=CLAUDE_CODE_TRACING_SCOPE, attributes=None, stamp_runner=True)
+_HARNESS_ALLOWLIST = Allowlist(scope=None, attributes=None, stamp_runner=True)
 
 
 @adapter_model
 @dataclass(frozen=True)
 class SpanRouting:
-    """One trace export, routed. ``claude`` is Claude Code's own tracing scope (kept only under
+    """One trace export, routed. ``harness`` is the bindings' own tracing scopes (kept only under
     ``harness_telemetry``); ``cli`` the worker CLI's kept spans, forwarded under :data:`CLI_SERVICE_NAME`;
     ``others`` the other programs' kept spans (only under ``worker_programs``). ``rest_received`` counts
-    spans outside Claude Code's scope; ``accepted``/``dropped`` the non-Claude spans kept and refused."""
+    spans outside the bindings' scopes; ``accepted``/``dropped`` the other spans kept and refused."""
 
-    claude: Admission[ReceivedSpan]
-    claude_received: int
+    harness: Admission[ReceivedSpan]
+    harness_received: int
     cli: list[ReceivedSpan]
     others: list[ReceivedSpan]
     rest_received: int
@@ -230,32 +226,39 @@ class SpanRouting:
     @property
     def kept(self) -> int:
         """Every span kept, both families — what the lease's span rate is charged."""
-        return len(self.claude.kept) + self.accepted
+        return len(self.harness.kept) + self.accepted
 
     @property
     def refused(self) -> int:
         """Every span refused, both families — what the export response names."""
-        return self.claude.dropped + self.dropped
+        return self.harness.dropped + self.dropped
 
 
 def route_spans(
-    spans: list[ReceivedSpan], lease: Lease, *, runner: RunnerIdentity, programs: bool, harness: bool
+    spans: list[ReceivedSpan],
+    lease: Lease,
+    *,
+    runner: RunnerIdentity,
+    programs: bool,
+    harness: bool,
+    names: tuple[HarnessTelemetryNames, ...],
 ) -> SpanRouting:
-    """Route each span to the one allowlist it is admitted against, exactly once: Claude Code's
-    tracing scope under ``harness``; the CLI's scope against its declared attributes; everything
+    """Route each span to the one allowlist it is admitted against, exactly once: any binding's
+    tracing scope in ``names`` under ``harness``; the CLI's scope against its declared attributes; everything
     else against the wildcard under ``programs``, or the CLI allowlist (refusing it) otherwise —
     so a CLI span's declared attributes are never cut by the wildcard's cap first."""
-    claude = [span for span in spans if harness and span.scope_name == CLAUDE_CODE_TRACING_SCOPE]
-    rest = [span for span in spans if not (harness and span.scope_name == CLAUDE_CODE_TRACING_SCOPE)]
-    claude_admission = admit(claude, lease, _CLAUDE_CODE_ALLOWLIST, runner=runner)
+    tracing_scopes = {n.traces_scope for n in names} if harness else set()
+    own = [span for span in spans if span.scope_name in tracing_scopes]
+    rest = [span for span in spans if span.scope_name not in tracing_scopes]
+    own_admission = admit(own, lease, _HARNESS_ALLOWLIST, runner=runner)
     cli_spans = [span for span in rest if programs and span.scope_name == CLI_SCOPE]
     program_spans = [span for span in rest if not (programs and span.scope_name == CLI_SCOPE)]
     admission = admit(program_spans, lease, _PROGRAM_ALLOWLIST if programs else _CLI_ALLOWLIST, runner=runner)
     cli_admission = admit(cli_spans, lease, _CLI_ALLOWLIST, runner=runner)
     cli = [*cli_admission.kept, *(span for span in admission.kept if not programs and span.scope_name == CLI_SCOPE)]
     return SpanRouting(
-        claude=claude_admission,
-        claude_received=len(claude),
+        harness=own_admission,
+        harness_received=len(own),
         cli=cli,
         others=[span for span in admission.kept if programs],
         rest_received=len(rest),
@@ -264,15 +267,17 @@ def route_spans(
     )
 
 
-def service_name_for(scope_name: str, mapped: Mapping[str, str]) -> str:
+def service_name_for(scope_name: str, mapped: Mapping[str, str], names: tuple[HarnessTelemetryNames, ...]) -> str:
     """The ``service.name`` a non-CLI span is forwarded under: the operator's mapping for its
-    scope, else Claude Code's for its own scopes, else the generic worker program's."""
-    default = CLAUDE_CODE_SERVICE_NAME if scope_name in CLAUDE_CODE_SCOPES else PROGRAM_SERVICE_NAME
+    scope, else the default of the binding whose scope it is, else the generic worker program's."""
+    default = next((n.service_name for n in names if scope_name in n.scopes), PROGRAM_SERVICE_NAME)
     return mapped.get(scope_name, default)
 
 
-def spans_by_service_name(spans: list[ReceivedSpan], mapped: Mapping[str, str]) -> dict[str, list[ReceivedSpan]]:
+def spans_by_service_name(
+    spans: list[ReceivedSpan], mapped: Mapping[str, str], names: tuple[HarnessTelemetryNames, ...]
+) -> dict[str, list[ReceivedSpan]]:
     groups: dict[str, list[ReceivedSpan]] = {}
     for span in spans:
-        groups.setdefault(service_name_for(span.scope_name, mapped), []).append(span)
+        groups.setdefault(service_name_for(span.scope_name, mapped, names), []).append(span)
     return groups

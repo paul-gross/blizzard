@@ -35,16 +35,16 @@ from blizzard.runner.environments.provider import IWorkspaceProvider
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.bundle import BundleSnapshot
 from blizzard.runner.harness.capability_snapshot import default_harness_id
-from blizzard.runner.harness.claude_code.telemetry_plan import plan_harness_telemetry
-from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryPlan
+from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryNames, HarnessTelemetryPlan
 from blizzard.runner.harness.health_cache import HarnessHealthCache
 from blizzard.runner.harness.internal.committed_corpus import CommittedCorpus
 from blizzard.runner.harness.registry import HarnessRegistry
 from blizzard.runner.harness.wiring import (
     build_production_harness_health_probes,
     build_production_harness_registry,
-    claude_code_section,
+    combined_telemetry_plan,
     configured_tiers,
+    declared_telemetry_names,
 )
 from blizzard.runner.hub.identity import ICurrentRunnerIdentity, RunnerIdentityHolder
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
@@ -126,8 +126,8 @@ class RunnerProcess:
     #: The span receiver's per-lease rate bound and its received/dropped tally, one of each per process.
     span_limiter: SpanRateLimiter
     receiver_counter: ReceiverCounter
-    #: Claude Code's spans alone, counted apart from the shared span tally above.
-    claude_trace_counter: ReceiverCounter
+    #: The harness bindings' spans alone, counted apart from the shared span tally above.
+    harness_span_counter: ReceiverCounter
     #: The metrics and logs receivers' own bound and tally, counted in data points and log records.
     metric_bounds: ReceiverBounds
     log_bounds: ReceiverBounds
@@ -137,8 +137,10 @@ class RunnerProcess:
     platform_tracing: IPlatformTracing = field(default_factory=DisabledPlatformTracing)
     #: Where admitted metrics and logs leave — off unless the host passed a handle.
     received_telemetry: IReceivedTelemetryExport = field(default_factory=DisabledReceivedTelemetryExport)
-    #: What the Claude Code binding does with each of a worker's telemetry signals, derived once at startup.
+    #: What the enabled bindings together do with each of a worker's telemetry signals, derived once at startup.
     harness_telemetry: HarnessTelemetryPlan = field(default_factory=HarnessTelemetryPlan)
+    #: What every declared binding's telemetry arrives under, which the receiver admits and routes by.
+    harness_telemetry_names: tuple[HarnessTelemetryNames, ...] = ()
     #: The credential-renewal pass, ``None`` when no provider binds a renewer; only ``runner host`` drives it.
     credential_renewal: CredentialRenewalPass | None = None
 
@@ -240,15 +242,21 @@ def build_runner_process(
         provider = build_workspace_provider(
             config.workspace_settings, held_ids=stores.environments.held_environment_ids
         )
-        plan = plan_harness_telemetry(
-            claude_code_section(config.harness_sections),
-            worker_env=config.worker_env,
+        runner_environ = os.environ if environ is None else environ
+        telemetry_enabled = config.tracing.harness_telemetry and platform_tracing.enabled
+        plan = combined_telemetry_plan(
+            config.harness_settings,
             bundle=bundle,
-            runner_environ=os.environ if environ is None else environ,
-            enabled=config.tracing.harness_telemetry and platform_tracing.enabled,
+            harness_telemetry_enabled=telemetry_enabled,
+            runner_environ=runner_environ,
         )
         harnesses = build_production_harness_registry(
-            config.harness_settings, executor=executor, process=process, bundle=bundle, harness_telemetry=plan
+            config.harness_settings,
+            executor=executor,
+            process=process,
+            bundle=bundle,
+            harness_telemetry_enabled=telemetry_enabled,
+            runner_environ=runner_environ,
         )
         default_id = default_harness_id(harnesses)
         if default_id is not None:
@@ -294,13 +302,14 @@ def build_runner_process(
             trace_replay=trace_replay,
             span_limiter=SpanRateLimiter(clock),
             receiver_counter=ReceiverCounter(),
-            claude_trace_counter=ReceiverCounter(),
+            harness_span_counter=ReceiverCounter(),
             metric_bounds=ReceiverBounds.fresh(clock),
             log_bounds=ReceiverBounds.fresh(clock),
             identity=identity,
             platform_tracing=platform_tracing,
             received_telemetry=received_telemetry or DisabledReceivedTelemetryExport(),
             harness_telemetry=plan,
+            harness_telemetry_names=declared_telemetry_names(),
             credential_renewal=credential_renewal,
         )
     except BaseException:

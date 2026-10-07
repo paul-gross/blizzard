@@ -93,10 +93,6 @@ class ClaudeCodeSectionKind:
     def table(self) -> str:
         return "claude_code"
 
-    @property
-    def cli_group(self) -> tuple[str, str] | None:
-        return None
-
     def parse(self, document: Mapping[str, Any], *, root: Path, path: Path) -> ClaudeCodeSection:
         table = Table.of(document.get(self.table))
         if "harness_binary" in document and "binary" in table.body:

@@ -12,6 +12,7 @@ from blizzard.runner.harness.adapter import IHarnessHealthProbe
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.bundle import HarnessLayout, HarnessSource
 from blizzard.runner.harness.declaration import SharedHarnessInputs
+from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryNames, HarnessTelemetryPlan
 from blizzard.runner.harness.identity import OPENCODE_HARNESS_ID
 from blizzard.runner.harness.internal.bundle_publisher import published_snapshot
 from blizzard.runner.harness.internal.committed_corpus import CommittedCorpus
@@ -55,6 +56,13 @@ class OpenCodeDeclaration:
     @property
     def bundle_layout(self) -> HarnessLayout:
         return OPENCODE_BUNDLE_LAYOUT
+
+    @property
+    def telemetry_names(self) -> HarnessTelemetryNames | None:
+        return None
+
+    def telemetry_plan(self, section: OpenCodeSection, shared: SharedHarnessInputs) -> HarnessTelemetryPlan:
+        return HarnessTelemetryPlan()
 
     def binding(
         self,

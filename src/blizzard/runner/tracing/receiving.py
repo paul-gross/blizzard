@@ -19,11 +19,7 @@ from blizzard.foundation.platform_tracing.received import (
     ReceivedMetrics,
     ReceivedSpan,
 )
-from blizzard.runner.harness.harness_telemetry_plan import (
-    CLAUDE_CODE_LOGS_SCOPE,
-    CLAUDE_CODE_METRICS_SCOPE,
-    CLAUDE_CODE_SERVICE_NAME,
-)
+from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryNames
 from blizzard.runner.hub.identity import ICurrentRunnerIdentity, RunnerIdentity
 from blizzard.runner.leases import Lease
 from blizzard.runner.tracing.received_export import IReceivedTelemetryExport
@@ -33,6 +29,7 @@ from blizzard.runner.tracing.receiver import (
     admit_data_points,
     admit_log_records,
     route_spans,
+    service_name_for,
     spans_by_service_name,
 )
 from blizzard.runner.tracing.receiver_limits import ReceiverBounds, ReceiverCounter, SpanRateLimiter
@@ -68,7 +65,8 @@ class TelemetryReceiver:
     received_telemetry: IReceivedTelemetryExport
     span_limiter: SpanRateLimiter
     span_counter: ReceiverCounter
-    claude_span_counter: ReceiverCounter
+    harness_span_counter: ReceiverCounter
+    telemetry_names: tuple[HarnessTelemetryNames, ...]
     metric_bounds: ReceiverBounds
     log_bounds: ReceiverBounds
     clock: IClock | None
@@ -95,24 +93,32 @@ class TelemetryReceiver:
         Raises :class:`RateExceeded` — counting every span as dropped — when the kept spans
         exceed the lease's span rate."""
         routing = route_spans(
-            spans, lease, runner=self._runner(), programs=self.worker_programs, harness=self.harness_telemetry
+            spans,
+            lease,
+            runner=self._runner(),
+            programs=self.worker_programs,
+            harness=self.harness_telemetry,
+            names=self.telemetry_names,
         )
         if routing.kept and not self.span_limiter.take(lease.lease_id, routing.kept, now=self._now()):
             self.span_counter.record(accepted=0, dropped=routing.rest_received)
-            self.claude_span_counter.record(accepted=0, dropped=routing.claude_received)
+            self.harness_span_counter.record(accepted=0, dropped=routing.harness_received)
             raise RateExceeded("span rate exceeded")
-        grouped = spans_by_service_name([*routing.claude.kept, *routing.others], self.mapped_services)
+        grouped = spans_by_service_name(
+            [*routing.harness.kept, *routing.others], self.mapped_services, self.telemetry_names
+        )
         for service_name, group in grouped.items():
             self.platform_tracing.forward(group, service_name)
         self.platform_tracing.forward(routing.cli, CLI_SERVICE_NAME)
-        self.claude_span_counter.record(accepted=len(routing.claude.kept), dropped=routing.claude.dropped)
+        self.harness_span_counter.record(accepted=len(routing.harness.kept), dropped=routing.harness.dropped)
         self.span_counter.record(accepted=routing.accepted, dropped=routing.dropped)
         return routing.refused
 
     def receive_metrics(self, lease: Lease, decoded: ReceivedMetrics) -> int:
-        """Keep Claude Code's metrics scope (a summary point is refused), charge, forward, count;
+        """Keep the bindings' metrics scopes (a summary point is refused), charge, forward, count;
         return how many data points it refused."""
-        admitted = admit_data_points(decoded.points, lease, CLAUDE_CODE_METRICS_SCOPE, runner=self._runner())
+        scopes = frozenset(n.metrics_scope for n in self.telemetry_names)
+        admitted = admit_data_points(decoded.points, lease, scopes, runner=self._runner())
         admission = Admission(kept=admitted.kept, dropped=admitted.dropped + decoded.unsupported)
         self._forward(
             self.metric_bounds,
@@ -120,20 +126,21 @@ class TelemetryReceiver:
             admission,
             received=len(decoded.points) + decoded.unsupported,
             forward=self.received_telemetry.forward_metrics,
-            scope=CLAUDE_CODE_METRICS_SCOPE,
+            scope_of=lambda point: point.scope_name,
         )
         return admission.dropped
 
     def receive_logs(self, lease: Lease, records: list[ReceivedLogRecord]) -> int:
-        """Keep Claude Code's events scope, charge, forward, count; return how many log records it refused."""
-        admission = admit_log_records(records, lease, CLAUDE_CODE_LOGS_SCOPE, runner=self._runner())
+        """Keep the bindings' logs scopes, charge, forward, count; return how many log records it refused."""
+        scopes = frozenset(n.logs_scope for n in self.telemetry_names)
+        admission = admit_log_records(records, lease, scopes, runner=self._runner())
         self._forward(
             self.log_bounds,
             lease,
             admission,
             received=len(records),
             forward=self.received_telemetry.forward_logs,
-            scope=CLAUDE_CODE_LOGS_SCOPE,
+            scope_of=lambda record: record.scope_name,
         )
         return admission.dropped
 
@@ -154,10 +161,16 @@ class TelemetryReceiver:
         *,
         received: int,
         forward: Callable[[Sequence[T], str], None],
-        scope: str,
+        scope_of: Callable[[T], str],
     ) -> None:
         if admission.kept and not bounds.limiter.take(lease.lease_id, len(admission.kept), now=self._now()):
             bounds.counter.record(accepted=0, dropped=received)
             raise RateExceeded("rate exceeded")
-        forward(admission.kept, self.mapped_services.get(scope, CLAUDE_CODE_SERVICE_NAME))
+        groups: dict[str, list[T]] = {}
+        for item in admission.kept:
+            groups.setdefault(service_name_for(scope_of(item), self.mapped_services, self.telemetry_names), []).append(
+                item
+            )
+        for service_name, group in groups.items():
+            forward(group, service_name)
         bounds.counter.record(accepted=len(admission.kept), dropped=admission.dropped)

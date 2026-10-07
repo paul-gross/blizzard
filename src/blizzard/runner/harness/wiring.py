@@ -18,7 +18,7 @@ from blizzard.runner.config_table import ConfigError
 from blizzard.runner.harness.adapter import IHarnessHealthProbe
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.bundle import BundleSnapshot, HarnessLayout, HarnessSource
-from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_SECTION, ClaudeCodeSection
+from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_SECTION
 from blizzard.runner.harness.declaration import (
     HarnessSection,
     IHarnessDeclaration,
@@ -26,7 +26,7 @@ from blizzard.runner.harness.declaration import (
     SharedHarnessInputs,
 )
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
-from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryPlan
+from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryNames, HarnessTelemetryPlan
 from blizzard.runner.harness.internal.bundle_publisher import inspect_bundle, publish_bundle, published_snapshot
 from blizzard.runner.harness.opencode.section import OPENCODE_SECTION
 from blizzard.runner.harness.process_launch import ProcessLauncher
@@ -82,13 +82,6 @@ class HarnessSections:
         return iter(self.of(kind.harness_id) for kind in HARNESS_SECTION_KINDS)
 
 
-def claude_code_section(sections: HarnessSections) -> ClaudeCodeSection:
-    """The Claude Code binding's section, as its telemetry plan reads it."""
-    section = sections.of(CLAUDE_CODE_SECTION.harness_id)
-    assert isinstance(section, ClaudeCodeSection)
-    return section
-
-
 @domain_model
 @dataclass(frozen=True)
 class HarnessSettings:
@@ -102,11 +95,6 @@ class HarnessSettings:
     worker_env: AllowlistedEnv
     transcripts_root: str
     sections: HarnessSections
-
-
-def harness_cli_groups() -> dict[str, str]:
-    """Every binding's mounted verb group, as ``blizzard runner``'s lazy command map takes it."""
-    return dict(kind.cli_group for kind in HARNESS_SECTION_KINDS if kind.cli_group is not None)
 
 
 @cache
@@ -149,11 +137,36 @@ def bundle_layouts() -> tuple[HarnessLayout, ...]:
     return tuple(declaration.bundle_layout for declaration in harness_catalog())
 
 
+def declared_telemetry_names() -> tuple[HarnessTelemetryNames, ...]:
+    """The names every binding's own telemetry arrives under, in catalog order — enabled or not."""
+    return tuple(names for declaration in harness_catalog() if (names := declaration.telemetry_names) is not None)
+
+
+def combined_telemetry_plan(
+    settings: HarnessSettings,
+    *,
+    bundle: BundleSnapshot | None = None,
+    harness_telemetry_enabled: bool = False,
+    runner_environ: Mapping[str, str] | None = None,
+) -> HarnessTelemetryPlan:
+    """What the enabled bindings together do with each telemetry signal, the most engaged outcome per signal."""
+    shared = shared_inputs(
+        settings,
+        bundle=bundle,
+        harness_telemetry_enabled=harness_telemetry_enabled,
+        runner_environ=runner_environ,
+    )
+    return HarnessTelemetryPlan.combine(
+        declaration.telemetry_plan(section, shared) for declaration, section in enabled(settings.sections)
+    )
+
+
 def shared_inputs(
     settings: HarnessSettings,
     *,
     bundle: BundleSnapshot | None = None,
-    harness_telemetry: HarnessTelemetryPlan | None = None,
+    harness_telemetry_enabled: bool = False,
+    runner_environ: Mapping[str, str] | None = None,
 ) -> SharedHarnessInputs:
     """The runner-wide inputs ``settings`` hands every binding."""
     return SharedHarnessInputs(
@@ -163,7 +176,8 @@ def shared_inputs(
         worker_env=settings.worker_env,
         transcripts_root=settings.transcripts_root,
         bundle=bundle,
-        harness_telemetry=harness_telemetry or HarnessTelemetryPlan(),
+        harness_telemetry_enabled=harness_telemetry_enabled,
+        runner_environ=runner_environ or {},
     )
 
 
@@ -173,15 +187,21 @@ def build_production_harness_registry(
     executor: Executor,
     process: IProcessProbe,
     bundle: BundleSnapshot | None = None,
-    harness_telemetry: HarnessTelemetryPlan | None = None,
+    harness_telemetry_enabled: bool = False,
+    runner_environ: Mapping[str, str] | None = None,
 ) -> HarnessRegistry:
     """Build every enabled harness binding once for one graph, over one shared probe/
     launcher pair. The process graph owns the injected executor and probe for the
     lifetime of every child launch. ``bundle`` is the snapshot this process published at startup;
-    ``harness_telemetry`` is the plan the composition root derived for Claude Code's exporters.
+    ``harness_telemetry_enabled`` and ``runner_environ`` are what each binding derives its own telemetry plan from.
     Insertion follows the catalog order: the first binding is the runner's default harness."""
     launcher = ProcessLauncher(process, executor=executor)
-    shared = shared_inputs(settings, bundle=bundle, harness_telemetry=harness_telemetry or HarnessTelemetryPlan())
+    shared = shared_inputs(
+        settings,
+        bundle=bundle,
+        harness_telemetry_enabled=harness_telemetry_enabled,
+        runner_environ=runner_environ,
+    )
     bindings: dict[str, HarnessBinding] = {
         declaration.harness_id: declaration.binding(section, shared, process=process, launcher=launcher)
         for declaration, section in enabled(settings.sections)
@@ -236,13 +256,13 @@ __all__ = [
     "build_production_harness_health_probes",
     "build_production_harness_registry",
     "bundle_layouts",
-    "claude_code_section",
+    "combined_telemetry_plan",
     "configured_tiers",
     "declared",
     "declared_normalizer_versions",
+    "declared_telemetry_names",
     "enabled",
     "harness_catalog",
-    "harness_cli_groups",
     "inspect_harness_bundle",
     "publish_harness_bundle",
     "published_harness_snapshot",

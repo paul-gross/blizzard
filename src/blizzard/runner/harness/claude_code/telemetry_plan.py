@@ -2,8 +2,8 @@
 ``service.name`` its telemetry leaves the runner with, and the per-signal plan for pointing a worker's exporters
 at the runner.
 
-The plan type and the names live in ``harness/harness_telemetry_plan.py``. The plan is derived once, at the
-composition root; Claude Code's name rules live in ``claude_code/telemetry.py``."""
+The plan and names types live in ``harness/harness_telemetry_plan.py``. The declaration answers both through the
+seam; Claude Code's name rules live in ``claude_code/telemetry.py``."""
 
 from __future__ import annotations
 
@@ -17,10 +17,24 @@ from blizzard.runner.harness.claude_code.bundle import ClaudeCodeBundleDelivery
 from blizzard.runner.harness.claude_code.section import ClaudeCodeSection
 from blizzard.runner.harness.claude_code.telemetry import RUNNER_OWNED_NAMES, operator_configured
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
-from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryPlan
+from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryNames, HarnessTelemetryPlan
 from blizzard.runner.harness.telemetry_signals import TelemetrySignal, signal_exportable
 
-__all__ = ["plan_harness_telemetry"]
+__all__ = ["CLAUDE_CODE_TELEMETRY_NAMES", "plan_harness_telemetry"]
+
+CLAUDE_CODE_METRICS_SCOPE = "com.anthropic.claude_code"
+CLAUDE_CODE_LOGS_SCOPE = "com.anthropic.claude_code.events"
+CLAUDE_CODE_TRACING_SCOPE = "com.anthropic.claude_code.tracing"
+
+#: ``service.name`` on Claude Code's telemetry unless ``worker_program_services`` maps its scope.
+CLAUDE_CODE_SERVICE_NAME = "blizzard-claude-code"
+
+CLAUDE_CODE_TELEMETRY_NAMES = HarnessTelemetryNames(
+    traces_scope=CLAUDE_CODE_TRACING_SCOPE,
+    metrics_scope=CLAUDE_CODE_METRICS_SCOPE,
+    logs_scope=CLAUDE_CODE_LOGS_SCOPE,
+    service_name=CLAUDE_CODE_SERVICE_NAME,
+)
 
 
 def plan_harness_telemetry(

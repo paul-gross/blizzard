@@ -8,7 +8,6 @@ import click
 
 from blizzard.cli.operator_trace import OperatorGroup
 from blizzard.runner.cli.worker_call import WorkerSession
-from blizzard.runner.harness.wiring import harness_cli_groups
 
 _CLI = "blizzard.runner.cli"
 
@@ -40,8 +39,7 @@ _COMMANDS = {
     "takeover": f"{_CLI}.control:takeover",
     "requeue": f"{_CLI}.control:requeue",
     "selftest": f"{_CLI}.control:selftest",
-    # Each harness binding mounts its own optional verb group.
-    **harness_cli_groups(),
+    "opencode": f"{_CLI}.opencode:opencode_group",
 }
 
 

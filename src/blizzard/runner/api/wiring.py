@@ -20,6 +20,7 @@ from blizzard.foundation.clock import IClock, IMonotonicClock
 from blizzard.foundation.platform_tracing.handle import DisabledPlatformTracing, IPlatformTracing
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.events.publisher import IRunnerEventPublisher
+from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryNames
 from blizzard.runner.harness.health_cache import IReadHarnessHealth
 from blizzard.runner.harness.registry import IHarnessRegistry
 from blizzard.runner.harness.workspace_prompts import WorkspacePromptService
@@ -130,9 +131,13 @@ class RunnerWiring:
         counter: ReceiverCounter | None = getattr(self.state, "receiver_counter", None)
         return counter if counter is not None else self._refuse("span receiver counter")
 
-    def claude_trace_counter(self) -> ReceiverCounter:
-        counter: ReceiverCounter | None = getattr(self.state, "claude_trace_counter", None)
-        return counter if counter is not None else self._refuse("Claude Code span receiver counter")
+    def harness_span_counter(self) -> ReceiverCounter:
+        counter: ReceiverCounter | None = getattr(self.state, "harness_span_counter", None)
+        return counter if counter is not None else self._refuse("harness span receiver counter")
+
+    def harness_telemetry_names(self) -> tuple[HarnessTelemetryNames, ...]:
+        """What every declared binding's telemetry arrives under; none where the composer wired none."""
+        return getattr(self.state, "harness_telemetry_names", ())
 
     def metric_bounds(self) -> ReceiverBounds:
         bounds: ReceiverBounds | None = getattr(self.state, "metric_bounds", None)
@@ -155,7 +160,8 @@ class RunnerWiring:
             received_telemetry=self.received_telemetry(),
             span_limiter=self.span_limiter(),
             span_counter=self.receiver_counter(),
-            claude_span_counter=self.claude_trace_counter(),
+            harness_span_counter=self.harness_span_counter(),
+            telemetry_names=self.harness_telemetry_names(),
             metric_bounds=self.metric_bounds(),
             log_bounds=self.log_bounds(),
             clock=getattr(self.state, "clock", None),

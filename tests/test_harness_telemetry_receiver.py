@@ -269,7 +269,7 @@ def test_rejected_counts_are_named_only_when_some_were() -> None:
 
 def test_admitted_data_points_are_stamped_and_replace_the_senders_stamps() -> None:
     forged = {"blizzard.lease.id": "other", "blizzard.caller": "operator", "blizzard.runner.id": "x", "user.id": "u"}
-    admission = admit_data_points([_point(attributes=forged)], _lease(), _METRICS_SCOPE, runner=_RUNNER)
+    admission = admit_data_points([_point(attributes=forged)], _lease(), frozenset({_METRICS_SCOPE}), runner=_RUNNER)
     (kept,) = admission.kept
     assert admission.dropped == 0
     assert kept.attributes == {
@@ -284,7 +284,7 @@ def test_admitted_data_points_are_stamped_and_replace_the_senders_stamps() -> No
 
 def test_data_points_under_another_scope_are_dropped_and_counted() -> None:
     admission = admit_data_points(
-        [_point(), _point(scope_name="some.library")], _lease(), _METRICS_SCOPE, runner=_RUNNER
+        [_point(), _point(scope_name="some.library")], _lease(), frozenset({_METRICS_SCOPE}), runner=_RUNNER
     )
     assert (len(admission.kept), admission.dropped) == (1, 1)
 
@@ -292,14 +292,17 @@ def test_data_points_under_another_scope_are_dropped_and_counted() -> None:
 def test_admission_caps_attributes_and_strings() -> None:
     sent = {f"k{i}": "v" * (MAX_STRING_CHARS + 5) for i in range(MAX_ATTRIBUTES + 10)}
     (kept,) = admit_data_points(
-        [_point(attributes=sent, metric_name="n" * (MAX_STRING_CHARS + 1))], _lease(), _METRICS_SCOPE, runner=_RUNNER
+        [_point(attributes=sent, metric_name="n" * (MAX_STRING_CHARS + 1))],
+        _lease(),
+        frozenset({_METRICS_SCOPE}),
+        runner=_RUNNER,
     ).kept
     assert len(kept.metric_name) == MAX_STRING_CHARS
     assert len(kept.attributes) == MAX_ATTRIBUTES + 5
     stamps = {"worker", "ch_1", "lease_1", "r1", "r-claude"}
     assert set(kept.attributes.values()) - stamps == {"v" * MAX_STRING_CHARS}
     (record,) = admit_log_records(
-        [_record(body="b" * (MAX_STRING_CHARS + 1))], _lease(), _LOGS_SCOPE, runner=_RUNNER
+        [_record(body="b" * (MAX_STRING_CHARS + 1))], _lease(), frozenset({_LOGS_SCOPE}), runner=_RUNNER
     ).kept
     assert record.body == "b" * MAX_STRING_CHARS
 
@@ -313,7 +316,7 @@ def test_a_log_record_keeps_its_trace_context_only_inside_the_leases_chunk_trace
             _record(scope_name="some.library"),
         ],
         _lease(),
-        _LOGS_SCOPE,
+        frozenset({_LOGS_SCOPE}),
         runner=_RUNNER,
     )
     kept_inside, kept_outside = admission.kept

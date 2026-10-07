@@ -1,4 +1,4 @@
-"""What the runner does with one of Claude Code's telemetry signals — the vocabulary the runner's plan and its
+"""What the runner does with one of a harness binding's telemetry signals — the vocabulary the runner's plan and its
 wire status share."""
 
 from __future__ import annotations
@@ -7,7 +7,7 @@ from enum import StrEnum
 
 
 class HarnessTelemetryOutcome(StrEnum):
-    """What the runner does with one of Claude Code's telemetry signals."""
+    """What the runner does with one of a harness binding's telemetry signals."""
 
     OFF = "off"
     CAPTURED = "captured"

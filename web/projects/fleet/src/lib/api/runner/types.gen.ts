@@ -1699,8 +1699,8 @@ export type HarnessHealthView = {
 /**
  * HarnessSignalStatus
  *
- * One signal of Claude Code's telemetry: what the binding does with its exporter, and what the runner's
- * receiver for it has accepted and dropped since start, in that signal's own unit.
+ * One signal of the harness bindings' telemetry: what the enabled bindings together do with its exporter, and
+ * what the runner's receiver for it has accepted and dropped since start, in that signal's own unit.
  */
 export type HarnessSignalStatus = {
     /**
@@ -1717,7 +1717,7 @@ export type HarnessSignalStatus = {
 /**
  * HarnessTelemetryOutcome
  *
- * What the runner does with one of Claude Code's telemetry signals.
+ * What the runner does with one of a harness binding's telemetry signals.
  */
 export const HarnessTelemetryOutcome = {
     OFF: 'off',
@@ -1729,7 +1729,7 @@ export const HarnessTelemetryOutcome = {
 /**
  * HarnessTelemetryOutcome
  *
- * What the runner does with one of Claude Code's telemetry signals.
+ * What the runner does with one of a harness binding's telemetry signals.
  */
 export type HarnessTelemetryOutcome = typeof HarnessTelemetryOutcome[keyof typeof HarnessTelemetryOutcome];
 
