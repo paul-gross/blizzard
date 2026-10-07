@@ -13,11 +13,13 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import select
+from structlog.testing import capture_logs
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.fact_kinds import (
     ESCALATION_RECORDED,
+    LEASE_MINTED,
     RUNNER_LOCALLY_PAUSED,
     RUNNER_LOCALLY_RESUMED,
     USAGE_RECORDED,
@@ -32,10 +34,12 @@ from blizzard.runner.leases import HEARTBEAT_STALENESS_THRESHOLD, NewLease
 from blizzard.runner.lifecycle.attempt import Attempt
 from blizzard.runner.lifecycle.held_chunk import HeldChunk
 from blizzard.runner.lifecycle.shutdown_drain import SHUTDOWN_DRAIN_DEADLINE
+from blizzard.runner.lifecycle.spawn import Spawner
 from blizzard.runner.loop.context import LoopConfig
-from blizzard.runner.loop.steps import Advance, Fill, ResumeIntents
+from blizzard.runner.loop.steps import Advance, Fill, Pull, Reap, ResumeIntents
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.node_steps.chunk_state import ChunkPause, ChunkState
+from blizzard.runner.node_steps.submissions import ApplyReply
 from blizzard.runner.store import schema as runner_schema
 from tests.runner_fakes import (
     FakeHarness,
@@ -787,3 +791,93 @@ def test_a_next_node_under_a_chunk_pause_holds_the_binding_and_enters_once_unpau
     lease = store.active_lease_for_chunk("ch_1")
     assert lease is not None and lease.node_name == "review"
     assert harness.resume_froms == [resume_from]
+
+
+# --------------------------------------------------------------------------- #
+# The spawn gate reads the chunk's own pause: a paused chunk starts no worker by any path.
+
+
+def _seed_orphan_lease(store, *, retries_max=2):  # type: ignore[no-untyped-def]
+    """A lease minted but never spawned (no pid/session) — REAP's orphan case."""
+    store.record_lease(
+        NewLease(
+            lease_id="lease_1",
+            chunk_id="ch_1",
+            graph_id="gr_1",
+            node_id="nd_build",
+            node_name="build",
+            epoch=1,
+            retries_max=retries_max,
+            created_at=_NOW,
+        )
+    )
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+
+
+def _suppressed_chunk_paused(logs, *, via):  # type: ignore[no-untyped-def]
+    return [
+        entry
+        for entry in logs
+        if entry["event"] == "spawn suppressed — chunk paused" and entry["via"] == via and entry["chunk_id"] == "ch_1"
+    ]
+
+
+def test_a_reaped_orphan_on_a_paused_chunk_is_not_respawned_until_the_chunk_resumes(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    _seed_orphan_lease(store)
+    hub = FakeHub()
+    hub.chunks["ch_1"] = _paused_chunk()
+    hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
+    harness = FakeHarness(
+        handle=WorkerHandle(session_id="sess-b", pid=202, process_start_time="start-202", pgid=202), verdict="pass"
+    )
+    ctx = _make_ctx(store, hub, harness, FakeProbe())
+
+    with capture_logs() as logs:
+        Reap(ctx).run()
+
+    assert store.active_lease_for_chunk("ch_1") is None
+    assert [f for f in store.pending_outbound() if f.kind == LEASE_MINTED] == []
+    assert store.held_environment_ids() == ["e1"]
+    assert _suppressed_chunk_paused(logs, via="requeue")
+
+    hub.chunks["ch_1"] = _running_chunk()
+    ctx.chunk_views.invalidate("ch_1")
+    Fill(ctx).run()
+
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None and lease.pid == 202
+
+
+def test_a_rejected_completion_on_a_paused_chunk_requeues_without_a_respawn(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    hub = FakeHub()
+    hub.chunks["ch_1"] = _running_chunk()
+    hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.FAILURE, detail="stale epoch — fenced")]
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    ctx = _make_ctx(store, hub, harness, FakeProbe())
+
+    Advance(ctx).run()  # launches the detached elicitation
+    Advance(ctx).run()  # collects it — completion buffered
+    assert [f for f in store.pending_outbound() if f.kind == "completion.submitted"]
+
+    hub.chunks["ch_1"] = _paused_chunk()
+    ctx.chunk_views.invalidate("ch_1")
+    with capture_logs() as logs:
+        Pull(ctx).run()  # flushes; the hub rejects; the retry arm reaches the gate
+
+    assert store.active_lease_for_chunk("ch_1") is None
+    assert [f for f in store.pending_outbound() if f.kind == LEASE_MINTED] == []
+    assert _suppressed_chunk_paused(logs, via="requeue")
+
+
+def test_an_unreadable_chunk_view_does_not_suppress_a_spawn(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    hub = FakeHub()
+    hub.chunks["ch_1"] = _paused_chunk()
+    hub.down = True
+    ctx = _make_ctx(store, hub, FakeHarness(handle=_HANDLE, verdict="pass"), FakeProbe())
+
+    assert Spawner(ctx).suppressed(via="requeue", chunk_id="ch_1") is False
