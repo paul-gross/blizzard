@@ -372,6 +372,7 @@ class FakeAnnotator:
         self.fail_refs = fail_refs or set()
         self.set_calls: list[tuple[WorkRef, WorkStatusMarker]] = []
         self.clear_calls: list[WorkRef] = []
+        self.read_calls = 0
 
     def set_status(self, pointer: WorkRef, marker: WorkStatusMarker) -> None:
         if pointer.ref in self.fail_refs:
@@ -386,6 +387,7 @@ class FakeAnnotator:
         self._marks.pop(pointer, None)
 
     def marked_refs(self) -> dict[WorkRef, frozenset[WorkStatusMarker]]:
+        self.read_calls += 1
         return {ref: frozenset(markers) for ref, markers in self._marks.items() if markers}
 
 
@@ -929,6 +931,7 @@ def build_hub(
         tracing=config.tracing,
         egress=config.egress,
         egress_path_key=egress_path_key,
+        annotation_interval_seconds=config.annotation_interval_seconds,
     )
     app = create_app(config, services=services)
     client = RunnerFleetClient(app, services=services, register_claimants=auto_register_claimants)

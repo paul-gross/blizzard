@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import Table, func, select
 
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
 from blizzard.foundation.clock import IClock
@@ -91,6 +91,33 @@ _STATUS_FAMILIES: frozenset[str] = frozenset(
         "pauses",
     }
 )
+
+
+#: Each status family's tables — the change probe's list, so a new family joins it here.
+_STATUS_FAMILY_TABLES: dict[str, tuple[Table, ...]] = {
+    "promoted": (s.chunk_promoted,),
+    "stopped": (s.chunk_stopped,),
+    "operator_completed": (s.chunk_completed,),
+    "escalations": (s.escalations,),
+    "leases": (s.lease_facts,),
+    "transitions": (s.transitions,),
+    "routes_created": (s.route_created,),
+    "routes_released": (s.route_released,),
+    "questions": (s.questions, s.question_answers),
+    "decisions": (s.decisions, s.decision_resolutions),
+    "requeues": (s.requeues,),
+    "migrations": (s.chunk_migrations,),
+    "restarts": (s.chunk_restarts,),
+    "pauses": (s.chunk_pause_facts,),
+}
+assert _STATUS_FAMILY_TABLES.keys() == _STATUS_FAMILIES, "every status family names its tables"
+
+
+def status_family_tables() -> tuple[Table, ...]:
+    """Every table the status families read, plus ``chunks`` (the roster the facts load keys on)."""
+    tables = {t.name: t for tables in _STATUS_FAMILY_TABLES.values() for t in tables}
+    tables["chunks"] = s.chunks
+    return tuple(tables[name] for name in sorted(tables))
 
 
 #: The families a :class:`~blizzard.wire.chunk.ChunkStatusView` reaches — :attr:`_STATUS_FAMILIES`

@@ -111,8 +111,12 @@ every live chunk's status onto its forge issue as `blizzard:ingested` (minted bu
 that reached stopped/done carries neither.
 
 The label sweep runs every `annotation_interval_seconds` (a top-level `blizzard-hub.toml` key, default 120). It keeps no
-label state: each pass discovers the forge's actual labels afresh and writes only the difference from desired state, so
-hand-removed labels, mid-sweep crashes, and forge outages all self-heal on the next pass. A forge that is down, slow, or
+label state: a full pass discovers the forge's actual labels afresh and writes only the difference from desired state.
+Each tick first checks, cheaply, whether anything the hub projects has changed (a chunk's status or work refs, or which
+sources annotate) and skips the forge reads when nothing has, running a full pass anyway once five intervals (ten minutes
+by default) have gone by. A change on the hub side shows on the forge within one interval; a hand-removed label, an edit
+by another actor, or a source's binding edit self-heals within that five-interval floor. Mid-sweep crashes, forge
+outages, and failed writes or clears are retried on the very next pass. A forge that is down, slow, or
 rate-limiting degrades the label sweep to a logged skip; it never blocks a chunk transition, an ingest, or any other hub
 request.
 

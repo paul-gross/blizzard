@@ -10,7 +10,7 @@ from datetime import datetime
 
 from sqlalchemy import func, insert, select
 
-from blizzard.hub.domain.observability.forge_status import IAnnotatedSources
+from blizzard.hub.domain.observability.forge_status import IWriteAnnotatedSources
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.schema import forge_annotation_facts
 
@@ -37,5 +37,5 @@ class ForgeAnnotationStore:
             conn.execute(insert(forge_annotation_facts), rows)
 
 
-def _conforms_forge_annotation_store(x: ForgeAnnotationStore) -> IAnnotatedSources:
+def _conforms_forge_annotation_store(x: ForgeAnnotationStore) -> IWriteAnnotatedSources:
     return x
