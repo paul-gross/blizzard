@@ -6,6 +6,7 @@ from fastapi import Request, status
 from fastapi.exceptions import HTTPException
 
 from blizzard.foundation.platform_tracing.attributes import annotate_caller
+from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.api.lease_token import presented_lease_token
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.auth.tokens import IReadTokenRepository
@@ -34,6 +35,32 @@ def authorized_worker_lease(lease_id: str, request: Request) -> WorkerLease:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     annotate_caller("worker")
     return worker
+
+
+def lease_for_presented_token(request: Request) -> Lease:
+    """The lease the presented token alone authorizes — the active lease, or an open takeover's
+    reference lease — for the routes whose path names no lease (the OTLP receivers). A missing
+    token, an unknown hash and a hash naming a closed lease are one ``403`` that never says
+    whether a lease exists; a wiring failure such as the store-free ``503`` still propagates."""
+    wiring = RunnerWiring.of(request)
+    refused = HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=str(LeaseTokenRejected("presented token does not authorize a lease")),
+    )
+    token = presented_lease_token(request)
+    if token is None:
+        raise refused
+    lease_id = wiring.read_stores().tokens.lease_for_token_hash(TokenHash(token).hex)
+    if lease_id is None:
+        raise refused
+    try:
+        worker = wiring.worker_lease_standing(lease_id)
+    except HTTPException as exc:
+        if exc.status_code == status.HTTP_404_NOT_FOUND:
+            raise refused from exc
+        raise
+    annotate_caller("worker")
+    return worker.lease
 
 
 def resolved_lease(lease_id: str, request: Request) -> Lease:

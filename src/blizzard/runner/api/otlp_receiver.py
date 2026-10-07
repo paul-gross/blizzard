@@ -23,8 +23,7 @@ from blizzard.foundation.platform_tracing.received import (
     rejected_data_points,
     rejected_log_records,
 )
-from blizzard.foundation.tokens import TokenHash
-from blizzard.runner.api.lease_token import presented_lease_token
+from blizzard.runner.api.lease_scope import lease_for_presented_token
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.leases.model import Lease
 from blizzard.runner.tracing.receiver import MAX_BODY_BYTES
@@ -43,7 +42,7 @@ async def receive_traces(request: Request) -> Response:
     the lease's span rate. Otherwise 200, naming the spans refused. Under ``harness_telemetry`` each binding's
     tracing scope is kept too."""
     wiring = RunnerWiring.of(request)
-    lease = await run_in_threadpool(_lease_for_token, wiring, presented_lease_token(request))
+    lease = await run_in_threadpool(lease_for_presented_token, request)
     receiver = wiring.telemetry_receiver()
     _on(receiver.require_traces)
     content_type, body = await _checked_body(request)
@@ -58,7 +57,7 @@ async def receive_metrics(request: Request) -> Response:
     platform tracing and ``harness_telemetry`` are both on, and the rate counts data points. Only the bindings'
     metrics scopes are kept, and a summary point is refused. Otherwise 200, naming the data points refused."""
     wiring = RunnerWiring.of(request)
-    lease = await run_in_threadpool(_lease_for_token, wiring, presented_lease_token(request))
+    lease = await run_in_threadpool(lease_for_presented_token, request)
     receiver = wiring.telemetry_receiver()
     _on(receiver.require_harness_telemetry)
     content_type, body = await _checked_body(request)
@@ -72,7 +71,7 @@ async def receive_logs(request: Request) -> Response:
     """Receive one OTLP logs export, refused as :func:`receive_metrics` refuses, the rate counting log records.
     Only the bindings' logs scopes are kept. Otherwise 200, naming the log records refused."""
     wiring = RunnerWiring.of(request)
-    lease = await run_in_threadpool(_lease_for_token, wiring, presented_lease_token(request))
+    lease = await run_in_threadpool(lease_for_presented_token, request)
     receiver = wiring.telemetry_receiver()
     _on(receiver.require_harness_telemetry)
     content_type, body = await _checked_body(request)
@@ -113,22 +112,6 @@ async def _decoded[T](decode: Callable[[bytes, str], T], body: bytes, content_ty
         return await run_in_threadpool(decode, body, content_type)
     except OtlpDecodeError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-
-
-def _lease_for_token(wiring: RunnerWiring, token: str | None) -> Lease:
-    """The lease the token was minted for, still active or under an open takeover; every miss is the same 403."""
-    refused = HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="presented token does not authorize a lease")
-    if token is None:
-        raise refused
-    lease_id = wiring.read_stores().tokens.lease_for_token_hash(TokenHash(token).hex)
-    if lease_id is None:
-        raise refused
-    try:
-        return wiring.worker_lease(lease_id)
-    except HTTPException as exc:
-        if exc.status_code == status.HTTP_404_NOT_FOUND:
-            raise refused from exc
-        raise
 
 
 async def _bounded_body(request: Request) -> bytes:

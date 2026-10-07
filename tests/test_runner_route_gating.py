@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient
 
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
+from tests.runner_fakes import registered_identity
 
 pytestmark = pytest.mark.unit
 
@@ -114,7 +115,7 @@ def _oauth_app() -> TestClient:
         hub_url="http://hub.example",
         public_urls=("https://runner-guard.example",),
     )
-    return TestClient(create_app(config, hub_http_client=_oauth_hub_client()))
+    return TestClient(create_app(config, hub_http_client=_oauth_hub_client(), identity=registered_identity()))
 
 
 def _live_routes(client: TestClient) -> list[APIRoute]:
@@ -181,3 +182,19 @@ def test_the_otlp_receiver_paths_are_never_redirected_to_the_login_bounce(path: 
     refused = client.post(path, content=b"", follow_redirects=False)
     assert refused.status_code == 403
     assert client.get("/v1/other", follow_redirects=False).status_code == 307
+
+
+def test_a_gated_served_shell_request_to_an_app_with_no_federation_settings_is_503() -> None:
+    config = RunnerConfig(root=Path("/tmp/runner-gating-guard"), db_url="sqlite://", hub_url="http://hub.example")
+    client = TestClient(create_app(config, hub_http_client=_oauth_hub_client()))
+    refused = client.get("/some-page", follow_redirects=False)
+    assert refused.status_code == 503
+    assert "federation settings" in refused.json()["detail"]
+
+
+def test_a_store_free_apps_auth_callback_is_503_naming_the_jti_cache() -> None:
+    config = RunnerConfig(root=Path("/tmp/runner-gating-guard"), db_url="sqlite://", hub_url="http://hub.example")
+    client = TestClient(create_app(config, hub_http_client=_oauth_hub_client(), identity=registered_identity()))
+    refused = client.post("/api/auth/callback", content="token=t&state=s")
+    assert refused.status_code == 503
+    assert "JTI cache" in refused.json()["detail"]

@@ -16,14 +16,15 @@ from urllib.parse import quote
 
 import httpx
 from fastapi import APIRouter, Depends, FastAPI, Request, params
-from fastapi.responses import RedirectResponse
+from fastapi.exceptions import HTTPException
+from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy import Engine
 
 from blizzard import __version__
 from blizzard.foundation.clock import IClock, IMonotonicClock, SystemClock, SystemMonotonicClock
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.platform_tracing.handle import DisabledPlatformTracing, IPlatformTracing
+from blizzard.foundation.platform_tracing.handle import DISABLED_TELEMETRY, IPlatformTracing
 from blizzard.foundation.roles import collaborator
 from blizzard.foundation.store.internal.store_status_reader import SqlAlchemyStoreStatusReader
 from blizzard.foundation.store.readiness import ReadinessService
@@ -76,11 +77,10 @@ from blizzard.runner.composition import RunnerProcess, build_runner_process
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.provider import IWorkspaceProvider
 from blizzard.runner.events.broker import EventBroker
-from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryNames
 from blizzard.runner.harness.health_cache import HarnessHealthCache, IReadHarnessHealth
 from blizzard.runner.harness.registry import HarnessRegistry, IHarnessRegistry
 from blizzard.runner.harness.workspace_prompts import WorkspacePromptService
-from blizzard.runner.hub.identity import ICurrentRunnerIdentity, RunnerIdentityHolder
+from blizzard.runner.hub.identity import ICurrentRunnerIdentity
 from blizzard.runner.leases.activity import LocalLeaseService
 from blizzard.runner.leases.asks import AskService
 from blizzard.runner.leases.liveness import LeaseLivenessService
@@ -100,8 +100,7 @@ from blizzard.runner.store.internal.jti_cache_store import JtiCacheRepository
 from blizzard.runner.stores import RunnerReadStores, RunnerStores
 from blizzard.runner.throttle.pause import PauseService
 from blizzard.runner.tracing.exclusion import is_excluded
-from blizzard.runner.tracing.received_export import IReceivedTelemetryExport
-from blizzard.runner.tracing.receiver_limits import ReceiverBounds, ReceiverCounter, SpanRateLimiter
+from blizzard.runner.tracing.receiving import TelemetryReceiver
 from blizzard.runner.tracing.replay import LeaseTraceReplay
 from blizzard.runner.tracing.status import LeaseTraceStatusReader
 from blizzard.runner.transcripts.internal.harness_transcript_repositories import HarnessTranscriptRepositories
@@ -198,13 +197,7 @@ def create_app(
     runner_status: RunnerStatusService | None = None,
     trace_status: LeaseTraceStatusReader | None = None,
     trace_replay: LeaseTraceReplay | None = None,
-    span_limiter: SpanRateLimiter | None = None,
-    receiver_counter: ReceiverCounter | None = None,
-    harness_span_counter: ReceiverCounter | None = None,
-    harness_telemetry_names: tuple[HarnessTelemetryNames, ...] = (),
-    metric_bounds: ReceiverBounds | None = None,
-    log_bounds: ReceiverBounds | None = None,
-    received_telemetry: IReceivedTelemetryExport | None = None,
+    telemetry_receiver: TelemetryReceiver | None = None,
     takeover: TakeoverService | None = None,
     requeue: RequeueService | None = None,
     selftests: SelfTestService | None = None,
@@ -231,13 +224,12 @@ def create_app(
     Every store-backed seam is optional, so a store-free build is possible; those routes
     then answer 503 and ``/api/ready`` reports ``ready=false``. ``selftests`` is always
     wired; ``events`` defaults absent, leaving the route silent. ``platform_tracing`` is off unless the
-    composition root passes a handle. ``identity`` is the process's holder; absent, the runner reads as
-    never registered, and sign-in waits."""
+    composition root passes a handle. ``telemetry_receiver`` is the process's worker telemetry receiver;
+    absent, the OTLP routes answer 503. ``identity`` is the process's holder; absent, the federation
+    routes answer 503."""
     log = get_logger("blizzard.runner")
     clock = clock or SystemClock()
     process = process or LinuxProcessProbe()
-    platform_tracing = platform_tracing or DisabledPlatformTracing()
-    identity = identity or RunnerIdentityHolder()
     resolved_harnesses: IHarnessRegistry = harnesses if harnesses is not None else HarnessRegistry({})
 
     # No framework exporters: tests/test_apps.py::test_an_otlp_endpoint_installs_no_framework_exporters.
@@ -245,15 +237,16 @@ def create_app(
         title="blizzard-runner",
         version=__version__,
         lifespan=_lifespan,
-        telemetry=platform_tracing.fastapi_telemetry(exclude=is_excluded),
+        telemetry=platform_tracing.fastapi_telemetry(exclude=is_excluded) if platform_tracing else DISABLED_TELEMETRY,
     )
     app.state.config = config
-    app.state.federation = FederationSettings(
-        public_origins=config.public_origins,
-        hub_url=config.hub_url,
-        identity=identity,
-        role_policy=config.role_policy,
-    )
+    if identity is not None:
+        app.state.federation = FederationSettings(
+            public_origins=config.public_origins,
+            hub_url=config.hub_url,
+            identity=identity,
+            role_policy=config.role_policy,
+        )
     app.state.readiness = readiness
     # The seams below are None on the store-free app.
     app.state.workspace_provider = workspace_provider
@@ -273,17 +266,8 @@ def create_app(
     app.state.runner_status = runner_status
     app.state.trace_status = trace_status
     app.state.trace_replay = trace_replay
-    app.state.platform_tracing = platform_tracing
-    app.state.identity = identity
-    # The OTLP receivers' bounds and tallies and the received-telemetry export, process-scoped:
-    # the host passes the graph's own.
-    app.state.span_limiter = span_limiter or SpanRateLimiter(clock)
-    app.state.receiver_counter = receiver_counter or ReceiverCounter()
-    app.state.harness_span_counter = harness_span_counter or ReceiverCounter()
-    app.state.harness_telemetry_names = harness_telemetry_names
-    app.state.metric_bounds = metric_bounds or ReceiverBounds.fresh(clock)
-    app.state.log_bounds = log_bounds or ReceiverBounds.fresh(clock)
-    app.state.received_telemetry = received_telemetry
+    # The worker telemetry receiver, built once by the composition root.
+    app.state.telemetry_receiver = telemetry_receiver
     app.state.takeover = takeover
     app.state.requeue = requeue
     app.state.attachments = attachments
@@ -352,12 +336,14 @@ def create_app(
 
     # An excluded request (the worker heartbeat, an OTLP receiver path) makes no server span, and
     # none of its store reads may start a sampled root of their own either.
-    @app.middleware("http")
-    async def _suppress_excluded(request: Request, call_next):  # type: ignore[no-untyped-def]
-        if is_excluded(request.scope):
-            with platform_tracing.suppressed():
-                return await call_next(request)
-        return await call_next(request)
+    if platform_tracing is not None:
+
+        @app.middleware("http")
+        async def _suppress_excluded(request: Request, call_next):  # type: ignore[no-untyped-def]
+            if is_excluded(request.scope):
+                with platform_tracing.suppressed():
+                    return await call_next(request)
+            return await call_next(request)
 
     # The served shell's half of the human web lane's gate — see :class:`Lane`.
     @app.middleware("http")
@@ -367,6 +353,9 @@ def create_app(
                 require_human_session(request)
             except NeedsFederationBounce as exc:
                 return RedirectResponse(f"/api/auth/login?return_to={quote(exc.return_to, safe='')}")
+            except HTTPException as exc:
+                # Raised inside an `http` middleware, an HTTPException skips FastAPI's handlers.
+                return JSONResponse({"detail": exc.detail}, status_code=exc.status_code, headers=exc.headers)
         return await call_next(request)
 
     # API routers first, so /api/* always wins over the web mount at /.
@@ -543,13 +532,7 @@ def _wire_hosted_app(
             log_receiver=graph.log_bounds.counter,
         ),
         trace_replay=graph.trace_replay,
-        span_limiter=graph.span_limiter,
-        receiver_counter=graph.receiver_counter,
-        harness_span_counter=graph.harness_span_counter,
-        harness_telemetry_names=graph.harness_telemetry_names,
-        metric_bounds=graph.metric_bounds,
-        log_bounds=graph.log_bounds,
-        received_telemetry=graph.received_telemetry,
+        telemetry_receiver=graph.telemetry_receiver,
         takeover=takeover,
         requeue=requeue,
         attachments=attachments,

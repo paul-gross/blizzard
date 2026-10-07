@@ -58,8 +58,7 @@ class RateExceeded(Exception):
 @dataclass(frozen=True)
 class TelemetryReceiver:
     """One worker telemetry export's orchestration, over the process's limiters and tallies.
-    ``clock`` is ``None`` where the composer wired none; each limiter then reads its own. ``identity``
-    answers who every kept item says sent it: the runner's latest registration."""
+    ``identity`` answers who every kept item says sent it: the runner's latest registration."""
 
     platform_tracing: IPlatformTracing
     received_telemetry: IReceivedTelemetryExport
@@ -69,7 +68,7 @@ class TelemetryReceiver:
     telemetry_names: tuple[HarnessTelemetryNames, ...]
     metric_bounds: ReceiverBounds
     log_bounds: ReceiverBounds
-    clock: IClock | None
+    clock: IClock
     identity: ICurrentRunnerIdentity
     worker_programs: bool = False
     harness_telemetry: bool = False
@@ -144,8 +143,8 @@ class TelemetryReceiver:
         )
         return admission.dropped
 
-    def _now(self) -> datetime | None:
-        return self.clock.now() if self.clock is not None else None
+    def _now(self) -> datetime:
+        return self.clock.now()
 
     def _runner(self) -> RunnerIdentity:
         runner = self.identity.current()

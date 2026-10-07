@@ -16,14 +16,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response,
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
-from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.origin import Origin
 from blizzard.foundation.platform_tracing.attributes import annotate_caller
 from blizzard.foundation.public_origins import PublicOrigins
 from blizzard.foundation.return_to import ReturnTo
-from blizzard.runner.auth.jti_cache import IJtiCache
-from blizzard.runner.auth.jwks_cache import IJwksCache
+from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.auth.roles import LocalRole, RolePolicy
 from blizzard.runner.auth.session import (
     CALLBACK_PATH,
@@ -50,7 +48,7 @@ _LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 class FederationSettings:
     """What the bounce and its callback read off this runner's config: the declared browser
     origins, the hub it federates with, its own identity there, and the role policy a federated
-    identity resolves against. The composition root sets it as ``app.state.federation``."""
+    identity resolves against. The composition root wires it onto the app."""
 
     public_origins: PublicOrigins
     hub_url: str
@@ -111,11 +109,14 @@ class HumanLane:
     request: Request
 
     @property
-    def gated(self) -> bool:  # ast-grep-ignore: bzh:property-delegates
-        """Whether the hub offers an IdP surface to bounce to (:class:`HubAuthModeCache`) — ``None``
-        on the store-free app resolves to *ungated*, matching the hermetic default's authless posture."""
-        cache: HubAuthModeCache | None = self.request.app.state.hub_auth_mode
-        return cache is not None and cache.enabled()
+    def wiring(self) -> RunnerWiring:
+        return RunnerWiring.of(self.request)
+
+    @property
+    def gated(self) -> bool:
+        """Whether the hub offers an IdP surface to bounce to (:class:`HubAuthModeCache`); an app wired
+        with no cache refuses rather than resolving to *ungated*."""
+        return self.wiring.hub_auth_mode().enabled()
 
     @property
     def session(self) -> RunnerSession | None:  # ast-grep-ignore: bzh:property-delegates
@@ -127,13 +128,11 @@ class HumanLane:
         )
 
     def _presented(self) -> RunnerSession | None:
-        settings: FederationSettings = self.request.app.state.federation
-        names = settings.cookie_names()
+        names = self.wiring.federation().cookie_names()
         cookie = self.request.cookies.get(names.session) if names is not None else None
         if cookie is None:
             return None
-        clock: IClock = self.request.app.state.clock
-        return SessionCookie(self.request.app.state.session_secret).read(cookie, now=clock.now())
+        return SessionCookie(self.wiring.session_secret()).read(cookie, now=self.wiring.clock().now())
 
     def demand_web(self) -> RunnerSession:
         """The served-web-app gate — the browser-navigated HTML surface mounted at ``/``."""
@@ -164,7 +163,7 @@ class Bounce:
 
     @property
     def origin(self) -> Origin:
-        return Origin(self.request, self.request.app.state.trusted_proxies)
+        return Origin(self.request, RunnerWiring.of(self.request).trusted_proxies())
 
     @property
     def state(self) -> str | None:
@@ -242,7 +241,7 @@ def login(
     return_to: str = "/",
     rehomed: Annotated[bool, Query(include_in_schema=False)] = False,
 ) -> Response:
-    settings: FederationSettings = request.app.state.federation
+    settings = RunnerWiring.of(request).federation()
     origins = settings.public_origins
     arrived = request.headers.get("host")
     # Bounce cookies set on an undeclared origin (`localhost` for `127.0.0.1`) never reach the callback.
@@ -277,15 +276,17 @@ async def callback(request: Request) -> Response:
     token = (parsed.get("token") or [None])[0]
     state = (parsed.get("state") or [None])[0]
 
-    settings: FederationSettings = request.app.state.federation
+    wiring = RunnerWiring.of(request)
+    settings = wiring.federation()
+    jwks = wiring.jwks_cache()
+    jti_cache = wiring.jti_cache()
+    clock = wiring.clock()
+    secret = wiring.session_secret()
     client = settings.client_id()
     bounce = Bounce(request, CookieNames(client))
     if not token or not bounce.matches(state):
         return bounce.refuse("bad or expired state")
 
-    jwks: IJwksCache = request.app.state.jwks_cache
-    jti_cache: IJtiCache = request.app.state.jti_cache
-    clock: IClock = request.app.state.clock
     try:
         identity = FederationToken(token, runner_id=client, jwks=jwks, jti_cache=jti_cache, clock=clock).identity()
     except FederationTokenError as exc:
@@ -295,7 +296,7 @@ async def callback(request: Request) -> Response:
     role = LocalRole(settings.role_policy, username=identity.username, hub_role=identity.role).role
     now = clock.now()
     session = RunnerSession(username=identity.username, role=role, issued_at=now, expires_at=now + SESSION_TTL)
-    cookie_value = SessionCookie(request.app.state.session_secret).mint(session)
+    cookie_value = SessionCookie(secret).mint(session)
 
     response = RedirectResponse(bounce.return_to, status_code=303)
     bounce.clear(response)
@@ -316,7 +317,7 @@ def logout(request: Request, response: Response) -> Response:
     logging out cannot itself require a live session, and clearing an absent cookie is a harmless no-op.
     The session is a **stateless** signed cookie, so there is nothing server-side to revoke — deleting
     it *is* the logout. It ends this runner's session only, not any hub-side session."""
-    names = request.app.state.federation.cookie_names()
+    names = RunnerWiring.of(request).federation().cookie_names()
     if names is not None:
         response.delete_cookie(names.session)
     response.status_code = status.HTTP_204_NO_CONTENT
