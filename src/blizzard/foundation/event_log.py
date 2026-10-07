@@ -5,6 +5,7 @@ declares it (``blizzard-context:/domain/operations.md`` §Event kinds)."""
 from __future__ import annotations
 
 from collections.abc import Mapping
+from enum import StrEnum
 from typing import Literal, cast, get_args
 
 EventLogKind = Literal[
@@ -33,38 +34,43 @@ EventLogKind = Literal[
     "egress-cursor-reset",
 ]
 
-#: The closed severity vocabulary; every wire severity field narrows against it.
-EventLogSeverity = Literal["critical", "warning", "info"]
+
+class EventLogSeverity(StrEnum):
+    """The closed severity vocabulary; every wire severity field is typed with it."""
+
+    CRITICAL = "critical"
+    WARNING = "warning"
+    INFO = "info"
+
 
 #: Each kind emits at exactly one severity — a function of kind, never paired independently.
 EVENT_LOG_SEVERITY: Mapping[EventLogKind, EventLogSeverity] = {
-    "needs-human": "critical",
-    "worker-lost": "critical",
-    "owner-unresolvable": "critical",
-    "no-acceptable-harness": "critical",
-    "hub-node-unroutable-outcome": "critical",
-    "repository-unresolved": "critical",
-    "repositories-disagree": "critical",
-    "attempt-failed": "warning",
-    "command-failed": "warning",
-    "work-item-close-failed": "warning",
-    "transcript-truncated": "warning",
-    "transcript-sidechain-dropped": "warning",
-    "worker-context-warned": "warning",
-    "attempt-abandoned": "info",
-    "work-item-closed": "info",
-    "trace-export-failed": "warning",
-    "trace-export-recovered": "info",
-    "trace-window-skipped": "warning",
-    "trace-config-rejected": "warning",
-    "egress-write-failed": "warning",
-    "egress-write-recovered": "info",
-    "egress-config-rejected": "warning",
-    "egress-cursor-reset": "info",
+    "needs-human": EventLogSeverity.CRITICAL,
+    "worker-lost": EventLogSeverity.CRITICAL,
+    "owner-unresolvable": EventLogSeverity.CRITICAL,
+    "no-acceptable-harness": EventLogSeverity.CRITICAL,
+    "hub-node-unroutable-outcome": EventLogSeverity.CRITICAL,
+    "repository-unresolved": EventLogSeverity.CRITICAL,
+    "repositories-disagree": EventLogSeverity.CRITICAL,
+    "attempt-failed": EventLogSeverity.WARNING,
+    "command-failed": EventLogSeverity.WARNING,
+    "work-item-close-failed": EventLogSeverity.WARNING,
+    "transcript-truncated": EventLogSeverity.WARNING,
+    "transcript-sidechain-dropped": EventLogSeverity.WARNING,
+    "worker-context-warned": EventLogSeverity.WARNING,
+    "attempt-abandoned": EventLogSeverity.INFO,
+    "work-item-closed": EventLogSeverity.INFO,
+    "trace-export-failed": EventLogSeverity.WARNING,
+    "trace-export-recovered": EventLogSeverity.INFO,
+    "trace-window-skipped": EventLogSeverity.WARNING,
+    "trace-config-rejected": EventLogSeverity.WARNING,
+    "egress-write-failed": EventLogSeverity.WARNING,
+    "egress-write-recovered": EventLogSeverity.INFO,
+    "egress-config-rejected": EventLogSeverity.WARNING,
+    "egress-cursor-reset": EventLogSeverity.INFO,
 }
 
 _EVENT_LOG_KINDS = frozenset(get_args(EventLogKind))
-_EVENT_LOG_SEVERITIES = frozenset(get_args(EventLogSeverity))
 
 
 def narrow_event_log_kind(value: str) -> EventLogKind | None:
@@ -74,4 +80,7 @@ def narrow_event_log_kind(value: str) -> EventLogKind | None:
 
 def narrow_event_log_severity(value: str) -> EventLogSeverity | None:
     """``value`` narrowed to :data:`EventLogSeverity`, or ``None`` outside the closed vocabulary."""
-    return cast(EventLogSeverity, value) if value in _EVENT_LOG_SEVERITIES else None
+    try:
+        return EventLogSeverity(value)
+    except ValueError:
+        return None

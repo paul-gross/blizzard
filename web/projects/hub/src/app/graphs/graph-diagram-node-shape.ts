@@ -1,5 +1,7 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
+import { hubApi } from 'fleet';
+
 import { META_FIRST_LINE_Y, META_LINE_HEIGHT } from './graph-box-sizing';
 import type { LaidOutNode } from './graph-layout';
 
@@ -24,8 +26,8 @@ const CORNER_RADIUS = 9;
     '[attr.data-node-id]': 'node().id',
     '[attr.data-selected]': "selected() ? 'true' : null",
     '[attr.data-incident]': "incident() ? 'true' : null",
-    '[class.exec-hub]': "node().executor === 'hub'",
-    '[class.exec-runner]': "node().executor !== 'hub'",
+    '[class.exec-hub]': "node().executor === Executor.HUB",
+    '[class.exec-runner]': "node().executor !== Executor.HUB",
     '[class.selected]': 'selected()',
     '[class.incident]': 'incident()',
   },
@@ -34,6 +36,8 @@ const CORNER_RADIUS = 9;
 })
 export class GraphDiagramNodeShape {
   readonly node = input.required<LaidOutNode>();
+  protected readonly Executor = hubApi.Executor;
+
   readonly selected = input(false);
   readonly incident = input(false);
 

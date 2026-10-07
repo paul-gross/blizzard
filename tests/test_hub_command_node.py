@@ -20,6 +20,7 @@ from sqlalchemy import select
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.event_log import EventLogSeverity
 from blizzard.foundation.hub_event_types import HubEventType
 from blizzard.foundation.node_steps import Executor
 from blizzard.foundation.platform_tracing.handle import IPlatformTracing, build_platform_tracing
@@ -989,9 +990,9 @@ def test_an_unroutable_outcome_is_announced_once_per_epoch(tmp_path: Path) -> No
     assert len(events) == 1, "and once in the operational event feed"
     # In-vocabulary, so the severity filter reaches it (test_event_log.py::…_sinks_below_info).
     assert events[0].severity == "critical"
-    assert [e.kind for e in hub.services.chunks.events.list_events(chunk_id=chunk_id, severity="critical")] == [
-        "hub-node-unroutable-outcome"
-    ]
+    assert [
+        e.kind for e in hub.services.chunks.events.list_events(chunk_id=chunk_id, severity=EventLogSeverity.CRITICAL)
+    ] == ["hub-node-unroutable-outcome"]
     assert "no authored edge for choice `failure`" in events[0].message
     assert events[0].detail["authored_choices"] == ["success"]
 

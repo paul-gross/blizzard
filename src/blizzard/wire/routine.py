@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict
 
+from blizzard.foundation.run_mode import RunMode
+
 
 class RoutineCreateRequest(BaseModel):
     name: str
@@ -82,7 +84,7 @@ class RoutineRunRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     scope_slug: str | None = None
-    mode: str = "full"
+    mode: RunMode = RunMode.FULL
     note: str | None = None
 
 
@@ -117,7 +119,7 @@ class RoutineRunResponse(BaseModel):
     body: str
     routine_name: str
     scope_slug: str
-    effective_mode: str
+    effective_mode: RunMode
     downgraded: bool
     baseline_finding_set_id: str | None = None
     baseline_revisions: dict[str, str] | None = None

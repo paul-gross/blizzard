@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import { type ChunkStatus, STATUS_TONE, compactRef, KitAsyncState, type KitAsyncStateValue, KitBadge, KitSelectRow, FleetWhen } from 'fleet';
+import { type ChunkStatus, type hubApi, STATUS_TONE, compactRef, KitAsyncState, type KitAsyncStateValue, KitBadge, KitSelectRow, FleetWhen } from 'fleet';
 
 /** A run's finding counts, summed across every set it delivered — `null` when it
  * delivered none, so the row renders no triple rather than a misleading `+0`. */
@@ -25,7 +25,7 @@ export interface RunListRowVm {
   readonly chunkId: string;
   readonly routineName: string;
   readonly scopeSlug: string;
-  readonly mode: string;
+  readonly mode: hubApi.RunMode;
   readonly mintedAt: string;
   readonly outcome: ChunkStatus;
   readonly escalated: boolean;
@@ -77,7 +77,7 @@ export class FleetRunList {
     this.runPick.emit(chunkId);
   }
 
-  protected modeLabel(mode: string): string {
+  protected modeLabel(mode: hubApi.RunMode): string {
     return mode.length === 0 ? mode : mode[0].toUpperCase() + mode.slice(1);
   }
 

@@ -15,6 +15,7 @@ from sqlalchemy import Engine, insert, select
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.event_log import EventLogSeverity
 from blizzard.hub.domain.chunk.model import EscalationOpen, EventFeed, OperationalEvent
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
@@ -45,7 +46,7 @@ def _store(tmp_path: Path) -> tuple[ChunkStores, Engine, FixedClock]:
 def test_record_event_roundtrips_columns_and_json_detail(tmp_path: Path) -> None:
     store, _, _clock = _store(tmp_path)
     store.events.record_event(
-        severity="critical",
+        severity=EventLogSeverity.CRITICAL,
         kind="worker-lost",
         runner_id="runner-1",
         chunk_id="ch_a",
@@ -71,7 +72,7 @@ def test_record_event_roundtrips_columns_and_json_detail(tmp_path: Path) -> None
 def test_runner_scoped_event_carries_no_chunk(tmp_path: Path) -> None:
     store, _, _clock = _store(tmp_path)
     store.events.record_event(
-        severity="warning",
+        severity=EventLogSeverity.WARNING,
         kind="command-failed",
         runner_id="runner-1",
         chunk_id=None,
@@ -90,7 +91,7 @@ def test_runner_scoped_event_carries_no_chunk(tmp_path: Path) -> None:
 def test_list_events_filters_and_orders_newest_first_bounded(tmp_path: Path) -> None:
     store, _, _clock = _store(tmp_path)
     store.events.record_event(
-        severity="info",
+        severity=EventLogSeverity.INFO,
         kind="attempt-abandoned",
         runner_id="r1",
         chunk_id="ch_a",
@@ -101,7 +102,7 @@ def test_list_events_filters_and_orders_newest_first_bounded(tmp_path: Path) -> 
         at=_at(1),
     )
     store.events.record_event(
-        severity="warning",
+        severity=EventLogSeverity.WARNING,
         kind="attempt-failed",
         runner_id="r1",
         chunk_id="ch_a",
@@ -112,7 +113,7 @@ def test_list_events_filters_and_orders_newest_first_bounded(tmp_path: Path) -> 
         at=_at(2),
     )
     store.events.record_event(
-        severity="critical",
+        severity=EventLogSeverity.CRITICAL,
         kind="worker-lost",
         runner_id="r2",
         chunk_id="ch_b",
@@ -126,7 +127,7 @@ def test_list_events_filters_and_orders_newest_first_bounded(tmp_path: Path) -> 
     # Newest-first over recorded_at.
     assert [e.message for e in store.events.list_events()] == ["c", "b", "a"]
     # Filters.
-    assert [e.message for e in store.events.list_events(severity="warning")] == ["b"]
+    assert [e.message for e in store.events.list_events(severity=EventLogSeverity.WARNING)] == ["b"]
     assert [e.message for e in store.events.list_events(runner_id="r2")] == ["c"]
     assert [e.message for e in store.events.list_events(chunk_id="ch_a")] == ["b", "a"]
     assert [e.message for e in store.events.list_events(since=_at(2))] == ["c", "b"]
@@ -137,7 +138,7 @@ def test_list_events_filters_and_orders_newest_first_bounded(tmp_path: Path) -> 
 def test_list_events_cap_keeps_the_newest_rows_regardless_of_severity(tmp_path: Path) -> None:
     store, _, _clock = _store(tmp_path)
     store.events.record_event(
-        severity="critical",
+        severity=EventLogSeverity.CRITICAL,
         kind="worker-lost",
         runner_id="r1",
         chunk_id="ch_a",
@@ -149,7 +150,7 @@ def test_list_events_cap_keeps_the_newest_rows_regardless_of_severity(tmp_path: 
     )
     for sec in (2, 3, 4, 5):
         store.events.record_event(
-            severity="warning" if sec % 2 else "info",
+            severity=EventLogSeverity.WARNING if sec % 2 else EventLogSeverity.INFO,
             kind="attempt-failed",
             runner_id="r1",
             chunk_id="ch_a",
@@ -312,7 +313,7 @@ def test_event_feed_sorts_by_recency_across_severities() -> None:
         OperationalEvent(
             id=1,
             recorded_at=_at(1),
-            severity="info",
+            severity=EventLogSeverity.INFO,
             kind="k",
             runner_id="r",
             chunk_id=None,
@@ -324,7 +325,7 @@ def test_event_feed_sorts_by_recency_across_severities() -> None:
         OperationalEvent(
             id=2,
             recorded_at=_at(9),
-            severity="warning",
+            severity=EventLogSeverity.WARNING,
             kind="k",
             runner_id="r",
             chunk_id=None,
@@ -336,7 +337,7 @@ def test_event_feed_sorts_by_recency_across_severities() -> None:
         OperationalEvent(
             id=3,
             recorded_at=_at(2),
-            severity="critical",
+            severity=EventLogSeverity.CRITICAL,
             kind="k",
             runner_id="r",
             chunk_id=None,

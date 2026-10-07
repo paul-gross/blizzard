@@ -402,7 +402,7 @@ class PerSubscriptionUsageView:
     sampled_at: datetime | None
     windows: tuple[ExternalSubscriptionUsageWindow, ...]
     #: ``"credential_lapsed"`` when the newest miss outranks the newest sample; ``None`` otherwise.
-    condition: str | None = None
+    condition: SampleMissReason | None = None
     #: The slug's newest reported miss reason; ``None`` when it has none.
     miss_reason: str | None = None
     #: The slug's newest reported miss instant; ``None`` alongside ``miss_reason``.

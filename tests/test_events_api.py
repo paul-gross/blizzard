@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pytest
 
+from blizzard.foundation.event_log import EventLogSeverity
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from tests.support import build_hub, chunk_stores, seed_chunk, seed_graph, seed_lease
@@ -39,7 +40,7 @@ def test_events_feed_unifies_open_escalations_filtered_and_ordered(tmp_path: Pat
 
     # event_log rows across two runners and two chunks.
     store.events.record_event(
-        severity="info",
+        severity=EventLogSeverity.INFO,
         kind="attempt-abandoned",
         runner_id="r1",
         chunk_id="ch_a",
@@ -50,7 +51,7 @@ def test_events_feed_unifies_open_escalations_filtered_and_ordered(tmp_path: Pat
         at=at(1),
     )
     store.events.record_event(
-        severity="warning",
+        severity=EventLogSeverity.WARNING,
         kind="attempt-failed",
         runner_id="r1",
         chunk_id="ch_a",
@@ -61,7 +62,7 @@ def test_events_feed_unifies_open_escalations_filtered_and_ordered(tmp_path: Pat
         at=at(2),
     )
     store.events.record_event(
-        severity="critical",
+        severity=EventLogSeverity.CRITICAL,
         kind="worker-lost",
         runner_id="r2",
         chunk_id="ch_b",
@@ -73,7 +74,7 @@ def test_events_feed_unifies_open_escalations_filtered_and_ordered(tmp_path: Pat
     )
     # A hub-authored row — names no runner (blizzard-context:/domain/operations.md).
     store.events.record_event(
-        severity="info",
+        severity=EventLogSeverity.INFO,
         kind="work-item-closed",
         runner_id=None,
         chunk_id="ch_b",
@@ -157,7 +158,7 @@ def test_events_feed_cap_keeps_the_newest_rows(tmp_path: Path) -> None:
         return t0 + timedelta(seconds=sec)
 
     store.events.record_event(
-        severity="critical",
+        severity=EventLogSeverity.CRITICAL,
         kind="worker-lost",
         runner_id="r1",
         chunk_id="ch_a",
@@ -169,7 +170,7 @@ def test_events_feed_cap_keeps_the_newest_rows(tmp_path: Path) -> None:
     )
     for sec in (2, 3, 4, 5):
         store.events.record_event(
-            severity="warning",
+            severity=EventLogSeverity.WARNING,
             kind="attempt-failed",
             runner_id="r1",
             chunk_id="ch_a",

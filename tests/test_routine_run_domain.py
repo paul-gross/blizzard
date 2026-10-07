@@ -14,6 +14,7 @@ import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.run_mode import RunMode
 from blizzard.hub.domain.chunk.ingest import IngestConflict
 from blizzard.hub.domain.chunk.model import (
     Chunk,
@@ -29,7 +30,6 @@ from blizzard.hub.domain.garden.routines import (
     IReadRoutineScopeRepository,
     Routine,
     RoutineGraphUnresolvedError,
-    RunMode,
 )
 from blizzard.hub.domain.garden.runs.run import (
     RoutineRetiredError,

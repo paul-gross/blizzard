@@ -50,7 +50,7 @@ def _narrow_persisted_severity(*, kind: str, severity: str) -> EventLogSeverity:
     if narrowed is not None:
         return narrowed
     narrowed_kind = narrow_event_log_kind(kind)
-    return EVENT_LOG_SEVERITY[narrowed_kind] if narrowed_kind is not None else "critical"
+    return EVENT_LOG_SEVERITY[narrowed_kind] if narrowed_kind is not None else EventLogSeverity.CRITICAL
 
 
 def _deleted_chunk_ids_stmt() -> Select[Any]:

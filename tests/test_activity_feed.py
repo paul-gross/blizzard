@@ -10,6 +10,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from blizzard.foundation.event_log import EventLogSeverity
 from blizzard.foundation.hub_event_types import ActivityChunkChangeCause
 from blizzard.hub.domain.chunk.model import ActivityEntry, ActivityFeed, OperationalEvent
 from blizzard.hub.domain.runners.registration import RecordedPause
@@ -33,7 +34,7 @@ def _event(id_: int, *, at: datetime) -> OperationalEvent:
     return OperationalEvent(
         id=id_,
         recorded_at=at,
-        severity="info",
+        severity=EventLogSeverity.INFO,
         kind="some.kind",
         runner_id="runner-a",
         chunk_id=None,
@@ -93,7 +94,7 @@ def test_event_row_reshapes_into_an_event_logged_activity_row() -> None:
             at=_at(3),
             chunk_id=None,
             runner_id="runner-a",
-            severity="info",
+            severity=EventLogSeverity.INFO,
             kind="some.kind",
         )
     ]

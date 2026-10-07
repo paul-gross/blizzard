@@ -13,6 +13,7 @@ import httpx
 
 from blizzard.cli.window import since_option, until_option, utc_query_value
 from blizzard.foundation.roles import dto
+from blizzard.foundation.run_mode import RunMode
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.views import Listing, ProposalOrigin
@@ -282,7 +283,7 @@ def _set_routine_lifecycle(cli: CliContext, name: str, *, verb: str, by: str) ->
 )
 @click.option(
     "--mode",
-    type=click.Choice(["full", "delta"]),
+    type=click.Choice([mode.value for mode in RunMode]),
     default="full",
     help="delta downgrades to full when the routine/scope pair has recorded no baseline.",
 )

@@ -5,6 +5,7 @@ from __future__ import annotations
 from pydantic import BaseModel, ConfigDict, Field
 
 from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.foundation.run_mode import RunMode
 
 
 class DeliveredSetView(BaseModel):
@@ -30,7 +31,7 @@ class RunRowView(BaseModel):
     chunk_id: str
     routine_name: str
     scope_slug: str
-    mode: str
+    mode: RunMode
     minted_at: str
     outcome: ChunkStatus
     escalation: RunEscalationView | None
@@ -81,7 +82,7 @@ class RunDeltaView(BaseModel):
     chunk_id: str
     routine_name: str
     scope_slug: str
-    mode: str
+    mode: RunMode
     outcome: ChunkStatus
     escalation: RunEscalationView | None
     sets: list[DeliveredSetDeltaView]

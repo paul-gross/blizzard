@@ -159,7 +159,8 @@ def test_run_unknown_mode_is_422(tmp_path: Path) -> None:
     resp = hub.client.post(f"/api/routines/{routine['routine_id']}/run", json={"mode": "sideways"})
 
     assert resp.status_code == 422, resp.text
-    assert "sideways" in resp.json()["detail"]
+    assert resp.json()["detail"][0]["loc"] == ["body", "mode"]
+    assert resp.json()["detail"][0]["input"] == "sideways"
 
 
 def test_run_malformed_scope_slug_is_422(tmp_path: Path) -> None:

@@ -83,6 +83,7 @@ _MOVED_HOMES = {
     "EventLogKind": "blizzard.foundation.event_log",
     "EventLogSeverity": "blizzard.foundation.event_log",
     "EVENT_LOG_SEVERITY": "blizzard.foundation.event_log",
+    "RunMode": "blizzard.foundation.run_mode",
     "PROVIDER_ANTHROPIC": "blizzard.runner.subscriptions.subscription_sampler",
     "PROVIDER_OPENAI": "blizzard.runner.subscriptions.subscription_sampler",
     "Coverage": "blizzard.foundation.completion_gates",

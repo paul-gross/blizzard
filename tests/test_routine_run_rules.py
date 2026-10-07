@@ -8,8 +8,9 @@ from datetime import UTC, datetime
 
 import pytest
 
+from blizzard.foundation.run_mode import RunMode
 from blizzard.hub.domain.garden.findings.model import FindingSet
-from blizzard.hub.domain.garden.routines import Routine, RoutineGraphUnresolvedError, RunMode
+from blizzard.hub.domain.garden.routines import Routine, RoutineGraphUnresolvedError
 from blizzard.hub.domain.garden.runs.run import (
     RoutineRetiredError,
     RunPlan,

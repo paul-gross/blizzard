@@ -1,14 +1,14 @@
 import { ChangeDetectionStrategy, Component, input, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
-import type { WorkItemAuthorView, WorkItemEntry } from '../../api/hub';
+import type { WorkItemAuthorView, WorkItemEntry, WorkItemPriority } from '../../api/hub';
 import { KitAccordionSection, KitAsyncState, KitBadge, KitMarkdown } from '../../kit';
 import type { Tone } from '../../kit';
 import { runnerDisplayName } from '../../core/runner-display-name';
 
 /** A stated priority's badge tone — advice for the triaging human, never
  * a queue position, so it borrows the shared urgency ladder rather than inventing one. */
-const PRIORITY_TONE: Record<string, Tone> = {
+const PRIORITY_TONE: Record<WorkItemPriority, Tone> = {
   high: 'needs',
   normal: 'waiting',
   low: 'idle',
@@ -100,10 +100,9 @@ export class ChunkIssueList {
     return item.hub_source === true;
   }
 
-  /** A stated priority's badge tone, or `null` for one this list does not recognize
-   * (defensive against a future value the wire has not widened this component for). */
+  /** A stated priority's badge tone, or `null` when the item states none. */
   protected priorityTone(item: WorkItemEntry): Tone | null {
-    return item.stated_priority ? (PRIORITY_TONE[item.stated_priority] ?? null) : null;
+    return item.stated_priority ? PRIORITY_TONE[item.stated_priority] : null;
   }
 
   /** A `user`-authored item's legible name — the resolved login, falling back to the

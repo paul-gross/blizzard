@@ -1657,10 +1657,10 @@ export const retireRoutineApiRoutinesRoutineIdRetirePost = <ThrowOnError extends
  *
  * Mint and ingest a hub work item from the routine, in one act; its chunk rests ``not_ready``
  * until promoted.
- * 404 on an unknown id; 422 on a malformed ``scope_slug``, an unknown
- * ``mode``, or an effective scope no scope row holds or outside the routine's own
- * related set (never minted); 503 on a retired routine
- * (checked first, before the mode or scope is even parsed), a retired effective
+ * 422 on an unknown ``mode`` (request validation, before any lookup); 404 on an unknown id;
+ * 422 on a malformed ``scope_slug``, or an effective scope no scope row holds or outside the
+ * routine's own related set (never minted); 503 on a retired routine
+ * (checked before the scope is even parsed), a retired effective
  * scope, or a graph name with no
  * enabled mint (mirroring ``POST /work-sources/{source}/items``'s own
  * retired-default-graph shape); 409 on an out-of-band ingest already holding the

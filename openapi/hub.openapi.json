@@ -176,18 +176,12 @@
           "severity": {
             "anyOf": [
               {
-                "enum": [
-                  "critical",
-                  "warning",
-                  "info"
-                ],
-                "type": "string"
+                "$ref": "#/components/schemas/EventLogSeverity"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Severity"
+            ]
           },
           "status": {
             "anyOf": [
@@ -4141,6 +4135,16 @@
         "title": "EscalationCause",
         "type": "string"
       },
+      "EventLogSeverity": {
+        "description": "The closed severity vocabulary; every wire severity field is typed with it.",
+        "enum": [
+          "critical",
+          "warning",
+          "info"
+        ],
+        "title": "EventLogSeverity",
+        "type": "string"
+      },
       "EventLoggedPayload": {
         "additionalProperties": false,
         "properties": {
@@ -4195,13 +4199,7 @@
             "title": "Runner Name"
           },
           "severity": {
-            "enum": [
-              "critical",
-              "warning",
-              "info"
-            ],
-            "title": "Severity",
-            "type": "string"
+            "$ref": "#/components/schemas/EventLogSeverity"
           }
         },
         "required": [
@@ -4300,13 +4298,7 @@
             "title": "Runner Name"
           },
           "severity": {
-            "enum": [
-              "critical",
-              "warning",
-              "info"
-            ],
-            "title": "Severity",
-            "type": "string"
+            "$ref": "#/components/schemas/EventLogSeverity"
           }
         },
         "required": [
@@ -8725,9 +8717,8 @@
         "description": "``POST /api/routines/{routine_id}/run`` \u2014 ``scope_slug`` omitted\nor ``None`` defaults to the routine's own; ``mode`` is ``\"full\"`` or ``\"delta\"``, a\nrequested ``\"delta\"`` with no recorded baseline downgrading to ``\"full\"`` on the\nresponse rather than refusing.",
         "properties": {
           "mode": {
-            "default": "full",
-            "title": "Mode",
-            "type": "string"
+            "$ref": "#/components/schemas/RunMode",
+            "default": "full"
           },
           "note": {
             "anyOf": [
@@ -8800,8 +8791,7 @@
             "type": "boolean"
           },
           "effective_mode": {
-            "title": "Effective Mode",
-            "type": "string"
+            "$ref": "#/components/schemas/RunMode"
           },
           "ref": {
             "title": "Ref",
@@ -8933,8 +8923,7 @@
             ]
           },
           "mode": {
-            "title": "Mode",
-            "type": "string"
+            "$ref": "#/components/schemas/RunMode"
           },
           "outcome": {
             "$ref": "#/components/schemas/ChunkStatus"
@@ -8997,6 +8986,15 @@
         "title": "RunEscalationView",
         "type": "object"
       },
+      "RunMode": {
+        "description": "How a routine run settles its delta baseline: ``full`` reports every finding, ``delta``\nonly what changed since the recorded baseline.",
+        "enum": [
+          "full",
+          "delta"
+        ],
+        "title": "RunMode",
+        "type": "string"
+      },
       "RunRowView": {
         "properties": {
           "chunk_id": {
@@ -9025,8 +9023,7 @@
             "type": "string"
           },
           "mode": {
-            "title": "Mode",
-            "type": "string"
+            "$ref": "#/components/schemas/RunMode"
           },
           "outcome": {
             "$ref": "#/components/schemas/ChunkStatus"
@@ -10403,13 +10400,12 @@
           "condition": {
             "anyOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/SampleMissReason"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Condition"
+            ]
           },
           "miss_reason": {
             "anyOf": [
@@ -16925,12 +16921,7 @@
             "schema": {
               "anyOf": [
                 {
-                  "enum": [
-                    "critical",
-                    "warning",
-                    "info"
-                  ],
-                  "type": "string"
+                  "$ref": "#/components/schemas/EventLogSeverity"
                 },
                 {
                   "type": "null"
@@ -21257,7 +21248,7 @@
     },
     "/api/routines/{routine_id}/run": {
       "post": {
-        "description": "Mint and ingest a hub work item from the routine, in one act; its chunk rests ``not_ready``\nuntil promoted.\n404 on an unknown id; 422 on a malformed ``scope_slug``, an unknown\n``mode``, or an effective scope no scope row holds or outside the routine's own\nrelated set (never minted); 503 on a retired routine\n(checked first, before the mode or scope is even parsed), a retired effective\nscope, or a graph name with no\nenabled mint (mirroring ``POST /work-sources/{source}/items``'s own\nretired-default-graph shape); 409 on an out-of-band ingest already holding the\nallocated ref's pointer.",
+        "description": "Mint and ingest a hub work item from the routine, in one act; its chunk rests ``not_ready``\nuntil promoted.\n422 on an unknown ``mode`` (request validation, before any lookup); 404 on an unknown id;\n422 on a malformed ``scope_slug``, or an effective scope no scope row holds or outside the\nroutine's own related set (never minted); 503 on a retired routine\n(checked before the scope is even parsed), a retired effective\nscope, or a graph name with no\nenabled mint (mirroring ``POST /work-sources/{source}/items``'s own\nretired-default-graph shape); 409 on an out-of-band ingest already holding the\nallocated ref's pointer.",
         "operationId": "run_routine_api_routines__routine_id__run_post",
         "parameters": [
           {

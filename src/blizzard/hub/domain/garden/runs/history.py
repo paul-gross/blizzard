@@ -21,6 +21,7 @@ from typing import Protocol
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.roles import domain_model
+from blizzard.foundation.run_mode import RunMode
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
@@ -76,7 +77,7 @@ class RunSummary:
     chunk_id: str
     routine_name: str
     scope_slug: str
-    mode: str
+    mode: RunMode
     minted_at: datetime
     outcome: ChunkStatus
     escalation: RunEscalation | None
@@ -144,7 +145,7 @@ class RunDelta:
     chunk_id: str
     routine_name: str
     scope_slug: str
-    mode: str
+    mode: RunMode
     outcome: ChunkStatus
     escalation: RunEscalation | None
     sets: list[DeliveredSetDelta]
@@ -159,7 +160,7 @@ class RunIdentity:
     chunk_id: str
     routine_name: str
     scope_slug: str
-    mode: str
+    mode: RunMode
     minted_at: datetime
 
 

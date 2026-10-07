@@ -3,6 +3,7 @@ import { RouterLink } from '@angular/router';
 
 import {
   FleetWhen,
+  hubApi,
   KitAsyncState,
   KitButton,
   KitDialog,
@@ -20,7 +21,7 @@ import { EMPTY_SCOPE_SELECTION, GardeningRunScopeField, type ScopeSelection } fr
 /** What the view asks the container to do once the operator submits. */
 export interface RunSubmission {
   readonly selection: ScopeSelection;
-  readonly mode: 'full' | 'delta';
+  readonly mode: hubApi.RunMode;
   readonly note: string | null;
 }
 
@@ -83,7 +84,8 @@ export class GardeningRunDialogView {
   readonly runSubmitted = output<RunSubmission>();
 
   protected readonly scopeSelection = signal<ScopeSelection>(EMPTY_SCOPE_SELECTION);
-  protected readonly mode = signal<'full' | 'delta'>('full');
+  protected readonly RunMode = hubApi.RunMode;
+  protected readonly mode = signal<hubApi.RunMode>(hubApi.RunMode.FULL);
   protected readonly note = signal('');
 
   /** The delta baseline for the currently selected scope, or `undefined` for a
@@ -116,7 +118,7 @@ export class GardeningRunDialogView {
     // operator switched to a never-swept or new one — steers back to full rather than
     // leaving delta selected with nothing to run it against.
     effect(() => {
-      if (!this.deltaAvailable() && this.mode() === 'delta') this.mode.set('full');
+      if (!this.deltaAvailable() && this.mode() === hubApi.RunMode.DELTA) this.mode.set(hubApi.RunMode.FULL);
     });
   }
 

@@ -10,7 +10,7 @@
         {{ group.refreshedLabel }}
       </div>
     }
-    @if (group.condition === 'credential_lapsed') {
+    @if (group.condition === SampleMissReason.CREDENTIAL_LAPSED) {
       <div
         class="sub-lapsed"
         data-testid="subscription-pace-group-lapsed"

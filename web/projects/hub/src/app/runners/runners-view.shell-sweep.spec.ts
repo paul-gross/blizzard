@@ -161,7 +161,7 @@ const ROWS: readonly RunnerRow[] = [
         sampledAt: null,
         refreshedLabel: null,
         freshness: null,
-        missReason: 'this endpoint could not be reached over a genuinely long, wrapping miss reason string',
+        missReason: 'endpoint_unreachable',
       },
     ],
   },
