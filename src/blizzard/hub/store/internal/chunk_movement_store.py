@@ -88,44 +88,116 @@ class ChunkMovementStore:
     ) -> FenceRefusal | None:
         with self._store.write("record_transition") as conn:
             lock_chunk_row(conn, chunk_id)
-            refusal = fence(conn, chunk_id, epoch=epoch, admission=admission, claimant=claimant)
-            if refusal is not None:
-                return refusal
+            return self._record_transition_conn(
+                conn,
+                transition_id=transition_id,
+                chunk_id=chunk_id,
+                from_node_id=from_node_id,
+                to_node_id=to_node_id,
+                choice_name=choice_name,
+                epoch=epoch,
+                admission=admission,
+                claimant=claimant,
+                runner_id=runner_id,
+                at=at,
+                artifacts=artifacts,
+                proposals=proposals,
+                decision_id=decision_id,
+            )
+
+    def record_transition_locked(
+        self,
+        handle: ILockedChunkRead,
+        *,
+        transition_id: str,
+        chunk_id: str,
+        from_node_id: str | None,
+        to_node_id: str,
+        choice_name: str | None,
+        epoch: int,
+        admission: EpochAdmission,
+        claimant: Claimant | None = None,
+        runner_id: str,
+        at: datetime,
+        artifacts: list[StoredArtifact],
+        proposals: list[StampedWorkItemProposal],
+        decision_id: str | None = None,
+    ) -> FenceRefusal | None:
+        """:meth:`record_transition` on ``handle``'s already-locked connection
+        (``bzh:store-exclusive-write``) — the caller's guard reads and this write share one lock."""
+        return self._record_transition_conn(
+            conn_of(handle),
+            transition_id=transition_id,
+            chunk_id=chunk_id,
+            from_node_id=from_node_id,
+            to_node_id=to_node_id,
+            choice_name=choice_name,
+            epoch=epoch,
+            admission=admission,
+            claimant=claimant,
+            runner_id=runner_id,
+            at=at,
+            artifacts=artifacts,
+            proposals=proposals,
+            decision_id=decision_id,
+        )
+
+    def _record_transition_conn(
+        self,
+        conn: Connection,
+        *,
+        transition_id: str,
+        chunk_id: str,
+        from_node_id: str | None,
+        to_node_id: str,
+        choice_name: str | None,
+        epoch: int,
+        admission: EpochAdmission,
+        claimant: Claimant | None = None,
+        runner_id: str,
+        at: datetime,
+        artifacts: list[StoredArtifact],
+        proposals: list[StampedWorkItemProposal],
+        decision_id: str | None = None,
+    ) -> FenceRefusal | None:
+        refusal = fence(conn, chunk_id, epoch=epoch, admission=admission, claimant=claimant)
+        if refusal is not None:
+            return refusal
+        conn.execute(
+            s.transitions.insert().values(
+                transition_id=transition_id,
+                chunk_id=chunk_id,
+                graph_id=graph_id_of(conn, chunk_id),
+                from_node_id=from_node_id,
+                to_node_id=to_node_id,
+                choice_name=choice_name,
+                decision_id=decision_id,
+                epoch=epoch,
+                runner_id=runner_id,
+                recorded_at=at,
+            )
+        )
+        for row in artifacts:
             conn.execute(
-                s.transitions.insert().values(
-                    transition_id=transition_id,
-                    chunk_id=chunk_id,
-                    graph_id=graph_id_of(conn, chunk_id),
-                    from_node_id=from_node_id,
-                    to_node_id=to_node_id,
-                    choice_name=choice_name,
-                    decision_id=decision_id,
-                    epoch=epoch,
-                    runner_id=runner_id,
-                    recorded_at=at,
+                s.artifacts.insert().values(
+                    artifact_id=row.artifact_id,
+                    chunk_id=row.chunk_id,
+                    node_id=row.node_id,
+                    node_name=row.node_name,
+                    epoch=row.epoch,
+                    name=row.name,
+                    kind=row.kind.value,
+                    data=row.data,
+                    repo=row.repo,
+                    forge=row.forge,
+                    produced_at=at,
+                    seq=next_artifact_seq(conn, row.chunk_id),
                 )
             )
-            for row in artifacts:
-                conn.execute(
-                    s.artifacts.insert().values(
-                        artifact_id=row.artifact_id,
-                        chunk_id=row.chunk_id,
-                        node_id=row.node_id,
-                        node_name=row.node_name,
-                        epoch=row.epoch,
-                        name=row.name,
-                        kind=row.kind.value,
-                        data=row.data,
-                        repo=row.repo,
-                        forge=row.forge,
-                        produced_at=at,
-                        seq=next_artifact_seq(conn, row.chunk_id),
-                    )
-                )
-            insert_proposals(conn, proposals, at=at)
-            if any(is_landing_marker(row.name, row.data) for row in artifacts):
-                enqueue_close_intents(conn, chunk_id, at=at)
-            return None
+        insert_proposals(conn, proposals, at=at)
+        if any(is_landing_marker(row.name, row.data) for row in artifacts):
+            enqueue_close_intents(conn, chunk_id, at=at)
+        return None
 
     def record_migration(
         self,
@@ -156,65 +228,155 @@ class ChunkMovementStore:
         intent clear (``clear_intent``, #124). Keyed ``(chunk_id, from_node_id, epoch)``."""
         with self._store.write("record_migration") as conn:
             lock_chunk_row(conn, chunk_id)
-            if self._migration_exists(conn, chunk_id, from_node_id=from_node_id, epoch=epoch):
-                return None
-            refusal = fence(conn, chunk_id, epoch=epoch, admission=admission, claimant=claimant)
-            if refusal is not None:
-                return refusal
-            resolved_migration_id = (
-                migration_id if migration_id is not None else Id.mint(MIGRATION_PREFIX, self._clock).value
+            return self._record_migration_conn(
+                conn,
+                chunk_id,
+                from_node_id=from_node_id,
+                from_graph_id=from_graph_id,
+                to_graph_id=to_graph_id,
+                landed_node_id=landed_node_id,
+                choice_name=choice_name,
+                decision_id=decision_id,
+                model=model,
+                epoch=epoch,
+                admission=admission,
+                claimant=claimant,
+                at=at,
+                artifacts=artifacts,
+                proposals=proposals,
+                source=source,
+                release_route=release_route,
+                clear_intent=clear_intent,
+                migration_id=migration_id,
             )
+
+    def record_migration_locked(
+        self,
+        handle: ILockedChunkRead,
+        chunk_id: str,
+        *,
+        from_node_id: str | None,
+        from_graph_id: str,
+        to_graph_id: str,
+        landed_node_id: str | None,
+        choice_name: str | None,
+        decision_id: str | None = None,
+        model: str | None,
+        epoch: int,
+        admission: EpochAdmission,
+        claimant: Claimant | None = None,
+        at: datetime,
+        artifacts: list[StoredArtifact],
+        proposals: list[StampedWorkItemProposal],
+        source: MigrationSource,
+        release_route: bool = True,
+        clear_intent: bool = False,
+        migration_id: str | None = None,
+    ) -> str | FenceRefusal | None:
+        """:meth:`record_migration` on ``handle``'s already-locked connection
+        (``bzh:store-exclusive-write``) — the caller's guard reads and this write share one lock."""
+        return self._record_migration_conn(
+            conn_of(handle),
+            chunk_id,
+            from_node_id=from_node_id,
+            from_graph_id=from_graph_id,
+            to_graph_id=to_graph_id,
+            landed_node_id=landed_node_id,
+            choice_name=choice_name,
+            decision_id=decision_id,
+            model=model,
+            epoch=epoch,
+            admission=admission,
+            claimant=claimant,
+            at=at,
+            artifacts=artifacts,
+            proposals=proposals,
+            source=source,
+            release_route=release_route,
+            clear_intent=clear_intent,
+            migration_id=migration_id,
+        )
+
+    def _record_migration_conn(
+        self,
+        conn: Connection,
+        chunk_id: str,
+        *,
+        from_node_id: str | None,
+        from_graph_id: str,
+        to_graph_id: str,
+        landed_node_id: str | None,
+        choice_name: str | None,
+        decision_id: str | None = None,
+        model: str | None,
+        epoch: int,
+        admission: EpochAdmission,
+        claimant: Claimant | None = None,
+        at: datetime,
+        artifacts: list[StoredArtifact],
+        proposals: list[StampedWorkItemProposal],
+        source: MigrationSource,
+        release_route: bool = True,
+        clear_intent: bool = False,
+        migration_id: str | None = None,
+    ) -> str | FenceRefusal | None:
+        if self._migration_exists(conn, chunk_id, from_node_id=from_node_id, epoch=epoch):
+            return None
+        refusal = fence(conn, chunk_id, epoch=epoch, admission=admission, claimant=claimant)
+        if refusal is not None:
+            return refusal
+        resolved_migration_id = (
+            migration_id if migration_id is not None else Id.mint(MIGRATION_PREFIX, self._clock).value
+        )
+        conn.execute(
+            s.chunk_migrations.insert().values(
+                migration_id=resolved_migration_id,
+                chunk_id=chunk_id,
+                from_node_id=from_node_id,
+                from_graph_id=from_graph_id,
+                to_graph_id=to_graph_id,
+                landed_node_id=landed_node_id,
+                choice_name=choice_name,
+                decision_id=decision_id,
+                model_after=model,
+                epoch=epoch,
+                recorded_at=at,
+                source=source.value,
+            )
+        )
+        values: dict[str, str | None] = {"graph_id": to_graph_id}
+        if model is not None:
+            # Written INLINE: a second transactional write would split the
+            # durable fact from the pin it implies (`hub:migration-pin-consistent`).
+            values["default_model"] = DEFAULT_MODEL.encode([model])
+        if clear_intent:
+            values["intended_migration"] = None
+        conn.execute(update(s.chunks).where(s.chunks.c.chunk_id == chunk_id).values(**values))
+        if release_route:
             conn.execute(
-                s.chunk_migrations.insert().values(
-                    migration_id=resolved_migration_id,
-                    chunk_id=chunk_id,
-                    from_node_id=from_node_id,
-                    from_graph_id=from_graph_id,
-                    to_graph_id=to_graph_id,
-                    landed_node_id=landed_node_id,
-                    choice_name=choice_name,
-                    decision_id=decision_id,
-                    model_after=model,
-                    epoch=epoch,
-                    recorded_at=at,
-                    source=source.value,
+                s.route_released.insert().values(chunk_id=chunk_id, released_at=at, seq=next_route_seq(conn, chunk_id))
+            )
+        for row in artifacts:
+            conn.execute(
+                s.artifacts.insert().values(
+                    artifact_id=row.artifact_id,
+                    chunk_id=row.chunk_id,
+                    node_id=row.node_id,
+                    node_name=row.node_name,
+                    epoch=row.epoch,
+                    name=row.name,
+                    kind=row.kind.value,
+                    data=row.data,
+                    repo=row.repo,
+                    forge=row.forge,
+                    produced_at=at,
+                    seq=next_artifact_seq(conn, row.chunk_id),
                 )
             )
-            values: dict[str, str | None] = {"graph_id": to_graph_id}
-            if model is not None:
-                # Written INLINE: a second transactional write would split the
-                # durable fact from the pin it implies (`hub:migration-pin-consistent`).
-                values["default_model"] = DEFAULT_MODEL.encode([model])
-            if clear_intent:
-                values["intended_migration"] = None
-            conn.execute(update(s.chunks).where(s.chunks.c.chunk_id == chunk_id).values(**values))
-            if release_route:
-                conn.execute(
-                    s.route_released.insert().values(
-                        chunk_id=chunk_id, released_at=at, seq=next_route_seq(conn, chunk_id)
-                    )
-                )
-            for row in artifacts:
-                conn.execute(
-                    s.artifacts.insert().values(
-                        artifact_id=row.artifact_id,
-                        chunk_id=row.chunk_id,
-                        node_id=row.node_id,
-                        node_name=row.node_name,
-                        epoch=row.epoch,
-                        name=row.name,
-                        kind=row.kind.value,
-                        data=row.data,
-                        repo=row.repo,
-                        forge=row.forge,
-                        produced_at=at,
-                        seq=next_artifact_seq(conn, row.chunk_id),
-                    )
-                )
-            insert_proposals(conn, proposals, at=at)
-            if any(is_landing_marker(row.name, row.data) for row in artifacts):
-                enqueue_close_intents(conn, chunk_id, at=at)
-            return resolved_migration_id
+        insert_proposals(conn, proposals, at=at)
+        if any(is_landing_marker(row.name, row.data) for row in artifacts):
+            enqueue_close_intents(conn, chunk_id, at=at)
+        return resolved_migration_id
 
     def record_restart_locked(
         self,

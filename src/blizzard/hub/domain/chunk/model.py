@@ -1129,6 +1129,13 @@ class ChunkFacts:
         )
         return not left and (self.latest_epoch() or 0) <= epoch
 
+    def accepted_transition_target(self, *, from_node_id: str, epoch: int) -> str | None:
+        """The ``to_node_id`` of the transition already recorded out of ``from_node_id`` at
+        ``epoch`` — the replay key — or ``None``."""
+        return next(
+            (t.to_node_id for t in self.transitions if t.from_node_id == from_node_id and t.epoch == epoch), None
+        )
+
     def epoch_floor(self) -> int:
         """The epoch a fresh node-step envelope carries — the latest fencing epoch, ``0`` before any."""
         return self.latest_epoch() or 0

@@ -29,6 +29,7 @@ from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, WorkRefLabel
 from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.decisions import IWriteChunkDecisionsRepository
 from blizzard.hub.domain.chunk.ports.escalations import IWriteChunkEscalationsRepository
+from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
@@ -166,6 +167,16 @@ class ApplyResult:
         return cls(outcome=ApplyOutcome.HUB_NODE_TAKEN, detail="chunk migrated onto a hub node (replay)")
 
 
+@domain_model
+@dataclass(frozen=True)
+class _Raced:
+    """A movement a concurrent submission already recorded at this submission's ``(node, epoch)``:
+    the transition's target, or the migration's replay class."""
+
+    transition_to: str | None = None
+    migration: ReplayedMigration | None = None
+
+
 class ApplyService:
     """Apply a node-step completion to a chunk, fenced and idempotent. Orchestration only: it
     reads, probes for replays, asks the completion rules what to do, and records it."""
@@ -177,6 +188,7 @@ class ApplyService:
         movement: IWriteChunkMovementRepository,
         decisions: IWriteChunkDecisionsRepository,
         escalations: IWriteChunkEscalationsRepository,
+        exclusive: IChunkExclusiveWrites,
         route: IReadChunkRouteRepository,
         artifacts: IReadChunkArtifactsRepository,
         retired: RetiredRunnerGuard,
@@ -188,6 +200,8 @@ class ApplyService:
         self._movement = movement
         self._decisions = decisions
         self._escalations = escalations
+        # Re-derives the current-node rule under the row lock (``bzh:store-exclusive-write``).
+        self._exclusive = exclusive
         self._route = route
         self._artifacts = artifacts
         self._retired = retired
@@ -209,7 +223,8 @@ class ApplyService:
         enabled graph" — so this holds no graph repo of its own (``bzh:domain-takes-objects``).
 
         Order is behavior: retired → facts → migration replay → route token → from node →
-        transition replay → attempt coherence → proposals → commit pointer → plan → record."""
+        transition replay → attempt coherence → proposals → commit pointer → plan → record. Attempt
+        coherence is re-derived under the chunk's row lock, ahead of the write itself."""
         targets = targets or MigrationTargets(cross_graph=None, intended=None, follow_latest=None)
         self._retired.refuse_if_retired(submission.runner_id, action="completion")
         facts = self._facts.load_facts(chunk.chunk_id)
@@ -273,13 +288,15 @@ class ApplyService:
         artifacts = () if resolving else submission.artifacts
         proposals = () if resolving else submission.proposals
         if plan.migrates:
-            return self._migrate_across(chunk, facts, from_node, submission, plan.edge, targets, artifacts, proposals)
+            return self._migrate_across(
+                chunk, graph, facts, from_node, submission, plan.edge, targets, artifacts, proposals
+            )
         assert plan.to_node_id is not None
         # The transition-time consult — after every rejection and before `record_transition`,
         # so a firing intent or follow-latest drift writes no transition row of its own.
         landing = Landing.consult(chunk, plan.edge, targets)
         if landing is not None:
-            return self._land_migration(chunk, from_node, submission, landing, submission.artifacts, proposals)
+            return self._land_migration(chunk, graph, from_node, submission, landing, submission.artifacts, proposals)
         return self._transition(chunk, graph, from_node, submission, plan, artifacts, proposals)
 
     def _transition(
@@ -294,23 +311,40 @@ class ApplyService:
     ) -> ApplyResult:
         assert plan.to_node_id is not None
         fresh_transition_id = Id.mint(TRANSITION_PREFIX, self._clock).value
-        refusal = self._movement.record_transition(
-            transition_id=fresh_transition_id,
-            chunk_id=chunk.chunk_id,
-            from_node_id=from_node.node_id,
-            to_node_id=plan.to_node_id,
-            choice_name=submission.choice,
-            epoch=submission.epoch,
-            admission=EpochAdmission.CURRENT,
-            claimant=Claimant(submission.runner_id, submission.lease_id),
-            runner_id=submission.runner_id,
-            at=self._clock.now(),
-            artifacts=self._artifact_rows(chunk, from_node, submission.epoch, artifacts),
-            proposals=self._proposal_rows(chunk, from_node, submission, proposals),
-            decision_id=submission.decision_id,
-        )
-        if refusal is not None:
-            return ApplyResult.failure(refusal.detail)
+        artifact_rows = self._artifact_rows(chunk, from_node, submission.epoch, artifacts)
+        proposal_rows = self._proposal_rows(chunk, from_node, submission, proposals)
+        with self._exclusive.locked([chunk.chunk_id]) as handle:
+            locked = handle.facts(chunk.chunk_id)
+            if locked is None:
+                return ApplyResult.failure(f"unknown chunk {chunk.chunk_id}")
+            # A racing duplicate at this (node, epoch) answers as the replay it is, never as a
+            # refusal for no longer standing at `from_node`.
+            raced = self._landed_under_lock(locked, submission)
+            if raced is None:
+                try:
+                    refuse_incoherent_attempt(locked, graph, from_node=from_node, epoch=submission.epoch)
+                except CompletionRefused as refused:
+                    return ApplyResult.failure(refused.detail)
+                refusal = self._movement.record_transition_locked(
+                    handle,
+                    transition_id=fresh_transition_id,
+                    chunk_id=chunk.chunk_id,
+                    from_node_id=from_node.node_id,
+                    to_node_id=plan.to_node_id,
+                    choice_name=submission.choice,
+                    epoch=submission.epoch,
+                    admission=EpochAdmission.CURRENT,
+                    claimant=Claimant(submission.runner_id, submission.lease_id),
+                    runner_id=submission.runner_id,
+                    at=self._clock.now(),
+                    artifacts=artifact_rows,
+                    proposals=proposal_rows,
+                    decision_id=submission.decision_id,
+                )
+                if refusal is not None:
+                    return ApplyResult.failure(refusal.detail)
+        if raced is not None:
+            return self._answer_raced(chunk, graph, from_node, submission, raced)
         return self._respond(
             chunk,
             graph,
@@ -325,6 +359,7 @@ class ApplyService:
     def _migrate_across(
         self,
         chunk: Chunk,
+        graph: Graph,
         facts: ChunkFacts,
         from_node: Node,
         submission: Completion,
@@ -337,7 +372,7 @@ class ApplyService:
         unresolved target answers ``PARKED_AT_GATE``: ``FAILURE`` would requeue and supersede it."""
         if targets.cross_graph is not None:
             landing = Landing.authored(edge, targets.cross_graph, from_node)
-            return self._land_migration(chunk, from_node, submission, landing, artifacts, proposals)
+            return self._land_migration(chunk, graph, from_node, submission, landing, artifacts, proposals)
         if not facts.escalated_at(submission.epoch):
             draft = UnresolvableTarget.of(edge)
             # Hub-authored: no runner runtime dir to compose a wrapped takeover command from.
@@ -359,6 +394,7 @@ class ApplyService:
     def _land_migration(
         self,
         chunk: Chunk,
+        graph: Graph,
         from_node: Node,
         submission: Completion,
         landing: Landing,
@@ -367,28 +403,46 @@ class ApplyService:
     ) -> ApplyResult:
         """Record the migration atomically (fact + re-pin + artifacts + proposals + route
         release/retain + intent clear), then govern by the landed node's executor."""
-        recorded = self._movement.record_migration(
-            chunk.chunk_id,
-            from_node_id=from_node.node_id,
-            from_graph_id=from_node.graph_id,
-            to_graph_id=landing.graph.graph_id,
-            landed_node_id=landing.node_id,
-            choice_name=submission.choice,
-            decision_id=submission.decision_id,
-            model=landing.model,
-            source=landing.source,
-            epoch=submission.epoch,
-            admission=EpochAdmission.CURRENT,
-            claimant=Claimant(submission.runner_id, submission.lease_id),
-            at=self._clock.now(),
-            artifacts=self._artifact_rows(chunk, from_node, submission.epoch, artifacts),
-            proposals=self._proposal_rows(chunk, from_node, submission, proposals),
-            release_route=landing.releases_route,
-            clear_intent=landing.clear_intent,
-            migration_id=Id.mint(MIGRATION_PREFIX, self._clock).value,
-        )
-        if isinstance(recorded, FenceRefusal):
-            return ApplyResult.failure(recorded.detail)
+        artifact_rows = self._artifact_rows(chunk, from_node, submission.epoch, artifacts)
+        proposal_rows = self._proposal_rows(chunk, from_node, submission, proposals)
+        migration_id = Id.mint(MIGRATION_PREFIX, self._clock).value
+        with self._exclusive.locked([chunk.chunk_id]) as handle:
+            locked = handle.facts(chunk.chunk_id)
+            if locked is None:
+                return ApplyResult.failure(f"unknown chunk {chunk.chunk_id}")
+            raced = self._landed_under_lock(locked, submission)
+            recorded: str | None = None
+            if raced is None:
+                try:
+                    refuse_incoherent_attempt(locked, graph, from_node=from_node, epoch=submission.epoch)
+                except CompletionRefused as refused:
+                    return ApplyResult.failure(refused.detail)
+                outcome = self._movement.record_migration_locked(
+                    handle,
+                    chunk.chunk_id,
+                    from_node_id=from_node.node_id,
+                    from_graph_id=from_node.graph_id,
+                    to_graph_id=landing.graph.graph_id,
+                    landed_node_id=landing.node_id,
+                    choice_name=submission.choice,
+                    decision_id=submission.decision_id,
+                    model=landing.model,
+                    source=landing.source,
+                    epoch=submission.epoch,
+                    admission=EpochAdmission.CURRENT,
+                    claimant=Claimant(submission.runner_id, submission.lease_id),
+                    at=self._clock.now(),
+                    artifacts=artifact_rows,
+                    proposals=proposal_rows,
+                    release_route=landing.releases_route,
+                    clear_intent=landing.clear_intent,
+                    migration_id=migration_id,
+                )
+                if isinstance(outcome, FenceRefusal):
+                    return ApplyResult.failure(outcome.detail)
+                recorded = outcome
+        if raced is not None:
+            return self._answer_raced(chunk, graph, from_node, submission, raced)
         _CP_MIGRATE_AFTER_RECORD.reached()
         landed_node = landing.node
         if not landing.releases_route:
@@ -396,6 +450,27 @@ class ApplyService:
             self._hub_node_executor.run(chunk, landing.graph, landed_node, epoch=submission.epoch)
             return ApplyResult.landed_on_hub(landed_node, recorded)
         return ApplyResult.migrated(from_node, landing.graph, recorded)
+
+    @staticmethod
+    def _landed_under_lock(locked: ChunkFacts, submission: Completion) -> _Raced | None:
+        """The movement a concurrent submission already recorded at this submission's
+        ``(node, epoch)``, read from the facts loaded under the row lock."""
+        target = locked.accepted_transition_target(from_node_id=submission.from_node_id, epoch=submission.epoch)
+        if target is not None:
+            return _Raced(transition_to=target)
+        if any(m.from_node_id == submission.from_node_id and m.epoch == submission.epoch for m in locked.migrations):
+            return _Raced(
+                migration=replayed_migration(locked, from_node_id=submission.from_node_id, epoch=submission.epoch)
+            )
+        return None
+
+    def _answer_raced(
+        self, chunk: Chunk, graph: Graph, from_node: Node, submission: Completion, raced: _Raced
+    ) -> ApplyResult:
+        if raced.migration is not None:
+            return ApplyResult.replayed(raced.migration, epoch=submission.epoch)
+        assert raced.transition_to is not None
+        return self._respond(chunk, graph, from_node, submission, to_node_id=raced.transition_to, is_fresh_apply=False)
 
     def _respond(
         self,

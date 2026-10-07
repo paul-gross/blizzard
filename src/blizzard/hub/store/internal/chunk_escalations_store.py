@@ -112,6 +112,7 @@ class ChunkEscalationsStore:
         chunk_id: str,
         *,
         epoch: int,
+        admission: EpochAdmission,
         runner_id: str,
         takeover_command: str,
         at: datetime,
@@ -131,6 +132,8 @@ class ChunkEscalationsStore:
                 )
             ).first()
             if already is not None:
+                return False
+            if fence(conn, chunk_id, epoch=epoch, admission=admission) is not None:
                 return False
             record_hub_lease(conn, chunk_id, epoch=epoch, runner_id=runner_id, at=at)
             conn.execute(

@@ -19,12 +19,14 @@ from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import DecisionChoice, DocketEntry, GateDecision
 from blizzard.hub.domain.chunk.ports.decisions import IWriteChunkDecisionsRepository, LiveDecisionStatus
+from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
 from blizzard.hub.domain.chunk.proposals import StampedWorkItemProposal
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import (
     chunk_has_ended,
+    conn_of,
     enqueue_close_intents,
     fence,
     insert_proposals,
@@ -243,45 +245,131 @@ class ChunkDecisionsStore:
         proposals: list[StampedWorkItemProposal],
         imposed_by_runner_id: str | None,
     ) -> FenceRefusal | None:
-        payload = json.dumps([{"name": c.name, "description": c.description} for c in choices])
         with self._store.write("record_decision") as conn:
             lock_chunk_row(conn, chunk_id)
-            refusal = fence(conn, chunk_id, epoch=epoch, admission=admission, claimant=claimant)
-            if refusal is not None:
-                return refusal
+            return self._record_decision_conn(
+                conn,
+                decision_id=decision_id,
+                chunk_id=chunk_id,
+                node_id=node_id,
+                node_name=node_name,
+                epoch=epoch,
+                admission=admission,
+                claimant=claimant,
+                choices=choices,
+                at=at,
+                artifacts=artifacts,
+                proposals=proposals,
+                imposed_by_runner_id=imposed_by_runner_id,
+            )
+
+    def record_decision_locked(
+        self,
+        handle: ILockedChunkRead,
+        *,
+        decision_id: str,
+        chunk_id: str,
+        node_id: str,
+        node_name: str,
+        epoch: int,
+        admission: EpochAdmission,
+        claimant: Claimant | None = None,
+        choices: list[DecisionChoice],
+        at: datetime,
+        artifacts: list[StoredArtifact],
+        proposals: list[StampedWorkItemProposal],
+        imposed_by_runner_id: str | None,
+    ) -> bool | FenceRefusal:
+        """:meth:`record_decision` on ``handle``'s already-locked connection
+        (``bzh:store-exclusive-write``). A decision already open at ``(chunk_id, node_id, epoch)``
+        answers ``False`` — the lost-ack replay, nothing written; ``True`` is a fresh write."""
+        conn = conn_of(handle)
+        if self._decision_exists(conn, chunk_id, node_id=node_id, epoch=epoch):
+            return False
+        refusal = self._record_decision_conn(
+            conn,
+            decision_id=decision_id,
+            chunk_id=chunk_id,
+            node_id=node_id,
+            node_name=node_name,
+            epoch=epoch,
+            admission=admission,
+            claimant=claimant,
+            choices=choices,
+            at=at,
+            artifacts=artifacts,
+            proposals=proposals,
+            imposed_by_runner_id=imposed_by_runner_id,
+        )
+        return refusal if refusal is not None else True
+
+    def _record_decision_conn(
+        self,
+        conn: Connection,
+        *,
+        decision_id: str,
+        chunk_id: str,
+        node_id: str,
+        node_name: str,
+        epoch: int,
+        admission: EpochAdmission,
+        claimant: Claimant | None = None,
+        choices: list[DecisionChoice],
+        at: datetime,
+        artifacts: list[StoredArtifact],
+        proposals: list[StampedWorkItemProposal],
+        imposed_by_runner_id: str | None,
+    ) -> FenceRefusal | None:
+        payload = json.dumps([{"name": c.name, "description": c.description} for c in choices])
+        refusal = fence(conn, chunk_id, epoch=epoch, admission=admission, claimant=claimant)
+        if refusal is not None:
+            return refusal
+        conn.execute(
+            s.decisions.insert().values(
+                decision_id=decision_id,
+                chunk_id=chunk_id,
+                node_id=node_id,
+                node_name=node_name,
+                epoch=epoch,
+                choices=payload,
+                submitted_at=at,
+                imposed_by_runner_id=imposed_by_runner_id,
+            )
+        )
+        for row in artifacts:
             conn.execute(
-                s.decisions.insert().values(
-                    decision_id=decision_id,
-                    chunk_id=chunk_id,
-                    node_id=node_id,
-                    node_name=node_name,
-                    epoch=epoch,
-                    choices=payload,
-                    submitted_at=at,
-                    imposed_by_runner_id=imposed_by_runner_id,
+                s.artifacts.insert().values(
+                    artifact_id=row.artifact_id,
+                    chunk_id=row.chunk_id,
+                    node_id=row.node_id,
+                    node_name=row.node_name,
+                    epoch=row.epoch,
+                    name=row.name,
+                    kind=row.kind.value,
+                    data=row.data,
+                    repo=row.repo,
+                    forge=row.forge,
+                    produced_at=at,
+                    seq=next_artifact_seq(conn, row.chunk_id),
                 )
             )
-            for row in artifacts:
-                conn.execute(
-                    s.artifacts.insert().values(
-                        artifact_id=row.artifact_id,
-                        chunk_id=row.chunk_id,
-                        node_id=row.node_id,
-                        node_name=row.node_name,
-                        epoch=row.epoch,
-                        name=row.name,
-                        kind=row.kind.value,
-                        data=row.data,
-                        repo=row.repo,
-                        forge=row.forge,
-                        produced_at=at,
-                        seq=next_artifact_seq(conn, row.chunk_id),
-                    )
+        insert_proposals(conn, proposals, at=at)
+        if any(is_landing_marker(row.name, row.data) for row in artifacts):
+            enqueue_close_intents(conn, chunk_id, at=at)
+        return None
+
+    @staticmethod
+    def _decision_exists(conn: Connection, chunk_id: str, *, node_id: str, epoch: int) -> bool:
+        return (
+            conn.execute(
+                select(s.decisions.c.decision_id).where(
+                    (s.decisions.c.chunk_id == chunk_id)
+                    & (s.decisions.c.node_id == node_id)
+                    & (s.decisions.c.epoch == epoch)
                 )
-            insert_proposals(conn, proposals, at=at)
-            if any(is_landing_marker(row.name, row.data) for row in artifacts):
-                enqueue_close_intents(conn, chunk_id, at=at)
-            return None
+            ).first()
+            is not None
+        )
 
     def record_decision_resolution(
         self, decision_id: str, *, choice: str, resolved_by: str, at: datetime, struck: Sequence[str] = ()
