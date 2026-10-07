@@ -69,6 +69,9 @@
  *     sections with no horizontal overflow at phone widths, including the
  *     General tab's `@media (min-width: 720px)` two-column grid collapse and
  *     a long unbroken artifact key on the Artifacts tab.
+ *   - projects/hub/src/app/events/events-scroll.shell-sweep.spec.ts — the Events
+ *     page feed: 80 events in a bounded shell genuinely scroll inside `.rows` alone
+ *     (the panel body does not), to the last event, at 1280/390px.
  *   - projects/hub/src/app/board/hover-tint.shell-sweep.spec.ts — the
  *     shared `--tint-hover`/`--tint-selected` wash on board-card,
  *     chunk-timeline, and chunk-artifacts rows: a computed-style claim, not a
@@ -259,6 +262,7 @@ const SWEEPS = [
   { project: 'runner', spec: 'projects/runner/src/app/core/identity/session-recovery-view.shell-sweep.spec.ts' },
   { project: 'runner', spec: 'projects/runner/src/app/shell/nav/app-nav.shell-sweep.spec.ts' },
   { project: 'runner', spec: 'projects/runner/src/app/board/chunk/chunk-page-runner-layout.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/events/events-scroll.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/board/hover-tint.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/chunk/chunk-detail/chunk-facts-alignment.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/graphs/graph-detail.shell-sweep.spec.ts' },

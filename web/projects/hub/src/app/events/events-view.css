@@ -11,6 +11,14 @@
 fleet-kit-panel.fill {
   flex: 1;
 }
+/* The panel body only clips (bodyScroll false); this column bounds the list so
+   `.rows` is the one scroller and the filters stay put above it. */
+.body {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
 .filters {
   display: flex;
   flex-direction: column;
