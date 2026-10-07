@@ -23,7 +23,7 @@ from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.leases import NewLease
-from blizzard.runner.leases.worker_stdout import WorkerStdoutFiles
+from blizzard.runner.leases.internal.worker_stdout_files import WorkerStdoutFiles
 from blizzard.runner.usage.recorder import UsageRecorder
 from tests.repo_files import repo_root
 from tests.runner_fakes import FakeHarness, FakeProbe, FakeTranscriptSource, make_store

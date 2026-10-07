@@ -47,7 +47,7 @@ from blizzard.runner.leases.asks import IWriteAskRepository
 from blizzard.runner.leases.elicitation import IWriteElicitationRepository
 from blizzard.runner.leases.escalations import IReadEscalationRepository
 from blizzard.runner.leases.lease_auth import LeaseToken
-from blizzard.runner.leases.worker_stdout import WorkerStdoutFiles
+from blizzard.runner.leases.worker_stdout import IWorkerStdoutFiles
 from blizzard.runner.lifecycle.env_release import EnvironmentRelease
 from blizzard.runner.lifecycle.judgement.artifacts import IWriteGraphArtifactRepository, PinnedGraphArtifact
 from blizzard.runner.lifecycle.judgement.elicitation_files import IElicitationFiles
@@ -173,7 +173,7 @@ class SpawnContext(TranscriptPumpContext, Protocol):
     @property
     def process(self) -> IProcessProbe: ...
     @property
-    def worker_files(self) -> WorkerStdoutFiles: ...
+    def worker_files(self) -> IWorkerStdoutFiles: ...
     @property
     def worker_scratch(self) -> WorkerScratchDirs: ...
     @property

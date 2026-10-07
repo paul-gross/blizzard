@@ -22,7 +22,7 @@ from blizzard.runner.harness.adapter import (
     WorkerHandle,
     WorkerPreamble,
 )
-from blizzard.runner.lifecycle.judgement.elicitation_files import IReadElicitationReply
+from blizzard.runner.lifecycle.judgement.elicitation_files import IElicitationReplyReader
 from blizzard.runner.node_steps.envelope import Choice, Envelope, EnvelopeNode
 from blizzard.runner.process.probe import IProcessProbe
 from blizzard.runner.selftest.model import (
@@ -98,7 +98,7 @@ class Scratch:
     adapter: IHarnessSelfTestSeam
     scratch_git: IScratchGit
     process: IProcessProbe
-    elicitation_replies: IReadElicitationReply
+    elicitation_replies: IElicitationReplyReader
     workdir: str
     session_id: str
 
@@ -278,7 +278,7 @@ class SelfTest:
     adapter: IHarnessSelfTestSeam
     scratch_git: IScratchGit
     process: IProcessProbe
-    elicitation_replies: IReadElicitationReply
+    elicitation_replies: IElicitationReplyReader
 
     def run(self) -> list[SelfTestCheck]:
         with self.scratch_git.new_scratch_repo() as repo:

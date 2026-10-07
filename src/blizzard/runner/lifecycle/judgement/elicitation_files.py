@@ -7,7 +7,7 @@ from __future__ import annotations
 from typing import Protocol
 
 
-class IReadElicitationReply(Protocol):
+class IElicitationReplyReader(Protocol):
     """The read half: a launched elicitation's collected reply."""
 
     def read(self, path: str) -> str:
@@ -16,7 +16,7 @@ class IReadElicitationReply(Protocol):
         ...
 
 
-class IElicitationFiles(IReadElicitationReply, Protocol):
+class IElicitationFiles(IElicitationReplyReader, Protocol):
     """One runner's elicitation-output file layout: where a launch writes, and its cleanup."""
 
     def output_path(self, lease_id: str, epoch: int, attempt: int) -> str:

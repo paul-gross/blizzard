@@ -13,7 +13,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import SELFTEST_PREFIX, Id
 from blizzard.runner.harness.adapter import IHarnessSelfTestSeam
 from blizzard.runner.harness.selftest_result import IWriteSelfTestResultRepository
-from blizzard.runner.lifecycle.judgement.elicitation_files import IReadElicitationReply
+from blizzard.runner.lifecycle.judgement.elicitation_files import IElicitationReplyReader
 from blizzard.runner.process.probe import IProcessProbe
 from blizzard.runner.selftest.checks import SelfTest
 from blizzard.runner.selftest.model import SelfTestCheck, SelfTestRun
@@ -37,7 +37,7 @@ class SelfTestService:
         *,
         scratch_git: IScratchGit,
         process: IProcessProbe,
-        elicitation_replies: IReadElicitationReply,
+        elicitation_replies: IElicitationReplyReader,
         clock: IClock,
         run_budget_seconds: float = _DEFAULT_RUN_BUDGET_SECONDS,
         results: IWriteSelfTestResultRepository | None = None,
