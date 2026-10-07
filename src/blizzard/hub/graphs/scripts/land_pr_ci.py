@@ -7,12 +7,12 @@ everything else waits. A head beyond the submitted commit plus its own base merg
 from __future__ import annotations
 
 import sys
-from collections import Counter
 from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any, ClassVar
 
 from blizzard.foundation.roles import domain_model
+from blizzard.hub.graphs.scripts.base_merge import contributes_only_base_change, merge_base_of
 from blizzard.hub.graphs.scripts.land_common import (
     ForgeReadDegraded,
     LandedRevisionUnknown,
@@ -55,9 +55,6 @@ _UPDATE = "update"  # behind — fire update-branch, then re-poll
 _BOUNCE = "bounce"  # dirty — a real content conflict, kick back to build
 _FAILED = "failed"  # a check run completed with a terminal conclusion — never re-poll
 _FOREIGN = "foreign-head"  # the PR head carries something beyond the submitted commit and base merges
-
-# A compare this long may be cut short.
-_COMPARE_FILES_MAX = 300
 
 # A completed check run in any of these is never going to turn green on its own, so
 # polling on out to `poll_timeout` only burns the slot. `cancelled` is NOT
@@ -224,42 +221,6 @@ def _first_parent_chain(commits: list[Any], head: str, submitted: str) -> tuple[
     return chain, None
 
 
-def _changed_lines(file: dict[str, Any]) -> Counter[str] | None:
-    """A patch's added and removed lines, or ``None`` when the forge sent no patch."""
-    patch = file.get("patch")
-    if not isinstance(patch, str):
-        return None
-    return Counter(line for line in patch.splitlines() if line[:1] in {"+", "-"})
-
-
-def _files_by_name(payload: dict[str, Any]) -> dict[str, dict[str, Any]] | None:
-    """A compare's files by name, or ``None`` when the list may be truncated or malformed."""
-    files = payload.get("files")
-    if not isinstance(files, list) or len(files) >= _COMPARE_FILES_MAX:
-        return None
-    if not all(isinstance(f, dict) and isinstance(f.get("filename"), str) for f in files):
-        return None
-    return {f["filename"]: f for f in files}
-
-
-def _contribution_matches(merged: dict[str, Any], base_side: dict[str, Any]) -> bool:
-    """Whether a merge adds exactly the base side's change: same files, each the same blob or
-    the same changed lines. Unprovable is ``False``."""
-    got, want = _files_by_name(merged), _files_by_name(base_side)
-    if got is None or want is None or got.keys() != want.keys():
-        return False
-    for name, file in got.items():
-        other = want[name]
-        if file.get("previous_filename") != other.get("previous_filename"):
-            return False
-        if file.get("sha") is not None and file.get("sha") == other.get("sha"):
-            continue
-        lines, other_lines = _changed_lines(file), _changed_lines(other)
-        if lines is None or other_lines is None or lines != other_lines:
-            return False
-    return True
-
-
 def gate_head(run: LandRun, bare_repo: str, submitted: str, head: str) -> HeadGate:
     """Whether ``head`` is ``submitted`` or descends from it through base merges alone.
 
@@ -293,9 +254,14 @@ def gate_head(run: LandRun, bare_repo: str, submitted: str, head: str) -> HeadGa
             continue
         merged = run.compare(bare_repo, first, sha)
         base_side = run.compare(bare_repo, first, second)
-        if merged is None or base_side is None:
+        merge_base = merge_base_of(base_side) if base_side is not None else None
+        if merged is None or base_side is None or merge_base is None:
             offenders.append(f"{sha} (its content could not be compared with the base branch's change)")
-        elif not _contribution_matches(merged, base_side):
+            continue
+        feature_side = run.compare(bare_repo, merge_base, first)
+        if feature_side is None:
+            offenders.append(f"{sha} (its content could not be compared with the base branch's change)")
+        elif not contributes_only_base_change(merged, base_side, feature_side):
             offenders.append(f"{sha} (adds content beyond the base branch's change)")
     return HeadGate(offenders)
 
