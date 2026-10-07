@@ -1,14 +1,14 @@
 import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
-import { type RoutineRunResponse, runRoutineApiRoutinesRoutineIdRunPost, hubRoutinesKey } from 'fleet';
+import { type hubApi, type RoutineRunResponse, runRoutineApiRoutinesRoutineIdRunPost, hubRoutinesKey } from 'fleet';
 import { runRoutineMutationKey } from '../../core/mutation-keys';
 
 /** Variables for running an existing routine against a scope in a given mode. */
 export interface RoutineRunVars {
   readonly routineId: string;
   readonly scopeSlug: string;
-  readonly mode: 'full' | 'delta';
+  readonly mode: hubApi.RunMode;
   readonly note: string | null;
 }
 

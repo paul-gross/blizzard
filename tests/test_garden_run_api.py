@@ -11,10 +11,11 @@ from pathlib import Path
 import pytest
 from sqlalchemy import insert
 
+from blizzard.foundation.run_mode import RunMode
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.domain.chunk.model import WorkItemAuthor
 from blizzard.hub.domain.config.changes import ChangeContext, Door
-from blizzard.hub.domain.garden.routines import Routine, RunMode
+from blizzard.hub.domain.garden.routines import Routine
 from blizzard.hub.domain.garden.scopes import ScopeSlug
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.store import schema as s

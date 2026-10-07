@@ -46,9 +46,9 @@ def _seeded_hub(tmp_path: Path) -> tuple[HubHarness, str, str]:
         for cid in ("ch_a", "ch_b"):
             seed_chunk(conn, cid, graph_id="gr_1", at=t0)
     rows: list[tuple[EventLogSeverity, str, str, str, str, int]] = [
-        ("info", "attempt-abandoned", "r1", "ch_a", "abandoned", 1),
-        ("warning", "attempt-failed", "r1", "ch_a", "retried", 10),
-        ("critical", "worker-lost", "r2", "ch_b", "lost", 20),
+        (EventLogSeverity.INFO, "attempt-abandoned", "r1", "ch_a", "abandoned", 1),
+        (EventLogSeverity.WARNING, "attempt-failed", "r1", "ch_a", "retried", 10),
+        (EventLogSeverity.CRITICAL, "worker-lost", "r2", "ch_b", "lost", 20),
     ]
     for severity, kind, runner, chunk, message, sec in rows:
         store.events.record_event(

@@ -18,9 +18,11 @@ from sqlalchemy import Engine
 from blizzard.auth_core import Role
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.event_log import EventLogSeverity
 from blizzard.foundation.garden_proposals import GardenProposalOrigin
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.migration_source import MigrationSource
+from blizzard.foundation.run_mode import RunMode
 from blizzard.foundation.tokens import TokenHash
 from blizzard.hub.auth.auth_state import IReadAuthStateRepository
 from blizzard.hub.auth.errors import RepoErrorFactory
@@ -67,7 +69,7 @@ from blizzard.hub.domain.garden.findings.trend import IReadGardenTrendRepository
 from blizzard.hub.domain.garden.proposals.closure import IReadGardenProposalClosureRepository
 from blizzard.hub.domain.garden.proposals.model import IReadGardenProposalRepository
 from blizzard.hub.domain.garden.proposals.resolution import resolve_proposal_findings
-from blizzard.hub.domain.garden.routines import IReadRoutineRepository, IReadRoutineScopeRepository, RunMode
+from blizzard.hub.domain.garden.routines import IReadRoutineRepository, IReadRoutineScopeRepository
 from blizzard.hub.domain.garden.run_context import IReadRunContextRepository
 from blizzard.hub.domain.garden.runs.history import IReadGardenRunRepository
 from blizzard.hub.domain.garden.runs.sweeps import IReadGardenSweepsRepository
@@ -1569,7 +1571,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     chunk_events = "ch_hub_events"
     _mint(chunk_events, "1012", at=_ht(58))
     write.events.record_event(
-        severity="info",
+        severity=EventLogSeverity.INFO,
         kind="chunk.transitioned",
         runner_id=HUB_RUNNER_ID,
         chunk_id=chunk_events,
@@ -1580,7 +1582,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         at=_ht(59),
     )
     write.events.record_event(
-        severity="warning",
+        severity=EventLogSeverity.WARNING,
         kind="chunk.paused",
         runner_id=None,
         chunk_id=chunk_events,

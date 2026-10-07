@@ -9,6 +9,7 @@ import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.ids import Id
+from blizzard.foundation.run_mode import RunMode
 from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.garden.findings.model import FindingSet
 from blizzard.hub.domain.garden.runs.baselines import (
@@ -73,7 +74,9 @@ def test_a_run_window_past_the_cap_refuses() -> None:
 
 
 def _record(chunk_id: str) -> RunDeliveries:
-    identity = RunIdentity(chunk_id=chunk_id, routine_name="nightly", scope_slug="blizzard", mode="full", minted_at=_T0)
+    identity = RunIdentity(
+        chunk_id=chunk_id, routine_name="nightly", scope_slug="blizzard", mode=RunMode.FULL, minted_at=_T0
+    )
     return RunDeliveries(identity=identity, delivered=[])
 
 

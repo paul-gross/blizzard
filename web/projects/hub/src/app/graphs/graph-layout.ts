@@ -1,6 +1,6 @@
 import dagre from '@dagrejs/dagre';
 
-import { hubApi, type GraphView } from 'fleet';
+import { hubApi, type GraphNodeView, type GraphView } from 'fleet';
 import { LABEL_HEIGHT, type TextMeasurer, labelBoxWidth, migrationBox, nodeBox } from './graph-box-sizing';
 import { type EdgeKind, type EdgeTarget, type ResolvedEdge, resolveEdges } from './graph-edge-target';
 
@@ -65,7 +65,7 @@ const SELF_LOOP_MARGIN = 60;
 export interface LaidOutNode {
   readonly id: string;
   readonly name: string;
-  readonly executor: string;
+  readonly executor: GraphNodeView['executor'];
   /** The meta line, already wrapped to the box: one entry per rendered line, empty
    * when the node has no meta at all. */
   readonly metaLines: readonly string[];

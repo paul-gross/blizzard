@@ -17,6 +17,7 @@ import pytest
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.node_steps import Executor
+from blizzard.foundation.run_mode import RunMode
 from blizzard.hub.api.garden_formats import GardenFormats
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, EscalationFact, MigrationFact, TransitionFact
 from blizzard.hub.domain.chunk.ports.record import ChunkPage
@@ -174,7 +175,7 @@ def _chunk(chunk_id: str, *, graph_id: str = "gr_1") -> Chunk:
 
 
 def _identity(
-    chunk_id: str, *, routine_name: str = "nightly", scope_slug: str = "blizzard", mode: str = "full"
+    chunk_id: str, *, routine_name: str = "nightly", scope_slug: str = "blizzard", mode: RunMode = RunMode.FULL
 ) -> RunIdentity:
     return RunIdentity(chunk_id=chunk_id, routine_name=routine_name, scope_slug=scope_slug, mode=mode, minted_at=_T0)
 

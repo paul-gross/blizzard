@@ -35,7 +35,6 @@ from blizzard.hub.domain.garden.routines import (
     RoutineGraphUnresolvedError,
     RoutineNameImmutableError,
     RoutineNameTakenError,
-    RunMode,
 )
 from blizzard.hub.domain.garden.runs.baselines import RoutineBaseline
 from blizzard.hub.domain.garden.runs.run import RoutineRetiredError, RunResult, ScopeNotRelatedError, ScopeRetiredError
@@ -494,7 +493,7 @@ def _run_response(result: RunResult) -> RoutineRunResponse:
         body=result.item.body,
         routine_name=result.item.routine_name or "",
         scope_slug=result.item.scope_slug or "",
-        effective_mode=result.effective_mode.value,
+        effective_mode=result.effective_mode,
         downgraded=result.downgraded,
         baseline_finding_set_id=baseline.finding_set_id if baseline is not None else None,
         baseline_revisions=dict(baseline.revisions) if baseline is not None else None,
@@ -515,10 +514,10 @@ def run_routine(
 ) -> object:
     """Mint and ingest a hub work item from the routine, in one act; its chunk rests ``not_ready``
     until promoted.
-    404 on an unknown id; 422 on a malformed ``scope_slug``, an unknown
-    ``mode``, or an effective scope no scope row holds or outside the routine's own
-    related set (never minted); 503 on a retired routine
-    (checked first, before the mode or scope is even parsed), a retired effective
+    422 on an unknown ``mode`` (request validation, before any lookup); 404 on an unknown id;
+    422 on a malformed ``scope_slug``, or an effective scope no scope row holds or outside the
+    routine's own related set (never minted); 503 on a retired routine
+    (checked before the scope is even parsed), a retired effective
     scope, or a graph name with no
     enabled mint (mirroring ``POST /work-sources/{source}/items``'s own
     retired-default-graph shape); 409 on an out-of-band ingest already holding the
@@ -530,12 +529,6 @@ def run_routine(
         services.routine_run.refuse_if_retired(routine)
     except RoutineRetiredError as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
-    try:
-        mode = RunMode(request.mode)
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"unknown mode {request.mode!r}"
-        ) from exc
     try:
         slug = routine.effective_scope_slug(
             ScopeSlug.parse(request.scope_slug) if request.scope_slug is not None else None
@@ -549,7 +542,7 @@ def run_routine(
         result = services.routine_run.run(
             routine,
             scope=scope,
-            mode=mode,
+            mode=request.mode,
             note=request.note,
             author=WorkItemAuthor.user(identity.user_id),
         )

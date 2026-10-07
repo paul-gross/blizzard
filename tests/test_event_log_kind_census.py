@@ -24,7 +24,7 @@ def test_census_names_exactly_the_declared_kinds() -> None:
 def test_every_census_severity_matches_the_vocabulary() -> None:
     for kind, disposition in CENSUS.items():
         assert disposition.severity == EVENT_LOG_SEVERITY[cast(EventLogKind, kind)]
-        assert disposition.severity in get_args(EventLogSeverity)
+        assert disposition.severity in EventLogSeverity
 
 
 def test_every_disposition_is_recorded_or_projected_with_a_real_site() -> None:

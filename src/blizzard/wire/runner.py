@@ -140,7 +140,7 @@ class SubscriptionUsageView(BaseModel):
     sampled_at: str | None = None
     windows: list[ExternalSubscriptionUsageWindowView]
     #: ``"credential_lapsed"`` when the newest reported miss outranks the newest sample; ``None`` otherwise.
-    condition: str | None = None
+    condition: SampleMissReason | None = None
     #: The newest reported miss's own reason; ``None`` when there is none.
     miss_reason: SampleMissReason | None = None
     #: The newest reported miss's own instant; ``None`` alongside ``miss_reason``.

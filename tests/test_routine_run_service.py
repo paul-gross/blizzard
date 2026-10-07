@@ -13,9 +13,10 @@ import pytest
 import sqlalchemy as sa
 
 from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.foundation.run_mode import RunMode
 from blizzard.hub.domain.chunk.model import WorkItemAuthor
 from blizzard.hub.domain.config.changes import ChangeContext, Door
-from blizzard.hub.domain.garden.routines import Routine, RoutineGraphUnresolvedError, RunMode
+from blizzard.hub.domain.garden.routines import Routine, RoutineGraphUnresolvedError
 from blizzard.hub.domain.garden.runs.run import RoutineRetiredError, ScopeNotRelatedError, ScopeRetiredError
 from blizzard.hub.domain.garden.scopes import Scope, ScopeSlug
 from blizzard.hub.domain.graph.model import Graph

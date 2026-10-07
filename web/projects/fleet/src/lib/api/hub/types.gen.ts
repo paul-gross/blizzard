@@ -102,10 +102,7 @@ export type ActivityView = {
      * Runner Name
      */
     runner_name?: string | null;
-    /**
-     * Severity
-     */
-    severity?: 'critical' | 'warning' | 'info' | null;
+    severity?: EventLogSeverity | null;
     /**
      * Status
      */
@@ -2593,6 +2590,24 @@ export const EscalationCause = {
 export type EscalationCause = typeof EscalationCause[keyof typeof EscalationCause];
 
 /**
+ * EventLogSeverity
+ *
+ * The closed severity vocabulary; every wire severity field is typed with it.
+ */
+export const EventLogSeverity = {
+    CRITICAL: 'critical',
+    WARNING: 'warning',
+    INFO: 'info'
+} as const;
+
+/**
+ * EventLogSeverity
+ *
+ * The closed severity vocabulary; every wire severity field is typed with it.
+ */
+export type EventLogSeverity = typeof EventLogSeverity[keyof typeof EventLogSeverity];
+
+/**
  * EventLoggedPayload
  */
 export type EventLoggedPayload = {
@@ -2616,10 +2631,7 @@ export type EventLoggedPayload = {
      * Runner Name
      */
     runner_name?: string | null;
-    /**
-     * Severity
-     */
-    severity: 'critical' | 'warning' | 'info';
+    severity: EventLogSeverity;
 };
 
 /**
@@ -2673,10 +2685,7 @@ export type EventView = {
      * Runner Name
      */
     runner_name?: string | null;
-    /**
-     * Severity
-     */
-    severity: 'critical' | 'warning' | 'info';
+    severity: EventLogSeverity;
 };
 
 /**
@@ -5660,10 +5669,7 @@ export type RoutineProposalState = typeof RoutineProposalState[keyof typeof Rout
  * response rather than refusing.
  */
 export type RoutineRunRequest = {
-    /**
-     * Mode
-     */
-    mode?: string;
+    mode?: RunMode;
     /**
      * Note
      */
@@ -5708,10 +5714,7 @@ export type RoutineRunResponse = {
      * Downgraded
      */
     downgraded: boolean;
-    /**
-     * Effective Mode
-     */
-    effective_mode: string;
+    effective_mode: RunMode;
     /**
      * Ref
      */
@@ -5791,10 +5794,7 @@ export type RunDeltaView = {
      */
     chunk_id: string;
     escalation: RunEscalationView | null;
-    /**
-     * Mode
-     */
-    mode: string;
+    mode: RunMode;
     outcome: ChunkStatus;
     /**
      * Routine Name
@@ -5829,6 +5829,22 @@ export type RunEscalationView = {
 };
 
 /**
+ * RunMode
+ *
+ * How a routine run settles its delta baseline: ``full`` reports every finding, ``delta``
+ * only what changed since the recorded baseline.
+ */
+export const RunMode = { FULL: 'full', DELTA: 'delta' } as const;
+
+/**
+ * RunMode
+ *
+ * How a routine run settles its delta baseline: ``full`` reports every finding, ``delta``
+ * only what changed since the recorded baseline.
+ */
+export type RunMode = typeof RunMode[keyof typeof RunMode];
+
+/**
  * RunRowView
  */
 export type RunRowView = {
@@ -5845,10 +5861,7 @@ export type RunRowView = {
      * Minted At
      */
     minted_at: string;
-    /**
-     * Mode
-     */
-    mode: string;
+    mode: RunMode;
     outcome: ChunkStatus;
     /**
      * Routine Name
@@ -6790,10 +6803,7 @@ export type SubmittedArtifact = {
  * carries the reason in that case, and ``windows`` is empty.
  */
 export type SubscriptionUsageView = {
-    /**
-     * Condition
-     */
-    condition?: string | null;
+    condition?: SampleMissReason | null;
     miss_reason?: SampleMissReason | null;
     /**
      * Missed At
@@ -10182,7 +10192,7 @@ export type ListEventsApiEventsGetData = {
         /**
          * Severity
          */
-        severity?: 'critical' | 'warning' | 'info' | null;
+        severity?: EventLogSeverity | null;
         /**
          * Runner Id
          */

@@ -1,16 +1,25 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import { type EventView, compactRef, runnerDisplayName, runnerTitle, KitAsyncState, type KitAsyncStateValue, KitBadge, KitChips, type KitChipOption, KitSelect, KitPanel, type Tone, FleetWhen } from 'fleet';
+import { type EventView, hubApi, compactRef, runnerDisplayName, runnerTitle, KitAsyncState, type KitAsyncStateValue, KitBadge, KitChips, type KitChipOption, KitSelect, KitPanel, type Tone, FleetWhen } from 'fleet';
 
 /** The severity filter row's options — `''` reads as "no filter" (every event). A
  * fixed closed set (unlike the runner/chunk axes, whose values are open and so are
  * derived from the feed's own ids — {@link EventsView.toOptions}). */
+const SEVERITY_LABEL: Readonly<Record<hubApi.EventLogSeverity, string>> = {
+  info: 'Info',
+  warning: 'Warning',
+  critical: 'Critical',
+};
+
+/** The severity chips read in ascending severity, the generated const's order reversed. */
 const SEVERITY_OPTIONS: readonly KitChipOption[] = [
   { value: '', label: 'All', testid: 'events-filter-all' },
-  { value: 'info', label: 'Info', testid: 'events-filter-info' },
-  { value: 'warning', label: 'Warning', testid: 'events-filter-warning' },
-  { value: 'critical', label: 'Critical', testid: 'events-filter-critical' },
-] satisfies readonly (KitChipOption & { readonly value: EventView['severity'] | '' })[];
+  ...[...Object.values(hubApi.EventLogSeverity)].reverse().map((severity) => ({
+    value: severity,
+    label: SEVERITY_LABEL[severity],
+    testid: `events-filter-${severity}`,
+  })),
+];
 
 /** `EventView.severity` → {@link Tone} — critical reads as the board's alarm red,
  * warning as its live-work amber, and info as its dim/idle color, so the badge

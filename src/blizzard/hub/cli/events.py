@@ -8,6 +8,7 @@ from typing import Any
 import click
 
 from blizzard.cli.window import since_option, utc_query_value
+from blizzard.foundation.event_log import EventLogSeverity
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.views import Listing
@@ -25,7 +26,10 @@ class FeedListing(Listing):
 
 @click.command("events", cls=FleetCommand)
 @click.option(
-    "--severity", type=click.Choice(["info", "warning", "critical"]), default=None, help="Only this severity."
+    "--severity",
+    type=click.Choice([severity.value for severity in EventLogSeverity]),
+    default=None,
+    help="Only this severity.",
 )
 @click.option("--runner", "runner_id", default=None, help="Only events from this runner.")
 @click.option("--chunk", "chunk_id", default=None, help="Only events about this chunk.")

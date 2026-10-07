@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
-import { KitPaceBar } from 'fleet';
+import { hubApi, KitPaceBar } from 'fleet';
 import type { SubscriptionPace } from './runner-rows';
 
 /**
@@ -27,6 +27,8 @@ import type { SubscriptionPace } from './runner-rows';
   styleUrl: './subscription-pace-group.css',
 })
 export class SubscriptionPaceGroup {
+  protected readonly SampleMissReason = hubApi.SampleMissReason;
+
   /** Every reported subscription, each pre-folded to its own pace bars. */
   readonly subscriptionPaces = input.required<readonly SubscriptionPace[]>();
 }

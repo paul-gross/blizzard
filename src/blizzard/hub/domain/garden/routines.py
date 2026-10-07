@@ -42,14 +42,6 @@ _REQUIRED_FIELDS = ("graph_name", "default_scope_slug", "default_model", "defaul
 SCOPES_FIELD = "scopes"
 
 
-class RunMode(StrEnum):
-    """How a routine run settles its delta baseline — a plain string
-    column, never a DB enum (``bzh:sql-portable``), the ``work_items.run_mode`` shape."""
-
-    FULL = "full"
-    DELTA = "delta"
-
-
 class RoutineNameTakenError(ValueError):
     """A routine create names an already-existing routine name."""
 

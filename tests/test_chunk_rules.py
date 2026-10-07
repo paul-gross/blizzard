@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, TERMINAL_STATUSES, ChunkStatus
+from blizzard.foundation.event_log import EventLogSeverity
 from blizzard.foundation.node_steps import Executor
 from blizzard.hub.domain.chunk.dependencies import BlockedMarking
 from blizzard.hub.domain.chunk.model import (
@@ -135,8 +136,8 @@ def test_an_open_escalation_matches_the_event_filters_as_its_critical_runnerless
     escalation = EscalationOpen(chunk_id="chk_a", recorded_at=_at(5), takeover_command="")
 
     assert escalation.matches()
-    assert escalation.matches(severity="critical", chunk_id="chk_a", since=_at(5))
-    assert not escalation.matches(severity="warning")
+    assert escalation.matches(severity=EventLogSeverity.CRITICAL, chunk_id="chk_a", since=_at(5))
+    assert not escalation.matches(severity=EventLogSeverity.WARNING)
     assert not escalation.matches(runner_id="r_1")
     assert not escalation.matches(chunk_id="chk_b")
     assert not escalation.matches(since=_at(6))

@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pytest
 
+from blizzard.foundation.event_log import EventLogSeverity
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.store.internal.chunk_rows import record_deleted_row
 from tests.support import build_hub, chunk_stores, seed_chunk, seed_graph
@@ -104,7 +105,7 @@ def test_events_are_capped_by_recency_not_severity(tmp_path: Path) -> None:
     with hub.engine.begin() as conn:
         seed_graph(conn, "gr_1", at=t0)
     oldest_critical_id = store.events.record_event(
-        severity="critical",
+        severity=EventLogSeverity.CRITICAL,
         kind="worker-lost",
         runner_id="runner-a",
         chunk_id=None,
@@ -115,7 +116,7 @@ def test_events_are_capped_by_recency_not_severity(tmp_path: Path) -> None:
         at=t0,
     )
     newer_info_id_1 = store.events.record_event(
-        severity="info",
+        severity=EventLogSeverity.INFO,
         kind="work-item-closed",
         runner_id=None,
         chunk_id=None,
@@ -126,7 +127,7 @@ def test_events_are_capped_by_recency_not_severity(tmp_path: Path) -> None:
         at=t0 + timedelta(seconds=1),
     )
     newer_info_id_2 = store.events.record_event(
-        severity="info",
+        severity=EventLogSeverity.INFO,
         kind="work-item-closed",
         runner_id=None,
         chunk_id=None,
@@ -151,7 +152,7 @@ def test_deleted_chunks_events_are_excluded_but_runner_scoped_events_survive(tmp
         seed_graph(conn, "gr_1", at=t0)
         seed_chunk(conn, "ch_deleted", graph_id="gr_1", at=t0)
     deleted_chunk_event_id = store.events.record_event(
-        severity="critical",
+        severity=EventLogSeverity.CRITICAL,
         kind="worker-lost",
         runner_id="runner-a",
         chunk_id="ch_deleted",
@@ -162,7 +163,7 @@ def test_deleted_chunks_events_are_excluded_but_runner_scoped_events_survive(tmp
         at=t0 + timedelta(seconds=1),
     )
     runner_scoped_event_id = store.events.record_event(
-        severity="info",
+        severity=EventLogSeverity.INFO,
         kind="work-item-closed",
         runner_id="runner-a",
         chunk_id=None,

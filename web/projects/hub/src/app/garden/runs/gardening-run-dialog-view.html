@@ -50,17 +50,17 @@
           <div role="radiogroup" aria-label="Mode">
             <fleet-kit-option
               name="run-mode"
-              [checked]="mode() === 'full'"
-              (changed)="mode.set('full')"
+              [checked]="mode() === RunMode.FULL"
+              (changed)="mode.set(RunMode.FULL)"
               testid="run-mode-full"
             >
               Full
             </fleet-kit-option>
             <fleet-kit-option
               name="run-mode"
-              [checked]="mode() === 'delta'"
+              [checked]="mode() === RunMode.DELTA"
               [disabled]="!deltaAvailable()"
-              (changed)="mode.set('delta')"
+              (changed)="mode.set(RunMode.DELTA)"
               testid="run-mode-delta"
             >
               Delta
@@ -71,7 +71,7 @@
               This routine has never swept this scope — delta has no baseline to run against, so only full is offered.
             </p>
           }
-          @if (mode() === 'delta' && selectedBaseline(); as baseline) {
+          @if (mode() === RunMode.DELTA && selectedBaseline(); as baseline) {
             <div class="baseline" data-testid="run-mode-baseline">
               <p>
                 Baseline <strong>{{ baseline.finding_set_id }}</strong>, recorded

@@ -1,4 +1,4 @@
-import { type ChunkStatus, type ExternalSubscriptionUsageWindowView, RunnerConnection, type RunnerRegistryView, compactRef, ageMs, formatRefreshedAgo, formatSeenAgo } from 'fleet';
+import { type ChunkStatus, type hubApi, type ExternalSubscriptionUsageWindowView, RunnerConnection, type RunnerRegistryView, compactRef, ageMs, formatRefreshedAgo, formatSeenAgo } from 'fleet';
 import type { ChunkSummary } from 'fleet/shell';
 
 /** One claim line under a registry row: the chunk a runner holds, where it sits, and
@@ -47,9 +47,9 @@ export interface SubscriptionPace {
   readonly slug: string;
   readonly name: string;
   readonly paceBars: readonly PaceBar[];
-  /** `'credential_lapsed'` when the newest reported miss outranks the newest sample;
+  /** {@link hubApi.SampleMissReason.CREDENTIAL_LAPSED} when the newest reported miss outranks the newest sample;
    * `null` otherwise. */
-  readonly condition: string | null;
+  readonly condition: hubApi.SampleMissReason | null;
   /** The last good sample's raw instant, or `null` when the slug has never been
    * sampled — presence, not `paceBars.length`, is what tells a zero-window sample
    * apart from no sample at all. */
@@ -61,7 +61,7 @@ export interface SubscriptionPace {
    * (`bzh:utc-instants`): never a confident tier for a reading the clock can't trust. */
   readonly freshness: SubscriptionFreshness | null;
   /** The newest reported miss's own reason, or `null` when there is none. */
-  readonly missReason: string | null;
+  readonly missReason: hubApi.SampleMissReason | null;
 }
 
 /**

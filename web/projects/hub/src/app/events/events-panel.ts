@@ -1,10 +1,10 @@
 import { ChangeDetectionStrategy, Component, computed, output, signal } from '@angular/core';
 
-import { type KitAsyncStateValue, asyncState } from 'fleet';
+import { type hubApi, type KitAsyncStateValue, asyncState } from 'fleet';
 import { injectQueryFilters } from '../core/route-state';
 import { EventsView } from './events-view';
 import { eventChunkIds, eventRunnerIds, eventRunnerNames } from './events-panel.model';
-import { type EventSeverity, injectHubEventsQuery, narrowEventSeverity } from './events.query';
+import { injectHubEventsQuery, narrowEventSeverity } from './events.query';
 
 /**
  * The Events tab's **container** — the board's operational
@@ -39,7 +39,7 @@ export class EventsPanel {
   readonly selectChunk = output<string>();
 
   /** The active severity filter, or `null` for "every severity". */
-  protected readonly severity = signal<EventSeverity | null>(null);
+  protected readonly severity = signal<hubApi.EventLogSeverity | null>(null);
   /** The active runner filter, or `null` for "every runner". */
   protected readonly runnerId = signal<string | null>(null);
   private readonly filters = injectQueryFilters();

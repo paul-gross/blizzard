@@ -15,6 +15,7 @@ from dataclasses import dataclass
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.roles import domain_model
+from blizzard.foundation.run_mode import RunMode
 from blizzard.hub.domain.chunk.model import HubWorkItem, IWriteWorkItemRepository, WorkItemAuthor
 from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository
 from blizzard.hub.domain.garden.findings.model import FindingSet, IReadFindingSetRepository
@@ -23,7 +24,6 @@ from blizzard.hub.domain.garden.routines import (
     IReadRoutineScopeRepository,
     Routine,
     RoutineVerb,
-    RunMode,
     require_graph_resolves,
 )
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository, Scope, ScopeVerb

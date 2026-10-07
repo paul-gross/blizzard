@@ -14,6 +14,7 @@ from datetime import datetime
 
 from sqlalchemy import func, select
 
+from blizzard.foundation.run_mode import RunMode
 from blizzard.hub.domain.garden.runs.history import (
     DeliveredSet,
     DeliveredSetRaw,
@@ -71,7 +72,7 @@ def _identity_of(row: object) -> RunIdentity:
         chunk_id=row.chunk_id,  # type: ignore[attr-defined]
         routine_name=row.routine_name,  # type: ignore[attr-defined]
         scope_slug=row.scope_slug,  # type: ignore[attr-defined]
-        mode=row.mode,  # type: ignore[attr-defined]
+        mode=RunMode(row.mode),  # type: ignore[attr-defined]
         minted_at=row.minted_at,  # type: ignore[attr-defined]
     )
 
