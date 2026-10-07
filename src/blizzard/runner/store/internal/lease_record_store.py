@@ -12,7 +12,9 @@ from sqlalchemy import and_, func, select
 
 from blizzard.foundation.leases import LeaseClosureReason
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.leases import ClosedLease, IWriteLeaseRecordRepository, Lease, NewLease, closure
+from blizzard.runner.leases import closure
+from blizzard.runner.leases.model import ClosedLease, Lease, NewLease
+from blizzard.runner.leases.record import IWriteLeaseRecordRepository
 from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.internal.base import (
     Unclosed,

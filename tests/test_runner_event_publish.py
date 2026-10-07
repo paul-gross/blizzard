@@ -34,7 +34,7 @@ from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.hub.client import HubQuestion, QueueEntry
 from blizzard.runner.hub.outbound import OutboundFacts
-from blizzard.runner.leases import NewLease
+from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.dormant import DormantSession
 from blizzard.runner.lifecycle.drain import OutboundDrain
 from blizzard.runner.lifecycle.takeover import TakeoverCloseScope, TakeoverOpenScope, TakeoverService

@@ -4,14 +4,12 @@ session-end, and preamble facts."""
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Protocol
+from typing import Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.runner.harness.fingerprint import PreambleFingerprint
 from blizzard.runner.harness.identity import SessionReference
-
-if TYPE_CHECKING:
-    from blizzard.runner.leases import Lease, PoolHead
+from blizzard.runner.leases.model import Lease, PoolHead
 
 __all__ = ["IReadLeaseSessionRepository", "IWriteLeaseSessionRepository", "LeaseSessionService"]
 

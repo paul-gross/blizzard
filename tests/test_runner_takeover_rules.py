@@ -11,7 +11,7 @@ import pytest
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.runner.environments.repository import EnvBinding
 from blizzard.runner.harness.identity import SessionReference
-from blizzard.runner.leases import Lease
+from blizzard.runner.leases.model import Lease
 from blizzard.runner.lifecycle.model import TakeoverHolds
 from blizzard.runner.lifecycle.takeover import (
     TAKEOVER_TRANSITIONS,

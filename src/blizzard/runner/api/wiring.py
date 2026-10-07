@@ -25,10 +25,12 @@ from blizzard.runner.harness.health_cache import IReadHarnessHealth
 from blizzard.runner.harness.registry import IHarnessRegistry
 from blizzard.runner.harness.workspace_prompts import WorkspacePromptService
 from blizzard.runner.hub.identity import ICurrentRunnerIdentity, RunnerIdentityHolder
-from blizzard.runner.leases import Lease, LocalLeaseService, WorkerLease
+from blizzard.runner.leases.activity import LocalLeaseService
 from blizzard.runner.leases.asks import AskService
 from blizzard.runner.leases.liveness import LeaseLivenessService
+from blizzard.runner.leases.model import Lease
 from blizzard.runner.leases.session import LeaseSessionService
+from blizzard.runner.leases.worker_lease import WorkerLease
 from blizzard.runner.lifecycle.judgement.git_commit_declaration import GitCommitDeclarationService
 from blizzard.runner.lifecycle.takeover import TakeoverService
 from blizzard.runner.operator.attachments import AttachmentService

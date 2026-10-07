@@ -21,7 +21,7 @@ from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.hub.client import HubQuestion
-from blizzard.runner.leases import Lease, NewLease
+from blizzard.runner.leases.model import Lease, NewLease
 from blizzard.runner.loop.steps import Advance
 from blizzard.runner.node_steps.chunk_state import ChunkState
 from blizzard.runner.usage.recorder import UsageRecorder

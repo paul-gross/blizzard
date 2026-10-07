@@ -9,18 +9,11 @@ import pytest
 
 from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.environments.repository import EnvBinding
-from blizzard.runner.leases import (
-    HEARTBEAT_STALENESS_THRESHOLD,
-    WORKER_VERBS,
-    Lease,
-    LeaseActivity,
-    LeaseLivenessFacts,
-    Liveness,
-    WorkerLease,
-    WorkerLeaseStanding,
-    WorkerVerb,
-)
+from blizzard.runner.leases.activity import HEARTBEAT_STALENESS_THRESHOLD, LeaseActivity, Liveness
 from blizzard.runner.leases.lease_auth import LeaseToken, LeaseTokenRejected
+from blizzard.runner.leases.liveness import LeaseLivenessFacts
+from blizzard.runner.leases.model import Lease
+from blizzard.runner.leases.worker_lease import WORKER_VERBS, WorkerLease, WorkerLeaseStanding, WorkerVerb
 
 pytestmark = pytest.mark.unit
 

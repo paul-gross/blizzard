@@ -129,18 +129,16 @@ from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.harness.workspace_prompts import IReadWorkspacePromptRepository
 from blizzard.runner.hub.identity import IReadRunnerIdentityRepository, RunnerIdentity
 from blizzard.runner.hub.outbound_buffer import IReadOutboundRepository
-from blizzard.runner.leases import (
-    IReadLeaseLivenessRepository,
-    IReadLeaseRecordRepository,
-    IReadLeaseResumeIntentRepository,
-    IReadLeaseSessionRepository,
-    NewLease,
-)
 from blizzard.runner.leases.asks import IReadAskRepository
 from blizzard.runner.leases.elicitation import IReadElicitationRepository
 from blizzard.runner.leases.escalations import IReadEscalationRepository
+from blizzard.runner.leases.liveness import IReadLeaseLivenessRepository
+from blizzard.runner.leases.model import NewLease
 from blizzard.runner.leases.operator_requests import IReadAttachmentRepository, IReadRequeueRepository
 from blizzard.runner.leases.overload import IReadOverloadRepository
+from blizzard.runner.leases.record import IReadLeaseRecordRepository
+from blizzard.runner.leases.resume_intent import IReadLeaseResumeIntentRepository
+from blizzard.runner.leases.session import IReadLeaseSessionRepository
 from blizzard.runner.lifecycle.judgement.artifacts import IReadGraphArtifactRepository, PinnedGraphArtifact
 from blizzard.runner.lifecycle.judgement.checks import ExecutedCheck, IReadCheckRepository
 from blizzard.runner.lifecycle.judgement.git_commit_declaration import IReadGitCommitDeclarationRepository

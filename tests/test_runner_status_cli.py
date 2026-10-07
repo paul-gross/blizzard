@@ -25,7 +25,7 @@ from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.cli.daemon import RunnerDaemon
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
-from blizzard.runner.leases import NewLease
+from blizzard.runner.leases.model import NewLease
 from blizzard.runner.listeners import Listeners, Uds
 from blizzard.runner.subscriptions.credential_renewer import (
     RenewalFailureReason,

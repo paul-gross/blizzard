@@ -27,8 +27,10 @@ from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryPlan
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
-from blizzard.runner.leases import HEARTBEAT_STALENESS_THRESHOLD, NewLease, WorkerLease
+from blizzard.runner.leases.activity import HEARTBEAT_STALENESS_THRESHOLD
 from blizzard.runner.leases.asks import AskService
+from blizzard.runner.leases.model import NewLease
+from blizzard.runner.leases.worker_lease import WorkerLease
 from blizzard.runner.lifecycle.session import SessionResolver
 from blizzard.runner.lifecycle.spawn import Spawner
 from blizzard.runner.lifecycle.takeover import (

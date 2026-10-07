@@ -17,7 +17,7 @@ from blizzard.foundation.ids import SEGMENT_PREFIX, Id
 from blizzard.runner.harness.fingerprint import PreambleFingerprint
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.usage import UsageKind, UsageSample
-from blizzard.runner.leases import NewLease
+from blizzard.runner.leases.model import NewLease
 from blizzard.runner.store.schema import external_usage_samples, heartbeats, transcript_outbound_buffer
 from blizzard.runner.usage.repository import InvocationCost
 from tests.runner_fakes import make_store, record_usage

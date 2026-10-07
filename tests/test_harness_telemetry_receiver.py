@@ -26,7 +26,7 @@ from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.foundation.trace_ids import chunk_trace_id
 from blizzard.runner.harness.telemetry_signals import TelemetrySignal, signal_exportable
 from blizzard.runner.hub.identity import RunnerIdentity
-from blizzard.runner.leases import Lease
+from blizzard.runner.leases.model import Lease
 from blizzard.runner.tracing.exclusion import is_excluded
 from blizzard.runner.tracing.received_export import (
     DisabledReceivedTelemetryExport,

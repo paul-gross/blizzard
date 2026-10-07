@@ -17,8 +17,8 @@ from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHar
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.hub.client import HubClientError
 from blizzard.runner.hub.outbound import OutboundFacts
-from blizzard.runner.leases import Lease
 from blizzard.runner.leases.elicitation import PendingElicitation
+from blizzard.runner.leases.model import Lease
 from blizzard.runner.lifecycle.attempt import Attempt
 from blizzard.runner.lifecycle.dormant import DormantContext, DormantSession
 from blizzard.runner.lifecycle.judgement.checks import CheckPlan, ExecutedCheck

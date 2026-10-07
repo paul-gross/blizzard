@@ -26,7 +26,7 @@ from blizzard.foundation.platform_tracing.received import (
 from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.api.lease_token import presented_lease_token
 from blizzard.runner.api.wiring import RunnerWiring
-from blizzard.runner.leases import Lease
+from blizzard.runner.leases.model import Lease
 from blizzard.runner.tracing.receiver import MAX_BODY_BYTES
 from blizzard.runner.tracing.receiving import RateExceeded, ReceiverOff
 

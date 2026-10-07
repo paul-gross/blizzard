@@ -9,12 +9,9 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from types import MappingProxyType
-from typing import TYPE_CHECKING
 
 from blizzard.foundation.roles import domain_model
-
-if TYPE_CHECKING:
-    from blizzard.runner.leases import Lease
+from blizzard.runner.leases.model import Lease
 
 __all__ = ["WORKER_VERBS", "WorkerLease", "WorkerLeaseStanding", "WorkerVerb"]
 

@@ -21,8 +21,8 @@ from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.overload import ProviderOverload
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
-from blizzard.runner.leases import Lease
 from blizzard.runner.leases.elicitation import PendingElicitation
+from blizzard.runner.leases.model import Lease
 from blizzard.runner.leases.overload import (
     BACKOFF_CAP_SECONDS,
     BACKOFF_LIMIT,

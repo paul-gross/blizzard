@@ -14,7 +14,7 @@ import sqlalchemy as sa
 
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.usage import UsageKind, UsageSample
-from blizzard.runner.leases import NewLease
+from blizzard.runner.leases.model import NewLease
 from blizzard.runner.store.schema import usage_facts
 from tests.runner_fakes import make_store, record_usage
 

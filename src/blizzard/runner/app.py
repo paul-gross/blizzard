@@ -81,7 +81,7 @@ from blizzard.runner.harness.health_cache import HarnessHealthCache, IReadHarnes
 from blizzard.runner.harness.registry import HarnessRegistry, IHarnessRegistry
 from blizzard.runner.harness.workspace_prompts import WorkspacePromptService
 from blizzard.runner.hub.identity import ICurrentRunnerIdentity, RunnerIdentityHolder
-from blizzard.runner.leases import LocalLeaseService
+from blizzard.runner.leases.activity import LocalLeaseService
 from blizzard.runner.leases.asks import AskService
 from blizzard.runner.leases.liveness import LeaseLivenessService
 from blizzard.runner.leases.session import LeaseSessionService

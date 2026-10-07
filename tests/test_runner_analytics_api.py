@@ -20,7 +20,7 @@ from blizzard.runner.api.analytics import _ANALYTICS_HUB_TIMEOUT
 from blizzard.runner.api.hub_proxy import _HUB_TIMEOUT
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.leases import NewLease
+from blizzard.runner.leases.model import NewLease
 from tests.runner_fakes import make_store, make_stores, no_retry_clock
 
 pytestmark = pytest.mark.component

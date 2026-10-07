@@ -17,7 +17,8 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
-from blizzard.runner.leases import LocalLeaseService, NewLease
+from blizzard.runner.leases.activity import LocalLeaseService
+from blizzard.runner.leases.model import NewLease
 from blizzard.wire.lease import LeaseView
 from tests.runner_fakes import FakeProbe, make_store, make_stores
 from tests.support import assert_all_timestamps_utc

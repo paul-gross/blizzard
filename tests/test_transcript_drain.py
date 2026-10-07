@@ -18,7 +18,7 @@ from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionRefe
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import NormalizedTurn, TranscriptBatch, TranscriptPosition
 from blizzard.runner.hub.client import TranscriptPush, TranscriptPushAck
-from blizzard.runner.leases import NewLease
+from blizzard.runner.leases.model import NewLease
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.transcripts import transcript_drain as transcript_drain_module
 from blizzard.runner.transcripts.transcript_drain import TranscriptDrain

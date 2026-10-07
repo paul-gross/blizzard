@@ -41,8 +41,8 @@ from blizzard.runner.hub.outbound_buffer import (
     submission_payload,
     transcript_truncated_event,
 )
-from blizzard.runner.leases import Lease
 from blizzard.runner.leases.asks import OpenAsk
+from blizzard.runner.leases.model import Lease
 from blizzard.runner.node_steps.submissions import Completion, GateSubmission
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.decision import DecisionSubmission

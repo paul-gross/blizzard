@@ -8,7 +8,7 @@ import pytest
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.hub.identity import RunnerIdentity
-from blizzard.runner.leases import NewLease, WorkRefStamp
+from blizzard.runner.leases.model import NewLease, WorkRefStamp
 from blizzard.runner.lifecycle.judgement.checks import ExecutedCheck
 from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.internal.lease_trace_facts_store import LeaseTraceFactsStore

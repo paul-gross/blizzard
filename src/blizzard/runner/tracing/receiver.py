@@ -16,7 +16,7 @@ from blizzard.foundation.roles import adapter_model, domain_model
 from blizzard.foundation.trace_ids import DerivedContext, SpanRole, StepKey, chunk_span_id, chunk_trace_id, step_root
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryNames
 from blizzard.runner.hub.identity import RunnerIdentity
-from blizzard.runner.leases import Lease
+from blizzard.runner.leases.model import Lease
 from blizzard.runner.tracing.attributes import RUNNER_ID, RUNNER_NAME
 
 __all__ = [

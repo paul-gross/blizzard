@@ -13,7 +13,7 @@ import pytest
 from sqlalchemy import insert, select
 
 from blizzard.runner.harness.identity import SessionReference
-from blizzard.runner.leases import NewLease
+from blizzard.runner.leases.model import NewLease
 from blizzard.runner.store import schema as runner
 from tests.runner_fakes import make_store
 

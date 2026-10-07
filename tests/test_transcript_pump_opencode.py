@@ -18,7 +18,7 @@ from blizzard.runner.harness.identity import OPENCODE_HARNESS_ID, SessionReferen
 from blizzard.runner.harness.opencode.transcript.export import OpenCodeExportError
 from blizzard.runner.harness.opencode.transcript.transcript_source import OpenCodeTranscriptSource
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
-from blizzard.runner.leases import NewLease
+from blizzard.runner.leases.model import NewLease
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.transcripts.transcript_pump import TranscriptPump
 from tests.repo_files import repo_root

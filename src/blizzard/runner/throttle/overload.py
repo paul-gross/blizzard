@@ -18,7 +18,7 @@ from blizzard.runner.harness.adapter import IHarnessProviderOverload
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.overload import ProviderOverload
 from blizzard.runner.harness.registry import IHarnessRegistry, UnavailableHarnessError, UnknownHarnessError
-from blizzard.runner.leases import Lease
+from blizzard.runner.leases.model import Lease
 from blizzard.runner.leases.overload import BACKOFF_LIMIT, InvocationKind, IWriteOverloadRepository, OverloadStreak
 
 __all__ = [

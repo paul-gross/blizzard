@@ -12,9 +12,9 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
-from blizzard.runner.leases import Lease
 from blizzard.runner.leases.asks import OpenAsk
 from blizzard.runner.leases.elicitation import ELICITATION_STALENESS_THRESHOLD, PendingElicitation
+from blizzard.runner.leases.model import Lease
 from blizzard.runner.lifecycle.judgement.check_runner import DEFAULT_CHECK_TIMEOUT
 from blizzard.runner.lifecycle.judgement.checks import CheckPlan, ExecutedCheck
 from blizzard.runner.lifecycle.judgement.collect import CollectOutcome, ElicitationExit

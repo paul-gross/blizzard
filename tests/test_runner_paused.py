@@ -36,7 +36,8 @@ from blizzard.runner.hub.client import (
     RouteClaimOutcome,
     TerminalDenial,
 )
-from blizzard.runner.leases import HEARTBEAT_STALENESS_THRESHOLD, NewLease
+from blizzard.runner.leases.activity import HEARTBEAT_STALENESS_THRESHOLD
+from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.dormant import DormantSession
 from blizzard.runner.loop.context import LoopConfig, ResolvedSubscription
 from blizzard.runner.loop.steps import Advance, Fill, Pull, Reap, Resume, ResumeIntents, SpendCeiling

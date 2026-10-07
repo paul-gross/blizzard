@@ -15,7 +15,7 @@ import pytest
 from blizzard.foundation.fact_kinds import EVENT_RECORDED
 from blizzard.foundation.repo_ref import repo_identity
 from blizzard.runner.harness.adapter import WorkerHandle
-from blizzard.runner.leases import NewLease
+from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.judgement.git_commits import DeclaredCommits
 from tests.runner_fakes import (
     FakeHarness,

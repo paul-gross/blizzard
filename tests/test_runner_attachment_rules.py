@@ -6,7 +6,8 @@ from datetime import UTC, datetime
 
 import pytest
 
-from blizzard.runner.leases import Lease, WorkerLease
+from blizzard.runner.leases.model import Lease
+from blizzard.runner.leases.worker_lease import WorkerLease
 from blizzard.runner.operator.attachments import AttachmentEmpty, AttachmentOnClosedLease, check_attachable
 
 pytestmark = pytest.mark.unit

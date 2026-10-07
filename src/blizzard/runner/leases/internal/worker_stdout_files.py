@@ -7,7 +7,8 @@ import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from blizzard.runner.leases import IReadLeaseLivenessRepository, Lease
+from blizzard.runner.leases.liveness import IReadLeaseLivenessRepository
+from blizzard.runner.leases.model import Lease
 from blizzard.runner.leases.worker_stdout import IWorkerStdoutFiles
 
 

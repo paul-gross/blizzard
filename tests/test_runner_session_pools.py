@@ -28,7 +28,7 @@ from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, TranscriptErrorFactory
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.hub.client import QueueEntry
-from blizzard.runner.leases import NewLease, WorkRefStamp
+from blizzard.runner.leases.model import NewLease, WorkRefStamp
 from blizzard.runner.lifecycle.attempt import Attempt
 from blizzard.runner.lifecycle.session import SessionResolver
 from blizzard.runner.lifecycle.spawn import Spawner

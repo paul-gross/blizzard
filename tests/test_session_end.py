@@ -20,7 +20,7 @@ from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.claude_code.worker_settings import WorkerSettings
 from blizzard.runner.harness.worker_hooks import SESSION_END_HOOK_COMMAND
-from blizzard.runner.leases import NewLease
+from blizzard.runner.leases.model import NewLease
 from tests.runner_fakes import make_store, make_stores
 from tests.worker_http import bind_stubs
 

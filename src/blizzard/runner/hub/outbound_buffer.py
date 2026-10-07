@@ -11,8 +11,8 @@ from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.runner.leases import Lease
 from blizzard.runner.leases.asks import OpenAsk
+from blizzard.runner.leases.model import Lease
 
 __all__ = [
     "COMMAND_FAILED_STDERR_TAIL",

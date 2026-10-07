@@ -29,10 +29,10 @@ from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import IHarnessLifecycleRegistry, UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.hub.outbound_buffer import IWriteOutboundRepository
-from blizzard.runner.leases import Lease
 from blizzard.runner.leases.elicitation import IWriteElicitationRepository
 from blizzard.runner.leases.escalations import resume_workdir
 from blizzard.runner.leases.lease_auth import LeaseToken
+from blizzard.runner.leases.model import Lease
 from blizzard.runner.node_steps.chunk_state import ChunkState
 from blizzard.runner.process.owned_process import IOwnedProcessControl, kill_owned_process
 

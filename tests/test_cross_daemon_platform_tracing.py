@@ -29,7 +29,7 @@ from blizzard.hub.domain.observability.tracing.attributes import (
 from blizzard.hub.domain.observability.tracing.attributes import resource_attributes
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.leases import NewLease
+from blizzard.runner.leases.model import NewLease
 from blizzard.runner.tracing.platform import (
     PLATFORM_INSTRUMENTATION_SCOPE as RUNNER_SCOPE,
 )
