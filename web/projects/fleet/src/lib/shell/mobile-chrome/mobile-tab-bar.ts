@@ -1,6 +1,8 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 
+import { KitCountBadge } from '../../kit/kit-count-badge';
+
 /**
  * One tab the {@link MobileTabBar} renders — the minimal shape both the
  * hub's Board/Asks/Fleet strip and the runner's Board/Asks/Transcripts/Events
@@ -20,7 +22,7 @@ export interface MobileTabItem {
   readonly label: string;
   /** A trailing count badge; omitted (not rendered as `0`) when falsy. */
   readonly badge?: number | null;
-  /** The badge span's `data-testid`, required whenever {@link badge} is used. */
+  /** The count badge's `data-testid`, required whenever {@link badge} is used. */
   readonly badgeTestid?: string | null;
   /** A route this tab navigates to — renders as a router-active `<a>`. Mutually
    * exclusive with {@link active}; omit both for a plain, unhighlighted tab. */
@@ -53,7 +55,7 @@ export interface MobileTabItem {
 @Component({
   selector: 'fleet-mobile-tab-bar',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, RouterLinkActive],
+  imports: [KitCountBadge, RouterLink, RouterLinkActive],
   templateUrl: './mobile-tab-bar.html',
   styleUrl: './mobile-tab-bar.css',
 })

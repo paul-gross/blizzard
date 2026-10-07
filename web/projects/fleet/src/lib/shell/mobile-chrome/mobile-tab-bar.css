@@ -39,15 +39,8 @@
   opacity: 0.55;
   cursor: default;
 }
-.badge {
-  display: inline-block;
-  min-width: 16px;
-  padding: 0 4px;
+/* The kit count chip beside the label, nudged off it and onto the label's line. */
+.count {
   margin-left: 5px;
-  background: var(--red);
-  color: var(--snow);
-  border-radius: 8px;
-  font-size: 10px;
-  line-height: 16px;
-  letter-spacing: 0;
+  vertical-align: middle;
 }

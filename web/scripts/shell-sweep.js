@@ -233,6 +233,9 @@
  *   - projects/fleet/src/lib/transcripts/chunk-transcripts-provenance.shell-sweep.spec.ts —
  *     two transcript segments recording distinct harnesses (blizzard#441) render two
  *     genuinely distinct provenance badges with no horizontal overflow at 390px.
+ *   - projects/fleet/src/lib/shell/mobile-chrome/mobile-tab-bar.shell-sweep.spec.ts —
+ *     the shared mobile bottom tab bar's Asks count renders as the kit's amber count
+ *     chip, inside its tab and the bar, at 390px and 320px.
  *   - projects/fleet/src/lib/chunk/chunk-detail/chunk-timeline-provenance.shell-sweep.spec.ts —
  *     two node-history steps recording distinct harnesses (blizzard#441) render two
  *     genuinely distinct provenance badges beside their usage figures with no horizontal
@@ -297,6 +300,7 @@ const SWEEPS = [
   { project: 'hub', spec: 'projects/hub/src/app/runners/runners-view.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-master-detail.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/transcripts/chunk-transcripts-provenance.shell-sweep.spec.ts' },
+  { project: 'fleet', spec: 'projects/fleet/src/lib/shell/mobile-chrome/mobile-tab-bar.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/chunk/chunk-detail/chunk-timeline-provenance.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/chunk/chunk-detail/chunk-timeline-forensics.shell-sweep.spec.ts' },
   { project: 'runner', spec: 'projects/runner/src/app/board/chunk-dock/chunk-detail-view-provenance.shell-sweep.spec.ts' },
