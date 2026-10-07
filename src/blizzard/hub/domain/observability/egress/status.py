@@ -10,9 +10,9 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.egress_state import EgressState
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.observability.analytics.extraction import EXTRACTOR_VERSION
 from blizzard.hub.domain.observability.egress.config import EgressConfig
@@ -21,8 +21,6 @@ from blizzard.hub.domain.observability.egress.schema import EVENTS_SCHEMA, INVOC
 from blizzard.hub.domain.observability.lane_failure import failure_ongoing
 from blizzard.hub.domain.observability.tracing.repository import IReadTraceSteps
 from blizzard.hub.domain.observability.tracing.window import oldest_unsent
-
-EgressState = Literal["on", "off", "rejected"]
 
 
 def egress_state(*, directory_configured: bool, rejected: bool) -> EgressState:
