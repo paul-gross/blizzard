@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 import sqlalchemy as sa
 from sqlalchemy import Engine
+from sqlalchemy.exc import OperationalError
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store import batching as batching_module
@@ -432,7 +433,7 @@ def test_a_guarded_finding_write_holds_the_writer_lock_until_its_transaction_end
     with engine.connect() as winner, engine.connect() as loser:
         lock_findings(winner, ["fin_1"])
         loser.exec_driver_sql("PRAGMA busy_timeout=0")
-        with pytest.raises(sa.exc.OperationalError, match="locked"):
+        with pytest.raises(OperationalError, match="locked"):
             lock_findings(loser, ["fin_1"])
         loser.rollback()
         winner.commit()
