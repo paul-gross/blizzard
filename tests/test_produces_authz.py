@@ -12,7 +12,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from blizzard.hub.config import PRODUCES_ENFORCE
+from blizzard.hub.domain.execution.auth.produces import PRODUCES_ENFORCE
 from tests.support import build_hub, pointer_token, report_lease
 
 pytestmark = pytest.mark.component

@@ -14,8 +14,8 @@ from typing import Literal
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.roles import domain_model
-from blizzard.hub.config import EgressConfig
 from blizzard.hub.domain.observability.analytics.extraction import EXTRACTOR_VERSION
+from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.repository import EgressCheckpoint, IReadEgress, IReadEgressEvents
 from blizzard.hub.domain.observability.egress.schema import EVENTS_SCHEMA, INVOCATIONS_SCHEMA, STEPS_SCHEMA
 from blizzard.hub.domain.observability.lane_failure import failure_ongoing

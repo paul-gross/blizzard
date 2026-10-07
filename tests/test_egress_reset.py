@@ -14,7 +14,7 @@ from click.testing import CliRunner
 
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.cli import hub as hub_group
-from blizzard.hub.config import EgressConfig
+from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.repository import UsagePosition
 from blizzard.hub.domain.observability.egress.reset import EgressReset
 from blizzard.hub.store import schema

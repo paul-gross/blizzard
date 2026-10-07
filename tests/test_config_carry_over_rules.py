@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.hub.config import ConfigError, LegacyKeys, WorkSourceConfig
 from blizzard.hub.domain.config.carry_over import (
     MIGRATION_CONTEXT,
     CommitCoordinate,
@@ -16,10 +15,12 @@ from blizzard.hub.domain.config.carry_over import (
     ImportPlan,
     LegacyImportRefused,
     LegacyStart,
+    LegacyStartRefused,
     plan_import,
     secret_name_of,
 )
 from blizzard.hub.domain.config.changes import Door, RecordKind
+from blizzard.hub.domain.config.legacy_keys import LegacyKeys, WorkSourceConfig
 from blizzard.hub.domain.config.repositories import ConfiguredRepository, RepositoryFields
 from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, WorkSourceFields
 
@@ -172,13 +173,13 @@ def test_the_fact_records_names_never_values() -> None:
 
 
 def test_legacy_start_refuses_before_an_import_naming_the_command() -> None:
-    with pytest.raises(ConfigError, match=r"blizzard hub config import-legacy --dir /hub"):
+    with pytest.raises(LegacyStartRefused, match=r"blizzard hub config import-legacy --dir /hub"):
         LegacyStart(recorded=False, keys=_legacy(variables=("BZ_FORGE_URL",))).check()
 
 
 def test_legacy_start_refuses_after_an_import_naming_each_key_and_where() -> None:
     keys = _legacy(_source("a", "acme/a"), variables=("BZ_FORGE_URL",))
-    with pytest.raises(ConfigError) as refused:
+    with pytest.raises(LegacyStartRefused) as refused:
         LegacyStart(recorded=True, keys=keys).check()
     assert 'blizzard-hub.toml [[work_source]] "a"' in str(refused.value)
     assert "environment BZ_FORGE_URL" in str(refused.value)

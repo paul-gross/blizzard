@@ -14,7 +14,6 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import ARTIFACT_PREFIX, DECISION_PREFIX, WORK_ITEM_PROPOSAL_PREFIX, Id
 from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.foundation.roles import domain_model
-from blizzard.hub.config import PRODUCES_WARN, ROUTE_TOKEN_WARN
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb, GateDecision
@@ -25,9 +24,9 @@ from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, Fenc
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.chunk.ports.route import IWriteChunkRouteRepository
 from blizzard.hub.domain.execution.auth.commit_pointer import CommitPointerPolicy
-from blizzard.hub.domain.execution.auth.produces import Produces
+from blizzard.hub.domain.execution.auth.produces import PRODUCES_WARN, Produces
 from blizzard.hub.domain.execution.auth.proposals import ProposalPolicy
-from blizzard.hub.domain.execution.auth.route import RouteToken
+from blizzard.hub.domain.execution.auth.route import ROUTE_TOKEN_WARN, RouteToken
 from blizzard.hub.domain.execution.completion import (
     CompletionRefused,
     decision_choices,

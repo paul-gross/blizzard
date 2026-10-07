@@ -28,7 +28,6 @@ from blizzard.hub.api.deps import get_services
 from blizzard.hub.api.graph_names import GraphNames, graph_by_ref
 from blizzard.hub.api.marker_auth import require_marker_authority
 from blizzard.hub.composition import HubServices
-from blizzard.hub.config import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.chunk.delivery_read import DeliveryRead, DeliverySources
 from blizzard.hub.domain.chunk.dependencies import (
     ChunkNeighbor,
@@ -47,6 +46,7 @@ from blizzard.hub.domain.garden.review.materialize import ReviewFindingsOutcome
 from blizzard.hub.domain.garden.review.validation import ReviewFindingsRejected
 from blizzard.hub.domain.graph.authoring import DefaultGraphRetired
 from blizzard.hub.domain.graph.model import TargetGraphRetired
+from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.kernel.pagination import DEFAULT_LIMIT, MAX_LIMIT, MalformedCursor
 from blizzard.hub.domain.operations.delete import ChunkHasDependents, ChunkNotDeletable
 from blizzard.hub.domain.operations.edit import (

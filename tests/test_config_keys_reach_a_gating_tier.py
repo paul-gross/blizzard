@@ -25,21 +25,21 @@ _NON_GATING = {"e2e", "journey", "crash", "service"}
 #: Every operator-written config dataclass, not just the two roots: a key on a nested
 #: block (a legacy `[[work_source]]` the import reads, an `[[auth.oauth.provider]]`) is as droppable as a root one.
 _CONFIGS = (
-    ("runner", "RunnerConfig"),
-    ("runner", "SubscriptionDeclaration"),
-    ("hub", "HubConfig"),
-    ("hub", "LegacyKeys"),
-    ("hub", "WorkSourceConfig"),
-    ("hub", "OAuthProviderConfig"),
-    ("hub", "AuthConfig"),
-    ("hub", "TranscriptCapsConfig"),
-    ("hub", "EgressConfig"),
-    ("foundation/trace_export", "TracingConfig"),
+    ("runner/config", "RunnerConfig"),
+    ("runner/config", "SubscriptionDeclaration"),
+    ("hub/config", "HubConfig"),
+    ("hub/domain/config/legacy_keys", "LegacyKeys"),
+    ("hub/domain/config/legacy_keys", "WorkSourceConfig"),
+    ("hub/config", "OAuthProviderConfig"),
+    ("hub/config", "AuthConfig"),
+    ("hub/config", "TranscriptCapsConfig"),
+    ("hub/domain/observability/egress/config", "EgressConfig"),
+    ("foundation/trace_export/config", "TracingConfig"),
 )
 
 
-def _fields(daemon: str, name: str) -> list[str]:
-    source = (_ROOT / "src" / "blizzard" / daemon / "config.py").read_text()
+def _fields(module: str, name: str) -> list[str]:
+    source = (_ROOT / "src" / "blizzard" / f"{module}.py").read_text()
     node = next(n for n in ast.walk(ast.parse(source)) if isinstance(n, ast.ClassDef) and n.name == name)
     return [
         target.id
@@ -56,10 +56,10 @@ def _gating_test_text() -> str:
     )
 
 
-@pytest.mark.parametrize(("daemon", "name"), _CONFIGS, ids=[name for _, name in _CONFIGS])
-def test_every_config_key_is_named_by_a_gating_test(daemon: str, name: str) -> None:
+@pytest.mark.parametrize(("module", "name"), _CONFIGS, ids=[name for _, name in _CONFIGS])
+def test_every_config_key_is_named_by_a_gating_test(module: str, name: str) -> None:
     gating = _gating_test_text()
-    unnamed = [field for field in _fields(daemon, name) if not re.search(rf"\b{re.escape(field)}\b", gating)]
+    unnamed = [field for field in _fields(module, name) if not re.search(rf"\b{re.escape(field)}\b", gating)]
     assert not unnamed, f"{name} keys no gating-tier test names: {unnamed}"
 
 

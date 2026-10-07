@@ -37,6 +37,21 @@ _KERNEL_DIRS = (_FOUNDATION_DIR, _WIRE_DIR, _AUTH_CORE_DIR)
 _NON_KERNEL_PACKAGES = ("blizzard.hub", "blizzard.runner", "blizzard.cli", "blizzard.tools")
 
 _MOVED_HOMES = {
+    "RESERVED_HUB_SOURCE_NAME": "blizzard.hub.domain.kernel.hub_source",
+    "KNOWN_WORK_SOURCE_PROVIDERS": "blizzard.hub.domain.config.work_sources",
+    "ROUTE_TOKEN_WARN": "blizzard.hub.domain.execution.auth.route",
+    "ROUTE_TOKEN_ENFORCE": "blizzard.hub.domain.execution.auth.route",
+    "PRODUCES_WARN": "blizzard.hub.domain.execution.auth.produces",
+    "PRODUCES_ENFORCE": "blizzard.hub.domain.execution.auth.produces",
+    "ENV_FORGE_URL": "blizzard.hub.domain.config.legacy_keys",
+    "ENV_FORGE_OWNER": "blizzard.hub.domain.config.legacy_keys",
+    "ENV_FORGE_BASE_BRANCH": "blizzard.hub.domain.config.legacy_keys",
+    "ENV_FORGE_TOKEN": "blizzard.hub.domain.config.legacy_keys",
+    "LEGACY_FORGE_VARIABLES": "blizzard.hub.domain.config.legacy_keys",
+    "WorkSourceConfig": "blizzard.hub.domain.config.legacy_keys",
+    "LegacyKeys": "blizzard.hub.domain.config.legacy_keys",
+    "EgressConfig": "blizzard.hub.domain.observability.egress.config",
+    "EGRESS_DATASETS": "blizzard.hub.domain.observability.egress.config",
     "ChunkStatus": "blizzard.foundation.chunk_status",
     "TERMINAL_STATUSES": "blizzard.foundation.chunk_status",
     "ArtifactKind": "blizzard.foundation.artifacts",
@@ -1141,6 +1156,11 @@ _DOMAIN_PACKAGE_LAYERS: dict[str, frozenset[str]] = {
 _DOMAIN_SHARED_KERNEL = "kernel"
 
 
+#: The hub's edge modules beside its domain — config reads and parses, delivery executes; the domain takes
+#: their values as domain-owned types and their collaborators as domain Protocols.
+_HUB_DOMAIN_EDGES = ("config", "delivery")
+
+
 def _import_statements(path: Path, src_root: Path) -> Iterator[tuple[int, list[list[str]]]]:
     """Each import statement in ``path``, wherever it sits (function bodies and ``TYPE_CHECKING``
     blocks included), as its line and the dotted segments of every name it binds — a relative import
@@ -1155,12 +1175,17 @@ def _import_statements(path: Path, src_root: Path) -> Iterator[tuple[int, list[l
             yield node.lineno, [[*base, alias.name] for alias in node.names]
 
 
-def _domain_layer_crossings(domain_dir: Path, layers: dict[str, frozenset[str]]) -> list[str]:
+def _domain_layer_crossings(
+    domain_dir: Path, layers: dict[str, frozenset[str]], edges: tuple[str, ...] = ()
+) -> list[str]:
     """Every import of a ``blizzard.hub.domain`` package its importer's layer does not allow, wherever it
     sits in the module (function bodies and ``TYPE_CHECKING`` blocks included), resolved as
-    :func:`_internal_crossings` resolves them; plus every module that sits in no declared package."""
+    :func:`_internal_crossings` resolves them; plus every module that sits in no declared package.
+    ``edges`` names the modules beside the domain it may not import at all, compared by whole segment
+    so the domain's own same-named package is never mistaken for one."""
     src_root = domain_dir.parent.parent.parent
     umbrella = list(domain_dir.relative_to(src_root).parts)
+    refused = [[*umbrella[:-1], edge] for edge in edges]
     violations: list[str] = []
     for path in sorted(domain_dir.rglob("*.py")):
         rel = path.relative_to(domain_dir).parts
@@ -1174,6 +1199,9 @@ def _domain_layer_crossings(domain_dir: Path, layers: dict[str, frozenset[str]])
         allowed = {own, _DOMAIN_SHARED_KERNEL, *layers[own]} if own is not None else set()
         for lineno, named in _import_statements(path, src_root):
             for module in named:
+                if any(module[: len(edge)] == edge for edge in refused):
+                    violations.append(f"{'/'.join(rel)}:{lineno} imports the edge {'.'.join(module)}")
+                    break
                 if module[: len(umbrella)] != umbrella:
                     continue
                 target = module[len(umbrella)] if len(module) > len(umbrella) else None
@@ -1214,7 +1242,7 @@ def _layer_cycle(layers: Mapping[str, frozenset[str]], kernel: str | None = _DOM
 
 
 def test_hub_domain_packages_import_only_what_their_layer_allows() -> None:
-    violations = _domain_layer_crossings(_HUB_DOMAIN_DIR, _DOMAIN_PACKAGE_LAYERS)
+    violations = _domain_layer_crossings(_HUB_DOMAIN_DIR, _DOMAIN_PACKAGE_LAYERS, _HUB_DOMAIN_EDGES)
     assert not violations, f"a hub domain package may import only its own layer's dependencies: {violations}"
 
 
@@ -1392,12 +1420,19 @@ def _plant_domain(tmp_path: Path, files: dict[str, str]) -> list[str]:
         "garden/run.py": "Y = 1\n",
         "kernel/__init__.py": "",
         "kernel/unset.py": "UNSET = 1\n",
+        "config/__init__.py": "",
+        "config/legacy_keys.py": "Z = 1\n",
         **files,
     }.items():
         (domain / rel).parent.mkdir(parents=True, exist_ok=True)
         (domain / rel).write_text(text)
-    layers = {"kernel": frozenset[str](), "chunk": frozenset[str](), "garden": frozenset({"chunk"})}
-    return _domain_layer_crossings(domain, layers)
+    layers = {
+        "kernel": frozenset[str](),
+        "chunk": frozenset[str](),
+        "config": frozenset[str](),
+        "garden": frozenset({"chunk", "config"}),
+    }
+    return _domain_layer_crossings(domain, layers, _HUB_DOMAIN_EDGES)
 
 
 @pytest.mark.parametrize(
@@ -1424,7 +1459,11 @@ def _plant_domain(tmp_path: Path, files: dict[str, str]) -> list[str]:
         ("chunk/ports.py", "from blizzard.hub.domain.kernel.unset import UNSET", False),
         ("chunk/ports.py", "from blizzard.hub.domain import kernel", False),
         ("garden/ports.py", "def f():\n    from blizzard.hub.domain.chunk.model import X", False),
-        ("chunk/ports.py", "import blizzard.hub.config", False),
+        ("chunk/ports.py", "import blizzard.hub.config", True),
+        ("chunk/ports.py", "from blizzard.hub.delivery.hub_node import HubNodeExecutor", True),
+        ("chunk/ports.py", "from ...config import X", True),
+        ("chunk/ports.py", "from blizzard.hub import config", True),
+        ("garden/ports.py", "from blizzard.hub.domain.config.legacy_keys import Z", False),
     ],
 )
 def test_domain_layer_check_counts_every_import_form(tmp_path: Path, rel: str, text: str, caught: bool) -> None:
@@ -1841,8 +1880,9 @@ _COMPOSITION_ROOT_FILES = (
 )
 
 
-# `TranscriptCaps` is a value object; `EventBroker` has a store-free `create_app` fallback.
-_REPEATABLE_CONSTRUCTIONS = frozenset({"TranscriptCaps", "EventBroker"})
+# `TranscriptCaps` is a value object; `EventBroker` has a store-free `create_app` fallback; `ConfigError` is a
+# refusal, raised wherever a boot check or the config edge refuses.
+_REPEATABLE_CONSTRUCTIONS = frozenset({"TranscriptCaps", "EventBroker", "ConfigError"})
 
 
 def _blizzard_constructions(path: Path) -> list[tuple[str, int]]:
@@ -2050,7 +2090,9 @@ def test_the_egress_sweep_imports_no_store_filesystem_or_format_library() -> Non
         f"{path.relative_to(_REPO_ROOT)} imports {module}"
         for path in sorted(domain.glob("*.py"))
         for module in sorted(_imported_modules(path))
-        if module.split(".")[0] in ("opentelemetry", "sqlalchemy", "pyarrow", "gzip", "os", "shutil", "pathlib")
+        # `config.py` only declares the export's directory as a `Path` value; it never touches the filesystem.
+        if module.split(".")[0] in ("opentelemetry", "sqlalchemy", "pyarrow", "gzip", "os", "shutil")
+        or (module == "pathlib" and path.name != "config.py")
         or module.startswith(("blizzard.hub.store", "blizzard.hub.egress.internal", "blizzard.hub.egress.factory"))
     ]
     assert not violations, violations

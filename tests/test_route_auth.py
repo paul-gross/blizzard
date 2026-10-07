@@ -12,9 +12,8 @@ from datetime import UTC, datetime
 
 import pytest
 
-from blizzard.hub.config import ROUTE_TOKEN_ENFORCE, ROUTE_TOKEN_WARN
 from blizzard.hub.domain.chunk.model import ChunkFacts, RouteCreatedFact, RouteReleasedFact, RouteTokenMintedFact
-from blizzard.hub.domain.execution.auth.route import RouteToken
+from blizzard.hub.domain.execution.auth.route import ROUTE_TOKEN_ENFORCE, ROUTE_TOKEN_WARN, RouteToken
 
 pytestmark = pytest.mark.unit
 

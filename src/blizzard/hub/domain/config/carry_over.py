@@ -15,16 +15,15 @@ from pathlib import Path
 from typing import Protocol
 
 from blizzard.foundation.roles import domain_model
-from blizzard.hub.config import (
+from blizzard.hub.domain.config import secret_lifecycle
+from blizzard.hub.domain.config.changes import ChangeContext, ConfigChange, Door, RecordKind
+from blizzard.hub.domain.config.legacy_keys import (
     ENV_FORGE_BASE_BRANCH,
     ENV_FORGE_OWNER,
     ENV_FORGE_TOKEN,
     ENV_FORGE_URL,
-    ConfigError,
     LegacyKeys,
 )
-from blizzard.hub.domain.config import secret_lifecycle
-from blizzard.hub.domain.config.changes import ChangeContext, ConfigChange, Door, RecordKind
 from blizzard.hub.domain.config.repositories import CommitOrigin, ConfiguredRepository, RepositoryFields
 from blizzard.hub.domain.config.secrets import SealedValue, SecretName, SecretNameError
 from blizzard.hub.domain.config.work_sources import ConfigFieldError, ConfiguredWorkSource, WorkSourceFields
@@ -39,6 +38,10 @@ DEFAULT_BASE_BRANCH = "main"
 
 class LegacyImportRefused(Exception):
     """The import cannot run as the keys stand; names the variable or block to fix. Nothing is written."""
+
+
+class LegacyStartRefused(Exception):
+    """The hub may not start while it carries legacy keys; names the remedy, never a value."""
 
 
 def secret_name_of(variable: str) -> str:
@@ -339,11 +342,11 @@ class LegacyStart:
             return
         if not self.recorded:
             root: Path = self.keys.config_path.parent
-            raise ConfigError(
+            raise LegacyStartRefused(
                 "this hub is still configured by legacy keys — run "
                 f"`blizzard hub config import-legacy --dir {root}`, then remove them and restart"
             )
-        raise ConfigError(
+        raise LegacyStartRefused(
             "the legacy configuration was imported, but these keys remain — remove each, then restart: "
             + "; ".join(self.keys.locations())
         )

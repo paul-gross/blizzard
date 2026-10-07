@@ -23,7 +23,8 @@ import uvicorn
 
 from blizzard.foundation.platform_tracing import attributes as platform_attr
 from blizzard.foundation.trace_export.config import TracingConfig
-from blizzard.hub.config import EgressConfig, HubConfig
+from blizzard.hub.config import HubConfig
+from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.composition import RunnerProcess
 from blizzard.runner.config import ENV_TRANSCRIPTS_ROOT, RunnerConfig

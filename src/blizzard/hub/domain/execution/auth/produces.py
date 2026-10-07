@@ -13,11 +13,15 @@ from dataclasses import dataclass
 from blizzard.foundation.completion_gates import Coverage
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
-from blizzard.hub.config import PRODUCES_ENFORCE
 from blizzard.hub.domain.execution.submissions import CompletionArtifact
 from blizzard.hub.domain.graph.model import Node
 
 _log = get_logger("blizzard.hub.produces_auth")
+
+# The produces-artifact rollout brake, separate from the route-token brake — `warn`
+# logs a `produces:` name with no attachment and proceeds; `enforce` rejects it.
+PRODUCES_WARN = "warn"
+PRODUCES_ENFORCE = "enforce"
 
 
 @domain_model

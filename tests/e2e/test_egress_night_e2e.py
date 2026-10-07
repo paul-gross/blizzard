@@ -26,7 +26,7 @@ from typing import Any
 import httpx
 import pytest
 
-from blizzard.hub.config import EgressConfig
+from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.runner.config import RunnerConfig
 from tests.e2e import egress_proof as proof
 from tests.e2e.fleet_traces import PLANT_DIR_VAR, PLANT_LEASE_TOKEN_SCRIPT, planted_lease_tokens

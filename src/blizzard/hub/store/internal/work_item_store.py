@@ -17,7 +17,6 @@ from blizzard.foundation.garden_proposals import GardenProposalClosureKind, Gard
 from blizzard.foundation.ids import WORK_ITEM_PREFIX, Id
 from blizzard.foundation.store.batching import id_batches
 from blizzard.foundation.work_items import WorkItemClosure
-from blizzard.hub.config import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.chunk.model import (
     Chunk,
     HubWorkItem,
@@ -29,6 +28,7 @@ from blizzard.hub.domain.chunk.model import (
 )
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.garden.run_context import RunContext
+from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_dependencies_store import release_outgoing_edges_conn

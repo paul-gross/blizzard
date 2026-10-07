@@ -17,8 +17,8 @@ from typing import Literal
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.hub.config import EgressConfig
 from blizzard.hub.domain.chunk.event_log import EventLogService
+from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.event_rows import missing_key_reason
 from blizzard.hub.domain.observability.egress.lifecycle import ExportVerb, export_allows
 from blizzard.hub.domain.observability.egress.repository import (

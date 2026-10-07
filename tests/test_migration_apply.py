@@ -12,7 +12,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from blizzard.hub.config import ROUTE_TOKEN_ENFORCE
+from blizzard.hub.domain.execution.auth.route import ROUTE_TOKEN_ENFORCE
 from tests.support import build_hub, emitted_events, pointer_token, report_lease
 
 pytestmark = pytest.mark.component

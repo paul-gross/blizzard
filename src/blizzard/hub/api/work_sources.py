@@ -25,7 +25,6 @@ from blizzard.hub.api.deps import get_services
 from blizzard.hub.api.door import RequestDoor, change_context
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import HubServices
-from blizzard.hub.config import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.ingest import IngestConflict
 from blizzard.hub.domain.chunk.model import HubWorkItem, WorkItemAuthor, WorkItemAuthorKind, WorkRef
@@ -42,6 +41,7 @@ from blizzard.hub.domain.config.work_sources import (
     require_configurable,
 )
 from blizzard.hub.domain.graph.authoring import DefaultGraphRetired
+from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.kernel.unset import UNSET
 from blizzard.hub.domain.work_items.editing import WorkItemHeldByDependents, WorkItemHeldByLiveChunk
 from blizzard.hub.domain.work_items.model import WorkItemEdit, WorkItemFieldBlank, WorkItemNotEditable, WorkItemText

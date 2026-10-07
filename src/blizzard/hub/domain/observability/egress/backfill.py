@@ -17,7 +17,6 @@ from datetime import date, datetime, timedelta
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.roles import domain_model
-from blizzard.hub.config import EgressConfig
 from blizzard.hub.domain.observability.analytics.extraction import EXTRACTOR_VERSION
 from blizzard.hub.domain.observability.egress.assembly import (
     guarded,
@@ -25,6 +24,7 @@ from blizzard.hub.domain.observability.egress.assembly import (
     sorted_step_rows,
     window_step_rows,
 )
+from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.event_rows import FilePathPolicy, missing_key_reason
 from blizzard.hub.domain.observability.egress.events_window import events_rows, position_of
 from blizzard.hub.domain.observability.egress.lifecycle import ExportVerb, export_allows

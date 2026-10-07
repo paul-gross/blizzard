@@ -29,7 +29,6 @@ from blizzard.foundation.fact_kinds import (
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.subscription_miss import SampleMissReason
-from blizzard.hub.config import ROUTE_TOKEN_WARN
 from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.chunk.model import ChunkFacts, NodeQuestion, QuestionDelivery
 from blizzard.hub.domain.chunk.ports.escalations import IWriteChunkEscalationsRepository
@@ -38,7 +37,7 @@ from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, Fenc
 from blizzard.hub.domain.chunk.ports.questions import IWriteChunkQuestionsRepository
 from blizzard.hub.domain.chunk.ports.route import IWriteChunkRouteRepository
 from blizzard.hub.domain.chunk.ports.usage import IWriteChunkUsageRepository
-from blizzard.hub.domain.execution.auth.route import RouteToken
+from blizzard.hub.domain.execution.auth.route import ROUTE_TOKEN_WARN, RouteToken
 from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.domain.execution.questions import parse_instant
 from blizzard.hub.domain.runners.registration import ExternalSubscriptionUsageWindow, RetiredRunnerGuard

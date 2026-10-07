@@ -13,9 +13,9 @@ from click.testing import CliRunner
 
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.cli import hub as hub_group
-from blizzard.hub.config import EgressConfig
 from blizzard.hub.domain.observability.analytics.extraction import EXTRACTOR_VERSION
 from blizzard.hub.domain.observability.egress.backfill import EgressBackfill
+from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.event_rows import FilePathPolicy
 from blizzard.hub.egress.writer import EgressFailure, EgressFailureCause
 from blizzard.hub.store.internal.egress_event_store import EgressEventStore

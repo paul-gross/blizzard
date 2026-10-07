@@ -11,7 +11,7 @@ import pytest
 from click.testing import CliRunner
 
 from blizzard.hub.cli import hub as hub_group
-from blizzard.hub.config import EgressConfig
+from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.egress.factory import EgressUnavailable
 from tests.support import HubHarness
 from tests.test_egress_sweep import _closed_step, _hub

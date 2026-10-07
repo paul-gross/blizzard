@@ -12,8 +12,8 @@ from datetime import datetime
 from sqlalchemy import and_, insert, or_, select
 
 from blizzard.foundation.event_log import EventLogKind
-from blizzard.hub.config import EGRESS_DATASETS
 from blizzard.hub.domain.chunk.model import UsageFact
+from blizzard.hub.domain.observability.egress.config import EGRESS_DATASETS
 from blizzard.hub.domain.observability.egress.repository import (
     EgressCheckpoint,
     EgressWriteFailure,
