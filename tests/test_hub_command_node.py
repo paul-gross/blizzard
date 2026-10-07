@@ -1579,6 +1579,10 @@ def test_poll_timeout_routes_the_failure_edge_via_the_kickback_path(tmp_path: Pa
     assert len(detail["bounces"]) == 1
     assert detail["bounces"][0]["cause"] == "poll-timeout"
     assert hub.services.chunks.hub_exec.count_live_hub_exec_slots() == 0
+    envelope = json.loads(detail["bounces"][0]["envelope"])
+    assert "poll_timeout" in envelope["detail"]
+    assert envelope["unlanded"] == []
+    assert envelope["step"] is None
 
 
 @pytest.mark.component

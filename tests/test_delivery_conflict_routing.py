@@ -7,6 +7,8 @@ id via a direct transition-fact insert.
 
 from __future__ import annotations
 
+import json
+from dataclasses import replace
 from pathlib import Path
 from typing import cast
 
@@ -16,6 +18,7 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.ids import ARTIFACT_PREFIX, Id
 from blizzard.hub.delivery.command_runner import CommandResult
 from blizzard.hub.domain.artifact.model import StoredArtifact
+from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.escalations import IWriteChunkEscalationsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
@@ -23,6 +26,7 @@ from blizzard.hub.domain.graph.model import DEFAULT_BOUNCE_CAP
 from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.graphs.scripts import land_pr_ci
 from tests.support import (
+    DEFAULT_FIXTURE_REPOSITORIES,
     FakeHubCommandRunner,
     FakeHubWorkdir,
     HubHarness,
@@ -69,24 +73,29 @@ def _mint_and_claim(hub: HubHarness) -> tuple[str, dict[str, str]]:
     return chunk_id, nodes
 
 
-def _seed_at_deliver_with_an_unlanded_commit(hub: HubHarness, chunk_id: str, nodes: dict[str, str]) -> None:
+def _seed_at_deliver_with_an_unlanded_commit(
+    hub: HubHarness, chunk_id: str, nodes: dict[str, str], *, repos: tuple[str, ...] = ("acme/widget",)
+) -> None:
     """Place the chunk's current node directly at ``deliver`` (standing in for the six
     node-steps a real chunk would take to arrive here — same technique
     ``tests/test_delivery_incomplete_routing.py`` uses for ``retrospective``), carrying
     one ``git_commit`` artifact for a repo with no ``merged/<repo>`` marker, so this
     reads as a genuine, unlanded delivery attempt."""
-    commit_artifact = StoredArtifact(
-        kind=ArtifactKind.GIT_COMMIT,
-        name="w",
-        data=f"feat/thing:{'c' * 40}",
-        repo="acme/widget",
-        forge=None,
-        artifact_id=Id.mint(ARTIFACT_PREFIX, hub.clock).value,
-        chunk_id=chunk_id,
-        node_id=nodes["build"],
-        node_name="build",
-        epoch=1,
-    )
+    commit_artifacts = [
+        StoredArtifact(
+            kind=ArtifactKind.GIT_COMMIT,
+            name=repo.split("/")[1],
+            data=f"feat/thing:{'c' * 40}",
+            repo=repo,
+            forge=None,
+            artifact_id=Id.mint(ARTIFACT_PREFIX, hub.clock).value,
+            chunk_id=chunk_id,
+            node_id=nodes["build"],
+            node_name="build",
+            epoch=1,
+        )
+        for repo in repos
+    ]
     _writable_movement(hub).record_transition(
         transition_id="tr_seed_deliver",
         chunk_id=chunk_id,
@@ -96,7 +105,7 @@ def _seed_at_deliver_with_an_unlanded_commit(hub: HubHarness, chunk_id: str, nod
         epoch=1,
         runner_id="r1",
         at=hub.clock.now(),
-        artifacts=[commit_artifact],
+        artifacts=commit_artifacts,
         proposals=[],
         admission=EpochAdmission.AT_OR_ABOVE,
     )
@@ -165,3 +174,65 @@ def test_a_dirty_conflict_escalates_once_the_bounce_cap_is_crossed(tmp_path: Pat
     assert detail["escalation"]["detail"] == (
         f"bounce cap ({DEFAULT_BOUNCE_CAP}) crossed after {DEFAULT_BOUNCE_CAP + 1} bounces"
     )
+
+
+def _envelope(hub: HubHarness, chunk_id: str) -> dict:
+    (bounce,) = hub.client.get(f"/api/chunks/{chunk_id}").json()["bounces"]
+    return json.loads(bounce["envelope"])
+
+
+def test_a_failed_deliver_step_envelope_names_the_unlanded_repo_and_the_step_output(tmp_path: Path) -> None:
+    runner = FakeHubCommandRunner()
+    runner.arm(_LAND_COMMAND, CommandResult(exit_code=1, stdout="", stderr="boom — merge refused\n" + "x" * 5000))
+    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
+    chunk_id, nodes = _mint_and_claim(hub)
+    _seed_at_deliver_with_an_unlanded_commit(hub, chunk_id, nodes)
+    report_lease(hub, chunk_id, epoch=1, seq=1)
+    assert hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance").json()["ran"] is True
+
+    envelope = _envelope(hub, chunk_id)
+    assert [u["repo"] for u in envelope["unlanded"]] == ["acme/widget"]
+    assert envelope["unlanded"][0]["branch"] == "feat/thing"
+    assert envelope["unlanded"][0]["commit"] == "c" * 40
+    assert envelope["unlanded"][0]["pr"] is None  # a repo with no PR
+    assert envelope["step"]["exit_code"] == 1
+    assert len(envelope["step"]["output_tail"]) == 2000
+    assert envelope["step"]["log_artifact"] == f"hub-log.{envelope['step']['name']}"
+    assert "acme/widget" in envelope["detail"] and envelope["step"]["name"] in envelope["detail"]
+
+
+def test_an_envelope_lists_only_the_unlanded_repo_with_its_pr_and_keeps_non_ascii_unescaped(tmp_path: Path) -> None:
+    runner = FakeHubCommandRunner()
+    runner.arm(_LAND_COMMAND, CommandResult(exit_code=1, stdout="", stderr="émoji ✗"))
+    repositories = [replace(DEFAULT_FIXTURE_REPOSITORIES[0], repo=name) for name in ("widget", "done")]
+    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir(), repositories=repositories)
+    chunk_id, nodes = _mint_and_claim(hub)
+    _seed_at_deliver_with_an_unlanded_commit(hub, chunk_id, nodes, repos=("acme/done", "acme/widget"))
+    artifacts = cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts)
+    for name, data in (
+        ("merged/acme/done", "d" * 40),
+        (
+            "delivery-pr/acme/widget",
+            json.dumps({"repo": "acme/widget", "number": 945, "url": "https://x/acme/widget/pull/945"}),
+        ),
+    ):
+        artifacts.record_hub_artifact(
+            chunk_id,
+            node_id=nodes["deliver"],
+            node_name="deliver",
+            epoch=1,
+            admission=EpochAdmission.AT_OR_ABOVE,
+            name=name,
+            content=data,
+            at=hub.clock.now(),
+        )
+    report_lease(hub, chunk_id, epoch=1, seq=1)
+    hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance")
+
+    envelope = _envelope(hub, chunk_id)
+    assert [u["repo"] for u in envelope["unlanded"]] == ["acme/widget"]
+    assert envelope["unlanded"][0]["pr"] == {"number": 945, "url": "https://x/acme/widget/pull/945"}
+    assert envelope["detail"].startswith("PR #945 in acme/widget did not land: `")
+    assert "émoji ✗" in envelope["step"]["output_tail"]
+    (bounce,) = hub.client.get(f"/api/chunks/{chunk_id}").json()["bounces"]
+    assert "\\u" not in bounce["envelope"]
