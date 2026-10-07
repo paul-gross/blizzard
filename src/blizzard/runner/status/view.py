@@ -19,13 +19,12 @@ from blizzard.runner.environments.repository import (
     group_bindings_by_chunk,
 )
 from blizzard.runner.harness.registry import IHarnessLifecycleRegistry, UnavailableHarnessError, UnknownHarnessError
-from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.hub.identity import ICurrentRunnerIdentity
 from blizzard.runner.hub.outbound_buffer import IReadOutboundRepository, OutboundFactEntry
 from blizzard.runner.leases.asks import IReadAskRepository, OpenAsk
-from blizzard.runner.leases.escalations import IReadEscalationRepository, resume_workdir
+from blizzard.runner.leases.escalations import IReadEscalationRepository
 from blizzard.runner.leases.record import IReadLeaseRecordRepository
-from blizzard.runner.lifecycle.takeover import IReadTakeoverRepository, TakeoverCommand
+from blizzard.runner.lifecycle.takeover import EscalationCommands, IReadTakeoverRepository
 from blizzard.runner.throttle.pause import IReadPauseRepository, RunnerBrakes
 
 __all__ = [
@@ -314,26 +313,24 @@ class RunnerStatusService:
         held_by_chunk = group_bindings_by_chunk(self._environments.held_bindings())
         views = []
         for escalation in self._escalations.open_escalations():
-            resume_command = ""
             session = escalation.session
-            workdir = resume_workdir(session, held_by_chunk.get(escalation.chunk_id, []))
-            if session is not None and workdir is not None:
-                # Composed from the escalation's own stamps, not a fresh
-                # resolution: the operator lands in the configuration it ran with.
+            harness = None
+            if session is not None:
                 try:
-                    resume_command = self._harnesses.lifecycle(session.harness_id).resume_command(
-                        SpawnCwd.of_session(self._workspace_root, workdir),
-                        session.session_id,
-                        model=escalation.resolved_model,
-                        effort=escalation.resolved_effort,
-                    )
+                    harness = self._harnesses.lifecycle(session.harness_id)
                 except (UnknownHarnessError, UnavailableHarnessError):
                     # The escalation remains visible under its recorded owner, but cannot
-                    # offer a command this runner cannot compose.
-                    resume_command = ""
-            # Composed under the conditions `escalate` uses: a resume command exists and the runner dir is known.
-            wrapped = TakeoverCommand.wrapped_for(
-                escalation.chunk_id, resume_command=resume_command, runner_dir=self._runner_dir
+                    # offer a command this runner cannot compose. A polled read: no log.
+                    harness = None
+            commands = EscalationCommands.compose(
+                escalation.chunk_id,
+                session=session,
+                bindings=held_by_chunk.get(escalation.chunk_id, []),
+                harness=harness,
+                model=escalation.resolved_model,
+                effort=escalation.resolved_effort,
+                workspace_root=self._workspace_root,
+                runner_dir=self._runner_dir,
             )
             views.append(
                 EscalationView(
@@ -342,13 +339,13 @@ class RunnerStatusService:
                     node_id=escalation.node_id,
                     epoch=escalation.epoch,
                     closed_at=escalation.closed_at,
-                    resume_command=resume_command,
+                    resume_command=commands.resume,
                     session_name=escalation.session_name,
                     model=escalation.resolved_model,
                     effort=escalation.resolved_effort,
                     harness_id=escalation.harness_id,
                     harness_version=escalation.harness_version,
-                    wrapped_takeover_command=wrapped,
+                    wrapped_takeover_command=commands.wrapped,
                     cause=escalation.cause,
                 )
             )
