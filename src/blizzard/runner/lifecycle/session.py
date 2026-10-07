@@ -23,12 +23,10 @@ _log = get_logger("blizzard.runner.loop")
 @dataclass(frozen=True)
 class ResumeTarget:
     """A node-entry spawn's resume target — the session to resume (``None`` for a fresh
-    mint), paired with the owner a rotated named pool's replacement must mint under, and,
-    when an existing session's owner cannot be dispatched to, the exception that says why."""
+    mint, which a breached pool's replacement is), paired, when an existing session's owner
+    cannot be dispatched to, with the exception that says why."""
 
     session: SessionReference | None
-    #: The breached pool head's own owner to mint its replacement under; unset for a plain resume or no breach.
-    pool_owner: str | None = None
     #: The existing session whose recorded owner won't resolve, paired with why; escalate in place, never mint under it.
     owner_unresolvable: tuple[SessionReference, UnknownHarnessError | UnavailableHarnessError] | None = None
 
@@ -153,9 +151,18 @@ class SessionResolver:
             return "owner-unresolvable", exc
         # Model drift first: the one check that needs no telemetry, and an edited declaration
         # should rotate regardless of how much context the old head accumulated.
-        resolved = harness.resolve_model(node.session_model) if node.session_model else None
-        if model_drifted(head.resolved_model, resolved):
-            return "model-drift", None
+        strict = bool(node.session_harnesses) and selection_is_strict(node)
+        if node.session_model:
+            resolved = (
+                harness.resolve_model_strict(node.session_model)
+                if strict
+                else harness.resolve_model(node.session_model)
+            )
+        else:
+            resolved = None
+        model_breach = model_breach_reason(head.resolved_model, resolved, strict=strict)
+        if model_breach is not None:
+            return model_breach, None
 
         rotate = node.session_rotate
         if rotate is None:
@@ -297,7 +304,8 @@ def resume_target(
     pool's head, ``breach`` why a pool head must not resume, ``owner_exc`` why its owner will not resolve.
     A fresh node or no candidate mints fresh (best-effort). A plain resume resumes its candidate, escalating
     in place rather than minting when the owner is unresolvable. A pool head resumes while unbreached; a
-    breached one mints its replacement under the head's owner, or escalates when the breach is that owner."""
+    breached one's replacement is a fresh mint — its owner sourced by selection or the runner default, never
+    carried from the head — or an in-place escalation when the breach is the head's owner."""
     if node.session is SessionMode.FRESH or candidate is None:
         return ResumeTarget(session=None)
     unresolvable = (candidate, owner_exc) if owner_exc is not None else None
@@ -307,13 +315,24 @@ def resume_target(
         return ResumeTarget(session=candidate)
     if breach is None:
         return ResumeTarget(session=candidate)
-    return ResumeTarget(session=None, pool_owner=candidate.harness_id, owner_unresolvable=unresolvable)
+    return ResumeTarget(session=None, owner_unresolvable=unresolvable)
 
 
 def model_drifted(head_model: str | None, resolved: str | None) -> bool:
     """A pool head rotates when the node now resolves to a different known model than the head
     recorded; an unknown on either side is not drift."""
     return resolved is not None and head_model is not None and head_model != resolved
+
+
+def model_breach_reason(head_model: str | None, resolved: str | None, *, strict: bool) -> str | None:
+    """Why the node's model preference breaches a pool head, or ``None``. ``strict`` mirrors selection
+    over an authored harness set: the owner mapping none of the preference (``resolved`` is ``None``)
+    is itself a breach, since the replacement could never be minted under it."""
+    if strict and resolved is None:
+        return "no-authored-tier"
+    if model_drifted(head_model, resolved):
+        return "model-drift"
+    return None
 
 
 def rotation_breach(

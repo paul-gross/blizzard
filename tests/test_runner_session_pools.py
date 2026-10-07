@@ -30,7 +30,7 @@ from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.hub.client import QueueEntry
 from blizzard.runner.leases.model import NewLease, WorkRefStamp
 from blizzard.runner.lifecycle.attempt import Attempt
-from blizzard.runner.lifecycle.session import SessionResolver
+from blizzard.runner.lifecycle.session import HarnessSelector, SessionResolver
 from blizzard.runner.lifecycle.spawn import Spawner
 from blizzard.runner.loop.steps import Advance, Fill, Pull
 from blizzard.runner.node_steps.chunk_state import ChunkState
@@ -893,21 +893,19 @@ def test_no_drift_when_the_resolved_model_still_matches_the_stamp(tmp_path):  # 
     assert _resolve(store, _bounded(SessionMode.RESUME), resolved_model="sonnet") == head
 
 
-@pytest.mark.component
-def test_rotation_mints_under_the_head_owner_and_resolves_its_model_there(tmp_path):  # type: ignore[no-untyped-def]
-    """A non-default pool head rotates into its own harness lineage, never Claude Code."""
+def _rotation_rig(tmp_path, *, owner_model: str = "opus"):  # type: ignore[no-untyped-def]
+    """A breached `other`-owned head beside the default harness; returns the store, ctx, both harnesses."""
     store = _store(tmp_path)
     _seed_head(store, model="sonnet")
     with store._engine.begin() as conn:
         conn.execute(update(leases).values(harness_id="other"))
-
     default = FakeHarness(
         handle=WorkerHandle(session_id="default", pid=100, process_start_time="default", pgid=100), verdict="pass"
     )
     other = FakeHarness(
         handle=WorkerHandle(session_id="rotated", pid=200, process_start_time="other", pgid=200), verdict="pass"
     )
-    other.resolved_model = "opus"
+    other.resolved_model = owner_model
     registry = HarnessRegistry(
         {
             "claude_code": HarnessBinding(adapter=default, transcript_source=default.transcript_source()),
@@ -918,21 +916,66 @@ def test_rotation_mints_under_the_head_owner_and_resolves_its_model_there(tmp_pa
     ctx = replace(
         ctx,
         harnesses=registry,
-        sessions=SessionResolver(
-            leases=store,
-            harnesses=registry,
-            transcripts_wired=True,
-        ),
+        harness_selector=HarnessSelector(registry),
+        sessions=SessionResolver(leases=store, harnesses=registry, transcripts_wired=True),
     )
-    envelope = _bounded(SessionMode.RESUME, model=["blizzard:basic"])
+    return store, ctx, default, other
 
+
+def _enter(ctx, envelope):  # type: ignore[no-untyped-def]
     Spawner(ctx).enter_node("ch_1", envelope, [AcquiredEnvironment("e1", "/ws/e1")], via="test")
+
+
+@pytest.mark.component
+def test_rotation_with_no_authored_set_mints_under_the_runner_default(tmp_path):  # type: ignore[no-untyped-def]
+    """A rotated replacement is a fresh mint: with no authored set it takes the runner default, not the head's owner."""
+    store, ctx, default, other = _rotation_rig(tmp_path)
+
+    _enter(ctx, _bounded(SessionMode.RESUME, model=["blizzard:basic"]))
+
+    assert other.spawn_model_effort == []
+    assert default.resume_froms == [None]
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None and lease.session == SessionReference("claude_code", "default")
+
+
+@pytest.mark.component
+def test_rotation_mints_under_the_first_member_when_the_owner_left_the_set(tmp_path):  # type: ignore[no-untyped-def]
+    _, ctx, default, other = _rotation_rig(tmp_path)
+    envelope = replace(
+        _bounded(SessionMode.RESUME, model=["blizzard:basic"]),
+        node=replace(_bounded(SessionMode.RESUME, model=["blizzard:basic"]).node, session_harnesses=["claude_code"]),
+    )
+
+    _enter(ctx, envelope)
+
+    assert other.spawn_model_effort == []
+    assert default.resume_froms == [None]
+
+
+@pytest.mark.component
+def test_rotation_stays_on_the_owner_when_it_is_the_sets_sole_member(tmp_path):  # type: ignore[no-untyped-def]
+    _, ctx, default, other = _rotation_rig(tmp_path)
+    base = _bounded(SessionMode.RESUME, model=["blizzard:basic"])
+    envelope = replace(base, node=replace(base.node, session_harnesses=["other"]))
+
+    _enter(ctx, envelope)
 
     assert default.spawns == []
     assert other.resume_froms == [None]
     assert other.spawn_model_effort == [("opus", None)]
-    lease = store.active_lease_for_chunk("ch_1")
-    assert lease is not None and lease.session == SessionReference("other", "rotated")
+
+
+@pytest.mark.component
+def test_rotation_escalates_when_no_set_member_qualifies(tmp_path):  # type: ignore[no-untyped-def]
+    store, ctx, default, other = _rotation_rig(tmp_path)
+    base = _bounded(SessionMode.RESUME, model=["blizzard:basic"])
+    envelope = replace(base, node=replace(base.node, session_harnesses=["gone"]))
+
+    _enter(ctx, envelope)
+
+    assert default.spawns == [] and other.spawn_model_effort == []
+    assert [e for e in store.open_escalations() if e.chunk_id == "ch_1"]
 
 
 @pytest.mark.component
@@ -1006,6 +1049,7 @@ def test_a_pool_heads_unresolvable_owner_escalates_node_entry_in_place(tmp_path,
     ctx = replace(
         ctx,
         harnesses=registry,
+        harness_selector=HarnessSelector(registry),
         sessions=SessionResolver(leases=store, harnesses=registry, transcripts_wired=True),
     )
     envelope = _bounded(SessionMode.RESUME, model=["blizzard:basic"])
@@ -1068,6 +1112,7 @@ def test_the_escalation_mints_never_spawned_lease_costs_a_later_real_attempt_no_
     ctx = replace(
         ctx,
         harnesses=registry,
+        harness_selector=HarnessSelector(registry),
         sessions=SessionResolver(leases=store, harnesses=registry, transcripts_wired=True),
     )
 

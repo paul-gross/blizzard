@@ -259,8 +259,9 @@ class Spawner:
         The sole funnel into the resolved owner's ``.spawn``, so a re-spawn joins its pool."""
         if self.suppressed(via=via, chunk_id=chunk_id):
             return
-        # A pool rotation's replacement or a retry (`Attempt.requeue`) mints under its own prior
-        # owner — neither a selection candidate; only fresh work reaches the selector or its no-set fallback.
+        # A retry (`Attempt.requeue`) or a recovery mints under its own prior owner — not a selection
+        # candidate. Every other fresh mint, a rotated pool's replacement included, reaches the selector
+        # or its no-set fallback.
         source = mint_owner_source(resume_from, harness_id, envelope.node)
         if source is MintOwnerSource.RESUME and resume_from is not None:
             owner = resume_from.harness_id
@@ -416,7 +417,7 @@ class Spawner:
             session, exc = resume.owner_unresolvable
             self._escalate_unresolvable_resume_owner(chunk_id, envelope, session, exc, via=via)
             return
-        self.spawn(chunk_id, envelope, environments, via=via, resume_from=resume.session, harness_id=resume.pool_owner)
+        self.spawn(chunk_id, envelope, environments, via=via, resume_from=resume.session)
 
     def _escalate_unresolvable_resume_owner(
         self,
