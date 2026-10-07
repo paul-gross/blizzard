@@ -207,13 +207,29 @@ def test_a_runner_whose_capabilities_cannot_run_the_chunk_is_refused() -> None:
         _admit(_READY, registration=withdrawn)
 
 
-def test_an_unregistered_runner_is_refused_after_the_chunk_admits_it() -> None:
+def test_an_unregistered_runner_is_refused_before_any_chunk_refusal() -> None:
+    ended = ChunkFacts(minted=True, operator_completed=True, operator_completed_at=_T0)
     with pytest.raises(ClaimDeniedUnregistered) as refused:
         _admit(_READY, registration=None)
     assert refused.value.runner_id == "runner-a"
     assert str(refused.value) == "runner runner-a is not registered at the hub"
-    with pytest.raises(ClaimDeniedNotReady):
+    with pytest.raises(ClaimDeniedUnregistered):
         _admit(ChunkFacts(minted=True), registration=None)
+    with pytest.raises(ClaimDeniedUnregistered):
+        _admit(ended, registration=None)
+    with pytest.raises(ClaimDeniedUnregistered):
+        _admit(_READY, route=_route(), registration=None)
+
+
+def test_a_retired_runner_is_refused_before_any_chunk_refusal() -> None:
+    ended = ChunkFacts(minted=True, operator_completed=True, operator_completed_at=_T0)
+    retired = replace(_REGISTERED, retired=True, retired_at=_T0, retired_by="op")
+    with pytest.raises(RunnerRetired):
+        _admit(ended, registration=retired)
+    with pytest.raises(RunnerRetired):
+        _admit(ChunkFacts(minted=True), registration=retired)
+    with pytest.raises(RunnerRetired):
+        _admit(_READY, unmet="chk_pre", registration=retired)
 
 
 def test_a_registration_reporting_no_capabilities_is_refused() -> None:

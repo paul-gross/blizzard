@@ -211,7 +211,8 @@ refresh token, or a path — but only `credential_lapsed` renders: a slug whose 
 sample shows on the board as "credential lapsed — log in again on this runner" in place of its pace bars. Its
 refreshed-age label and tier still render alongside the notice — they describe the last good sample, not the lapse — and
 once a runner has declared its roster the notice carries no age gate of its own: it stays until a fresh sample or a
-different miss reason supersedes it, rather than ageing out. Any other reason leaves the row reading "no sample yet"
+different miss reason supersedes it, rather than ageing out. A reason this hub does not recognize, as from a newer
+runner, supersedes it too, and its row names no reason. Any other reason leaves the row reading "no sample yet"
 with that reason named, exactly as a never-sampled slug's, even though the hub has stored it.
 
 Credentials never leave the runner machine: the sample reads the runner's own local OAuth credential file, and only
