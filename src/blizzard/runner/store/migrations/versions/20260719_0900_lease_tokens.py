@@ -9,16 +9,26 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+import sqlalchemy as sa
 from alembic import op
 
-from blizzard.runner.store.schema import lease_tokens
+from blizzard.foundation.store.utc import UtcDateTime
 
 revision: str = "20260719_0900_runner_lease_tokens"
 down_revision: str | None = "20260718_1200_runner_route_tokens"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-_TABLES = (lease_tokens,)
+_frozen_metadata = sa.MetaData()
+_lease_tokens = sa.Table(
+    "lease_tokens",
+    _frozen_metadata,
+    sa.Column("lease_id", sa.String, primary_key=True),
+    sa.Column("token_hash", sa.Text, nullable=False),
+    sa.Column("minted_at", UtcDateTime, nullable=False),
+)
+
+_TABLES = (_lease_tokens,)
 
 
 def upgrade() -> None:
