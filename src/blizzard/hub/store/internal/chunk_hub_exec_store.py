@@ -23,10 +23,10 @@ from blizzard.hub.domain.chunk.ports.hub_exec import IWriteChunkHubExecRepositor
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import (
-    MARKER_PREFIX,
     enqueue_close_intents,
     fence,
     graph_id_of,
+    is_landing_marker,
     lock_chunk_row,
     next_artifact_seq,
     next_route_seq,
@@ -160,7 +160,7 @@ class ChunkHubExecStore:
                         chunk_id=chunk_id, released_at=at, seq=next_route_seq(conn, chunk_id)
                     )
                 )
-            if any(row.name.startswith(MARKER_PREFIX) for row in artifacts):
+            if any(is_landing_marker(row.name, row.data) for row in artifacts):
                 enqueue_close_intents(conn, chunk_id, at=at)
             return True
 

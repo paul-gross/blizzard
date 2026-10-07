@@ -24,11 +24,11 @@ from blizzard.hub.domain.chunk.proposals import StampedWorkItemProposal
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import (
-    MARKER_PREFIX,
     chunk_has_ended,
     enqueue_close_intents,
     fence,
     insert_proposals,
+    is_landing_marker,
     lock_chunk_row,
     next_artifact_seq,
     proposal_row,
@@ -279,7 +279,7 @@ class ChunkDecisionsStore:
                     )
                 )
             insert_proposals(conn, proposals, at=at)
-            if any(row.name.startswith(MARKER_PREFIX) for row in artifacts):
+            if any(is_landing_marker(row.name, row.data) for row in artifacts):
                 enqueue_close_intents(conn, chunk_id, at=at)
             return None
 

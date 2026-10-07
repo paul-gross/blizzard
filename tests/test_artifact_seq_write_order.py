@@ -57,5 +57,10 @@ def test_same_millisecond_marker_writes_read_back_in_write_order(
     view = DeliveryRead.of(ChunkFacts(minted=True), sources)
     assert [p.number for p in view.open_prs] == [4]
     assert [p.number for p in view.closed_prs] == [3]
+    loaded = hub.services.chunks.artifacts.load_artifacts(chunk_id)
+    assert [m.name for m in loaded if m.name.startswith("delivery-pr/")] == [
+        "delivery-pr/acme/one/3",
+        "delivery-pr/acme/one/4",
+    ]
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert [p["number"] for p in detail["open_prs"]] == [4]

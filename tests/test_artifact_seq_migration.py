@@ -55,7 +55,7 @@ def _seqs(engine: sa.Engine) -> dict[str, int]:
         return dict(conn.execute(sa.text("SELECT artifact_id, seq FROM artifacts")).tuples().all())
 
 
-def test_backfill_orders_each_chunk_by_epoch_then_produced_at_then_id(tmp_path: Path) -> None:
+def test_backfill_orders_each_chunk_by_epoch_then_produced_at_then_arbitrary_id_tiebreak(tmp_path: Path) -> None:
     runner, engine = migrate_to(tmp_path, _BEFORE)
     with engine.begin() as conn:
         seed_graph(conn, "gr_1", at=_T0)
@@ -76,6 +76,20 @@ def test_backfill_orders_each_chunk_by_epoch_then_produced_at_then_id(tmp_path: 
         "art_a_epoch2": 4,
         "art_b_only": 1,  # each chunk's counter starts fresh
     }
+    # The tie rows' order is a deterministic tiebreak by id, not their write order.
+
+
+def test_backfill_follows_produced_at_when_the_later_row_has_the_smaller_id(tmp_path: Path) -> None:
+    runner, engine = migrate_to(tmp_path, _BEFORE)
+    with engine.begin() as conn:
+        seed_graph(conn, "gr_1", at=_T0)
+        seed_chunk(conn, "ch_a", graph_id="gr_1", at=_T0)
+        _seed(conn, "art_zzzz", "ch_a", epoch=1, at=_T0)
+        _seed(conn, "art_aaaa", "ch_a", epoch=1, at=_T0 + timedelta(seconds=5))
+
+    runner.upgrade("head")
+
+    assert _seqs(engine) == {"art_zzzz": 1, "art_aaaa": 2}
 
 
 def test_upgrade_downgrade_round_trip_keeps_rows_and_toggles_seq(tmp_path: Path) -> None:

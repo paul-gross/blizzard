@@ -23,9 +23,9 @@ from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import (
-    MARKER_PREFIX,
     enqueue_close_intents,
     fence,
+    is_landing_marker,
     lock_chunk_row,
     next_artifact_seq,
 )
@@ -75,7 +75,9 @@ class ChunkArtifactsStore:
                         )
                     )
                 for row in conn.execute(
-                    select(s.delivery_repo_landed).where(s.delivery_repo_landed.c.chunk_id.in_(batch))
+                    select(s.delivery_repo_landed)
+                    .where(s.delivery_repo_landed.c.chunk_id.in_(batch))
+                    .order_by(s.delivery_repo_landed.c.id)
                 ):
                     landed[row.chunk_id][row.repo] = row.commit_hash
         return {chunk_id: DeliverySources(markers[chunk_id], landed[chunk_id]) for chunk_id in chunk_ids}
@@ -95,7 +97,11 @@ class ChunkArtifactsStore:
                     node_name=a.node_name,
                     epoch=a.epoch,
                 )
-                for a in conn.execute(select(s.artifacts).where(s.artifacts.c.chunk_id == chunk_id)).all()
+                for a in conn.execute(
+                    select(s.artifacts)
+                    .where(s.artifacts.c.chunk_id == chunk_id)
+                    .order_by(s.artifacts.c.seq, s.artifacts.c.artifact_id)
+                ).all()
             ]
 
     def latest_artifact(self, chunk_id: str, name: str) -> StoredArtifact | None:
@@ -221,7 +227,7 @@ class ChunkArtifactsStore:
                     seq=next_artifact_seq(conn, chunk_id),
                 )
             )
-            if name.startswith(MARKER_PREFIX):
+            if is_landing_marker(name, content):
                 enqueue_close_intents(conn, chunk_id, at=at)
             return True
 
