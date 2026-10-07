@@ -26,7 +26,8 @@ list. The selected child route remains in the URL, so a detail can still be open
 `blizzard hub routine create <name> <graph_name> <default_scope_slug> [--model] [--effort] [--harnesses]`, `list`,
 `show <routine_id>`, and `edit <routine_id> [--graph <name>] [--scope <slug>] [--model] [--effort] [--harnesses] [--clear model|effort|harnesses]` are the routine
 verbs. `edit` sends only the options given; anything left out stands. `GRAPH_NAME` must resolve to a currently-enabled
-graph — a create or edit naming one that does not refuses, naming it. `DEFAULT_SCOPE_SLUG` is minted through the same
+graph — a create, or an edit that changes the graph, naming one that does not refuses, naming it. Restating the graph
+a routine already points at is accepted even after that graph retires. `DEFAULT_SCOPE_SLUG` is minted through the same
 path `scope create` uses if the slug is unseen, so a routine's default scope never needs a separate `scope create`
 first.
 

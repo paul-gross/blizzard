@@ -193,8 +193,9 @@ def plan_edit(
         _require_editable(chunk.chunk_id, facts, "graph_id")
         if facts.current_node_id() is not None:
             raise ChunkAlreadyMoved(chunk.chunk_id)
-        GraphStanding(graph_target, retired=graph_target_retired).require_targetable()
-        graph_id = None if edit.graph_id == chunk.graph_id else edit.graph_id
+        if edit.graph_id != chunk.graph_id:
+            GraphStanding(graph_target, retired=graph_target_retired).require_targetable()
+            graph_id = edit.graph_id
     if edit.default_model is not UNSET:
         _require_editable(chunk.chunk_id, facts, "default_model")
     if edit.default_effort is not UNSET:

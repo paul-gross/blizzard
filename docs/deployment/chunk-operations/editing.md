@@ -10,7 +10,8 @@ client is `blizzard hub chunk set`, which requires at least one option.
 ## Re-pinning the graph
 
 `blizzard hub chunk set --graph <graph-id>` re-pins the graph. `--graph`, like `PATCH graph_id`, resolves a graph id
-only — never a name, unlike migration's `--to-graph`. The edit also requires that the chunk has never moved, and
+only — never a name, unlike migration's `--to-graph`. Naming the chunk's current pin is a no-op, even when that graph
+has since retired, so any defaults sent with it still apply. The edit also requires that the chunk has never moved, and
 unclaimed and never-moved are not the same thing: a chunk that was claimed, ran a node, and was detached derives `ready`
 again while standing on a node of its pinned graph, and re-pinning it would strand that node, absent from the new graph
 — so it is refused 409. A retired target graph is the graph edit's other extra 409, named by the retired graph id; the

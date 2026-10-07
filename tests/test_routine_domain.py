@@ -28,6 +28,7 @@ from blizzard.hub.domain.garden.routines import (
     RoutineNameImmutableError,
     RoutineNameTakenError,
     RoutineScopeMembership,
+    require_graph_change_resolves,
 )
 from blizzard.hub.domain.garden.scopes import IWriteScopeRepository, Scope, ScopeMint, ScopeRegistry, ScopeSlug
 from blizzard.hub.domain.graph.harnesses import InvalidHarnesses
@@ -375,6 +376,29 @@ def test_edit_naming_an_unresolved_graph_is_refused_naming_it() -> None:
 
     with pytest.raises(RoutineGraphUnresolvedError, match="ghost"):
         authoring.edit(routine, RoutineEdit(graph_name="ghost"), _CTX)
+
+
+def test_edit_restating_a_since_retired_graph_writes_the_other_fields() -> None:
+    graphs = _FakeGraphs()
+    authoring, _, _, _ = _authoring(graphs=graphs)
+    routine = _create(authoring)
+    graphs.resolvable.clear()
+
+    edited = authoring.edit(routine, RoutineEdit(graph_name="alpha", default_effort="high"), _CTX)
+
+    assert (edited.default_effort, edited.revision) == ("high", routine.revision + 1)
+
+
+def test_the_graph_check_refuses_a_create_or_a_change_to_an_unresolved_name_only() -> None:
+    def never(_: str) -> bool:
+        raise AssertionError("an unchanged name must not be resolved")
+
+    with pytest.raises(RoutineGraphUnresolvedError, match="ghost"):
+        require_graph_change_resolves(None, "ghost", lambda _: False)
+    with pytest.raises(RoutineGraphUnresolvedError, match="ghost"):
+        require_graph_change_resolves("alpha", "ghost", lambda _: False)
+    require_graph_change_resolves(None, "alpha", lambda _: True)
+    require_graph_change_resolves("alpha", "alpha", never)
 
 
 def test_edit_without_a_graph_skips_graph_resolution() -> None:

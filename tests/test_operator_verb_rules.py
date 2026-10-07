@@ -353,6 +353,18 @@ def test_edit_naming_the_current_pin_plans_no_pin_write() -> None:
     assert plan.graph_id is None
 
 
+def test_edit_naming_a_since_retired_current_pin_is_a_no_op_and_applies_the_defaults() -> None:
+    plan = plan_edit(
+        _CHUNK,
+        _AT[ChunkStatus.READY],
+        ChunkEdit(graph_id="gr_1", default_effort="high"),
+        graph_target=_GRAPH,
+        graph_target_retired=True,
+    )
+    assert plan.graph_id is None
+    assert plan.defaults is not None and plan.defaults.effort == "high"
+
+
 def test_edit_naming_another_pin_plans_its_write() -> None:
     plan = plan_edit(_CHUNK, _AT[ChunkStatus.READY], ChunkEdit(graph_id="gr_2"), graph_target=_OTHER)
     assert plan.graph_id == "gr_2"
