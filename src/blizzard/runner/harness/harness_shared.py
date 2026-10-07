@@ -2,14 +2,12 @@
 
 Not a base class either adapter must inherit — only what was implemented nearly verbatim
 in both ``claude_code/adapter.py`` and ``opencode/adapter.py`` lives here: the identity
-env, the version probe, the ``<Choice>`` scan, the stdout-target idiom, and the
+env, the ``<Choice>`` scan, the stdout-target idiom, and the
 model-resolution skeleton."""
 
 from __future__ import annotations
 
 import contextlib
-import shutil
-import subprocess
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from typing import IO
 
@@ -25,44 +23,11 @@ _log = get_logger("blizzard.runner.harness")
 CHOICE_OPEN = "<Choice>"
 CHOICE_CLOSE = "</Choice>"
 
-# Bounds `observe_version`'s probe: a wedged binary costs one skipped read, not a hang.
-VERSION_PROBE_TIMEOUT_SECONDS = 5
-
 # The named `version` semver capture group both bindings' `--version` patterns embed.
 SEMVER_VERSION_GROUP = (
     r"(?P<version>\d+\.\d+\.\d+"
     r"(?:(?:-[0-9A-Za-z][0-9A-Za-z.-]*)|(?:\+[0-9A-Za-z][0-9A-Za-z.-]*)|(?:\.[0-9A-Za-z][0-9A-Za-z.-]*))?)"
 )
-
-
-def binary_present(binary: str) -> bool:
-    """Whether ``binary`` resolves on ``PATH`` right now — bounded and non-raising, the
-    standalone half of :func:`observe_version`'s own internal presence check, for a caller
-    (the health-probe seam) that needs presence without paying for a version probe."""
-    return shutil.which(binary) is not None
-
-
-def observe_version(binary: str) -> str | None:
-    """The configured executable's version, observed right now — bounded and non-raising:
-    a timeout, a missing binary, or empty output all read as ``None``, logged rather than
-    propagated. Uncached; identical for every binding, only ``binary`` differs. Absent from
-    ``PATH`` entirely (one of several known bindings, unconfigured here) skips the subprocess
-    and logs at ``debug``, not the genuine-failure ``warning``."""
-    if not binary_present(binary):
-        _log.debug("harness binary not found on PATH; skipping version probe", binary=binary)
-        return None
-    try:
-        result = subprocess.run(
-            [binary, "--version"],
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=VERSION_PROBE_TIMEOUT_SECONDS,
-        )
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        _log.warning("harness version probe failed", binary=binary, detail=str(exc))
-        return None
-    return result.stdout.strip() or result.stderr.strip() or None
 
 
 def receiver_env(signal: TelemetrySignal, local_api_url: str, lease_token: str) -> dict[str, str]:

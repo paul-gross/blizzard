@@ -34,6 +34,7 @@ from blizzard.runner.harness.claude_code.bundle import ClaudeCodeBundleDelivery
 from blizzard.runner.harness.claude_code.settings_compose import PERMISSION_MODES
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryPlan
+from blizzard.runner.harness.internal import version_probe
 from blizzard.runner.harness.overload import ProviderOverload
 from blizzard.runner.harness.process_launch import IProcessLauncher
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
@@ -197,7 +198,7 @@ class ClaudeCodeAdapter:
 
     def observe_version(self) -> str | None:
         """See ``src/blizzard/runner/harness/adapter.py``'s ``IHarnessWorkerLifecycle.observe_version``."""
-        return harness_shared.observe_version(self._binary)
+        return version_probe.observe_version(self._binary)
 
     def resolve_model(self, preferences: Sequence[str]) -> str:
         """Left-to-right; first entry that resolves wins; an empty or fully-unresolvable list

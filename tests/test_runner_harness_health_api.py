@@ -31,11 +31,11 @@ from blizzard.runner.harness.health import DeclaredDegradation
 from blizzard.runner.harness.health_cache import HarnessHealthCache
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID
 from blizzard.runner.harness.internal.committed_corpus import CommittedCorpus
+from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
 from blizzard.runner.harness.opencode.adapter import OpenCodeAdapter
 from blizzard.runner.harness.opencode.compatibility.probe import ADMITTED_OPENCODE_RANGE_DISPLAY
 from blizzard.runner.harness.opencode.health import OpenCodeHealthProbe
 from blizzard.runner.harness.opencode.section import OpenCodeSection
-from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from tests.harness_sections import claude_code, opencode, sections

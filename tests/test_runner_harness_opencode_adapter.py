@@ -23,6 +23,7 @@ from blizzard.runner.harness.adapter import HarnessSpawnError, ResumeHandle, Wor
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.identity import OPENCODE_HARNESS_ID
 from blizzard.runner.harness.internal.committed_corpus import CommittedCorpus
+from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
 from blizzard.runner.harness.offline_compatibility import admitted_corpus_versions
 from blizzard.runner.harness.opencode.adapter import (
     _MAX_IDENTITY_PREAMBLE_LINES,
@@ -38,7 +39,6 @@ from blizzard.runner.harness.opencode.usage.price_cache import (
     OpenCodeModelPrice,
     OpenCodeRate,
 )
-from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.lifecycle.session import HarnessSelection, HarnessSelector, SkippedHarness
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe

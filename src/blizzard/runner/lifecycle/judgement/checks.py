@@ -3,7 +3,7 @@ run under."""
 
 from __future__ import annotations
 
-import os
+import posixpath
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
@@ -31,7 +31,7 @@ class CheckPlan:
         onto it when the node names one, and the node's ``checks_timeout`` or the default."""
         return cls(
             commands=tuple(node.checks),
-            cwd=os.path.join(workdir, node.checks_cwd) if node.checks_cwd else workdir,
+            cwd=posixpath.join(workdir, node.checks_cwd) if node.checks_cwd else workdir,
             timeout=node.checks_timeout or DEFAULT_CHECK_TIMEOUT,
         )
 

@@ -23,7 +23,7 @@ from blizzard.runner.lifecycle.judgement.internal.elicitation_files import Elici
 from blizzard.runner.lifecycle.session import HarnessSelector
 from blizzard.runner.loop.context import LoopConfig, LoopContext
 from blizzard.runner.loop.steps import Fill
-from blizzard.runner.process.worker_scratch import WorkerScratchDirs
+from blizzard.runner.process.internal.worker_scratch_dirs import WorkerScratchDirs
 from tests.runner_fakes import (
     FakeHarness,
     FakeProbe,

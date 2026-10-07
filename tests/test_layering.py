@@ -1131,16 +1131,99 @@ def test_conformance_check_catches_a_step_context_without_a_sentinel(tmp_path: P
     assert contexts - _conformance_sentinels(src / "runner/loop/context.py") == set()
 
 
-_DOMAIN_CORE_FORBIDDEN = ("fastapi", "starlette", "sqlalchemy", "click", "httpx")
+_DOMAIN_CORE_FRAMEWORKS = ("fastapi", "starlette", "sqlalchemy", "click", "httpx")
+_DOMAIN_CORE_STDLIB_DRIVERS = ("os", "shutil", "subprocess", "tempfile")
+_DOMAIN_CORE_FORBIDDEN = (*_DOMAIN_CORE_FRAMEWORKS, *_DOMAIN_CORE_STDLIB_DRIVERS)
+
+#: The harness binding nodes: adapters, so they may bind a process or the filesystem (the stdlib-driver half
+#: of ``bzh:domain-core``) while staying held to the framework imports. An explicit set — a new binding
+#: fails the gate until it is named here.
+_HARNESS_BINDING_NODES = ("harness/claude_code", "harness/opencode")
+
+#: Runner module -> the stdlib driver packages admitted for it, each a reasoned exception; an entry that
+#: admits a package its module no longer imports is stale and fails the gate.
+_DOMAIN_CORE_DRIVER_EXCEPTIONS: dict[Path, tuple[str, ...]] = {
+    # The one reader of the daemon's own environment — the single owner ``bzh:worker-env-allowlist`` requires.
+    _RUNNER_DIR / "harness" / "env_allowlist.py": ("os",),
+    # The canary builds paths in, and reads its resume stdout back from, its own throwaway scratch workdir.
+    _RUNNER_DIR / "selftest" / "checks.py": ("os",),
+}
+
+
+def _is_binding_module(path: Path, runner_dir: Path) -> bool:
+    rel = path.relative_to(runner_dir).as_posix()
+    return any(rel.startswith(f"{node}/") for node in _HARNESS_BINDING_NODES)
+
+
+def _imports_package(modules: Iterable[str], package: str) -> bool:
+    return any(module == package or module.startswith(f"{package}.") for module in modules)
+
+
+def _driver_import_violations(
+    runner_dir: Path, files: Iterable[Path], exceptions: Mapping[Path, tuple[str, ...]]
+) -> list[str]:
+    """Runner domain-core modules importing a framework, or a stdlib driver nothing admits them to; plus
+    every exception entry admitting a package its module does not import. Paths read relative to ``runner_dir``."""
+    violations: list[str] = []
+    for path in files:
+        forbidden = _DOMAIN_CORE_FRAMEWORKS if _is_binding_module(path, runner_dir) else _DOMAIN_CORE_FORBIDDEN
+        admitted = exceptions.get(path, ())
+        modules = _imported_modules(path)
+        violations += [
+            f"{path.relative_to(runner_dir)} imports {package}"
+            for package in forbidden
+            if package not in admitted and _imports_package(modules, package)
+        ]
+    for path, admitted in sorted(exceptions.items()):
+        modules = _imported_modules(path) if path.exists() else set()
+        violations += [
+            f"{path.relative_to(runner_dir)} is exempt for {package} but does not import it"
+            for package in admitted
+            if not _imports_package(modules, package)
+        ]
+    return violations
 
 
 def test_domain_core_imports_no_framework_or_driver() -> None:
-    """``hub/domain/`` and every runner domain-core module are framework-free (``bzh:domain-core``):
-    no web framework, driver, CLI, or HTTP-client import."""
-    violations = _violations(_HUB_DIR / "domain", _DOMAIN_CORE_FORBIDDEN) + _file_violations(
-        _runner_domain_core_files(_RUNNER_DIR, _RUNNER_PACKAGE_LAYERS), _DOMAIN_CORE_FORBIDDEN
+    """``hub/domain/`` and every runner domain-core module are framework- and driver-free (``bzh:domain-core``):
+    no web framework, database driver, CLI, or HTTP-client import, and no ``os``, ``shutil``, ``subprocess``, or
+    ``tempfile`` — bar the harness binding nodes (adapters, held to the frameworks only) and the reasoned
+    per-module exceptions."""
+    violations = _violations(_HUB_DIR / "domain", _DOMAIN_CORE_FORBIDDEN) + _driver_import_violations(
+        _RUNNER_DIR, _runner_domain_core_files(_RUNNER_DIR, _RUNNER_PACKAGE_LAYERS), _DOMAIN_CORE_DRIVER_EXCEPTIONS
     )
     assert not violations, f"Q — a domain core must import no framework or driver: {violations}"
+
+
+def test_domain_core_driver_gate_flags_a_driver_and_honours_its_exemptions(tmp_path: Path) -> None:
+    runner = _plant_runner(
+        tmp_path,
+        {
+            "leases/launch.py": "import subprocess\n",
+            "leases/paths.py": "import os\nimport shutil\n",
+            "leases/clean.py": "import posixpath\n",
+            "harness/claude_code/adapter.py": "import subprocess\nimport os\n",
+            "harness/claude_code/http.py": "import httpx\n",
+            "harness/wiring.py": "import tempfile\n",
+        },
+    )
+    files = _runner_domain_core_files(runner, _PLANTED_RUNNER_LAYERS)
+    flagged = _driver_import_violations(runner, files, {})
+    assert "leases/launch.py imports subprocess" in flagged
+    assert "harness/wiring.py imports tempfile" in flagged
+    assert "harness/claude_code/http.py imports httpx" in flagged
+    assert not [v for v in flagged if v.startswith(("harness/claude_code/adapter.py", "leases/clean.py"))]
+    admitted = _driver_import_violations(runner, files, {runner / "leases" / "paths.py": ("os",)})
+    assert "leases/paths.py imports shutil" in admitted
+    assert "leases/paths.py imports os" not in admitted
+
+
+def test_domain_core_driver_gate_fails_a_stale_exemption(tmp_path: Path) -> None:
+    runner = _plant_runner(tmp_path, {"leases/clean.py": "import posixpath\n"})
+    clean = runner / "leases" / "clean.py"
+    assert _driver_import_violations(runner, [clean], {clean: ("os",)}) == [
+        "leases/clean.py is exempt for os but does not import it"
+    ]
 
 
 _HUB_DOMAIN_DIR = _HUB_DIR / "domain"

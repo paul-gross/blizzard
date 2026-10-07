@@ -78,8 +78,8 @@ from blizzard.runner.loop_wiring import LoopWiring
 from blizzard.runner.node_steps.chunk_state import ChunkState
 from blizzard.runner.node_steps.envelope import Envelope, EnvelopeNode, GraphArtifact, ProducesSpec, RotateBounds
 from blizzard.runner.node_steps.submissions import ApplyReply, Completion, GateSubmission
+from blizzard.runner.process.internal.worker_scratch_dirs import WorkerScratchDirs
 from blizzard.runner.process.probe import IProcessProbe
-from blizzard.runner.process.worker_scratch import WorkerScratchDirs
 from blizzard.runner.runtime import migration_runner
 from blizzard.runner.store.errors import RunnerStoreConnections, RunnerStoreErrorFactory
 from blizzard.runner.store.internal.ask_store import AskStore

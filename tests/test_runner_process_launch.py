@@ -19,8 +19,9 @@ from typing import Any
 
 import pytest
 
-import blizzard.runner.harness.process_launch as process_launch
-from blizzard.runner.harness.process_launch import LaunchedProcess, ProcessLauncher, _ensure_executable
+import blizzard.runner.harness.internal.process_launcher as process_launch
+from blizzard.runner.harness.internal.process_launcher import ProcessLauncher, _ensure_executable
+from blizzard.runner.harness.process_launch import LaunchedProcess
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 
 
@@ -85,7 +86,7 @@ _GRANDCHILD_LAUNCH_SCRIPT = """
 import sys
 sys.path.insert(0, {src!r})
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
-from blizzard.runner.harness.process_launch import ProcessLauncher
+from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
 from concurrent.futures import ThreadPoolExecutor
 import os, time
 

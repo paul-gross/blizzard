@@ -16,6 +16,7 @@ from blizzard.runner.harness import harness_shared
 from blizzard.runner.harness.adapter import IHarnessHealthProbe
 from blizzard.runner.harness.claude_code.ambient import AmbientSources, detect_ambient_conflicts
 from blizzard.runner.harness.health import DeclaredDegradation
+from blizzard.runner.harness.internal import version_probe
 from blizzard.runner.subscriptions.subscription_sampler import ANTHROPIC_DEFAULT_CREDENTIALS_PATH
 
 # Currently >=2.1,<3.0, corpus-free: membership via `version_admitted` admits it alone.
@@ -67,12 +68,12 @@ class ClaudeCodeHealthProbe:
         self._credentials_path = Path(credentials_path or ANTHROPIC_DEFAULT_CREDENTIALS_PATH)
 
     def binary_present(self) -> bool:
-        return harness_shared.binary_present(self._binary)
+        return version_probe.binary_present(self._binary)
 
     def probe_authentication(self) -> bool:
         """Authenticated when the binary responds and the OAuth credential file holds an access
         token. Expiry is not checked: an expired-but-present token still reads as authenticated."""
-        if harness_shared.observe_version(self._binary) is None:
+        if version_probe.observe_version(self._binary) is None:
             return False
         return self._has_access_token()
 

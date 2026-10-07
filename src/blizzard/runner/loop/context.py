@@ -38,7 +38,7 @@ from blizzard.runner.lifecycle.judgement.elicitation_files import IElicitationFi
 from blizzard.runner.lifecycle.session import HarnessSelector, SessionResolver
 from blizzard.runner.loop.retention_floor import RetentionPasses
 from blizzard.runner.process.probe import IProcessProbe
-from blizzard.runner.process.worker_scratch import WorkerScratchDirs
+from blizzard.runner.process.worker_scratch import IWorkerScratchDirs
 from blizzard.runner.stores import RunnerStores
 from blizzard.runner.subscriptions.subscription_sampler import ISubscriptionSampler
 from blizzard.runner.usage.recorder import UsageRecorder
@@ -172,7 +172,7 @@ class LoopContext:
     worker_files: IWorkerStdoutFiles
     elicitation_files: IElicitationFiles
     #: The per-lease scratch directory (`BLIZZARD_TMPDIR`), removed at lease closure.
-    worker_scratch: WorkerScratchDirs
+    worker_scratch: IWorkerScratchDirs
     usage: UsageRecorder
     sessions: SessionResolver
     #: The fresh-mint owner selector over the acceptable harness set; a resume never reaches it.

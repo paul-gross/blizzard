@@ -3,7 +3,7 @@
 Implements :class:`~blizzard.runner.harness.adapter.IHarnessAdapter` against the ``opencode``
 CLI. Reuses only the production event/record parsers (``opencode.shapes``) — never the
 diagnostic PROCESS/scratch machinery the compatibility proof owns: every worker launches
-through :class:`~blizzard.runner.harness.process_launch.ProcessLauncher`, as Claude Code does."""
+through :class:`~blizzard.runner.harness.internal.process_launcher.ProcessLauncher`, as Claude Code does."""
 
 from __future__ import annotations
 
@@ -31,6 +31,7 @@ from blizzard.runner.harness.adapter import (
 )
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
+from blizzard.runner.harness.internal import version_probe
 from blizzard.runner.harness.opencode.bundle import check_ambient_plugins, content_with_snapshot_references
 from blizzard.runner.harness.opencode.command import OpenCodeCommand, OpenCodeInvocationKind
 from blizzard.runner.harness.opencode.permissions.permission_compose import (
@@ -261,9 +262,9 @@ class OpenCodeAdapter:
         self._launcher: IProcessLauncher = launcher
 
     def observe_version(self) -> str | None:
-        """Shared verbatim with Claude Code (``harness_shared.observe_version``); only
+        """Shared verbatim with Claude Code (``version_probe.observe_version``); only
         ``self._binary`` differs between the two."""
-        return harness_shared.observe_version(self._binary)
+        return version_probe.observe_version(self._binary)
 
     def resolve_model(self, preferences: Sequence[str]) -> str:
         return harness_shared.resolve_model(
