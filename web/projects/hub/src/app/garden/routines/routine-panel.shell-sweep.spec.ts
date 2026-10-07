@@ -1,8 +1,27 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { page } from 'vitest/browser';
+import { commands, page } from 'vitest/browser';
 
 import { FleetRoutinePanel, type RoutinePanelVm } from './routine-panel';
+
+/** The design tokens are a global stylesheet the app build loads, never a standalone mount —
+ * injected so the kit badges' tone colours resolve to real colours. */
+async function loadDesignTokens(): Promise<void> {
+  const css = await commands.readFile('projects/fleet/src/lib/core/design/tokens.css');
+  const styleEl = document.createElement('style');
+  styleEl.textContent = css;
+  document.head.appendChild(styleEl);
+}
+
+/** The computed colour a design token resolves to, read off a probe element. */
+function tokenColor(token: string): string {
+  const probe = document.createElement('span');
+  probe.style.color = `var(${token})`;
+  document.body.appendChild(probe);
+  const color = getComputedStyle(probe).color;
+  probe.remove();
+  return color;
+}
 
 /**
  * The gardening routine panel's health blocks (the tooled half of
@@ -161,6 +180,7 @@ describe('gardening routine panel lifecycle controls shell sweep (web:shell-swee
   it.each([1280, 390, 320])(
     'renders the retired state badge and the Re-enable control with no overflow at %ipx',
     async (width) => {
+      await loadDesignTokens();
       const fixture = await render({ ...VM, retired: true, renderedRetired: true }, true);
       const root = fixture.nativeElement as HTMLElement;
       document.body.appendChild(root);
@@ -178,6 +198,9 @@ describe('gardening routine panel lifecycle controls shell sweep (web:shell-swee
 
         const state = root.querySelector('[data-testid="gardening-routine-panel-state"]');
         expect(state?.textContent?.trim()).toBe('retired');
+        const badge = state!.querySelector<HTMLElement>('.badge')!;
+        expect(getComputedStyle(badge).color, `${width}px: retired state is not the lifecycle red`).toBe(tokenColor('--red'));
+        expect(getComputedStyle(badge).textTransform).toBe('uppercase');
         expect(root.querySelector('[data-testid="gardening-routine-panel-enable"]')).not.toBeNull();
         expect(root.querySelector('[data-testid="gardening-routine-run"]')).toBeNull();
         expect(root.querySelector('[data-testid="gardening-routine-retired-notice"]')).not.toBeNull();
@@ -186,4 +209,23 @@ describe('gardening routine panel lifecycle controls shell sweep (web:shell-swee
       }
     },
   );
+
+  it.each([1280, 390])('renders the enabled state as a cyan kit label at %ipx', async (width) => {
+    await loadDesignTokens();
+    const fixture = await render(VM, true);
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    await fixture.whenStable();
+
+    try {
+      await page.viewport(width, 900);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+
+      const state = root.querySelector<HTMLElement>('[data-testid="gardening-routine-panel-state"]')!;
+      expect(state.textContent?.trim()).toBe('enabled');
+      expect(getComputedStyle(state.querySelector<HTMLElement>('.badge')!).color).toBe(tokenColor('--cyan'));
+    } finally {
+      root.remove();
+    }
+  });
 });

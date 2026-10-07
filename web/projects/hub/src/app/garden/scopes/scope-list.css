@@ -16,10 +16,6 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.sc-retired {
+.sc-flag {
   display: inline-block;
-  color: var(--red);
-  font-size: var(--fs-label);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
 }

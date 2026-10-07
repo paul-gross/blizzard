@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import { KitOption, KitPanel, type ScopeView } from 'fleet';
+import { KitBadge, KitOption, KitPanel, type ScopeView } from 'fleet';
 
 /** The run dialog's own scope-field state — the chosen scope's slug, `''` for nothing
  * selected yet (the field offers only the routine's own related
@@ -19,7 +19,7 @@ export const EMPTY_SCOPE_SELECTION: ScopeSelection = '';
 @Component({
   selector: 'app-gardening-run-scope-field',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitOption, KitPanel],
+  imports: [KitBadge, KitOption, KitPanel],
   templateUrl: './gardening-run-scope-field.html',
   styleUrl: './gardening-run-scope-field.css',
 })

@@ -19,12 +19,6 @@
 .sp-head h3 {
   margin: 0;
 }
-.sp-state {
-  color: var(--label);
-}
-.sp-state--retired {
-  color: var(--red);
-}
 .sp-description {
   margin: 0;
   color: var(--amber);

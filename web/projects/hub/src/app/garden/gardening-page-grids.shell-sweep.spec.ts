@@ -4,11 +4,30 @@ import { provideRouter, Router, RouterOutlet, type Routes } from '@angular/route
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { hubClient, ViewportService } from 'fleet';
 import { OPERATOR_ME_RESPONSE, settle, stubRequestClient } from 'fleet/testing';
-import { page } from 'vitest/browser';
+import { commands, page } from 'vitest/browser';
 
 import { GardeningFindingsPage } from './findings/gardening-findings-page';
 import { GardeningRunsPage } from './runs/gardening-runs-page';
 import { GardeningScopesPage } from './scopes/gardening-scopes-page';
+
+/** The design tokens are a global stylesheet the app build loads, never a standalone mount —
+ * injected so the kit badges' tone colours resolve to real colours. */
+async function loadDesignTokens(): Promise<void> {
+  const css = await commands.readFile('projects/fleet/src/lib/core/design/tokens.css');
+  const styleEl = document.createElement('style');
+  styleEl.textContent = css;
+  document.head.appendChild(styleEl);
+}
+
+/** The computed colour a design token resolves to, read off a probe element. */
+function tokenColor(token: string): string {
+  const probe = document.createElement('span');
+  probe.style.color = `var(${token})`;
+  document.body.appendChild(probe);
+  const color = getComputedStyle(probe).color;
+  probe.remove();
+  return color;
+}
 
 /**
  * The three gardening sub-tabs that arrived with the five-way tab split and had no
@@ -31,7 +50,7 @@ import { GardeningScopesPage } from './scopes/gardening-scopes-page';
  */
 const SCOPES = [
   { slug: 'blizzard', description: 'the hub, runner, CLI and board', retired: false, created_at: '2026-01-01T00:00:00Z' },
-  { slug: 'web', description: 'the Angular workspace', retired: false, created_at: '2026-01-01T00:00:00Z' },
+  { slug: 'web', description: 'the Angular workspace', retired: true, created_at: '2026-01-01T00:00:00Z' },
   ...Array.from({ length: 38 }, (_, i) => ({
     slug: `scope-${i + 1}`,
     description: `Additional scope ${i + 1}`,
@@ -311,6 +330,34 @@ describe('gardening sub-tab layout shell sweep (web:shell-sweep)', () => {
 
       expect(router.url).toBe('/gardening/scopes');
       expect(listScroller.scrollTop, 'Back did not restore the list scroll position').toBe(listScrollTop);
+    } finally {
+      viewport.setOverride('auto');
+      root.remove();
+      stub.restore();
+      await page.viewport(1280, 800);
+    }
+  });
+
+  it.each([1280, 390])('scopes: renders a retired scope row as a red kit label inside the list at %ipx', async (width) => {
+    await loadDesignTokens();
+    const { fixture, stub, viewport } = await render('/gardening/scopes');
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    await fixture.whenStable();
+
+    try {
+      await page.viewport(width, 800);
+      if (width < 720) viewport.setOverride('mobile');
+      await settle(fixture);
+
+      const row = root.querySelector<HTMLElement>('[data-testid="gardening-scope-row-web"]')!;
+      expect(row, `${width}px: no retired scope row in the DOM`).not.toBeNull();
+      const marker = row.querySelector<HTMLElement>('fleet-kit-badge .badge')!;
+      expect(marker.textContent?.trim()).toBe('retired');
+      expect(getComputedStyle(marker).color, `${width}px: retired marker is not the lifecycle red`).toBe(tokenColor('--red'));
+      expect(marker.getBoundingClientRect().right).toBeLessThanOrEqual(row.getBoundingClientRect().right + 1);
+      const left = root.querySelector<HTMLElement>('.gs-left')!;
+      expect(left.scrollWidth, `${width}px: scope list overflows horizontally`).toBeLessThanOrEqual(left.clientWidth);
     } finally {
       viewport.setOverride('auto');
       root.remove();

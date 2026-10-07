@@ -2,6 +2,8 @@ import { ChangeDetectionStrategy, Component, input, output, signal } from '@angu
 
 import { KitAsyncState, type KitAsyncStateValue, KitBadge, KitButton, KitConfirmDialog, KitFactList, type KitFact, KitPanel, KitProseBlock, FleetWhen } from 'fleet';
 
+import { lifecycleTone } from '../../core/lifecycle-tone';
+
 /** The routine's own record — read-only: this panel ships no New/Edit
  * affordance. `RoutineView` also carries `routine_id`/`created_at`, neither
  * displayed here — identity is the list's own compact ref (`RoutineListRowVm`),
@@ -133,6 +135,9 @@ export class FleetRoutinePanel {
   readonly run = output<void>();
   readonly retire = output<string>();
   readonly enable = output<string>();
+
+  /** The lifecycle badge's tone, from the hub's one lifecycle owner. */
+  protected readonly lifecycleTone = lifecycleTone;
 
   protected readonly pendingConfirm = signal<{
     readonly heading: string;

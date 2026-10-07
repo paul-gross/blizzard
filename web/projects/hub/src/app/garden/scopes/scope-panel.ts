@@ -1,6 +1,8 @@
 import { ChangeDetectionStrategy, Component, input, output, signal } from '@angular/core';
 
 import { KitAsyncState, type KitAsyncStateValue, KitBadge, KitButton, KitConfirmDialog } from 'fleet';
+
+import { lifecycleTone } from '../../core/lifecycle-tone';
 import type { ScopeDescriptionEditEvent } from './scope-list';
 
 /** One routine related to the selected scope — `isDefault` marks whether this scope
@@ -70,6 +72,9 @@ export class FleetScopePanel {
   readonly editDescription = output<ScopeDescriptionEditEvent>();
   readonly retire = output<string>();
   readonly enable = output<string>();
+
+  /** The lifecycle badge's tone, from the hub's one lifecycle owner. */
+  protected readonly lifecycleTone = lifecycleTone;
 
   protected readonly pendingConfirm = signal<{
     readonly heading: string;

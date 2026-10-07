@@ -42,11 +42,6 @@
   color: var(--label-dim);
   white-space: nowrap;
 }
-.rt-blocked,
-.rt-retired {
+.rt-flag {
   display: inline-block;
-  color: var(--red);
-  font-size: var(--fs-label);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
 }
