@@ -12,8 +12,8 @@ import { HUB_CHUNK_PAGE_PROVIDERS } from './hub-chunk-actions';
 /**
  * The Artifacts tab's real composed chain — `ChunkPage` → `ChunkArtifactsPanel` — under
  * a real browser. `ChunkArtifactsPanel`'s
- * `.art-tab` sizes itself with `height: 100%`, a claim jsdom parses but never lays out —
- * `web:unit-test` cannot see whether that percentage actually resolves against a definite
+ * host is a `flex: 1; min-height: 0` flex item whose kit split fills it, a claim jsdom parses but never lays out —
+ * `web:unit-test` cannot see whether that flex chain actually resolves against a definite
  * containing block, only that the rule exists. Driven through a real router the way
  * `chunk-page-layout.shell-sweep.spec.ts`'s own composed-chain cases drive `ChunkPage`, so
  * the panel's real host is genuinely in the chain, not stood in for.
@@ -39,7 +39,7 @@ async function pumpUntil(fixture: { detectChanges(): void }, ready: () => boolea
 
 const CHUNK_ID = 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9';
 
-/** Enough distinct artifact rows to overflow `.art-nav`'s own box at any viewport this
+/** Enough distinct artifact rows to overflow the nav list's own box at any viewport this
  * sweep uses — the load-bearing fixture for "the nav list actually scrolls" rather than
  * merely rendering short enough to never need to. */
 function overflowingArtifacts(): hubApi.ArtifactView[] {
@@ -116,8 +116,8 @@ describe('chunk page Artifacts tab composed-chain layout shell sweep (web:shell-
         expect(tab, 'no fleet-chunk-artifacts-panel in the composed chain').not.toBeNull();
         expect(nav, 'no artifacts-tab-nav in the DOM').not.toBeNull();
 
-        // The regression's own signature: under the bug, `.art-tab`'s containing block
-        // (the panel host) has no definite height, so `height: 100%` computes to `auto`
+        // The regression's own signature: under the bug, the kit split's flex chain
+        // (the panel host's `flex: 1; min-height: 0`) never reaches a definite height,
         // and the whole tab grows to fit every row rather than being clipped to the space
         // `.cps-body` actually has — this bounds it to the real viewport.
         expect(

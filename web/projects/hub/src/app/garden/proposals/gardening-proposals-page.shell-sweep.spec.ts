@@ -10,10 +10,10 @@ import { GardeningProposalDetail } from './gardening-proposal-detail';
 import { GardeningProposalsPage } from './gardening-proposals-page';
 
 /**
- * The garden proposal docket's `.gp-layout` two-column split
- * (`gardening-proposals-page.css`) — a real-Chromium proof that the `@media
- * (max-width: 720px)` rule and viewport-driven visibility turn it into a mobile
- * list/detail drill-down (`bzh:narrow-viewport-tier-rule`): jsdom parses the CSS
+ * The garden proposal docket's `.gp-layout` two-column split — the page's
+ * `fleet-kit-master-detail` host, with the page's own slot sizing
+ * (`gardening-proposals-page.css`) — a real-Chromium proof that the kit's row layout
+ * and viewport-driven drill-down turn it into a mobile list/detail drill-down (`bzh:narrow-viewport-tier-rule`): jsdom parses the CSS
  * without ever evaluating it, and gardening sits in the hub's mobile bottom tab
  * bar, so the narrow width is load-bearing, not incidental.
  *
@@ -177,9 +177,9 @@ describe('gardening proposals page layout shell sweep (web:shell-sweep)', () => 
 
         expect(list!.getBoundingClientRect().width, `${width}px: proposal list remains visible after selection`).toBe(0);
         expect(panel!.getBoundingClientRect().width, `${width}px: proposal detail is not visible`).toBeGreaterThan(0);
-        const back = root.querySelector<HTMLAnchorElement>('[data-testid="gardening-proposals-back"]');
+        const back = root.querySelector<HTMLButtonElement>('[data-testid="gardening-proposals-back"]');
         expect(back, `${width}px: no mobile Back control`).not.toBeNull();
-        expect(back!.getAttribute('href')).toBe('/gardening/proposals');
+        expect(back!.checkVisibility(), `${width}px: the mobile Back control is not visible`).toBe(true);
 
         const layout = root.querySelector<HTMLElement>('.gp-layout')!;
         expect(
@@ -187,7 +187,7 @@ describe('gardening proposals page layout shell sweep (web:shell-sweep)', () => 
           `${width}px: layout overflows horizontally (${layout.scrollWidth} > ${layout.clientWidth})`,
         ).toBeLessThanOrEqual(layout.clientWidth);
 
-        await router.navigateByUrl('/gardening/proposals');
+        back!.click();
         await settle(fixture);
         expect(router.url).toBe('/gardening/proposals');
       }

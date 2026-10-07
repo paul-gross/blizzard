@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
-import { Router, RouterLink, RouterOutlet } from '@angular/router';
-import { asyncState, KitBackBar, KitPanel, type GraphSummaryView, type KitAsyncStateValue, type RoutineView, ViewportService } from 'fleet';
+import { Router, RouterOutlet } from '@angular/router';
+import { asyncState, KitMasterDetail, KitPanel, type GraphSummaryView, type KitAsyncStateValue, type RoutineView, ViewportService } from 'fleet';
 import { FleetRoutineList, type RoutineListRowVm } from './routine-list';
 import { injectHubGraphsQuery } from '../../graphs/graphs.query';
 import { injectHubRoutinesQuery } from '../core/routines.query';
@@ -26,13 +26,9 @@ import { presentRoutineName, routineListRows } from './gardening-routines-page.m
 @Component({
   selector: 'app-gardening-routines-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetRoutineList, KitBackBar, KitPanel, RouterLink, RouterOutlet],
+  imports: [FleetRoutineList, KitMasterDetail, KitPanel, RouterOutlet],
   templateUrl: './gardening-routines-page.html',
   styleUrl: './gardening-routines-page.css',
-  host: {
-    '[class.mobile]': 'mobile()',
-    '[class.detail-open]': 'routineNameParam() !== null',
-  },
 })
 export class GardeningRoutinesPage {
   private readonly router = inject(Router);
@@ -58,6 +54,10 @@ export class GardeningRoutinesPage {
 
   protected selectRoutine(name: string): void {
     void this.router.navigate(['/gardening', 'routines', name], { queryParamsHandling: 'preserve' });
+  }
+
+  protected onBack(): void {
+    void this.router.navigate(['/gardening', 'routines'], { queryParamsHandling: 'preserve' });
   }
 
   protected readonly listRows = computed<readonly RoutineListRowVm[]>(() =>

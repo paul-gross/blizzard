@@ -79,11 +79,12 @@ describe('ConfigMaster', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('[data-testid="t-row-winter"]')).not.toBeNull();
-    expect(el.querySelector('[data-testid="t-projected"]')).toBeNull();
+    expect(el.querySelector('.kmd-detail')?.classList.contains('kmd-pane--hidden')).toBe(true);
 
     fixture.componentInstance.selectedKey.set('winter');
     await fixture.whenStable();
-    expect(el.querySelector('[data-testid="t-row-winter"]')).toBeNull();
+    expect(el.querySelector('.kmd-list')?.classList.contains('kmd-pane--hidden')).toBe(true);
+    expect(el.querySelector('.kmd-detail')?.classList.contains('kmd-pane--hidden')).toBe(false);
     expect(el.querySelector('[data-testid="t-projected"]')).not.toBeNull();
     expect(el.querySelector('[data-testid="t-back"]')).not.toBeNull();
   });

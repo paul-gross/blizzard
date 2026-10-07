@@ -20,25 +20,24 @@
   />
 </div>
 
-<div class="gp-layout">
+<fleet-kit-master-detail
+  class="gp-layout"
+  paneId="gardening-proposals"
+  testidPrefix="gardening-proposals"
+  backLabel="Proposals"
+  [drilldown]="mobile()"
+  [hasSelection]="proposalId() !== null"
+  (back)="onBack()"
+>
   <app-proposal-list
+    kit-master-detail-list
     class="gp-list"
     [rows]="listRows()"
     [selectedId]="proposalId()"
     [state]="listState()"
     (proposalPick)="select($event)"
   />
-  <div class="gp-panel">
-    @if (mobile() && proposalId() !== null) {
-      <a
-        class="back-row"
-        routerLink="/gardening/proposals"
-        queryParamsHandling="preserve"
-        data-testid="gardening-proposals-back"
-      >
-        <fleet-kit-back-bar label="Proposals" />
-      </a>
-    }
+  <div kit-master-detail-detail class="gp-panel">
     <router-outlet />
   </div>
-</div>
+</fleet-kit-master-detail>

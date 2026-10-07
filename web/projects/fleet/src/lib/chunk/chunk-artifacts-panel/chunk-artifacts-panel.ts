@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
 
 import type { ArtifactView } from '../../api/hub';
 import { ChunkArtifactBody, sortArtifacts } from '../chunk-detail';
-import { KitAsyncState, KitBackBar, type KitAsyncStateValue } from '../../kit';
+import { KitAsyncState, KitMasterDetail, type KitAsyncStateValue } from '../../kit';
 import { FleetWhen } from '../../core/when-display';
 
 /**
@@ -20,12 +20,15 @@ import { FleetWhen } from '../../core/when-display';
  * to the empty state rather than silently falling back to something else.
  *
  * The viewer composes {@link ChunkArtifactBody} in `full` mode — the single owner of an
- * artifact's rendering.
+ * artifact's rendering. The split, its phone drill-down, and its Back control are
+ * {@link KitMasterDetail}'s; this owns only the nav rows and the viewer inside its slots.
+ * `hasSelection` is the raw {@link selectedKey}, never {@link effectiveKey}: the desktop
+ * default-to-latest is not a selection.
  */
 @Component({
   selector: 'fleet-chunk-artifacts-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ChunkArtifactBody, FleetWhen, KitAsyncState, KitBackBar],
+  imports: [ChunkArtifactBody, FleetWhen, KitAsyncState, KitMasterDetail],
   templateUrl: './chunk-artifacts-panel.html',
   styleUrl: './chunk-artifacts-panel.css',
 })
@@ -42,14 +45,13 @@ export class ChunkArtifactsPanel {
    * Defaults to simultaneous list-plus-viewer. */
   readonly drilldown = input(false);
 
-  /** Roots every `data-testid` this component renders, the same convention
-   * {@link ChunkArtifactBody}'s own `testid` input follows. Defaults to
-   * `'artifacts-panel'` — the runner's chunk detail page and this component's
-   * own spec both read that name. The hub's chunk detail page overrides it to
-   * `'artifacts-tab'`, the name its Artifacts tab carried before this panel
-   * absorbed it, because `DemoDirector`'s unattended kiosk tour steers by that
-   * exact string outside any test harness — a rename here would silently stop
-   * the demo mid-tour rather than fail a build. */
+  /** Roots every `data-testid` this component renders, the kit's Back button included,
+   * the same convention {@link ChunkArtifactBody}'s own `testid` input follows. Defaults
+   * to `'artifacts-panel'`, the name this component's own spec reads. The shared chunk
+   * detail page — the hub's and the runner's alike — overrides it to `'artifacts-tab'`,
+   * because `DemoDirector`'s unattended kiosk tour steers by that exact string outside
+   * any test harness — a rename here would silently stop the demo mid-tour rather than
+   * fail a build. */
   readonly testidPrefix = input('artifacts-panel');
 
   /** Emitted with a nav row's key when the operator picks it. */
@@ -60,8 +62,6 @@ export class ChunkArtifactsPanel {
 
   protected readonly sortedArtifacts = computed(() => sortArtifacts(this.artifacts()));
   protected readonly hasSelection = computed(() => this.selectedKey() !== null);
-  protected readonly showNav = computed(() => !this.drilldown() || !this.hasSelection());
-  protected readonly showView = computed(() => !this.drilldown() || this.hasSelection());
 
   /** Gates the nav list through {@link KitAsyncState} rather than a hand-rolled empty
    * line — not a query state (there is no read in flight here, just an empty store), but

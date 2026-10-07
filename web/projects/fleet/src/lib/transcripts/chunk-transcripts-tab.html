@@ -1,111 +1,137 @@
 @if (indexState() === 'loading') {
-  <fleet-kit-async-state state="loading" loadingText="LOADING TRANSCRIPTS…" loadingTestid="transcripts-loading" />
+<fleet-kit-async-state
+  state="loading"
+  loadingText="LOADING TRANSCRIPTS…"
+  loadingTestid="transcripts-loading"
+/>
 } @else if (isForbidden()) {
-  <fleet-kit-async-state
-    state="empty"
-    tone="accent"
-    emptyText="NO PERMISSION TO READ TRANSCRIPTS"
-    emptyTestid="transcripts-forbidden"
-  />
+<fleet-kit-async-state
+  state="empty"
+  tone="accent"
+  emptyText="NO PERMISSION TO READ TRANSCRIPTS"
+  emptyTestid="transcripts-forbidden"
+/>
 } @else if (indexState() === 'error') {
-  <fleet-kit-async-state state="error" errorText="TRANSCRIPTS UNAVAILABLE" errorTestid="transcripts-error" />
+<fleet-kit-async-state
+  state="error"
+  errorText="TRANSCRIPTS UNAVAILABLE"
+  errorTestid="transcripts-error"
+/>
 } @else if (steps().length === 0) {
-  <fleet-kit-async-state state="empty" emptyText="NO TRANSCRIPT SEGMENTS YET" emptyTestid="transcripts-empty" />
+<fleet-kit-async-state
+  state="empty"
+  emptyText="NO TRANSCRIPT SEGMENTS YET"
+  emptyTestid="transcripts-empty"
+/>
 } @else {
-  <div class="tx-tab" [class.list-only]="drilldown() && !hasSelection()" data-testid="chunk-transcripts-tab">
-    @if (showNav()) {
-      <nav class="tx-nav" data-testid="transcripts-tab-nav">
-      @for (step of steps(); track step.key) {
-        <div class="step" data-testid="transcript-step">
-          <div class="step-head">
-            {{ stepLabel(step) }}
-            @if (step.current) {
-              <span class="tag">in progress</span>
-            }
-            @if (!step.matched) {
-              <span class="tag warn">unmatched</span>
-            }
-          </div>
-          @if (step.segments.length === 0) {
-            <fleet-kit-async-state state="empty" placement="inline" emptyText="No segments." />
-          } @else {
-            <ul class="seg-list">
-              @for (seg of step.segments; track seg.segment_id) {
-                <li>
-                  <button
-                    type="button"
-                    class="seg-item"
-                    [class.active]="seg.segment_id === segmentId()"
-                    data-testid="transcript-segment-item"
-                    [attr.data-segment-id]="seg.segment_id"
-                    (click)="pickSegment.emit(seg.segment_id)"
-                  >
-                    <span>Segment {{ seg.spawn_generation }}</span>
-                    @if (seg.harness_id) {
-                      <fleet-kit-badge
-                        variant="pill"
-                        tone="idle"
-                        data-testid="transcript-segment-harness"
-                        [attr.data-harness-id]="seg.harness_id"
-                        [attr.aria-label]="harnessName(seg.harness_id)"
-                      >
-                        {{ harnessName(seg.harness_id) }}
-                      </fleet-kit-badge>
-                    }
-                    @if (seg.truncated) {
-                      <span class="tag warn">truncated</span>
-                    }
-                    @if (!seg.final) {
-                      <span class="tag">open</span>
-                    }
-                  </button>
-                </li>
-              }
-            </ul>
-          }
-        </div>
-      }
-      </nav>
-    }
-    @if (showView()) {
-      <section class="tx-view">
-        @if (drilldown()) {
-          <button type="button" class="tx-back" data-testid="transcript-segment-back" (click)="pickSegment.emit(null)">
-            <fleet-kit-back-bar label="Transcripts" />
-          </button>
+<fleet-kit-master-detail
+  data-testid="chunk-transcripts-tab"
+  paneId="transcripts"
+  testidPrefix="transcript-segment"
+  backLabel="Transcripts"
+  [drilldown]="drilldown()"
+  [hasSelection]="hasSelection()"
+  (back)="pickSegment.emit(null)"
+>
+  <nav class="tx-nav" kit-master-detail-list data-testid="transcripts-tab-nav">
+    @for (step of steps(); track step.key) {
+    <div class="step" data-testid="transcript-step">
+      <div class="step-head">
+        {{ stepLabel(step) }} @if (step.current) {
+        <span class="tag">in progress</span>
+        } @if (!step.matched) {
+        <span class="tag warn">unmatched</span>
         }
-      @if (segmentState() === 'empty') {
-        <fleet-kit-async-state state="empty" emptyText="SELECT A SEGMENT" emptyTestid="transcript-segment-empty" />
-      } @else if (segmentState() === 'loading') {
-        <fleet-kit-async-state state="loading" loadingText="LOADING SEGMENT…" loadingTestid="transcript-segment-loading" />
-      } @else if (segmentState() === 'error') {
-        <fleet-kit-async-state state="error" errorText="SEGMENT UNAVAILABLE" errorTestid="transcript-segment-error" />
+      </div>
+      @if (step.segments.length === 0) {
+      <fleet-kit-async-state
+        state="empty"
+        placement="inline"
+        emptyText="No segments."
+      />
       } @else {
-        <div class="seg-body" data-testid="transcript-segment-body">
-          @if (standaloneSidechain(); as sidechain) {
-            <button
-              type="button"
-              class="back"
-              data-testid="transcript-sidechain-back"
-              (click)="pickSidechain.emit(null)"
+      <ul class="seg-list">
+        @for (seg of step.segments; track seg.segment_id) {
+        <li>
+          <button
+            type="button"
+            class="seg-item"
+            [class.active]="seg.segment_id === segmentId()"
+            data-testid="transcript-segment-item"
+            [attr.data-segment-id]="seg.segment_id"
+            (click)="pickSegment.emit(seg.segment_id)"
+          >
+            <span>Segment {{ seg.spawn_generation }}</span>
+            @if (seg.harness_id) {
+            <fleet-kit-badge
+              variant="pill"
+              tone="idle"
+              data-testid="transcript-segment-harness"
+              [attr.data-harness-id]="seg.harness_id"
+              [attr.aria-label]="harnessName(seg.harness_id)"
             >
-              ← Back to segment
-            </button>
-            <fleet-transcript-viewer [turns]="sidechain.turns" (openStandalone)="onStandaloneOpenStandalone($event)" />
-          } @else {
-            <fleet-transcript-segment-view
-              [turns]="mergedTurns()"
-              [truncated]="segmentData()?.truncated ?? false"
-              [continuedFrom]="continuedFrom()"
-              [continuesIn]="continuesIn()"
-              [harnessId]="openSegmentEntry()?.harness_id ?? null"
-              (pickSegment)="pickSegment.emit($event)"
-              (openStandalone)="onTopLevelOpenStandalone($event)"
-            />
-          }
-        </div>
+              {{ harnessName(seg.harness_id) }}
+            </fleet-kit-badge>
+            } @if (seg.truncated) {
+            <span class="tag warn">truncated</span>
+            } @if (!seg.final) {
+            <span class="tag">open</span>
+            }
+          </button>
+        </li>
+        }
+      </ul>
       }
-      </section>
+    </div>
     }
-  </div>
+  </nav>
+  <section class="tx-view" kit-master-detail-detail>
+    @if (segmentState() === 'empty') {
+    <fleet-kit-async-state
+      state="empty"
+      emptyText="SELECT A SEGMENT"
+      emptyTestid="transcript-segment-empty"
+    />
+    } @else if (segmentState() === 'loading') {
+    <fleet-kit-async-state
+      state="loading"
+      loadingText="LOADING SEGMENT…"
+      loadingTestid="transcript-segment-loading"
+    />
+    } @else if (segmentState() === 'error') {
+    <fleet-kit-async-state
+      state="error"
+      errorText="SEGMENT UNAVAILABLE"
+      errorTestid="transcript-segment-error"
+    />
+    } @else {
+    <div class="seg-body" data-testid="transcript-segment-body">
+      @if (standaloneSidechain(); as sidechain) {
+      <button
+        type="button"
+        class="back"
+        data-testid="transcript-sidechain-back"
+        (click)="pickSidechain.emit(null)"
+      >
+        ← Back to segment
+      </button>
+      <fleet-transcript-viewer
+        [turns]="sidechain.turns"
+        (openStandalone)="onStandaloneOpenStandalone($event)"
+      />
+      } @else {
+      <fleet-transcript-segment-view
+        [turns]="mergedTurns()"
+        [truncated]="segmentData()?.truncated ?? false"
+        [continuedFrom]="continuedFrom()"
+        [continuesIn]="continuesIn()"
+        [harnessId]="openSegmentEntry()?.harness_id ?? null"
+        (pickSegment)="pickSegment.emit($event)"
+        (openStandalone)="onTopLevelOpenStandalone($event)"
+      />
+      }
+    </div>
+    }
+  </section>
+</fleet-kit-master-detail>
 }

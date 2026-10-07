@@ -1,5 +1,13 @@
-<div class="gr-layout">
-  <fleet-kit-panel class="gr-list" label="Runs">
+<fleet-kit-master-detail
+  class="gr-layout"
+  paneId="gardening-runs"
+  testidPrefix="gardening-runs"
+  backLabel="Runs"
+  [drilldown]="mobile()"
+  [hasSelection]="chunkId() !== null"
+  (back)="onBack()"
+>
+  <fleet-kit-panel kit-master-detail-list class="gr-list" label="Runs">
     <app-run-list
       [rows]="runs.listRows()"
       [selectedChunkId]="chunkId()"
@@ -7,18 +15,7 @@
       (runPick)="selectRun($event)"
     />
   </fleet-kit-panel>
-
-  <fleet-kit-panel class="gr-detail" label="Run">
-    @if (mobile() && chunkId() !== null) {
-      <a
-        class="back-row"
-        routerLink="/gardening/runs"
-        queryParamsHandling="preserve"
-        data-testid="gardening-runs-back"
-      >
-        <fleet-kit-back-bar label="Runs" />
-      </a>
-    }
+  <fleet-kit-panel kit-master-detail-detail class="gr-detail" label="Run">
     <router-outlet />
   </fleet-kit-panel>
-</div>
+</fleet-kit-master-detail>

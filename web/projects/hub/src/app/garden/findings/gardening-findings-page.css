@@ -1,5 +1,5 @@
 /* A flex column so `.gf-layout` below can resolve `.body`'s bounded height
- * (`gardening-page.css`) into its own full-height grid track, the way that
+ * (`gardening-page.css`) into its own full height, the way that
  * page's own `:host` resolves the app shell's height into `.body` — the
  * filter block above the layout stays its own natural height (`flex: none`
  * below) and only the layout grows to fill what is left. */
@@ -12,10 +12,10 @@
      clamped multi-line headline over its own meta lines — and their detail panes
      carry proportionally less, so the split is retuned here rather than in the
      shared token (`core/design/tokens.css`'s `--master-list-col`, which the
-     routines/runs/scopes screens still take as-is). Overriding the token, not the
-     `grid-template-columns` line below, so anything else keyed to it on this page
-     stays one value. The narrow-viewport rule is unaffected: under 720px the layout
-     is a single stacked column and this width never applies. */
+     routines/runs/scopes screens still take as-is). Overriding the token, which the
+     kit's list pane resolves its width through, so anything else keyed to it on this
+     page stays one value. The narrow-viewport rule is unaffected: under 720px the
+     layout is a single stacked column and this width never applies. */
   --master-list-col: 640px;
 }
 /* A fixed label column beside a chips column, one grid row per filter group —
@@ -40,28 +40,8 @@
   color: var(--label);
   padding-top: 4px;
 }
-/* `grid-template-rows: minmax(0, 1fr)` gives the row the grid container's
- * full bounded height regardless of content — `align-items: start` then
- * keeps a short column at its own content height instead of stretching it to
- * match, so the two columns may genuinely differ in height while a tall one
- * still hits the row's bound and scrolls inside its own box (`.gf-list`/
- * `.gf-detail` below) rather than dragging the other column down with it. */
-.gf-layout {
-  display: grid;
-  grid-template-columns: var(--master-list-col) 1fr;
-  grid-template-rows: minmax(0, 1fr);
-  align-items: start;
-  gap: 12px;
-  min-width: 0;
-  flex: 1;
-  min-height: 0;
-}
-:host(.mobile) .gf-layout {
-  grid-template-columns: 1fr;
-  grid-template-rows: minmax(0, 1fr);
-  flex: 1;
-  min-height: 0;
-}
+/* The filters sit outside the kit's split, so they collapse with the page's own
+ * host state: two per row on mobile, and gone while a finding's detail is open. */
 :host(.mobile) .gf-filters {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
@@ -69,15 +49,26 @@
 :host(.mobile) .gf-filter-label {
   display: none;
 }
-:host(.mobile:not(.detail-open)) .gf-detail,
-:host(.mobile.detail-open) .gf-list,
 :host(.mobile.detail-open) .gf-filters {
   display: none;
 }
+/* The split itself is `fleet-kit-master-detail`'s (`.gf-layout` is its host
+ * tag): its row layout, its mobile drill-down, and the Back control. This page sets
+ * only the kit's gap and divider properties, keeping a 12px gutter and no rule
+ * between the two panes. */
+.gf-layout {
+  --kit-master-detail-gap: 12px;
+  --kit-master-detail-divider: none;
+}
+/* Each pane is a flex column (`kit-master-detail.css`); `flex: 0 1 auto` with
+ * `min-height: 0` lets a short slot hug its own content while a tall one hits the
+ * pane's bound and scrolls inside its own box rather than dragging the other pane
+ * down with it. */
 .gf-list,
 .gf-detail {
+  flex: 0 1 auto;
   min-width: 0;
-  max-height: 100%;
+  min-height: 0;
   overflow-y: auto;
 }
 /* A floor under the empty/loading text (`fleet-kit-async-state`'s own inline
@@ -85,9 +76,4 @@
  * bare line of text collapsed to fit its content. */
 .gf-detail {
   min-height: 240px;
-}
-.back-row {
-  display: block;
-  flex: none;
-  text-decoration: none;
 }

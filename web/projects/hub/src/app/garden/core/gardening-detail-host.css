@@ -1,9 +1,10 @@
 /* Every gardening detail child is a routed container with no layout of its own:
-   the tab's own two-column grid (`gardening-scopes-page.css` and its siblings)
-   sizes the right-hand column, and the panel inside is what fills it. `display:
-   contents` drops this host out of the box tree entirely so that column's rules
-   reach the panel directly, exactly as they did before the detail became its own
-   routed component. */
+   the tab's `fleet-kit-master-detail` detail pane, and the slot element each tab
+   projects into it (`gardening-scopes-page.html` and its siblings), size the
+   detail column, and the panel inside is what fills it. `display: contents` drops
+   this host out of the box tree entirely so that slot element's rules reach the
+   panel directly, exactly as they did before the detail became its own routed
+   component. */
 :host {
   display: contents;
 }

@@ -76,13 +76,15 @@ describe('ChunkArtifactsPanel', () => {
     await fixture.whenStable();
     let el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="artifacts-panel-nav"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="artifacts-panel-nav"]')?.closest('.kmd-pane--hidden')).toBeNull();
     expect(el.querySelector('[data-testid="artifacts-panel-artifact"]')).toBeNull();
+    expect(el.querySelector('[data-testid="artifacts-panel-back"]')).toBeNull();
 
     fixture.componentRef.setInput('selectedKey', OLDER.key);
     await fixture.whenStable();
     el = fixture.nativeElement as HTMLElement;
-    expect(el.querySelector('[data-testid="artifacts-panel-nav"]')).toBeNull();
+    // The list stays mounted under drill-down, only hidden — the kit's pane carries the hide.
+    expect(el.querySelector('[data-testid="artifacts-panel-nav"]')?.closest('.kmd-pane--hidden')).not.toBeNull();
     expect(el.querySelector('[data-testid="artifacts-panel-artifact"]')?.textContent).toContain('acme/widget');
 
     let cleared = false;

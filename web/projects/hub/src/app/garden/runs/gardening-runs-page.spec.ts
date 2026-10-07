@@ -169,20 +169,14 @@ describe('GardeningRunsPage', () => {
   it('drills into a run and back to the list in mobile mode', async () => {
     const { fixture, router, el } = await mount({ mobile: true });
 
-    const page = el.querySelector('app-gardening-runs-page')!;
-    expect(page.classList).toContain('mobile');
-    expect(page.classList).not.toContain('detail-open');
-
     el.querySelector<HTMLButtonElement>('[data-testid="gardening-run-row-ch_1"]')!.click();
     await settle(fixture);
 
     expect(router.url).toBe('/gardening/runs/ch_1');
-    expect(page.classList).toContain('detail-open');
-    el.querySelector<HTMLAnchorElement>('[data-testid="gardening-runs-back"]')!.click();
+    el.querySelector<HTMLButtonElement>('[data-testid="gardening-runs-back"]')!.click();
     await settle(fixture);
 
     expect(router.url).toBe('/gardening/runs');
-    expect(page.classList).not.toContain('detail-open');
   });
 
   it('resolves a run-list read failure to the error state', async () => {

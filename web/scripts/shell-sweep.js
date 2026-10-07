@@ -35,7 +35,7 @@
  *     the Artifacts tab's real `ChunkPage` → `ChunkArtifactsPanel` chain, mounted
  *     with the hub's daemon: a 40-artifact nav list genuinely
  *     scrolls inside a bounded box rather than clipping with no scroll
- *     container — the `height: 100%` percentage chain jsdom cannot resolve.
+ *     container — the flex chain jsdom cannot resolve.
  *   - projects/hub/src/app/board/glance/glance-view.shell-sweep.spec.ts — the
  *     mobile glance board's attention-to-completion section ordering and no-overflow
  *     layout at 390px and 320px.

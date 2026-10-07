@@ -114,7 +114,6 @@ describe('GardeningRoutinesPage', () => {
     expect(el.querySelector('[data-testid="gardening-routine-row-nightly"]')?.classList.contains('selected')).toBe(
       false,
     );
-    expect(el.querySelector('app-gardening-routines-page')?.classList).toContain('detail-open');
     expect(el.querySelector('[data-testid="gardening-routines-back"]')).toBeTruthy();
   });
 
@@ -150,19 +149,13 @@ describe('GardeningRoutinesPage', () => {
   it('drills into a routine and back to the list in mobile mode', async () => {
     const { fixture, router, el } = await render({ mobile: true });
 
-    const page = el.querySelector('app-gardening-routines-page')!;
-    expect(page.classList).toContain('mobile');
-    expect(page.classList).not.toContain('detail-open');
-
     el.querySelector<HTMLButtonElement>('[data-testid="gardening-routine-row-nightly"]')!.click();
     await settle(fixture);
 
     expect(router.url).toBe('/gardening/routines/nightly');
-    expect(page.classList).toContain('detail-open');
-    el.querySelector<HTMLAnchorElement>('[data-testid="gardening-routines-back"]')!.click();
+    el.querySelector<HTMLButtonElement>('[data-testid="gardening-routines-back"]')!.click();
     await settle(fixture);
 
     expect(router.url).toBe('/gardening/routines');
-    expect(page.classList).not.toContain('detail-open');
   });
 });

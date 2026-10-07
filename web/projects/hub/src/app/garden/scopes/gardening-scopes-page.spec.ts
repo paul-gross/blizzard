@@ -107,7 +107,6 @@ describe('GardeningScopesPage', () => {
     expect(el.querySelector('[data-testid="gardening-scope-row-blizzard"]')?.classList.contains('selected')).toBe(
       false,
     );
-    expect(el.querySelector('app-gardening-scopes-page')?.classList).toContain('detail-open');
     expect(el.querySelector('[data-testid="gardening-scopes-back"]')).toBeTruthy();
   });
 
@@ -123,20 +122,15 @@ describe('GardeningScopesPage', () => {
   it('drills into a scope and back to the filtered list in mobile mode', async () => {
     const { fixture, router, el } = await render({ url: '/gardening/scopes?retired=false', mobile: true });
 
-    const page = el.querySelector('app-gardening-scopes-page')!;
-    expect(page.classList).toContain('mobile');
-    expect(page.classList).not.toContain('detail-open');
     expect(el.querySelector('[data-testid="gardening-scopes-back"]')).toBeNull();
 
     el.querySelector<HTMLButtonElement>('[data-testid="gardening-scope-row-blizzard"]')!.click();
     await settle(fixture);
 
     expect(router.url).toBe('/gardening/scopes/blizzard?retired=false');
-    expect(page.classList).toContain('detail-open');
-    el.querySelector<HTMLAnchorElement>('[data-testid="gardening-scopes-back"]')!.click();
+    el.querySelector<HTMLButtonElement>('[data-testid="gardening-scopes-back"]')!.click();
     await settle(fixture);
 
     expect(router.url).toBe('/gardening/scopes?retired=false');
-    expect(page.classList).not.toContain('detail-open');
   });
 });
