@@ -63,6 +63,41 @@ async function mountSweepHost(): Promise<HTMLElement> {
   return root;
 }
 
+@Component({
+  selector: 'fleet-kit-master-detail-sweep-drill-host',
+  imports: [KitMasterDetail],
+  template: `
+    <fleet-kit-master-detail
+      paneId="kmd-drill"
+      backLabel="Node history"
+      [drilldown]="true"
+      [hasSelection]="selected"
+      style="height: 300px"
+    >
+      <div kit-master-detail-list data-testid="slot-list">list</div>
+      <div kit-master-detail-detail data-testid="slot-detail" style="flex: 1; min-height: 0; overflow-y: auto">
+        <div style="height: 600px">tall</div>
+      </div>
+    </fleet-kit-master-detail>
+  `,
+})
+class KitMasterDetailSweepDrillHost {
+  selected = true;
+}
+
+async function mountDrillHost(): Promise<HTMLElement> {
+  TestBed.resetTestingModule();
+  await TestBed.configureTestingModule({
+    imports: [KitMasterDetailSweepDrillHost],
+    providers: [provideZonelessChangeDetection()],
+  }).compileComponents();
+  const fixture = TestBed.createComponent(KitMasterDetailSweepDrillHost);
+  await fixture.whenStable();
+  const root = fixture.nativeElement as HTMLElement;
+  document.body.appendChild(root);
+  return root;
+}
+
 describe('KitMasterDetail collapse shell sweep (web:shell-sweep)', () => {
   it("splits list beside detail at desktop width, the list sized to --master-list-col — proven able to fail by forcing :host's base flex-direction to row", async () => {
     await loadDesignTokens();
@@ -112,6 +147,66 @@ describe('KitMasterDetail collapse shell sweep (web:shell-sweep)', () => {
         ).toBeGreaterThan(listRect.top);
         expectNoOverflow(root, `${width}px`);
       }
+    } finally {
+      root.remove();
+    }
+  });
+
+  it("fills the host with a drill-down's lone detail pane in the 720–767px band and at phone width", async () => {
+    await loadDesignTokens();
+    const root = await mountDrillHost();
+    try {
+      const host = root.querySelector<HTMLElement>('fleet-kit-master-detail')!;
+      const detail = root.querySelector<HTMLElement>('.kmd-detail')!;
+      for (const width of [740, 390]) {
+        await page.viewport(width, 700);
+        await nextFrame();
+        expect(
+          detail.getBoundingClientRect().width,
+          `${width}px: the lone detail pane does not fill the host (${host.getBoundingClientRect().width})`,
+        ).toBeCloseTo(host.getBoundingClientRect().width, 0);
+      }
+    } finally {
+      root.remove();
+    }
+  });
+
+  it("fills the host with a drill-down's lone list pane in the 720–767px band — proven able to fail by deleting the .kmd-list--only rule inside the media query", async () => {
+    await loadDesignTokens();
+    TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      imports: [KitMasterDetailSweepDrillHost],
+      providers: [provideZonelessChangeDetection()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(KitMasterDetailSweepDrillHost);
+    fixture.componentInstance.selected = false;
+    await fixture.whenStable();
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    try {
+      await page.viewport(740, 700);
+      await nextFrame();
+      const host = root.querySelector<HTMLElement>('fleet-kit-master-detail')!;
+      const list = root.querySelector<HTMLElement>('.kmd-list')!;
+      expect(list.getBoundingClientRect().width, 'the lone list pane stays at the fixed list column instead of filling the host').toBeCloseTo(
+        host.getBoundingClientRect().width,
+        0,
+      );
+      expect(getComputedStyle(root.querySelector<HTMLElement>('.kmd-detail')!).display).toBe('none');
+    } finally {
+      root.remove();
+    }
+  });
+
+  it("scrolls a height-bounded slot element inside its pane — proven able to fail by making .kmd-detail display: block", async () => {
+    await loadDesignTokens();
+    const root = await mountDrillHost();
+    try {
+      await page.viewport(1024, 700);
+      await nextFrame();
+      const slot = root.querySelector<HTMLElement>('[data-testid="slot-detail"]')!;
+      expect(slot.getBoundingClientRect().height, 'the slot element grew past its pane instead of being bounded by it').toBeLessThanOrEqual(300);
+      expect(slot.scrollHeight, 'the slot element does not overflow its own bound').toBeGreaterThan(slot.clientHeight);
     } finally {
       root.remove();
     }

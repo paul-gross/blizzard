@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject } from '@angular/core';
-import { Router, RouterLink, RouterOutlet } from '@angular/router';
+import { Router, RouterOutlet } from '@angular/router';
 import { acceptGardenProposalMutationKey, passGardenProposalMutationKey } from '../../core/mutation-keys';
-import { asyncState, injectPendingMutationVariables, KitBackBar, KitChips, KitSelect, type GardenProposalView, type KitAsyncStateValue, type KitChipOption, ViewportService } from 'fleet';
+import { asyncState, injectPendingMutationVariables, KitMasterDetail, KitChips, KitSelect, type GardenProposalView, type KitAsyncStateValue, type KitChipOption, ViewportService } from 'fleet';
 import { FleetProposalList, type ProposalListRowVm } from './proposal-list';
 import { type GardenProposalAcceptVars, type GardenProposalPassVars } from './garden-proposal.mutations';
 import { injectHubGardenProposalsQuery } from './garden-proposals.query';
@@ -47,7 +47,7 @@ import { injectChildRouteParam, injectQueryFilters } from '../../core/route-stat
 @Component({
   selector: 'app-gardening-proposals-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetProposalList, KitBackBar, KitChips, KitSelect, RouterLink, RouterOutlet],
+  imports: [FleetProposalList, KitMasterDetail, KitChips, KitSelect, RouterOutlet],
   templateUrl: './gardening-proposals-page.html',
   styleUrl: './gardening-proposals-page.css',
   host: {
@@ -152,6 +152,10 @@ export class GardeningProposalsPage {
 
   protected select(proposalId: string): void {
     void this.router.navigate(['/gardening', 'proposals', proposalId], { queryParamsHandling: 'preserve' });
+  }
+
+  protected onBack(): void {
+    void this.router.navigate(['/gardening', 'proposals'], { queryParamsHandling: 'preserve' });
   }
 
   constructor() {

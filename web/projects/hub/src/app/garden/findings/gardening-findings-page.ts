@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject } from '@angular/core';
-import { Router, RouterLink, RouterOutlet } from '@angular/router';
-import { asyncState, KitBackBar, KitSelect, KitPanel, type KitAsyncStateValue, ViewportService } from 'fleet';
+import { Router, RouterOutlet } from '@angular/router';
+import { asyncState, KitSelect, KitMasterDetail, KitPanel, type KitAsyncStateValue, ViewportService } from 'fleet';
 import { FleetFindingList, type FindingListRowVm } from '../core/finding-list';
 
 import { injectChildRouteParam } from '../../core/route-state';
@@ -31,7 +31,7 @@ import { findingListRows } from './gardening-findings-page.model';
 @Component({
   selector: 'app-gardening-findings-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetFindingList, KitBackBar, KitPanel, KitSelect, RouterLink, RouterOutlet],
+  imports: [FleetFindingList, KitMasterDetail, KitPanel, KitSelect, RouterOutlet],
   templateUrl: './gardening-findings-page.html',
   styleUrl: './gardening-findings-page.css',
   host: {
@@ -62,6 +62,10 @@ export class GardeningFindingsPage {
 
   protected selectFinding(findingId: string): void {
     void this.router.navigate(['/gardening', 'findings', findingId], { queryParamsHandling: 'preserve' });
+  }
+
+  protected onBack(): void {
+    void this.router.navigate(['/gardening', 'findings'], { queryParamsHandling: 'preserve' });
   }
 
   /**

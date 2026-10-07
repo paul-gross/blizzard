@@ -1,5 +1,6 @@
 :host {
-  display: block;
+  display: flex;
+  flex-direction: column;
   flex: 1;
   min-height: 0;
   /* The four top-level `fleet-kit-async-state` states below render as
@@ -8,25 +9,13 @@
      ancestor here, the way `.tx-view` below already provides one level down. */
   position: relative;
 }
-.tx-tab {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 0;
-}
+/* The list slot element: it owns its own scroll inside the kit's list pane. */
 .tx-nav {
-  flex: none;
+  flex: 1;
   display: flex;
   flex-direction: column;
   min-height: 0;
-  max-height: 40%;
   overflow-y: auto;
-  border-bottom: 1px solid var(--line);
-}
-.tx-tab.list-only .tx-nav {
-  flex: 1;
-  max-height: none;
-  border-bottom: none;
 }
 /* Owns no horizontal padding (`design/tokens.css`'s `--surface-*` doc comment) — it
    wraps `.seg-item`, a full-bleed interactive row that carries its own, so that row's
@@ -120,27 +109,4 @@
   cursor: pointer;
   padding: 4px 0;
   margin-bottom: 4px;
-}
-.tx-back {
-  flex: none;
-  display: block;
-  width: 100%;
-  padding: 0;
-  border: 0;
-  background: transparent;
-}
-.tx-back fleet-kit-back-bar {
-  width: 100%;
-  box-sizing: border-box;
-}
-@media (min-width: 720px) {
-  .tx-tab {
-    flex-direction: row;
-  }
-  .tx-nav {
-    width: 300px;
-    max-height: none;
-    border-bottom: none;
-    border-right: 1px solid var(--line);
-  }
 }

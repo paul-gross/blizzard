@@ -13,15 +13,15 @@ import { GardeningScopesPage } from './scopes/gardening-scopes-page';
 /**
  * The three gardening sub-tabs that arrived with the five-way tab split and had no
  * sweep of their own: Scopes (`.gs-layout`), Runs (`.gr-layout`), and Findings
- * (`.gf-layout`). Each declares the same `grid-template-columns: var(--master-list-
- * col) 1fr` master/detail split and the same mobile drill-down that Routines and
+ * (`.gf-layout`). Each composes the same `fleet-kit-master-detail` split, its host
+ * carrying that class, and the same mobile drill-down that Routines and
  * Proposals each carry a sweep for, so each owes the same proof
  * (`bzh:visual-change-needs-a-render`, `bzh:narrow-viewport-tier-rule`): jsdom
  * parses the media query without ever evaluating it, and gardening sits in the
  * hub's mobile bottom tab bar, so the narrow width is load-bearing.
  *
  * One file rather than three, unlike the per-page sweeps beside it, because the
- * claim really is one claim: the same grid, the same breakpoint, the same collapse,
+ * claim really is one claim: the same split, the same breakpoint, the same collapse,
  * differing only in the class prefix each page scopes it under. It is driven from a
  * table so a fourth page joining the split adds a row, not a copy — and so a page
  * silently dropping the shared layout fails here rather than being quietly absent.
@@ -179,8 +179,8 @@ async function render(url: string) {
   return { fixture, router, stub, viewport };
 }
 
-/** One row per sub-tab: the route to mount and the three class names its own CSS
- * scopes the shared grid under. */
+/** One row per sub-tab: the route to mount and the three class names its kit host and
+ * slot elements carry. */
 const PAGES = [
   {
     name: 'scopes',
@@ -256,7 +256,7 @@ describe('gardening sub-tab layout shell sweep (web:shell-sweep)', () => {
             right!.getBoundingClientRect().width,
             `${width}px: ${spec.right} is not the visible detail screen`,
           ).toBeGreaterThan(0);
-          const back = root.querySelector<HTMLAnchorElement>(spec.back);
+          const back = root.querySelector<HTMLButtonElement>(spec.back);
           expect(back, `${width}px: no mobile Back control`).not.toBeNull();
 
           const layout = root.querySelector<HTMLElement>(spec.layout)!;
@@ -298,10 +298,13 @@ describe('gardening sub-tab layout shell sweep (web:shell-sweep)', () => {
       await settle(fixture);
 
       const detailScroller = root.querySelector<HTMLElement>('.gs-right .p-body')!;
-      const back = root.querySelector<HTMLAnchorElement>('[data-testid="gardening-scopes-back"]')!;
+      const detailPanel = root.querySelector<HTMLElement>('.gs-right')!;
+      const back = root.querySelector<HTMLButtonElement>('[data-testid="gardening-scopes-back"]')!;
       expect(detailScroller.scrollTop, 'detail inherited the list scroll position').toBe(0);
-      expect(back.getBoundingClientRect().top).toBeGreaterThanOrEqual(detailScroller.getBoundingClientRect().top);
-      expect(back.getBoundingClientRect().bottom).toBeLessThanOrEqual(detailScroller.getBoundingClientRect().bottom);
+      expect(back.checkVisibility(), 'the mobile Back control is not visible').toBe(true);
+      expect(listScroller.checkVisibility(), 'the list is still visible beside the detail').toBe(false);
+      expect(back.getBoundingClientRect().top).toBeGreaterThanOrEqual(root.getBoundingClientRect().top);
+      expect(back.getBoundingClientRect().bottom).toBeLessThanOrEqual(detailPanel.getBoundingClientRect().top);
 
       back.click();
       await settle(fixture);

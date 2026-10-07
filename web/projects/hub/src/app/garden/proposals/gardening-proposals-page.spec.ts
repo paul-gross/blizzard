@@ -197,7 +197,7 @@ describe('GardeningProposalsPage', () => {
 
     expect(router.url).toBe('/gardening/proposals/gp_1?show=all');
     expect(page.classList).toContain('detail-open');
-    el.querySelector<HTMLAnchorElement>('[data-testid="gardening-proposals-back"]')!.click();
+    el.querySelector<HTMLButtonElement>('[data-testid="gardening-proposals-back"]')!.click();
     await settle(fixture);
 
     expect(router.url).toBe('/gardening/proposals?show=all');

@@ -10,12 +10,12 @@ import { GardeningRoutineDetail } from './gardening-routine-detail';
 import { GardeningRoutinesPage } from './gardening-routines-page';
 
 /**
- * The gardening routines page's `.gr-layout` two-column split
- * (`gardening-routines-page.css`) — the master/detail grid
+ * The gardening routines page's `.gr-layout` two-column split — the page's
+ * `fleet-kit-master-detail` host, with the page's own slot sizing
+ * (`gardening-routines-page.css`) — the master/detail split
  * `routine-panel.shell-sweep.spec.ts` never mounts, since it stands `FleetRoutinePanel`
- * up in isolation. A real, headless-Chromium proof that the `@media (max-width:
- * 720px)` rule and the viewport-driven list/detail visibility turn it into a mobile
- * drill-down: jsdom parses the CSS without ever evaluating it
+ * up in isolation. A real, headless-Chromium proof that the kit's row layout and its
+ * viewport-driven drill-down turn it into a mobile drill-down: jsdom parses the CSS without ever evaluating it
  * (`bzh:narrow-viewport-tier-rule`) — gardening sits in the hub's mobile bottom tab
  * bar, so the narrow width is load-bearing, not incidental.
  *
@@ -221,7 +221,7 @@ describe('gardening routines page layout shell sweep (web:shell-sweep, blizzard#
 
         expect(left!.getBoundingClientRect().width, `${width}px: routine list remains visible after selection`).toBe(0);
         expect(right!.getBoundingClientRect().width, `${width}px: routine detail is not visible`).toBeGreaterThan(0);
-        const back = root.querySelector<HTMLAnchorElement>('[data-testid="gardening-routines-back"]');
+        const back = root.querySelector<HTMLButtonElement>('[data-testid="gardening-routines-back"]');
         expect(back, `${width}px: no mobile Back control`).not.toBeNull();
 
         const layout = root.querySelector<HTMLElement>('.gr-layout')!;
@@ -354,7 +354,7 @@ describe('gardening routines page independent-scroll shell sweep (web:shell-swee
       expect(leftHost, 'no .gr-left in the DOM').not.toBeNull();
       // `.gr-left` is `<fleet-kit-panel>` itself, and `bodyScroll` defaults true
       // (`kit-panel.ts`'s own doc comment) — the panel's *own* `.p-body` is the
-      // real scroller once `.gr-left`'s `max-height: 100%` bounds the panel,
+      // real scroller once `.gr-left`'s `min-height: 0` lets the kit's list pane bound the panel,
       // not `.gr-left`'s outer box, which the header row keeps just tall
       // enough for header + clipped body to exactly fill.
       const left = leftHost.querySelector<HTMLElement>(':scope > .p-body') ?? leftHost;

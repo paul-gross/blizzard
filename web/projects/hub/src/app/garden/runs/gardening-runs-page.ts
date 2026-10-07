@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
-import { Router, RouterLink, RouterOutlet } from '@angular/router';
+import { Router, RouterOutlet } from '@angular/router';
 import { FleetRunList } from './run-list';
-import { KitBackBar, KitPanel, ViewportService } from 'fleet';
+import { KitMasterDetail, KitPanel, ViewportService } from 'fleet';
 
 import { injectChildRouteParam } from '../../core/route-state';
 import { GardeningRunsState } from './gardening-runs-state';
@@ -24,14 +24,10 @@ import { GardeningRunsState } from './gardening-runs-state';
 @Component({
   selector: 'app-gardening-runs-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetRunList, KitBackBar, KitPanel, RouterLink, RouterOutlet],
+  imports: [FleetRunList, KitMasterDetail, KitPanel, RouterOutlet],
   templateUrl: './gardening-runs-page.html',
   styleUrl: './gardening-runs-page.css',
   providers: [GardeningRunsState],
-  host: {
-    '[class.mobile]': 'mobile()',
-    '[class.detail-open]': 'chunkId() !== null',
-  },
 })
 export class GardeningRunsPage {
   private readonly router = inject(Router);
@@ -46,5 +42,9 @@ export class GardeningRunsPage {
 
   protected selectRun(chunkId: string): void {
     void this.router.navigate(['/gardening', 'runs', chunkId], { queryParamsHandling: 'preserve' });
+  }
+
+  protected onBack(): void {
+    void this.router.navigate(['/gardening', 'runs'], { queryParamsHandling: 'preserve' });
   }
 }

@@ -104,14 +104,16 @@ describe('ChunkTranscriptsTab', () => {
   it('opts into phone drill-down as a list without a segment and a detail with one', async () => {
     const { el, fixture } = await render({ history: HISTORY, segments: [segment()], drilldown: true });
 
-    expect(el.querySelector('[data-testid="transcripts-tab-nav"]')).not.toBeNull();
-    expect(el.querySelector('[data-testid="transcript-segment-empty"]')).toBeNull();
+    expect(el.querySelector('[data-testid="transcripts-tab-nav"]')?.closest('.kmd-pane--hidden')).toBeNull();
+    expect(el.querySelector('[data-testid="transcript-segment-empty"]')?.closest('.kmd-pane--hidden')).not.toBeNull();
+    expect(el.querySelector('[data-testid="transcript-segment-back"]')).toBeNull();
 
     fixture.componentRef.setInput('segmentId', 'seg-1');
     fixture.componentRef.setInput('segmentState', 'ready');
     fixture.componentRef.setInput('segmentData', { segment_id: 'seg-1', final: true, truncated: false, turns: [] });
     await fixture.whenStable();
-    expect(el.querySelector('[data-testid="transcripts-tab-nav"]')).toBeNull();
+    // The list stays mounted under drill-down, only hidden — the kit's pane carries the hide.
+    expect(el.querySelector('[data-testid="transcripts-tab-nav"]')?.closest('.kmd-pane--hidden')).not.toBeNull();
     expect(el.querySelector('[data-testid="transcript-segment-back"]')).not.toBeNull();
 
     const picked: (string | null)[] = [];

@@ -3,8 +3,8 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
 import type { TransitionView } from '../api/hub';
 import { harnessName } from '../core/harness-name';
 import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
-import { KitBackBar } from '../kit/kit-back-bar';
 import { KitBadge } from '../kit/kit-badge';
+import { KitMasterDetail } from '../kit/kit-master-detail';
 import { encodeSidechainPath, parseSidechainPath, resolveSidechainByPath } from './transcript-sidechain-path';
 import { deriveTranscriptSteps, resolveSegmentSeams, type TranscriptStep } from './transcript-steps';
 import type { TranscriptSegmentContentView, TranscriptSegmentIndexEntry } from '../api/hub';
@@ -14,8 +14,10 @@ import { type SidechainOpenEvent, TranscriptViewer } from './transcript-viewer';
 
 /**
  * The chunk detail page's Transcripts tab — a nav of node-history steps, each holding
- * its segments, beside a lazily-fetched segment viewer. Mirrors `ChunkArtifactsPanel`'s nav-beside-viewer shape
- * and, like it, is presentational (`bzh:frontend-container-presentational`):
+ * its segments, beside a lazily-fetched segment viewer, composed into {@link KitMasterDetail}'s
+ * split the way `ChunkArtifactsPanel` is — the kit owns the split, its phone drill-down, and
+ * its Back control; the loading/forbidden/error/no-steps states render outside it. Like the
+ * panel it is presentational (`bzh:frontend-container-presentational`):
  * the two reads behind this tab (the index on open, one segment's turns only once
  * opened) arrive as resolved-state inputs — nothing about a chunk's transcripts is in `detail()`'s own payload
  * (pinned at `test_chunk_detail_carries_no_transcript_field`).
@@ -30,7 +32,7 @@ import { type SidechainOpenEvent, TranscriptViewer } from './transcript-viewer';
 @Component({
   selector: 'fleet-chunk-transcripts-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitBackBar, KitBadge, TranscriptSegmentView, TranscriptViewer],
+  imports: [KitAsyncState, KitBadge, KitMasterDetail, TranscriptSegmentView, TranscriptViewer],
   templateUrl: './chunk-transcripts-tab.html',
   styleUrl: './chunk-transcripts-tab.css',
 })
@@ -79,8 +81,6 @@ export class ChunkTranscriptsTab {
   readonly pickSidechain = output<string | null>();
 
   protected readonly hasSelection = computed(() => this.segmentId() !== null);
-  protected readonly showNav = computed(() => !this.drilldown() || !this.hasSelection());
-  protected readonly showView = computed(() => !this.drilldown() || this.hasSelection());
 
   protected readonly steps = computed<readonly TranscriptStep[]>(() =>
     deriveTranscriptSteps(this.segments(), this.history(), {

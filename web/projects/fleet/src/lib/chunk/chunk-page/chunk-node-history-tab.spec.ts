@@ -116,12 +116,12 @@ describe('ChunkNodeHistoryTab', () => {
     const fixture = await render({ drilldown: true });
     let el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('[data-testid="selection-step"]')).not.toBeNull();
-    expect(el.querySelector('[data-testid="chunk-node-history-tab"] .kmd-detail')).toBeNull();
+    expect(el.querySelector('[data-testid="chunk-node-history-tab"] .kmd-detail')?.classList.contains('kmd-pane--hidden')).toBe(true);
 
     fixture.componentRef.setInput('selectedKey', 'nd_build:1');
     await fixture.whenStable();
     el = fixture.nativeElement as HTMLElement;
-    expect(el.querySelector('[data-testid="selection-step"]')).toBeNull();
+    expect(el.querySelector('[data-testid="chunk-node-history-tab"] .kmd-list')?.classList.contains('kmd-pane--hidden')).toBe(true);
     expect(el.querySelector('[data-testid="node-history-back"]')).not.toBeNull();
 
     const picked: (string | null)[] = [];

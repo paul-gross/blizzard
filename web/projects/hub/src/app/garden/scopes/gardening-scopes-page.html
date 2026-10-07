@@ -1,5 +1,13 @@
-<div class="gs-layout">
-  <fleet-kit-panel class="gs-left" label="Scopes">
+<fleet-kit-master-detail
+  class="gs-layout"
+  paneId="gardening-scopes"
+  testidPrefix="gardening-scopes"
+  backLabel="Scopes"
+  [drilldown]="mobile()"
+  [hasSelection]="scopeSlugParam() !== null"
+  (back)="onBack()"
+>
+  <fleet-kit-panel kit-master-detail-list class="gs-left" label="Scopes">
     <app-scope-list
       [rows]="scopeRows()"
       [selectedSlug]="selectedScopeSlug()"
@@ -7,17 +15,7 @@
       (scopePick)="selectScope($event)"
     />
   </fleet-kit-panel>
-  <fleet-kit-panel class="gs-right" label="Scope">
-    @if (mobile() && scopeSlugParam() !== null) {
-      <a
-        class="back-row"
-        routerLink="/gardening/scopes"
-        queryParamsHandling="preserve"
-        data-testid="gardening-scopes-back"
-      >
-        <fleet-kit-back-bar label="Scopes" />
-      </a>
-    }
+  <fleet-kit-panel kit-master-detail-detail class="gs-right" label="Scope">
     <router-outlet />
   </fleet-kit-panel>
-</div>
+</fleet-kit-master-detail>

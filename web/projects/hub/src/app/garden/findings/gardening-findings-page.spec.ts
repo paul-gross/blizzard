@@ -242,7 +242,7 @@ describe('GardeningFindingsPage', () => {
 
     expect(router.url).toBe('/gardening/findings/fnd_10?state=live');
     expect(page.classList).toContain('detail-open');
-    el.querySelector<HTMLAnchorElement>('[data-testid="gardening-findings-back"]')!.click();
+    el.querySelector<HTMLButtonElement>('[data-testid="gardening-findings-back"]')!.click();
     await settle(fixture);
 
     expect(router.url).toBe('/gardening/findings?state=live');

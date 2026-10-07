@@ -1,5 +1,13 @@
-<div class="gr-layout">
-  <fleet-kit-panel class="gr-left" label="Routines">
+<fleet-kit-master-detail
+  class="gr-layout"
+  paneId="gardening-routines"
+  testidPrefix="gardening-routines"
+  backLabel="Routines"
+  [drilldown]="mobile()"
+  [hasSelection]="routineNameParam() !== null"
+  (back)="onBack()"
+>
+  <fleet-kit-panel kit-master-detail-list class="gr-left" label="Routines">
     <app-routine-list
       [rows]="listRows()"
       [selectedName]="selectedRoutineName()"
@@ -7,17 +15,7 @@
       (routinePick)="selectRoutine($event)"
     />
   </fleet-kit-panel>
-  <div class="gr-right">
-    @if (mobile() && routineNameParam() !== null) {
-      <a
-        class="back-row"
-        routerLink="/gardening/routines"
-        queryParamsHandling="preserve"
-        data-testid="gardening-routines-back"
-      >
-        <fleet-kit-back-bar label="Routines" />
-      </a>
-    }
+  <div kit-master-detail-detail class="gr-right">
     <router-outlet />
   </div>
-</div>
+</fleet-kit-master-detail>

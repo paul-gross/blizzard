@@ -11,7 +11,11 @@ import { KitBackBar } from './kit-back-bar';
  * consumer's own (`bzh:frontend-container-presentational`), this owns only the
  * chrome around them — the split itself, its optional per-pane caption, its
  * `@media (min-width: 720px)` row collapse, and the opt-in phone drill-down that
- * shows one pane at a time.
+ * shows one pane at a time. Both panes stay mounted under drill-down: the inactive one
+ * is `display: none` — out of layout and the accessibility tree — so its projected
+ * content (scroll position, focus target) survives a drill. A drill-down's lone pane
+ * fills the host at every width, the 720px row flip included. Each pane is a flex
+ * column, so a projected slot element can bound its own height and own its scroll.
  *
  * `:host` **is** the split container, with no wrapper inside it — the same
  * projection-boundary stance {@link ChunkPageShell}'s own doc comment states: a
@@ -19,14 +23,12 @@ import { KitBackBar } from './kit-back-bar';
  * `data-testid` names (carried on this component's host tag from outside) and the
  * element a spec measures must stay the same box.
  *
- * Fully controlled, the same shape {@link ChunkArtifactsPanel}'s own
- * `drilldown`/`hasSelection`/`showList`/`showDetail`/`back` follow: this component
+ * Fully controlled: this component
  * derives no selection of its own — it cannot see what a consumer's `[kitMasterDetailDetail]`
  * content even keys on — so `hasSelection` arrives as a plain input beside `drilldown`,
  * and activating Back only emits; the consumer's own selection state is the sole writer.
  *
- * `testidPrefix` roots the Back button's own `data-testid` the same way
- * {@link ChunkArtifactsPanel.testidPrefix} roots its nav/view testids, so a consumer
+ * `testidPrefix` roots the Back button's own `data-testid`, so a consumer
  * whose Back testid is queried from outside keeps a stable string of its own choosing.
  *
  * A caption is optional per pane; given one, the pane reads `role="region"` labelled by
@@ -40,6 +42,10 @@ import { KitBackBar } from './kit-back-bar';
  * exactly this: neither app can apply padding to a node this component renders, and one
  * consumer (the hub's Node history tab) wants an 8px inset its sibling (the runner's) does
  * not, so the property cascades through view encapsulation from whichever consumer sets it.
+ *
+ * The gap between the panes (`--kit-master-detail-gap`, default none) and the divider
+ * line between them (`--kit-master-detail-divider`, a `border` value, default the `--line`
+ * rule) are custom properties on the same precedent.
  *
  * The list pane's fixed width resolves through `var(--master-list-col)`
  * (`design/tokens.css`) rather than a literal of its own, so every surface sharing this
@@ -64,8 +70,8 @@ export class KitMasterDetail {
   /** The detail pane's caption, or `null` for none. */
   readonly detailCaption = input<string | null>(null);
 
-  /** Opt-in phone drill-down presentation. An unselected split renders only its list
-   * pane; a selected one renders only its detail pane, with a Back control ahead of the
+  /** Opt-in phone drill-down presentation. An unselected split shows only its list
+   * pane; a selected one shows only its detail pane, with a Back control ahead of the
    * projected detail content. */
   readonly drilldown = input(false);
 
@@ -76,8 +82,7 @@ export class KitMasterDetail {
   /** The Back control's label, e.g. `'Node history'`. */
   readonly backLabel = input.required<string>();
 
-  /** Roots the Back button's own `data-testid` the same way
-   * {@link ChunkArtifactsPanel.testidPrefix} roots its own testids. */
+  /** Roots the Back button's own `data-testid`. */
   readonly testidPrefix = input('master-detail');
 
   /** Back's activation — the consumer's own selection state is the sole writer, this

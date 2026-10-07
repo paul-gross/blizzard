@@ -214,7 +214,7 @@ describe('Chunk page Transcripts tab', () => {
     await settle(harness.fixture);
     el = harness.fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="transcripts-tab-nav"]')).toBeNull();
+    expect(el.querySelector('[data-testid="transcripts-tab-nav"]')?.closest('.kmd-pane--hidden')).not.toBeNull();
     expect(el.querySelector('[data-testid="transcript-sidechain-back"]')).not.toBeNull();
     expect(el.textContent).toContain('sidechain deep link');
 
@@ -222,7 +222,7 @@ describe('Chunk page Transcripts tab', () => {
     await settle(harness.fixture);
     el = harness.fixture.nativeElement as HTMLElement;
     expect(TestBed.inject(Router).url).toBe(`/board/chunk/${CHUNK_ID}?tab=transcripts`);
-    expect(el.querySelector('[data-testid="transcripts-tab-nav"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="transcripts-tab-nav"]')?.closest('.kmd-pane--hidden')).toBeNull();
     expect(el.querySelector('[data-testid="transcript-segment-body"]')).toBeNull();
   });
 });

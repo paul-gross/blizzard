@@ -341,7 +341,7 @@ describe('chunk page General tab layout shell sweep (web:shell-sweep)', () => {
 /**
  * The Transcripts tab's own narrow-viewport case
  * (`bzh:narrow-viewport-tier-rule`) — its nav-beside-viewer split collapses to the
- * stacked layout below `@media (min-width: 720px)` (`chunk-transcripts-tab.ts`), the
+ * stacked layout below `KitMasterDetail`'s `@media (min-width: 720px)` (`kit-master-detail.css`), the
  * same query jsdom parses without evaluating, so a real headless-Chromium proof is
  * needed the same way the General tab's own two-column split needed one above.
  */
@@ -425,7 +425,7 @@ describe('chunk page Transcripts tab layout shell sweep (web:shell-sweep)', () =
  * mounts `ChunkTranscriptsTab` standalone via `TestBed.createComponent`, which never
  * assembles `ChunkTranscriptsContainer`'s own box into the chain, so it could not have
  * caught either round-2 regression: the styleless container breaking the flex/height
- * chain down to `.tx-view`'s scroll container, and the tab's own four top-level
+ * chain down to the segment view's scroll container (`.tx-view`, the kit's detail slot element), and the tab's own four top-level
  * `KitAsyncState` states centering on the browser viewport for want of a positioned
  * ancestor. Driven through a real router the way `chunk-page.spec.ts` drives it, so
  * the container is genuinely mounted, not stood in for.
@@ -565,7 +565,7 @@ describe('chunk page Transcripts tab composed-chain layout shell sweep (web:shel
           `the tab's own box is unbounded (${tab!.getBoundingClientRect().height}px) — the flex/height chain never reached it`,
         ).toBeLessThanOrEqual(700);
 
-        // With a real, bounded box, `.tx-view` is the one that overflows — and is a
+        // With a real, bounded box, `.tx-view` (the detail slot element) is the one that overflows — and is a
         // genuine scroll container an operator can actually reach the tail through.
         expect(
           txView!.scrollHeight,
@@ -725,15 +725,15 @@ describe('ChunkPage mobile drill-down composed-chain shell sweep (web:shell-swee
           await pumpUntil(harness.fixture, () => root.querySelector('[data-testid="selection-step"]') !== null);
           let nodeHistory = root.querySelector<HTMLElement>('[data-testid="chunk-node-history-tab"]')!;
           expect(
-            nodeHistory.querySelector('.kmd-detail'),
+            nodeHistory.querySelector<HTMLElement>('.kmd-detail')?.checkVisibility(),
             `${width}px: node history shows detail beside its list`,
-          ).toBeNull();
+          ).toBe(false);
           expect(root.querySelector('[data-testid="node-history-back"]'), `${width}px: node history list has Back`).toBeNull();
           expectNoOverflow(nodeHistory, `${width}px node history list`);
           root.querySelector<HTMLElement>('[data-testid="selection-step"]')?.click();
           await pumpUntil(harness.fixture, () => root.querySelector('[data-testid="node-history-back"]') !== null);
           nodeHistory = root.querySelector<HTMLElement>('[data-testid="chunk-node-history-tab"]')!;
-          expect(root.querySelector('[data-testid="selection-step"]'), `${width}px: node history detail retains its list`).toBeNull();
+          expect(root.querySelector<HTMLElement>('[data-testid="selection-step"]')?.checkVisibility(), `${width}px: node history detail retains its list`).toBe(false);
           expectNoOverflow(nodeHistory, `${width}px node history detail`);
           root.querySelector<HTMLElement>('[data-testid="node-history-back"]')?.click();
           await pumpUntil(harness.fixture, () => root.querySelector('[data-testid="selection-step"]') !== null);
@@ -742,12 +742,13 @@ describe('ChunkPage mobile drill-down composed-chain shell sweep (web:shell-swee
           await pumpUntil(harness.fixture, () => root.querySelector('[data-testid="artifacts-tab-nav-item"]') !== null);
           let artifacts = root.querySelector<HTMLElement>('[data-testid="chunk-artifacts-panel"]')!;
           expect(root.querySelector('[data-testid="artifacts-tab-artifact"]'), `${width}px: artifact list shows a detail`).toBeNull();
+          expect(artifacts.querySelector<HTMLElement>('.kmd-detail')?.checkVisibility(), `${width}px: artifact list shows its detail pane`).toBe(false);
           expect(root.querySelector('[data-testid="artifacts-tab-back"]'), `${width}px: artifact list has Back`).toBeNull();
           expectNoOverflow(artifacts, `${width}px artifact list`);
           root.querySelector<HTMLElement>('[data-testid="artifacts-tab-nav-item"]')?.click();
           await pumpUntil(harness.fixture, () => root.querySelector('[data-testid="artifacts-tab-back"]') !== null);
           artifacts = root.querySelector<HTMLElement>('[data-testid="chunk-artifacts-panel"]')!;
-          expect(root.querySelector('[data-testid="artifacts-tab-nav"]'), `${width}px: artifact detail retains its list`).toBeNull();
+          expect(root.querySelector<HTMLElement>('[data-testid="artifacts-tab-nav"]')?.checkVisibility(), `${width}px: artifact detail retains its list`).toBe(false);
           expectNoOverflow(artifacts, `${width}px artifact detail`);
           root.querySelector<HTMLElement>('[data-testid="artifacts-tab-back"]')?.click();
           await pumpUntil(harness.fixture, () => root.querySelector('[data-testid="artifacts-tab-nav-item"]') !== null);
@@ -756,12 +757,13 @@ describe('ChunkPage mobile drill-down composed-chain shell sweep (web:shell-swee
           await pumpUntil(harness.fixture, () => root.querySelector('[data-testid="transcript-segment-item"]') !== null);
           let transcripts = root.querySelector<HTMLElement>('[data-testid="chunk-transcripts-tab"]')!;
           expect(root.querySelector('[data-testid="transcript-segment-body"]'), `${width}px: transcript list shows a detail`).toBeNull();
+          expect(transcripts.querySelector<HTMLElement>('.kmd-detail')?.checkVisibility(), `${width}px: transcript list shows its detail pane`).toBe(false);
           expect(root.querySelector('[data-testid="transcript-segment-back"]'), `${width}px: transcript list has Back`).toBeNull();
           expectNoOverflow(transcripts, `${width}px transcript list`);
           root.querySelector<HTMLElement>('[data-testid="transcript-segment-item"]')?.click();
           await pumpUntil(harness.fixture, () => root.querySelector('[data-testid="transcript-segment-back"]') !== null);
           transcripts = root.querySelector<HTMLElement>('[data-testid="chunk-transcripts-tab"]')!;
-          expect(root.querySelector('[data-testid="transcripts-tab-nav"]'), `${width}px: transcript detail retains its list`).toBeNull();
+          expect(root.querySelector<HTMLElement>('[data-testid="transcripts-tab-nav"]')?.checkVisibility(), `${width}px: transcript detail retains its list`).toBe(false);
           expectNoOverflow(transcripts, `${width}px transcript detail`);
           root.querySelector<HTMLElement>('[data-testid="transcript-segment-back"]')?.click();
           await pumpUntil(harness.fixture, () => root.querySelector('[data-testid="transcript-segment-item"]') !== null);
@@ -779,10 +781,10 @@ describe('ChunkPage mobile drill-down composed-chain shell sweep (web:shell-swee
         ).not.toBeNull();
         await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}?tab=artifacts`);
         await pumpUntil(harness.fixture, () => root.querySelector('[data-testid="artifacts-tab-artifact"]') !== null);
-        expect(root.querySelector('[data-testid="artifacts-tab-nav"]'), 'desktop artifacts lost its nav').not.toBeNull();
+        expect(root.querySelector<HTMLElement>('[data-testid="artifacts-tab-nav"]')?.checkVisibility(), 'desktop artifacts lost its nav').toBe(true);
         await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}?tab=transcripts`);
         await pumpUntil(harness.fixture, () => root.querySelector('[data-testid="transcript-segment-empty"]') !== null);
-        expect(root.querySelector('[data-testid="transcripts-tab-nav"]'), 'desktop transcripts lost its nav').not.toBeNull();
+        expect(root.querySelector<HTMLElement>('[data-testid="transcripts-tab-nav"]')?.checkVisibility(), 'desktop transcripts lost its nav').toBe(true);
       } finally {
         root.remove();
       }

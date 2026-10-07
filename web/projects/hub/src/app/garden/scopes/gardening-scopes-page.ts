@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
-import { Router, RouterLink, RouterOutlet } from '@angular/router';
-import { asyncState, KitPanel, KitBackBar, type KitAsyncStateValue, type ScopeView, ViewportService } from 'fleet';
+import { Router, RouterOutlet } from '@angular/router';
+import { asyncState, KitMasterDetail, KitPanel, type KitAsyncStateValue, type ScopeView, ViewportService } from 'fleet';
 import { FleetScopeList, type ScopeRowVm } from './scope-list';
 import { injectHubScopesQuery } from '../core/scopes.query';
 
@@ -24,13 +24,9 @@ import { presentScopeSlug, scopeRows } from './gardening-scopes-page.model';
 @Component({
   selector: 'app-gardening-scopes-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetScopeList, KitBackBar, KitPanel, RouterLink, RouterOutlet],
+  imports: [FleetScopeList, KitMasterDetail, KitPanel, RouterOutlet],
   templateUrl: './gardening-scopes-page.html',
   styleUrl: './gardening-scopes-page.css',
-  host: {
-    '[class.mobile]': 'mobile()',
-    '[class.detail-open]': 'scopeSlugParam() !== null',
-  },
 })
 export class GardeningScopesPage {
   private readonly router = inject(Router);
@@ -55,6 +51,10 @@ export class GardeningScopesPage {
 
   protected selectScope(slug: string): void {
     void this.router.navigate(['/gardening', 'scopes', slug], { queryParamsHandling: 'preserve' });
+  }
+
+  protected onBack(): void {
+    void this.router.navigate(['/gardening', 'scopes'], { queryParamsHandling: 'preserve' });
   }
 
   protected readonly scopeRows = computed<readonly ScopeRowVm[]>(() => scopeRows(this.scopes()));
