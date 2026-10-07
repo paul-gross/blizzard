@@ -5,6 +5,7 @@ runner from the default fleet views, and refuses its claims and registrations by
 
 from __future__ import annotations
 
+import re
 from datetime import timedelta
 from pathlib import Path
 from typing import cast
@@ -15,8 +16,11 @@ import sqlalchemy as sa
 from blizzard.hub.domain.runners.registration import IWriteRunnerRegistry
 from blizzard.wire.route import RouteClaimPausedDenial
 from tests.support import build_hub, pointer_token, report_lease, runner_token
+from tests.test_route_classification import _api_routes, _dependency_names
 
 pytestmark = pytest.mark.component
+
+_GATE = "require_runner_principal"
 
 _YAML = """
 name: default-delivery
@@ -249,86 +253,45 @@ def _store_rows(hub) -> dict[str, list[str]]:  # type: ignore[no-untyped-def]
         }
 
 
-def test_a_retired_runner_whose_token_still_resolves_is_refused_on_every_runner_contact_route(
+def test_every_fleet_route_is_gated_or_a_named_exception(tmp_path: Path) -> None:
+    """A route a new fleet router mounts without the gate fails here: the only `/api/fleet` routes
+    outside the retirement gate are the identity read (which answers `retired` itself) and the claim."""
+    ungated = {
+        (method, route.path)
+        for route in _api_routes(build_hub(tmp_path).client.app)
+        if route.path.startswith("/api/fleet/") and _GATE not in _dependency_names(route)
+        for method in (route.methods or set()) - {"HEAD"}
+    }
+    assert ungated == {("GET", "/api/fleet/identity"), ("POST", "/api/fleet/routes")}
+
+
+def test_a_retired_runner_whose_token_still_resolves_is_refused_on_every_gated_fleet_route(
     tmp_path: Path,
 ) -> None:
     """Retirement recorded without revoking the token — as when an enroll races the retire — still
-    refuses every contact, since the guard keys on the runner, not on how its token fared."""
+    refuses every route on the gated fleet router, read or write, derived from the app's own route table."""
     hub = build_hub(tmp_path)
     _register(hub)
     held = _held_chunk(hub)
-    node_id = hub.client.get(f"/api/chunks/{held}").json()["current_node_id"]
     report_lease(hub, held, epoch=1, seq=1, runner_id="runner-a")
-    ready = hub.client.post(
-        "/api/chunks", json={"tokens": [pointer_token({"source": "default", "ref": "665"})]}
-    ).json()["chunk_id"]
-    assert hub.client.post(f"/api/chunks/{ready}/promote").status_code == 202
-    # Retired with its route still live, so the route-token rekey has a route to refuse on.
+    # Retired with its route still live, so the routes that act on a held chunk have one to refuse on.
     writer = cast(IWriteRunnerRegistry, hub.services.registry)
     writer.record_lifecycle("runner-a", retired=True, at=hub.clock.now(), by="op")
     hub.clock.advance(timedelta(seconds=5))
     before = _store_rows(hub)
 
-    contact = {
-        "registration": hub.client.post(
-            "/api/fleet/runners",
-            json={
-                "runner_id": "runner-a",
-                "workspace_id": "ws-a",
-                "capabilities": [{"harness_id": "claude", "default": True}],
-            },
-        ),
-        "heartbeat": hub.client.post("/api/fleet/runners/runner-a/heartbeats"),
-        "runner read": hub.client.get("/api/fleet/runners/runner-a"),
-        "fact ingest": hub.client.post(
-            "/api/fleet/events",
-            json={
-                "runner_id": "runner-a",
-                "facts": [{"seq": 2, "kind": "lease.minted", "payload": {"chunk_id": held, "epoch": 2}}],
-            },
-        ),
-        "transcript ingest": hub.client.post(
-            "/api/fleet/transcripts",
-            json={
-                "runner_id": "runner-a",
-                "records": [
-                    {
-                        "seq": 1,
-                        "segment_id": "sg_1",
-                        "chunk_id": held,
-                        "node_id": node_id,
-                        "epoch": 1,
-                        "spawn_generation": 1,
-                        "turn_range_start": 0,
-                        "turn_range_end": 0,
-                        "final": True,
-                        "normalizer_version": "claude-code-jsonl/2",
-                        "harness_version": "claude-code-1.0",
-                        "turns": [],
-                    }
-                ],
-            },
-        ),
-        "completion": hub.client.post(
-            f"/api/fleet/chunks/{held}/completions",
-            json={"choice": "pass", "epoch": 1, "runner_id": "runner-a", "from_node_id": node_id, "artifacts": []},
-        ),
-        "decision": hub.client.post(
-            f"/api/fleet/chunks/{held}/decisions",
-            json={"from_node_id": node_id, "epoch": 1, "runner_id": "runner-a"},
-        ),
-        "route-token rekey": hub.client.post(
-            f"/api/fleet/chunks/{held}/route-token", headers=_bearer(runner_token("runner-a"))
-        ),
-        "claim": hub.client.post(
-            "/api/fleet/routes",
-            json={"chunk_id": ready, "runner_id": "runner-a", "workspace_id": "ws-a", "environment_ids": ["e1"]},
-        ),
-    }
-
-    for action, resp in contact.items():
-        assert resp.status_code == 403, (action, resp.text)
-        assert "retired" in resp.json()["detail"], (action, resp.text)
+    gated = [route for route in _api_routes(hub.client.app) if _GATE in _dependency_names(route)]
+    assert gated, "no route carries the fleet gate"
+    refused = []
+    for route in gated:
+        path = re.sub(r"\{[^}]+\}", "placeholder", route.path)
+        for method in sorted(set(route.methods or set()) - {"HEAD"}):
+            resp = hub.client.request(method, path, headers=_bearer(runner_token("runner-a")))
+            assert resp.status_code == 403, (method, route.path, resp.text)
+            assert "retired" in resp.json()["detail"], (method, route.path, resp.text)
+            refused.append((method, route.path))
+    assert ("GET", "/api/fleet/summary") in refused
+    assert ("POST", "/api/fleet/chunks/{chunk_id}/pause") in refused
     assert _store_rows(hub) == before
 
 

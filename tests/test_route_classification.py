@@ -247,7 +247,7 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     ("DELETE", "/api/work-sources/{source}/items/{ref}"): CHUNK_CONTROL,
 }
 
-#: Fleet plane — every route mounted under ``/api/fleet/*`` but the identity route carries its own
+#: Fleet plane — every route mounted under ``/api/fleet/*`` but the identity route and the claim route carries
 #: ``require_runner_principal``-at-router-level confinement; no per-route permission.
 _FLEET: set[tuple[str, str]] = {
     ("GET", "/api/fleet/queue/peek"),
@@ -278,7 +278,6 @@ _FLEET: set[tuple[str, str]] = {
     ("GET", "/api/fleet/chunks/{chunk_id}/findings"),
     ("GET", "/api/fleet/chunks/{chunk_id}/findings/{finding_id}"),
     ("POST", "/api/fleet/chunks/{chunk_id}/hub-advance"),
-    ("POST", "/api/fleet/routes"),
     ("POST", "/api/fleet/chunks/{chunk_id}/route-token"),
     ("POST", "/api/fleet/chunks/{chunk_id}/completions"),
     ("POST", "/api/fleet/chunks/{chunk_id}/decisions"),
@@ -295,6 +294,10 @@ _FLEET: set[tuple[str, str]] = {
     ("GET", "/api/fleet/system-artifacts"),
     ("GET", "/api/fleet/system-artifacts/{name:path}"),
 }
+
+#: The claim route is gated by the principal without the retirement refusal: a retired runner's claim is
+#: refused in-domain with the paused-denial body older runners parse.
+_FLEET_CLAIM: tuple[str, str] = ("POST", "/api/fleet/routes")
 
 
 def _api_routes(app: FastAPI) -> list[APIRoute]:
@@ -395,7 +398,7 @@ def test_every_live_route_is_classified(tmp_path: Path) -> None:
     app = build_hub(tmp_path).client.app
     assert isinstance(app, FastAPI)
     live = _live_routes(app)
-    classified = _PUBLIC | set(_HUMAN) | _FLEET
+    classified = _PUBLIC | set(_HUMAN) | _FLEET | {_FLEET_CLAIM}
     unclassified = live - classified
     assert not unclassified, f"unclassified route(s): {sorted(unclassified)}"
 
@@ -406,7 +409,7 @@ def test_every_classified_route_is_still_live(tmp_path: Path) -> None:
     app = build_hub(tmp_path).client.app
     assert isinstance(app, FastAPI)
     live = _live_routes(app)
-    classified = _PUBLIC | set(_HUMAN) | _FLEET
+    classified = _PUBLIC | set(_HUMAN) | _FLEET | {_FLEET_CLAIM}
     stale = classified - live
     assert not stale, f"table entry(ies) naming a route no longer mounted: {sorted(stale)}"
 
@@ -438,3 +441,7 @@ def test_fleet_routes_carry_the_runner_principal_gate_not_a_permission(tmp_path:
         route = by_key[key]
         assert "require_runner_principal" in _dependency_names(route), key
         assert _required_permission(route) is None, key
+    claim = by_key[_FLEET_CLAIM]
+    assert "require_runner_principal_even_if_retired" in _dependency_names(claim)
+    assert "require_runner_principal" not in _dependency_names(claim)
+    assert _required_permission(claim) is None
