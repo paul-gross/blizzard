@@ -15,11 +15,13 @@ from blizzard.foundation.platform_tracing.received import ReceivedDataPoint, Rec
 from blizzard.foundation.trace_export.cursor import CursorJump, JumpReason
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.foundation.trace_ids import chunk_trace_id
-from blizzard.runner.harness.harness_telemetry_plan import (
+from blizzard.runner.harness.claude_code.telemetry_plan import (
     CLAUDE_CODE_METRICS_SCOPE,
     CLAUDE_CODE_SERVICE_NAME,
+    CLAUDE_CODE_TELEMETRY_NAMES,
     CLAUDE_CODE_TRACING_SCOPE,
 )
+from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryNames
 from blizzard.runner.hub.identity import RunnerIdentity, RunnerIdentityHolder
 from blizzard.runner.leases import Lease
 from blizzard.runner.tracing.cursor import LeaseCursorKey
@@ -160,12 +162,18 @@ def test_bucket_refill_and_take_with_explicit_now() -> None:
     assert bucket.idle(_T0 + timedelta(seconds=4), capacity=10, refill_per_second=2.0) is False
 
 
+_NAMES = (CLAUDE_CODE_TELEMETRY_NAMES,)
+_OTHER_NAMES = HarnessTelemetryNames(
+    traces_scope="other.tracing", metrics_scope="other", logs_scope="other.events", service_name="blizzard-other"
+)
+
+
 # --- span routing and the receiver ----------------------------------------------------
 
 
 def test_route_spans_keeps_the_cli_and_refuses_other_programs_by_default() -> None:
     routing = route_spans(
-        [_span(CLI_SCOPE), _span("some.library")], _lease(), runner=_RUNNER, programs=False, harness=False
+        [_span(CLI_SCOPE), _span("some.library")], _lease(), runner=_RUNNER, programs=False, harness=False, names=_NAMES
     )
     assert ([s.scope_name for s in routing.cli], routing.others) == ([CLI_SCOPE], [])
     assert (routing.accepted, routing.dropped, routing.kept, routing.refused, routing.rest_received) == (1, 1, 1, 1, 2)
@@ -173,7 +181,7 @@ def test_route_spans_keeps_the_cli_and_refuses_other_programs_by_default() -> No
 
 def test_route_spans_admits_other_programs_under_worker_programs() -> None:
     routing = route_spans(
-        [_span(CLI_SCOPE), _span("some.library")], _lease(), runner=_RUNNER, programs=True, harness=False
+        [_span(CLI_SCOPE), _span("some.library")], _lease(), runner=_RUNNER, programs=True, harness=False, names=_NAMES
     )
     assert [s.scope_name for s in routing.cli] == [CLI_SCOPE]
     assert [s.scope_name for s in routing.others] == ["some.library"]
@@ -182,16 +190,26 @@ def test_route_spans_admits_other_programs_under_worker_programs() -> None:
 
 def test_route_spans_keeps_claude_codes_scope_only_under_harness_telemetry() -> None:
     claude = _span(CLAUDE_CODE_TRACING_SCOPE)
-    on = route_spans([claude], _lease(), runner=_RUNNER, programs=False, harness=True)
-    assert (len(on.claude.kept), on.claude_received, on.rest_received) == (1, 1, 0)
-    off = route_spans([claude], _lease(), runner=_RUNNER, programs=False, harness=False)
-    assert (off.claude_received, off.rest_received, off.dropped) == (0, 1, 1)
+    on = route_spans([claude], _lease(), runner=_RUNNER, programs=False, harness=True, names=_NAMES)
+    assert (len(on.harness.kept), on.harness_received, on.rest_received) == (1, 1, 0)
+    off = route_spans([claude], _lease(), runner=_RUNNER, programs=False, harness=False, names=_NAMES)
+    assert (off.harness_received, off.rest_received, off.dropped) == (0, 1, 1)
+
+
+def test_route_spans_iterates_the_bindings_it_is_given_not_claude_code() -> None:
+    other, claude = _span("other.tracing"), _span(CLAUDE_CODE_TRACING_SCOPE)
+    routing = route_spans(
+        [other, claude], _lease(), runner=_RUNNER, programs=False, harness=True, names=(_OTHER_NAMES,)
+    )
+    assert (len(routing.harness.kept), routing.harness_received, routing.rest_received) == (1, 1, 1)
+    assert service_name_for("other.events", {}, (_OTHER_NAMES,)) == "blizzard-other"
+    assert service_name_for(CLAUDE_CODE_TRACING_SCOPE, {}, (_OTHER_NAMES,)) == PROGRAM_SERVICE_NAME
 
 
 def test_service_name_for() -> None:
-    assert service_name_for("some.library", {}) == PROGRAM_SERVICE_NAME
-    assert service_name_for(CLAUDE_CODE_TRACING_SCOPE, {}) == CLAUDE_CODE_SERVICE_NAME
-    assert service_name_for("some.library", {"some.library": "mine"}) == "mine"
+    assert service_name_for("some.library", {}, _NAMES) == PROGRAM_SERVICE_NAME
+    assert service_name_for(CLAUDE_CODE_TRACING_SCOPE, {}, _NAMES) == CLAUDE_CODE_SERVICE_NAME
+    assert service_name_for("some.library", {"some.library": "mine"}, _NAMES) == "mine"
 
 
 class _FixedClock:
@@ -215,12 +233,13 @@ def _receiver(*, enabled: bool, harness: bool = True, capacity: int = 1000) -> T
         received_telemetry=DisabledReceivedTelemetryExport(),
         span_limiter=SpanRateLimiter(clock, capacity=capacity),
         span_counter=ReceiverCounter(),
-        claude_span_counter=ReceiverCounter(),
+        harness_span_counter=ReceiverCounter(),
         metric_bounds=ReceiverBounds(SpanRateLimiter(clock, capacity=capacity), ReceiverCounter()),
         log_bounds=ReceiverBounds.fresh(clock),
         clock=clock,
         identity=RunnerIdentityHolder(_RUNNER),
         harness_telemetry=harness,
+        telemetry_names=_NAMES,
     )
 
 
@@ -236,7 +255,7 @@ def test_span_rate_refused_counts_every_span_dropped() -> None:
     receiver = _receiver(enabled=True, capacity=1)
     with pytest.raises(RateExceeded, match="span rate exceeded"):
         receiver.receive_spans(_lease(), [_span(CLI_SCOPE), _span(CLAUDE_CODE_TRACING_SCOPE)])
-    assert (receiver.span_counter.count().dropped, receiver.claude_span_counter.count().dropped) == (1, 1)
+    assert (receiver.span_counter.count().dropped, receiver.harness_span_counter.count().dropped) == (1, 1)
 
 
 def _point() -> ReceivedDataPoint:

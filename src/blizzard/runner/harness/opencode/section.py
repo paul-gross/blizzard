@@ -91,10 +91,6 @@ class OpenCodeSectionKind:
     def table(self) -> str:
         return "opencode"
 
-    @property
-    def cli_group(self) -> tuple[str, str] | None:
-        return ("opencode", "blizzard.runner.cli.opencode:opencode_group")
-
     def parse(self, document: Mapping[str, Any], *, root: Path, path: Path) -> OpenCodeSection:
         table = Table.of(document.get(self.table))
         return OpenCodeSection(

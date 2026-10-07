@@ -25,9 +25,11 @@ from blizzard.runner.harness.claude_code.bundle import (
 from blizzard.runner.harness.claude_code.health import ClaudeCodeHealthProbe
 from blizzard.runner.harness.claude_code.normalizer import NORMALIZER_VERSION
 from blizzard.runner.harness.claude_code.section import WORKER_SETTINGS_FILENAME, ClaudeCodeSection
+from blizzard.runner.harness.claude_code.telemetry_plan import CLAUDE_CODE_TELEMETRY_NAMES, plan_harness_telemetry
 from blizzard.runner.harness.claude_code.transcript import ClaudeCodeTranscriptSource
 from blizzard.runner.harness.claude_code.worker_settings import WorkerSettings
 from blizzard.runner.harness.declaration import SharedHarnessInputs
+from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryNames, HarnessTelemetryPlan
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.process_launch import IProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding
@@ -51,6 +53,19 @@ class ClaudeCodeDeclaration:
     @property
     def bundle_layout(self) -> HarnessLayout:
         return CLAUDE_CODE_BUNDLE_LAYOUT
+
+    @property
+    def telemetry_names(self) -> HarnessTelemetryNames:
+        return CLAUDE_CODE_TELEMETRY_NAMES
+
+    def telemetry_plan(self, section: ClaudeCodeSection, shared: SharedHarnessInputs) -> HarnessTelemetryPlan:
+        return plan_harness_telemetry(
+            section,
+            worker_env=shared.worker_env,
+            bundle=shared.bundle,
+            runner_environ=shared.runner_environ,
+            enabled=shared.harness_telemetry_enabled,
+        )
 
     def binding(
         self,
@@ -76,7 +91,7 @@ class ClaudeCodeDeclaration:
             transcript_source=transcript_source,
             process=process,
             launcher=launcher,
-            harness_telemetry=shared.harness_telemetry,
+            harness_telemetry=self.telemetry_plan(section, shared),
         )
         return HarnessBinding(adapter=adapter, transcript_source=transcript_source)
 

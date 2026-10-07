@@ -2636,7 +2636,7 @@
         "type": "object"
       },
       "HarnessSignalStatus": {
-        "description": "One signal of Claude Code's telemetry: what the binding does with its exporter, and what the runner's\nreceiver for it has accepted and dropped since start, in that signal's own unit.",
+        "description": "One signal of the harness bindings' telemetry: what the enabled bindings together do with its exporter, and\nwhat the runner's receiver for it has accepted and dropped since start, in that signal's own unit.",
         "properties": {
           "accepted": {
             "title": "Accepted",
@@ -2659,7 +2659,7 @@
         "type": "object"
       },
       "HarnessTelemetryOutcome": {
-        "description": "What the runner does with one of Claude Code's telemetry signals.",
+        "description": "What the runner does with one of a harness binding's telemetry signals.",
         "enum": [
           "off",
           "captured",
@@ -8016,7 +8016,7 @@
     },
     "/api/traces/status": {
       "get": {
-        "description": "Tracing on or off, the redacted endpoint, the cursor and its lag, the last export and the last error,\nand Claude Code's harness-telemetry plan with each signal's receiver counts.",
+        "description": "Tracing on or off, the redacted endpoint, the cursor and its lag, the last export and the last error,\nand the bindings' combined harness-telemetry plan with each signal's receiver counts.",
         "operationId": "trace_status_api_traces_status_get",
         "responses": {
           "200": {

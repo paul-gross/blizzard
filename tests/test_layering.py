@@ -1981,10 +1981,9 @@ def _adapter_modules_beyond_sections(loaded: set[str]) -> list[str]:
     ids=["hook-entry-point", "heartbeat-verb"],
 )
 def test_a_worker_hook_loads_no_harness_adapter_beyond_its_section(load: Callable[[], set[str]]) -> None:
-    """The per-tool-call ``heartbeat`` and ``session-end`` hooks reach ``harness/wiring.py`` only for the
-    section roster: neither adapter's declaration graph loads (``bzh:pluggable-seams``)."""
+    """The per-tool-call ``heartbeat`` and ``session-end`` hooks load no adapter's declaration graph, whatever
+    they reach of ``harness/wiring.py`` (``bzh:pluggable-seams``)."""
     loaded = load()
-    assert "blizzard.runner.harness.wiring" in loaded
     adapters = _adapter_modules_beyond_sections(loaded)
     assert not adapters, (
         f"a worker hook loaded {len(adapters)} harness adapter modules, first {adapters[:3]}: keep "

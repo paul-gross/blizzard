@@ -24,8 +24,8 @@ __all__ = [
 
 
 class HarnessSignalStatus(BaseModel):
-    """One signal of Claude Code's telemetry: what the binding does with its exporter, and what the runner's
-    receiver for it has accepted and dropped since start, in that signal's own unit."""
+    """One signal of the harness bindings' telemetry: what the enabled bindings together do with its exporter, and
+    what the runner's receiver for it has accepted and dropped since start, in that signal's own unit."""
 
     outcome: HarnessTelemetryOutcome
     accepted: int

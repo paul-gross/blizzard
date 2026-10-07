@@ -24,7 +24,7 @@ from blizzard.runner.tracing.sweep import FAILED_MESSAGE
 @domain_model
 @dataclass(frozen=True)
 class HarnessTelemetryStatus:
-    """The Claude Code binding's plan, and what each signal's receiver has taken in since start, in that
+    """The enabled bindings' combined plan, and what each signal's receiver has taken in since start, in that
     signal's own unit (spans, data points, log records)."""
 
     plan: HarnessTelemetryPlan
@@ -65,13 +65,13 @@ class LeaseTraceStatusReader:
         receiver: ReceiverCounter | None = None,
         replay_max_window: int | None = None,
         harness_telemetry: HarnessTelemetryPlan | None = None,
-        claude_trace_receiver: ReceiverCounter | None = None,
+        harness_span_receiver: ReceiverCounter | None = None,
         metric_receiver: ReceiverCounter | None = None,
         log_receiver: ReceiverCounter | None = None,
     ) -> None:
         self._harness_telemetry = harness_telemetry
         self._signal_receivers = {
-            TelemetrySignal.TRACES: claude_trace_receiver,
+            TelemetrySignal.TRACES: harness_span_receiver,
             TelemetrySignal.METRICS: metric_receiver,
             TelemetrySignal.LOGS: log_receiver,
         }

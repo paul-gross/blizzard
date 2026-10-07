@@ -51,8 +51,7 @@ from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.claude_code.section import ClaudeCodeSection
-from blizzard.runner.harness.claude_code.telemetry_plan import plan_harness_telemetry
-from blizzard.runner.harness.wiring import claude_code_section
+from blizzard.runner.harness.wiring import combined_telemetry_plan, declared_telemetry_names
 from blizzard.runner.hub.identity import ICurrentRunnerIdentity, RunnerIdentity, RunnerIdentityHolder
 from blizzard.runner.hub.outbound import OutboundFacts
 from blizzard.runner.leases import Lease, NewLease
@@ -206,7 +205,8 @@ def _app(  # type: ignore[no-untyped-def]
         identity=identity or registered_identity(_RUNNER, _NAME),
         span_limiter=limiter,
         receiver_counter=counter,
-        claude_trace_counter=claude_counter,
+        harness_span_counter=claude_counter,
+        harness_telemetry_names=declared_telemetry_names(),
         metric_bounds=metric_bounds,
         log_bounds=log_bounds,
         received_telemetry=received,
@@ -215,7 +215,7 @@ def _app(  # type: ignore[no-untyped-def]
             leases=make_stores(store).lease_traces,
             clock=FixedClock(_NOW),
             receiver=counter,
-            claude_trace_receiver=claude_counter,
+            harness_span_receiver=claude_counter,
         ),
     )
     return app
@@ -1247,13 +1247,7 @@ def test_claude_code_spans_are_kept_and_counted_while_traces_are_operator_config
         db_url="sqlite://",
         harness_sections=sections(ClaudeCodeSection(worker_settings_path=str(settings))),
     )
-    plan = plan_harness_telemetry(
-        claude_code_section(config.harness_sections),
-        worker_env=config.worker_env,
-        bundle=None,
-        runner_environ=_ENDPOINT,
-        enabled=True,
-    )
+    plan = combined_telemetry_plan(config.harness_settings, harness_telemetry_enabled=True, runner_environ=_ENDPOINT)
     assert plan.traces is HarnessTelemetryOutcome.OPERATOR_CONFIGURED
 
     exporter = InMemorySpanExporter()

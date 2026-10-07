@@ -14,12 +14,11 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.adapter import AcquiredEnvironment, WorkerPreamble
 from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.claude_code.section import WORKER_SETTINGS_FILENAME, ClaudeCodeSection
-from blizzard.runner.harness.claude_code.telemetry_plan import plan_harness_telemetry
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryPlan
 from blizzard.runner.harness.process_launch import LaunchedProcess
 from blizzard.runner.harness.telemetry_signals import TelemetrySignal
-from blizzard.runner.harness.wiring import claude_code_section, publish_harness_bundle
+from blizzard.runner.harness.wiring import combined_telemetry_plan, publish_harness_bundle
 from blizzard.runner.runtime import Runtime
 from tests.harness_sections import sections
 from tests.runner_fakes import FakeProbe, make_envelope
@@ -52,12 +51,8 @@ def _settings(tmp_path: Path, env: Mapping[str, str]) -> str:
 def _plan(
     config: RunnerConfig, *, runner_environ: Mapping[str, str] = RUNNER_ENV, enabled: bool = True, bundle=None
 ) -> HarnessTelemetryPlan:  # type: ignore[no-untyped-def]
-    return plan_harness_telemetry(
-        claude_code_section(config.harness_sections),
-        worker_env=config.worker_env,
-        bundle=bundle,
-        runner_environ=runner_environ,
-        enabled=enabled,
+    return combined_telemetry_plan(
+        config.harness_settings, bundle=bundle, harness_telemetry_enabled=enabled, runner_environ=runner_environ
     )
 
 
@@ -314,3 +309,31 @@ def test_worker_programs_and_capture_agree_on_the_traces_variables() -> None:
     env = _adapter(_all(CAPTURED)).identity_env(_preamble(worker_programs=True), "ch_1", "sess")
     assert env["OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"] == "http://127.0.0.1:8431/v1/traces"
     assert env["OTEL_EXPORTER_OTLP_TRACES_HEADERS"] == "X-Blizzard-Lease-Token=tok"
+
+
+def test_the_combined_plan_takes_the_most_engaged_outcome_per_signal() -> None:
+    combined = HarnessTelemetryPlan.combine(
+        [
+            HarnessTelemetryPlan(traces=OFF, metrics=NO_DESTINATION, logs=YIELDED),
+            HarnessTelemetryPlan(traces=NO_DESTINATION, metrics=CAPTURED, logs=NO_DESTINATION),
+        ]
+    )
+    assert combined == HarnessTelemetryPlan(traces=NO_DESTINATION, metrics=CAPTURED, logs=YIELDED)
+    assert HarnessTelemetryPlan.combine([]) == _all(OFF)
+
+
+def test_opencode_answers_no_names_and_an_all_off_plan() -> None:
+    from blizzard.runner.harness.opencode.declaration import OPENCODE_DECLARATION
+    from blizzard.runner.harness.opencode.section import OpenCodeSection
+
+    assert OPENCODE_DECLARATION.telemetry_names is None
+    shared = shared_inputs_for_tests()
+    assert OPENCODE_DECLARATION.telemetry_plan(OpenCodeSection(), shared) == _all(OFF)
+
+
+def shared_inputs_for_tests():  # type: ignore[no-untyped-def]
+    from blizzard.runner.harness.wiring import shared_inputs
+
+    return shared_inputs(
+        _config(Path("/tmp")).harness_settings, harness_telemetry_enabled=True, runner_environ=RUNNER_ENV
+    )

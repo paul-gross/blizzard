@@ -17,7 +17,7 @@ from blizzard.runner.harness.adapter import IHarnessHealthProbe
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.bundle import BundleSnapshot, HarnessLayout, HarnessSource
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
-from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryPlan
+from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryNames, HarnessTelemetryPlan
 from blizzard.runner.harness.process_launch import IProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding
 from blizzard.runner.process.probe import IProcessProbe
@@ -55,8 +55,7 @@ class HarnessSection(Protocol):
 
 
 class IHarnessSectionKind(Protocol):
-    """How one binding's section is read, defaulted, and scaffolded, and the CLI verb group it
-    mounts on ``blizzard runner`` (``None`` when it mounts none)."""
+    """How one binding's section is read, defaulted, and scaffolded."""
 
     @property
     def harness_id(self) -> str: ...
@@ -64,11 +63,6 @@ class IHarnessSectionKind(Protocol):
     @property
     def table(self) -> str:
         """The TOML table the section lives under."""
-        ...
-
-    @property
-    def cli_group(self) -> tuple[str, str] | None:
-        """The verb name and the lazy ``module:attribute`` of its click group."""
         ...
 
     def parse(self, document: Mapping[str, Any], *, root: Path, path: Path) -> HarnessSection:
@@ -103,8 +97,10 @@ class SharedHarnessInputs:
     transcripts_root: str
     #: The snapshot this process published at startup, when it published one.
     bundle: BundleSnapshot | None = None
-    #: How Claude Code's own exporters are wired, as the composition root planned it.
-    harness_telemetry: HarnessTelemetryPlan = field(default_factory=HarnessTelemetryPlan)
+    #: `[tracing] harness_telemetry` together with platform tracing — whether a binding captures its telemetry.
+    harness_telemetry_enabled: bool = False
+    #: The runner's own environ, where a binding finds whether it has a destination to capture a signal to.
+    runner_environ: Mapping[str, str] = field(default_factory=dict)
 
 
 class IHarnessDeclaration(Protocol[SectionT_contra]):
@@ -121,6 +117,15 @@ class IHarnessDeclaration(Protocol[SectionT_contra]):
     @property
     def bundle_layout(self) -> HarnessLayout:
         """The binding's bundle directory and entry points, without runner composition."""
+        ...
+
+    @property
+    def telemetry_names(self) -> HarnessTelemetryNames | None:
+        """What the binding's own telemetry arrives under; ``None`` for a binding that exports none."""
+        ...
+
+    def telemetry_plan(self, section: SectionT_contra, shared: SharedHarnessInputs) -> HarnessTelemetryPlan:
+        """What the binding does with each telemetry signal's exporter under ``section`` and ``shared``."""
         ...
 
     def binding(
