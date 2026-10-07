@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from blizzard.foundation.node_steps import Executor
 from blizzard.hub.domain.chunk.model import (
     ChunkFacts,
@@ -13,6 +15,8 @@ from blizzard.hub.domain.chunk.model import (
     RestartFact,
     TransitionFact,
 )
+
+pytestmark = pytest.mark.unit
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
