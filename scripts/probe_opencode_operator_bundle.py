@@ -22,8 +22,9 @@ from pathlib import Path
 from blizzard.foundation.node_steps import Executor, JudgedBy
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import WorkerPreamble
-from blizzard.runner.harness.bundle import HarnessBundleError, published_snapshot
+from blizzard.runner.harness.bundle import HarnessBundleError
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
+from blizzard.runner.harness.internal.bundle_publisher import published_snapshot
 from blizzard.runner.harness.opencode.adapter import OpenCodeAdapter
 from blizzard.runner.harness.opencode.bundle import check_ambient_plugins
 from blizzard.runner.harness.opencode.declaration import OPENCODE_DECLARATION

@@ -10,9 +10,7 @@ from pathlib import Path
 from blizzard.foundation.roles import collaborator
 from blizzard.runner.harness.offline_compatibility import ICompatibilityCorpus
 
-# Package-relative, not repo-root-relative: the wheel ships only `src/blizzard`
-# (`pyproject.toml`'s `packages`), so the corpus lives under `harness/contracts` and is
-# found the same way in a checkout and an installed wheel alike.
+# Package-relative: the wheel ships only `src/blizzard`, so the corpus lives under `harness/contracts`.
 DEFAULT_CORPUS_ROOT = Path(__file__).resolve().parent.parent / "contracts"
 
 

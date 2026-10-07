@@ -1,11 +1,9 @@
 """The runner's hub bearer token as its runtime dir's ``.env`` holds it.
 
-``runner init`` writes the token the hub issues there, and every runner verb reads it back when the
-process environment carries none. The file keeps systemd ``EnvironmentFile`` syntax — ``NAME=value``
-lines, ``#`` and ``;`` comments, optionally quoted values, the last assignment winning — because an
-installed runner's unit loads the same file, and the token's line is the only one ``init`` rewrites.
-
-These are the pure rules over the file's text; the file driver is ``internal/token_file.py``."""
+``runner init`` writes the token the hub issues there; every runner verb reads it back when the
+environment carries none. The file keeps systemd ``EnvironmentFile`` syntax (``NAME=value`` lines,
+``#``/``;`` comments, optional quotes, last assignment wins) because an installed runner's unit
+loads the same file. These are the pure rules over its text; the driver is ``internal/token_file.py``."""
 
 from __future__ import annotations
 

@@ -1,10 +1,8 @@
 """The filesystem driver behind ``IElicitationFiles``.
 
-Load-bearing, unlike the diagnostic worker-stdout lane (`bzh:daemon-stdout-to-file`): the
-verdict and the attempt's usage live only here, so a launch with nowhere to write fails
-loudly rather than proceeding uncollectable — ``root`` is never the empty-disables string
-``WorkerStdoutFiles`` accepts. One file per launch attempt, never appended to, so a
-relaunch's second document can never corrupt the first's."""
+Load-bearing, unlike the diagnostic worker-stdout lane (`bzh:daemon-stdout-to-file`): the verdict
+and usage live only here, so ``root`` is never the empty-disables string ``WorkerStdoutFiles``
+accepts. One file per launch attempt, never appended to, so a relaunch can never corrupt the first."""
 
 from __future__ import annotations
 
