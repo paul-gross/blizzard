@@ -1234,7 +1234,6 @@
         "enum": [
           "minted",
           "promoted",
-          "edited",
           "grouped",
           "claimed",
           "node-completed",
@@ -1252,7 +1251,8 @@
           "stopped",
           "completed",
           "hub-advanced",
-          "deleted"
+          "deleted",
+          "edited"
         ],
         "type": "string"
       },
@@ -1277,7 +1277,6 @@
                 "enum": [
                   "minted",
                   "promoted",
-                  "edited",
                   "grouped",
                   "claimed",
                   "node-completed",
@@ -1295,7 +1294,8 @@
                   "stopped",
                   "completed",
                   "hub-advanced",
-                  "deleted"
+                  "deleted",
+                  "edited"
                 ],
                 "type": "string"
               },

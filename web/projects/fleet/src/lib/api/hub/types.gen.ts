@@ -846,7 +846,6 @@ export type ChoiceTargetKind = typeof ChoiceTargetKind[keyof typeof ChoiceTarget
 export const ChunkChangeCause = {
     MINTED: 'minted',
     PROMOTED: 'promoted',
-    EDITED: 'edited',
     GROUPED: 'grouped',
     CLAIMED: 'claimed',
     NODE_COMPLETED: 'node-completed',
@@ -864,7 +863,8 @@ export const ChunkChangeCause = {
     STOPPED: 'stopped',
     COMPLETED: 'completed',
     HUB_ADVANCED: 'hub-advanced',
-    DELETED: 'deleted'
+    DELETED: 'deleted',
+    EDITED: 'edited'
 } as const;
 
 export type ChunkChangeCause = typeof ChunkChangeCause[keyof typeof ChunkChangeCause];
@@ -880,7 +880,7 @@ export type ChunkChangedPayload = {
     /**
      * Cause
      */
-    cause?: 'minted' | 'promoted' | 'edited' | 'grouped' | 'claimed' | 'node-completed' | 'migrated' | 'decision-submitted' | 'decision-resolved' | 'question-asked' | 'question-answered' | 'escalated' | 'requeued' | 'restarted' | 'detached' | 'paused' | 'resumed' | 'stopped' | 'completed' | 'hub-advanced' | 'deleted' | null;
+    cause?: 'minted' | 'promoted' | 'grouped' | 'claimed' | 'node-completed' | 'migrated' | 'decision-submitted' | 'decision-resolved' | 'question-asked' | 'question-answered' | 'escalated' | 'requeued' | 'restarted' | 'detached' | 'paused' | 'resumed' | 'stopped' | 'completed' | 'hub-advanced' | 'deleted' | 'edited' | null;
     /**
      * Chunk Id
      */
