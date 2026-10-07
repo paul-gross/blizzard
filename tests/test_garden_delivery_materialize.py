@@ -242,6 +242,25 @@ def test_deliver_settles_a_gone_op_against_an_actor_less_delivered_finding_too()
     ]
 
 
+def test_deliver_gives_a_citable_finding_the_delta_leaves_unnamed_no_fact() -> None:
+    """`gone_settlements` spans every citable finding in the bucket, but a finding the run's
+    delta does not name keeps its last word — only the ops the delta carries become facts."""
+    repo = _FakeGardenDeliveryRepo()
+    service = GardenDelivery(delivery=_as_write_repo(repo), clock=FixedClock(instant=_T0))
+    delta = DeliveredDelta(scope="runner", findings=[FindingObservedOp(id="fin_1")])
+    validated = ValidatedDelivery(
+        run=_RUN,
+        deltas=[delta],
+        proposals=[],
+        gone_settlements={"fin_1": ("resolved", "u_1"), "fin_2": ("resolved", "u_1")},
+    )
+
+    service.deliver(validated, chunk=_CHUNK, node=_NODE, epoch=1, delta_artifact_ids=["art_1"])
+
+    facts = repo.delivered[0].deltas[0].facts
+    assert [(f.finding_id, f.kind) for f in facts] == [("fin_1", "observed")]
+
+
 def test_deliver_on_an_empty_delta_yields_one_finding_set_and_no_findings_or_facts() -> None:
     repo = _FakeGardenDeliveryRepo()
     service = GardenDelivery(delivery=_as_write_repo(repo), clock=FixedClock(instant=_T0))

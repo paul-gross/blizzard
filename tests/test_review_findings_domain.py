@@ -140,6 +140,21 @@ def test_a_deferred_entry_marked_blocking_is_rejected() -> None:
         validate_review_findings(delta)
 
 
+def test_a_deferred_entry_with_a_severity_outside_the_vocabulary_is_rejected() -> None:
+    payload = {
+        "ref": "F1",
+        "disposition": "deferred",
+        "severity": "nit",
+        "scope": "blizzard",
+        "class": "stale-docstring",
+        "locus": "a.py:1",
+        "summary": "s",
+    }
+
+    with pytest.raises(ValidationError):
+        DeferredReviewFindingEntry.model_validate(payload)
+
+
 def test_a_deferred_entry_naming_a_malformed_scope_slug_is_rejected() -> None:
     delta = ReviewDelta(entries=[_deferred(scope="Not A Slug")])
 

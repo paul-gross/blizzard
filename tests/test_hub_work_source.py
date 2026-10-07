@@ -660,6 +660,38 @@ def test_close_delivers_the_accepted_proposals_live_finding_attributed_to_it(tmp
     assert fact.actor == "u_1"
 
 
+def test_close_of_a_withdrawn_item_still_delivers_the_accepted_proposals_live_finding(tmp_path: Path) -> None:
+    """The withdrawn closure stays withdrawn, but `close()` goes on to resolve the findings
+    the accepted minting proposal answers — the no-op on the item must not end the call."""
+    source, items, _, _, engine, _ = _source(tmp_path)
+    graph = _graph(engine)
+    created = seed_work_item(
+        items,
+        graph_id=graph.graph_id,
+        author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
+        at=_T0,
+    )
+    items.close("hub", created.ref, closure=WorkItemClosure.WITHDRAWN, at=_T0)
+    pointer = WorkRef(source="hub", ref=created.ref)
+    proposal_id = _seed_accepted_proposal(engine, pointer=pointer)
+
+    source.close(pointer, trace=None)
+
+    row = items.get("hub", created.ref)
+    assert row is not None
+    assert row.closure is WorkItemClosure.WITHDRAWN
+    finding = FindingStore(hub_store_connections(engine)).get("fin_1")
+    assert finding is not None
+    assert finding.state == "delivered"
+    with engine.connect() as conn:
+        fact = conn.execute(
+            select(s.finding_facts).where(
+                s.finding_facts.c.finding_id == "fin_1", s.finding_facts.c.kind == "delivered"
+            )
+        ).one()
+    assert fact.proposal_id == proposal_id
+
+
 def test_close_run_twice_appends_only_one_delivery(tmp_path: Path) -> None:
     """`close()` is safe to repeat — a redelivered close-intent drain sweep, or any
     other retry, must not append a second `delivered` fact."""
