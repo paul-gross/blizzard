@@ -16,6 +16,7 @@ from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.artifact.model import is_valid_graph_artifact_name
 from blizzard.hub.domain.graph.harnesses import InvalidHarnesses, validated_harnesses
 from blizzard.hub.domain.graph.model import (
+    HUB_DEFAULT_FAILURE_CHOICE,
     RESERVED_TERMINAL,
     SESSION_LEGAL_FORMS,
     ChoiceTarget,
@@ -253,6 +254,12 @@ class NodeCheck:
                 self.errors.append(
                     f"hub node `{node.name}`: a hub command node must declare a judgement "
                     f"(its outcome choices — at least the edges its commands route)"
+                )
+            elif all(c.name != HUB_DEFAULT_FAILURE_CHOICE for c in judgement.choices):
+                self.errors.append(
+                    f"hub node `{node.name}`: a hub command node must author the reserved "
+                    f"`{HUB_DEFAULT_FAILURE_CHOICE}` choice — a nonzero exit, a refusal, or a poll timeout "
+                    f"routes it"
                 )
 
     def _check_checks_gating(self) -> None:

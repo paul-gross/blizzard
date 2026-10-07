@@ -2681,6 +2681,7 @@ def _default_graph_two_repo_yaml(landed_file: str) -> str:
                     "choices": {
                         "landed": {"description": "Every repo merged cleanly.", "to": "done"},
                         "conflict": {"description": "A repo did not merge; back to build.", "to": "build"},
+                        "failure": {"description": "The land script failed; back to build.", "to": "build"},
                     }
                 },
             },

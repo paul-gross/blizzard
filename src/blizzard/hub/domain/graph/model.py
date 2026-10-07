@@ -122,7 +122,8 @@ class RetriesExhausted(StrEnum):
 
 
 # The reserved outcomes a command's exit code maps to absent an explicit choice (#65):
-# exit 0 -> success, nonzero -> failure. Machinery-reserved, not authored edges (#67).
+# exit 0 -> success, nonzero -> failure. Reserved names whose edges a node authors:
+# every hub node authors `failure`, and `success` is opt-in.
 HUB_DEFAULT_SUCCESS_CHOICE = "success"
 HUB_DEFAULT_FAILURE_CHOICE = "failure"
 

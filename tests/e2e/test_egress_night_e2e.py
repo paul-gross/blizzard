@@ -106,6 +106,7 @@ def _deliver(entry: str = "build") -> dict[str, Any]:
             "choices": {
                 "landed": {"description": "Landed.", "to": "done"},
                 "conflict": {"description": "Conflict; back to the entry.", "to": entry},
+                "failure": {"description": "Failed; back to the entry.", "to": entry},
             }
         },
     }

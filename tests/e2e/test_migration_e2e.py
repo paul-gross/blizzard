@@ -107,6 +107,7 @@ def _target_yaml() -> str:
                     "choices": {
                         "landed": {"description": "Landed.", "to": "done"},
                         "conflict": {"description": "Conflict; back to build.", "to": "build"},
+                        "failure": {"description": "Failed.", "to": "build"},
                     },
                 },
             },

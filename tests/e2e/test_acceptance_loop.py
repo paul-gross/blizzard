@@ -223,6 +223,7 @@ def _graph_yaml(harness: MockHarness = CLAUDE_CODE, *, probed: bool = False) -> 
                     "choices": {
                         "landed": {"description": "Landed.", "to": "done"},
                         "conflict": {"description": "Conflict.", "to": "build"},
+                        "failure": {"description": "Failed.", "to": "build"},
                     }
                 },
             },
@@ -763,6 +764,7 @@ def _work_item_graph_yaml() -> str:
                     "choices": {
                         "landed": {"description": "Landed.", "to": "done"},
                         "conflict": {"description": "Conflict.", "to": "build"},
+                        "failure": {"description": "Failed.", "to": "build"},
                     }
                 },
             },

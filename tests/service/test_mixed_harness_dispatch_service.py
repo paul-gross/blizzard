@@ -457,6 +457,7 @@ def _opencode_task_chunk_spec(work_ref: str) -> dict:
                     "choices": {
                         "landed": {"description": "Every repo merged cleanly.", "to": "done"},
                         "conflict": {"description": "A repo did not merge cleanly.", "to": "build"},
+                        "failure": {"description": "A repo failed to land.", "to": "build"},
                     },
                 },
             },

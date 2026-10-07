@@ -78,6 +78,7 @@ def _graph_yaml() -> str:
                     "choices": {
                         "landed": {"description": "Landed.", "to": "done"},
                         "conflict": {"description": "Conflict.", "to": "spike"},
+                        "failure": {"description": "Failed.", "to": "spike"},
                     }
                 },
             },

@@ -940,7 +940,8 @@ def test_nonzero_exit_maps_to_default_failure_edge(tmp_path: Path) -> None:
     assert detail["current_node_name"] == "build"
 
 
-#: No `failure` edge for a non-zero merge exit.
+#: No `failure` edge for a non-zero merge exit — a graph mint now refuses, standing in for a
+#: legacy stored graph.
 _UNROUTABLE_GRAPH_YAML = _HUB_CMD_GRAPH_YAML.replace(
     """        failure:
           description: Failed to land.
@@ -955,9 +956,12 @@ def _event_logged_frames(hub, *, since: int = 0) -> list[dict]:  # type: ignore[
 
 
 @pytest.mark.component
-def test_an_unroutable_outcome_is_announced_once_per_epoch(tmp_path: Path) -> None:
+def test_an_unroutable_outcome_is_announced_once_per_epoch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """An unroutable failure strands the node but emits one critical event per
-    (node, epoch), even on repeat polls (event-recording-publishes AC3)."""
+    (node, epoch), even on repeat polls (event-recording-publishes AC3). Mint refuses a hub
+    node with no `failure` edge, so the legacy stored graph is minted past validation."""
+    assert Validator.of(GraphDoc.of(yaml.safe_load(_UNROUTABLE_GRAPH_YAML))).result.errors
+    monkeypatch.setattr(Validator, "require_valid", lambda self: self.result)
     runner = FakeHubCommandRunner()
     runner.arm("land-the-repo", CommandResult(exit_code=1, stdout="", stderr="boom"))
     hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
@@ -1012,6 +1016,38 @@ def test_an_unroutable_outcome_is_announced_once_per_epoch(tmp_path: Path) -> No
     assert len(artifacts) == 1, "a poll loop must not write an artifact per attempt"
     assert len(events) == 1, "nor an event per attempt"
     assert len(_event_logged_frames(hub, since=since)) == 1, "nor a frame per attempt"
+
+
+_SILENT_RUN_GRAPH_YAML = _HUB_CMD_GRAPH_YAML.replace(
+    """        success:
+          description: Landed.
+          to: done
+""",
+    """        landed:
+          description: Landed.
+          to: done
+""",
+)
+
+
+@pytest.mark.component
+def test_a_silent_run_routes_success_when_the_node_authors_it(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, hub_command_runner=FakeHubCommandRunner(), hub_workdir=FakeHubWorkdir())
+    chunk_id, build_node_id, _graph = _to_merge_node(hub)
+
+    assert _submit_build_pass(hub, chunk_id, build_node_id, 1).json()["outcome"] == "hub_node_taken"
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "done"
+
+
+@pytest.mark.component
+def test_a_silent_run_routes_failure_when_the_node_authors_no_success(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, hub_command_runner=FakeHubCommandRunner(), hub_workdir=FakeHubWorkdir())
+    chunk_id, build_node_id, _graph = _to_merge_node(hub, graph_yaml=_SILENT_RUN_GRAPH_YAML)
+
+    assert _submit_build_pass(hub, chunk_id, build_node_id, 1).json()["outcome"] == "hub_node_taken"
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert detail["status"] == "running"
+    assert detail["current_node_name"] == "build"
 
 
 @pytest.mark.component
