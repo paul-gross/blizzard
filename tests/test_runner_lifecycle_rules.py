@@ -98,6 +98,7 @@ from blizzard.runner.lifecycle.session import (
     ResumedSession,
     ResumeTarget,
     member_skip_reason,
+    model_breach_reason,
     model_drifted,
     resume_target,
     rotation_breach,
@@ -775,11 +776,9 @@ def test_resume_target_cases() -> None:
     )
     assert resume_target(pooled) == ResumeTarget(session=None)  # an empty pool mints its head
     assert resume_target(pooled, candidate=head) == ResumeTarget(session=head)
-    assert resume_target(pooled, candidate=head, breach="max_invocations") == ResumeTarget(
-        session=None, pool_owner="cc"
-    )
+    assert resume_target(pooled, candidate=head, breach="max_invocations") == ResumeTarget(session=None)
     assert resume_target(pooled, candidate=head, breach="owner-unresolvable", owner_exc=exc) == ResumeTarget(
-        session=None, pool_owner="cc", owner_unresolvable=(head, exc)
+        session=None, owner_unresolvable=(head, exc)
     )
 
 
@@ -795,6 +794,10 @@ def test_rotation_breach_order() -> None:
     assert not model_drifted(None, "sonnet")
     assert not model_drifted("opus", None)
     assert not model_drifted("opus", "opus")
+    assert model_breach_reason("opus", None, strict=True) == "no-authored-tier"
+    assert model_breach_reason("opus", None, strict=False) is None
+    assert model_breach_reason("opus", "sonnet", strict=True) == "model-drift"
+    assert model_breach_reason("opus", "opus", strict=True) is None
 
 
 @pytest.mark.parametrize(
