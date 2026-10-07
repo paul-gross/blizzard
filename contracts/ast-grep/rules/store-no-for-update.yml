@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ast-grep/ast-grep/main/schemas/rule.json
+
+id: bzh:store-no-for-update
+language: Python
+severity: error
+message: >-
+  `.with_for_update()` renders nothing on SQLite, so the guard read holds no writer lock
+  there. Lock the row with a no-op `UPDATE` as the transaction's first statement, then
+  read (`bzh:store-exclusive-write`, blizzard-context:/architecture/system-shape/exclusive-writes.md).
+files:
+  - src/blizzard/hub/**
+rule:
+  pattern: $X.with_for_update($$$)

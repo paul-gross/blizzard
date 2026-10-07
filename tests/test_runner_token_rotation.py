@@ -3,14 +3,19 @@ rather than merely failing to resolve."""
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from sqlalchemy.dialects import postgresql
+from sqlalchemy.exc import OperationalError
 
+from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.tokens import TokenHash
-from blizzard.hub.store.internal.runner_registry_store import locked_token_hash
-from tests.support import build_hub, runner_token
+from blizzard.hub.config import HubConfig
+from blizzard.hub.domain.runners.registration import RunnerAddition
+from blizzard.hub.runtime import migration_runner
+from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore, locked_token_hash
+from tests.support import build_hub, hub_store_connections, runner_token
 
 pytestmark = pytest.mark.component
 
@@ -48,10 +53,24 @@ def test_a_rotated_out_token_is_revoked_and_refused(tmp_path: Path) -> None:
     assert hub.client.get("/api/fleet/queue/peek", headers=_bearer(new)).status_code == 200
 
 
-@pytest.mark.unit
-def test_rotation_and_revocation_read_the_hash_under_the_registration_row_lock() -> None:
-    sql = str(locked_token_hash("runner-a").compile(dialect=postgresql.dialect()))
-    assert sql.rstrip().endswith("FOR UPDATE")
+def test_a_guarded_token_read_holds_the_writer_lock_until_its_transaction_ends(tmp_path: Path) -> None:
+    db_url = f"sqlite:///{tmp_path / 'hub.db'}"
+    migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
+    engine = create_engine_from_url(db_url)
+    store = RunnerRegistryStore(hub_store_connections(engine))
+    now = datetime(2026, 7, 16, tzinfo=UTC)
+    store.add(RunnerAddition(runner_id="runner-a", name="a", token_hash="old", at=now, by="op"))
+
+    with engine.connect() as winner, engine.connect() as loser:
+        assert locked_token_hash(winner, "runner-a") == "old"
+        loser.exec_driver_sql("PRAGMA busy_timeout=0")
+        with pytest.raises(OperationalError, match="locked"):
+            locked_token_hash(loser, "runner-a")
+        loser.rollback()
+        winner.commit()
+
+    with engine.connect() as late:
+        assert locked_token_hash(late, "runner-a") == "old"
 
 
 def test_every_token_three_enrollments_mint_is_current_or_revoked(tmp_path: Path) -> None:

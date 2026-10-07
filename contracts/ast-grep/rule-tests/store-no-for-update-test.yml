@@ -1,0 +1,11 @@
+id: bzh:store-no-for-update
+valid:
+  - |
+    conn.execute(table.update().where(table.c.id == key).values(id=table.c.id))
+  - |
+    stmt = select(table).order_by(table.c.id)
+invalid:
+  - |
+    stmt = select(table.c.id).with_for_update()
+  - |
+    conn.execute(select(t.c.x).where(t.c.id == key).with_for_update(of=t))

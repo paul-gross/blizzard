@@ -9,7 +9,7 @@ import json
 from collections.abc import Mapping, Sequence
 from datetime import datetime
 
-from sqlalchemy import ColumnElement, and_, desc, exists, func, insert, or_, select
+from sqlalchemy import ColumnElement, Connection, and_, desc, exists, func, insert, or_, select
 
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.garden.findings.model import (
@@ -62,6 +62,14 @@ def _decode_finding_cursor(cursor: str) -> str:
     if len(parts) != _CURSOR_ARITY or not isinstance(parts[0], str):
         raise MalformedCursor(cursor)
     return parts[0]
+
+
+def lock_findings(conn: Connection, finding_ids: Sequence[str]) -> None:
+    """Take the write lock of each named finding row — a no-op ``UPDATE``, which must be the
+    transaction's first statement (``bzh:store-exclusive-write``; ``FOR UPDATE`` renders nothing on SQLite)."""
+    conn.execute(
+        findings.update().where(findings.c.finding_id.in_(finding_ids)).values(finding_id=findings.c.finding_id)
+    )
 
 
 class FindingStore:
@@ -142,7 +150,7 @@ class FindingStore:
     def record_facts(self, entries: Sequence[FactEntry], *, expect: Mapping[str, str] | None = None) -> list[str]:
         """All-or-nothing — pinned by
         `tests/test_finding_store.py::test_record_facts_is_all_or_nothing`. With ``expect``, each
-        named finding's state is re-derived under its row lock first; any that moved off its
+        named finding's state is re-derived under its row lock first (`lock_findings`); any that moved off its
         expected state is returned and nothing is written."""
         for entry in entries:
             if entry.kind not in FACT_KINDS:
@@ -153,9 +161,7 @@ class FindingStore:
             if expect:
                 guarded = sorted(expect)
                 for batch in id_batches(guarded):
-                    conn.execute(
-                        select(findings.c.finding_id).where(findings.c.finding_id.in_(batch)).with_for_update()
-                    )
+                    lock_findings(conn, batch)
                 current = self._facts_for_many(conn, guarded)
                 moved = [fid for fid in guarded if derive_liveness(current[fid]).state != expect[fid]]
                 if moved:
