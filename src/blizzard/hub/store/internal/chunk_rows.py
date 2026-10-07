@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol, cast
 
-from sqlalchemy import ColumnElement, Connection, Select, func, insert, or_, select, update
+from sqlalchemy import Connection, Select, func, insert, literal, select, update
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.chunk_migration import MigrationMode
@@ -32,10 +32,10 @@ from blizzard.hub.domain.chunk.model import (
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead, ILockedWorkRefRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, EpochOwner, FenceRefusal, MintAdmission
 from blizzard.hub.domain.chunk.proposals import StampedWorkItemProposal
-from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.domain.work_items.closure import TERMINAL_CLOSE_OUTCOMES
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.internal.chunk_terminal_predicates import chunk_is_terminal
 
 
 @adapter_model
@@ -476,37 +476,6 @@ def row_exists(conn, table, chunk_id: str) -> bool:  # type: ignore[no-untyped-d
     return conn.execute(select(table.c.chunk_id).where(table.c.chunk_id == chunk_id).limit(1)).first() is not None
 
 
-def chunk_is_terminal(conn: Connection, chunk_id: str) -> bool:
-    """Whether the chunk carries a terminal fact — ``chunk_stopped`` or
-    ``chunk_completed`` — read on the caller's connection so this sits inside the same
-    transaction as the write it fences. Terminal rejects every later state-advancing
-    write regardless of epoch (``bzh:epoch-fencing``): ``record_stop_locked`` mints no epoch,
-    so the epoch guard alone cannot catch a write arriving after a stop."""
-    return row_exists(conn, s.chunk_stopped, chunk_id) or row_exists(conn, s.chunk_completed, chunk_id)
-
-
-def chunk_has_ended(chunk_id: ColumnElement[str]) -> ColumnElement[bool]:
-    """The SQL predicate that the chunk named by the correlated ``chunk_id`` column is stopped
-    or done — a terminal fact, or a transition into the reserved terminal that no newer
-    lease, restart or ownership epoch has superseded. The set-wise form of
-    :func:`chunk_is_terminal` and :func:`_reached_terminal_at`."""
-    t = s.transitions
-    newer = [
-        select(table.c.chunk_id).where((table.c.chunk_id == t.c.chunk_id) & (table.c.epoch > t.c.epoch)).exists()
-        for table in (s.lease_facts, s.chunk_restarts, s.epoch_owners)
-    ]
-    reached_terminal = (
-        select(t.c.transition_id)
-        .where((t.c.chunk_id == chunk_id) & (t.c.to_node_id == RESERVED_TERMINAL) & ~or_(*newer))
-        .exists()
-    )
-    return or_(
-        select(s.chunk_stopped.c.chunk_id).where(s.chunk_stopped.c.chunk_id == chunk_id).exists(),
-        select(s.chunk_completed.c.chunk_id).where(s.chunk_completed.c.chunk_id == chunk_id).exists(),
-        reached_terminal,
-    )
-
-
 def fence(
     conn: Connection,
     chunk_id: str,
@@ -520,7 +489,7 @@ def fence(
     After :func:`lock_chunk_row` and the replay probe, refuse terminal chunks,
     then stale epochs, then displaced claimants. ``None`` admits the write."""
     newest = latest_epoch(conn, chunk_id)
-    if chunk_is_terminal(conn, chunk_id) or _reached_terminal_at(conn, chunk_id, newest):
+    if _is_terminal(conn, chunk_id):
         return FenceRefusal.terminal(epoch)
     if not admission.admits(epoch, newest=newest):
         return FenceRefusal.stale(epoch, latest=newest)
@@ -539,29 +508,17 @@ def mint_admission(conn: Connection, chunk_id: str, *, epoch: int, runner_id: st
     return MintAdmission(
         epoch=epoch,
         newest=newest,
-        terminal=chunk_is_terminal(conn, chunk_id) or _reached_terminal_at(conn, chunk_id, newest),
+        terminal=_is_terminal(conn, chunk_id),
         owner=epoch_owner(conn, chunk_id, epoch),
         owning_lease_id=owning_lease_id(conn, chunk_id, epoch),
         holds_route=route is not None and route.runner_id == runner_id,
     )
 
 
-def _reached_terminal_at(conn: Connection, chunk_id: str, newest: int) -> bool:
-    """Whether a transition into the reserved terminal sits at the chunk's newest epoch —
-    ``done`` reached by transition. A restart or a fresh lease mints a newer epoch, so a
-    chunk moved on from a terminal transition no longer matches."""
-    return (
-        conn.execute(
-            select(s.transitions.c.transition_id)
-            .where(
-                (s.transitions.c.chunk_id == chunk_id)
-                & (s.transitions.c.to_node_id == RESERVED_TERMINAL)
-                & (s.transitions.c.epoch >= newest)
-            )
-            .limit(1)
-        ).first()
-        is not None
-    )
+def _is_terminal(conn: Connection, chunk_id: str) -> bool:
+    """Whether the chunk is stopped or done, read on the caller's connection so this sits inside the same
+    transaction as the write it fences."""
+    return bool(conn.execute(select(chunk_is_terminal(literal(chunk_id)))).scalar())
 
 
 def insert_proposals(conn: Connection, proposals: list[StampedWorkItemProposal], *, at: datetime) -> None:

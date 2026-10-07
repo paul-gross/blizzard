@@ -18,7 +18,8 @@ from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, Fenc
 from blizzard.hub.domain.chunk.ports.questions import IWriteChunkQuestionsRepository
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
-from blizzard.hub.store.internal.chunk_rows import QUESTIONS, chunk_has_ended, fence, lock_chunk_row
+from blizzard.hub.store.internal.chunk_rows import QUESTIONS, fence, lock_chunk_row
+from blizzard.hub.store.internal.chunk_terminal_predicates import chunk_is_terminal
 
 
 class ChunkQuestionsStore:
@@ -40,7 +41,7 @@ class ChunkQuestionsStore:
             rows = conn.execute(
                 QUESTIONS.select.where(
                     s.questions.c.question_id.not_in(select(s.question_answers.c.question_id))
-                    & ~chunk_has_ended(s.questions.c.chunk_id)
+                    & ~chunk_is_terminal(s.questions.c.chunk_id)
                 ).order_by(s.questions.c.asked_at)
             ).all()
             return [QUESTIONS.of(row) for row in rows]

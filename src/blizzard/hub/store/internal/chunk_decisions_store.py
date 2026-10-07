@@ -25,7 +25,6 @@ from blizzard.hub.domain.chunk.proposals import StampedWorkItemProposal
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import (
-    chunk_has_ended,
     conn_of,
     enqueue_close_intents,
     fence,
@@ -35,6 +34,7 @@ from blizzard.hub.store.internal.chunk_rows import (
     next_artifact_seq,
     proposal_row,
 )
+from blizzard.hub.store.internal.chunk_terminal_predicates import chunk_is_terminal
 
 #: Every fact table whose ``decision_id`` column closes a decision — the resolving
 #: transition, the migration (#90), the unresolvable-target escalation (#110), or the
@@ -168,7 +168,7 @@ class ChunkDecisionsStore:
         with self._store.read("list_open_decisions") as conn:
             rows = conn.execute(
                 select(s.decisions)
-                .where(not_resolved & ~chunk_has_ended(s.decisions.c.chunk_id))
+                .where(not_resolved & ~chunk_is_terminal(s.decisions.c.chunk_id))
                 .order_by(s.decisions.c.submitted_at, s.decisions.c.decision_id)
             ).all()
             return [d for d in self._hydrate(conn, rows) if d.is_open]
