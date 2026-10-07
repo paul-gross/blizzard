@@ -76,7 +76,10 @@ def parse_blocks(file: dict[str, Any]) -> list[Block] | None:
         while i < len(lines) and not lines[i].startswith("@@"):
             line = lines[i]
             kind = line[:1]
-            if kind in {"+", "-", "\\"}:
+            if kind == "\\":
+                if run:
+                    run.append(line)
+            elif kind in {"+", "-"}:
                 if not run:
                     run_start = cursor
                 run.append(line)
@@ -163,9 +166,10 @@ def contributes_only_base_change(
     }
     for name, file in got.items():
         other = want[name]
-        if name not in touched:
-            if not _same_blob(file, other):
+        renamed_from = {f.get("previous_filename") for f in (file, other)}
+        if name in touched or renamed_from & feature.keys():
+            if name not in feature or not _same_changes(file, other, feature[name]):
                 return False
-        elif name not in feature or not _same_changes(file, other, feature[name]):
+        elif not _same_blob(file, other):
             return False
     return True

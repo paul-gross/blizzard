@@ -2330,3 +2330,20 @@ def test_a_base_tip_with_a_sha_is_returned() -> None:
     run = _land_run({("GET", f"http://forge/repos/{_REPO}/git/ref/heads/main"): (200, {"object": {"sha": "tip1"}})})
 
     assert run.base_tip(_REPO) == "tip1"
+
+
+def test_a_base_rename_of_a_file_the_feature_edited_is_refused() -> None:
+    feature = [_file("x.txt", "f")]
+    renamed = {**_file("y.txt", "Y", "@@ -1 +1 @@\n-a\n+b"), "previous_filename": "x.txt"}
+    reverted = {**_file("y.txt", "Y", ""), "previous_filename": "x.txt"}
+
+    assert not _matches([reverted], [renamed], feature)
+    assert not _matches([renamed], [renamed], feature)
+
+
+def test_a_no_newline_marker_after_context_opens_no_change_block() -> None:
+    patch = "@@ -1,2 +1,2 @@\n-a\n+b\n tail\n\\ No newline at end of file"
+    blocks = base_merge.parse_blocks(_file("a.txt", "s", patch))
+
+    assert blocks is not None
+    assert [(b.start, b.lines) for b in blocks] == [(1, ("-a", "+b"))]
