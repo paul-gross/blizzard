@@ -49,7 +49,7 @@ from blizzard.runner.hub.client import (
 )
 from blizzard.runner.hub.identity import RunnerIdentityHolder
 from blizzard.runner.hub.internal.http_hub import HttpHubClient, HttpHubRunnerAdmin
-from blizzard.runner.hub.token_file import HubTokenFile
+from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.runner.listeners import ListenerError, Listeners, Uds
 from blizzard.runner.loop_wiring import LoopWiring, PeriodicDriver
 from blizzard.runner.runtime import ensure_current_revision, init_environment, migrate, migration_runner

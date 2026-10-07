@@ -18,7 +18,7 @@ from pathlib import Path
 import httpx
 
 from blizzard.runner.config import DEFAULT_TOKEN_ENV, ENV_HUB_URL
-from blizzard.runner.hub.token_file import HubTokenFile
+from blizzard.runner.hub.internal.token_file import HubTokenFile
 
 RUNNER_BIN = Path(sys.executable).parent / "blizzard-runner"
 

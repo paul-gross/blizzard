@@ -24,7 +24,8 @@ from blizzard.runner.hub.client import (
     TokenIdentity,
     TokenRefusal,
 )
-from blizzard.runner.hub.token_file import ENV_FILENAME, HubTokenFile
+from blizzard.runner.hub.internal.token_file import HubTokenFile
+from blizzard.runner.hub.token_file import ENV_FILENAME, assigned_token, with_token
 from tests.runner_init_fakes import FakeInitHub, FakeTokenIdentityReader
 
 _HUB = "http://hub.test:8421"
@@ -117,6 +118,33 @@ def test_the_token_file_reads_a_quoted_token_and_holds_none_when_absent(tmp_path
     assert tokens.held() == ""
     (tmp_path / ENV_FILENAME).write_text('BZ_HUB_TOKEN="quoted"\n')
     assert tokens.held() == "quoted"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("", ""),
+        ("# BZ_HUB_TOKEN=commented\n; BZ_HUB_TOKEN=also\nOTHER=x\n", ""),
+        ("BZ_HUB_TOKEN=old\nBZ_HUB_TOKEN='last'\n", "last"),
+        ('  BZ_HUB_TOKEN = "spaced" \n', "spaced"),
+    ],
+)
+def test_the_token_a_text_assigns_is_its_last_unquoted_assignment(text: str, expected: str) -> None:
+    assert assigned_token(text, "BZ_HUB_TOKEN") == expected
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("", "BZ_HUB_TOKEN=new\n"),
+        ("A=1\n", "A=1\nBZ_HUB_TOKEN=new\n"),
+        ("A=1\nBZ_HUB_TOKEN=x\n# keep\nBZ_HUB_TOKEN=y\n", "A=1\nBZ_HUB_TOKEN=new\n# keep\n"),
+    ],
+)
+def test_a_text_with_the_token_replaced_keeps_every_other_line(text: str, expected: str) -> None:
+    assert with_token(text, "BZ_HUB_TOKEN", "new") == expected
 
 
 @pytest.mark.component
