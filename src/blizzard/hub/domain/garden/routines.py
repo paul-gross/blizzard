@@ -290,6 +290,11 @@ class IReadRoutineRepository(Protocol):
 
     def get_by_name(self, name: str) -> Routine | None: ...
 
+    def get_many_by_name(self, names: Sequence[str]) -> dict[str, Routine]:
+        """The routines holding ``names``, keyed by name — ``get_by_name``'s batched plural
+        (``bzh:bulk-reconstitution``); a name no routine holds is absent."""
+        ...
+
     def list_all(self) -> list[Routine]: ...
 
     def is_retired(self, routine_id: str) -> bool:
@@ -341,6 +346,11 @@ class IReadRoutineScopeRepository(Protocol):
 
     def list_scopes(self, routine_id: str) -> list[str]:
         """Every scope slug linked to ``routine_id``, sorted."""
+        ...
+
+    def list_scopes_for(self, routine_ids: Sequence[str]) -> dict[str, list[str]]:
+        """``list_scopes`` for every id in ``routine_ids``, keyed by id — each id present,
+        its list empty when nothing links to it."""
         ...
 
     def list_routines(self, scope_slug: str) -> list[str]:

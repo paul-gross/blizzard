@@ -14,6 +14,7 @@ from sqlalchemy import insert, select, update
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 
+from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.config.changes import ConfigChange
 from blizzard.hub.domain.config.secrets import (
     IResealSecretRepository,
@@ -112,9 +113,12 @@ class SecretStore:
     def get_many(self, names: list[str]) -> dict[str, SecretMetadata]:
         if not names:
             return {}
+        found: dict[str, SecretMetadata] = {}
         with self._store.read("get_many") as conn:
-            rows = conn.execute(select(*_METADATA).where(secrets.c.name.in_(names))).all()
-        return {row.name: self._of(row) for row in rows}
+            for batch in id_batches(names):
+                rows = conn.execute(select(*_METADATA).where(secrets.c.name.in_(batch))).all()
+                found.update({row.name: self._of(row) for row in rows})
+        return found
 
     def list_all(self) -> list[SecretMetadata]:
         with self._store.read("list_all") as conn:

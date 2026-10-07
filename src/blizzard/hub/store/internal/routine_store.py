@@ -17,6 +17,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.roles import adapter_model
+from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.config.changes import ConfigChange
 from blizzard.hub.domain.config.work_sources import ConfigRevisionConflict
 from blizzard.hub.domain.garden.routines import IWriteRoutineRepository, Routine, RoutineNameTakenError
@@ -185,6 +186,17 @@ class RoutineStore:
     def get_by_name(self, name: str) -> Routine | None:
         return self._one(routines.c.name == name, "get_by_name")
 
+    def get_many_by_name(self, names: Sequence[str]) -> dict[str, Routine]:
+        found: dict[str, Routine] = {}
+        if not names:
+            return found
+        with self._store.read("get_many_by_name") as conn:
+            for batch in id_batches(names):
+                rows = conn.execute(select(routines).where(routines.c.name.in_(batch))).all()
+                retired = _retired_ids(conn, [row.routine_id for row in rows])
+                found.update({row.name: self._of(row, retired=row.routine_id in retired) for row in rows})
+        return found
+
     def _one(self, where, operation: str) -> Routine | None:  # type: ignore[no-untyped-def]
         with self._store.read(operation) as conn:
             row = conn.execute(select(routines).where(where)).one_or_none()
@@ -236,10 +248,15 @@ def _is_retired(conn: Connection, routine_id: str) -> bool:
     return bool(row.retired) if row is not None else False
 
 
-def _retired_ids(conn: Connection) -> set[str]:
-    return set(
-        conn.execute(newest_retired_select(routine_lifecycle_facts, routine_lifecycle_facts.c.routine_id)).scalars()
-    )
+def _retired_ids(conn: Connection, routine_ids: Sequence[str] | None = None) -> set[str]:
+    found: set[str] = set()
+    for batch in id_batches(routine_ids) if routine_ids is not None else [None]:
+        found.update(
+            conn.execute(
+                newest_retired_select(routine_lifecycle_facts, routine_lifecycle_facts.c.routine_id, batch)
+            ).scalars()
+        )
+    return found
 
 
 def _conforms_routine_store(x: RoutineStore) -> IWriteRoutineRepository:

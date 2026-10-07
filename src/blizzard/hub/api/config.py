@@ -189,16 +189,16 @@ def _stored(declaration: ConfigDeclaration, services: HubServices) -> StoredConf
     secrets = services.secret_catalog.get_many(list(declaration.secrets))
     retired = services.secret_catalog.retired_names()
     scopes: dict[str, DeclarableRecord] = {scope.slug: scope for scope in services.scopes.list_all()}
-    routines: dict[str, DeclarableRecord] = {}
-    linked: dict[str, tuple[str, ...]] = {}
     graph_names: set[str] = set()
+    names: list[str] = []
     for entry in declaration.routines:
         assert isinstance(entry, RoutineDeclaration)
         graph_names.add(entry.graph_name)
-        routine = services.routines.get_by_name(entry.name)
-        if routine is not None:
-            routines[routine.name] = routine
-            linked[routine.name] = tuple(services.routine_scopes.list_scopes(routine.routine_id))
+        names.append(entry.name)
+    stored = services.routines.get_many_by_name(names)
+    routines: dict[str, DeclarableRecord] = dict(stored)
+    scope_links = services.routine_scopes.list_scopes_for([r.routine_id for r in stored.values()])
+    linked = {name: tuple(scope_links[r.routine_id]) for name, r in stored.items()}
     return StoredConfig(
         work_sources=services.work_source_records.get_many([d.name for d in declaration.work_sources]),
         repositories=services.repository_records.get_many([d.name for d in declaration.repositories]),
@@ -304,6 +304,8 @@ def export_config(services: Annotated[HubServices, Depends(get_services)]) -> Co
     scope set included), with every field, and every active secret name, as a document that applies back as a
     no-op. Retired records are left out, since applying one would enable it."""
     retired = services.secret_catalog.retired_names()
+    live_routines = [r for r in sorted(services.routines.list_all(), key=lambda r: r.name) if not r.retired]
+    scope_links = services.routine_scopes.list_scopes_for([r.routine_id for r in live_routines])
     sources = services.work_source_records.list_all(include_retired=False)
     repositories = services.repository_records.list_all(include_retired=False)
     return ConfigDocument(
@@ -324,9 +326,8 @@ def export_config(services: Annotated[HubServices, Depends(get_services)]) -> Co
                 default_model=r.default_model,
                 default_effort=r.default_effort,
                 default_harnesses=r.default_harnesses,
-                scopes=services.routine_scopes.list_scopes(r.routine_id),
+                scopes=scope_links[r.routine_id],
             )
-            for r in sorted(services.routines.list_all(), key=lambda r: r.name)
-            if not r.retired
+            for r in live_routines
         ],
     )

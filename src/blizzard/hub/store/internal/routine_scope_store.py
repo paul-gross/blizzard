@@ -5,8 +5,11 @@ change row in the same transaction as the join write (``bzh:configured-record``)
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from sqlalchemy import delete, select
 
+from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.config.changes import ConfigChange
 from blizzard.hub.domain.config.work_sources import ConfigRevisionConflict
 from blizzard.hub.domain.garden.routines import IWriteRoutineScopeRepository, Routine
@@ -30,6 +33,21 @@ class RoutineScopeStore:
                 .order_by(routine_scopes.c.scope_slug)
             ).all()
         return [row.scope_slug for row in rows]
+
+    def list_scopes_for(self, routine_ids: Sequence[str]) -> dict[str, list[str]]:
+        linked: dict[str, list[str]] = {routine_id: [] for routine_id in routine_ids}
+        if not routine_ids:
+            return linked
+        with self._store.read("list_scopes_for") as conn:
+            for batch in id_batches(routine_ids):
+                rows = conn.execute(
+                    select(routine_scopes.c.routine_id, routine_scopes.c.scope_slug)
+                    .where(routine_scopes.c.routine_id.in_(batch))
+                    .order_by(routine_scopes.c.routine_id, routine_scopes.c.scope_slug)
+                ).all()
+                for row in rows:
+                    linked[row.routine_id].append(row.scope_slug)
+        return linked
 
     def list_routines(self, scope_slug: str) -> list[str]:
         with self._store.read("list_routines") as conn:
