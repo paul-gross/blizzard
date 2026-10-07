@@ -21,7 +21,7 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.garden.findings.model import FactEntry, Finding, FindingAlreadyExited, FindingExitService
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.errors import HubStoreError
-from blizzard.hub.store.internal.finding_store import FindingStore
+from blizzard.hub.store.internal.finding_store import FindingStore, lock_findings
 from tests.support import count_queries, hub_store_connections
 
 pytestmark = pytest.mark.component
@@ -423,3 +423,20 @@ def test_count_by_class_query_plans_as_an_index_search(tmp_path: Path) -> None:
             )
         ).all()
     assert any("ix_findings_routine_class" in str(row) for row in plan), plan
+
+
+def test_a_guarded_finding_write_holds_the_writer_lock_until_its_transaction_ends(tmp_path: Path) -> None:
+    store, engine = _store_and_engine(tmp_path)
+    _add(store)
+
+    with engine.connect() as winner, engine.connect() as loser:
+        lock_findings(winner, ["fin_1"])
+        loser.exec_driver_sql("PRAGMA busy_timeout=0")
+        with pytest.raises(sa.exc.OperationalError, match="locked"):
+            lock_findings(loser, ["fin_1"])
+        loser.rollback()
+        winner.commit()
+
+    entry = FactEntry(finding_id="fin_1", kind="resolved", at=_LATER, note="done")
+    assert store.record_facts([entry], expect={"fin_1": "live"}) == []
+    assert store.record_facts([entry], expect={"fin_1": "live"}) == ["fin_1"]

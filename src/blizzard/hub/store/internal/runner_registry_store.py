@@ -11,7 +11,7 @@ import json
 from collections.abc import Iterable, Sequence
 from datetime import datetime
 
-from sqlalchemy import Select, insert, select
+from sqlalchemy import Connection, insert, select
 
 from blizzard.foundation.store.batching import id_batches
 from blizzard.foundation.store.utc import as_utc
@@ -32,14 +32,17 @@ from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.newest_fact import newest_fact_select
 
 
-def locked_token_hash(runner_id: str) -> Select[tuple[str | None]]:
-    """The runner's current token hash, read under its registration row's lock (``FOR UPDATE``
-    where the backend has one; SQLite serializes writers instead)."""
-    return (
-        select(s.runner_registrations.c.token_hash)
-        .where(s.runner_registrations.c.runner_id == runner_id)
-        .with_for_update()
+def locked_token_hash(conn: Connection, runner_id: str) -> str | None:
+    """The runner's current token hash, read under its registration row's write lock — a no-op
+    ``UPDATE`` as the transaction's first statement, then the read (``bzh:store-exclusive-write``;
+    ``FOR UPDATE`` renders nothing on SQLite)."""
+    registrations = s.runner_registrations
+    conn.execute(
+        registrations.update().where(registrations.c.runner_id == runner_id).values(runner_id=registrations.c.runner_id)
     )
+    return conn.execute(
+        select(registrations.c.token_hash).where(registrations.c.runner_id == runner_id)
+    ).scalar_one_or_none()
 
 
 class RunnerRegistryStore:
@@ -377,7 +380,7 @@ class RunnerRegistryStore:
         # The revocation fact and the nulled hash land in one transaction, so a token always resolves or
         # reads as revoked; the row lock orders it against a concurrent rotation.
         with self._store.write("revoke_token") as conn:
-            token_hash = conn.execute(locked_token_hash(runner_id)).scalar_one_or_none()
+            token_hash = locked_token_hash(conn, runner_id)
             if token_hash is None:
                 return None
             result = conn.execute(
@@ -397,7 +400,7 @@ class RunnerRegistryStore:
         # The replaced hash's revocation and the new hash land in one transaction, and the row lock makes a
         # concurrent rotation read the hash this one stored, so every replaced hash is revoked.
         with self._store.write("rotate_token") as conn:
-            replaced = conn.execute(locked_token_hash(rotation.runner_id)).scalar_one_or_none()
+            replaced = locked_token_hash(conn, rotation.runner_id)
             revocation_id: int | None = None
             if replaced is not None:
                 result = conn.execute(

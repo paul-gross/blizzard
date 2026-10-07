@@ -1,0 +1,16 @@
+id: bzh:store-no-for-update
+snapshots:
+  ? |
+    conn.execute(select(t.c.x).where(t.c.id == key).with_for_update(of=t))
+  : labels:
+    - source: select(t.c.x).where(t.c.id == key).with_for_update(of=t)
+      style: primary
+      start: 13
+      end: 69
+  ? |
+    stmt = select(table.c.id).with_for_update()
+  : labels:
+    - source: select(table.c.id).with_for_update()
+      style: primary
+      start: 7
+      end: 43
