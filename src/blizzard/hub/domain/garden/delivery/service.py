@@ -5,6 +5,7 @@ orders the reads and the write."""
 
 from __future__ import annotations
 
+import functools
 from collections.abc import Sequence
 
 from blizzard.hub.domain.chunk.model import Chunk
@@ -12,11 +13,13 @@ from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsReposit
 from blizzard.hub.domain.garden.delivery.materialize import DeliveryOutcome, GardenDelivery, delivery_replay_outcome
 from blizzard.hub.domain.garden.delivery.validation import (
     CommitResolver,
+    GardenDeliveryRejected,
     select_delta_artifacts,
     select_proposal_artifacts,
     validate_delivery,
 )
 from blizzard.hub.domain.garden.findings.bucket import FindingBucketReader
+from blizzard.hub.domain.garden.findings.model import GUARD_ATTEMPTS
 from blizzard.hub.domain.garden.formats import IGardenFormats
 from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.domain.graph.model import Node
@@ -25,7 +28,9 @@ from blizzard.hub.domain.graph.model import Node
 class GardenDeliveryRecorder:
     """Records one delivering node-step's garden delivery. Raises
     :class:`~blizzard.hub.domain.garden.delivery.validation.GardenDeliveryRejected` when an
-    artifact is missing or fails validation, nothing written."""
+    artifact is missing or fails validation, nothing written. A finding that moves between validation and
+    the write (``GUARD_LOST``) is re-validated against a freshly read bucket, so the result is the same as
+    if the mover had landed first; it is refused as rejected once :data:`GUARD_ATTEMPTS` run out."""
 
     def __init__(
         self,
@@ -65,19 +70,29 @@ class GardenDeliveryRecorder:
         )
         if replay is not None:
             return replay
-        validated = validate_delivery(
-            run=run,
-            delta_artifacts=deltas.contents,
-            proposal_artifacts=proposals.contents,
-            bucket=self._buckets.for_run(run),
-            formats=self._formats,
-            resolve_commit=self._resolve_commit,
-        )
-        return self._materialize.deliver(
-            validated,
-            chunk=chunk,
-            node=node,
-            epoch=epoch,
-            delta_artifact_ids=list(deltas.artifact_ids.values()),
-            proposal_artifact_ids=[proposals.artifact_ids[name] for name in validated.proposal_sources],
+        # One memo across every attempt: a retry never re-resolves a commit, so the delivery spends the
+        # fleet-wide hub-exec slot at most once per commit.
+        resolve_commit = functools.lru_cache(maxsize=None)(self._resolve_commit) if self._resolve_commit else None
+        for _ in range(GUARD_ATTEMPTS):
+            validated = validate_delivery(
+                run=run,
+                delta_artifacts=deltas.contents,
+                proposal_artifacts=proposals.contents,
+                bucket=self._buckets.for_run(run),
+                formats=self._formats,
+                resolve_commit=resolve_commit,
+            )
+            outcome = self._materialize.deliver(
+                validated,
+                chunk=chunk,
+                node=node,
+                epoch=epoch,
+                delta_artifact_ids=list(deltas.artifact_ids.values()),
+                proposal_artifact_ids=[proposals.artifact_ids[name] for name in validated.proposal_sources],
+            )
+            if outcome is not DeliveryOutcome.GUARD_LOST:
+                return outcome
+        raise GardenDeliveryRejected(
+            "findings this delivery names kept changing while it was being recorded — nothing was written; "
+            "re-run the delivery"
         )

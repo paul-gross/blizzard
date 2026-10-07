@@ -524,15 +524,16 @@ def deliver_facts(
     return [fact for fact in facts if fact is not None]
 
 
-#: How many times a finding verb re-reads and re-asks the model after losing its state guard.
-_GUARD_ATTEMPTS = 3
+#: How many times a finding write re-reads and re-asks the model after losing its state guard — shared by
+#: the exit verbs and the garden delivery.
+GUARD_ATTEMPTS = 3
 
 
 class FindingExitService:
     """The human-driven exit verbs, `reopen`, and the provisional, delivery-triggered `deliver`, over
     already-loaded :class:`Finding` objects; each writes the batch's facts in one all-or-nothing
-    `record_facts` guarded on the states they were built from, re-asking the model when a concurrent
-    write wins the guard."""
+    `record_facts` guarded on the states they were built from — and, for `supersede`, on the absorber's
+    liveness — re-asking the model against freshly read findings when a concurrent write wins the guard."""
 
     def __init__(self, *, repo: IWriteFindingRepository, clock: IClock) -> None:
         self._repo = repo
@@ -548,7 +549,7 @@ class FindingExitService:
         a delivery alone declaring the ground changed."""
         at = self._clock.now()
         self._record(
-            findings, lambda batch: deliver_facts(batch, note=note, actor=actor, at=at, proposal_id=proposal_id)
+            findings, lambda batch, _: deliver_facts(batch, note=note, actor=actor, at=at, proposal_id=proposal_id)
         )
 
     def confirm_gone(self, findings: Sequence[Finding], *, note: str, actor: str) -> None:
@@ -562,7 +563,11 @@ class FindingExitService:
 
     def supersede(self, findings: Sequence[Finding], absorber: Finding, *, note: str, actor: str) -> None:
         at = self._clock.now()
-        self._record(findings, lambda batch: supersede_facts(batch, absorber, note=note, actor=actor, at=at))
+        self._record(
+            findings,
+            lambda batch, companions: supersede_facts(batch, companions[0], note=note, actor=actor, at=at),
+            companions=[absorber],
+        )
 
     def reopen(self, findings: Sequence[Finding], *, note: str, actor: str) -> None:
         self._exit(findings, kind="reopened", note=note, actor=actor)
@@ -572,17 +577,28 @@ class FindingExitService:
     ) -> None:
         at = self._clock.now()
         self._record(
-            findings, lambda batch: exit_facts(batch, kind, note=note, actor=actor, at=at, proposal_id=proposal_id)
+            findings, lambda batch, _: exit_facts(batch, kind, note=note, actor=actor, at=at, proposal_id=proposal_id)
         )
 
-    def _record(self, findings: Sequence[Finding], facts_for: Callable[[Sequence[Finding]], list[FactEntry]]) -> None:
+    def _record(
+        self,
+        findings: Sequence[Finding],
+        facts_for: Callable[[Sequence[Finding], Sequence[Finding]], list[FactEntry]],
+        *,
+        companions: Sequence[Finding] = (),
+    ) -> None:
+        """`companions` receive no fact, but `facts_for` read their state: they are guarded on it and
+        reloaded with the batch, so a retry re-asks the model against a fresh one."""
         batch = list(findings)
-        for _ in range(_GUARD_ATTEMPTS):
-            if not self._repo.record_facts(facts_for(batch), expect={f.finding_id: f.state for f in batch}):
+        others = list(companions)
+        for _ in range(GUARD_ATTEMPTS):
+            expect = {f.finding_id: f.state for f in (*batch, *others)}
+            if not self._repo.record_facts(facts_for(batch, others), expect=expect):
                 return
-            reloaded = self._repo.get_many([f.finding_id for f in batch])
+            reloaded = self._repo.get_many(list(expect))
             batch = [reloaded.get(f.finding_id, f) for f in batch]
-        facts_for(batch)
+            others = [reloaded.get(f.finding_id, f) for f in others]
+        facts_for(batch, others)
         raise FindingWriteContended([f.finding_id for f in batch])
 
 

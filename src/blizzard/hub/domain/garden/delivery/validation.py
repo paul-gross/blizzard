@@ -72,6 +72,9 @@ class ValidatedDelivery:
     introduced_at: dict[tuple[str, str], datetime | None] = field(default_factory=dict)
     #: Every citable finding's :meth:`Finding.run_gone`: the fact kind and actor a run's `gone` lands as.
     gone_settlements: dict[str, tuple[str, str | None]] = field(default_factory=dict)
+    #: Finding id → the state validation judged it in, for every finding an `observed`/`gone` op
+    #: names — what the write re-checks under the finding's row lock.
+    expect: dict[str, str] = field(default_factory=dict)
 
 
 @domain_model
@@ -289,6 +292,9 @@ def validate_delivery(
     for proposal in proposals:
         check_proposal(proposal, run=run, live_findings=live_findings, exited_ids=exited_ids, known_refs=known_refs)
 
+    states = {f.finding_id: f.state for f in bucket.citable}
+    expect = {op.id: states[op.id] for delta in deltas for op in delta.findings if not isinstance(op, FindingAddOp)}
+
     return ValidatedDelivery(
         run=run,
         deltas=deltas,
@@ -296,6 +302,7 @@ def validate_delivery(
         proposal_sources=proposal_sources,
         introduced_at=introduced_at,
         gone_settlements=gone_settlements,
+        expect=expect,
     )
 
 

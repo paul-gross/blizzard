@@ -66,10 +66,39 @@ def _decode_finding_cursor(cursor: str) -> str:
 
 def lock_findings(conn: Connection, finding_ids: Sequence[str]) -> None:
     """Take the write lock of each named finding row — a no-op ``UPDATE``, which must be the
-    transaction's first statement (``bzh:store-exclusive-write``; ``FOR UPDATE`` renders nothing on SQLite)."""
+    transaction's first statement, or follow only the chunk-row lock where one is taken
+    (``bzh:store-exclusive-write``; ``FOR UPDATE`` renders nothing on SQLite)."""
     conn.execute(
         findings.update().where(findings.c.finding_id.in_(finding_ids)).values(finding_id=findings.c.finding_id)
     )
+
+
+def moved_findings(conn: Connection, expect: Mapping[str, str]) -> list[str]:
+    """The ids in `expect` whose state, re-derived under their row locks (`lock_findings`, taken
+    in sorted order), is no longer the state they were expected in — the one derive-and-compare
+    every guarded finding write shares."""
+    guarded = sorted(expect)
+    for batch in id_batches(guarded):
+        lock_findings(conn, batch)
+    current = facts_by_finding(conn, guarded)
+    return [fid for fid in guarded if derive_liveness(current[fid]).state != expect[fid]]
+
+
+def facts_by_finding(conn: Connection, finding_ids: list[str]) -> dict[str, list[FindingFact]]:
+    """One query per `id_batches` batch over `finding_ids` (index-backed on
+    `ix_finding_facts_finding_id_id`), each finding's facts oldest first — `list_across_routines`
+    can hand this an unbounded id list, and one unbatched `IN (...)` would eventually exceed
+    the driver's own per-statement bind-parameter ceiling."""
+    grouped: dict[str, list[FindingFact]] = {finding_id: [] for finding_id in finding_ids}
+    for batch in id_batches(finding_ids):
+        rows = conn.execute(
+            select(finding_facts)
+            .where(finding_facts.c.finding_id.in_(batch))
+            .order_by(finding_facts.c.finding_id, finding_facts.c.id.asc())
+        ).all()
+        for r in rows:
+            grouped[r.finding_id].append(FindingStore._fact_of(r))
+    return grouped
 
 
 class FindingStore:
@@ -159,11 +188,7 @@ class FindingStore:
             return []
         with self._store.write("record_facts") as conn:
             if expect:
-                guarded = sorted(expect)
-                for batch in id_batches(guarded):
-                    lock_findings(conn, batch)
-                current = self._facts_for_many(conn, guarded)
-                moved = [fid for fid in guarded if derive_liveness(current[fid]).state != expect[fid]]
+                moved = moved_findings(conn, expect)
                 if moved:
                     return moved
             conn.execute(
@@ -318,23 +343,9 @@ class FindingStore:
         ).all()
         return [self._fact_of(r) for r in rows]
 
-    def _facts_for_many(self, conn, finding_ids: list[str]) -> dict[str, list[FindingFact]]:  # type: ignore[no-untyped-def]
-        """One query per `id_batches` batch over `finding_ids` (index-backed on
-        `ix_finding_facts_finding_id_id`) — `list_across_routines` can hand
-        this an unbounded id list, and one unbatched `IN (...)` would eventually exceed
-        the driver's own per-statement bind-parameter ceiling."""
-        grouped: dict[str, list[FindingFact]] = {finding_id: [] for finding_id in finding_ids}
-        if not finding_ids:
-            return grouped
-        for batch in id_batches(finding_ids):
-            rows = conn.execute(
-                select(finding_facts)
-                .where(finding_facts.c.finding_id.in_(batch))
-                .order_by(finding_facts.c.finding_id, finding_facts.c.id.asc())
-            ).all()
-            for r in rows:
-                grouped[r.finding_id].append(self._fact_of(r))
-        return grouped
+    @staticmethod
+    def _facts_for_many(conn, finding_ids: list[str]) -> dict[str, list[FindingFact]]:  # type: ignore[no-untyped-def]
+        return facts_by_finding(conn, finding_ids)
 
     @staticmethod
     def _fact_of(row) -> FindingFact:  # type: ignore[no-untyped-def]

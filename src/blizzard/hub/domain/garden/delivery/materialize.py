@@ -32,6 +32,10 @@ class DeliveryOutcome(Enum):
     RECORDED = "recorded"  # this call minted every row
     ALREADY_RECORDED = "already_recorded"  # a prior call's marker was found; nothing minted
     FENCED = "fenced"  # the chunk is terminal or the delivery's epoch is stale; nothing minted
+    #: A finding the plan's facts name moved off the state validation judged it in; nothing minted,
+    #: not even the marker. Only the store returns it and only `GardenDeliveryRecorder` consumes it —
+    #: the recorder re-validates against fresh state, so it never leaves the recorder.
+    GUARD_LOST = "guard_lost"
 
 
 @domain_model
@@ -129,6 +133,9 @@ class DeliveryPlan:
     run: RunContext
     deltas: list[DeltaMaterialization]
     proposals: list[NewProposal]
+    #: Finding id → the state validation judged it in, for every finding an `observed`/`gone` op
+    #: names — the store re-checks it under the finding's row lock and returns ``GUARD_LOST`` on a move.
+    expect: dict[str, str] = field(default_factory=dict)
 
 
 # --- Repository seam (I-prefix — bzh:repository-split; write-only, this phase mints
@@ -137,7 +144,9 @@ class DeliveryPlan:
 
 class IWriteGardenDeliveryRepository(Protocol):
     """Materialize one :class:`DeliveryPlan`, atomically and idempotently, keyed on the
-    ``(chunk_id, node_id, epoch)`` marker the plan carries."""
+    ``(chunk_id, node_id, epoch)`` marker the plan carries. The findings in ``plan.expect`` are
+    re-checked under their row locks before any fact lands; one that moved yields
+    ``DeliveryOutcome.GUARD_LOST`` with nothing written."""
 
     def deliver(self, plan: DeliveryPlan, *, admission: EpochAdmission) -> DeliveryOutcome: ...
 
@@ -253,6 +262,7 @@ def build_delivery_plan(
         run=validated.run,
         deltas=deltas,
         proposals=proposals,
+        expect=dict(validated.expect),
     )
 
 
