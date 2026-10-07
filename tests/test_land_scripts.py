@@ -2347,3 +2347,164 @@ def test_a_no_newline_marker_after_context_opens_no_change_block() -> None:
 
     assert blocks is not None
     assert [(b.start, b.lines) for b in blocks] == [(1, ("-a", "+b"))]
+
+
+# --- the base-merge proof, driven directly -----------------------------------------------
+
+_Block = base_merge.Block
+
+
+def _patch_file(patch: str, additions: Any, deletions: Any) -> dict[str, Any]:
+    return {"patch": patch, "additions": additions, "deletions": deletions}
+
+
+def test_a_patch_parses_into_blocks_positioned_in_old_file_lines() -> None:
+    patch = "@@ -1,7 +1,8 @@\n a\n-b\n+B\n+B2\n c\n d\n+e\n f\n-g\n h\n@@ -20,2 +21,3 @@\n x\n+y\n z\n"
+
+    assert base_merge.parse_blocks(_patch_file(patch, 4, 2)) == [
+        _Block(2, 1, 2, ("-b", "+B", "+B2")),
+        _Block(5, 0, 1, ("+e",)),
+        _Block(6, 1, 0, ("-g",)),
+        _Block(21, 0, 1, ("+y",)),
+    ]
+
+
+def test_a_single_line_hunk_header_means_a_count_of_one() -> None:
+    assert base_merge.parse_blocks(_patch_file("@@ -5 +5 @@\n-a\n+b", 1, 1)) == [_Block(5, 1, 1, ("-a", "+b"))]
+
+
+def test_a_pure_insertion_hunk_starts_after_the_old_line_it_names() -> None:
+    assert base_merge.parse_blocks(_patch_file("@@ -3,0 +4,2 @@\n+x\n+y", 2, 0)) == [_Block(4, 0, 2, ("+x", "+y"))]
+
+
+def test_a_pure_deletion_is_a_valid_count_of_zero_additions() -> None:
+    assert base_merge.parse_blocks(_patch_file("@@ -2 +1,0 @@\n-x", 0, 1)) == [_Block(2, 1, 0, ("-x",))]
+
+
+def test_the_no_newline_marker_is_content_of_its_block() -> None:
+    patch = "@@ -1 +1 @@\n-a\n\\ No newline at end of file\n+b\n\\ No newline at end of file\n"
+
+    assert base_merge.parse_blocks(_patch_file(patch, 1, 1)) == [
+        _Block(1, 1, 1, ("-a", "\\ No newline at end of file", "+b", "\\ No newline at end of file"))
+    ]
+
+
+@pytest.mark.parametrize(
+    ("patch", "additions", "deletions"),
+    [
+        ("@@ -1,2 +1,2 @@\n-a\n+b", 1, 1),
+        ("@@ -1 +1 @@\n-a\n+b\n", 2, 1),
+        ("@@ -1 +1 @@\n-a\n+b\n", 1, 2),
+        ("@@ -1 +1 @@\n-a\n+b\n?odd", 1, 1),
+        ("not a hunk\n-a\n+b", 1, 1),
+        ("@@ -1 +1 @@\n-a\n+b\n@@ -9 +9 @@\n-c\n+d", 1, 1),
+        ("@@ -1 +1 @@\n-a\n+b", True, 1),
+        ("@@ -1 +1 @@\n-a\n+b", None, 1),
+        ("@@ -1 +1 @@\n-a\n+b", 1, None),
+        (None, 1, 1),
+    ],
+    ids=[
+        "header-counts-disagree",
+        "additions-disagree",
+        "deletions-disagree",
+        "unknown-line-kind",
+        "no-hunk-header",
+        "later-hunk-totals-disagree",
+        "bool-count",
+        "missing-additions",
+        "missing-deletions",
+        "no-patch",
+    ],
+)
+def test_a_patch_that_cannot_be_trusted_complete_parses_to_nothing(patch: Any, additions: Any, deletions: Any) -> None:
+    assert base_merge.parse_blocks(_patch_file(patch, additions, deletions)) is None
+
+
+def test_a_translation_accumulates_the_shift_of_every_feature_block_before_it() -> None:
+    feature = [_Block(1, 1, 3, ("-a",)), _Block(5, 0, 2, ("+b",))]
+
+    assert base_merge._translate([_Block(20, 1, 1, ("-c", "+d"))], feature) == [_Block(24, 1, 1, ("-c", "+d"))]
+
+
+def test_a_base_block_abutting_a_feature_block_is_not_translated() -> None:
+    assert base_merge._translate([_Block(3, 2, 1, ())], [_Block(5, 1, 1, ())]) is None
+    assert base_merge._translate([_Block(6, 1, 1, ())], [_Block(5, 1, 1, ())]) is None
+    assert base_merge._translate([_Block(3, 1, 1, ())], [_Block(5, 1, 1, ())]) == [_Block(3, 1, 1, ())]
+
+
+def test_a_files_list_is_refused_when_truncated_or_malformed() -> None:
+    assert base_merge.files_by_name({"files": [{"filename": "a"}]}) == {"a": {"filename": "a"}}
+    assert base_merge.files_by_name({"files": [{"filename": "a"}] * base_merge.COMPARE_FILES_MAX}) is None
+    assert base_merge.files_by_name({"files": [{"filename": 3}]}) is None
+    assert base_merge.files_by_name({"files": ["a"]}) is None
+    assert base_merge.files_by_name({}) is None
+
+
+def test_a_merge_whose_own_files_are_unreadable_is_not_proven() -> None:
+    base_side = {"files": [_file("a.txt", "b")]}
+
+    assert base_merge.contributes_only_base_change({"files": "x"}, base_side, {"files": []}) is False
+    assert base_merge.contributes_only_base_change({"files": []}, {"files": "x"}, {"files": []}) is False
+    assert base_merge.contributes_only_base_change({"files": []}, base_side, {"files": "x"}) is False
+
+
+def _bare_compare(**fields: Any) -> dict[tuple[str, str], tuple[int, Any]]:
+    return {("GET", f"http://forge/repos/{_REPO}/compare/sha1...merge1"): (200, fields)}
+
+
+def test_a_head_equal_to_the_submitted_commit_has_no_offenders() -> None:
+    assert land_pr_ci.gate_head(_land_run({}), _REPO, "sha1", "sha1").offenders == []
+
+
+def test_an_identical_comparison_has_no_offenders() -> None:
+    assert _gate_offenders(_compare("sha1", "merge1", status="identical")) == []
+
+
+def test_the_commit_count_is_read_from_total_commits_before_ahead_by() -> None:
+    commits = [_commit("merge1", "sha1")]
+    responses = _bare_compare(status="ahead", total_commits=1, ahead_by=99, commits=commits)
+
+    assert _gate_offenders(responses) == ["merge1 (not a merge of the base branch)"]
+
+
+@pytest.mark.parametrize("commits", [None, "x"], ids=["missing", "not-a-list"])
+def test_an_unreadable_commit_list_is_refused(commits: Any) -> None:
+    responses = _bare_compare(status="ahead", total_commits=1, commits=commits)
+
+    assert _gate_offenders(responses) == ["the commit list between sha1 and merge1 is truncated or unreadable"]
+
+
+def test_a_non_merge_does_not_hide_the_merges_below_it() -> None:
+    responses = {
+        **_compare("sha1", "merge2", commits=[_commit("merge1", "sha1", "b1"), _commit("merge2", "merge1")]),
+        **_compare("main", "b1", status="diverged"),
+    }
+
+    assert _gate_offenders(responses, head="merge2") == [
+        "merge2 (not a merge of the base branch)",
+        "merge1 (merges b1, which the base branch does not hold)",
+    ]
+
+
+def test_an_unprovable_merge_does_not_hide_the_merges_below_it() -> None:
+    responses = {
+        **_compare("sha1", "merge2", commits=[_commit("merge1", "sha1", "b1"), _commit("merge2", "merge1", "b2")]),
+        **_compare("main", "b1", status="diverged"),
+        **_compare("main", "b2", status="behind"),
+        **_unreadable_compare("merge1", "merge2"),
+        **_compare("merge1", "b2"),
+    }
+
+    assert _gate_offenders(responses, head="merge2") == [
+        "merge2 (its content could not be compared with the base branch's change)",
+        "merge1 (merges b1, which the base branch does not hold)",
+    ]
+
+
+def test_a_merge_adding_content_beyond_the_base_change_is_named() -> None:
+    merged = [_file("a.txt", "m", "@@ -1 +1 @@\n-a\n+z")]
+    base_side = [_file("a.txt", "b", "@@ -1 +1 @@\n-a\n+b")]
+
+    assert _gate_offenders(_base_merge(merged_files=merged, base_files=base_side)) == [
+        "merge1 (adds content beyond the base branch's change)"
+    ]
