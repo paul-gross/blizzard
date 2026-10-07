@@ -19,3 +19,7 @@
   border-color: var(--amber-hi);
   color: var(--amber-hi);
 }
+.chip:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}

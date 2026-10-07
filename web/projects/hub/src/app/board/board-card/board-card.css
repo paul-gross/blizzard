@@ -182,20 +182,8 @@
   gap: 6px;
 }
 .card-promote {
-  align-self: flex-start;
-  border: 1px solid var(--amber-dim);
-  background: transparent;
-  color: var(--amber-hi);
-  padding: 1px 6px;
-  font: inherit;
-  font-size: var(--fs-label);
-  letter-spacing: 0.14em;
-  cursor: pointer;
-}
-.card-promote:hover,
-.card-promote:focus-visible {
-  border-color: var(--amber);
-  outline: none;
+  --kit-button-pad: 1px 6px;
+  --kit-button-fs: var(--fs-label);
 }
 /* The blocked marking beside the status: "BLOCKED BY" carries `.st`'s own engraved
    label style, and the prerequisite it names reads gold against it — the one part of

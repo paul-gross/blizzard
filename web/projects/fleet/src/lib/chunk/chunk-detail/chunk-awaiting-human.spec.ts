@@ -179,6 +179,8 @@ describe('ChunkAwaitingHuman', () => {
     expect(el.querySelector('[data-testid="decision-node"]')?.textContent).toContain('approve-gate');
     const choices = [...el.querySelectorAll('[data-testid="decision-choice"]')].map((c) => c.textContent?.trim());
     expect(choices).toEqual(['approve', 'reject']);
+    expect(el.querySelector('[data-testid="decision-choice"]')?.closest('[title]')?.getAttribute('title')).toBe('Ship it.');
+    expect(el.querySelector('[data-testid="decision-choice"]')?.hasAttribute('aria-pressed')).toBe(false);
     expect(el.querySelector('[data-testid="open-question"]')).toBeNull();
   });
 

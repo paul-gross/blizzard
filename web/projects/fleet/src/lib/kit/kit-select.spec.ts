@@ -8,6 +8,7 @@ const OPTIONS: readonly KitChipOption[] = [
   { value: 'all', label: 'All routines', testid: 'opt-all' },
   { value: 'a', label: 'Alpha', testid: 'opt-a' },
   { value: 'b', label: 'Bravo', testid: 'opt-b' },
+  { value: 'locked', label: 'Locked', testid: 'opt-locked', disabled: true },
 ];
 
 @Component({
@@ -20,6 +21,7 @@ const OPTIONS: readonly KitChipOption[] = [
       testid="the-select"
       [options]="options"
       [selectedValue]="selected()"
+      [disabled]="disabled()"
       (choose)="picks.push($event)"
     />
     <button type="button" data-testid="outside">outside</button>
@@ -29,6 +31,7 @@ class TestHost {
   options = OPTIONS;
   selected = signal<string | null>('a');
   label = signal<string | null>(null);
+  disabled = signal(false);
   picks: string[] = [];
 }
 
@@ -75,7 +78,7 @@ describe('KitSelect', () => {
     expect(listbox?.getAttribute('aria-label')).toBe('Routine filter');
     expect(trigger()?.getAttribute('aria-controls')).toBe(listbox?.id);
     const options = [...document.body.querySelectorAll('[role="option"]')];
-    expect(options.map((o) => o.textContent?.trim())).toEqual(['All routines', 'Alpha', 'Bravo']);
+    expect(options.map((o) => o.textContent?.trim())).toEqual(['All routines', 'Alpha', 'Bravo', 'Locked']);
     expect(inOverlay('[data-testid="opt-a"]')?.getAttribute('aria-selected')).toBe('true');
     expect(inOverlay('[data-testid="opt-b"]')?.getAttribute('aria-selected')).toBe('false');
   });
@@ -129,6 +132,32 @@ describe('KitSelect', () => {
     keydown(document.activeElement, 'Enter', 13);
     await fixture.whenStable();
     expect(fixture.componentInstance.picks).toEqual(['b']);
+  });
+
+  it('skips unavailable options by keyboard and refuses pointer and synthetic picks', async () => {
+    await open();
+    await fixture.whenStable();
+    const locked = inOverlay('[data-testid="opt-locked"]');
+    expect(locked?.getAttribute('aria-disabled')).toBe('true');
+    locked?.click();
+    keydown(locked, 'Enter', 13);
+    await fixture.whenStable();
+    expect(fixture.componentInstance.picks).toEqual([]);
+    expect(trigger()?.getAttribute('aria-expanded')).toBe('true');
+
+    keydown(inOverlay('[role="listbox"]'), 'ArrowDown', 40);
+    expect(document.activeElement).toBe(inOverlay('[data-testid="opt-b"]'));
+    keydown(inOverlay('[role="listbox"]'), 'ArrowDown', 40);
+    expect(document.activeElement).not.toBe(locked);
+  });
+
+  it('disables the trigger and refuses to open', async () => {
+    fixture.componentInstance.disabled.set(true);
+    await fixture.whenStable();
+    expect(trigger()?.hasAttribute('disabled')).toBe(true);
+    trigger()?.click();
+    await fixture.whenStable();
+    expect(inOverlay('[role="listbox"]')).toBeNull();
   });
 
   it('closes on Escape without emitting, returning focus to the trigger', async () => {

@@ -5,17 +5,19 @@ import { KitChips, type KitChipOption } from './kit-chips';
 
 const OPTIONS: KitChipOption[] = [
   { value: 'a', label: 'Option A', testid: 'chip-a' },
-  { value: 'b', label: 'Option B', testid: 'chip-b' },
+  { value: 'b', label: 'Option B', testid: 'chip-b', disabled: true },
 ];
 
 @Component({
   selector: 'fleet-test-host',
   imports: [KitChips],
-  template: `<fleet-kit-chips [options]="options" [selectedValue]="selected()" (choose)="chosen = $event" />`,
+  template: `<fleet-kit-chips [options]="options" [selectedValue]="selected()" [action]="action()" [disabled]="disabled()" (choose)="chosen = $event" />`,
 })
 class TestHost {
   options = OPTIONS;
   readonly selected = signal<string | null>(null);
+  readonly action = signal(false);
+  readonly disabled = signal(false);
   chosen: string | null = null;
 }
 
@@ -51,8 +53,8 @@ describe('KitChips', () => {
     expect(chips[0].getAttribute('aria-pressed')).toBe('true');
     expect(chips[1].getAttribute('aria-pressed')).toBe('false');
 
-    (chips[1] as HTMLButtonElement).click();
-    expect(fixture.componentInstance.chosen).toBe('b');
+    (chips[0] as HTMLButtonElement).click();
+    expect(fixture.componentInstance.chosen).toBe('a');
   });
 
   it('renders each chip fully rounded, matching the soft-pill vocabulary', async () => {
@@ -71,5 +73,27 @@ describe('KitChips', () => {
 
     expect(el.querySelector('[data-testid="chip-a"]')?.textContent?.trim()).toBe('Option A');
     expect(el.querySelector('[data-testid="chip-b"]')?.textContent?.trim()).toBe('Option B');
+  });
+
+  it('renders one-shot actions without pressed state and blocks disabled choices', async () => {
+    const fixture = TestBed.createComponent(TestHost);
+    fixture.componentInstance.action.set(true);
+    fixture.componentInstance.selected.set('a');
+    await fixture.whenStable();
+    const chips = (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('.chip');
+    expect(chips[0].hasAttribute('aria-pressed')).toBe(false);
+    expect(chips[0].classList.contains('selected')).toBe(false);
+    expect(chips[1].disabled).toBe(true);
+    chips[1].click();
+    expect(fixture.componentInstance.chosen).toBeNull();
+    chips[0].click();
+    expect(fixture.componentInstance.chosen).toBe('a');
+
+    fixture.componentInstance.chosen = null;
+    fixture.componentInstance.disabled.set(true);
+    await fixture.whenStable();
+    chips[0].click();
+    expect(chips[0].disabled).toBe(true);
+    expect(fixture.componentInstance.chosen).toBeNull();
   });
 });

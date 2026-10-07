@@ -87,6 +87,22 @@ module.exports = defineConfig([
     ],
     rules: {},
   },
+  // Kit owns native control chrome. A distinct native interaction needs a
+  // reasoned, single-element template suppression rather than a new CSS name.
+  {
+    // Each Angular project loads this shared config from its own directory.
+    files: ["**/src/**/*.html"],
+    ignores: ["**/src/lib/kit/**/*.html", "src/lib/kit/**/*.html"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "Element[name=/^(button|select|input)$/]",
+          message: "Use the fleet kit control; explain a genuinely distinct native interaction in an element-level ESLint suppression.",
+        },
+      ],
+    },
+  },
   // A sub-barrel names what's re-stackable outside its feature directory
   // (`bzh:frontend-disjoint-diffs`); a blanket `export *` makes that decision unmakeable,
   // since every symbol added under the feature directory becomes public with no diff on

@@ -33,15 +33,14 @@
     </section>
     <section class="col center">
       <fleet-kit-panel class="chunks-panel" data-testid="chunks-pane" label="chunks on this machine · derived status">
-        <label class="chunk-filter-bar" data-testid="chunk-filter-bar">
-          <input
-            type="checkbox"
-            data-testid="chunk-filter-show-all"
+        <div class="chunk-filter-bar" data-testid="chunk-filter-bar">
+          <fleet-kit-checkbox
+            label="show all"
+            testid="chunk-filter-show-all"
             [checked]="showAllChunks()"
-            (change)="toggleShowAllChunks.emit(!showAllChunks())"
+            (checkedChange)="toggleShowAllChunks.emit($event)"
           />
-          show all
-        </label>
+        </div>
         <fleet-kit-async-state
           [state]="chunksTriadState()"
           loadingText="LOADING…"

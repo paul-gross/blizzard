@@ -26,17 +26,14 @@
               @if (isSelf(user) || !isAssignableRole(user.role)) {
                 <span data-testid="users-table-role-static">{{ user.role }}{{ isSelf(user) ? ' (you)' : '' }}</span>
               } @else {
-                <select
-                  data-testid="users-table-role-select"
+                <fleet-kit-select
+                  [ariaLabel]="'Role for ' + user.username"
+                  testid="users-table-role-select"
+                  [options]="roleOptions(user)"
+                  [selectedValue]="user.role"
                   [disabled]="isPending(user) || !user.assignable_roles?.length"
-                  (change)="onRoleChange(user.user_id, $event)"
-                >
-                  @for (role of assignableRoles(); track role) {
-                    <option [value]="role" [selected]="role === user.role" [disabled]="!user.assignable_roles?.includes(role)">
-                      {{ role }}
-                    </option>
-                  }
-                </select>
+                  (choose)="onRoleChange(user.user_id, $event)"
+                />
               }
             </td>
             <td>

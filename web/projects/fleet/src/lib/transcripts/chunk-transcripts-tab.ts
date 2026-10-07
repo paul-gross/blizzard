@@ -4,7 +4,9 @@ import type { TransitionView } from '../api/hub';
 import { harnessName } from '../core/harness-name';
 import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
 import { KitBadge } from '../kit/kit-badge';
+import { KitButton } from '../kit/kit-button';
 import { KitMasterDetail } from '../kit/kit-master-detail';
+import { KitSelectRow } from '../kit/kit-select-row';
 import { encodeSidechainPath, parseSidechainPath, resolveSidechainByPath } from './transcript-sidechain-path';
 import { deriveTranscriptSteps, resolveSegmentSeams, type TranscriptStep } from './transcript-steps';
 import type { TranscriptSegmentContentView, TranscriptSegmentIndexEntry } from '../api/hub';
@@ -32,7 +34,7 @@ import { type SidechainOpenEvent, TranscriptViewer } from './transcript-viewer';
 @Component({
   selector: 'fleet-chunk-transcripts-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitBadge, KitMasterDetail, TranscriptSegmentView, TranscriptViewer],
+  imports: [KitAsyncState, KitBadge, KitButton, KitMasterDetail, KitSelectRow, TranscriptSegmentView, TranscriptViewer],
   templateUrl: './chunk-transcripts-tab.html',
   styleUrl: './chunk-transcripts-tab.css',
 })

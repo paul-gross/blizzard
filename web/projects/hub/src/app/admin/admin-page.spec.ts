@@ -87,8 +87,9 @@ describe('AdminPage', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     const guestRow = el.querySelector('[data-user-id="usr_guest"]');
-    const adminOption = guestRow?.querySelector<HTMLOptionElement>('option[value="admin"]');
-    expect(adminOption?.disabled).toBe(false);
+    guestRow?.querySelector<HTMLButtonElement>('[data-testid="users-table-role-select"]')?.click();
+    await settle(fixture);
+    expect(document.querySelector('[role="listbox"] [role="option"][title="admin"]')?.getAttribute('aria-disabled')).not.toBe('true');
   });
 
   it("renders the signed-in actor's own row as read-only", async () => {
@@ -110,8 +111,9 @@ describe('AdminPage', () => {
     const select = el.querySelector<HTMLSelectElement>(
       '[data-user-id="usr_guest"] [data-testid="users-table-role-select"]',
     );
-    select!.value = 'admin';
-    select!.dispatchEvent(new Event('change'));
+    select!.click();
+    await settle(fixture);
+    document.querySelector<HTMLElement>('[role="listbox"] [role="option"][title="contributor"]')?.click();
     await settle(fixture);
 
     expect(el.querySelector('[data-testid="admin-page-assign-role-error"]')?.textContent).toContain(

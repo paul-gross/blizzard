@@ -15,15 +15,15 @@
   }
   @if (editable() && canControl()) {
     <span class="edit-row">
-      <input
-        #graphInput
+      <fleet-kit-text-input
         class="edit-input"
-        type="text"
-        data-testid="graph-input"
+        testid="graph-input"
         placeholder="New graph id…"
-        [attr.aria-label]="'Set graph for chunk ' + detail().chunk_id"
+        [ariaLabel]="'Set graph for chunk ' + detail().chunk_id"
+        [value]="graphDraft()"
+        (valueChange)="graphDraft.set($event)"
       />
-      <fleet-kit-button testid="graph-submit" [disabled]="graphPending()" (click)="submitGraph(graphInput.value); graphInput.value = ''">
+      <fleet-kit-button testid="graph-submit" [disabled]="graphPending()" (click)="submitGraph(graphDraft())">
         Set
       </fleet-kit-button>
     </span>

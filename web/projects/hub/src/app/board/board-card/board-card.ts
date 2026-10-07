@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import { type ChunkStatus, type LandedRepoView, type PrView, STATUS_LANE, compactRef, formatCost, hasCostFigure, FleetWhen, KitBadge } from 'fleet';
+import { type ChunkStatus, type LandedRepoView, type PrView, STATUS_LANE, compactRef, formatCost, hasCostFigure, FleetWhen, KitBadge, KitButton, KitSelectRow } from 'fleet';
 
 /** One rendered board card — the derived-status view of a chunk. */
 export interface BoardCard {
@@ -66,7 +66,7 @@ export interface BoardCard {
 @Component({
   selector: 'app-board-card',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetWhen, KitBadge],
+  imports: [FleetWhen, KitBadge, KitButton, KitSelectRow],
   templateUrl: './board-card.html',
   styleUrl: './board-card.css',
 })

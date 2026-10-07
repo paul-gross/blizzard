@@ -1,11 +1,8 @@
-<button
-  type="button"
-  class="rd-toggle"
-  [attr.data-testid]="testid() + '-raw-toggle'"
-  (click)="showRaw.set(!showRaw())"
->
-  {{ showRaw() ? 'Show summary' : 'Show raw JSON' }}
-</button>
+<div class="rd-toggle">
+  <fleet-kit-button [testid]="testid() + '-raw-toggle'" (click)="showRaw.set(!showRaw())">
+    {{ showRaw() ? 'Show summary' : 'Show raw JSON' }}
+  </fleet-kit-button>
+</div>
 
 @if (showRaw()) {
   <pre class="rd-raw" [attr.data-testid]="testid() + '-raw'">{{ raw() }}</pre>

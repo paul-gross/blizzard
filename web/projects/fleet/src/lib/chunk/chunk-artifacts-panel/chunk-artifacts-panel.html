@@ -16,14 +16,13 @@
     >
       <ul class="art-list" [attr.data-testid]="testidPrefix() + '-nav'">
         @for (art of sortedArtifacts(); track art.key) {
-        <li>
-          <button
-            type="button"
+          <li>
+          <fleet-kit-select-row
             class="art-item"
-            [class.active]="art.key === effectiveKey()"
-            [attr.data-testid]="testidPrefix() + '-nav-item'"
+            [selected]="art.key === effectiveKey()"
+            [testid]="testidPrefix() + '-nav-item'"
             [attr.data-artifact-key]="art.key"
-            (click)="pickArtifact.emit(art.key)"
+            (picked)="pickArtifact.emit(art.key)"
           >
             <span class="key">{{ art.key }}</span>
             <span class="sub">
@@ -32,8 +31,8 @@
               }
               <span class="kind">{{ art.kind }}</span>
             </span>
-          </button>
-        </li>
+          </fleet-kit-select-row>
+          </li>
         }
       </ul>
     </fleet-kit-async-state>

@@ -22,32 +22,7 @@
 }
 .art-item {
   display: block;
-  width: 100%;
-  text-align: left;
-  font-family: inherit;
-  background: transparent;
-  border: none;
   border-bottom: 1px solid var(--line);
-  border-left: 2px solid transparent;
-  color: var(--text);
-  cursor: pointer;
-  padding: 6px 8px;
-}
-/* The interaction-state scale (`design/tokens.css`'s `--surface-*`) — reserved
-   transparent left edge recolored on selection, background alone on hover,
-   the same split the hub board's own reference implementation of this pattern
-   (its Artifacts tab) draws. */
-.art-item:hover {
-  background: var(--surface-hover);
-}
-.art-item.active {
-  border-left-color: var(--cyan);
-  background: var(--surface-selected);
-}
-/* Selection is the "stickier" state: hovering an already-active row keeps
-   the selected background rather than dimming to the hover tone. */
-.art-item.active:hover {
-  background: var(--surface-selected);
 }
 .art-item .key {
   display: block;

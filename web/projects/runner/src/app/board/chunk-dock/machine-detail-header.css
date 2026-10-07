@@ -72,14 +72,13 @@ a.iss:focus-visible {
   align-items: center;
   gap: 6px;
 }
-.close {
+:host ::ng-deep fleet-kit-button.close > button {
   background: transparent;
-  border: 1px solid var(--bezel);
+  border-color: var(--bezel);
   color: var(--label-dim);
-  cursor: pointer;
-  font-family: inherit;
   padding: 2px 6px;
 }
-.close:hover {
+:host ::ng-deep fleet-kit-button.close > button:hover {
+  border-color: var(--bezel);
   color: var(--text);
 }

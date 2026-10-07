@@ -762,6 +762,8 @@ describe('ChunkDetail container', () => {
 
     const input = el.querySelector<HTMLInputElement>('[data-testid="graph-input"]')!;
     input.value = 'gr_alt';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    await settle(fixture);
     el.querySelector<HTMLButtonElement>('[data-testid="graph-submit"]')?.click();
     await settle(fixture);
 
@@ -788,6 +790,8 @@ describe('ChunkDetail container', () => {
 
     const input = el.querySelector<HTMLInputElement>('[data-testid="graph-input"]')!;
     input.value = 'gr_alt';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    await settle(fixture);
     el.querySelector<HTMLButtonElement>('[data-testid="graph-submit"]')?.click();
     await settle(fixture);
 

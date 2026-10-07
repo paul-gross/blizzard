@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { page } from 'vitest/browser';
 
 import { KitSelect } from './kit-select';
+import type { KitChipOption } from './kit-chips';
 
 @Component({
   imports: [KitSelect],
@@ -16,7 +17,7 @@ import { KitSelect } from './kit-select';
   `,
 })
 class SelectHost {
-  options = [{ value: 'all', label: 'All classes' }, ...Array.from({ length: 40 }, (_, i) => ({
+  options: KitChipOption[] = [{ value: 'all', label: 'All classes' }, ...Array.from({ length: 40 }, (_, i) => ({
     value: `class-${i}`,
     label: `Finding class ${i}`,
   }))];
@@ -82,6 +83,33 @@ describe('KitSelect popup shell sweep', () => {
     } finally {
       fixture.destroy();
       root.remove();
+    }
+  });
+
+  it('renders disabled options distinctly and keeps a keyboard focus target at phone width', async () => {
+    await page.viewport(390, 800);
+    await TestBed.configureTestingModule({ imports: [SelectHost], providers: [provideZonelessChangeDetection()] }).compileComponents();
+    const fixture = TestBed.createComponent(SelectHost);
+    fixture.componentInstance.options = [
+      { value: 'all', label: 'All classes', disabled: true },
+      { value: 'active', label: 'Active classes' },
+    ];
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    await fixture.whenStable();
+    try {
+      root.querySelector<HTMLButtonElement>('button')!.click();
+      await fixture.whenStable();
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      const options = document.body.querySelectorAll<HTMLElement>('[role="option"]');
+      expect(options[0].getAttribute('aria-disabled')).toBe('true');
+      expect(getComputedStyle(options[0]).opacity).toBe('0.5');
+      expect(document.activeElement).toBe(options[1]);
+      expect(options[1].getBoundingClientRect().right).toBeLessThanOrEqual(390);
+    } finally {
+      fixture.destroy();
+      root.remove();
+      await page.viewport(1280, 800);
     }
   });
 });

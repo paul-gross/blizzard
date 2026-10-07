@@ -4,13 +4,12 @@
     @for (entry of entries(); track entry.proposal_id) {
       <div class="entry" [class.struck]="isStruck(entry)" data-testid="docket-entry">
         @if (canResolve() && !entry.struck) {
-          <input
-            type="checkbox"
+          <fleet-kit-checkbox
             class="sel"
-            data-testid="docket-strike"
-            [attr.aria-label]="'Strike ' + title(entry)"
+            testid="docket-strike"
+            [ariaLabel]="'Strike ' + title(entry)"
             [checked]="isStruck(entry)"
-            (change)="toggle(entry)"
+            (checkedChange)="toggle(entry)"
           />
         }
         <div class="entry-body">

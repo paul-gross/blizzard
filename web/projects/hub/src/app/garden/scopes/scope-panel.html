@@ -16,18 +16,17 @@
 
       @if (canEdit()) {
         <span class="sp-edit">
-          <input
-            #descInput
+          <fleet-kit-text-input
             class="edit-input"
-            type="text"
-            [value]="panel.description"
-            data-testid="gardening-scope-panel-description-input"
-            [attr.aria-label]="'Set description for scope ' + panel.slug"
+            [value]="descriptionValue(panel)"
+            testid="gardening-scope-panel-description-input"
+            [ariaLabel]="'Set description for scope ' + panel.slug"
+            (valueChange)="updateDescription(panel, $event)"
           />
           <fleet-kit-button
             testid="gardening-scope-panel-description-submit"
             [disabled]="editPending()"
-            (click)="submitDescription(descInput.value)"
+            (click)="submitDescription(descriptionValue(panel))"
           >
             Set
           </fleet-kit-button>

@@ -52,14 +52,13 @@
       } @else {
       <ul class="seg-list">
         @for (seg of step.segments; track seg.segment_id) {
-        <li>
-          <button
-            type="button"
-            class="seg-item"
-            [class.active]="seg.segment_id === segmentId()"
-            data-testid="transcript-segment-item"
-            [attr.data-segment-id]="seg.segment_id"
-            (click)="pickSegment.emit(seg.segment_id)"
+         <li>
+           <fleet-kit-select-row
+             class="seg-item"
+             [selected]="seg.segment_id === segmentId()"
+             testid="transcript-segment-item"
+             [attr.data-segment-id]="seg.segment_id"
+             (picked)="pickSegment.emit(seg.segment_id)"
           >
             <span>Segment {{ seg.spawn_generation }}</span>
             @if (seg.harness_id) {
@@ -77,7 +76,7 @@
             } @if (!seg.final) {
             <fleet-kit-badge variant="pill" tone="idle">open</fleet-kit-badge>
             }
-          </button>
+           </fleet-kit-select-row>
         </li>
         }
       </ul>
@@ -107,14 +106,12 @@
     } @else {
     <div class="seg-body" data-testid="transcript-segment-body">
       @if (standaloneSidechain(); as sidechain) {
-      <button
-        type="button"
-        class="back"
-        data-testid="transcript-sidechain-back"
-        (click)="pickSidechain.emit(null)"
+       <fleet-kit-button
+         testid="transcript-sidechain-back"
+         (click)="pickSidechain.emit(null)"
       >
         ← Back to segment
-      </button>
+       </fleet-kit-button>
       <fleet-transcript-viewer
         [turns]="sidechain.turns"
         (openStandalone)="onStandaloneOpenStandalone($event)"

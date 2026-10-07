@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import { type hubApi, type UserView, KitAsyncState, KitPanel, FleetWhen } from 'fleet';
+import { type hubApi, type UserView, KitAsyncState, KitPanel, KitSelect, type KitChipOption, FleetWhen } from 'fleet';
 
 /**
  * The admin page's user table — presentational: renders `users()` with a role selector per row,
@@ -20,7 +20,7 @@ import { type hubApi, type UserView, KitAsyncState, KitPanel, FleetWhen } from '
 @Component({
   selector: 'app-users-table',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitPanel, FleetWhen],
+  imports: [KitAsyncState, KitPanel, KitSelect, FleetWhen],
   templateUrl: './users-table.html',
   styleUrl: './users-table.css',
 })
@@ -54,8 +54,15 @@ export class UsersTable {
     return this.pendingUserIds().includes(user.user_id);
   }
 
-  protected onRoleChange(userId: string, event: Event): void {
-    const role = (event.target as HTMLSelectElement).value;
+  protected roleOptions(user: UserView): readonly KitChipOption[] {
+    return this.assignableRoles().map((role) => ({
+      value: role,
+      label: role,
+      disabled: !user.assignable_roles?.includes(role),
+    }));
+  }
+
+  protected onRoleChange(userId: string, role: string): void {
     this.assignRole.emit({ userId, role });
   }
 }

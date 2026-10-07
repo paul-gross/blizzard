@@ -29,7 +29,6 @@
 }
 .sel {
   margin: 2px 0 0;
-  accent-color: var(--cyan);
 }
 .entry-body {
   min-width: 0;

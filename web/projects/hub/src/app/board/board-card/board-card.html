@@ -6,10 +6,10 @@
   [class.selected]="selected()"
   [attr.aria-current]="selected() ? 'true' : null"
 >
-  <button
-    type="button"
+  <fleet-kit-select-row
     class="card-open"
     [attr.aria-label]="'Open chunk ' + card().shortId"
+    [selected]="selected()"
     (click)="selectChunk.emit(card().chunkId)"
   >
     <span class="tid">
@@ -62,7 +62,7 @@
         }
       </span>
     </span>
-  </button>
+  </fleet-kit-select-row>
   @if (showsDelivery(card())) {
     <div class="delivery-links" data-testid="card-delivery">
       @if (card().awaitingExternalMerge) {
@@ -78,15 +78,14 @@
        eats into the card's own space. -->
   <div class="card-controls">
     @if (card().status === 'not_ready' && canControl()) {
-      <button
-        type="button"
+      <fleet-kit-button
         class="card-promote"
-        data-testid="promote-chunk"
-        [attr.aria-label]="'Promote chunk ' + card().shortId + ' to ready'"
+        testid="promote-chunk"
+        [ariaLabel]="'Promote chunk ' + card().shortId + ' to ready'"
         (click)="promote.emit(card().chunkId)"
       >
         PROMOTE
-      </button>
+      </fleet-kit-button>
     }
   </div>
 </div>

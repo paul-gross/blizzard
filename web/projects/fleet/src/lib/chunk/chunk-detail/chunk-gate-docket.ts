@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 
 import type { CreateWorkItemProposal, DocketEntryView, UpdateWorkItemProposal } from '../../api/hub';
+import { KitCheckbox } from '../../kit/kit-checkbox';
 
 function isCreate(payload: CreateWorkItemProposal | UpdateWorkItemProposal): payload is CreateWorkItemProposal {
   return payload.kind !== 'update';
@@ -21,6 +22,7 @@ function isCreate(payload: CreateWorkItemProposal | UpdateWorkItemProposal): pay
 @Component({
   selector: 'fleet-chunk-detail-gate-docket',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [KitCheckbox],
   templateUrl: './chunk-gate-docket.html',
   styleUrl: './chunk-gate-docket.css',
 })

@@ -1,9 +1,9 @@
 <div class="lpm" data-testid="local-panel-mobile">
   @if (detailOpen()) {
     <div class="lpm-detail" data-testid="panel-chunk-detail">
-      <button class="back-row" type="button" aria-label="Back to Machine" data-testid="mobile-detail-back" (click)="closeDetail.emit()">
+      <fleet-kit-button class="back-row" ariaLabel="Back to Machine" testid="mobile-detail-back" (click)="closeDetail.emit()">
         <fleet-kit-back-bar label="Machine" />
-      </button>
+      </fleet-kit-button>
       <app-machine-detail
         class="md"
         [leases]="selectedChunkLeases()"

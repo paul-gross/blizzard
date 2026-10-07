@@ -157,13 +157,5 @@ a.edge-ref:focus-visible {
   color: var(--red);
 }
 .close {
-  background: transparent;
-  border: 1px solid var(--line);
-  color: var(--label-dim);
-  cursor: pointer;
-  font-family: inherit;
-  padding: 2px 6px;
-}
-.close:hover {
-  color: var(--text);
+  --kit-button-pad: 2px 6px;
 }

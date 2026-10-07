@@ -1,0 +1,17 @@
+:host {
+  display: inline-flex;
+}
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+input {
+  margin: 0;
+  accent-color: var(--cyan);
+}
+.check:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.5;
+}

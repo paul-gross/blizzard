@@ -46,6 +46,7 @@ export class KitSelect {
 
   readonly options = input.required<readonly KitChipOption[]>();
   readonly selectedValue = input<string | null>(null);
+  readonly disabled = input(false);
 
   /** Names the listbox, and the trigger (with the selection) when no {@link label} is set. */
   readonly ariaLabel = input.required<string>();
@@ -78,6 +79,7 @@ export class KitSelect {
   protected readonly selection = computed(() => [this.selectedValue()].filter((v): v is string => v !== null));
 
   protected toggle(): void {
+    if (this.disabled()) return;
     this.open.update((o) => !o);
   }
 
@@ -88,8 +90,8 @@ export class KitSelect {
         const popup = document.getElementById(this.listboxId);
         if (!popup) return;
         const target =
-          popup.querySelector<HTMLElement>('[role="option"][aria-selected="true"]') ??
-          popup.querySelector<HTMLElement>('[role="option"]');
+          popup.querySelector<HTMLElement>('[role="option"][aria-selected="true"]:not([aria-disabled="true"])') ??
+          popup.querySelector<HTMLElement>('[role="option"]:not([aria-disabled="true"])');
         target?.focus();
       },
       { injector: this.injector },
@@ -97,6 +99,7 @@ export class KitSelect {
   }
 
   protected pick(value: string): void {
+    if (this.disabled() || this.options().find((o) => o.value === value)?.disabled) return;
     this.choose.emit(value);
     this.close();
   }

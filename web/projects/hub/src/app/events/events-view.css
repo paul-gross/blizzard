@@ -86,17 +86,9 @@ fleet-kit-panel.fill {
   white-space: nowrap;
 }
 .chunk {
-  font-family: inherit;
-  font-size: var(--fs-xs);
-  color: var(--amber-hi);
-  background: transparent;
-  border: 1px solid var(--line);
-  cursor: pointer;
-  padding: 0 4px;
+  --kit-button-pad: 0 4px;
+  --kit-button-fs: var(--fs-xs);
   justify-self: start;
-}
-.chunk:hover {
-  border-color: var(--cyan);
 }
 /* A chunk-less (runner-scoped) row still occupies the chunk column, so the
    columns after it stay aligned with the rows that do name a chunk. The inset

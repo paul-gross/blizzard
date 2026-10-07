@@ -7,22 +7,6 @@
 }
 .rd-toggle {
   align-self: flex-start;
-  background: none;
-  border: 1px solid var(--line);
-  border-radius: 3px;
-  color: var(--label);
-  font: inherit;
-  font-size: var(--fs-label);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  padding: 3px 8px;
-  cursor: pointer;
-}
-.rd-toggle:hover,
-.rd-toggle:focus-visible {
-  color: var(--text);
-  border-color: var(--label);
-  outline: none;
 }
 .rd-raw {
   flex: 1;

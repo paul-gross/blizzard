@@ -12,28 +12,15 @@ fleet-kit-panel.fill {
   flex: 1;
 }
 .gg {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  width: 100%;
-  text-align: left;
-  padding: 6px 8px;
-  border: 0;
-  border-bottom: 1px solid var(--line);
-  background: transparent;
-  font: inherit;
-  color: inherit;
-  cursor: pointer;
+  display: block;
 }
-.gg:hover {
-  background: color-mix(in srgb, var(--amber) 6%, transparent);
-}
-.gg:focus-visible {
-  outline: 1px solid var(--cyan);
-  outline-offset: -1px;
+.gg .node, .gg .opts {
+  display: block;
+  margin-bottom: 3px;
 }
 .h {
   display: flex;
+  margin-bottom: 3px;
   justify-content: space-between;
   align-items: baseline;
   gap: 6px;

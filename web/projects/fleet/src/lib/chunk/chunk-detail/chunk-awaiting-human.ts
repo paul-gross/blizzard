@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output, signal } f
 
 import type { ChunkDetail, DecisionView, QuestionView } from '../../api/hub';
 import { KitButton } from '../../kit/kit-button';
+import { KitChips, type KitChipOption } from '../../kit/kit-chips';
 import { KitTextInput } from '../../kit/kit-text-input';
 import { FleetWhen } from '../../core/when-display/fleet-when';
 import { runnerDisplayName } from '../../core/runner-display-name';
@@ -47,11 +48,18 @@ const ANSWERED_TRAIL_LIMIT = 3;
 @Component({
   selector: 'fleet-chunk-detail-awaiting-human',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ChunkEscalation, ChunkGateDocket, FleetWhen, KitButton, KitTextInput],
+  imports: [ChunkEscalation, ChunkGateDocket, FleetWhen, KitButton, KitChips, KitTextInput],
   templateUrl: './chunk-awaiting-human.html',
   styleUrl: './chunk-awaiting-human.css',
 })
 export class ChunkAwaitingHuman {
+  protected questionOptions(options: readonly string[]): readonly KitChipOption[] {
+    return options.map((value) => ({ value, label: value, testid: 'question-option' }));
+  }
+
+  protected decisionOptions(choices: readonly { name: string; description: string }[]): readonly KitChipOption[] {
+    return choices.map((choice) => ({ value: choice.name, label: choice.name, title: choice.description, testid: 'decision-choice' }));
+  }
   /** The chunk aggregate to render (open questions, gate decision, escalation). */
   readonly detail = input.required<ChunkDetail>();
 

@@ -14,6 +14,7 @@
         }
       </a>
     } @else {
+      <!-- eslint-disable-next-line no-restricted-syntax -- Inert navigation tabs share native button semantics and router-link tab chrome. -->
       <button
         class="tab"
         [class.inert]="item.inert"

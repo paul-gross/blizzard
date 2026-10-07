@@ -1,0 +1,13 @@
+<label class="check">
+  <input
+    type="checkbox"
+    [checked]="checked()"
+    [disabled]="disabled()"
+    [attr.aria-label]="ariaLabel()"
+    [attr.data-testid]="testid()"
+    (change)="changed($event)"
+  />
+  @if (label(); as text) {
+    <span>{{ text }}</span>
+  }
+</label>

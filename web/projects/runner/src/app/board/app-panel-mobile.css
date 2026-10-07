@@ -39,17 +39,18 @@
   flex: 1;
   min-height: 0;
 }
-/* A bare wrapper: KitBackBar owns the row's look and height, this owns only
-   the button reset and the focus ring. */
-.back-row {
+/* KitBackBar owns the row's look and height; reset KitButton's native button
+   so its wrapper contributes only the hit target and focus ring. */
+:host ::ng-deep fleet-kit-button.back-row > button {
   flex: none;
   display: block;
+  width: 100%;
   padding: 0;
   border: 0;
   background: none;
   text-align: left;
 }
-.back-row:focus-visible {
+:host ::ng-deep fleet-kit-button.back-row > button:focus-visible {
   outline: 1px solid var(--cyan);
   outline-offset: -1px;
 }

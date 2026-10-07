@@ -78,6 +78,7 @@ describe('FleetScopePanel', () => {
 
     const input = el.querySelector<HTMLInputElement>('[data-testid="gardening-scope-panel-description-input"]')!;
     input.value = '  updated description  ';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
     el.querySelector<HTMLButtonElement>('[data-testid="gardening-scope-panel-description-submit"]')?.click();
 
     expect(emitted).toEqual({ slug: 'blizzard', description: 'updated description' });

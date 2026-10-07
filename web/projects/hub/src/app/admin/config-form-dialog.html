@@ -11,13 +11,11 @@
           }
         </span>
         @if (field.kind === 'checkbox') {
-          <input
-            type="checkbox"
-            [checked]="flagOf(field.key)"
-            [attr.aria-label]="field.label"
-            [attr.data-testid]="testidPrefix() + '-field-' + field.key"
-            (change)="onFlag(field.key, $event)"
-          />
+          <fleet-kit-chip
+            [selected]="flagOf(field.key)"
+            [testid]="testidPrefix() + '-field-' + field.key"
+            (click)="onFlag(field.key)"
+          >{{ field.label }}</fleet-kit-chip>
         } @else {
           <fleet-kit-text-input
             [type]="field.kind === 'password' ? 'password' : 'text'"

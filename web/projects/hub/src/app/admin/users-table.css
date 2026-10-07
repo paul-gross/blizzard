@@ -25,9 +25,3 @@ td {
   padding: 4px 8px;
   border-bottom: 1px solid var(--line);
 }
-select {
-  font-family: inherit;
-  background: var(--overlay-30);
-  border: 1px solid var(--line);
-  color: var(--text);
-}

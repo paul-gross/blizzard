@@ -198,7 +198,10 @@ describe('LocalPanelMobile', () => {
     let closed = 0;
     fixture.componentInstance.closeDetail.subscribe(() => (closed += 1));
 
-    el.querySelector<HTMLElement>('[data-testid="mobile-detail-back"]')?.click();
+    const back = el.querySelector<HTMLButtonElement>('[data-testid="mobile-detail-back"]');
+    expect(back?.tagName).toBe('BUTTON');
+    expect(back?.getAttribute('aria-label')).toBe('Back to Machine');
+    back?.click();
 
     expect(closed).toBe(1);
   });
