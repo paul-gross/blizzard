@@ -16,7 +16,7 @@ import pytest
 
 from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
-from blizzard.runner.harness.process_launch import ProcessLauncher
+from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
 from blizzard.runner.lifecycle.judgement.internal.elicitation_files import ElicitationFiles
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from blizzard.runner.selftest.checks import SelfTest

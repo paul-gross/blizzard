@@ -39,6 +39,7 @@ from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.health_cache import HARNESS_VERSION_REFRESH_SECONDS, HarnessHealthCache
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.internal.committed_corpus import CommittedCorpus
+from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
 from blizzard.runner.harness.preamble import (
     DEFAULT_BLIZZARD_PREAMBLE,
     RESUME_BLIZZARD_UNCHANGED,
@@ -48,7 +49,6 @@ from blizzard.runner.harness.preamble import (
     PreambleFingerprint,
     resume_cross_node,
 )
-from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import NullTranscriptSource
 from blizzard.runner.hub.client import QueueEntry, SubscriptionDeclaration
@@ -65,7 +65,7 @@ from blizzard.runner.loop.tick import tick
 from blizzard.runner.node_steps.chunk_state import ChunkSpend, ChunkState
 from blizzard.runner.node_steps.envelope import ProducesSpec
 from blizzard.runner.node_steps.submissions import ApplyReply, CompletionArtifact
-from blizzard.runner.process.worker_scratch import WorkerScratchDirs
+from blizzard.runner.process.internal.worker_scratch_dirs import WorkerScratchDirs
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.store.schema import lease_spawns
 from blizzard.runner.store.schema import metadata as runner_metadata

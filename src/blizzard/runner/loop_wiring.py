@@ -37,8 +37,8 @@ from blizzard.runner.loop.context import LoopConfig, LoopContext, ResolvedSubscr
 from blizzard.runner.loop.retention_floor import RetentionPasses
 from blizzard.runner.loop.steps import ResumeIntents
 from blizzard.runner.loop.tick import tick
+from blizzard.runner.process.internal.worker_scratch_dirs import WorkerScratchDirs
 from blizzard.runner.process.probe import IProcessProbe
-from blizzard.runner.process.worker_scratch import WorkerScratchDirs
 from blizzard.runner.stores import RunnerStores
 from blizzard.runner.subscriptions.internal.subscription_sampler_factory import select_sampler
 from blizzard.runner.transcripts.transcript_backfill import (

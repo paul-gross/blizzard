@@ -63,7 +63,7 @@ from blizzard.runner.lifecycle.registration import registered_runner_id
 from blizzard.runner.lifecycle.session import HarnessSelector, ResumedSession, SessionResolver, SkippedHarness
 from blizzard.runner.node_steps.envelope import Envelope
 from blizzard.runner.process.probe import IProcessProbe
-from blizzard.runner.process.worker_scratch import WorkerScratchDirs
+from blizzard.runner.process.worker_scratch import IWorkerScratchDirs
 from blizzard.runner.throttle.pause import IWritePauseRepository, RunnerBrakes
 from blizzard.runner.transcripts.invocation_boundaries import IWriteInvocationBoundaryRepository, spawn_boundary_kind
 from blizzard.runner.transcripts.transcript_pump import (
@@ -175,7 +175,7 @@ class SpawnContext(TranscriptPumpContext, Protocol):
     @property
     def worker_files(self) -> IWorkerStdoutFiles: ...
     @property
-    def worker_scratch(self) -> WorkerScratchDirs: ...
+    def worker_scratch(self) -> IWorkerScratchDirs: ...
     @property
     def elicitation_files(self) -> IElicitationFiles: ...
     @property

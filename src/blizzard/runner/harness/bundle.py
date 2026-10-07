@@ -5,7 +5,7 @@ validating, and publishing the bundle as an immutable snapshot is ``internal/bun
 
 from __future__ import annotations
 
-import os
+import posixpath
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
@@ -105,9 +105,9 @@ def companion_path(reference: str) -> PurePosixPath | None:
     """The bundle-relative path a companion ``reference`` names, or ``None`` when it is skipped
     (an absolute or ``~`` path resolves outside the bundle by design); raises
     :class:`CompanionEscapes` when it climbs out of the harness directory."""
-    if os.path.isabs(reference) or reference.startswith("~"):
+    if posixpath.isabs(reference) or reference.startswith("~"):
         return None
-    relative = PurePosixPath(os.path.normpath(reference))
+    relative = PurePosixPath(posixpath.normpath(reference))
     if relative.parts[:1] == ("..",) or str(relative) == ".":
         raise CompanionEscapes(reference)
     return relative

@@ -24,7 +24,7 @@ from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import ResumeHandle, WorkerPreamble
 from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
-from blizzard.runner.harness.process_launch import ProcessLauncher
+from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
 from blizzard.runner.node_steps.envelope import Envelope
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from tests import transcript_fixtures
@@ -778,8 +778,8 @@ def test_a_hung_version_probe_reads_none_and_the_spawn_right_after_still_runs(
     reads back ``None`` instead of blocking — the spawn right after it, on the same binary,
     is entirely unaffected."""
     # `observe_version` is shared verbatim with OpenCode — the bound lives on
-    # `harness_shared`, not on this adapter module.
-    monkeypatch.setattr("blizzard.runner.harness.harness_shared.VERSION_PROBE_TIMEOUT_SECONDS", 0.2)
+    # `version_probe`, not on this adapter module.
+    monkeypatch.setattr("blizzard.runner.harness.internal.version_probe.VERSION_PROBE_TIMEOUT_SECONDS", 0.2)
     script = tmp_path / "hung-version-claude"
     script.write_text(_VERSION_HANGS_HARNESS)
     script.chmod(script.stat().st_mode | stat.S_IEXEC | stat.S_IRUSR)

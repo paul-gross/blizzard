@@ -19,8 +19,8 @@ from blizzard.runner.harness.claude_code.health import ClaudeCodeHealthProbe
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.health_cache import HarnessHealthCache
 from blizzard.runner.harness.internal.committed_corpus import CommittedCorpus
+from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
 from blizzard.runner.harness.opencode.health import OpenCodeHealthProbe
-from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from tests.service.support import require_mock_fleet, require_opencode_cli_surface, service_gate
 
