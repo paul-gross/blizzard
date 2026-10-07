@@ -28,6 +28,10 @@ _log = get_logger("blizzard.hub.auth")
 #: dependency reuses it rather than resolving the same token a second time.
 _PRINCIPAL_SCOPE_KEY = "blizzard.runner_principal"
 
+#: ASGI-scope key holding the registration that principal was resolved from, so the fleet gate asks the
+#: loaded model whether it is retired rather than reading the registry a second time.
+_REGISTRATION_SCOPE_KEY = "blizzard.runner_registration"
+
 
 @dto
 @dataclass(frozen=True)
@@ -62,6 +66,9 @@ class RunnerAuth:
             scope[_PRINCIPAL_SCOPE_KEY] = self._resolve()
         return scope[_PRINCIPAL_SCOPE_KEY]
 
+    def _resolved_registration(self) -> RunnerRegistration | None:
+        return self.request.scope.get(_REGISTRATION_SCOPE_KEY)
+
     def _resolve(self) -> RunnerPrincipal | None:
         token = presented_bearer(self.request)
         if token is None:
@@ -69,16 +76,22 @@ class RunnerAuth:
         registration = self.services.registry.registration_for_token_hash(TokenHash(token).hex)
         if registration is None:
             return None
+        self.request.scope[_REGISTRATION_SCOPE_KEY] = registration
         return RunnerPrincipal(
             runner_id=registration.runner_id, runner_name=registration.name, workspace_id=registration.workspace_id
         )
 
-    def demand(self) -> RunnerPrincipal:
+    def demand(self, *, allow_retired: bool = False) -> RunnerPrincipal:
         """The resolved principal; a missing/malformed header, a revoked token, or one that
-        resolves to no runner raises 401 — there is no tokenless fleet call."""
+        resolves to no runner raises 401 — there is no tokenless fleet call. A principal whose
+        registration is retired raises :class:`RunnerRetired` (403) unless ``allow_retired``: a token
+        that outlived its retirement (an enroll racing the retire) is refused as contact."""
         principal = self.principal
         if principal is not None:
             annotate({CALLER: "runner", RUNNER_ID: principal.runner_id, RUNNER_NAME: principal.runner_name})
+            registration = self._resolved_registration()
+            if registration is not None and not allow_retired:
+                registration.refuse_if_retired(action="fleet call")
             return principal
         token = presented_bearer(self.request)
         if token is not None and self.services.registry.is_token_revoked(TokenHash(token).hex):
@@ -127,6 +140,14 @@ def require_runner_principal(
     request: Request, services: Annotated[HubServices, Depends(get_services)]
 ) -> RunnerPrincipal:
     return RunnerAuth.of(request, services).demand()
+
+
+def require_runner_principal_even_if_retired(
+    request: Request, services: Annotated[HubServices, Depends(get_services)]
+) -> RunnerPrincipal:
+    """The principal without the retirement refusal — the claim route's, whose retired refusal is the
+    paused-denial body a runner parses (``ClaimService`` raises it in-domain)."""
+    return RunnerAuth.of(request, services).demand(allow_retired=True)
 
 
 def reject_runner_principal(request: Request, services: Annotated[HubServices, Depends(get_services)]) -> None:

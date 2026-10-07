@@ -34,7 +34,7 @@ from blizzard.hub.api.analytics import (
     operational_criteria,
     spend_response,
 )
-from blizzard.hub.api.auth import RunnerPrincipal, require_runner_principal
+from blizzard.hub.api.auth import RunnerPrincipal, require_runner_principal, require_runner_principal_even_if_retired
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.api.findings import finding_view
 from blizzard.hub.api.garden_proposals import garden_proposal_view
@@ -110,6 +110,12 @@ _log = get_logger("blizzard.hub.fleet")
 
 router = APIRouter(prefix="/api/fleet", tags=["fleet"], dependencies=[Depends(require_runner_principal)])
 
+#: The claim route's own router: gated by the principal *without* the retirement refusal, because a retired
+#: runner's claim is refused in-domain with the paused-denial body older runners parse.
+claim_router = APIRouter(
+    prefix="/api/fleet", tags=["fleet"], dependencies=[Depends(require_runner_principal_even_if_retired)]
+)
+
 
 @collaborator
 @dataclass(frozen=True)
@@ -124,6 +130,14 @@ class FleetRequest:
         cls,
         request: Request,
         principal: Annotated[RunnerPrincipal, Depends(require_runner_principal)],
+    ) -> FleetRequest:
+        return cls(principal, request.app.state.config)
+
+    @classmethod
+    def of_even_if_retired(
+        cls,
+        request: Request,
+        principal: Annotated[RunnerPrincipal, Depends(require_runner_principal_even_if_retired)],
     ) -> FleetRequest:
         return cls(principal, request.app.state.config)
 
@@ -563,11 +577,11 @@ def hub_advance(
     )
 
 
-@router.post("/routes", response_model=RouteClaimResponse, status_code=status.HTTP_201_CREATED)
+@claim_router.post("/routes", response_model=RouteClaimResponse, status_code=status.HTTP_201_CREATED)
 def claim_route(
     claim: RouteClaim,
     services: Annotated[HubServices, Depends(get_services)],
-    fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
+    fleet: Annotated[FleetRequest, Depends(FleetRequest.of_even_if_retired)],
 ) -> object:
     """Claim a chunk; 403 if the runner is unregistered, paused, or retired at the hub, 409 if already claimed,
     already terminal ({done, stopped}), not ready, standing on an unmet prerequisite,

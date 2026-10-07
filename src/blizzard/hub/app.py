@@ -49,6 +49,7 @@ from blizzard.hub.api.decisions import router as decisions_router
 from blizzard.hub.api.egress import router as egress_router
 from blizzard.hub.api.events import router as events_router
 from blizzard.hub.api.findings import router as findings_router
+from blizzard.hub.api.fleet import claim_router as fleet_claim_router
 from blizzard.hub.api.fleet import router as fleet_router
 from blizzard.hub.api.fleet_identity import router as fleet_identity_router
 from blizzard.hub.api.garden_proposals import router as garden_proposals_router
@@ -381,6 +382,8 @@ def create_app(
     # The runner-authenticated fleet router — a fleet verb is authenticated
     # *because of where it is mounted*; see `blizzard.hub.api.fleet`.
     app.include_router(fleet_router)
+    # The claim route is the other `/api/fleet` path outside that gate's retirement refusal.
+    app.include_router(fleet_claim_router)
 
     Frontend.embedded("hub", app_name="blizzard-hub").mount(app)
     install_schema_components(app, HUB_SCHEMA_COMPONENTS.models, HUB_SCHEMA_COMPONENTS.enums)
