@@ -725,15 +725,18 @@ describe('ChunkPage mobile drill-down composed-chain shell sweep (web:shell-swee
           await pumpUntil(harness.fixture, () => root.querySelector('[data-testid="selection-step"]') !== null);
           let nodeHistory = root.querySelector<HTMLElement>('[data-testid="chunk-node-history-tab"]')!;
           expect(
-            nodeHistory.querySelector('.kmd-detail'),
+            nodeHistory.querySelector<HTMLElement>('.kmd-detail')?.checkVisibility(),
             `${width}px: node history shows detail beside its list`,
-          ).toBeNull();
+          ).toBe(false);
           expect(root.querySelector('[data-testid="node-history-back"]'), `${width}px: node history list has Back`).toBeNull();
           expectNoOverflow(nodeHistory, `${width}px node history list`);
           root.querySelector<HTMLElement>('[data-testid="selection-step"]')?.click();
           await pumpUntil(harness.fixture, () => root.querySelector('[data-testid="node-history-back"]') !== null);
           nodeHistory = root.querySelector<HTMLElement>('[data-testid="chunk-node-history-tab"]')!;
-          expect(root.querySelector('[data-testid="selection-step"]'), `${width}px: node history detail retains its list`).toBeNull();
+          expect(
+            root.querySelector<HTMLElement>('[data-testid="selection-step"]')?.checkVisibility(),
+            `${width}px: node history detail retains its list`,
+          ).toBe(false);
           expectNoOverflow(nodeHistory, `${width}px node history detail`);
           root.querySelector<HTMLElement>('[data-testid="node-history-back"]')?.click();
           await pumpUntil(harness.fixture, () => root.querySelector('[data-testid="selection-step"]') !== null);

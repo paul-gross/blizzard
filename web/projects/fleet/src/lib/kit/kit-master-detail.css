@@ -4,10 +4,19 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  gap: var(--kit-master-detail-gap, 0);
+}
+.kmd-list,
+.kmd-detail {
+  display: flex;
+  flex-direction: column;
+}
+.kmd-pane--hidden {
+  display: none;
 }
 .kmd-list {
   flex: none;
-  border-bottom: 1px solid var(--line);
+  border-bottom: var(--kit-master-detail-divider, 1px solid var(--line));
 }
 .kmd-list--only {
   flex: 1;
@@ -24,6 +33,7 @@
 }
 .kmd-back {
   display: block;
+  flex: none;
   width: 100%;
   padding: 0;
   border: 0;
@@ -53,7 +63,12 @@
     max-height: none;
     overflow-y: auto;
     border-bottom: none;
-    border-right: 1px solid var(--line);
+    border-right: var(--kit-master-detail-divider, 1px solid var(--line));
+  }
+  .kmd-list.kmd-list--only {
+    flex: 1;
+    width: auto;
+    border-right: none;
   }
   .kmd-detail {
     overflow-y: auto;

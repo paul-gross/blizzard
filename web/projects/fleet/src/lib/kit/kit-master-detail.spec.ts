@@ -115,7 +115,7 @@ describe('KitMasterDetail', () => {
     expect(list.getAttribute('aria-labelledby')).not.toBe(detail.getAttribute('aria-labelledby'));
   });
 
-  it('renders only the list pane, with no Back control, under drilldown with no selection', async () => {
+  it('shows only the list pane, the detail pane mounted but hidden, with no Back control, under drilldown with no selection', async () => {
     await TestBed.configureTestingModule({
       imports: [KitMasterDetailDrilldownListHost],
       providers: [provideZonelessChangeDetection()],
@@ -125,11 +125,13 @@ describe('KitMasterDetail', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="slot-list"]')).not.toBeNull();
-    expect(el.querySelector('[data-testid="slot-detail"]')).toBeNull();
+    expect(el.querySelector('[data-testid="slot-detail"]')).not.toBeNull();
+    expect(el.querySelector('.kmd-list')?.classList.contains('kmd-pane--hidden')).toBe(false);
+    expect(el.querySelector('.kmd-detail')?.classList.contains('kmd-pane--hidden')).toBe(true);
     expect(el.querySelector('.kmd-back')).toBeNull();
   });
 
-  it('renders only the detail pane, with a Back control rooted at testidPrefix, under drilldown with a selection', async () => {
+  it('shows only the detail pane, the list pane mounted but hidden, with a Back control rooted at testidPrefix, under drilldown with a selection', async () => {
     await TestBed.configureTestingModule({
       imports: [KitMasterDetailDrilldownDetailHost],
       providers: [provideZonelessChangeDetection()],
@@ -138,7 +140,9 @@ describe('KitMasterDetail', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="slot-list"]')).toBeNull();
+    expect(el.querySelector('[data-testid="slot-list"]')).not.toBeNull();
+    expect(el.querySelector('.kmd-list')?.classList.contains('kmd-pane--hidden')).toBe(true);
+    expect(el.querySelector('.kmd-detail')?.classList.contains('kmd-pane--hidden')).toBe(false);
     expect(el.querySelector('[data-testid="slot-detail"]')).not.toBeNull();
     const back = el.querySelector<HTMLButtonElement>('[data-testid="node-history-back"]');
     expect(back).not.toBeNull();
