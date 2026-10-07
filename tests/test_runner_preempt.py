@@ -16,7 +16,7 @@ from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionRefe
 from blizzard.runner.hub.node_steps import completion_submission
 from blizzard.runner.hub.outbound import COMPLETION_KIND
 from blizzard.runner.leases.model import NewLease
-from blizzard.runner.loop.steps import Advance, Pull, Reap
+from blizzard.runner.loop.steps import Advance, Pull, Reap, Resume, ResumeIntents
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.node_steps.chunk_state import ChunkPause, ChunkState
 from blizzard.runner.node_steps.submissions import ApplyReply, Completion
@@ -28,6 +28,7 @@ from tests.runner_fakes import (
     make_context,
     make_envelope,
     make_store,
+    make_stores,
 )
 
 pytestmark = pytest.mark.unit
@@ -438,3 +439,49 @@ def test_a_full_tick_under_the_local_brake_preempts_but_spawns_nothing_and_the_n
     assert probe.killed == [100]
     fresh = store.active_lease_for_chunk("ch_1")
     assert fresh is not None and fresh.lease_id != "lease_1" and fresh.session_id == "sess-b"
+
+
+def _marked_for_restart_resume(store):  # type: ignore[no-untyped-def]
+    ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
+    assert store.resume_intent_lease_ids() == {"lease_1"}
+
+
+def test_restart_resume_after_downtime_preempts_a_fenced_out_session_rather_than_waking_it(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    _marked_for_restart_resume(store)
+    harness = FakeHarness(handle=_HANDLE, verdict=None)
+    probe = FakeProbe(alive={(100, "start-100")})
+    ctx = _ctx(store, _restarted_hub(), harness=harness, probe=probe)
+
+    Resume(ctx).run()
+
+    assert harness.resumed == []  # the stale session is never woken
+    assert probe.killed == [100]
+    assert store.active_lease("lease_1") is None
+    fresh = store.active_lease_for_chunk("ch_1")
+    assert fresh is not None and fresh.lease_id != "lease_1"
+    assert fresh.epoch == 3  # re-entered above the hub's own fence at 2
+    assert len(harness.spawns) == 1
+    assert store.attempt_count("ch_1", "nd_build") == 1  # preempted, not spent
+    assert store.resume_intent_lease_ids() == set()
+
+
+def test_the_local_brake_does_not_defer_a_restart_resume_preempt(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    _marked_for_restart_resume(store)
+    _brake(store, paused=True)
+    harness = FakeHarness(handle=_HANDLE, verdict=None)
+    probe = FakeProbe(alive={(100, "start-100")})
+    ctx = _ctx(store, _restarted_hub(), harness=harness, probe=probe)
+
+    Resume(ctx).run()
+
+    assert probe.killed == [100]  # killed and closed now, the brake notwithstanding
+    assert store.active_lease("lease_1") is None
+    assert store.resume_intent_lease_ids() == set()
+    assert harness.resumed == []
+    assert harness.spawns == []  # only the re-entry spawn waits for the brake
+    assert store.active_lease_for_chunk("ch_1") is None
+    assert store.attempt_count("ch_1", "nd_build") == 0

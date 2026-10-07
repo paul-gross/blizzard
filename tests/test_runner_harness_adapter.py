@@ -20,12 +20,13 @@ from typing import Any
 import pytest
 from structlog.testing import capture_logs
 
+from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import ResumeHandle, WorkerPreamble
 from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
-from blizzard.runner.node_steps.envelope import Envelope
+from blizzard.runner.node_steps.envelope import Envelope, GraphArtifact
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from tests import transcript_fixtures
 from tests.conftest import _WORKER_IDENTITY_ENV
@@ -2208,3 +2209,25 @@ def test_classify_provider_overload_is_none_when_a_real_reply_follows_it_in_the_
 def test_classify_provider_overload_tolerates_malformed_lines(spawn_executor: Executor) -> None:
     lines = ["not json", "", transcript_fixtures.overload_record()]
     assert _adapter(spawn_executor).classify_provider_overload("", lines) is not None
+
+
+@pytest.mark.unit
+def test_spawn_never_splices_graph_artifact_content_into_the_prompt(
+    monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor
+) -> None:
+    captured: dict[str, list[str]] = {}
+    monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
+    adapter, _, preamble = _spawn_fixture(spawn_executor)
+    envelope = make_envelope(
+        "ch_1",
+        "build",
+        node_id="nd_build",
+        choices=[("pass", "ok")],
+        graph_artifacts=[GraphArtifact(name="rubric", kind=ArtifactKind.ASSET, content="RUBRIC-BODY-7f3a")],
+    )
+
+    adapter.spawn(envelope, preamble, session_hint="fresh-hint").await_identity(0)
+
+    cmd = captured["cmd"]
+    assert envelope.prompt in cmd
+    assert not any("RUBRIC-BODY-7f3a" in part or "rubric" in part for part in cmd)

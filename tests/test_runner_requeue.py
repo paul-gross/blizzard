@@ -11,6 +11,7 @@ from dataclasses import replace
 from datetime import UTC, datetime
 
 import pytest
+from sqlalchemy import create_engine, select
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
@@ -26,6 +27,7 @@ from blizzard.runner.operator.requeue import (
     RequeueScope,
     RequeueService,
 )
+from blizzard.runner.store.schema import leases, requeues
 from tests.runner_fakes import FakeHarness, FakeHub, FakeProbe, FakeProvider, make_context, make_envelope, make_store
 
 pytestmark = pytest.mark.component
@@ -285,3 +287,44 @@ def test_fill_releases_the_binding_when_a_requeued_chunk_is_no_longer_routed_her
 
     assert harness.spawns == []
     assert store.held_environment_ids() == []
+
+
+def _rows(tmp_path, stmt):  # type: ignore[no-untyped-def]
+    engine = create_engine(f"sqlite:///{tmp_path / 'runner.db'}")
+    try:
+        with engine.connect() as conn:
+            return conn.execute(stmt).all()
+    finally:
+        engine.dispose()
+
+
+def test_a_requeue_asked_while_one_is_pending_changes_nothing(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """Two marks, one fill, one lease, one retry charged — the second ask is absorbed by consumption."""
+    store = _store(tmp_path)
+    _seed_escalated_chunk(store)
+    _service(store, clock=FixedClock(_LATER)).requeue(_scope(store))
+    _service(store, clock=FixedClock(_LATER + (_EVEN_LATER - _LATER) / 2)).requeue(_scope(store))
+    assert len(_rows(tmp_path, select(requeues.c.chunk_id))) == 2
+    assert store.pending_requeue_chunk_ids() == {"ch_1"}
+
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok"), ("fail", "no")])
+    hub.queue = []
+    harness = FakeHarness(handle=_HANDLE, verdict=None)
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        clock=FixedClock(_EVEN_LATER),
+    )
+
+    Fill(ctx).run()
+    Fill(ctx).run()
+
+    assert len(harness.spawns) == 1
+    assert store.pending_requeue_chunk_ids() == set()
+    assert store.attempt_count("ch_1", "nd_build") == 2
+    assert len(_rows(tmp_path, select(leases.c.lease_id).where(leases.c.chunk_id == "ch_1"))) == 2
+    assert hub.claims == []

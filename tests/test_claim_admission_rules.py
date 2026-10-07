@@ -232,6 +232,15 @@ def test_a_retired_runner_is_refused_before_any_chunk_refusal() -> None:
         _admit(_READY, unmet="chk_pre", registration=retired)
 
 
+def test_an_unmet_prerequisite_is_refused_before_a_capability_mismatch() -> None:
+    withdrawn = replace(_REGISTERED, capabilities=(RunnerCapability(harness_id="claude_code", available=False),))
+    with pytest.raises(ClaimDeniedDependency) as refused:
+        _admit(_READY, unmet="chk_pre", registration=withdrawn)
+    assert refused.value.prerequisite_chunk_id == "chk_pre"
+    with pytest.raises(ClaimDeniedIncompatible):
+        _admit(_READY, registration=withdrawn)
+
+
 def test_a_registration_reporting_no_capabilities_is_refused() -> None:
     with pytest.raises(ClaimDeniedIncompatible):
         _admit(_READY, registration=replace(_REGISTERED, capabilities=()))
@@ -282,8 +291,34 @@ class _RegistryOf:
 class _UnenterableExclusiveWrites:
     @contextmanager
     def locked(self, chunk_ids: object) -> Iterator[object]:
-        raise AssertionError("the claim entered the lock for a retired runner")
+        raise AssertionError("the claim entered the lock for a runner refused on its own standing")
         yield
+
+
+def _service_over(registration: RunnerRegistration | None) -> ClaimService:
+    return ClaimService(
+        route=cast(Any, None),
+        artifacts=cast(Any, None),
+        graphs=cast(Any, None),
+        registry=cast(Any, _RegistryOf(registration)),
+        retired=cast(Any, None),
+        exclusive=cast(Any, _UnenterableExclusiveWrites()),
+        clock=cast(Any, None),
+        label=cast(Any, None),
+    )
+
+
+def test_a_paused_runner_is_refused_on_the_claim_path_before_any_chunk_check() -> None:
+    # Every chunk check (ended, held, not ready, prerequisite, capability) runs inside the lock; the
+    # lock is unenterable here, so the paused refusal is the runner's own, ahead of all of them.
+    paused = replace(_REGISTERED, hub_paused=True)
+    with pytest.raises(ClaimDeniedPaused):
+        _service_over(paused).claim(_CHUNK, _GRAPH, runner_id="runner-a", workspace_id="ws-a", environment_ids=["e1"])
+
+
+def test_an_unregistered_runner_is_refused_on_the_claim_path_before_any_chunk_check() -> None:
+    with pytest.raises(ClaimDeniedUnregistered):
+        _service_over(None).claim(_CHUNK, _GRAPH, runner_id="runner-a", workspace_id="ws-a", environment_ids=["e1"])
 
 
 def test_a_retired_runner_is_refused_before_the_claim_lock_is_entered() -> None:
