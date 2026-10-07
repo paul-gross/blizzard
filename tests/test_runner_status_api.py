@@ -131,6 +131,7 @@ def test_patch_runner_reports_the_identity_get_reports(tmp_path: Path) -> None:
     )
 
 
+@pytest.mark.component
 def test_summary_reports_the_gates_the_service_was_built_with(tmp_path: Path) -> None:
     app, _store = _app_with_status(tmp_path, gates=("build", "review"))
     with TestClient(app) as client:
