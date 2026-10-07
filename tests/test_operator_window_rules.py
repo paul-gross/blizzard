@@ -19,7 +19,7 @@ from blizzard.hub.domain.observability.egress.reset import (
     plan_reset,
     require_resettable,
 )
-from blizzard.hub.domain.observability.operator_window import OperatorWindow, WindowFault, fault_message
+from blizzard.foundation.operator_window import OperatorWindow, WindowFault, fault_message
 from blizzard.hub.domain.observability.tracing.cursor import CursorKey
 from blizzard.hub.domain.observability.tracing.replay import (
     ReplayUnavailable,

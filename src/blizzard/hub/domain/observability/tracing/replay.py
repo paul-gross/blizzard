@@ -15,7 +15,7 @@ from blizzard.foundation.roles import domain_model
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.exporter import ITraceExporter
 from blizzard.foundation.trace_spans import FinishedSpan
-from blizzard.hub.domain.observability.operator_window import OperatorWindow, fault_message
+from blizzard.foundation.operator_window import OperatorWindow, fault_message
 from blizzard.hub.domain.observability.tracing.cursor import CursorKey
 from blizzard.hub.domain.observability.tracing.lifecycle import TraceVerb, trace_export_allows
 from blizzard.hub.domain.observability.tracing.repository import IReadTraceSteps

@@ -86,12 +86,15 @@ def _span(scope: str, **changes: object) -> ReceivedSpan:
 # --- replay ---------------------------------------------------------------------------
 
 
-def test_replay_window_refuses_empty_and_oversized() -> None:
+def test_replay_window_refuses_empty_oversized_and_future() -> None:
+    now = _T0 + timedelta(hours=1)
     with pytest.raises(ReplayWindowRefused, match="until must be after since"):
-        ReplayWindow.of(_T0, _T0, max_window_seconds=60)
+        ReplayWindow.of(_T0, _T0, max_window_seconds=60, now=now)
     with pytest.raises(ReplayWindowRefused, match=r"wider than replay_max_window \(60 seconds\)"):
-        ReplayWindow.of(_T0, _T0 + timedelta(seconds=61), max_window_seconds=60)
-    window = ReplayWindow.of(_T0, _T0 + timedelta(seconds=60), max_window_seconds=60)
+        ReplayWindow.of(_T0, _T0 + timedelta(seconds=61), max_window_seconds=60, now=now)
+    with pytest.raises(ReplayWindowRefused, match="until must not be in the future"):
+        ReplayWindow.of(now - timedelta(seconds=30), now + timedelta(seconds=1), max_window_seconds=60, now=now)
+    window = ReplayWindow.of(_T0, _T0 + timedelta(seconds=60), max_window_seconds=60, now=now)
     assert window.opening == LeaseCursorKey(_T0)
     assert window.last_inclusive == _T0 + timedelta(seconds=60) - timedelta(microseconds=1)
 

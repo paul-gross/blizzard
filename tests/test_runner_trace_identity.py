@@ -66,7 +66,13 @@ def _pre_identity_store(tmp_path: Path) -> SqlAlchemyRunnerStore:
 
 def _replayed(store: SqlAlchemyRunnerStore, identity: RunnerIdentityHolder) -> list[FinishedSpan]:
     exporter = InMemoryTraceExporter()
-    replay = LeaseTraceReplay(leases=store, exporter=exporter, identity=identity, config=_CONFIG)
+    replay = LeaseTraceReplay(
+        leases=store,
+        exporter=exporter,
+        identity=identity,
+        clock=FixedClock(_CLOSED_AT + timedelta(minutes=10)),
+        config=_CONFIG,
+    )
     replay.replay(_CLOSED_AT - timedelta(minutes=10), _CLOSED_AT + timedelta(minutes=10), dry_run=False)
     return [span for batch in exporter.batches for span in batch]
 

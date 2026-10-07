@@ -1,7 +1,5 @@
-"""The window an operator verb reads over — a trace replay or an egress backfill.
-
-Both lanes bound it the same way: it must be non-empty, no wider than the lane's maximum, and
-closed in the past, as an egress reset's ``to`` must be. Each lane names its own refusal."""
+"""The window an operator verb reads over: non-empty, no wider than the verb's maximum, and
+closed in the past, as an egress reset's ``to`` must be. The caller names its own refusal."""
 
 from __future__ import annotations
 
@@ -39,7 +37,7 @@ class OperatorWindow:
 
 
 def fault_message(fault: WindowFault, *, max_window_name: str, max_window_seconds: int) -> str:
-    """The operator-facing reason for ``fault``, naming the lane's maximum-width setting."""
+    """The operator-facing reason for ``fault``, naming the verb's maximum-width setting."""
     if fault is WindowFault.INVERTED:
         return "until must be after since"
     if fault is WindowFault.TOO_WIDE:

@@ -30,7 +30,7 @@ from blizzard.hub.domain.observability.egress.events_window import events_rows, 
 from blizzard.hub.domain.observability.egress.lifecycle import ExportVerb, export_allows
 from blizzard.hub.domain.observability.egress.repository import EpochKey, IReadEgress, IReadEgressEvents, UsagePosition
 from blizzard.hub.domain.observability.egress.schema import EVENTS_SCHEMA, INVOCATIONS_SCHEMA, STEPS_SCHEMA
-from blizzard.hub.domain.observability.operator_window import OperatorWindow, fault_message
+from blizzard.foundation.operator_window import OperatorWindow, fault_message
 from blizzard.hub.domain.observability.tracing.cursor import CursorKey
 from blizzard.hub.domain.observability.tracing.repository import IReadTraceSteps
 from blizzard.hub.domain.observability.tracing.window import read_window
