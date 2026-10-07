@@ -321,7 +321,7 @@ def get_backlog(
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
 ) -> BacklogPageView:
     """The hub-ordered ``not_ready`` list, read-only and keyset-paginated
-    — an operator triage surface, requiring ``Permission.QUEUE_REORDER`` not ``Permission.FLEET_VIEW``."""
+    — an operator triage surface, requiring ``queue:reorder`` not ``fleet:view``."""
     statuses = services.chunks.facts.load_live_statuses()
     try:
         page = services.queue.page(QueueList.NOT_READY, statuses=statuses, cursor=cursor, limit=limit)

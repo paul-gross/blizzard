@@ -177,7 +177,7 @@ def list_work_sources(
     services: Annotated[HubServices, Depends(get_services)], include_retired: bool = False
 ) -> WorkSourcesListView:
     """The built-in ``hub`` source and every stored work source, retired ones hidden unless
-    `include_retired`. No gate beyond `Permission.FLEET_VIEW`, since a client needs this to know which
+    `include_retired`. No gate beyond `fleet:view`, since a client needs this to know which
     sources gate their items."""
     records = services.work_source_records.list_all(include_retired=include_retired)
     return WorkSourcesListView(sources=[_built_in_summary(services), *(_summary(r, services) for r in records)])
