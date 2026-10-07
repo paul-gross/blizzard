@@ -34,7 +34,13 @@
               [attr.aria-label]="'Open ' + row.nodeName + ', epoch ' + row.epoch"
             ></a>
           }
-          <span class="att">{{ rowMark(row) }}</span>
+          <span class="att">@if (row.kind === 'bounce') {
+              <svg class="bounce-icon" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+                <path d="M6 3 2.5 6.5 6 10M2.5 6.5H10a3.5 3.5 0 0 1 0 7H7" />
+              </svg>
+            } @else {
+              {{ rowMark(row) }}
+            }</span>
           <span class="nd" [attr.title]="row.nodeId">
             @if (multiGraph() && row.graphName) {
               @if (graphLinkBase(); as linkBase) {
@@ -63,6 +69,9 @@
             <span class="verdict" data-testid="history-choice">{{ row.verdict ?? '·' }}</span>
             @if (row.toName !== null) {
               <span class="jg-to" [attr.title]="row.toId">→ {{ row.toName }}</span>
+            }
+@if (row.kind === 'bounce' && row.title) {
+              <span class="bounce-reason" data-testid="history-bounce-reason">{{ row.title }}</span>
             }
             @if (row.actor !== null) {
               <span class="jg-by" data-testid="history-actor">by {{ row.actor }}</span>

@@ -1,6 +1,7 @@
 import { type ChunkDetail, type ChunkStatus, MigrationSource } from '../../api/hub';
 import { nodeStepKey } from '../../core/node-step';
 import { formatAbsolute, formatWhen } from '../../core/when';
+import { bounceReason } from './parse-bounce-envelope';
 
 /** One judged node on the timeline: the node, the verdict that closed it, and where
  * that verdict routed the chunk — a transition re-read node-first for display. A
@@ -16,7 +17,7 @@ import { formatAbsolute, formatWhen } from '../../core/when';
  * Authored-edge migrations join the producing step at their real epoch.
  *
  * A `bounce` row is a worker result the hub refused: `verdict` carries its cause and
- * {@link title} its raw envelope, with no node, epoch, or destination of its own. A
+ * {@link title} its envelope read as one readable line, with no node, epoch, or destination of its own. A
  * `restart` row is an operator's move of the chunk: `nodeName → toName`, by
  * {@link actor}, its graph crossing (when it left another graph) read off `toName`'s
  * `graph/node` form the way a migration's is. Neither is a node-step, so both are
@@ -39,7 +40,7 @@ export interface HistoryRow {
   readonly toName: string | null;
   /** Who drove the row — a restart's `restarted_by`; `null` on every other kind. */
   readonly actor: string | null;
-  /** The whole row's tooltip — a bounce's raw envelope; `null` on every other kind. */
+  /** The whole row's tooltip — a bounce's readable reason; `null` on every other kind. */
   readonly title: string | null;
   /** Whether the row hops graphs — a migration always, a restart when it left another
    * graph. */
@@ -155,7 +156,7 @@ export function deriveHistoryRows(detail: ChunkDetail): readonly HistoryRow[] {
     toId: null,
     toName: null,
     actor: null,
-    title: b.envelope,
+    title: bounceReason(b.envelope),
     crossesGraph: false,
     when: formatWhen(b.recorded_at),
     whenTitle: formatAbsolute(b.recorded_at),
@@ -187,10 +188,11 @@ export function deriveHistoryRows(detail: ChunkDetail): readonly HistoryRow[] {
 }
 
 // U+FE0E pins the arrows to text presentation: bare, Chromium paints them as colour emoji
-// wider than the mark column, which then overlaps the label.
+// wider than the mark column, which then overlaps the label. A bounce's mark is an inline
+// SVG the templates draw, so its text mark is empty.
 const KIND_MARKS: Record<Exclude<HistoryRow['kind'], 'transition'>, { mark: string; choice: string }> = {
   migration: { mark: '⤳', choice: 'migrated' },
-  bounce: { mark: '\u21A9\uFE0E', choice: 'bounced' },
+  bounce: { mark: '', choice: 'bounced' },
   restart: { mark: '\u21BB\uFE0E', choice: 'restarted' },
 };
 
