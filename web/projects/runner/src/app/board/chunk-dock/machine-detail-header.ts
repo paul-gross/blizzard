@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, input, output, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import {
+  KitBadge,
   KitButton,
   KitConfirmDialog,
   type KitConfirmDialogPrompt,
@@ -31,7 +32,7 @@ import {
 @Component({
   selector: 'app-machine-detail-header',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitButton, KitConfirmDialog, KitTooltip, RouterLink],
+  imports: [KitBadge, KitButton, KitConfirmDialog, KitTooltip, RouterLink],
   templateUrl: './machine-detail-header.html',
   styleUrl: './machine-detail-header.css',
 })

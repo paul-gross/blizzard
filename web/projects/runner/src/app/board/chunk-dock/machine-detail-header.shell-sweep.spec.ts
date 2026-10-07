@@ -1,7 +1,7 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { page, userEvent } from 'vitest/browser';
+import { commands, page, userEvent } from 'vitest/browser';
 
 import { MachineDetailHeader } from './machine-detail-header';
 
@@ -25,6 +25,25 @@ import { MachineDetailHeader } from './machine-detail-header';
  */
 const WIDTHS = [1024, 390, 320];
 
+/** The design tokens are a global stylesheet the app build loads, never a standalone mount —
+ * injected so the status badge's tone colour resolves. */
+async function loadDesignTokens(): Promise<void> {
+  const css = await commands.readFile('projects/fleet/src/lib/core/design/tokens.css');
+  const styleEl = document.createElement('style');
+  styleEl.textContent = css;
+  document.head.appendChild(styleEl);
+}
+
+/** The computed colour a design token resolves to, read off a probe element. */
+function tokenColor(token: string): string {
+  const probe = document.createElement('span');
+  probe.style.color = `var(${token})`;
+  document.body.appendChild(probe);
+  const color = getComputedStyle(probe).color;
+  probe.remove();
+  return color;
+}
+
 async function renderHeader(width: number): Promise<{ root: HTMLElement; fixture: ReturnType<typeof TestBed.createComponent<MachineDetailHeader>> }> {
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
@@ -35,6 +54,7 @@ async function renderHeader(width: number): Promise<{ root: HTMLElement; fixture
   fixture.componentRef.setInput('chunkId', 'ch_01dockwidth0000000000000000');
   fixture.componentRef.setInput('runnerName', 'a-long-runner-identity-that-wraps-under-a-narrow-column');
   fixture.componentRef.setInput('statusLabel', 'RUNNING');
+  fixture.componentRef.setInput('statusTone', 'running');
   fixture.componentRef.setInput('nodeName', 'build');
   fixture.componentRef.setInput('epoch', 3);
   fixture.componentRef.setInput('pausable', true);
@@ -75,4 +95,21 @@ describe('machine detail header shell sweep (web:shell-sweep)', () => {
       root.remove();
     }
   });
+
+  for (const width of [1024, 390]) {
+    it(`renders the status label as a kit badge in its tone, the node suffix plain, at width ${width}`, async () => {
+      await loadDesignTokens();
+      const { root } = await renderHeader(width);
+      try {
+        const status = root.querySelector<HTMLElement>('[data-testid="machine-detail-status"]')!;
+        const badge = status.querySelector<HTMLElement>('fleet-kit-badge .badge')!;
+        expect(badge.textContent?.trim()).toBe('RUNNING');
+        expect(getComputedStyle(badge).color).toBe(tokenColor('--amber'));
+        expect(status.textContent).toContain('· node build · a3');
+        expect(getComputedStyle(status).color).toBe(tokenColor('--label'));
+      } finally {
+        root.remove();
+      }
+    });
+  }
 });

@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, TemplateRef, input } from '@angular/core';
-import { type KitFact, KitFactList, type runnerApi } from 'fleet';
+import { type KitFact, KitFactList, STATUS_TONE, type runnerApi, toneColor } from 'fleet';
 
 /**
  * {@link LocalInfo}'s presentational sibling (`bzh:frontend-container-presentational`):
@@ -30,6 +30,17 @@ export class LocalInfoView {
   readonly lastFlushLabel = input.required<string>();
 
   readonly lastTickLabel = input.required<string>();
+
+  /** Each fleet-count bucket's colour, derived from the chunk status it counts
+   * (`FleetSummaryView`'s buckets: `ready`, `running`+`delivering`,
+   * `waiting_on_human`+`paused`, `needs_human`) through `STATUS_TONE` and
+   * `toneColor` — never a ladder of this panel's own (`bzh:frontend-formatters`). */
+  protected readonly bucketColor = {
+    ready: toneColor(STATUS_TONE.ready),
+    running: toneColor(STATUS_TONE.running),
+    waiting: toneColor(STATUS_TONE.waiting_on_human),
+    needs: toneColor(STATUS_TONE.needs_human),
+  } as const;
 
   /** The hub-link facts table's rows — a method, not a stored computed, since the
    * identity/endpoint/link/loop rows need the `<ng-template>`s this template declares for them

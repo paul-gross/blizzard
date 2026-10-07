@@ -1,4 +1,6 @@
-import { type Tone, runnerApi } from 'fleet';
+import type { Tone, runnerApi } from 'fleet';
+
+import { deriveLeaseStatus } from '../../core/lease-status';
 
 /**
  * The machine-side derived status of a chunk this runner holds — folded at
@@ -28,31 +30,13 @@ export interface MachineChunkFacts {
  * Precedence mirrors the runner's own lease-state fold (`derive_lease_state`)
  * extended with the chunk-level human facts: an open takeover outranks
  * everything (a human is in the session *now*), then an escalation (blocked on
- * a human), then an open ask (waiting on one), then the lease's own state.
+ * a human), then an open ask (waiting on one), then the lease's own state
+ * ({@link deriveLeaseStatus}, the kernel's lease fold).
  */
 export function deriveMachineChunkStatus(lease: runnerApi.LeaseView, facts: MachineChunkFacts): MachineChunkStatus {
   const chunkId = lease.chunk_id;
   if (facts.takeoverChunkIds.has(chunkId)) return { label: 'HUMAN IN SESSION', tone: 'takeover' };
   if (facts.escalatedChunkIds.has(chunkId)) return { label: 'NEEDS HUMAN', tone: 'needs' };
   if (facts.askChunkIds.has(chunkId)) return { label: 'WAITING · ASK', tone: 'waiting' };
-  switch (lease.state) {
-    case 'running':
-      return { label: 'RUNNING', tone: 'running' };
-    case 'stale':
-      return { label: 'STALE', tone: 'stale' };
-    case 'parked':
-      return { label: 'PARKED', tone: 'waiting' };
-    case 'backing-off':
-      return { label: 'BACKING OFF', tone: 'waiting' };
-    case 'spawning':
-      return { label: 'SPAWNING', tone: 'spawning' };
-    case 'exited':
-      return { label: 'EXITED', tone: 'idle' };
-    case 'closed':
-      // `transitioned` is the one healthy closure (the node step completed and
-      // the chunk moved on) — the rest (`failed`/`reaped`/`released`/…) read dim.
-      return lease.closure_reason === runnerApi.LeaseClosureReason.TRANSITIONED
-        ? { label: 'TRANSITIONED', tone: 'done' }
-        : { label: `CLOSED · ${(lease.closure_reason ?? 'unknown').toUpperCase()}`, tone: 'idle' };
-  }
+  return deriveLeaseStatus(lease);
 }

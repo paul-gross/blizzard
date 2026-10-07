@@ -1,13 +1,15 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
-import { compactRef, type runnerApi } from 'fleet';
+import { KitBadge, compactRef, type runnerApi } from 'fleet';
 
+import { deriveLeaseStatus } from '../core/lease-status';
 import { HeartbeatFreshness } from './heartbeat-freshness';
 
 /**
  * One active lease — presentational, `OnPush`. Shaped like the discovery
  * mock's `.lease` row: compact refs (`L-ZPRR · C-7S5D · epoch 2` —
  * `compactRef`, the app-wide short-name mechanism) with the server-derived
- * `state` right-aligned on the first line, `node / env / pid / session` on the
+ * `state` right-aligned on the first line as a kit badge, labelled and toned by
+ * the kernel's lease fold ({@link deriveLeaseStatus}), `node / env / pid / session` on the
  * second, and a {@link HeartbeatFreshness} bar under both. Deliberately free of
  * issue chips/titles — the lease list is the *liveness* rail; what a chunk is
  * about lives on the machine-chunks list, which carries the work-item enrichment.
@@ -21,7 +23,7 @@ import { HeartbeatFreshness } from './heartbeat-freshness';
 @Component({
   selector: 'app-agent-row',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [HeartbeatFreshness],
+  imports: [HeartbeatFreshness, KitBadge],
   templateUrl: './agent-row.html',
   styleUrl: './agent-row.css',
 })
@@ -50,14 +52,7 @@ export class AgentRow {
   protected readonly leaseRef = computed(() => compactRef(this.agent().lease_id));
   protected readonly chunkRef = computed(() => compactRef(this.agent().chunk_id));
 
-  /** `st-running` / `st-stale` / `st-parked` / `st-backing-off` / `st-spawning` / `st-exited` /
-   * `st-closed`. */
-  protected readonly stateClass = computed(() => `st-${this.agent().state}`);
-
-  /** `backing-off`'s own hyphen reads as a space here, matching the fleet board's own
-   * hand-authored 'BACKING OFF' label (`chunk-status.ts`) — every other state is one word,
-   * so this is a no-op for them. */
-  protected readonly stateLabel = computed(() => this.agent().state.toUpperCase().replace('-', ' '));
+  protected readonly status = computed(() => deriveLeaseStatus(this.agent()));
 
   protected readonly isStale = computed(() => this.agent().state === 'stale');
 }

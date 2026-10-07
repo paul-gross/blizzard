@@ -16,8 +16,13 @@
           <span class="iss" data-testid="detail-pointer">{{ ref.label ?? ref.source + '#' + ref.ref }}</span>
         }
       }
-      <span class="st" [attr.data-tone]="statusTone()" data-testid="machine-detail-status">
-        {{ statusLabel() }} · node {{ nodeName() }} · a{{ epoch() }}
+      <span class="st" data-testid="machine-detail-status">
+        @if (statusTone(); as tone) {
+          <fleet-kit-badge [tone]="tone">{{ statusLabel() }}</fleet-kit-badge>
+        } @else {
+          {{ statusLabel() }}
+        }
+        · node {{ nodeName() }} · a{{ epoch() }}
       </span>
     </span>
   </div>

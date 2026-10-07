@@ -78,12 +78,27 @@ describe('AgentRow', () => {
     expect(l2).not.toContain('sess-77');
   });
 
-  it('renders the server-derived state as the right-aligned chip', async () => {
+  it('renders the server-derived state as a kit badge in the lease fold\'s tone', async () => {
     const el = await render(lease({ state: 'parked' }));
 
     const chip = el.querySelector('[data-testid="agent-state"]');
+    expect(chip?.tagName.toLowerCase()).toBe('fleet-kit-badge');
     expect(chip?.textContent?.trim()).toBe('PARKED');
-    expect(chip?.classList.contains('st-parked')).toBe(true);
+    expect(chip?.querySelector('.badge')?.getAttribute('style')).toContain('var(--amber-hi)');
+  });
+
+  it('reads a running lease amber, the same tone as its chunk status', async () => {
+    const el = await render(lease({ state: 'running' }));
+
+    const badge = el.querySelector('[data-testid="agent-state"] .badge');
+    expect(badge?.getAttribute('style')).toContain('var(--amber)');
+    expect(badge?.getAttribute('style')).not.toContain('var(--amber-hi)');
+  });
+
+  it('labels a closed lease with its closure reason', async () => {
+    const el = await render(lease({ state: 'closed', closure_reason: 'reaped' }));
+
+    expect(el.querySelector('[data-testid="agent-state"]')?.textContent?.trim()).toBe('CLOSED · REAPED');
   });
 
   it('carries a heartbeat freshness bar fed by last_heartbeat_at', async () => {

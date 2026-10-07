@@ -34,30 +34,6 @@
 }
 .st {
   flex: none;
-  font-size: var(--fs-label);
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-.st-running {
-  color: var(--green);
-}
-.st-stale {
-  color: var(--red);
-}
-.st-parked {
-  color: var(--amber-hi);
-}
-.st-backing-off {
-  color: var(--amber-hi);
-}
-.st-spawning {
-  color: var(--cyan);
-}
-.st-exited {
-  color: var(--label-dim);
-}
-.st-closed {
-  color: var(--label-dim);
 }
 .l2 {
   color: var(--label);
