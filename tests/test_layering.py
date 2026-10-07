@@ -2014,6 +2014,46 @@ def test_each_blizzard_class_is_constructed_once_across_the_hub_composition_root
     assert not duplicated, f"constructed more than once across the composition roots: {duplicated}"
 
 
+#: What the runner's composition root builds once, so the served app never builds a second, private copy.
+_ROOT_BUILT_COLLABORATORS = frozenset(
+    {
+        "SpanRateLimiter",
+        "ReceiverCounter",
+        "ReceiverBounds",
+        "RunnerIdentityHolder",
+        "DisabledPlatformTracing",
+        "DisabledReceivedTelemetryExport",
+        "TelemetryReceiver",
+    }
+)
+
+
+def test_the_runner_app_builds_no_collaborator_the_composition_root_builds() -> None:
+    """bzh:dependency-injection: ``create_app`` takes the receiver, handle and identity the process
+    graph built, and falls back to none of them."""
+    built = {name for name, _ in _blizzard_constructions(_RUNNER_DIR / "app.py")}
+    assert not built & _ROOT_BUILT_COLLABORATORS, f"runner/app.py builds {sorted(built & _ROOT_BUILT_COLLABORATORS)}"
+
+
+def _is_attribute(node: ast.expr, name: str) -> bool:
+    return isinstance(node, ast.Attribute) and node.attr == name
+
+
+def test_only_the_runner_wiring_reads_app_state_under_runner_api() -> None:
+    """bzh:dependency-injection: a runner route resolves what it needs through ``RunnerWiring``, which
+    refuses an unwired seam with a named 503, rather than reading ``app.state`` itself."""
+    reads = [
+        f"{path.relative_to(_REPO_ROOT)}:{node.lineno}"
+        for path in sorted((_RUNNER_DIR / "api").glob("*.py"))
+        if path.name != "wiring.py"
+        for node in ast.walk(ast.parse(path.read_text(), filename=str(path)))
+        if isinstance(node, ast.Attribute)
+        and node.attr == "state"
+        and ((isinstance(node.value, ast.Name) and node.value.id == "app") or _is_attribute(node.value, "app"))
+    ]
+    assert not reads, f"read app.state outside RunnerWiring: {reads}"
+
+
 def _loaded_after_importing(module: str) -> set[str]:
     code = f"import sys, json; import {module}; print(json.dumps(sorted(sys.modules)))"
     result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)

@@ -94,6 +94,7 @@ from blizzard.runner.tracing.received_export import (
     build_received_telemetry_export,
 )
 from blizzard.runner.tracing.receiver_limits import ReceiverBounds, ReceiverCounter, SpanRateLimiter
+from blizzard.runner.tracing.receiving import TelemetryReceiver
 from blizzard.runner.tracing.replay import LeaseTraceReplay
 from blizzard.runner.tracing.sweep import LeaseTraceSweep
 from blizzard.runner.usage.credential_renewal import CredentialRenewalPass, RenewableSubscription
@@ -133,6 +134,9 @@ class RunnerProcess:
     log_bounds: ReceiverBounds
     #: Who this runner is at its hub; seeded from the store at boot and refreshed by every registration.
     identity: RunnerIdentityHolder
+    #: The worker telemetry receiver over this process's limiters, tallies, export and identity — the one
+    #: the OTLP routes use, so the trace-status reader and the routes read and write the same counters.
+    telemetry_receiver: TelemetryReceiver
     #: Platform spans — off unless the host passed a handle; every collaborator opens spans through it.
     platform_tracing: IPlatformTracing = field(default_factory=DisabledPlatformTracing)
     #: Where admitted metrics and logs leave — off unless the host passed a handle.
@@ -286,6 +290,28 @@ def build_runner_process(
         trace_replay = LeaseTraceReplay(
             leases=stores.lease_traces, exporter=exporter, identity=identity, config=config.tracing
         )
+        span_limiter = SpanRateLimiter(clock)
+        receiver_counter = ReceiverCounter()
+        harness_span_counter = ReceiverCounter()
+        metric_bounds = ReceiverBounds.fresh(clock)
+        log_bounds = ReceiverBounds.fresh(clock)
+        received_telemetry = received_telemetry or DisabledReceivedTelemetryExport()
+        telemetry_names = declared_telemetry_names()
+        telemetry_receiver = TelemetryReceiver(
+            platform_tracing=platform_tracing,
+            received_telemetry=received_telemetry,
+            span_limiter=span_limiter,
+            span_counter=receiver_counter,
+            harness_span_counter=harness_span_counter,
+            telemetry_names=telemetry_names,
+            metric_bounds=metric_bounds,
+            log_bounds=log_bounds,
+            clock=clock,
+            identity=identity,
+            worker_programs=config.tracing.worker_programs,
+            harness_telemetry=config.tracing.harness_telemetry,
+            mapped_services=config.tracing.worker_program_services,
+        )
         return RunnerProcess(
             engine,
             stores,
@@ -300,16 +326,17 @@ def build_runner_process(
             trace_settings=tracing,
             trace_sweep=trace_sweep,
             trace_replay=trace_replay,
-            span_limiter=SpanRateLimiter(clock),
-            receiver_counter=ReceiverCounter(),
-            harness_span_counter=ReceiverCounter(),
-            metric_bounds=ReceiverBounds.fresh(clock),
-            log_bounds=ReceiverBounds.fresh(clock),
+            span_limiter=span_limiter,
+            receiver_counter=receiver_counter,
+            harness_span_counter=harness_span_counter,
+            metric_bounds=metric_bounds,
+            log_bounds=log_bounds,
             identity=identity,
+            telemetry_receiver=telemetry_receiver,
             platform_tracing=platform_tracing,
-            received_telemetry=received_telemetry or DisabledReceivedTelemetryExport(),
+            received_telemetry=received_telemetry,
             harness_telemetry=plan,
-            harness_telemetry_names=declared_telemetry_names(),
+            harness_telemetry_names=telemetry_names,
             credential_renewal=credential_renewal,
         )
     except BaseException:

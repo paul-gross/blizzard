@@ -10,7 +10,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
-from blizzard.foundation.store.readiness import ReadinessService
+from blizzard.runner.api.wiring import RunnerWiring
 
 router = APIRouter(prefix="/api", tags=["meta"])
 
@@ -27,7 +27,7 @@ class ReadinessResponse(BaseModel):
 
 @router.get("/ready")
 def ready(request: Request) -> ReadinessResponse:
-    service: ReadinessService | None = getattr(request.app.state, "readiness", None)
+    service = RunnerWiring.of(request).maybe_readiness()
     if service is None:
         return ReadinessResponse(
             ready=False,

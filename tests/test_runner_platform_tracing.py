@@ -39,7 +39,7 @@ from opentelemetry.sdk.trace import ReadableSpan
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 from blizzard.foundation.chunk_status import ChunkStatus
-from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.clock import FixedClock, SystemClock
 from blizzard.foundation.harness_telemetry_outcome import HarnessTelemetryOutcome
 from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.foundation.platform_tracing.handle import IPlatformTracing, build_platform_tracing
@@ -68,6 +68,7 @@ from blizzard.runner.tracing.platform import (
     identity_stamp,
 )
 from blizzard.runner.tracing.received_export import (
+    DisabledReceivedTelemetryExport,
     IReceivedTelemetryExport,
     build_received_telemetry_export,
 )
@@ -78,6 +79,7 @@ from blizzard.runner.tracing.receiver_limits import (
     ReceiverCounter,
     SpanRateLimiter,
 )
+from blizzard.runner.tracing.receiving import TelemetryReceiver
 from blizzard.runner.tracing.status import LeaseTraceStatusReader
 from tests import claude_code_telemetry
 from tests.harness_sections import sections
@@ -196,20 +198,33 @@ def _app(  # type: ignore[no-untyped-def]
     _seed_lease(store)
     handle.instrument_engine(store._engine)
     handle.instrument_client(proxy)
+    clock = SystemClock()
+    identity = identity or registered_identity(_RUNNER, _NAME)
+    counter = counter or ReceiverCounter()
+    claude_counter = claude_counter or ReceiverCounter()
+    receiver = TelemetryReceiver(
+        platform_tracing=handle,
+        received_telemetry=received or DisabledReceivedTelemetryExport(),
+        span_limiter=limiter or SpanRateLimiter(clock),
+        span_counter=counter,
+        harness_span_counter=claude_counter,
+        telemetry_names=declared_telemetry_names(),
+        metric_bounds=metric_bounds or ReceiverBounds.fresh(clock),
+        log_bounds=log_bounds or ReceiverBounds.fresh(clock),
+        clock=clock,
+        identity=identity,
+        worker_programs=worker_programs,
+        harness_telemetry=harness_telemetry,
+        mapped_services=services or {},
+    )
     app = create_app(
         config,
         runner_stores=make_stores(store),
         hub_proxy_client=proxy,
         hub_retry_clock=no_retry_clock(),
         platform_tracing=handle,
-        identity=identity or registered_identity(_RUNNER, _NAME),
-        span_limiter=limiter,
-        receiver_counter=counter,
-        harness_span_counter=claude_counter,
-        harness_telemetry_names=declared_telemetry_names(),
-        metric_bounds=metric_bounds,
-        log_bounds=log_bounds,
-        received_telemetry=received,
+        identity=identity,
+        telemetry_receiver=receiver,
         trace_status=LeaseTraceStatusReader(
             settings=TracingSettings.of(_ENDPOINT),
             leases=make_stores(store).lease_traces,
@@ -455,6 +470,28 @@ def test_a_request_without_a_valid_lease_token_is_refused_403(tmp_path: Path, he
     with TestClient(_app(tmp_path, handle, [])) as client:
         assert _post_json(client, _export(_own_trace()), headers).status_code == 403
     assert _worker_spans(_finished(handle, exporter)) == []
+
+
+def test_an_app_built_without_a_receiver_refuses_a_valid_token_503_naming_it(tmp_path: Path) -> None:
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    _seed_lease(store)
+    app = create_app(
+        RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}"), runner_stores=make_stores(store)
+    )
+    with TestClient(app) as client:
+        refused = _post_json(client, _export(_own_trace()))
+        assert refused.status_code == 503
+        assert "telemetry receiver" in refused.json()["detail"]
+        assert _post_json(client, _export(_own_trace()), {}).status_code == 403
+
+
+def test_the_trace_status_reader_reads_the_tally_the_receiver_writes(tmp_path: Path) -> None:
+    counter = ReceiverCounter()
+    with TestClient(_app(tmp_path, _handle(InMemorySpanExporter()), [], counter=counter)) as client:
+        assert _post_json(client, _export(_own_trace())).status_code == 200
+        received = client.get("/api/traces/status").json()["receiver"]
+    assert received == {"accepted_spans": counter.count().accepted, "dropped_spans": counter.count().dropped}
+    assert counter.count().accepted == 1
 
 
 def test_a_closed_leases_token_is_refused_403(tmp_path: Path) -> None:

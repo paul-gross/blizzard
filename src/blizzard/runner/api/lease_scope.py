@@ -44,7 +44,8 @@ def lease_for_presented_token(request: Request) -> Lease:
     whether a lease exists; a wiring failure such as the store-free ``503`` still propagates."""
     wiring = RunnerWiring.of(request)
     refused = HTTPException(
-        status_code=status.HTTP_403_FORBIDDEN, detail=str(LeaseTokenRejected("presented token does not authorize a lease"))
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=str(LeaseTokenRejected("presented token does not authorize a lease")),
     )
     token = presented_lease_token(request)
     if token is None:

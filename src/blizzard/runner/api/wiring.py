@@ -8,8 +8,9 @@ mutation resolves its own single-concept service instead."""
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
-from typing import NoReturn
+from typing import TYPE_CHECKING, NoReturn
 
 import httpx
 from fastapi import Request, status
@@ -17,14 +18,16 @@ from fastapi.exceptions import HTTPException
 from starlette.datastructures import State
 
 from blizzard.foundation.clock import IClock, IMonotonicClock
-from blizzard.foundation.platform_tracing.handle import DisabledPlatformTracing, IPlatformTracing
+from blizzard.foundation.events.broker import EventBroker
+from blizzard.foundation.forwarded import TrustedProxies
+from blizzard.foundation.store.readiness import ReadinessService
+from blizzard.runner.auth.jti_cache import IJtiCache
+from blizzard.runner.auth.jwks_cache import IJwksCache
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.events.publisher import IRunnerEventPublisher
-from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryNames
 from blizzard.runner.harness.health_cache import IReadHarnessHealth
 from blizzard.runner.harness.registry import IHarnessRegistry
 from blizzard.runner.harness.workspace_prompts import WorkspacePromptService
-from blizzard.runner.hub.identity import ICurrentRunnerIdentity, RunnerIdentityHolder
 from blizzard.runner.leases.activity import LocalLeaseService
 from blizzard.runner.leases.asks import AskService
 from blizzard.runner.leases.liveness import LeaseLivenessService
@@ -39,15 +42,14 @@ from blizzard.runner.selftest.service import SelfTestService
 from blizzard.runner.status.view import RunnerStatusService
 from blizzard.runner.stores import RunnerReadStores
 from blizzard.runner.throttle.pause import PauseService
-from blizzard.runner.tracing.received_export import (
-    DisabledReceivedTelemetryExport,
-    IReceivedTelemetryExport,
-)
-from blizzard.runner.tracing.receiver_limits import ReceiverBounds, ReceiverCounter, SpanRateLimiter
 from blizzard.runner.tracing.receiving import TelemetryReceiver
 from blizzard.runner.tracing.replay import LeaseTraceReplay
 from blizzard.runner.tracing.status import LeaseTraceStatusReader
 from blizzard.runner.transcripts.service import TranscriptService
+
+if TYPE_CHECKING:
+    # `api/federation.py` resolves its own collaborators through this module.
+    from blizzard.runner.api.federation import FederationSettings, HubAuthModeCache
 
 _STORE = "runner store"
 
@@ -70,6 +72,30 @@ class RunnerWiring:
     def clock(self) -> IClock:
         clock: IClock | None = getattr(self.state, "clock", None)
         return clock if clock is not None else self._refuse(_STORE)
+
+    def federation(self) -> FederationSettings:
+        settings: FederationSettings | None = getattr(self.state, "federation", None)
+        return settings if settings is not None else self._refuse("federation settings")
+
+    def hub_auth_mode(self) -> HubAuthModeCache:
+        cache: HubAuthModeCache | None = getattr(self.state, "hub_auth_mode", None)
+        return cache if cache is not None else self._refuse("hub auth-mode cache")
+
+    def jwks_cache(self) -> IJwksCache:
+        cache: IJwksCache | None = getattr(self.state, "jwks_cache", None)
+        return cache if cache is not None else self._refuse("JWKS cache")
+
+    def jti_cache(self) -> IJtiCache:
+        cache: IJtiCache | None = getattr(self.state, "jti_cache", None)
+        return cache if cache is not None else self._refuse("JTI cache")
+
+    def session_secret(self) -> bytes:
+        secret: bytes | None = getattr(self.state, "session_secret", None)
+        return secret if secret is not None else self._refuse("session secret")
+
+    def trusted_proxies(self) -> TrustedProxies:
+        proxies: TrustedProxies | None = getattr(self.state, "trusted_proxies", None)
+        return proxies if proxies is not None else self._refuse("trusted proxies")
 
     def hub_proxy_client(self) -> httpx.Client:
         client: httpx.Client | None = getattr(self.state, "hub_proxy_client", None)
@@ -117,61 +143,9 @@ class RunnerWiring:
         replay: LeaseTraceReplay | None = getattr(self.state, "trace_replay", None)
         return replay if replay is not None else self._refuse("trace replay")
 
-    def platform_tracing(self) -> IPlatformTracing:
-        """The process's platform-tracing handle; the disabled one where the composer wired none."""
-        return getattr(self.state, "platform_tracing", None) or DisabledPlatformTracing()
-
-    def identity(self) -> ICurrentRunnerIdentity:
-        """The process's identity holder; a never-registered one where the composer wired none."""
-        return getattr(self.state, "identity", None) or RunnerIdentityHolder()
-
-    def span_limiter(self) -> SpanRateLimiter:
-        limiter: SpanRateLimiter | None = getattr(self.state, "span_limiter", None)
-        return limiter if limiter is not None else self._refuse("span rate limiter")
-
-    def receiver_counter(self) -> ReceiverCounter:
-        counter: ReceiverCounter | None = getattr(self.state, "receiver_counter", None)
-        return counter if counter is not None else self._refuse("span receiver counter")
-
-    def harness_span_counter(self) -> ReceiverCounter:
-        counter: ReceiverCounter | None = getattr(self.state, "harness_span_counter", None)
-        return counter if counter is not None else self._refuse("harness span receiver counter")
-
-    def harness_telemetry_names(self) -> tuple[HarnessTelemetryNames, ...]:
-        """What every declared binding's telemetry arrives under; none where the composer wired none."""
-        return getattr(self.state, "harness_telemetry_names", ())
-
-    def metric_bounds(self) -> ReceiverBounds:
-        bounds: ReceiverBounds | None = getattr(self.state, "metric_bounds", None)
-        return bounds if bounds is not None else self._refuse("metric receiver bounds")
-
-    def log_bounds(self) -> ReceiverBounds:
-        bounds: ReceiverBounds | None = getattr(self.state, "log_bounds", None)
-        return bounds if bounds is not None else self._refuse("log receiver bounds")
-
-    def received_telemetry(self) -> IReceivedTelemetryExport:
-        """The received metrics and logs export; the disabled one where the composer wired none."""
-        return getattr(self.state, "received_telemetry", None) or DisabledReceivedTelemetryExport()
-
     def telemetry_receiver(self) -> TelemetryReceiver:
-        """The worker telemetry receiver over the process's limiters and tallies, switched by
-        the runner's ``[tracing]`` config (every receiver flag off with no config wired)."""
-        config = self.maybe_config()
-        return TelemetryReceiver(
-            platform_tracing=self.platform_tracing(),
-            received_telemetry=self.received_telemetry(),
-            span_limiter=self.span_limiter(),
-            span_counter=self.receiver_counter(),
-            harness_span_counter=self.harness_span_counter(),
-            telemetry_names=self.harness_telemetry_names(),
-            metric_bounds=self.metric_bounds(),
-            log_bounds=self.log_bounds(),
-            clock=getattr(self.state, "clock", None),
-            identity=self.identity(),
-            worker_programs=config is not None and config.tracing.worker_programs,
-            harness_telemetry=config is not None and config.tracing.harness_telemetry,
-            mapped_services=config.tracing.worker_program_services if config is not None else {},
-        )
+        receiver: TelemetryReceiver | None = getattr(self.state, "telemetry_receiver", None)
+        return receiver if receiver is not None else self._refuse("telemetry receiver")
 
     def leases(self) -> LocalLeaseService:
         service: LocalLeaseService | None = getattr(self.state, "leases", None)
@@ -235,6 +209,18 @@ class RunnerWiring:
         """The publish seam, typed against :mod:`~blizzard.runner.events.publisher`'s Protocol.
         ``None`` when none is wired — never refused."""
         return getattr(self.state, "events", None)
+
+    def maybe_event_broker(self) -> EventBroker | None:
+        """The SSE broker the stream route reads; ``None`` when no stream is wired — never refused."""
+        return getattr(self.state, "events", None)
+
+    def maybe_shutdown(self) -> asyncio.Event | None:
+        """The event ``_lifespan`` sets on shutdown; ``None`` where the app was built without one."""
+        return getattr(self.state, "shutdown", None)
+
+    def maybe_readiness(self) -> ReadinessService | None:
+        """The readiness service; ``None`` on the store-free app, which reports not ready — never refused."""
+        return getattr(self.state, "readiness", None)
 
     def maybe_config(self) -> RunnerConfig | None:
         return getattr(self.state, "config", None)

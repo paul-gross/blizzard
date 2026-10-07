@@ -61,6 +61,10 @@ class IPlatformTracing(Protocol):
         ...
 
 
+#: The framework telemetry of an app with no platform tracing: no spans, no auto-configured exporters.
+DISABLED_TELEMETRY: TelemetryConfig = {"tracing": False, "auto_configure": False}
+
+
 class DisabledPlatformTracing:
     def __init__(self) -> None:
         self._tracer = NoopPlatformTracer()
@@ -74,7 +78,7 @@ class DisabledPlatformTracing:
         return self._tracer
 
     def fastapi_telemetry(self, *, exclude: ScopeFilter | None = None) -> TelemetryConfig:
-        return {"tracing": False, "auto_configure": False}
+        return DISABLED_TELEMETRY
 
     def instrument_engine(self, engine: Engine) -> None:
         return None
