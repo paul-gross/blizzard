@@ -844,10 +844,9 @@ def test_adapter_isolation_admits_wiring_roots_and_own_adapter(tmp_path: Path, i
 
 
 def test_the_process_probe_is_declared_under_runner_process() -> None:
-    """``IProcessProbe`` lives in ``runner/process/`` beside the owned-process seam it extends,
-    so a harness reaches the probe without importing ``runner/loop``; the ``/proc`` driver
-    ``LinuxProcessProbe`` lives under ``runner/process/internal/``, and :data:`_MOVED_HOMES`
-    routes every import of it there."""
+    """``IProcessProbe`` lives in ``runner/process/``, so a harness reaches the probe without importing
+    ``runner/loop``; the ``/proc`` driver ``LinuxProcessProbe`` lives under ``runner/process/internal/``,
+    and :data:`_MOVED_HOMES` routes every import of it there."""
 
     def declared(path: Path) -> set[str]:
         tree = ast.parse(path.read_text(), filename=str(path))
