@@ -29,7 +29,7 @@ from blizzard.foundation.fact_kinds import (
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.event_log import EventLogService
-from blizzard.hub.domain.chunk.model import ChunkFacts, NodeQuestion, QuestionDelivery
+from blizzard.hub.domain.chunk.model import PROJECTED_EVENT_KINDS, ChunkFacts, NodeQuestion, QuestionDelivery
 from blizzard.hub.domain.chunk.ports.escalations import IWriteChunkEscalationsRepository
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
@@ -121,9 +121,9 @@ def requires_route_token(kind: str, chunk_id: str | None) -> bool | None:
 
 def admitted_event_kind(kind: str, severity: str) -> EventLogKind | None:
     """The event-log kind a runner's ``event.recorded`` lands as — ``None`` for a kind outside
-    the closed vocabulary or a severity other than that kind's own."""
+    the closed vocabulary, a kind the log only projects, or a severity other than that kind's own."""
     narrowed = narrow_event_log_kind(kind)
-    if narrowed is None or severity != EVENT_LOG_SEVERITY[narrowed]:
+    if narrowed is None or narrowed in PROJECTED_EVENT_KINDS or severity != EVENT_LOG_SEVERITY[narrowed]:
         return None
     return narrowed
 
@@ -386,7 +386,7 @@ class FactIngestService:
             # dying worker is exactly the signal this log exists to surface. `chunk_id` is optional.
             wire_kind = admitted_event_kind(fact.require_text("kind"), fact.require_text("severity"))
             if wire_kind is None:
-                _log.warning("event fact outside the closed vocabulary", kind=fact.require_text("kind"))
+                _log.warning("event fact not admitted to the log", kind=fact.require_text("kind"))
                 return False, None
             event_id = self._events.record(
                 kind=wire_kind,

@@ -7,6 +7,7 @@ from typing import cast, get_args
 import pytest
 
 from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind, EventLogSeverity
+from blizzard.hub.domain.chunk.model import PROJECTED_EVENT_KINDS
 from tests.event_log_kind_census import EVENT_LOG_KIND_CENSUS as CENSUS
 from tests.event_log_kind_census import Projected, Recorded
 from tests.repo_files import repo_root
@@ -19,6 +20,11 @@ _OPERATIONS_MD = _REPO_ROOT.parent / "blizzard-context" / "domain" / "operations
 
 def test_census_names_exactly_the_declared_kinds() -> None:
     assert set(CENSUS) == set(get_args(EventLogKind))
+
+
+def test_the_projected_dispositions_are_exactly_the_hubs_projected_kinds() -> None:
+    projected = {kind for kind, disposition in CENSUS.items() if isinstance(disposition, Projected)}
+    assert projected == set(PROJECTED_EVENT_KINDS)
 
 
 def test_every_census_severity_matches_the_vocabulary() -> None:

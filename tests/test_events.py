@@ -211,6 +211,13 @@ def test_event_recorded_rejects_a_declared_kind_paired_with_the_wrong_severity(t
     assert hub.client.get("/api/events").json()["events"] == []
 
 
+def test_event_recorded_rejects_a_kind_the_log_only_projects(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    ack = _push_event_fact(hub, kind="needs-human", severity="critical")
+    assert ack["rejected"] == [1]
+    assert hub.client.get("/api/events").json()["events"] == []
+
+
 def test_event_recorded_with_a_declared_kind_and_its_declared_severity_is_applied(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     ack = _push_event_fact(hub, kind="worker-lost", severity="critical")

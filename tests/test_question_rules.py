@@ -167,7 +167,7 @@ def test_other_facts_are_not_route_token_gated(kind: str) -> None:
 
 
 def test_an_event_lands_only_in_its_kinds_own_severity() -> None:
-    assert admitted_event_kind("needs-human", "critical") == "needs-human"
+    assert admitted_event_kind("needs-human", "critical") is None
     assert admitted_event_kind("attempt-failed", "warning") == "attempt-failed"
     assert admitted_event_kind("needs-human", "warning") is None
     assert admitted_event_kind("not-a-kind", "critical") is None
