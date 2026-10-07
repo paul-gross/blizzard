@@ -751,3 +751,21 @@ def test_validate_delivery_rejects_on_the_first_failing_artifact() -> None:
             proposal_artifacts={},
             bucket=_bucket([_finding(_FIN1), _finding(_FIN2), _finding(_FIN3)]),
         )
+
+
+def test_validate_delivery_expects_the_state_of_every_finding_an_observed_or_gone_op_names() -> None:
+    bucket = _bucket([_finding(_FIN1), _finding(_FIN2, state="delivered", actor="u1"), _finding(_FIN3)])
+    raw = wire_json(
+        DeliveredDelta(
+            scope=_RUN.scope_slug,
+            revisions={},
+            findings=[FindingObservedOp(id=_FIN1), FindingGoneOp(id=_FIN2, note="n")],
+            measurement=None,
+        )
+    )
+
+    validated = validate_delivery(
+        run=_RUN, delta_artifacts={"d": raw}, proposal_artifacts={}, bucket=bucket, formats=_FORMATS
+    )
+
+    assert validated.expect == {_FIN1: "live", _FIN2: "delivered"}

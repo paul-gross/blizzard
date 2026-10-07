@@ -12,6 +12,7 @@ from sqlalchemy import insert, select
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.ids import ARTIFACT_PREFIX, Id
+from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.garden.delivery.materialize import (
     DeliveryOutcome,
@@ -20,6 +21,7 @@ from blizzard.hub.domain.garden.delivery.materialize import (
 )
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import fence, lock_chunk_row, next_artifact_seq
+from blizzard.hub.store.internal.finding_store import lock_findings, moved_findings
 from blizzard.hub.store.schema import (
     artifacts,
     finding_facts,
@@ -58,6 +60,11 @@ class GardenDeliveryStore:
     def deliver(self, plan: DeliveryPlan, *, admission: EpochAdmission) -> DeliveryOutcome:
         with self._store.write("deliver") as conn:
             lock_chunk_row(conn, plan.chunk_id)
+            # Every finding an `observed`/`gone` op names, locked before any read below so the guard
+            # further down judges a state no verb can move until this transaction ends. Chunk row
+            # first, then findings sorted: no path locks a finding and then a chunk.
+            for batch in id_batches(sorted(plan.expect)):
+                lock_findings(conn, batch)
             # Not `ChunkArtifactsStore.record_hub_artifact`: that opens its own transaction, which
             # cannot fold into this one alongside every insert below.
             already = self._marker(conn, chunk_id=plan.chunk_id, node_id=plan.node_id, epoch=plan.epoch)
@@ -135,6 +142,11 @@ class GardenDeliveryStore:
 
             new_findings = [f for d in surviving_deltas for f in d.new_findings]
             facts = [fact for d in surviving_deltas for fact in d.facts]
+            # Only facts that will actually be inserted: a dropped, already-materialized delta's ops
+            # write nothing, so a finding they name moving is no reason to refuse.
+            written = {fact.finding_id for fact in facts}
+            if moved_findings(conn, {fid: state for fid, state in plan.expect.items() if fid in written}):
+                return DeliveryOutcome.GUARD_LOST
             finding_set_rows = [d.finding_set for d in surviving_deltas]
 
             if new_findings:
