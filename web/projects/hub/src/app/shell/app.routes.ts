@@ -70,7 +70,7 @@ export const routes: Routes = [
     path: 'gardening',
     loadComponent: () => import('../garden/gardening-page').then((m) => m.GardeningPage),
     children: [
-      { path: '', redirectTo: 'scopes', pathMatch: 'full' },
+      { path: '', redirectTo: 'runs', pathMatch: 'full' },
       // A scope has no id of its own — its slug *is* the id.
       {
         path: 'scopes',
