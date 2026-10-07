@@ -302,3 +302,86 @@ def test_a_store_seeded_by_the_previous_encoder_reconciles_up_to_date(tmp_path: 
     outcomes = GraphReconciliation(hub.services.graph_mint, hub.services.graphs, PACKAGED.paths).outcomes()
 
     assert {o.status for o in outcomes} == {GraphSyncStatus.UP_TO_DATE}
+
+
+_TWO_ARTIFACTS_YAML = """
+name: {name}
+artifacts:
+{declared}
+entry: build
+nodes:
+  build:
+    executor: runner
+    prompt: ./prompts/build.md
+    judgement:
+      prompt: judge it
+      choices:
+        pass:
+          description: it works
+          to: done
+"""
+
+
+def test_reordering_the_artifacts_map_alone_mints_nothing(tmp_path: Path) -> None:
+    # `artifacts:` is a map: its authored order carries no meaning, so a reorder is no
+    # change and must not supersede a definition on every deploy.
+    hub = build_hub(tmp_path)
+    graph_yaml = _packaged(tmp_path, "ordered", body="")
+    (graph_yaml.parent / "alpha.md").write_text("alpha text\n")
+    (graph_yaml.parent / "beta.md").write_text("beta text\n")
+    graph_yaml.write_text(_TWO_ARTIFACTS_YAML.format(name="ordered", declared="  alpha: ./alpha.md\n  beta: ./beta.md"))
+    assert _statuses(_sync(hub, [graph_yaml])) == [("ordered", "minted")]
+
+    graph_yaml.write_text(_TWO_ARTIFACTS_YAML.format(name="ordered", declared="  beta: ./beta.md\n  alpha: ./alpha.md"))
+    outcomes = _sync(hub, [graph_yaml])
+
+    assert _statuses(outcomes) == [("ordered", "up-to-date")]
+    assert len(hub.client.get("/api/graphs").json()) == 1
+
+
+def _retire_all(hub: HubHarness, name: str) -> None:
+    for summary in hub.services.graphs.list_summaries():
+        if summary.name == name:
+            graph = hub.services.graphs.get(summary.graph_id)
+            assert graph is not None
+            hub.services.graph_lifecycle.retire(graph, by="operator")
+
+
+def test_reconciling_a_fully_retired_name_with_an_unchanged_definition_mints_nothing(tmp_path: Path) -> None:
+    # Retirement is the operator's brake: a deploy whose packaged definition is unchanged
+    # must not silently undo it by minting a fresh enabled graph.
+    hub = build_hub(tmp_path)
+    path = _packaged(tmp_path, "braked")
+    _sync(hub, [path])
+    _retire_all(hub, "braked")
+
+    outcomes = _sync(hub, [path])
+
+    assert _statuses(outcomes) == [("braked", "up-to-date")]
+    rows = hub.client.get("/api/graphs").json()
+    assert len(rows) == 1
+    assert rows[0]["retired"] is True
+    assert hub.services.graphs.get_enabled_by_name("braked") is None
+
+
+def test_reconciling_a_fully_retired_name_with_a_changed_definition_mints_a_new_enabled_graph(
+    tmp_path: Path,
+) -> None:
+    # A changed definition is a new graph, whatever the retired lineage behind it.
+    hub = build_hub(tmp_path)
+    path = _packaged(tmp_path, "braked", prompt="do the work")
+    first = _sync(hub, [path])[0]
+    _retire_all(hub, "braked")
+
+    hub.clock.advance(timedelta(minutes=1))
+    (path.parent / "prompts" / "build.md").write_text("do the work, differently")
+    outcomes = _sync(hub, [path])
+
+    assert _statuses(outcomes) == [("braked", "minted")]
+    new_id = outcomes[0].graph_id
+    assert new_id is not None and new_id != first.graph_id
+    enabled = hub.services.graphs.get_enabled_by_name("braked")
+    assert enabled is not None and enabled.graph_id == new_id
+    listed = {g["graph_id"]: g for g in hub.client.get("/api/graphs").json()}
+    assert listed[new_id]["retired"] is False
+    assert listed[first.graph_id]["retired"] is True

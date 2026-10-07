@@ -17,7 +17,7 @@ from sqlalchemy import create_engine
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.node_steps import SessionMode
 from blizzard.hub.domain.graph.authoring import Reification
-from blizzard.hub.domain.graph.model import GraphDoc, GraphParseError, RotatePolicy, SessionDecl
+from blizzard.hub.domain.graph.model import SESSION_KNOWN_KEYS, GraphDoc, GraphParseError, RotatePolicy, SessionDecl
 from blizzard.hub.domain.graph.validation import Validator
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.schema import metadata
@@ -164,6 +164,13 @@ def test_an_unknown_session_key_is_rejected_naming_the_key() -> None:
     message = str(exc_info.value)
     assert "not_a_real_key" in message
     assert "compaction_window" not in message.split("recognizes only")[0]
+
+
+def test_an_unknown_session_key_error_lists_every_recognised_key() -> None:
+    with pytest.raises(GraphParseError) as exc_info:
+        GraphDoc.of(_doc(sessions={"code": {"not_a_real_key": "x"}}))
+    recognised = str(exc_info.value).split("recognizes only ")[1]
+    assert recognised == str(sorted(SESSION_KNOWN_KEYS))
 
 
 def test_an_unknown_session_key_error_names_the_session_and_the_hub_version() -> None:
