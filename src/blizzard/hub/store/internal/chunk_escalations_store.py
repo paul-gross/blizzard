@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import select, tuple_
 
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.model import EscalationOpen
@@ -157,12 +157,19 @@ class ChunkEscalationsStore:
             maybe_live(), s.chunks.c.chunk_id.not_in(ephemeral_ids_select())
         )
         with self._store.read("_newest_escalation_per_chunk") as conn:
-            newest_by_chunk = {}
-            for e in conn.execute(select(s.escalations).where(s.escalations.c.chunk_id.in_(live_chunk_ids))).all():
-                current = newest_by_chunk.get(e.chunk_id)
-                if current is None or e.recorded_at > current.recorded_at:
-                    newest_by_chunk[e.chunk_id] = e
-            return newest_by_chunk
+            newer = s.escalations.alias("newer")
+            beaten = (
+                select(newer.c.id)
+                .where(
+                    newer.c.chunk_id == s.escalations.c.chunk_id,
+                    tuple_(newer.c.recorded_at, newer.c.id) > tuple_(s.escalations.c.recorded_at, s.escalations.c.id),
+                )
+                .exists()
+            )
+            rows = conn.execute(
+                select(s.escalations).where(s.escalations.c.chunk_id.in_(live_chunk_ids), ~beaten)
+            ).all()
+            return {e.chunk_id: e for e in rows}
 
     def _escalation_candidates(self, newest_by_chunk) -> list[str]:  # type: ignore[no-untyped-def]
         """Chunks whose newest escalation *might* still be open — a **drop-only** narrowing that

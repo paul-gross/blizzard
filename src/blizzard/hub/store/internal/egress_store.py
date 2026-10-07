@@ -62,15 +62,16 @@ class EgressStore:
         return max(newest, key=lambda record: record.recorded_at, default=None)
 
     def newest_egress_failure(self) -> EgressWriteFailure | None:
-        """Walks the latch events newest-first — one per outage edge, so a few — to the first failure."""
+        """The newest failure event — filtered in the query, so a later recovery never hides it."""
         c = s.event_log.c
         stmt = (
             select(c.kind, c.recorded_at, c.message)
-            .where(c.kind.in_(_LATCH_KINDS))
+            .where(c.kind == _FAILED)
             .order_by(c.recorded_at.desc(), c.id.desc())
+            .limit(1)
         )
         with self._store.read("egress_newest_failure") as conn:
-            row = next((r for r in conn.execute(stmt) if r.kind == _FAILED), None)
+            row = conn.execute(stmt).first()
         return EgressWriteFailure(row.recorded_at, row.message) if row is not None else None
 
     def usage_after(self, position: UsagePosition, until: datetime, limit: int) -> Sequence[AttributedUsage]:

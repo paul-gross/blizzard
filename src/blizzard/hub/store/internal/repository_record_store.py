@@ -8,10 +8,11 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import func, insert, select, update
+from sqlalchemy import insert, select, update
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 
+from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.config.changes import ConfigChange
 from blizzard.hub.domain.config.repositories import (
     ConfiguredRepository,
@@ -24,19 +25,19 @@ from blizzard.hub.domain.config.repositories import (
 from blizzard.hub.domain.config.work_sources import ConfigRevisionConflict
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.config_change_store import append_change
+from blizzard.hub.store.internal.newest_fact import newest_retired_select
 from blizzard.hub.store.internal.secret_store import secret_unavailable
 from blizzard.hub.store.schema import repositories, repository_lifecycle_facts
 
 
 def _retirements(conn: Connection, names: list[str] | None = None) -> dict[str, datetime]:
     """When each currently-retired repository's newest retirement fact was set."""
-    newest = select(func.max(repository_lifecycle_facts.c.id)).group_by(repository_lifecycle_facts.c.name)
-    query = select(repository_lifecycle_facts.c.name, repository_lifecycle_facts.c.set_at).where(
-        repository_lifecycle_facts.c.id.in_(newest), repository_lifecycle_facts.c.retired.is_(True)
-    )
-    if names is not None:
-        query = query.where(repository_lifecycle_facts.c.name.in_(names))
-    return {row.name: row.set_at for row in conn.execute(query)}
+    facts = repository_lifecycle_facts
+    found: dict[str, datetime] = {}
+    for batch in id_batches(names) if names is not None else [None]:
+        for row in conn.execute(newest_retired_select(facts, facts.c.name, batch, facts.c.set_at)):
+            found[row.name] = row.set_at
+    return found
 
 
 def _check_secret(conn: Connection, secret: str) -> None:

@@ -38,7 +38,7 @@ from blizzard.hub.domain.graph.model import (
 )
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import lock_keys
-from blizzard.hub.store.internal.newest_fact import newest_fact_select
+from blizzard.hub.store.internal.newest_fact import newest_retired_select
 from blizzard.hub.store.schema import (
     graph_artifacts,
     graph_choices,
@@ -377,20 +377,11 @@ class GraphStore:
         read or one :meth:`_is_retired` query per candidate."""
         if not graph_ids:
             return set()
-        newest: dict[str, bool] = {}
+        facts = graph_lifecycle_facts
+        retired: set[str] = set()
         for batch in id_batches(graph_ids):
-            rows = conn.execute(
-                newest_fact_select(
-                    graph_lifecycle_facts,
-                    graph_lifecycle_facts.c.graph_id,
-                    batch,
-                    graph_lifecycle_facts.c.graph_id,
-                    graph_lifecycle_facts.c.retired,
-                )
-            ).all()
-            for row in rows:
-                newest[row.graph_id] = row.retired
-        return {graph_id for graph_id, retired in newest.items() if retired}
+            retired.update(conn.execute(newest_retired_select(facts, facts.c.graph_id, batch)).scalars())
+        return retired
 
     def get_many(self, graph_ids: Sequence[str]) -> dict[str, Graph]:
         """``get``'s batched sibling — every requested id's
@@ -549,15 +540,9 @@ class GraphStore:
     def retired_graph_ids(self) -> set[str]:
         """Every ``graph_id`` whose newest lifecycle fact reads retired."""
         with self._store.read("retired_graph_ids") as conn:
-            rows = conn.execute(
-                select(graph_lifecycle_facts.c.graph_id, graph_lifecycle_facts.c.retired).order_by(
-                    graph_lifecycle_facts.c.id
-                )
-            ).all()
-        newest: dict[str, bool] = {}
-        for row in rows:
-            newest[row.graph_id] = row.retired  # newest-fact-wins: ascending id order overwrites
-        return {graph_id for graph_id, retired in newest.items() if retired}
+            return set(
+                conn.execute(newest_retired_select(graph_lifecycle_facts, graph_lifecycle_facts.c.graph_id)).scalars()
+            )
 
     def record_lifecycle(self, graph_id: str, *, retired: bool, at: datetime, by: str) -> None:
         """Append a ``graph.retired``/``graph.enabled`` fact — newest-fact-wins."""

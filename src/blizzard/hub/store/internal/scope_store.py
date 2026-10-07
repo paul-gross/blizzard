@@ -18,6 +18,7 @@ from blizzard.hub.domain.config.work_sources import ConfigRevisionConflict
 from blizzard.hub.domain.garden.scopes import IWriteScopeRepository, Scope, ScopeMint
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.config_change_store import append_change
+from blizzard.hub.store.internal.newest_fact import newest_retired_select
 from blizzard.hub.store.schema import scope_lifecycle_facts, scopes
 
 
@@ -63,13 +64,7 @@ def _is_retired(conn: Connection, slug: str) -> bool:
 
 
 def _retired_slugs(conn: Connection) -> set[str]:
-    rows = conn.execute(
-        select(scope_lifecycle_facts.c.slug, scope_lifecycle_facts.c.retired).order_by(scope_lifecycle_facts.c.id)
-    ).all()
-    newest: dict[str, bool] = {}
-    for row in rows:
-        newest[row.slug] = row.retired  # newest-fact-wins: ascending id order overwrites
-    return {slug for slug, retired in newest.items() if retired}
+    return set(conn.execute(newest_retired_select(scope_lifecycle_facts, scope_lifecycle_facts.c.slug)).scalars())
 
 
 def update_scope(conn: Connection, record: Scope, from_revision: int, change: ConfigChange) -> None:

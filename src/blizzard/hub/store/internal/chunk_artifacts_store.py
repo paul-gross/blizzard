@@ -10,7 +10,7 @@ from collections import defaultdict
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import or_, select
+from sqlalchemy import or_, select, tuple_
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import IClock
@@ -136,21 +136,23 @@ class ChunkArtifactsStore:
         result: dict[str, StoredArtifact] = {}
         with self._store.read("latest_artifacts") as conn:
             for batch in id_batches(names):
-                # The winner per name is picked off the unloaded columns, in
-                # `latest_artifact`'s own order, so a superseded version's blob is never read.
-                winner_by_name: dict[str, str] = {}
-                for r in conn.execute(
-                    select(s.artifacts.c.name, s.artifacts.c.artifact_id)
-                    .where((s.artifacts.c.chunk_id == chunk_id) & s.artifacts.c.name.in_(batch))
-                    .order_by(
-                        s.artifacts.c.epoch.desc(), s.artifacts.c.produced_at.desc(), s.artifacts.c.artifact_id.desc()
+                # The winner is the row no newer row of the same (chunk, name) beats, in
+                # `latest_artifact`'s own order — one statement, so a superseded blob is never read.
+                newer = s.artifacts.alias("newer")
+                beaten = (
+                    select(newer.c.artifact_id)
+                    .where(
+                        newer.c.chunk_id == s.artifacts.c.chunk_id,
+                        newer.c.name == s.artifacts.c.name,
+                        tuple_(newer.c.epoch, newer.c.produced_at, newer.c.artifact_id)
+                        > tuple_(s.artifacts.c.epoch, s.artifacts.c.produced_at, s.artifacts.c.artifact_id),
                     )
-                ).all():
-                    winner_by_name.setdefault(r.name, r.artifact_id)
-                if not winner_by_name:
-                    continue
+                    .exists()
+                )
                 for a in conn.execute(
-                    select(s.artifacts).where(s.artifacts.c.artifact_id.in_(list(winner_by_name.values())))
+                    select(s.artifacts).where(
+                        (s.artifacts.c.chunk_id == chunk_id) & s.artifacts.c.name.in_(batch), ~beaten
+                    )
                 ).all():
                     result[a.name] = StoredArtifact(
                         kind=ArtifactKind(a.kind),
