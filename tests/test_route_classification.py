@@ -14,23 +14,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.routing import APIRoute, _IncludedRouter
 
-from blizzard.auth_core import (
-    ANALYTICS_ADMIN,
-    CHUNK_CONTROL,
-    CHUNK_INGEST,
-    CONFIG_EDIT,
-    FLEET_VIEW,
-    GATE_RESOLVE,
-    GRAPH_EDIT,
-    QUESTION_ANSWER,
-    QUEUE_REORDER,
-    RUNNER_ADD,
-    RUNNER_PAUSE,
-    RUNNER_RETIRE,
-    TRANSCRIPT_READ,
-    USER_MANAGE,
-    Permission,
-)
+from blizzard.auth_core import Permission
 from tests.support import build_hub
 
 pytestmark = pytest.mark.unit
@@ -60,191 +44,191 @@ _PUBLIC: set[tuple[str, str]] = {
 
 #: Human plane — ``(method, path) -> permission`` required via ``require(<permission>)``.
 _HUMAN: dict[tuple[str, str], Permission] = {
-    ("GET", "/api/events/stream"): FLEET_VIEW,
-    ("GET", "/api/events"): FLEET_VIEW,
-    ("GET", "/api/activity"): FLEET_VIEW,
-    ("POST", "/api/graphs"): GRAPH_EDIT,
+    ("GET", "/api/events/stream"): Permission.FLEET_VIEW,
+    ("GET", "/api/events"): Permission.FLEET_VIEW,
+    ("GET", "/api/activity"): Permission.FLEET_VIEW,
+    ("POST", "/api/graphs"): Permission.GRAPH_EDIT,
     # Reconciliation mints, so it needs exactly what an explicit mint needs.
-    ("POST", "/api/graphs/sync"): GRAPH_EDIT,
-    ("GET", "/api/graphs"): FLEET_VIEW,
-    ("GET", "/api/graphs/{graph_id}"): FLEET_VIEW,
-    ("POST", "/api/graphs/{graph_id}/retire"): GRAPH_EDIT,
-    ("POST", "/api/graphs/{graph_id}/enable"): GRAPH_EDIT,
+    ("POST", "/api/graphs/sync"): Permission.GRAPH_EDIT,
+    ("GET", "/api/graphs"): Permission.FLEET_VIEW,
+    ("GET", "/api/graphs/{graph_id}"): Permission.FLEET_VIEW,
+    ("POST", "/api/graphs/{graph_id}/retire"): Permission.GRAPH_EDIT,
+    ("POST", "/api/graphs/{graph_id}/enable"): Permission.GRAPH_EDIT,
     # The graph's mutable flags, and the deprecated follow-latest alias onto the same verb.
-    ("PATCH", "/api/graphs/{graph_id}"): GRAPH_EDIT,
-    ("POST", "/api/graphs/{graph_id}/follow-latest"): GRAPH_EDIT,
-    # Scopes — reads take FLEET_VIEW, writes take GRAPH_EDIT.
-    ("POST", "/api/scopes"): GRAPH_EDIT,
-    ("GET", "/api/scopes"): FLEET_VIEW,
-    ("GET", "/api/scopes/{slug}"): FLEET_VIEW,
-    ("GET", "/api/scopes/{slug}/routines"): FLEET_VIEW,
-    ("PATCH", "/api/scopes/{slug}"): GRAPH_EDIT,
-    ("POST", "/api/scopes/{slug}/retire"): GRAPH_EDIT,
-    ("POST", "/api/scopes/{slug}/enable"): GRAPH_EDIT,
-    ("POST", "/api/secrets"): CONFIG_EDIT,
-    ("GET", "/api/secrets"): FLEET_VIEW,
-    ("GET", "/api/secrets/{name}"): FLEET_VIEW,
-    ("PUT", "/api/secrets/{name}/value"): CONFIG_EDIT,
-    ("POST", "/api/secrets/{name}/retire"): CONFIG_EDIT,
-    ("POST", "/api/secrets/{name}/enable"): CONFIG_EDIT,
-    # Routines — reads take FLEET_VIEW, writes take GRAPH_EDIT.
-    ("POST", "/api/routines"): GRAPH_EDIT,
-    ("GET", "/api/routines"): FLEET_VIEW,
-    ("GET", "/api/routines/{routine_id}"): FLEET_VIEW,
-    ("PATCH", "/api/routines/{routine_id}"): GRAPH_EDIT,
-    ("POST", "/api/routines/{routine_id}/retire"): GRAPH_EDIT,
-    ("POST", "/api/routines/{routine_id}/enable"): GRAPH_EDIT,
-    ("GET", "/api/routines/trend"): FLEET_VIEW,  #
-    ("GET", "/api/routines/proposal-counts"): FLEET_VIEW,  #
-    ("GET", "/api/routines/{routine_id}/sweeps"): FLEET_VIEW,
-    # A routine's scope membership — reads take FLEET_VIEW, writes take
-    # GRAPH_EDIT, the same split as scopes/routines themselves.
-    ("GET", "/api/routines/{routine_id}/scopes"): FLEET_VIEW,
-    ("PUT", "/api/routines/{routine_id}/scopes/{scope_slug}"): GRAPH_EDIT,
-    ("DELETE", "/api/routines/{routine_id}/scopes/{scope_slug}"): GRAPH_EDIT,
-    # Mint and ingest a run in one act — the same CHUNK_CONTROL
+    ("PATCH", "/api/graphs/{graph_id}"): Permission.GRAPH_EDIT,
+    ("POST", "/api/graphs/{graph_id}/follow-latest"): Permission.GRAPH_EDIT,
+    # Scopes — reads take Permission.FLEET_VIEW, writes take Permission.GRAPH_EDIT.
+    ("POST", "/api/scopes"): Permission.GRAPH_EDIT,
+    ("GET", "/api/scopes"): Permission.FLEET_VIEW,
+    ("GET", "/api/scopes/{slug}"): Permission.FLEET_VIEW,
+    ("GET", "/api/scopes/{slug}/routines"): Permission.FLEET_VIEW,
+    ("PATCH", "/api/scopes/{slug}"): Permission.GRAPH_EDIT,
+    ("POST", "/api/scopes/{slug}/retire"): Permission.GRAPH_EDIT,
+    ("POST", "/api/scopes/{slug}/enable"): Permission.GRAPH_EDIT,
+    ("POST", "/api/secrets"): Permission.CONFIG_EDIT,
+    ("GET", "/api/secrets"): Permission.FLEET_VIEW,
+    ("GET", "/api/secrets/{name}"): Permission.FLEET_VIEW,
+    ("PUT", "/api/secrets/{name}/value"): Permission.CONFIG_EDIT,
+    ("POST", "/api/secrets/{name}/retire"): Permission.CONFIG_EDIT,
+    ("POST", "/api/secrets/{name}/enable"): Permission.CONFIG_EDIT,
+    # Routines — reads take Permission.FLEET_VIEW, writes take Permission.GRAPH_EDIT.
+    ("POST", "/api/routines"): Permission.GRAPH_EDIT,
+    ("GET", "/api/routines"): Permission.FLEET_VIEW,
+    ("GET", "/api/routines/{routine_id}"): Permission.FLEET_VIEW,
+    ("PATCH", "/api/routines/{routine_id}"): Permission.GRAPH_EDIT,
+    ("POST", "/api/routines/{routine_id}/retire"): Permission.GRAPH_EDIT,
+    ("POST", "/api/routines/{routine_id}/enable"): Permission.GRAPH_EDIT,
+    ("GET", "/api/routines/trend"): Permission.FLEET_VIEW,  #
+    ("GET", "/api/routines/proposal-counts"): Permission.FLEET_VIEW,  #
+    ("GET", "/api/routines/{routine_id}/sweeps"): Permission.FLEET_VIEW,
+    # A routine's scope membership — reads take Permission.FLEET_VIEW, writes take
+    # Permission.GRAPH_EDIT, the same split as scopes/routines themselves.
+    ("GET", "/api/routines/{routine_id}/scopes"): Permission.FLEET_VIEW,
+    ("PUT", "/api/routines/{routine_id}/scopes/{scope_slug}"): Permission.GRAPH_EDIT,
+    ("DELETE", "/api/routines/{routine_id}/scopes/{scope_slug}"): Permission.GRAPH_EDIT,
+    # Mint and ingest a run in one act — the same Permission.CHUNK_CONTROL
     # the act it composes (ingest) already requires.
-    ("POST", "/api/routines/{routine_id}/run"): CHUNK_CONTROL,
-    # The per-scope delta baseline a routine has swept — a read, FLEET_VIEW.
-    ("GET", "/api/routines/{routine_id}/baselines"): FLEET_VIEW,
-    # The run list and one run's own delta — reads, FLEET_VIEW.
-    ("GET", "/api/runs"): FLEET_VIEW,
-    ("GET", "/api/runs/{chunk_id}"): FLEET_VIEW,
-    # Findings and garden proposals — read-only routes, both FLEET_VIEW.
-    ("GET", "/api/findings"): FLEET_VIEW,
-    ("GET", "/api/findings/{finding_id}"): FLEET_VIEW,
-    ("GET", "/api/garden-proposals"): FLEET_VIEW,
-    ("GET", "/api/garden-proposals/{proposal_id}"): FLEET_VIEW,
-    # Closing a garden proposal — CHUNK_CONTROL, the same permission a
+    ("POST", "/api/routines/{routine_id}/run"): Permission.CHUNK_CONTROL,
+    # The per-scope delta baseline a routine has swept — a read, Permission.FLEET_VIEW.
+    ("GET", "/api/routines/{routine_id}/baselines"): Permission.FLEET_VIEW,
+    # The run list and one run's own delta — reads, Permission.FLEET_VIEW.
+    ("GET", "/api/runs"): Permission.FLEET_VIEW,
+    ("GET", "/api/runs/{chunk_id}"): Permission.FLEET_VIEW,
+    # Findings and garden proposals — read-only routes, both Permission.FLEET_VIEW.
+    ("GET", "/api/findings"): Permission.FLEET_VIEW,
+    ("GET", "/api/findings/{finding_id}"): Permission.FLEET_VIEW,
+    ("GET", "/api/garden-proposals"): Permission.FLEET_VIEW,
+    ("GET", "/api/garden-proposals/{proposal_id}"): Permission.FLEET_VIEW,
+    # Closing a garden proposal — Permission.CHUNK_CONTROL, the same permission a
     # not-chunk-scoped work-item write already carries.
-    ("POST", "/api/garden-proposals/{proposal_id}/pass"): CHUNK_CONTROL,
-    ("POST", "/api/garden-proposals/{proposal_id}/accept"): CHUNK_CONTROL,
+    ("POST", "/api/garden-proposals/{proposal_id}/pass"): Permission.CHUNK_CONTROL,
+    ("POST", "/api/garden-proposals/{proposal_id}/accept"): Permission.CHUNK_CONTROL,
     # Operator authoring — create/edit/attach/detach — the same
-    # CHUNK_CONTROL pass/accept already carry.
-    ("POST", "/api/garden-proposals"): CHUNK_CONTROL,
-    ("PATCH", "/api/garden-proposals/{proposal_id}"): CHUNK_CONTROL,
-    ("POST", "/api/garden-proposals/{proposal_id}/attach"): CHUNK_CONTROL,
-    ("POST", "/api/garden-proposals/{proposal_id}/detach"): CHUNK_CONTROL,
+    # Permission.CHUNK_CONTROL pass/accept already carry.
+    ("POST", "/api/garden-proposals"): Permission.CHUNK_CONTROL,
+    ("PATCH", "/api/garden-proposals/{proposal_id}"): Permission.CHUNK_CONTROL,
+    ("POST", "/api/garden-proposals/{proposal_id}/attach"): Permission.CHUNK_CONTROL,
+    ("POST", "/api/garden-proposals/{proposal_id}/detach"): Permission.CHUNK_CONTROL,
     # The human-driven exit verbs and `reopen` over findings — the
-    # same CHUNK_CONTROL a garden-proposal closure already carries.
-    ("POST", "/api/findings/resolve"): CHUNK_CONTROL,
-    ("POST", "/api/findings/confirm-gone"): CHUNK_CONTROL,
-    ("POST", "/api/findings/wont-fix"): CHUNK_CONTROL,
-    ("POST", "/api/findings/not-a-finding"): CHUNK_CONTROL,
-    ("POST", "/api/findings/supersede"): CHUNK_CONTROL,
-    ("POST", "/api/findings/reopen"): CHUNK_CONTROL,
-    ("POST", "/api/chunks"): CHUNK_INGEST,
-    ("GET", "/api/chunks"): FLEET_VIEW,
-    ("GET", "/api/chunk-counts"): FLEET_VIEW,
-    ("GET", "/api/chunks/{chunk_id}"): FLEET_VIEW,
-    ("POST", "/api/chunks/{chunk_id}/hub-markers"): CHUNK_CONTROL,
-    ("POST", "/api/chunks/{chunk_id}/garden-delivery"): CHUNK_CONTROL,
-    ("POST", "/api/chunks/{chunk_id}/review-findings-delivery"): CHUNK_CONTROL,
-    ("POST", "/api/chunks/{chunk_id}/requeues"): CHUNK_CONTROL,
-    ("POST", "/api/chunks/{chunk_id}/restart"): CHUNK_CONTROL,
-    ("POST", "/api/chunks/{chunk_id}/detach"): CHUNK_CONTROL,
-    ("POST", "/api/chunks/{chunk_id}/pause"): CHUNK_CONTROL,
-    ("POST", "/api/chunks/{chunk_id}/resume"): CHUNK_CONTROL,
-    ("POST", "/api/chunks/{chunk_id}/stop"): CHUNK_CONTROL,
-    ("POST", "/api/chunks/{chunk_id}/complete"): CHUNK_CONTROL,
-    ("POST", "/api/chunks/{chunk_id}/promote"): CHUNK_CONTROL,
-    # Declare/release a dependency edge — the same CHUNK_CONTROL every
+    # same Permission.CHUNK_CONTROL a garden-proposal closure already carries.
+    ("POST", "/api/findings/resolve"): Permission.CHUNK_CONTROL,
+    ("POST", "/api/findings/confirm-gone"): Permission.CHUNK_CONTROL,
+    ("POST", "/api/findings/wont-fix"): Permission.CHUNK_CONTROL,
+    ("POST", "/api/findings/not-a-finding"): Permission.CHUNK_CONTROL,
+    ("POST", "/api/findings/supersede"): Permission.CHUNK_CONTROL,
+    ("POST", "/api/findings/reopen"): Permission.CHUNK_CONTROL,
+    ("POST", "/api/chunks"): Permission.CHUNK_INGEST,
+    ("GET", "/api/chunks"): Permission.FLEET_VIEW,
+    ("GET", "/api/chunk-counts"): Permission.FLEET_VIEW,
+    ("GET", "/api/chunks/{chunk_id}"): Permission.FLEET_VIEW,
+    ("POST", "/api/chunks/{chunk_id}/hub-markers"): Permission.CHUNK_CONTROL,
+    ("POST", "/api/chunks/{chunk_id}/garden-delivery"): Permission.CHUNK_CONTROL,
+    ("POST", "/api/chunks/{chunk_id}/review-findings-delivery"): Permission.CHUNK_CONTROL,
+    ("POST", "/api/chunks/{chunk_id}/requeues"): Permission.CHUNK_CONTROL,
+    ("POST", "/api/chunks/{chunk_id}/restart"): Permission.CHUNK_CONTROL,
+    ("POST", "/api/chunks/{chunk_id}/detach"): Permission.CHUNK_CONTROL,
+    ("POST", "/api/chunks/{chunk_id}/pause"): Permission.CHUNK_CONTROL,
+    ("POST", "/api/chunks/{chunk_id}/resume"): Permission.CHUNK_CONTROL,
+    ("POST", "/api/chunks/{chunk_id}/stop"): Permission.CHUNK_CONTROL,
+    ("POST", "/api/chunks/{chunk_id}/complete"): Permission.CHUNK_CONTROL,
+    ("POST", "/api/chunks/{chunk_id}/promote"): Permission.CHUNK_CONTROL,
+    # Declare/release a dependency edge — the same Permission.CHUNK_CONTROL every
     # other chunk-control-plane verb here already carries.
-    ("POST", "/api/chunks/{chunk_id}/dependencies"): CHUNK_CONTROL,
-    ("POST", "/api/chunks/{chunk_id}/dependencies/release"): CHUNK_CONTROL,
-    ("PATCH", "/api/chunks/{chunk_id}"): CHUNK_CONTROL,
-    ("DELETE", "/api/chunks/{chunk_id}"): CHUNK_CONTROL,
-    ("GET", "/api/chunks/{chunk_id}/work-items"): FLEET_VIEW,
+    ("POST", "/api/chunks/{chunk_id}/dependencies"): Permission.CHUNK_CONTROL,
+    ("POST", "/api/chunks/{chunk_id}/dependencies/release"): Permission.CHUNK_CONTROL,
+    ("PATCH", "/api/chunks/{chunk_id}"): Permission.CHUNK_CONTROL,
+    ("DELETE", "/api/chunks/{chunk_id}"): Permission.CHUNK_CONTROL,
+    ("GET", "/api/chunks/{chunk_id}/work-items"): Permission.FLEET_VIEW,
     # The issue-#55 deprecated alias onto the same handler — classified identically,
     # because an alias that fell into a different plane would be an authz hole.
-    ("GET", "/api/chunks/{chunk_id}/pm-items"): FLEET_VIEW,
-    ("GET", "/api/decisions"): FLEET_VIEW,
-    ("POST", "/api/decisions/{decision_id}/resolutions"): GATE_RESOLVE,
-    ("GET", "/api/queue"): FLEET_VIEW,
-    ("PUT", "/api/queue"): QUEUE_REORDER,
-    ("POST", "/api/queue/position"): QUEUE_REORDER,
-    # Backlog (``not_ready``) reorder — QUEUE_REORDER even to read, an operator
-    # triage surface, narrower than the ready queue's FLEET_VIEW.
-    ("GET", "/api/backlog"): QUEUE_REORDER,
-    ("PUT", "/api/backlog"): QUEUE_REORDER,
-    ("POST", "/api/backlog/position"): QUEUE_REORDER,
-    ("POST", "/api/chunks/{chunk_id}/group"): QUEUE_REORDER,
-    ("POST", "/api/questions"): QUESTION_ANSWER,
-    ("POST", "/api/questions/{question_id}/answers"): QUESTION_ANSWER,
-    ("GET", "/api/questions"): FLEET_VIEW,
+    ("GET", "/api/chunks/{chunk_id}/pm-items"): Permission.FLEET_VIEW,
+    ("GET", "/api/decisions"): Permission.FLEET_VIEW,
+    ("POST", "/api/decisions/{decision_id}/resolutions"): Permission.GATE_RESOLVE,
+    ("GET", "/api/queue"): Permission.FLEET_VIEW,
+    ("PUT", "/api/queue"): Permission.QUEUE_REORDER,
+    ("POST", "/api/queue/position"): Permission.QUEUE_REORDER,
+    # Backlog (``not_ready``) reorder — Permission.QUEUE_REORDER even to read, an operator
+    # triage surface, narrower than the ready queue's Permission.FLEET_VIEW.
+    ("GET", "/api/backlog"): Permission.QUEUE_REORDER,
+    ("PUT", "/api/backlog"): Permission.QUEUE_REORDER,
+    ("POST", "/api/backlog/position"): Permission.QUEUE_REORDER,
+    ("POST", "/api/chunks/{chunk_id}/group"): Permission.QUEUE_REORDER,
+    ("POST", "/api/questions"): Permission.QUESTION_ANSWER,
+    ("POST", "/api/questions/{question_id}/answers"): Permission.QUESTION_ANSWER,
+    ("GET", "/api/questions"): Permission.FLEET_VIEW,
     # Adding a runner and rotating its token both mint a credential.
-    ("POST", "/api/runners"): RUNNER_ADD,
-    ("POST", "/api/runners/{runner_id}/enrollments"): RUNNER_ADD,
-    ("GET", "/api/runners"): FLEET_VIEW,
-    ("GET", "/api/runners/{runner_id}"): FLEET_VIEW,
-    ("POST", "/api/runners/{runner_id}/pause"): RUNNER_PAUSE,
-    ("POST", "/api/runners/{runner_id}/resume"): RUNNER_PAUSE,
-    ("POST", "/api/runners/{runner_id}/retire"): RUNNER_RETIRE,
-    ("POST", "/api/runners/{runner_id}/reinstate"): RUNNER_RETIRE,
-    ("POST", "/api/runners/{runner_id}/token-revocations"): RUNNER_RETIRE,
-    ("GET", "/api/spend"): FLEET_VIEW,
-    ("GET", "/api/users"): USER_MANAGE,
-    ("POST", "/api/users/{user_id}/role"): USER_MANAGE,
+    ("POST", "/api/runners"): Permission.RUNNER_ADD,
+    ("POST", "/api/runners/{runner_id}/enrollments"): Permission.RUNNER_ADD,
+    ("GET", "/api/runners"): Permission.FLEET_VIEW,
+    ("GET", "/api/runners/{runner_id}"): Permission.FLEET_VIEW,
+    ("POST", "/api/runners/{runner_id}/pause"): Permission.RUNNER_PAUSE,
+    ("POST", "/api/runners/{runner_id}/resume"): Permission.RUNNER_PAUSE,
+    ("POST", "/api/runners/{runner_id}/retire"): Permission.RUNNER_RETIRE,
+    ("POST", "/api/runners/{runner_id}/reinstate"): Permission.RUNNER_RETIRE,
+    ("POST", "/api/runners/{runner_id}/token-revocations"): Permission.RUNNER_RETIRE,
+    ("GET", "/api/spend"): Permission.FLEET_VIEW,
+    ("GET", "/api/users"): Permission.USER_MANAGE,
+    ("POST", "/api/users/{user_id}/role"): Permission.USER_MANAGE,
     # Key rotation — the same admin-tier permission the user-management
     # API uses; no new permission is minted for this one verb.
-    ("POST", "/api/auth/rotate-signing-key"): USER_MANAGE,
+    ("POST", "/api/auth/rotate-signing-key"): Permission.USER_MANAGE,
     # Transcript-segment discovery/content reads — above
-    # FLEET_VIEW, since a transcript carries everything a worker saw.
-    ("GET", "/api/chunks/{chunk_id}/transcripts"): TRANSCRIPT_READ,
-    ("GET", "/api/chunks/{chunk_id}/transcripts/{segment_id}"): TRANSCRIPT_READ,
+    # Permission.FLEET_VIEW, since a transcript carries everything a worker saw.
+    ("GET", "/api/chunks/{chunk_id}/transcripts"): Permission.TRANSCRIPT_READ,
+    ("GET", "/api/chunks/{chunk_id}/transcripts/{segment_id}"): Permission.TRANSCRIPT_READ,
     # Forced transcript-event re-derivation — a mutation, above the
-    # read-only TRANSCRIPT_READ.
-    ("POST", "/api/analytics/re-derive"): ANALYTICS_ADMIN,
+    # read-only Permission.TRANSCRIPT_READ.
+    ("POST", "/api/analytics/re-derive"): Permission.ANALYTICS_ADMIN,
     # Fleet-trace operator surface — status is redacted fleet state.
-    ("GET", "/api/traces/status"): FLEET_VIEW,
+    ("GET", "/api/traces/status"): Permission.FLEET_VIEW,
     # Replay re-sends a window to the exporter — above the read-only tiers.
-    ("POST", "/api/traces/replay"): ANALYTICS_ADMIN,
+    ("POST", "/api/traces/replay"): Permission.ANALYTICS_ADMIN,
     # Fact-egress operator surface — status is export state and a directory path, fleet-viewer grade.
-    ("GET", "/api/egress/status"): FLEET_VIEW,
+    ("GET", "/api/egress/status"): Permission.FLEET_VIEW,
     # Reset moves the export's cursor — an admin write.
-    ("POST", "/api/egress/reset"): ANALYTICS_ADMIN,
+    ("POST", "/api/egress/reset"): Permission.ANALYTICS_ADMIN,
     # Backfill writes a past window to the export directory — an admin write.
-    ("POST", "/api/egress/backfill"): ANALYTICS_ADMIN,
+    ("POST", "/api/egress/backfill"): Permission.ANALYTICS_ADMIN,
     # The read-only events/counts surfaces — no grant of their own.
-    ("GET", "/api/analytics/events"): TRANSCRIPT_READ,
-    ("GET", "/api/analytics/events/ndjson"): TRANSCRIPT_READ,
-    ("GET", "/api/analytics/counts/files"): TRANSCRIPT_READ,
-    ("GET", "/api/analytics/counts/skills"): TRANSCRIPT_READ,
-    ("GET", "/api/analytics/counts/agent-types"): TRANSCRIPT_READ,
-    ("GET", "/api/analytics/counts/nodes"): TRANSCRIPT_READ,
+    ("GET", "/api/analytics/events"): Permission.TRANSCRIPT_READ,
+    ("GET", "/api/analytics/events/ndjson"): Permission.TRANSCRIPT_READ,
+    ("GET", "/api/analytics/counts/files"): Permission.TRANSCRIPT_READ,
+    ("GET", "/api/analytics/counts/skills"): Permission.TRANSCRIPT_READ,
+    ("GET", "/api/analytics/counts/agent-types"): Permission.TRANSCRIPT_READ,
+    ("GET", "/api/analytics/counts/nodes"): Permission.TRANSCRIPT_READ,
     # The operational datasets — durations, spend, outcomes — no
-    # grant of their own, strictly narrower than the FLEET_VIEW the same numbers
+    # grant of their own, strictly narrower than the Permission.FLEET_VIEW the same numbers
     # already sit behind at /api/spend and on every board card.
-    ("GET", "/api/analytics/durations/nodes"): TRANSCRIPT_READ,
-    ("GET", "/api/analytics/durations/graphs"): TRANSCRIPT_READ,
-    ("GET", "/api/analytics/spend/nodes"): TRANSCRIPT_READ,
-    ("GET", "/api/analytics/spend/graphs"): TRANSCRIPT_READ,
-    ("GET", "/api/analytics/spend/chunks"): TRANSCRIPT_READ,
-    ("GET", "/api/analytics/spend/chunks/ndjson"): TRANSCRIPT_READ,
-    ("GET", "/api/analytics/outcomes/nodes"): TRANSCRIPT_READ,
+    ("GET", "/api/analytics/durations/nodes"): Permission.TRANSCRIPT_READ,
+    ("GET", "/api/analytics/durations/graphs"): Permission.TRANSCRIPT_READ,
+    ("GET", "/api/analytics/spend/nodes"): Permission.TRANSCRIPT_READ,
+    ("GET", "/api/analytics/spend/graphs"): Permission.TRANSCRIPT_READ,
+    ("GET", "/api/analytics/spend/chunks"): Permission.TRANSCRIPT_READ,
+    ("GET", "/api/analytics/spend/chunks/ndjson"): Permission.TRANSCRIPT_READ,
+    ("GET", "/api/analytics/outcomes/nodes"): Permission.TRANSCRIPT_READ,
     # The work-source item routes — the same two permissions the chunk
     # work-item read and its mutations already sit behind.
-    ("GET", "/api/work-sources"): FLEET_VIEW,
-    ("POST", "/api/work-sources"): CONFIG_EDIT,
-    ("GET", "/api/work-sources/{source}"): FLEET_VIEW,
-    ("PATCH", "/api/work-sources/{source}"): CONFIG_EDIT,
-    ("POST", "/api/work-sources/{source}/retire"): CONFIG_EDIT,
-    ("POST", "/api/work-sources/{source}/enable"): CONFIG_EDIT,
-    ("GET", "/api/repositories"): FLEET_VIEW,
-    ("POST", "/api/repositories"): CONFIG_EDIT,
-    ("GET", "/api/repositories/{name}"): FLEET_VIEW,
-    ("PATCH", "/api/repositories/{name}"): CONFIG_EDIT,
-    ("POST", "/api/repositories/{name}/retire"): CONFIG_EDIT,
-    ("POST", "/api/repositories/{name}/enable"): CONFIG_EDIT,
-    ("GET", "/api/config/schema/{kind}"): FLEET_VIEW,
-    ("GET", "/api/config/changes"): FLEET_VIEW,
-    ("GET", "/api/config/export"): FLEET_VIEW,
-    ("POST", "/api/config/apply"): CONFIG_EDIT,
-    ("GET", "/api/work-sources/{source}/items"): FLEET_VIEW,
-    ("POST", "/api/work-sources/{source}/items"): CHUNK_CONTROL,
-    ("GET", "/api/work-sources/{source}/items/{ref}"): FLEET_VIEW,
-    ("PATCH", "/api/work-sources/{source}/items/{ref}"): CHUNK_CONTROL,
-    ("DELETE", "/api/work-sources/{source}/items/{ref}"): CHUNK_CONTROL,
+    ("GET", "/api/work-sources"): Permission.FLEET_VIEW,
+    ("POST", "/api/work-sources"): Permission.CONFIG_EDIT,
+    ("GET", "/api/work-sources/{source}"): Permission.FLEET_VIEW,
+    ("PATCH", "/api/work-sources/{source}"): Permission.CONFIG_EDIT,
+    ("POST", "/api/work-sources/{source}/retire"): Permission.CONFIG_EDIT,
+    ("POST", "/api/work-sources/{source}/enable"): Permission.CONFIG_EDIT,
+    ("GET", "/api/repositories"): Permission.FLEET_VIEW,
+    ("POST", "/api/repositories"): Permission.CONFIG_EDIT,
+    ("GET", "/api/repositories/{name}"): Permission.FLEET_VIEW,
+    ("PATCH", "/api/repositories/{name}"): Permission.CONFIG_EDIT,
+    ("POST", "/api/repositories/{name}/retire"): Permission.CONFIG_EDIT,
+    ("POST", "/api/repositories/{name}/enable"): Permission.CONFIG_EDIT,
+    ("GET", "/api/config/schema/{kind}"): Permission.FLEET_VIEW,
+    ("GET", "/api/config/changes"): Permission.FLEET_VIEW,
+    ("GET", "/api/config/export"): Permission.FLEET_VIEW,
+    ("POST", "/api/config/apply"): Permission.CONFIG_EDIT,
+    ("GET", "/api/work-sources/{source}/items"): Permission.FLEET_VIEW,
+    ("POST", "/api/work-sources/{source}/items"): Permission.CHUNK_CONTROL,
+    ("GET", "/api/work-sources/{source}/items/{ref}"): Permission.FLEET_VIEW,
+    ("PATCH", "/api/work-sources/{source}/items/{ref}"): Permission.CHUNK_CONTROL,
+    ("DELETE", "/api/work-sources/{source}/items/{ref}"): Permission.CHUNK_CONTROL,
 }
 
 #: Fleet plane — every route mounted under ``/api/fleet/*`` but the identity route and the claim route carries

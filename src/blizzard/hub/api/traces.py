@@ -1,6 +1,6 @@
 """Fleet-trace operator-plane routes: the status read and the replay. Never ``/api/fleet/...``; a runner
-principal is refused. Status gates on :data:`~blizzard.auth_core.FLEET_VIEW` — it is redacted, so it
-holds nothing beyond fleet state — and replay on :data:`~blizzard.auth_core.ANALYTICS_ADMIN`."""
+principal is refused. Status gates on :attr:`~blizzard.auth_core.Permission.FLEET_VIEW` — it is redacted, so it
+holds nothing beyond fleet state — and replay on :attr:`~blizzard.auth_core.Permission.ANALYTICS_ADMIN`."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 
-from blizzard.auth_core import ANALYTICS_ADMIN, FLEET_VIEW
+from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
@@ -26,7 +26,7 @@ from blizzard.wire.traces import (
 router = APIRouter(prefix="/api/traces", tags=["traces"], dependencies=[Depends(reject_runner_principal)])
 
 
-@router.get("/status", response_model=TraceStatusResponse, dependencies=[Depends(require(FLEET_VIEW))])
+@router.get("/status", response_model=TraceStatusResponse, dependencies=[Depends(require(Permission.FLEET_VIEW))])
 def trace_status(services: Annotated[HubServices, Depends(get_services)]) -> TraceStatusResponse:
     """Tracing on or off, the redacted endpoint, the cursor and its lag, the last export and the last error."""
     read = services.trace_status.read()
@@ -50,7 +50,7 @@ def trace_status(services: Annotated[HubServices, Depends(get_services)]) -> Tra
     "/replay",
     response_model=TraceReplayResponse,
     responses={status.HTTP_502_BAD_GATEWAY: {"model": TraceReplayFailure}},
-    dependencies=[Depends(require(ANALYTICS_ADMIN))],
+    dependencies=[Depends(require(Permission.ANALYTICS_ADMIN))],
 )
 def trace_replay(
     request: TraceReplayRequest, services: Annotated[HubServices, Depends(get_services)]

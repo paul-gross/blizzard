@@ -3,7 +3,7 @@
 The ``ready`` queue and ``not_ready`` list each rank independently
 (``bzh:ranking-is-per-list``); controllers stay read-only and delegate writes to the
 queue-shaping domain (``bzh:controller-read-only``). Backlog routes require
-``QUEUE_REORDER`` even to read — an operator triage surface, not fleet-wide visibility."""
+``Permission.QUEUE_REORDER`` even to read — an operator triage surface, not fleet-wide visibility."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 
-from blizzard.auth_core import FLEET_VIEW, QUEUE_REORDER
+from blizzard.auth_core import Permission
 from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, ChunkStatus
 from blizzard.foundation.roles import dto
 from blizzard.hub.api import chunk_events
@@ -217,7 +217,7 @@ def _page_view(page: QueuePage, markings: Mapping[str, list[str]]) -> QueuePageV
     )
 
 
-@router.get("/queue", response_model=QueuePageView, dependencies=[Depends(require(FLEET_VIEW))])
+@router.get("/queue", response_model=QueuePageView, dependencies=[Depends(require(Permission.FLEET_VIEW))])
 def get_queue(
     services: Annotated[HubServices, Depends(get_services)],
     cursor: Annotated[str | None, Query()] = None,
@@ -233,7 +233,7 @@ def get_queue(
     return _page_view(page, _blocked_markings(services, statuses, [entry.chunk.chunk_id for entry in page.entries]))
 
 
-@router.put("/queue", response_model=QueuePeekResponse, dependencies=[Depends(require(QUEUE_REORDER))])
+@router.put("/queue", response_model=QueuePeekResponse, dependencies=[Depends(require(Permission.QUEUE_REORDER))])
 def replace_queue(
     request: QueueReplaceRequest, services: Annotated[HubServices, Depends(get_services)]
 ) -> QueuePeekResponse:
@@ -249,7 +249,9 @@ def replace_queue(
     return ReadyQueue.of(services, statuses).view
 
 
-@router.post("/queue/position", response_model=QueuePeekResponse, dependencies=[Depends(require(QUEUE_REORDER))])
+@router.post(
+    "/queue/position", response_model=QueuePeekResponse, dependencies=[Depends(require(Permission.QUEUE_REORDER))]
+)
 def reposition_queue(
     request: QueuePositionRequest, services: Annotated[HubServices, Depends(get_services)]
 ) -> QueuePeekResponse:
@@ -312,14 +314,14 @@ def _backlog_page_view(page: QueuePage, markings: Mapping[str, list[str]]) -> Ba
     )
 
 
-@router.get("/backlog", response_model=BacklogPageView, dependencies=[Depends(require(QUEUE_REORDER))])
+@router.get("/backlog", response_model=BacklogPageView, dependencies=[Depends(require(Permission.QUEUE_REORDER))])
 def get_backlog(
     services: Annotated[HubServices, Depends(get_services)],
     cursor: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
 ) -> BacklogPageView:
     """The hub-ordered ``not_ready`` list, read-only and keyset-paginated
-    — an operator triage surface, requiring ``QUEUE_REORDER`` not ``FLEET_VIEW``."""
+    — an operator triage surface, requiring ``Permission.QUEUE_REORDER`` not ``Permission.FLEET_VIEW``."""
     statuses = services.chunks.facts.load_live_statuses()
     try:
         page = services.queue.page(QueueList.NOT_READY, statuses=statuses, cursor=cursor, limit=limit)
@@ -330,7 +332,7 @@ def get_backlog(
     )
 
 
-@router.put("/backlog", response_model=BacklogPeekResponse, dependencies=[Depends(require(QUEUE_REORDER))])
+@router.put("/backlog", response_model=BacklogPeekResponse, dependencies=[Depends(require(Permission.QUEUE_REORDER))])
 def replace_backlog(
     request: BacklogReplaceRequest, services: Annotated[HubServices, Depends(get_services)]
 ) -> BacklogPeekResponse:
@@ -346,7 +348,9 @@ def replace_backlog(
     return Backlog.of(services, statuses).view
 
 
-@router.post("/backlog/position", response_model=BacklogPeekResponse, dependencies=[Depends(require(QUEUE_REORDER))])
+@router.post(
+    "/backlog/position", response_model=BacklogPeekResponse, dependencies=[Depends(require(Permission.QUEUE_REORDER))]
+)
 def reposition_backlog(
     request: BacklogPositionRequest, services: Annotated[HubServices, Depends(get_services)]
 ) -> BacklogPeekResponse:
@@ -363,7 +367,9 @@ def reposition_backlog(
 
 
 @router.post(
-    "/chunks/{chunk_id}/group", response_model=ChunkGroupResponse, dependencies=[Depends(require(QUEUE_REORDER))]
+    "/chunks/{chunk_id}/group",
+    response_model=ChunkGroupResponse,
+    dependencies=[Depends(require(Permission.QUEUE_REORDER))],
 )
 def group_chunks(
     chunk_id: str,

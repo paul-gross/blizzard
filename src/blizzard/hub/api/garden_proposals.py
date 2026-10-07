@@ -1,6 +1,6 @@
 """Garden-proposal routes — the read routes render a proposal's closure
 once one exists; the two closing writes are their own POST routes, both
-human-plane and gated on `CHUNK_CONTROL` — the same permission a not-chunk-scoped
+human-plane and gated on `Permission.CHUNK_CONTROL` — the same permission a not-chunk-scoped
 work-item write already carries."""
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 
-from blizzard.auth_core import CHUNK_CONTROL, FLEET_VIEW
+from blizzard.auth_core import Permission
 from blizzard.foundation.garden_proposals import GardenProposalOrigin
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import chunk_events
@@ -113,7 +113,9 @@ def _resolve_findings_or_422(finding_ids: list[str], services: HubServices) -> l
     return [found[fid] for fid in finding_ids]
 
 
-@router.get("/garden-proposals", response_model=GardenProposalsPageView, dependencies=[Depends(require(FLEET_VIEW))])
+@router.get(
+    "/garden-proposals", response_model=GardenProposalsPageView, dependencies=[Depends(require(Permission.FLEET_VIEW))]
+)
 def list_garden_proposals(
     services: Annotated[HubServices, Depends(get_services)],
     cursor: Annotated[str | None, Query()] = None,
@@ -136,7 +138,7 @@ def list_garden_proposals(
 @router.get(
     "/garden-proposals/{proposal_id}",
     response_model=GardenProposalView,
-    dependencies=[Depends(require(FLEET_VIEW))],
+    dependencies=[Depends(require(Permission.FLEET_VIEW))],
 )
 def get_garden_proposal(
     proposal_id: str, services: Annotated[HubServices, Depends(get_services)]
@@ -151,7 +153,7 @@ def pass_garden_proposal(
     proposal_id: str,
     request: GardenProposalPassRequest,
     services: Annotated[HubServices, Depends(get_services)],
-    identity: Annotated[ResolvedIdentity, Depends(require(CHUNK_CONTROL))],
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
 ) -> GardenProposalView:
     """Pass the proposal at PROPOSAL_ID, recording the given reason. Passing is not a
     dismissal — it is the note that stops a later run raising the same response as
@@ -173,7 +175,7 @@ def accept_garden_proposal(
     proposal_id: str,
     request: GardenProposalAcceptRequest,
     services: Annotated[HubServices, Depends(get_services)],
-    identity: Annotated[ResolvedIdentity, Depends(require(CHUNK_CONTROL))],
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
 ) -> object:
     """Accept the proposal at PROPOSAL_ID. When `mint_work_item` is true, mints a linked
     hub work item from `body` (or the proposal's own), wrapped in the "Related findings"
@@ -224,7 +226,7 @@ def accept_garden_proposal(
 def create_garden_proposal(
     request: GardenProposalCreateRequest,
     services: Annotated[HubServices, Depends(get_services)],
-    identity: Annotated[ResolvedIdentity, Depends(require(CHUNK_CONTROL))],
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
 ) -> GardenProposalView:
     """Mint an operator-authored proposal, naming `routine` when the
     caller names one, else none. 422 for a blank title/class/body, an unknown routine,
@@ -255,7 +257,7 @@ def create_garden_proposal(
 @router.patch(
     "/garden-proposals/{proposal_id}",
     response_model=GardenProposalView,
-    dependencies=[Depends(require(CHUNK_CONTROL))],
+    dependencies=[Depends(require(Permission.CHUNK_CONTROL))],
 )
 def edit_garden_proposal(
     proposal_id: str, request: GardenProposalEditRequest, services: Annotated[HubServices, Depends(get_services)]
@@ -281,7 +283,7 @@ def edit_garden_proposal(
 @router.post(
     "/garden-proposals/{proposal_id}/attach",
     response_model=GardenProposalView,
-    dependencies=[Depends(require(CHUNK_CONTROL))],
+    dependencies=[Depends(require(Permission.CHUNK_CONTROL))],
 )
 def attach_garden_proposal_findings(
     proposal_id: str,
@@ -311,7 +313,7 @@ def attach_garden_proposal_findings(
 @router.post(
     "/garden-proposals/{proposal_id}/detach",
     response_model=GardenProposalView,
-    dependencies=[Depends(require(CHUNK_CONTROL))],
+    dependencies=[Depends(require(Permission.CHUNK_CONTROL))],
 )
 def detach_garden_proposal_findings(
     proposal_id: str,

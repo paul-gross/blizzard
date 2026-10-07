@@ -11,7 +11,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from blizzard.auth_core import USER_MANAGE, Role
+from blizzard.auth_core import Permission, Role
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
@@ -40,7 +40,7 @@ def _user_view(user: User, *, identities: list[Identity], actor: ResolvedIdentit
 @router.get("/users", response_model=list[UserView])
 def list_users(
     services: Annotated[HubServices, Depends(get_services)],
-    actor: Annotated[ResolvedIdentity, Depends(require(USER_MANAGE))],
+    actor: Annotated[ResolvedIdentity, Depends(require(Permission.USER_MANAGE))],
 ) -> list[UserView]:
     """Every hub-local account — the admin page's own table."""
     users = services.users.list_all()
@@ -53,7 +53,7 @@ def assign_role(
     user_id: str,
     body: RoleAssignmentRequest,
     services: Annotated[HubServices, Depends(get_services)],
-    actor: Annotated[ResolvedIdentity, Depends(require(USER_MANAGE))],
+    actor: Annotated[ResolvedIdentity, Depends(require(Permission.USER_MANAGE))],
 ) -> UserView:
     """Assign ``user_id`` a new role. Three refusals, each a 403: changing your own role;
     any change touching ``superuser``, which is bootstrap-only; and granting or revoking

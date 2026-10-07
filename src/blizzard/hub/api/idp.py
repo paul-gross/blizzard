@@ -19,7 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel
 
-from blizzard.auth_core import USER_MANAGE
+from blizzard.auth_core import Permission
 from blizzard.foundation.roles import dto
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, resolve_identity
@@ -303,7 +303,7 @@ def cli_token(request: Request, body: CliTokenRequest) -> CliTokenResponse:
 @router.post(
     "/rotate-signing-key",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(reject_runner_principal), Depends(require(USER_MANAGE))],
+    dependencies=[Depends(reject_runner_principal), Depends(require(Permission.USER_MANAGE))],
 )
 def rotate_signing_key(request: Request) -> Response:
     """Mint a fresh current signing key, demoting the old current to previous.

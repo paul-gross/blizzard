@@ -12,7 +12,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from blizzard.auth_core import FLEET_VIEW
+from blizzard.auth_core import Permission
 from blizzard.foundation.roles import dto
 from blizzard.foundation.store.utc import as_utc
 from blizzard.hub.api.auth import reject_runner_principal
@@ -50,7 +50,7 @@ def _instant(value: str, *, field: str) -> datetime:
         ) from exc
 
 
-@router.get("/spend", response_model=FleetSpendView, dependencies=[Depends(require(FLEET_VIEW))])
+@router.get("/spend", response_model=FleetSpendView, dependencies=[Depends(require(Permission.FLEET_VIEW))])
 def fleet_spend(
     since: str, services: Annotated[HubServices, Depends(get_services)], until: str | None = None
 ) -> FleetSpendView:

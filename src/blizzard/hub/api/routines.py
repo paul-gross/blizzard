@@ -13,7 +13,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
 from fastapi.responses import JSONResponse
 
-from blizzard.auth_core import CHUNK_CONTROL, FLEET_VIEW, GRAPH_EDIT
+from blizzard.auth_core import Permission
 from blizzard.foundation.garden_proposals import GardenProposalOrigin
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.api import chunk_events
@@ -96,7 +96,7 @@ def _routine_or_404(routine_id: str, services: HubServices) -> Routine:
 @router.post("/routines", response_model=RoutineView, status_code=status.HTTP_201_CREATED)
 def create_routine(
     request: RoutineCreateRequest,
-    identity: Annotated[ResolvedIdentity, Depends(require(GRAPH_EDIT))],
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.GRAPH_EDIT))],
     door: RequestDoor,
     services: Annotated[HubServices, Depends(get_services)],
 ) -> RoutineView:
@@ -118,7 +118,7 @@ def create_routine(
     return _routine_view(routine)
 
 
-@router.get("/routines", response_model=list[RoutineView], dependencies=[Depends(require(FLEET_VIEW))])
+@router.get("/routines", response_model=list[RoutineView], dependencies=[Depends(require(Permission.FLEET_VIEW))])
 def list_routines(
     services: Annotated[HubServices, Depends(get_services)],
     include_retired: Annotated[bool, Query()] = False,
@@ -165,7 +165,7 @@ def _trend_view(trend: Trend) -> TrendView:
     )
 
 
-@router.get("/routines/trend", response_model=TrendView, dependencies=[Depends(require(FLEET_VIEW))])
+@router.get("/routines/trend", response_model=TrendView, dependencies=[Depends(require(Permission.FLEET_VIEW))])
 def routine_trend(
     services: Annotated[HubServices, Depends(get_services)],
     routine: Annotated[str, Query()],
@@ -211,7 +211,9 @@ def _proposal_counts_row_view(counts: GardenProposalCounts) -> GardenProposalCou
 
 
 @router.get(
-    "/routines/proposal-counts", response_model=GardenProposalCountsView, dependencies=[Depends(require(FLEET_VIEW))]
+    "/routines/proposal-counts",
+    response_model=GardenProposalCountsView,
+    dependencies=[Depends(require(Permission.FLEET_VIEW))],
 )
 def routine_proposal_counts(
     services: Annotated[HubServices, Depends(get_services)],
@@ -245,7 +247,9 @@ def routine_proposal_counts(
     )
 
 
-@router.get("/routines/{routine_id}", response_model=RoutineView, dependencies=[Depends(require(FLEET_VIEW))])
+@router.get(
+    "/routines/{routine_id}", response_model=RoutineView, dependencies=[Depends(require(Permission.FLEET_VIEW))]
+)
 def get_routine(routine_id: str, services: Annotated[HubServices, Depends(get_services)]) -> RoutineView:
     """One routine's whole record; 404 on an unknown id."""
     return _routine_view(_routine_or_404(routine_id, services))
@@ -266,7 +270,7 @@ def _baseline_view(baseline: RoutineBaseline) -> RoutineBaselineView:
 @router.get(
     "/routines/{routine_id}/baselines",
     response_model=list[RoutineBaselineView],
-    dependencies=[Depends(require(FLEET_VIEW))],
+    dependencies=[Depends(require(Permission.FLEET_VIEW))],
 )
 def routine_baselines(
     routine_id: str, services: Annotated[HubServices, Depends(get_services)]
@@ -283,7 +287,7 @@ def routine_baselines(
 @router.get(
     "/routines/{routine_id}/scopes",
     response_model=list[str],
-    dependencies=[Depends(require(FLEET_VIEW))],
+    dependencies=[Depends(require(Permission.FLEET_VIEW))],
 )
 def list_routine_scopes(routine_id: str, services: Annotated[HubServices, Depends(get_services)]) -> list[str]:
     """Every scope slug linked to `routine_id`, sorted — its own default
@@ -312,7 +316,7 @@ def _resolve_scope_for_membership(scope_slug: str, services: HubServices) -> Sco
 def link_routine_scope(
     routine_id: str,
     scope_slug: str,
-    identity: Annotated[ResolvedIdentity, Depends(require(GRAPH_EDIT))],
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.GRAPH_EDIT))],
     door: RequestDoor,
     services: Annotated[HubServices, Depends(get_services)],
     if_match: Annotated[int | None, Header()] = None,
@@ -333,7 +337,7 @@ def link_routine_scope(
 def unlink_routine_scope(
     routine_id: str,
     scope_slug: str,
-    identity: Annotated[ResolvedIdentity, Depends(require(GRAPH_EDIT))],
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.GRAPH_EDIT))],
     door: RequestDoor,
     services: Annotated[HubServices, Depends(get_services)],
     if_match: Annotated[int | None, Header()] = None,
@@ -366,7 +370,7 @@ def _routine_edit(request: RoutineEditRequest) -> RoutineEdit:
 def edit_routine(
     routine_id: str,
     request: RoutineEditRequest,
-    identity: Annotated[ResolvedIdentity, Depends(require(GRAPH_EDIT))],
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.GRAPH_EDIT))],
     door: RequestDoor,
     services: Annotated[HubServices, Depends(get_services)],
     if_match: Annotated[int | None, Header()] = None,
@@ -394,7 +398,7 @@ def edit_routine(
 def retire_routine(
     routine_id: str,
     request: RoutineLifecycleRequest,
-    identity: Annotated[ResolvedIdentity, Depends(require(GRAPH_EDIT))],
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.GRAPH_EDIT))],
     door: RequestDoor,
     services: Annotated[HubServices, Depends(get_services)],
     if_match: Annotated[int | None, Header()] = None,
@@ -415,7 +419,7 @@ def retire_routine(
 def enable_routine(
     routine_id: str,
     request: RoutineLifecycleRequest,
-    identity: Annotated[ResolvedIdentity, Depends(require(GRAPH_EDIT))],
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.GRAPH_EDIT))],
     door: RequestDoor,
     services: Annotated[HubServices, Depends(get_services)],
     if_match: Annotated[int | None, Header()] = None,
@@ -458,7 +462,7 @@ def _sweeps_view(sweeps: GardenSweeps) -> GardenSweepsView:
 @router.get(
     "/routines/{routine_id}/sweeps",
     response_model=GardenSweepsView,
-    dependencies=[Depends(require(FLEET_VIEW))],
+    dependencies=[Depends(require(Permission.FLEET_VIEW))],
 )
 def routine_sweeps(
     routine_id: str,
@@ -510,7 +514,7 @@ def run_routine(
     routine_id: str,
     request: RoutineRunRequest,
     services: Annotated[HubServices, Depends(get_services)],
-    identity: Annotated[ResolvedIdentity, Depends(require(CHUNK_CONTROL))],
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
 ) -> object:
     """Mint and ingest a hub work item from the routine, in one act; its chunk rests ``not_ready``
     until promoted.

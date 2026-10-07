@@ -13,7 +13,7 @@ from typing import Annotated, ClassVar
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from blizzard.auth_core import FLEET_VIEW, RUNNER_ADD, RUNNER_PAUSE, RUNNER_RETIRE
+from blizzard.auth_core import Permission
 from blizzard.foundation.hub_event_types import RunnerChangeKind
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.subscription_miss import SampleMissReason
@@ -215,7 +215,7 @@ def _reread(services: HubServices, runner_id: str) -> RunnerRegistryView:
 def add_runner(
     request: RunnerAddRequest,
     services: Annotated[HubServices, Depends(get_services)],
-    identity: Annotated[ResolvedIdentity, Depends(require(RUNNER_ADD))],
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.RUNNER_ADD))],
 ) -> RunnerAddResponse:
     """Add a runner under the initial ``name`` — the hub mints its id and bearer token together,
     and the plaintext token is returned once. The runner is never connected until it first
@@ -229,7 +229,7 @@ def add_runner(
     "/runners/{runner_id}/enrollments",
     response_model=RunnerEnrollmentResponse,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require(RUNNER_ADD))],
+    dependencies=[Depends(require(Permission.RUNNER_ADD))],
 )
 def enroll_runner(runner_id: str, services: Annotated[HubServices, Depends(get_services)]) -> RunnerEnrollmentResponse:
     """Rotate ``runner_id``'s bearer token — the plaintext is returned once, and the token it
@@ -245,7 +245,9 @@ def enroll_runner(runner_id: str, services: Annotated[HubServices, Depends(get_s
     return RunnerEnrollmentResponse(runner_id=runner_id, token=token)
 
 
-@router.get("/runners", response_model=RunnerRegistryListResponse, dependencies=[Depends(require(FLEET_VIEW))])
+@router.get(
+    "/runners", response_model=RunnerRegistryListResponse, dependencies=[Depends(require(Permission.FLEET_VIEW))]
+)
 def list_runners(
     services: Annotated[HubServices, Depends(get_services)],
     include_retired: Annotated[bool, Query()] = False,
@@ -260,7 +262,9 @@ def list_runners(
     )
 
 
-@router.get("/runners/{runner_id}", response_model=RunnerRegistryView, dependencies=[Depends(require(FLEET_VIEW))])
+@router.get(
+    "/runners/{runner_id}", response_model=RunnerRegistryView, dependencies=[Depends(require(Permission.FLEET_VIEW))]
+)
 def get_runner(runner_id: str, services: Annotated[HubServices, Depends(get_services)]) -> RunnerRegistryView:
     """One runner's connection condition and paused state — the operator's detail read,
     symmetric with the list. 404 on unknown."""
@@ -268,7 +272,9 @@ def get_runner(runner_id: str, services: Annotated[HubServices, Depends(get_serv
 
 
 @router.post(
-    "/runners/{runner_id}/pause", response_model=RunnerRegistryView, dependencies=[Depends(require(RUNNER_PAUSE))]
+    "/runners/{runner_id}/pause",
+    response_model=RunnerRegistryView,
+    dependencies=[Depends(require(Permission.RUNNER_PAUSE))],
 )
 def pause_runner(
     runner_id: str, request: RunnerPauseRequest, services: Annotated[HubServices, Depends(get_services)]
@@ -278,7 +284,9 @@ def pause_runner(
 
 
 @router.post(
-    "/runners/{runner_id}/resume", response_model=RunnerRegistryView, dependencies=[Depends(require(RUNNER_PAUSE))]
+    "/runners/{runner_id}/resume",
+    response_model=RunnerRegistryView,
+    dependencies=[Depends(require(Permission.RUNNER_PAUSE))],
 )
 def resume_runner(
     runner_id: str, request: RunnerPauseRequest, services: Annotated[HubServices, Depends(get_services)]
@@ -288,7 +296,9 @@ def resume_runner(
 
 
 @router.post(
-    "/runners/{runner_id}/retire", response_model=RunnerRetireResponse, dependencies=[Depends(require(RUNNER_RETIRE))]
+    "/runners/{runner_id}/retire",
+    response_model=RunnerRetireResponse,
+    dependencies=[Depends(require(Permission.RUNNER_RETIRE))],
 )
 def retire_runner(
     runner_id: str, request: RunnerRetireRequest, services: Annotated[HubServices, Depends(get_services)]
@@ -322,7 +332,9 @@ def retire_runner(
 
 
 @router.post(
-    "/runners/{runner_id}/reinstate", response_model=RunnerRegistryView, dependencies=[Depends(require(RUNNER_RETIRE))]
+    "/runners/{runner_id}/reinstate",
+    response_model=RunnerRegistryView,
+    dependencies=[Depends(require(Permission.RUNNER_RETIRE))],
 )
 def reinstate_runner(
     runner_id: str, request: RunnerLifecycleRequest, services: Annotated[HubServices, Depends(get_services)]
@@ -347,7 +359,7 @@ def reinstate_runner(
     "/runners/{runner_id}/token-revocations",
     response_model=RunnerTokenRevocationResponse,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require(RUNNER_RETIRE))],
+    dependencies=[Depends(require(Permission.RUNNER_RETIRE))],
 )
 def revoke_runner_token(
     runner_id: str, request: RunnerLifecycleRequest, services: Annotated[HubServices, Depends(get_services)]

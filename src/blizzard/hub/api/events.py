@@ -16,7 +16,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
 
-from blizzard.auth_core import FLEET_VIEW
+from blizzard.auth_core import Permission
 from blizzard.foundation.event_log import EventLogSeverity
 from blizzard.foundation.events.broker import EventBroker
 from blizzard.foundation.events.stream import Cursor, Stream
@@ -41,11 +41,11 @@ FEED_MAX_LIMIT = 200
 
 @router.get("/events/stream", include_in_schema=False)
 async def events_stream(
-    request: Request, identity: Annotated[ResolvedIdentity, Depends(require(FLEET_VIEW))]
+    request: Request, identity: Annotated[ResolvedIdentity, Depends(require(Permission.FLEET_VIEW))]
 ) -> StreamingResponse:
     """Subscribe to the live event stream, resuming from ``Last-Event-ID`` if present.
 
-    ``identity`` is unused beyond the gate itself — ``require(FLEET_VIEW)`` already
+    ``identity`` is unused beyond the gate itself — ``require(Permission.FLEET_VIEW)`` already
     raised 401/403 before this body runs."""
     del identity
     broker: EventBroker | None = getattr(request.app.state, "events", None)
@@ -89,7 +89,7 @@ class Events:
 @router.get(
     "/events",
     response_model=EventsResponse,
-    dependencies=[Depends(reject_runner_principal), Depends(require(FLEET_VIEW))],
+    dependencies=[Depends(reject_runner_principal), Depends(require(Permission.FLEET_VIEW))],
 )
 def list_events(
     services: Annotated[HubServices, Depends(get_services)],
@@ -152,7 +152,7 @@ class Activity:
 @router.get(
     "/activity",
     response_model=ActivityResponse,
-    dependencies=[Depends(reject_runner_principal), Depends(require(FLEET_VIEW))],
+    dependencies=[Depends(reject_runner_principal), Depends(require(Permission.FLEET_VIEW))],
 )
 def list_activity(
     services: Annotated[HubServices, Depends(get_services)],

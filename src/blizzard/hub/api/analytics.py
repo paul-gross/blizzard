@@ -1,8 +1,8 @@
 """Analytics operator-plane routes: a forced re-derive, the read-only
 events/counts surfaces over the derived projection, and the operational
 datasets over facts the hub already holds. Reads gate on
-:data:`~blizzard.auth_core.TRANSCRIPT_READ`; ``/re-derive`` alone on the mutating
-:data:`~blizzard.auth_core.ANALYTICS_ADMIN`, per-route. Operator-plane,
+:attr:`~blizzard.auth_core.Permission.TRANSCRIPT_READ`; ``/re-derive`` alone on the mutating
+:attr:`~blizzard.auth_core.Permission.ANALYTICS_ADMIN`, per-route. Operator-plane,
 never ``/api/fleet/...``."""
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 
-from blizzard.auth_core import ANALYTICS_ADMIN, TRANSCRIPT_READ
+from blizzard.auth_core import Permission
 from blizzard.foundation.roles import dto
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
@@ -65,7 +65,7 @@ router = APIRouter(prefix="/api/analytics", tags=["analytics"], dependencies=[De
 _STREAM_BATCH_SIZE = 500
 
 
-@router.post("/re-derive", response_model=ReDeriveResponse, dependencies=[Depends(require(ANALYTICS_ADMIN))])
+@router.post("/re-derive", response_model=ReDeriveResponse, dependencies=[Depends(require(Permission.ANALYTICS_ADMIN))])
 def re_derive(request: ReDeriveRequest, services: Annotated[HubServices, Depends(get_services)]) -> ReDeriveResponse:
     """A segment scope forces that one visible segment regardless of its candidacy; a chunk
     or all scope derives up to ``limit`` of that scope's current candidates and reports how
@@ -278,7 +278,9 @@ def counts_response(rows: list[KeyedCount]) -> AnalyticsCountsResponse:
     )
 
 
-@router.get("/events", response_model=AnalyticsEventsResponse, dependencies=[Depends(require(TRANSCRIPT_READ))])
+@router.get(
+    "/events", response_model=AnalyticsEventsResponse, dependencies=[Depends(require(Permission.TRANSCRIPT_READ))]
+)
 def list_events(
     services: Annotated[HubServices, Depends(get_services)],
     filters: Annotated[EventFilters, Depends(EventFilters.of)],
@@ -297,7 +299,7 @@ def list_events(
 
 @router.get(
     "/events/ndjson",
-    dependencies=[Depends(require(TRANSCRIPT_READ))],
+    dependencies=[Depends(require(Permission.TRANSCRIPT_READ))],
     # Declared, not defaulted: FastAPI's default 200 for a `StreamingResponse` would
     # claim `application/json` in the spec the TS client is generated from.
     response_class=StreamingResponse,
@@ -316,7 +318,9 @@ def stream_events(
     )
 
 
-@router.get("/counts/files", response_model=AnalyticsCountsResponse, dependencies=[Depends(require(TRANSCRIPT_READ))])
+@router.get(
+    "/counts/files", response_model=AnalyticsCountsResponse, dependencies=[Depends(require(Permission.TRANSCRIPT_READ))]
+)
 def counts_by_file(
     services: Annotated[HubServices, Depends(get_services)],
     scope: Annotated[EventScopeFilters, Depends(EventScopeFilters.of)],
@@ -330,7 +334,11 @@ def counts_by_file(
     return counts_response(services.analytics_events.counts_by_file(criteria))
 
 
-@router.get("/counts/skills", response_model=AnalyticsCountsResponse, dependencies=[Depends(require(TRANSCRIPT_READ))])
+@router.get(
+    "/counts/skills",
+    response_model=AnalyticsCountsResponse,
+    dependencies=[Depends(require(Permission.TRANSCRIPT_READ))],
+)
 def counts_by_skill(
     services: Annotated[HubServices, Depends(get_services)],
     scope: Annotated[EventScopeFilters, Depends(EventScopeFilters.of)],
@@ -344,7 +352,9 @@ def counts_by_skill(
 
 
 @router.get(
-    "/counts/agent-types", response_model=AnalyticsCountsResponse, dependencies=[Depends(require(TRANSCRIPT_READ))]
+    "/counts/agent-types",
+    response_model=AnalyticsCountsResponse,
+    dependencies=[Depends(require(Permission.TRANSCRIPT_READ))],
 )
 def counts_by_agent_type(
     services: Annotated[HubServices, Depends(get_services)],
@@ -357,7 +367,9 @@ def counts_by_agent_type(
     return counts_response(services.analytics_events.counts_by_agent_type(filters.criteria))
 
 
-@router.get("/counts/nodes", response_model=AnalyticsCountsResponse, dependencies=[Depends(require(TRANSCRIPT_READ))])
+@router.get(
+    "/counts/nodes", response_model=AnalyticsCountsResponse, dependencies=[Depends(require(Permission.TRANSCRIPT_READ))]
+)
 def counts_by_node(
     services: Annotated[HubServices, Depends(get_services)],
     scope: Annotated[EventScopeFilters, Depends(EventScopeFilters.of)],
@@ -389,7 +401,9 @@ def _durations_response(stats: list[DurationStats]) -> AnalyticsDurationsRespons
 
 
 @router.get(
-    "/durations/nodes", response_model=AnalyticsDurationsResponse, dependencies=[Depends(require(TRANSCRIPT_READ))]
+    "/durations/nodes",
+    response_model=AnalyticsDurationsResponse,
+    dependencies=[Depends(require(Permission.TRANSCRIPT_READ))],
 )
 def durations_by_node(
     services: Annotated[HubServices, Depends(get_services)], scope: Annotated[ScopeFilters, Depends(ScopeFilters.of)]
@@ -400,7 +414,9 @@ def durations_by_node(
 
 
 @router.get(
-    "/durations/graphs", response_model=AnalyticsDurationsResponse, dependencies=[Depends(require(TRANSCRIPT_READ))]
+    "/durations/graphs",
+    response_model=AnalyticsDurationsResponse,
+    dependencies=[Depends(require(Permission.TRANSCRIPT_READ))],
 )
 def durations_by_graph(
     services: Annotated[HubServices, Depends(get_services)], scope: Annotated[ScopeFilters, Depends(ScopeFilters.of)]
@@ -442,7 +458,9 @@ def named_spend(stats: list[SpendStats], by_name: bool) -> list[SpendStats]:
     return fold_spend_by_name(stats) if by_name else stats
 
 
-@router.get("/spend/nodes", response_model=AnalyticsSpendResponse, dependencies=[Depends(require(TRANSCRIPT_READ))])
+@router.get(
+    "/spend/nodes", response_model=AnalyticsSpendResponse, dependencies=[Depends(require(Permission.TRANSCRIPT_READ))]
+)
 def spend_by_node(
     services: Annotated[HubServices, Depends(get_services)],
     scope: Annotated[ScopeFilters, Depends(ScopeFilters.of)],
@@ -456,7 +474,9 @@ def spend_by_node(
     )
 
 
-@router.get("/spend/graphs", response_model=AnalyticsSpendResponse, dependencies=[Depends(require(TRANSCRIPT_READ))])
+@router.get(
+    "/spend/graphs", response_model=AnalyticsSpendResponse, dependencies=[Depends(require(Permission.TRANSCRIPT_READ))]
+)
 def spend_by_graph(
     services: Annotated[HubServices, Depends(get_services)],
     scope: Annotated[ScopeFilters, Depends(ScopeFilters.of)],
@@ -503,7 +523,9 @@ def chunk_spend_ndjson_lines(
 
 
 @router.get(
-    "/spend/chunks", response_model=AnalyticsChunkSpendResponse, dependencies=[Depends(require(TRANSCRIPT_READ))]
+    "/spend/chunks",
+    response_model=AnalyticsChunkSpendResponse,
+    dependencies=[Depends(require(Permission.TRANSCRIPT_READ))],
 )
 def spend_by_chunk(
     services: Annotated[HubServices, Depends(get_services)],
@@ -523,7 +545,7 @@ def spend_by_chunk(
 
 @router.get(
     "/spend/chunks/ndjson",
-    dependencies=[Depends(require(TRANSCRIPT_READ))],
+    dependencies=[Depends(require(Permission.TRANSCRIPT_READ))],
     # Declared, not defaulted: FastAPI's default 200 for a `StreamingResponse` would
     # claim `application/json` in the spec the TS client is generated from.
     response_class=StreamingResponse,
@@ -550,7 +572,9 @@ def _outcomes_response(stats: list[OutcomeStats]) -> AnalyticsOutcomesResponse:
 
 
 @router.get(
-    "/outcomes/nodes", response_model=AnalyticsOutcomesResponse, dependencies=[Depends(require(TRANSCRIPT_READ))]
+    "/outcomes/nodes",
+    response_model=AnalyticsOutcomesResponse,
+    dependencies=[Depends(require(Permission.TRANSCRIPT_READ))],
 )
 def outcomes_by_node(
     services: Annotated[HubServices, Depends(get_services)], scope: Annotated[ScopeFilters, Depends(ScopeFilters.of)]

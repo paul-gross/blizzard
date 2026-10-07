@@ -11,7 +11,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 
-from blizzard.auth_core import FLEET_VIEW, GRAPH_EDIT
+from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
@@ -60,7 +60,7 @@ def _scope_or_404(slug: str, services: HubServices) -> Scope:
 @router.post("/scopes", response_model=ScopeView, status_code=status.HTTP_201_CREATED)
 def create_scope(
     request: ScopeCreateRequest,
-    identity: Annotated[ResolvedIdentity, Depends(require(GRAPH_EDIT))],
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.GRAPH_EDIT))],
     door: RequestDoor,
     services: Annotated[HubServices, Depends(get_services)],
 ) -> ScopeView:
@@ -74,13 +74,13 @@ def create_scope(
     return scope_view(scope)
 
 
-@router.get("/scopes", response_model=list[ScopeView], dependencies=[Depends(require(FLEET_VIEW))])
+@router.get("/scopes", response_model=list[ScopeView], dependencies=[Depends(require(Permission.FLEET_VIEW))])
 def list_scopes(services: Annotated[HubServices, Depends(get_services)]) -> list[ScopeView]:
     """Every scope, newest first, each marked retired or not."""
     return [scope_view(s) for s in services.scopes.list_all()]
 
 
-@router.get("/scopes/{slug}", response_model=ScopeView, dependencies=[Depends(require(FLEET_VIEW))])
+@router.get("/scopes/{slug}", response_model=ScopeView, dependencies=[Depends(require(Permission.FLEET_VIEW))])
 def get_scope(slug: str, services: Annotated[HubServices, Depends(get_services)]) -> ScopeView:
     """One scope; 404 on an unknown slug."""
     return scope_view(_scope_or_404(slug, services))
@@ -89,7 +89,7 @@ def get_scope(slug: str, services: Annotated[HubServices, Depends(get_services)]
 @router.get(
     "/scopes/{slug}/routines",
     response_model=list[str],
-    dependencies=[Depends(require(FLEET_VIEW))],
+    dependencies=[Depends(require(Permission.FLEET_VIEW))],
 )
 def list_scope_routines(slug: str, services: Annotated[HubServices, Depends(get_services)]) -> list[str]:
     """Every routine id linked to `slug` — the reverse direction of
@@ -102,7 +102,7 @@ def list_scope_routines(slug: str, services: Annotated[HubServices, Depends(get_
 def edit_scope(
     slug: str,
     request: ScopeEditRequest,
-    identity: Annotated[ResolvedIdentity, Depends(require(GRAPH_EDIT))],
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.GRAPH_EDIT))],
     door: RequestDoor,
     services: Annotated[HubServices, Depends(get_services)],
     if_match: Annotated[int | None, Header()] = None,
@@ -129,7 +129,7 @@ def edit_scope(
 def retire_scope(
     slug: str,
     request: ScopeLifecycleRequest,
-    identity: Annotated[ResolvedIdentity, Depends(require(GRAPH_EDIT))],
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.GRAPH_EDIT))],
     door: RequestDoor,
     services: Annotated[HubServices, Depends(get_services)],
     if_match: Annotated[int | None, Header()] = None,
@@ -150,7 +150,7 @@ def retire_scope(
 def enable_scope(
     slug: str,
     request: ScopeLifecycleRequest,
-    identity: Annotated[ResolvedIdentity, Depends(require(GRAPH_EDIT))],
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.GRAPH_EDIT))],
     door: RequestDoor,
     services: Annotated[HubServices, Depends(get_services)],
     if_match: Annotated[int | None, Header()] = None,

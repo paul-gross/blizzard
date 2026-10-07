@@ -17,7 +17,7 @@ import uvicorn
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
-from blizzard.auth_core import FLEET_VIEW
+from blizzard.auth_core import Permission
 from blizzard.cli.runtime import _EarlyShutdownServer
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationRunner
@@ -207,7 +207,7 @@ def test_require_grants_the_implicit_operator_with_no_store_wired() -> None:
     app.state.services = None  # store-free, exactly as the export/unit app is built
 
     @app.get("/_pin_probe")
-    def _probe(identity: ResolvedIdentity = Depends(require(FLEET_VIEW))) -> dict[str, str]:
+    def _probe(identity: ResolvedIdentity = Depends(require(Permission.FLEET_VIEW))) -> dict[str, str]:
         return {"username": identity.username}
 
     with TestClient(app) as client:

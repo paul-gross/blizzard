@@ -15,7 +15,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 
-from blizzard.auth_core import CHUNK_CONTROL, CONFIG_EDIT, FLEET_VIEW
+from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.work_items import WorkItemPriority
 from blizzard.hub.api import chunk_events
@@ -172,12 +172,12 @@ def _writable(source: str, services: HubServices) -> ConfiguredWorkSource:
     return record
 
 
-@router.get("/work-sources", response_model=WorkSourcesListView, dependencies=[Depends(require(FLEET_VIEW))])
+@router.get("/work-sources", response_model=WorkSourcesListView, dependencies=[Depends(require(Permission.FLEET_VIEW))])
 def list_work_sources(
     services: Annotated[HubServices, Depends(get_services)], include_retired: bool = False
 ) -> WorkSourcesListView:
     """The built-in ``hub`` source and every stored work source, retired ones hidden unless
-    `include_retired`. No gate beyond `FLEET_VIEW`, since a client needs this to know which
+    `include_retired`. No gate beyond `Permission.FLEET_VIEW`, since a client needs this to know which
     sources gate their items."""
     records = services.work_source_records.list_all(include_retired=include_retired)
     return WorkSourcesListView(sources=[_built_in_summary(services), *(_summary(r, services) for r in records)])
@@ -186,7 +186,7 @@ def list_work_sources(
 @router.post("/work-sources", response_model=WorkSourceSummary, status_code=status.HTTP_201_CREATED)
 def create_work_source(
     request: WorkSourceDocument,
-    identity: Annotated[ResolvedIdentity, Depends(require(CONFIG_EDIT))],
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
     door: RequestDoor,
     services: Annotated[HubServices, Depends(get_services)],
 ) -> WorkSourceSummary:
@@ -210,7 +210,9 @@ def create_work_source(
     return _summary(record, services)
 
 
-@router.get("/work-sources/{source}", response_model=WorkSourceSummary, dependencies=[Depends(require(FLEET_VIEW))])
+@router.get(
+    "/work-sources/{source}", response_model=WorkSourceSummary, dependencies=[Depends(require(Permission.FLEET_VIEW))]
+)
 def get_work_source(source: str, services: Annotated[HubServices, Depends(get_services)]) -> WorkSourceSummary:
     """One work source, retired or not; the built-in `hub` shows as `built_in`. 404 on an unknown name."""
     if is_built_in(source):
@@ -225,7 +227,7 @@ def get_work_source(source: str, services: Annotated[HubServices, Depends(get_se
 def patch_work_source(
     source: str,
     request: WorkSourcePatchRequest,
-    identity: Annotated[ResolvedIdentity, Depends(require(CONFIG_EDIT))],
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
     door: RequestDoor,
     services: Annotated[HubServices, Depends(get_services)],
     if_match: Annotated[int | None, Header()] = None,
@@ -251,7 +253,7 @@ def patch_work_source(
 @router.post("/work-sources/{source}/retire", response_model=WorkSourceSummary)
 def retire_work_source(
     source: str,
-    identity: Annotated[ResolvedIdentity, Depends(require(CONFIG_EDIT))],
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
     door: RequestDoor,
     services: Annotated[HubServices, Depends(get_services)],
     if_match: Annotated[int | None, Header()] = None,
@@ -271,7 +273,7 @@ def retire_work_source(
 @router.post("/work-sources/{source}/enable", response_model=WorkSourceSummary)
 def enable_work_source(
     source: str,
-    identity: Annotated[ResolvedIdentity, Depends(require(CONFIG_EDIT))],
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
     door: RequestDoor,
     services: Annotated[HubServices, Depends(get_services)],
     if_match: Annotated[int | None, Header()] = None,
@@ -291,7 +293,9 @@ def enable_work_source(
 
 
 @router.get(
-    "/work-sources/{source}/items", response_model=WorkItemsListView, dependencies=[Depends(require(FLEET_VIEW))]
+    "/work-sources/{source}/items",
+    response_model=WorkItemsListView,
+    dependencies=[Depends(require(Permission.FLEET_VIEW))],
 )
 def list_work_items(
     source: str,
@@ -332,7 +336,7 @@ def create_work_item(
     source: str,
     request: WorkItemCreateRequest,
     services: Annotated[HubServices, Depends(get_services)],
-    identity: Annotated[ResolvedIdentity, Depends(require(CHUNK_CONTROL))],
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
 ) -> object:
     """Allocate a fresh item at SOURCE, open, authored by the caller, and mint its
     resting ``not_ready`` chunk in the same transaction. 404/409 from the source's editor gate,
@@ -386,7 +390,7 @@ def create_work_item(
 @router.get(
     "/work-sources/{source}/items/{ref}",
     response_model=WorkItemView,
-    dependencies=[Depends(require(FLEET_VIEW))],
+    dependencies=[Depends(require(Permission.FLEET_VIEW))],
 )
 def get_work_item(source: str, ref: str, services: Annotated[HubServices, Depends(get_services)]) -> WorkItemView:
     """One item at SOURCE by REF, open or closed. 404 for an unknown source, an
@@ -409,7 +413,7 @@ def get_work_item(source: str, ref: str, services: Annotated[HubServices, Depend
 @router.patch(
     "/work-sources/{source}/items/{ref}",
     response_model=WorkItemView,
-    dependencies=[Depends(require(CHUNK_CONTROL))],
+    dependencies=[Depends(require(Permission.CHUNK_CONTROL))],
 )
 def patch_work_item(
     source: str,
@@ -455,7 +459,7 @@ def withdraw_work_item(
     source: str,
     ref: str,
     services: Annotated[HubServices, Depends(get_services)],
-    identity: Annotated[ResolvedIdentity, Depends(require(CHUNK_CONTROL))],
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
 ) -> WorkItemView:
     """Withdraw the item at SOURCE/REF. 404 for an unknown source, an unallocated ref,
     or a chunk a race deletes between resolving it and this write; 409 for a known

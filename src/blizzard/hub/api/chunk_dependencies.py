@@ -10,7 +10,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 
-from blizzard.auth_core import CHUNK_CONTROL
+from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
@@ -84,7 +84,7 @@ def _edge_view(edge: DependencyEdge) -> ChunkDependencyEdgeView:
     "/chunks/{chunk_id}/dependencies",
     response_model=ChunkDependencyEdgeView,
     status_code=status.HTTP_202_ACCEPTED,
-    dependencies=[Depends(require(CHUNK_CONTROL))],
+    dependencies=[Depends(require(Permission.CHUNK_CONTROL))],
 )
 def declare_dependency(
     chunk_id: str,
@@ -120,7 +120,7 @@ def declare_dependency(
     "/chunks/{chunk_id}/dependencies/release",
     response_model=ChunkDependencyEdgeView,
     status_code=status.HTTP_202_ACCEPTED,
-    dependencies=[Depends(require(CHUNK_CONTROL))],
+    dependencies=[Depends(require(Permission.CHUNK_CONTROL))],
 )
 def release_dependency(
     chunk_id: str,
