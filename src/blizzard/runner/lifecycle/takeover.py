@@ -193,7 +193,7 @@ class IReadTakeoverRepository(Protocol):
     def lease_for_open_takeover(self, lease_id: str) -> Lease | None:
         """The lease by id iff an open takeover names it, regardless of the
         lease's own closure — the worker-authorization resolver's second half, alongside
-        :meth:`~blizzard.runner.leases.IReadLeaseRecordRepository.active_lease`. The
+        :meth:`~blizzard.runner.leases.record.IReadLeaseRecordRepository.active_lease`. The
         open-takeover fact is what authorizes a resumed session's worker verbs against the
         reference lease it names, not the lease's own activeness."""
         ...
