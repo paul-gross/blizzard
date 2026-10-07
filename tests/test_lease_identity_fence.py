@@ -12,7 +12,7 @@ import httpx
 import pytest
 from sqlalchemy import func, select
 
-from blizzard.hub.config import ROUTE_TOKEN_WARN
+from blizzard.hub.domain.execution.auth.route import ROUTE_TOKEN_WARN
 from blizzard.hub.store import schema as s
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID

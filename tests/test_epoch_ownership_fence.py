@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 from sqlalchemy import func, select
 
-from blizzard.hub.config import ROUTE_TOKEN_WARN
+from blizzard.hub.domain.execution.auth.route import ROUTE_TOKEN_WARN
 from blizzard.hub.store import schema as s
 from tests.support import HubHarness, build_hub, ingest
 

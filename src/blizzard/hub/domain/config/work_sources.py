@@ -9,7 +9,6 @@ from datetime import datetime
 from typing import ClassVar, Protocol
 
 from blizzard.foundation.roles import domain_model
-from blizzard.hub.config import KNOWN_WORK_SOURCE_PROVIDERS, RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.config.changes import (
     FIELDED_RECORD_TRANSITIONS,
     RETIRED_FIELD,
@@ -21,7 +20,12 @@ from blizzard.hub.domain.config.changes import (
     RecordState,
     Verdict,
 )
+from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
+
+# The only work-source provider grammar a source may declare; an unknown provider fails
+# at config load, not at first use.
+KNOWN_WORK_SOURCE_PROVIDERS = {"github"}
 
 #: Providers whose items cannot be read without a credential.
 PROVIDERS_NEEDING_CREDENTIAL = frozenset({"github"})

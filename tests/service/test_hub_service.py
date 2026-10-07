@@ -17,7 +17,8 @@ from pathlib import Path
 import httpx
 import pytest
 
-from blizzard.hub.config import PRODUCES_ENFORCE, ROUTE_TOKEN_ENFORCE
+from blizzard.hub.domain.execution.auth.produces import PRODUCES_ENFORCE
+from blizzard.hub.domain.execution.auth.route import ROUTE_TOKEN_ENFORCE
 from tests.e2e.test_acceptance_loop import REPO, REPO_NAME, _await_http, _forge, _free_port, _hub, _terminate
 from tests.service.support import (
     mint_fixture,

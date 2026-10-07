@@ -19,7 +19,6 @@ from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.event_log import EventLogKind
 from blizzard.foundation.lane_retry import OutageLatch
 from blizzard.foundation.logging import get_logger
-from blizzard.hub.config import EgressConfig
 from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.observability.analytics.events import DropFact
 from blizzard.hub.domain.observability.analytics.extraction import EXTRACTOR_VERSION
@@ -30,6 +29,7 @@ from blizzard.hub.domain.observability.egress.assembly import (
     plan_invocations_pass,
     plan_steps_pass,
 )
+from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.event_rows import FilePathPolicy
 from blizzard.hub.domain.observability.egress.events_window import events_rows, position_of, take
 from blizzard.hub.domain.observability.egress.repository import (

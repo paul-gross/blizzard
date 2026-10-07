@@ -21,7 +21,7 @@ import pytest
 from blizzard.foundation.operator_sessions.internal import session_file
 from blizzard.hub import app as hub_app
 from blizzard.hub import runtime as hub_runtime
-from blizzard.hub.config import LEGACY_FORGE_VARIABLES
+from blizzard.hub.domain.config.legacy_keys import LEGACY_FORGE_VARIABLES
 from blizzard.runner import app as runner_app
 from blizzard.runner import runtime as runner_runtime
 from blizzard.runner.config import DEFAULT_TOKEN_ENV, ENV_HUB_URL

@@ -19,8 +19,8 @@ from fastapi import FastAPI
 from blizzard.foundation.lane_retry import BACKOFF_CAP
 from blizzard.hub import app as hub_app
 from blizzard.hub.app import Sweep
-from blizzard.hub.config import EgressConfig
 from blizzard.hub.domain.graph.model import Graph
+from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.event_rows import FilePathPolicy
 from blizzard.hub.domain.observability.egress.repository import EventsPosition, UsagePosition
 from blizzard.hub.domain.observability.egress.rows import ExportedInvocation, ExportedStep

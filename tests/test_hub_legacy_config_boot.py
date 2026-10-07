@@ -9,7 +9,8 @@ import pytest
 
 from blizzard.hub import app as hub_app
 from blizzard.hub import runtime as hub_runtime
-from blizzard.hub.config import RESERVED_HUB_SOURCE_NAME, ConfigError, HubConfig
+from blizzard.hub.config import ConfigError, HubConfig
+from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.secrets import ENV_SECRET_KEY
 
 pytestmark = pytest.mark.component

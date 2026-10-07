@@ -18,8 +18,11 @@ from blizzard.foundation.trace_export.config import TracingConfig, toml_literal
 from blizzard.hub.config import ENV_DB_URL as HUB_ENV_DB_URL
 from blizzard.hub.config import ENV_HOST as HUB_ENV_HOST
 from blizzard.hub.config import ENV_PORT as HUB_ENV_PORT
-from blizzard.hub.config import PRODUCES_ENFORCE, EgressConfig, HubConfig, LegacyKeys, WorkSourceConfig
 from blizzard.hub.config import ConfigError as HubConfigError
+from blizzard.hub.config import HubConfig, parse_egress_config, read_legacy_keys, render_egress_toml
+from blizzard.hub.domain.config.legacy_keys import LegacyKeys, WorkSourceConfig
+from blizzard.hub.domain.execution.auth.produces import PRODUCES_ENFORCE
+from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.runner.config import (
     DEFAULT_RUNNER_CEILING_WINDOW_HOURS,
     LEGACY_ANTHROPIC_SLUG,
@@ -724,14 +727,14 @@ _BLOCK = '\n[[work_source]]\nname = "blizzard"\nprovider = "github"\nrepo = "o/r
 def _legacy(tmp_path: Path, body: str, environ: dict[str, str] | None = None) -> LegacyKeys:
     path = tmp_path / "blizzard-hub.toml"
     path.write_text('db_url = "sqlite:///x"\n' + body)
-    return LegacyKeys.read(path, environ or {})
+    return read_legacy_keys(path, environ or {})
 
 
 @pytest.mark.unit
 def test_a_scaffolded_config_carries_no_legacy_keys(tmp_path: Path) -> None:
     config = _hub_config(tmp_path)
     config.config_path.write_text(config.to_toml())
-    legacy = LegacyKeys.read(config.config_path, {})
+    legacy = read_legacy_keys(config.config_path, {})
     assert not legacy.present()
     assert "[[work_source]]" not in config.to_toml()
 
@@ -2247,22 +2250,22 @@ def test_egress_rejects_an_invalid_key(tmp_path: Path, key: str, value: str) -> 
 @pytest.mark.unit
 @pytest.mark.parametrize("key", ["sweep_seconds", "batch_limit", "max_rows_per_file", "backfill_max_window"])
 def test_egress_positive_keys_accept_one_and_refuse_zero(tmp_path: Path, key: str) -> None:
-    assert getattr(EgressConfig.of({key: 1}), key) == 1
+    assert getattr(parse_egress_config({key: 1}), key) == 1
     with pytest.raises(HubConfigError) as error:
-        EgressConfig.of({key: 0})
+        parse_egress_config({key: 0})
     assert str(error.value) == f"egress.{key} must be positive, got 0"
 
 
 @pytest.mark.unit
 def test_egress_file_paths_refuses_a_non_string_naming_every_mode() -> None:
     with pytest.raises(HubConfigError) as error:
-        EgressConfig.of({"file_paths": 3})
+        parse_egress_config({"file_paths": 3})
     assert str(error.value) == "egress.file_paths must be one of relative, hashed, absolute, omit, got 3"
 
 
 @pytest.mark.unit
 def test_egress_header_comment_names_the_file_path_and_key_variable_knobs() -> None:
-    header = EgressConfig().to_toml()[0]
+    header = render_egress_toml(EgressConfig())[0]
     assert "# batch_limit and max_rows_per_file (rows) and min_free_bytes. file_paths decides what a file\n" in header
     assert "# read's path leaves as (relative, hashed, absolute or omit); path_key_env names the\n" in header
     assert "# environment variable holding the key for hashed paths. extractor_versions is current or\n" in header

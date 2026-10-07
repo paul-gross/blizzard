@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
@@ -22,8 +23,6 @@ from blizzard.foundation.ids import (
 )
 from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.foundation.roles import domain_model
-from blizzard.hub.config import PRODUCES_WARN, ROUTE_TOKEN_WARN
-from blizzard.hub.delivery.hub_node import HubNodeExecutor
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, WorkRefLabel
 from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
@@ -36,8 +35,9 @@ from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementReposito
 from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository
 from blizzard.hub.domain.chunk.proposals import ItemProposal, StampedWorkItemProposal
 from blizzard.hub.domain.execution.auth.commit_pointer import CommitPointerPolicy
+from blizzard.hub.domain.execution.auth.produces import PRODUCES_WARN
 from blizzard.hub.domain.execution.auth.proposals import ProposalPolicy
-from blizzard.hub.domain.execution.auth.route import RouteToken
+from blizzard.hub.domain.execution.auth.route import ROUTE_TOKEN_WARN, RouteToken
 from blizzard.hub.domain.execution.completion import (
     CompletionPlan,
     CompletionRefused,
@@ -177,6 +177,12 @@ class _Raced:
     migration: ReplayedMigration | None = None
 
 
+class IHubNodeExecutor(Protocol):
+    """Runs a hub-executed node's ``run:`` list once; the result is the executor's own and unread here."""
+
+    def run(self, chunk: Chunk, graph: Graph, node: Node, *, epoch: int) -> object: ...
+
+
 class ApplyService:
     """Apply a node-step completion to a chunk, fenced and idempotent. Orchestration only: it
     reads, probes for replays, asks the completion rules what to do, and records it."""
@@ -193,7 +199,7 @@ class ApplyService:
         artifacts: IReadChunkArtifactsRepository,
         retired: RetiredRunnerGuard,
         clock: IClock,
-        hub_node_executor: HubNodeExecutor,
+        hub_node_executor: IHubNodeExecutor,
         label: WorkRefLabel,
     ) -> None:
         self._facts = facts

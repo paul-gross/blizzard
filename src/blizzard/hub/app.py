@@ -81,8 +81,9 @@ from blizzard.hub.composition import (
     build_process_core,
     build_services,
 )
-from blizzard.hub.config import AUTH_MODE_OAUTH, ConfigError, EgressConfig, HubConfig, LegacyKeys
-from blizzard.hub.domain.config.carry_over import ExistingConfig, ImportResult, LegacyStart
+from blizzard.hub.config import AUTH_MODE_OAUTH, ConfigError, HubConfig, read_legacy_keys
+from blizzard.hub.domain.config.carry_over import ExistingConfig, ImportResult, LegacyStart, LegacyStartRefused
+from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.event_rows import missing_key_reason
 from blizzard.hub.domain.observability.tracing.attributes import (
     INSTRUMENTATION_SCOPE,
@@ -264,7 +265,7 @@ def import_legacy_config(config: HubConfig, environ: Mapping[str, str]) -> Impor
     """The offline ``import-legacy`` wiring: the hub key's existence checked before a provider is
     built, then the store and key source opened directly, no app."""
     require_hub_key(environ, data_dir=config.data_dir)
-    legacy = LegacyKeys.read(config.config_path, environ)
+    legacy = read_legacy_keys(config.config_path, environ)
     engine = create_engine_from_url(config.db_url)
     try:
         core = build_process_core(engine)
@@ -493,7 +494,10 @@ def build_hosted_app(
     # Only once the store is at the expected schema head: a store mid-migration must
     # fail *readiness*, not *boot* (pinned: `test_ready_probe_false_on_unmigrated_store`).
     if readiness.evaluate().ready:
-        LegacyStart.of(core.config_import, LegacyKeys.read(config.config_path, os.environ)).check()
+        try:
+            LegacyStart.of(core.config_import, read_legacy_keys(config.config_path, os.environ)).check()
+        except LegacyStartRefused as refusal:
+            raise ConfigError(str(refusal)) from refusal
         OrphanedProviders.of(config, services).check()
         KeyCoverage.of(core.secrets, secret_keys).check()
         # Before the hub serves: a live slot now belongs to a run the previous process died in.

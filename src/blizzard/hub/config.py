@@ -21,6 +21,16 @@ from sqlalchemy.engine import make_url
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.trace_export.config import TracingConfig
+from blizzard.hub.domain.config.legacy_keys import (
+    LEGACY_FORGE_VARIABLES,
+    LegacyKeys,
+    WorkSourceConfig,
+)
+from blizzard.hub.domain.config.work_sources import KNOWN_WORK_SOURCE_PROVIDERS
+from blizzard.hub.domain.execution.auth.produces import PRODUCES_ENFORCE, PRODUCES_WARN
+from blizzard.hub.domain.execution.auth.route import ROUTE_TOKEN_ENFORCE, ROUTE_TOKEN_WARN
+from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
+from blizzard.hub.domain.observability.egress.config import EGRESS_DATASETS, EgressConfig
 from blizzard.hub.domain.observability.transcripts import TranscriptCaps
 
 CONFIG_FILENAME = "blizzard-hub.toml"
@@ -35,27 +45,13 @@ ENV_PORT = "BZ_HUB_PORT"
 # identically by every verb, which all resolve through `load` (`bzh:sql-portable`).
 ENV_DB_URL = "BZ_HUB_DB_URL"
 
-# The route-capability-token rollout brake — `warn` proceeds; `enforce` rejects before the fence.
-# A runner's bearer token has no brake: a fleet call without one the hub issued is always refused,
-# and a toml that still sets `runner_auth_mode` boots with the key ignored.
-ROUTE_TOKEN_WARN = "warn"
-ROUTE_TOKEN_ENFORCE = "enforce"
+# The modes the route-capability-token brake accepts; the modes themselves live beside the check.
 _KNOWN_ROUTE_TOKEN_MODES = {ROUTE_TOKEN_WARN, ROUTE_TOKEN_ENFORCE}
 
-# The produces-artifact rollout brake, separate from the route-token brake above — `warn`
-# logs a `produces:` name with no attachment and proceeds; `enforce` rejects it.
-PRODUCES_WARN = "warn"
-PRODUCES_ENFORCE = "enforce"
+# The modes the produces-artifact brake accepts, likewise.
 _KNOWN_PRODUCES_MODES = {PRODUCES_WARN, PRODUCES_ENFORCE}
 
-# The only work-source provider grammar a source may declare; an unknown provider fails
-# at config load, not at first use.
-KNOWN_WORK_SOURCE_PROVIDERS = {"github"}
 _REQUIRED_WORK_SOURCE_KEYS = ("name", "provider", "repo", "token_env")
-
-# The built-in, always-seated hub work source's reserved name — no
-# `[[work_source]]` entry may claim it.
-RESERVED_HUB_SOURCE_NAME = "hub"
 
 # `[[work_source]]`'s pre-rename name — deliberately *not* aliased; pinned by
 # `test_config.py::test_a_leftover_pm_source_block_fails_the_load_naming_the_new_key`.
@@ -156,125 +152,76 @@ class StoreUrl:
             ) from exc
 
 
-@domain_model
-@dataclass(frozen=True)
-class WorkSourceConfig:
-    """One legacy ``[[work_source]]`` block, parsed only for :class:`LegacyKeys`.
-    ``token_env`` names the environment variable carrying the credential, never the
-    secret itself; ``api_base``/``web_base`` override the provider's default origins,
-    and ``web_base`` derives from ``api_base`` when omitted."""
-
-    name: str
-    provider: str
-    repo: str
-    token_env: str
-    #: Opt into the forge-status label sweep — canonical instance only; two writers fight.
-    annotate: bool = False
-    api_base: str | None = None
-    web_base: str | None = None
-
-    @classmethod
-    def sources(cls, raw_sources: object) -> tuple[WorkSourceConfig, ...]:
-        """Validate and project ``[[work_source]]`` entries; each rejection names
-        the offending entry rather than failing generically."""
-        if not isinstance(raw_sources, list):
-            return ()
-        sources: list[WorkSourceConfig] = []
-        seen_names: set[str] = set()
-        seen_provider_repo: set[tuple[str, str]] = set()
-        for entry in raw_sources:
-            if not isinstance(entry, dict):
-                raise ConfigError(f"[[work_source]] entry must be a table, got {entry!r}")
-            missing = [key for key in _REQUIRED_WORK_SOURCE_KEYS if key not in entry]
-            if missing:
-                raise ConfigError(f"[[work_source]] entry is missing required key(s) {missing}: {entry!r}")
-            name = str(entry["name"])
-            provider = str(entry["provider"])
-            repo = str(entry["repo"])
-            token_env = str(entry["token_env"])
-            if ":" in name:
-                # A colon in a source name breaks the ingest-token grammar's first-colon split.
-                raise ConfigError(f"[[work_source]] name {name!r} must not contain ':'")
-            if name == RESERVED_HUB_SOURCE_NAME:
-                # The built-in, always-seated source — a configured entry
-                # of the same name would collide with it.
-                raise ConfigError(f"[[work_source]] name {name!r} is reserved for the built-in hub source")
-            if name in seen_names:
-                raise ConfigError(f"duplicate [[work_source]] name {name!r}")
-            seen_names.add(name)
-            if "close" in entry:
-                # Close intents have no per-source configuration key.
-                raise ConfigError(f"[[work_source]] {name!r} has an unsupported close key — delete the key")
-            provider_repo = (provider, repo)
-            if provider_repo in seen_provider_repo:
-                # Two names for one (provider, repo) would let the same item be ingested twice
-                # under two identities — this is what holds pointer identity uniqueness up.
-                raise ConfigError(f"duplicate [[work_source]] (provider, repo) {provider_repo!r} across two names")
-            seen_provider_repo.add(provider_repo)
-            if provider not in KNOWN_WORK_SOURCE_PROVIDERS:
-                raise ConfigError(
-                    f"[[work_source]] {name!r} has unknown provider {provider!r} "
-                    f"(known: {sorted(KNOWN_WORK_SOURCE_PROVIDERS)})"
-                )
-            annotate = entry.get("annotate", False)
-            if not isinstance(annotate, bool):
-                # Validated rather than coerced, mirroring `follow_latest`: a source that opts
-                # into writing to a shared forge deserves an explicit boolean, not a truthy guess.
-                raise ConfigError(f"[[work_source]] {name!r} has annotate={annotate!r}, must be a boolean")
-            api_base = str(entry["api_base"]) if entry.get("api_base") else None
-            web_base = str(entry["web_base"]) if entry.get("web_base") else None
-            sources.append(
-                cls(
-                    name=name,
-                    provider=provider,
-                    repo=repo,
-                    token_env=token_env,
-                    annotate=annotate,
-                    api_base=api_base,
-                    web_base=web_base,
-                )
+def _work_sources(raw_sources: object) -> tuple[WorkSourceConfig, ...]:
+    """Validate and project ``[[work_source]]`` entries; each rejection names
+    the offending entry rather than failing generically."""
+    if not isinstance(raw_sources, list):
+        return ()
+    sources: list[WorkSourceConfig] = []
+    seen_names: set[str] = set()
+    seen_provider_repo: set[tuple[str, str]] = set()
+    for entry in raw_sources:
+        if not isinstance(entry, dict):
+            raise ConfigError(f"[[work_source]] entry must be a table, got {entry!r}")
+        missing = [key for key in _REQUIRED_WORK_SOURCE_KEYS if key not in entry]
+        if missing:
+            raise ConfigError(f"[[work_source]] entry is missing required key(s) {missing}: {entry!r}")
+        name = str(entry["name"])
+        provider = str(entry["provider"])
+        repo = str(entry["repo"])
+        token_env = str(entry["token_env"])
+        if ":" in name:
+            # A colon in a source name breaks the ingest-token grammar's first-colon split.
+            raise ConfigError(f"[[work_source]] name {name!r} must not contain ':'")
+        if name == RESERVED_HUB_SOURCE_NAME:
+            # The built-in, always-seated source — a configured entry
+            # of the same name would collide with it.
+            raise ConfigError(f"[[work_source]] name {name!r} is reserved for the built-in hub source")
+        if name in seen_names:
+            raise ConfigError(f"duplicate [[work_source]] name {name!r}")
+        seen_names.add(name)
+        if "close" in entry:
+            # Close intents have no per-source configuration key.
+            raise ConfigError(f"[[work_source]] {name!r} has an unsupported close key — delete the key")
+        provider_repo = (provider, repo)
+        if provider_repo in seen_provider_repo:
+            # Two names for one (provider, repo) would let the same item be ingested twice
+            # under two identities — this is what holds pointer identity uniqueness up.
+            raise ConfigError(f"duplicate [[work_source]] (provider, repo) {provider_repo!r} across two names")
+        seen_provider_repo.add(provider_repo)
+        if provider not in KNOWN_WORK_SOURCE_PROVIDERS:
+            raise ConfigError(
+                f"[[work_source]] {name!r} has unknown provider {provider!r} "
+                f"(known: {sorted(KNOWN_WORK_SOURCE_PROVIDERS)})"
             )
-        return tuple(sources)
-
-
-#: The environment variables that configured forge delivery before repositories were records.
-ENV_FORGE_URL = "BZ_FORGE_URL"
-ENV_FORGE_OWNER = "BZ_FORGE_OWNER"
-ENV_FORGE_BASE_BRANCH = "BZ_FORGE_BASE_BRANCH"
-ENV_FORGE_TOKEN = "BZ_FORGE_TOKEN"
-LEGACY_FORGE_VARIABLES = (ENV_FORGE_URL, ENV_FORGE_OWNER, ENV_FORGE_BASE_BRANCH, ENV_FORGE_TOKEN)
-
-
-@domain_model
-@dataclass(frozen=True)
-class LegacyKeys:
-    """The legacy keys a hub still carries: its file's ``[[work_source]]`` blocks and the
-    names of the legacy variables set in its environment — the forge variables and every
-    variable a block's ``token_env`` names. Read from the parsed file, so a commented-out
-    block never counts. Holds names only; a value is read by the import alone."""
-
-    config_path: Path
-    sources: tuple[WorkSourceConfig, ...]
-    #: The legacy variables set in the environment, in declaration order.
-    variables: tuple[str, ...]
-
-    @classmethod
-    def read(cls, config_path: Path, environ: Mapping[str, str]) -> LegacyKeys:
-        raw = tomllib.loads(config_path.read_text()) if config_path.exists() else {}
-        sources = WorkSourceConfig.sources(raw.get("work_source", []))
-        named = [*LEGACY_FORGE_VARIABLES, *(source.token_env for source in sources)]
-        variables = tuple(dict.fromkeys(name for name in named if name in environ))
-        return cls(config_path=config_path, sources=sources, variables=variables)
-
-    def present(self) -> bool:
-        return bool(self.sources or self.variables)
-
-    def locations(self) -> tuple[str, ...]:
-        """Where each key was found — the file and block, or the variable — never a value."""
-        return (
-            *(f'{self.config_path.name} [[work_source]] "{source.name}"' for source in self.sources),
-            *(f"environment {name}" for name in self.variables),
+        annotate = entry.get("annotate", False)
+        if not isinstance(annotate, bool):
+            # Validated rather than coerced, mirroring `follow_latest`: a source that opts
+            # into writing to a shared forge deserves an explicit boolean, not a truthy guess.
+            raise ConfigError(f"[[work_source]] {name!r} has annotate={annotate!r}, must be a boolean")
+        api_base = str(entry["api_base"]) if entry.get("api_base") else None
+        web_base = str(entry["web_base"]) if entry.get("web_base") else None
+        sources.append(
+            WorkSourceConfig(
+                name=name,
+                provider=provider,
+                repo=repo,
+                token_env=token_env,
+                annotate=annotate,
+                api_base=api_base,
+                web_base=web_base,
+            )
         )
+    return tuple(sources)
+
+
+def read_legacy_keys(config_path: Path, environ: Mapping[str, str]) -> LegacyKeys:
+    """The legacy keys ``config_path`` and ``environ`` still carry; a malformed block raises :class:`ConfigError`."""
+    raw = tomllib.loads(config_path.read_text()) if config_path.exists() else {}
+    sources = _work_sources(raw.get("work_source", []))
+    named = [*LEGACY_FORGE_VARIABLES, *(source.token_env for source in sources)]
+    variables = tuple(dict.fromkeys(name for name in named if name in environ))
+    return LegacyKeys(config_path=config_path, sources=sources, variables=variables)
 
 
 @domain_model
@@ -392,153 +339,123 @@ class TranscriptCapsConfig:
 
 
 EGRESS_FORMATS = ("ndjson", "parquet")
-#: The datasets an export can carry, in the order a pass writes them.
-EGRESS_DATASETS = ("steps", "invocations", "events")
 #: What leaves as a ``file_read`` event's subject.
 EGRESS_FILE_PATHS = ("relative", "hashed", "absolute", "omit")
 #: Which extractor versions' derivations the ``events`` dataset writes.
 EGRESS_EXTRACTOR_VERSIONS = ("current", "all")
 
 
-@domain_model
-@dataclass(frozen=True)
-class EgressConfig:
-    """Resolved ``[egress]`` config — the fact-egress export's keys. It runs only when ``directory`` is set;
-    every other key has a default that works unset."""
+def parse_egress_config(raw_egress: object) -> EgressConfig:
+    if not isinstance(raw_egress, dict):
+        return EgressConfig()
+    defaults = EgressConfig()
+    return EgressConfig(
+        directory=_egress_directory(raw_egress),
+        format=_egress_format(raw_egress, defaults.format),
+        datasets=_egress_datasets(raw_egress, defaults.datasets),
+        sweep_seconds=_egress_integer(raw_egress, "sweep_seconds", defaults.sweep_seconds, minimum=1),
+        settle_seconds=_egress_integer(raw_egress, "settle_seconds", defaults.settle_seconds, minimum=0),
+        batch_limit=_egress_integer(raw_egress, "batch_limit", defaults.batch_limit, minimum=1),
+        max_rows_per_file=_egress_integer(raw_egress, "max_rows_per_file", defaults.max_rows_per_file, minimum=1),
+        min_free_bytes=_egress_integer(raw_egress, "min_free_bytes", defaults.min_free_bytes, minimum=0),
+        backfill_max_window=_egress_integer(raw_egress, "backfill_max_window", defaults.backfill_max_window, minimum=1),
+        file_paths=_egress_file_paths(raw_egress, defaults.file_paths),
+        path_key_env=_egress_path_key_env(raw_egress, defaults.path_key_env),
+        extractor_versions=_egress_extractor_versions(raw_egress, defaults.extractor_versions),
+    )
 
-    directory: Path | None = None
-    format: Literal["ndjson", "parquet"] = "ndjson"
-    datasets: tuple[str, ...] = EGRESS_DATASETS
-    sweep_seconds: int = 60
-    #: How long a closed step or usage fact must have stood before it is exported; 0 exports at once.
-    settle_seconds: int = 300
-    batch_limit: int = 5000
-    max_rows_per_file: int = 100000
-    min_free_bytes: int = 1024**3
-    #: The widest window a backfill may write, in seconds.
-    backfill_max_window: int = 604800
-    #: How a ``file_read`` event's path leaves: relative to the working directory, keyed-hashed, as stored, or omitted.
-    file_paths: Literal["relative", "hashed", "absolute", "omit"] = "relative"
-    #: The environment variable holding the HMAC key for hashed paths; the config never holds the secret itself.
-    path_key_env: str = "BZ_EGRESS_PATH_KEY"
-    #: Whether the ``events`` dataset writes only the hub's current extractor version's derivations, or every one.
-    extractor_versions: Literal["current", "all"] = "current"
 
-    @classmethod
-    def of(cls, raw_egress: object) -> EgressConfig:
-        if not isinstance(raw_egress, dict):
-            return cls()
-        defaults = cls()
-        return cls(
-            directory=cls._directory(raw_egress),
-            format=cls._format(raw_egress, defaults.format),
-            datasets=cls._datasets(raw_egress, defaults.datasets),
-            sweep_seconds=cls._integer(raw_egress, "sweep_seconds", defaults.sweep_seconds, minimum=1),
-            settle_seconds=cls._integer(raw_egress, "settle_seconds", defaults.settle_seconds, minimum=0),
-            batch_limit=cls._integer(raw_egress, "batch_limit", defaults.batch_limit, minimum=1),
-            max_rows_per_file=cls._integer(raw_egress, "max_rows_per_file", defaults.max_rows_per_file, minimum=1),
-            min_free_bytes=cls._integer(raw_egress, "min_free_bytes", defaults.min_free_bytes, minimum=0),
-            backfill_max_window=cls._integer(
-                raw_egress, "backfill_max_window", defaults.backfill_max_window, minimum=1
-            ),
-            file_paths=cls._file_paths(raw_egress, defaults.file_paths),
-            path_key_env=cls._path_key_env(raw_egress, defaults.path_key_env),
-            extractor_versions=cls._extractor_versions(raw_egress, defaults.extractor_versions),
-        )
+def _egress_directory(raw: Mapping[str, object]) -> Path | None:
+    value = raw.get("directory")
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise ConfigError(f"egress.directory must be a non-empty path, got {value!r}")
+    return Path(value).expanduser()
 
-    @staticmethod
-    def _directory(raw: Mapping[str, object]) -> Path | None:
-        value = raw.get("directory")
-        if value is None:
-            return None
-        if not isinstance(value, str) or not value.strip():
-            raise ConfigError(f"egress.directory must be a non-empty path, got {value!r}")
-        return Path(value).expanduser()
 
-    @staticmethod
-    def _format(raw: Mapping[str, object], default: Literal["ndjson", "parquet"]) -> Literal["ndjson", "parquet"]:
-        value = raw.get("format", default)
-        if value == "ndjson":
-            return "ndjson"
-        if value == "parquet":
-            return "parquet"
-        raise ConfigError(f"egress.format must be one of {', '.join(EGRESS_FORMATS)}, got {value!r}")
+def _egress_format(raw: Mapping[str, object], default: Literal["ndjson", "parquet"]) -> Literal["ndjson", "parquet"]:
+    value = raw.get("format", default)
+    if value == "ndjson":
+        return "ndjson"
+    if value == "parquet":
+        return "parquet"
+    raise ConfigError(f"egress.format must be one of {', '.join(EGRESS_FORMATS)}, got {value!r}")
 
-    @staticmethod
-    def _file_paths(
-        raw: Mapping[str, object], default: Literal["relative", "hashed", "absolute", "omit"]
-    ) -> Literal["relative", "hashed", "absolute", "omit"]:
-        value = raw.get("file_paths", default)
-        if value == "relative":
-            return "relative"
-        if value == "hashed":
-            return "hashed"
-        if value == "absolute":
-            return "absolute"
-        if value == "omit":
-            return "omit"
-        raise ConfigError(f"egress.file_paths must be one of {', '.join(EGRESS_FILE_PATHS)}, got {value!r}")
 
-    @staticmethod
-    def _extractor_versions(raw: Mapping[str, object], default: Literal["current", "all"]) -> Literal["current", "all"]:
-        value = raw.get("extractor_versions", default)
-        if value == "current":
-            return "current"
-        if value == "all":
-            return "all"
-        raise ConfigError(
-            f"egress.extractor_versions must be one of {', '.join(EGRESS_EXTRACTOR_VERSIONS)}, got {value!r}"
-        )
+def _egress_file_paths(
+    raw: Mapping[str, object], default: Literal["relative", "hashed", "absolute", "omit"]
+) -> Literal["relative", "hashed", "absolute", "omit"]:
+    value = raw.get("file_paths", default)
+    if value == "relative":
+        return "relative"
+    if value == "hashed":
+        return "hashed"
+    if value == "absolute":
+        return "absolute"
+    if value == "omit":
+        return "omit"
+    raise ConfigError(f"egress.file_paths must be one of {', '.join(EGRESS_FILE_PATHS)}, got {value!r}")
 
-    @staticmethod
-    def _path_key_env(raw: Mapping[str, object], default: str) -> str:
-        value = raw.get("path_key_env", default)
-        if not isinstance(value, str) or not value.strip():
-            raise ConfigError(f"egress.path_key_env must be a non-empty environment variable name, got {value!r}")
-        return value
 
-    @staticmethod
-    def _datasets(raw: Mapping[str, object], default: tuple[str, ...]) -> tuple[str, ...]:
-        value = raw.get("datasets", list(default))
-        if not isinstance(value, list) or not value or any(item not in EGRESS_DATASETS for item in value):
-            raise ConfigError(
-                f"egress.datasets must be a non-empty list drawn from {list(EGRESS_DATASETS)}, got {value!r}"
-            )
-        # Pass order, not file order: steps first, once each.
-        return tuple(name for name in EGRESS_DATASETS if name in value)
+def _egress_extractor_versions(
+    raw: Mapping[str, object], default: Literal["current", "all"]
+) -> Literal["current", "all"]:
+    value = raw.get("extractor_versions", default)
+    if value == "current":
+        return "current"
+    if value == "all":
+        return "all"
+    raise ConfigError(f"egress.extractor_versions must be one of {', '.join(EGRESS_EXTRACTOR_VERSIONS)}, got {value!r}")
 
-    @staticmethod
-    def _integer(raw: Mapping[str, object], key: str, default: int, *, minimum: int) -> int:
-        value = raw.get(key, default)
-        if isinstance(value, bool) or not isinstance(value, int):
-            raise ConfigError(f"egress.{key} must be an integer, got {value!r}")
-        if value < minimum:
-            bound = "non-negative" if minimum == 0 else "positive"
-            raise ConfigError(f"egress.{key} must be {bound}, got {value!r}")
-        return value
 
-    def to_toml(self) -> list[str]:
-        """The ``[egress]`` block. ``directory`` is the switch and has no default; every other key is rendered
-        commented out at its default, live once overridden."""
-        defaults = EgressConfig()
-        lines = [
-            "\n# Fact egress: write closed steps, usage and transcript events as immutable files an analytics\n"
-            "# tool can load. Off until `directory` is set. format is ndjson or parquet (parquet needs the\n"
-            "# blizzard[egress] extra); datasets draws from steps, invocations and events. Seconds, except\n"
-            "# batch_limit and max_rows_per_file (rows) and min_free_bytes. file_paths decides what a file\n"
-            "# read's path leaves as (relative, hashed, absolute or omit); path_key_env names the\n"
-            "# environment variable holding the key for hashed paths. extractor_versions is current or\n"
-            "# all: which extractor versions' events are written. Uncomment to override.\n",
-            "[egress]\n",
-            '# directory = "/var/lib/blizzard/egress"\n'
-            if self.directory is None
-            else f"directory = {json.dumps(str(self.directory))}\n",
-        ]
-        for key in _EGRESS_KEYS:
-            value = getattr(self, key)
-            literal = json.dumps(list(value)) if isinstance(value, tuple) else json.dumps(value)
-            lines.append(f"# {key} = {literal}\n" if value == getattr(defaults, key) else f"{key} = {literal}\n")
-        return lines
+def _egress_path_key_env(raw: Mapping[str, object], default: str) -> str:
+    value = raw.get("path_key_env", default)
+    if not isinstance(value, str) or not value.strip():
+        raise ConfigError(f"egress.path_key_env must be a non-empty environment variable name, got {value!r}")
+    return value
+
+
+def _egress_datasets(raw: Mapping[str, object], default: tuple[str, ...]) -> tuple[str, ...]:
+    value = raw.get("datasets", list(default))
+    if not isinstance(value, list) or not value or any(item not in EGRESS_DATASETS for item in value):
+        raise ConfigError(f"egress.datasets must be a non-empty list drawn from {list(EGRESS_DATASETS)}, got {value!r}")
+    # Pass order, not file order: steps first, once each.
+    return tuple(name for name in EGRESS_DATASETS if name in value)
+
+
+def _egress_integer(raw: Mapping[str, object], key: str, default: int, *, minimum: int) -> int:
+    value = raw.get(key, default)
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ConfigError(f"egress.{key} must be an integer, got {value!r}")
+    if value < minimum:
+        bound = "non-negative" if minimum == 0 else "positive"
+        raise ConfigError(f"egress.{key} must be {bound}, got {value!r}")
+    return value
+
+
+def render_egress_toml(egress: EgressConfig) -> list[str]:
+    """The ``[egress]`` block. ``directory`` is the switch and has no default; every other key is rendered
+    commented out at its default, live once overridden."""
+    defaults = EgressConfig()
+    lines = [
+        "\n# Fact egress: write closed steps, usage and transcript events as immutable files an analytics\n"
+        "# tool can load. Off until `directory` is set. format is ndjson or parquet (parquet needs the\n"
+        "# blizzard[egress] extra); datasets draws from steps, invocations and events. Seconds, except\n"
+        "# batch_limit and max_rows_per_file (rows) and min_free_bytes. file_paths decides what a file\n"
+        "# read's path leaves as (relative, hashed, absolute or omit); path_key_env names the\n"
+        "# environment variable holding the key for hashed paths. extractor_versions is current or\n"
+        "# all: which extractor versions' events are written. Uncomment to override.\n",
+        "[egress]\n",
+        '# directory = "/var/lib/blizzard/egress"\n'
+        if egress.directory is None
+        else f"directory = {json.dumps(str(egress.directory))}\n",
+    ]
+    for key in _EGRESS_KEYS:
+        value = getattr(egress, key)
+        literal = json.dumps(list(value)) if isinstance(value, tuple) else json.dumps(value)
+        lines.append(f"# {key} = {literal}\n" if value == getattr(defaults, key) else f"{key} = {literal}\n")
+    return lines
 
 
 _EGRESS_KEYS = (
@@ -690,7 +607,7 @@ class HubConfig:
             else '# public_url = "https://blizzard.example.com"\n',
             *self._transcript_cap_lines(),
             *self.tracing.to_toml(unit="closed steps"),
-            *self.egress.to_toml(),
+            *render_egress_toml(self.egress),
         ]
         lines.append("\n[auth]\n")
         lines.append(f'mode = "{self.auth.mode}"\n')
@@ -770,7 +687,7 @@ class HubConfig:
             auth=AuthConfig.of(raw.get("auth", {})),
             transcripts=TranscriptCapsConfig.of(raw.get("transcripts", {})),
             tracing=TracingConfig.of(raw.get("tracing", {}), ConfigError),
-            egress=EgressConfig.of(raw.get("egress", {})),
+            egress=parse_egress_config(raw.get("egress", {})),
             trusted_proxies=TrustedProxies.entries(raw.get("trusted_proxies"), ConfigError),
             public_url=cls.parse_public_url(raw.get("public_url")),
         )

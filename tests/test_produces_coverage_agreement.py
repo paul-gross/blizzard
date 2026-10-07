@@ -13,8 +13,7 @@ import pytest
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
-from blizzard.hub.config import PRODUCES_ENFORCE
-from blizzard.hub.domain.execution.auth.produces import Produces
+from blizzard.hub.domain.execution.auth.produces import PRODUCES_ENFORCE, Produces
 from blizzard.hub.domain.execution.submissions import CompletionArtifact as HubArtifact
 from blizzard.hub.domain.graph.model import Node, ProducesSpec
 from blizzard.runner.lifecycle.judgement.produces import ProducesReconciler

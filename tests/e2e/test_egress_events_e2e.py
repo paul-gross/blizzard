@@ -21,7 +21,7 @@ from typing import Any
 import httpx
 import pytest
 
-from blizzard.hub.config import EgressConfig
+from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.runner.config import ENV_TRANSCRIPTS_ROOT, RunnerConfig
 from blizzard.runner.harness.identity import OPENCODE_HARNESS_ID
 from tests.e2e import egress_proof as proof

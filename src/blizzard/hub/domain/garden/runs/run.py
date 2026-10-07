@@ -15,7 +15,6 @@ from dataclasses import dataclass
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.roles import domain_model
-from blizzard.hub.config import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.chunk.model import HubWorkItem, IWriteWorkItemRepository, WorkItemAuthor
 from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository
 from blizzard.hub.domain.garden.findings.model import FindingSet, IReadFindingSetRepository
@@ -29,6 +28,7 @@ from blizzard.hub.domain.garden.routines import (
 )
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository, Scope, ScopeVerb
 from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository
+from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.work_items.editing import prepare_mint
 
 

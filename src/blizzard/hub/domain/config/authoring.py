@@ -9,7 +9,6 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 
 from blizzard.foundation.clock import IClock
-from blizzard.hub.config import LegacyKeys
 from blizzard.hub.domain.config import secret_lifecycle
 from blizzard.hub.domain.config.apply import (
     ConfigDeclaration,
@@ -30,6 +29,7 @@ from blizzard.hub.domain.config.carry_over import (
     plan_import,
 )
 from blizzard.hub.domain.config.changes import ChangeContext
+from blizzard.hub.domain.config.legacy_keys import LegacyKeys
 from blizzard.hub.domain.config.repositories import (
     ConfiguredRepository,
     IWriteRepositoryRecordRepository,
