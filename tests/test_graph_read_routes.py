@@ -50,6 +50,9 @@ nodes:
         conflict:
           description: a repo did not merge cleanly
           to: ship
+        failure:
+          description: a command failed
+          to: ship
 """
 
 

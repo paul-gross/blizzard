@@ -12,6 +12,7 @@ import pytest
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.hub_event_types import HubEventType
 from blizzard.foundation.ids import Id, IdPrefix
+from blizzard.hub.delivery.command_runner import CommandResult
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
 from blizzard.hub.graphs import PACKAGED
@@ -40,14 +41,14 @@ _ENV_NAMES = {
 }
 
 
-def _mint_and_claim(hub: HubHarness) -> tuple[str, dict[str, str]]:
+def _mint_and_claim(hub: HubHarness, ref: str = "1") -> tuple[str, dict[str, str]]:
     minted = hub.client.post(
         "/api/graphs", json={"definition_yaml": PACKAGED.named("advanced-development-workflow").inlined_yaml}
     )
     assert minted.status_code == 201, minted.text
     nodes = {n["name"]: n["node_id"] for n in minted.json()["nodes"]}
     chunk_id = hub.client.post(
-        "/api/chunks", json={"tokens": [pointer_token({"source": "default", "ref": "1"})]}
+        "/api/chunks", json={"tokens": [pointer_token({"source": "default", "ref": ref})]}
     ).json()["chunk_id"]
     repin = hub.client.patch(f"/api/chunks/{chunk_id}", json={"graph_id": minted.json()["graph_id"]})
     assert repin.status_code == 202, repin.text
@@ -113,7 +114,8 @@ def _event_kinds(hub: HubHarness) -> list[str]:
 
 
 def _hub(tmp_path: Path) -> tuple[HubHarness, FakeHubCommandRunner]:
-    runner = FakeHubCommandRunner()
+    # `deliver` authors no `success`, so a silent run would route `failure`; print the landing outcome.
+    runner = FakeHubCommandRunner(default=CommandResult(exit_code=0, stdout="landed\n", stderr=""))
     return build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir(), repositories=()), runner
 
 
@@ -143,7 +145,10 @@ def test_a_secret_replaced_between_visits_reaches_the_next_visit(tmp_path: Path)
     _visit(hub, chunk_id, nodes)
     replaced = hub.client.put(f"/api/secrets/{FIXTURE_FORGE_SECRET}/value", json={"value": "rotated-token"})
     assert replaced.status_code == 200, replaced.text
-    _visit(hub, chunk_id, nodes)
+    # The first visit landed the chunk, so the next visit is a second chunk at `deliver`.
+    next_chunk_id, next_nodes = _mint_and_claim(hub, "2")
+    _seed_at_deliver(hub, next_chunk_id, next_nodes, [("widget", None)])
+    _visit(hub, next_chunk_id, next_nodes)
 
     assert [call[2]["BZ_FORGE_TOKEN"] for call in runner.calls] == ["fixture-token", "rotated-token"]
 

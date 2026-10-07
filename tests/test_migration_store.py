@@ -67,6 +67,9 @@ nodes:
         pass:
           description: done
           to: done
+        failure:
+          description: a command failed
+          to: build
 """
 
 

@@ -379,7 +379,8 @@ class PrintedChoice:
         """The last non-blank stdout line, iff it names one of the node's authored choices
         (#65's outcome-mapping vocabulary) or the machinery-reserved ``pending`` outcome
         (#66), recognized regardless of whether the node authors a matching choice — like
-        ``success``/``failure``, it is never an authored edge."""
+        ``success``/``failure``, it is never an authored edge (``success``/``failure`` are
+        reserved names whose edges a node authors)."""
         lines = [line.strip() for line in stdout.splitlines() if line.strip()]
         if not lines:
             return cls(None)
@@ -626,7 +627,13 @@ class HubNodeExecutor:
                     chosen = printed
                     break
             if chosen is None:
-                chosen = HUB_DEFAULT_SUCCESS_CHOICE
+                # A silent run succeeds only where the node authors `success`; otherwise it
+                # routes `failure`, which every hub node authors.
+                chosen = (
+                    HUB_DEFAULT_SUCCESS_CHOICE
+                    if HUB_DEFAULT_SUCCESS_CHOICE in choice_names
+                    else HUB_DEFAULT_FAILURE_CHOICE
+                )
 
             commits: list[dict[str, str]] = json.loads(env[ENV_GIT_COMMITS])
             return self._route(chunk, graph, node, epoch=epoch, choice=chosen, commits=commits, step=last_step)
@@ -775,8 +782,9 @@ class HubNodeExecutor:
     ) -> HubRunResult:
         edge = graph.edge_for_choice(node.node_id, choice)
         if edge is None:
-            # An authoring gap, not a crash: nothing routes, so the same outcome re-polls
-            # forever. Announced once per (node, epoch) rather than once per poll.
+            # Reachable only for a stored graph that lacks an edge mint now requires: nothing
+            # routes, so the same outcome re-polls forever. Announced once per (node, epoch)
+            # rather than once per poll.
             now = self._clock.now()
             detail = f"no authored edge for choice `{choice}` on hub node `{node.name}`"
             authored = sorted(c.name for c in node.choices)

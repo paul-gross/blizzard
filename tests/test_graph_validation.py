@@ -40,6 +40,7 @@ def _min_build_deliver() -> dict[str, Any]:
                     "choices": {
                         "landed": {"description": "landed", "to": "done"},
                         "conflict": {"description": "conflict", "to": "build"},
+                        "failure": {"description": "a command failed", "to": "build"},
                     }
                 },
             },
@@ -106,7 +107,10 @@ def test_hub_node_choice_with_an_arbitrary_name_is_legal() -> None:
     machinery-known outcome."""
     doc = _min_build_deliver()
     doc["nodes"]["deliver"]["judgement"] = {  # type: ignore[index]
-        "choices": {"bogus": {"description": "x", "to": "build"}}
+        "choices": {
+            "bogus": {"description": "x", "to": "build"},
+            "failure": {"description": "failed", "to": "build"},
+        }
     }
     result = Validator.of(GraphDoc.of(doc)).result
     assert result.ok
@@ -115,7 +119,10 @@ def test_hub_node_choice_with_an_arbitrary_name_is_legal() -> None:
 def test_hub_node_overriding_conflict_routing_is_legal() -> None:
     doc = _min_build_deliver()
     doc["nodes"]["deliver"]["judgement"] = {  # type: ignore[index]
-        "choices": {"conflict": {"description": "merge conflicted", "to": "build"}}
+        "choices": {
+            "conflict": {"description": "merge conflicted", "to": "build"},
+            "failure": {"description": "failed", "to": "build"},
+        }
     }
     result = Validator.of(GraphDoc.of(doc)).result
     assert result.ok
@@ -127,10 +134,27 @@ def test_hub_node_choice_routing_straight_to_the_terminal_is_legal() -> None:
     special case; a hub node's routing is checked exactly like a worker node's."""
     doc = _min_build_deliver()
     doc["nodes"]["deliver"]["judgement"] = {  # type: ignore[index]
-        "choices": {"conflict": {"description": "merge conflicted", "to": "done"}}
+        "choices": {
+            "conflict": {"description": "merge conflicted", "to": "done"},
+            "failure": {"description": "failed", "to": "build"},
+        }
     }
     result = Validator.of(GraphDoc.of(doc)).result
     assert result.ok
+
+
+def test_hub_node_without_a_failure_choice_is_an_error() -> None:
+    doc = _min_build_deliver()
+    del doc["nodes"]["deliver"]["judgement"]["choices"]["failure"]  # type: ignore[attr-defined]
+    result = Validator.of(GraphDoc.of(doc)).result
+    assert not result.ok
+    assert any("`deliver`" in e and "`failure`" in e for e in result.errors)
+
+
+def test_hub_node_with_a_failure_choice_and_no_success_choice_mints() -> None:
+    doc = _min_build_deliver()
+    assert "success" not in doc["nodes"]["deliver"]["judgement"]["choices"]  # type: ignore[index]
+    assert Validator.of(GraphDoc.of(doc)).result.ok
 
 
 def test_bad_retries_exhausted_target_is_an_error() -> None:
