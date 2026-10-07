@@ -1,4 +1,5 @@
 import { Injectable, InjectionToken, inject } from '@angular/core';
+import { FLEET_CLOCK } from 'fleet';
 
 /**
  * The kiosk half of demo mode — the two things a board left on a wall screen
@@ -165,7 +166,7 @@ export const DEMO_KIOSK_ENV = new InjectionToken<DemoKioskEnv>('DEMO_KIOSK_ENV',
   factory: (): DemoKioskEnv => ({
     fetch: (input, init) => fetch(input, init),
     reload: () => globalThis.location.reload(),
-    now: () => Date.now(),
+    now: inject(FLEET_CLOCK),
     wakeLock: () => (globalThis.navigator as NavigatorWithWakeLock).wakeLock,
   }),
 });

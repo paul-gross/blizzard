@@ -15,7 +15,7 @@ import { formatAbsolute, formatWhen } from '../when';
  * attributes land on it exactly as they would on the `<span>` it replaces.
  *
  * `text` reads {@link injectNowSignal} (a minute's granularity — `formatWhen`'s
- * coarsest unit) rather than `formatWhen`'s own `new Date()` default: for a static
+ * coarsest unit) rather than a reading taken inside `formatWhen`: for a static
  * `iso` (a completed chunk's `completedAt`, an immutable event's `recorded_at`),
  * `iso` is the only otherwise-tracked signal, so `computed()` would never
  * re-invoke past first render and a long-lived card would read a stale "23:45"

@@ -62,9 +62,9 @@ export class GlanceBoard {
   private readonly live = inject(FleetLiveUpdates);
 
   /** The fleet-wide spend-since read — the same local-midnight
-   * window the titlebar's own cell reads (`startOfLocalDayIso`), so the two
-   * never disagree and share one query-cache entry. */
-  protected readonly spendToday = injectHubFleetSpendQuery(() => startOfLocalDayIso());
+   * window the titlebar's own cell reads (`startOfLocalDayIso`), cut from the same minute tick, so the two
+   * agree and share one query-cache entry. */
+  protected readonly spendToday = injectHubFleetSpendQuery(() => startOfLocalDayIso(this.now()));
 
   private readonly chunks = computed<readonly ChunkSummary[]>(() => this.chunksQuery.data() ?? []);
   private readonly questions = computed(() => this.questionsQuery.data() ?? []);

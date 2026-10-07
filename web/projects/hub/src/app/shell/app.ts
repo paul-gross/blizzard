@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, Injector, afterRenderEffect, comput
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import { filter, map } from 'rxjs';
-import { AppShell, BoardHeader, FleetLiveUpdates, ViewportService } from 'fleet/shell';
+import { AppShell, BoardHeader, FleetLiveUpdates, ViewportService, injectNowSignal } from 'fleet/shell';
 import { PendingLobby } from '../core/auth/pending-lobby';
 import { hasPermission, injectMeQuery } from '../core/auth/me.query';
 import { injectAuthProvidersQuery } from '../core/auth/providers.query';
@@ -93,20 +93,24 @@ export class App {
    */
   private readonly demoConfig = readDemoConfig(globalThis.location?.search ?? '');
 
-  /** The fleet's spend-today read — `since` is local start-of-day,
-   * recomputed each time the query re-derives its key (a day rollover moves the
-   * window forward, same as any other calendar-relative read). */
-  protected readonly spendToday = injectHubFleetSpendQuery(() => startOfLocalDayIso());
+  /** The minute tick the spend windows are cut from — reading it inside the query
+   * options makes the key reactive, yet it changes only when the local day does, so a
+   * tick within the day leaves the key equal and refetches nothing. */
+  private readonly now = injectNowSignal(60_000);
 
-  /** The fleet's spend-yesterday read — `[startOfPreviousLocalDayIso(),
-   * startOfLocalDayIso())`, both derived from the one local-day boundary helper so
+  /** The fleet's spend-today read — `since` is local start-of-day off {@link now},
+   * so the window rolls forward at local midnight without a reload. */
+  protected readonly spendToday = injectHubFleetSpendQuery(() => startOfLocalDayIso(this.now()));
+
+  /** The fleet's spend-yesterday read — `[startOfPreviousLocalDayIso(now),
+   * startOfLocalDayIso(now))`, both derived from the one local-day boundary helper so
    * the window rolls over with today by construction and never includes today's
    * own spend. A second, independent `injectHubFleetSpendQuery` entry — distinct
    * from {@link spendToday}'s in both `since` and `until`, so it is its own cache
    * entry rather than colliding on one. */
   protected readonly spendYesterday = injectHubFleetSpendQuery(
-    () => startOfPreviousLocalDayIso(),
-    () => startOfLocalDayIso(),
+    () => startOfPreviousLocalDayIso(this.now()),
+    () => startOfLocalDayIso(this.now()),
   );
 
   /** The app-root-level shell fork (`../docs/designs/mobile/README.md`'s

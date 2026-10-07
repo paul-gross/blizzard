@@ -1,7 +1,7 @@
 <div class="a-head">
   <span class="a-key" [attr.data-testid]="keyTestid()">{{ artifact().key }}</span>
-  @if (when(); as w) {
-    <span class="a-when" [attr.data-testid]="whenTestid()" [attr.title]="whenTitle() || null">{{ w }}</span>
+  @if (artifact().recorded_at; as at) {
+    <fleet-when class="a-when" [attr.data-testid]="whenTestid()" [iso]="at" />
   }
   <span class="a-kind">{{ artifact().kind }}</span>
 </div>

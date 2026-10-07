@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
 import { ArtifactKind, type ArtifactView, type FindingDelta, type FindingSurvey } from '../../api/hub';
-import { formatAbsolute, formatWhen } from '../../core/when';
+import { FleetWhen } from '../../core/when-display/fleet-when';
 import { ChunkArtifactBounce } from './chunk-artifact-bounce';
 import { ChunkArtifactDelta } from './chunk-artifact-delta';
 import { ChunkArtifactSurvey } from './chunk-artifact-survey';
@@ -50,7 +50,7 @@ import { parseFindingSurvey } from './parse-finding-survey';
 @Component({
   selector: 'fleet-chunk-detail-artifact-body',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ChunkArtifactBounce, ChunkArtifactDelta, ChunkArtifactSurvey],
+  imports: [ChunkArtifactBounce, ChunkArtifactDelta, ChunkArtifactSurvey, FleetWhen],
   templateUrl: './chunk-artifact-body.html',
   styleUrl: './chunk-artifact-body.css',
 })
@@ -72,15 +72,6 @@ export class ChunkArtifactBody {
   protected readonly contentTestid = computed(() => `${this.testid()}-content`);
   protected readonly refTestid = computed(() => `${this.testid()}-ref`);
   protected readonly branchTestid = computed(() => `${this.testid()}-branch`);
-
-  /** The attachment instant, pre-formatted, or `null` when the entry carries none. */
-  protected readonly when = computed(() => {
-    const at = this.artifact().recorded_at;
-    return at ? formatWhen(at) : null;
-  });
-
-  /** {@link when}'s full local date + time, for the stamp's hover tooltip. */
-  protected readonly whenTitle = computed(() => formatAbsolute(this.artifact().recorded_at));
 
   protected readonly isAsset = computed(() => this.artifact().kind === ArtifactKind.ASSET);
 

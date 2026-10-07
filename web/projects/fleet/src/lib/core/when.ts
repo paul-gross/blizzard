@@ -32,8 +32,9 @@ function localDaysAgo(d: Date, now: Date): number {
  * older as the date alone (`2026/07/16` — a day-old judgement's minute no longer
  * matters). Local time, 24-hour clock, empty string for an unparseable input.
  *
- * `now` is injectable for tests only; callers pass the timestamp alone. */
-export function formatWhen(iso: string, now: Date = new Date()): string {
+ * `now` is the caller's clock reading — from `injectNowSignal` for a display
+ * that must advance, `FLEET_CLOCK` for a single moment. */
+export function formatWhen(iso: string, now: Date): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
   const pad = (n: number): string => `${n}`.padStart(2, '0');
@@ -75,11 +76,11 @@ export interface LocalClockWithDay {
  * — a board stamp where only the day still matters), a log entry's time is
  * always the primary read, so it's never dropped.
  *
- * `now` is injectable for tests only; callers pass the timestamp alone. Returns
+ * `now` is the caller's clock reading (see {@link formatWhen}). Returns
  * `null` for an absent/unparseable input — the caller supplies its own
  * fallback text (e.g. `—`).
  */
-export function formatLocalClockWithDay(iso: string | null | undefined, now: Date = new Date()): LocalClockWithDay | null {
+export function formatLocalClockWithDay(iso: string | null | undefined, now: Date): LocalClockWithDay | null {
   if (iso === null || iso === undefined) return null;
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return null;
@@ -149,7 +150,7 @@ function agoUnits(deltaMs: number): string {
  * or beyond {@link SKEW_TOLERANCE_MS} in the future — never a confident `0s`
  * for a stamp that far off.
  */
-export function formatSeenAgo(lastSeenAt: string | null | undefined, online: boolean, now: number = Date.now()): string {
+export function formatSeenAgo(lastSeenAt: string | null | undefined, online: boolean, now: number): string {
   const delta = ageMs(lastSeenAt, now);
   if (delta === null) return online ? 'online' : 'offline';
   return `seen ${agoUnits(delta)} ago`;

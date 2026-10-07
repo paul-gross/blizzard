@@ -1,6 +1,6 @@
-import { ChangeDetectionStrategy, Component, computed, effect, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal } from '@angular/core';
 
-import { type ChunkDetail as ChunkDetailAggregate, type ChunkStatus, injectHubChunkDetailQuery, injectHubChunkWorkItemsQuery, errorMessage, KitAsyncState, type KitAsyncStateValue, injectPendingMutationVariables, isPendingFor, asyncState, type WorkItemsState, type AnswerQuestionEvent, type EditGraphEvent, type ResolveDecisionEvent } from 'fleet';
+import { type ChunkDetail as ChunkDetailAggregate, type ChunkStatus, injectHubChunkDetailQuery, injectHubChunkWorkItemsQuery, errorMessage, FLEET_CLOCK, KitAsyncState, type KitAsyncStateValue, injectPendingMutationVariables, isPendingFor, asyncState, type WorkItemsState, type AnswerQuestionEvent, type EditGraphEvent, type ResolveDecisionEvent } from 'fleet';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { injectCompleteChunkMutation, type CompleteVars } from '../chunks/complete.mutations';
 import { type DeleteVars, injectDeleteChunkMutation } from '../chunks/delete.mutations';
@@ -83,6 +83,7 @@ export class ChunkDetail {
   private readonly deleteMutation = injectDeleteChunkMutation();
   private readonly editGraphMutation = injectSetChunkGraphMutation();
   private readonly meQuery = injectMeQuery();
+  private readonly clock = inject(FLEET_CLOCK);
 
   /** Whether the current identity may pause/resume/detach or set the chunk's graph
    * (`chunk:control`). Withholds those controls in the panel below so a
@@ -266,7 +267,7 @@ export class ChunkDetail {
         chunkId: event.chunkId,
         struck: event.struck,
       },
-      { onError: (error) => this.reportFailure(readDecisionFailure(error)) },
+      { onError: (error) => this.reportFailure(readDecisionFailure(error, new Date(this.clock()))) },
     );
   }
 

@@ -3,6 +3,7 @@ import { RouterLink } from '@angular/router';
 
 import type { ChunkDetail } from '../../api/hub';
 import { formatCost, formatTokens, STEP_COST_PARTIAL_TITLE } from '../../core/cost-format';
+import { injectNowSignal } from '../../core/now-signal';
 import { KitAsyncState } from '../../kit/kit-async-state';
 import { deriveActiveRow, deriveHistoryRows, deriveMultiGraph, type HistoryRow, rowChoice, rowMark, usageForStep as sumStepUsage } from './chunk-timeline-rows';
 
@@ -67,7 +68,10 @@ export class ChunkTimelineSelection {
     this.pickStep.emit(key === this.selectedKey() ? null : key);
   }
 
-  protected readonly historyRows = computed<readonly HistoryRow[]>(() => deriveHistoryRows(this.detail()));
+  protected readonly historyRows = computed<readonly HistoryRow[]>(() => deriveHistoryRows(this.detail(), new Date(this.now())));
+
+  /** The tick `historyRows` stamps read against, so "HH:MM" rolls over to "Yesterday". */
+  private readonly now = injectNowSignal(60_000);
 
   /** Whether the timeline spans more than one graph — see {@link ChunkTimeline.multiGraph}
    * for why a single-graph chunk shows no graph badge. */

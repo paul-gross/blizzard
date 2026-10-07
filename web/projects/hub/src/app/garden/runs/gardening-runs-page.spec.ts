@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { provideRouter, Router, RouterOutlet, type Routes } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient, ViewportService } from 'fleet';
+import { FLEET_CLOCK, hubClient, ViewportService } from 'fleet';
 import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
 
 import { GardeningRunsPage } from './gardening-runs-page';
@@ -120,6 +120,15 @@ describe('GardeningRunsPage', () => {
     expect(row?.textContent).toContain('nightly/blizzard');
     expect(row?.textContent).toContain('Full');
     expect(row?.querySelector('[data-testid="rl-counts"]')?.textContent).toBe('+1 / 11 / -2');
+  });
+
+  it('cuts the runs read’s window from FLEET_CLOCK, 28 days back', async () => {
+    const nowMs = Date.UTC(2026, 6, 16, 12, 0, 0);
+    TestBed.overrideProvider(FLEET_CLOCK, { useValue: () => nowMs });
+    await mount();
+
+    const since = new Date(nowMs - 28 * 24 * 60 * 60 * 1000).toISOString();
+    expect(stub.forRoute('/api/runs', 'GET').map((r) => r.search)).toContain(`?since=${encodeURIComponent(since)}`);
   });
 
   it('renders nothing for a row’s counts when it delivered no sets', async () => {

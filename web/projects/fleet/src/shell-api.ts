@@ -7,6 +7,7 @@
 export { AppShell } from './lib/shell/app-shell/app-shell';
 export { BoardHeader } from './lib/shell/board-header/board-header';
 export { FleetLiveUpdates } from './lib/sse/fleet-live';
+export { injectNowSignal } from './lib/core/now-signal';
 
 export { ViewportService } from './lib/core/viewport/viewport-service';
 export { matchesMobileViewport } from './lib/core/viewport/matches-mobile-viewport';

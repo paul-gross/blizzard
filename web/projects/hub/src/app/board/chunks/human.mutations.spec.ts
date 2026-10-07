@@ -56,6 +56,8 @@ describe('injectResolveDecisionMutation', () => {
 });
 
 describe('readDecisionFailure', () => {
+  const NOW = new Date(2026, 6, 16, 12, 0);
+
   it('reads a lost race as the winning choice, who, and when', () => {
     const failure = readDecisionFailure({
       decision_id: 'dc_1',
@@ -63,13 +65,13 @@ describe('readDecisionFailure', () => {
       resolved_choice: 'reject',
       resolved_at: '2026-07-16T00:00:00Z',
       detail: 'decision already resolved',
-    });
+    }, NOW);
 
-    expect(failure).toEqual({ kind: 'outcome', message: `reject by alice, ${formatWhen('2026-07-16T00:00:00Z')}` });
+    expect(failure).toEqual({ kind: 'outcome', message: `reject by alice, ${formatWhen('2026-07-16T00:00:00Z', NOW)}` });
   });
 
   it('keeps any other failure on the error channel', () => {
-    expect(readDecisionFailure({ detail: 'unknown decision dc_1' })).toEqual({ kind: 'error', message: 'unknown decision dc_1' });
-    expect(readDecisionFailure(undefined).kind).toBe('error');
+    expect(readDecisionFailure({ detail: 'unknown decision dc_1' }, NOW)).toEqual({ kind: 'error', message: 'unknown decision dc_1' });
+    expect(readDecisionFailure(undefined, NOW).kind).toBe('error');
   });
 });

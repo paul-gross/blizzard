@@ -16,6 +16,7 @@ import {
 import { provideAuthInterceptor } from '../core/auth/auth.interceptor';
 import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
 import { vi } from 'vitest';
+import { FLEET_CLOCK } from 'fleet';
 
 import { App } from './app';
 import { routes } from './app.routes';
@@ -213,8 +214,8 @@ describe('hub App', () => {
       await router.navigateByUrl('/');
       await settle(fixture);
 
-      const todayMidnight = startOfLocalDayIso();
-      const yesterdayMidnight = startOfPreviousLocalDayIso();
+      const todayMidnight = startOfLocalDayIso(Date.now());
+      const yesterdayMidnight = startOfPreviousLocalDayIso(Date.now());
       const withUntil = capture.spendUrls.filter((u) => u.includes('until='));
       const withoutUntil = capture.spendUrls.filter((u) => !u.includes('until='));
 
@@ -226,6 +227,41 @@ describe('hub App', () => {
           (u) =>
             u.includes(`since=${encodeURIComponent(yesterdayMidnight)}`) &&
             u.includes(`until=${encodeURIComponent(todayMidnight)}`),
+        ),
+      ).toBe(true);
+    });
+  });
+
+  describe('the spend windows across local midnight', () => {
+    afterEach(() => vi.useRealTimers());
+
+    it('re-opens spendToday and spendYesterday on the next day once the minute tick crosses midnight', async () => {
+      let nowMs = new Date(2026, 6, 16, 23, 59, 30).getTime();
+      TestBed.overrideProvider(FLEET_CLOCK, { useValue: () => nowMs });
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+      authStub.restore();
+      const capture = stubAuthCapturingSpendUrls();
+      authStub = capture;
+
+      const fixture = TestBed.createComponent(App);
+      await TestBed.inject(Router).navigateByUrl('/');
+      await settle(fixture);
+
+      const sinceOf = (day: Date): string => `since=${encodeURIComponent(day.toISOString())}`;
+      expect(capture.spendUrls.some((u) => u.includes(sinceOf(new Date(2026, 6, 16))))).toBe(true);
+
+      nowMs = new Date(2026, 6, 17, 0, 0, 30).getTime();
+      vi.advanceTimersByTime(60_000);
+      await settle(fixture);
+
+      const withUntil = capture.spendUrls.filter((u) => u.includes('until='));
+      const withoutUntil = capture.spendUrls.filter((u) => !u.includes('until='));
+      expect(withoutUntil.some((u) => u.includes(sinceOf(new Date(2026, 6, 17))))).toBe(true);
+      expect(
+        withUntil.some(
+          (u) =>
+            u.includes(sinceOf(new Date(2026, 6, 16))) &&
+            u.includes(`until=${encodeURIComponent(new Date(2026, 6, 17).toISOString())}`),
         ),
       ).toBe(true);
     });

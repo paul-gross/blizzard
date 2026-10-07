@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
-import { asyncState, errorMessage, injectPendingMutationVariables, isPendingFor, type GraphSummaryView, type KitAsyncStateValue, type RoutineView } from 'fleet';
+import { FLEET_CLOCK, asyncState, errorMessage, injectPendingMutationVariables, isPendingFor, type GraphSummaryView, type KitAsyncStateValue, type RoutineView } from 'fleet';
 import { defaultRoutineWindow } from '../core/routine-window';
 import { FleetRoutinePanel, type LastSweptRowVm, type MeasurementReadingVm, type RelatedScopeVm, type RoutinePanelVm, type StrategyStepVm } from './routine-panel';
 import {
@@ -70,9 +70,9 @@ export class GardeningRoutineDetail {
   private readonly pendingRoutineLifecycle =
     injectPendingMutationVariables<RoutineLifecycleVars>(routineLifecycleMutationKey);
 
-  /** The panel's fixed reporting window (AC 3, AC 4) — computed once at
+  /** The panel's fixed reporting window (AC 3, AC 4) — read once from `FLEET_CLOCK` at
    * construction, not re-derived per render; a page reload is what refreshes it. */
-  private readonly window = defaultRoutineWindow(Date.now());
+  private readonly window = defaultRoutineWindow(inject(FLEET_CLOCK)());
 
   private readonly routines = computed<readonly RoutineView[]>(() => this.routinesQuery.data() ?? []);
   private readonly graphs = computed<readonly GraphSummaryView[]>(() => this.graphsQuery.data() ?? []);

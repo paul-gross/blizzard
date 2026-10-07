@@ -42,18 +42,25 @@ const BASE: ChunkDetail = {
   ],
 } as ChunkDetail;
 
+const NOW = new Date(2026, 6, 13, 12, 0);
+
 describe('deriveHistoryRows', () => {
   it('interleaves transitions, migrations, bounces and restarts by recorded_at', () => {
-    expect(deriveHistoryRows(BASE).map((r) => r.kind)).toEqual(['transition', 'bounce', 'migration', 'restart', 'transition']);
+    expect(deriveHistoryRows(BASE, NOW).map((r) => r.kind)).toEqual(['transition', 'bounce', 'migration', 'restart', 'transition']);
+  });
+
+  it('stamps a row as Yesterday from the supplied now alone', () => {
+    const dayAfter = new Date(Date.parse('2026-07-13T00:00:00Z') + 86_400_000);
+    expect(deriveHistoryRows(BASE, dayAfter).some((r) => r.when.startsWith('Yesterday '))).toBe(true);
   });
 
   it('keys neither a bounce nor a restart', () => {
-    const rows = deriveHistoryRows(BASE).filter((r) => r.kind === 'bounce' || r.kind === 'restart');
+    const rows = deriveHistoryRows(BASE, NOW).filter((r) => r.kind === 'bounce' || r.kind === 'restart');
     expect(rows.map((r) => r.key)).toEqual([null, null]);
   });
 
   it('reads a bounce as its cause with the readable reason as its title, routing nowhere', () => {
-    const bounce = deriveHistoryRows(BASE).find((r) => r.kind === 'bounce')!;
+    const bounce = deriveHistoryRows(BASE, NOW).find((r) => r.kind === 'bounce')!;
     expect(bounce).toMatchObject({ verdict: 'schema-mismatch', title: 'verdict ??? is not a choice', toName: null, epoch: null });
     expect(rowMark(bounce)).toBe('');
     expect(rowChoice(bounce)).toBe('bounced');
@@ -64,7 +71,7 @@ describe('deriveHistoryRows', () => {
       ...BASE,
       usage: [{ node_id: 'nd_build', epoch: 3, kind: 'spawn', model: 'm', input_tokens: 1, output_tokens: 1, cache_read_tokens: 0, cache_create_tokens: 0, cost_usd: 0.01 }],
     } as ChunkDetail;
-    const restart = deriveHistoryRows(detail).find((r) => r.kind === 'restart')!;
+    const restart = deriveHistoryRows(detail, NOW).find((r) => r.kind === 'restart')!;
     expect(restart).toMatchObject({ nodeName: 'build', toName: 'plan', actor: 'operator@example.test', crossesGraph: false });
     expect(rowChoice(restart)).toBe('restarted');
     expect(usageForStep(detail, restart)).toBeNull();
@@ -87,7 +94,7 @@ describe('deriveHistoryRows', () => {
       ],
       restarts: [{ ...BASE.restarts![0], from_graph_id: 'gr_1', from_graph_name: 'first' }],
     } as ChunkDetail;
-    const rows = deriveHistoryRows(detail);
+    const rows = deriveHistoryRows(detail, NOW);
     expect(rows.filter((r) => r.kind === 'migration')).toHaveLength(1);
     const restart = rows.find((r) => r.kind === 'restart')!;
     expect(restart).toMatchObject({ graphName: 'first', graphId: 'gr_1', toName: 'second/plan', crossesGraph: true });
@@ -101,11 +108,11 @@ describe('deriveHistoryRows', () => {
       bounces: [],
       restarts: [{ ...BASE.restarts![0], from_graph_id: 'gr_1' }],
     } as ChunkDetail;
-    expect(deriveMultiGraph(deriveHistoryRows(detail))).toBe(true);
+    expect(deriveMultiGraph(deriveHistoryRows(detail, NOW))).toBe(true);
   });
 
   it('renders unchanged when bounces and restarts are absent', () => {
     const rest = { ...BASE, bounces: undefined, restarts: undefined };
-    expect(deriveHistoryRows(rest).map((r) => r.kind)).toEqual(['transition', 'migration', 'transition']);
+    expect(deriveHistoryRows(rest, NOW).map((r) => r.kind)).toEqual(['transition', 'migration', 'transition']);
   });
 });

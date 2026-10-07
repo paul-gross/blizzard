@@ -1,5 +1,5 @@
-import { type Provider, computed, signal } from '@angular/core';
-import { type AnswerQuestionEvent, type ChunkPageActions, type EditGraphEvent, type ResolveDecisionEvent, errorMessage, hubClient, injectPendingMutationVariables, provideChunkPageDaemon } from 'fleet';
+import { type Provider, computed, inject, signal } from '@angular/core';
+import { type AnswerQuestionEvent, type ChunkPageActions, type EditGraphEvent, type ResolveDecisionEvent, FLEET_CLOCK, errorMessage, hubClient, injectPendingMutationVariables, provideChunkPageDaemon } from 'fleet';
 import { type AnswerVars, injectAnswerQuestionMutation, injectResolveDecisionMutation, readAnswerFailure, readDecisionFailure } from '../chunks/human.mutations';
 import { answerQuestionMutationKey, chunkSetGraphMutationKey } from '../../core/mutation-keys';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
@@ -28,6 +28,7 @@ const EVENTS_LINK_BASE: readonly string[] = ['/events'];
  */
 export function injectHubChunkActions(): ChunkPageActions {
   const meQuery = injectMeQuery();
+  const clock = inject(FLEET_CLOCK);
   const answerMutation = injectAnswerQuestionMutation();
   const pendingAnswers = injectPendingMutationVariables<AnswerVars>(answerQuestionMutationKey);
   const resolveMutation = injectResolveDecisionMutation();
@@ -73,7 +74,7 @@ export function injectHubChunkActions(): ChunkPageActions {
         { decisionId: event.decisionId, choice: event.choice, chunkId: event.chunkId, struck: event.struck },
         {
           onError: (error) => {
-            const failure = readDecisionFailure(error);
+            const failure = readDecisionFailure(error, new Date(clock()));
             if (failure.kind === 'outcome') actionOutcome.set(failure.message);
             else actionError.set(failure.message);
           },
