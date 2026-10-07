@@ -668,7 +668,7 @@ def test_a_non_404_lease_failure_propagates_and_an_unknown_hash_is_403(tmp_path:
         def failing(self, lease_id):  # type: ignore[no-untyped-def]
             raise HTTPException(status_code=503, detail="down")
 
-        monkeypatch.setattr(RunnerWiring, "worker_lease", failing)
+        monkeypatch.setattr(RunnerWiring, "worker_lease_standing", failing)
         assert _post_json(client, _export(_own_trace())).status_code == 503
 
 
