@@ -174,8 +174,7 @@ def invocation_row(
     facts: StepFacts, step: NodeStep, usage: AttributedUsage, exported_at: datetime
 ) -> ExportedInvocation:
     """The ``invocations`` row of one usage row, positioned by ``step`` — the runner step holding its epoch,
-    open or closed. Its runner's name comes from ``facts``, which name every epoch's owner, and a runner reports
-    usage only for the epochs it held."""
+    open or closed; its runner's name is ``facts``' owner of the usage's epoch."""
     if usage.chunk_id != facts.chunk_id:
         raise ValueError(f"usage {usage.usage_id} belongs to {usage.chunk_id}, not {facts.chunk_id}")
     fact = usage.fact

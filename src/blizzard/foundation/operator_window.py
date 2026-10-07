@@ -1,5 +1,5 @@
 """The window an operator verb reads over: non-empty, no wider than the verb's maximum, and
-closed in the past, as an egress reset's ``to`` must be. The caller names its own refusal."""
+closed in the past. The caller names its own refusal."""
 
 from __future__ import annotations
 

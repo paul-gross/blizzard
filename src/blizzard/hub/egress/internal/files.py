@@ -2,7 +2,7 @@
 
 Stage under ``.staging/``, flush and fsync, place with ``os.link`` (which fails with ``EEXIST`` instead of
 replacing), fsync the parent, then drop the staged name. ``rename`` overwrites, so it is used for one file only: a
-``_schema/`` document the current schema widens with nullable columns, swapped whole for the wider one. Only files
+``_schema/`` document, swapped whole. Only files
 this writer staged are ever removed; ``.staging/`` is shared with other processes and is never cleared wholesale."""
 
 from __future__ import annotations

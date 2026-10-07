@@ -1,11 +1,9 @@
 """Backfill: writes the rows of a past window, as the live export would have, without moving a cursor.
 
 Contract: ``blizzard-product:/plans/fact-egress/steps/spec/export.md`` §Operator surface. It holds read seams
-alone — never :class:`IWriteEgressCursor` — so it cannot move a cursor by construction. It pages the reads the live
-pass uses from a local position that is never stored, assembles each row through the live sweep's own functions,
-and writes through a writer of its own (the writer is single-caller, and its file names derive from its token), so it
-never contends with the sweep or with another backfill. It reconciles no late usage: it assembles from the record
-as it stands. ``events`` selects by step start, not derivation time (``fact-egress/events/spec/export.md``
+alone — never :class:`IWriteEgressCursor` — so it cannot move a cursor by construction. It pages from a local
+position that is never stored and writes through a writer of its own. It reconciles no late usage: it assembles from the
+record as it stands. ``events`` selects by step start, not derivation time (``fact-egress/events/spec/export.md``
 §Backfill)."""
 
 from __future__ import annotations
@@ -16,6 +14,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.operator_window import OperatorWindow, fault_message
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.observability.analytics.extraction import EXTRACTOR_VERSION
 from blizzard.hub.domain.observability.egress.assembly import (
@@ -30,7 +29,6 @@ from blizzard.hub.domain.observability.egress.events_window import events_rows, 
 from blizzard.hub.domain.observability.egress.lifecycle import ExportVerb, export_allows
 from blizzard.hub.domain.observability.egress.repository import EpochKey, IReadEgress, IReadEgressEvents, UsagePosition
 from blizzard.hub.domain.observability.egress.schema import EVENTS_SCHEMA, INVOCATIONS_SCHEMA, STEPS_SCHEMA
-from blizzard.foundation.operator_window import OperatorWindow, fault_message
 from blizzard.hub.domain.observability.tracing.cursor import CursorKey
 from blizzard.hub.domain.observability.tracing.repository import IReadTraceSteps
 from blizzard.hub.domain.observability.tracing.window import read_window

@@ -73,7 +73,7 @@ def events_rows(
     now: datetime,
 ) -> list[tuple[date, EgressValues]]:
     """Each item's rows with their step-start partition, in ``items``' order. A marker absent from ``derivations``
-    changed after it was read and is reached again later; an item with no runner step to stand in is skipped."""
+    yields no rows; an item with no runner step to stand in is skipped."""
     rows: list[tuple[date, EgressValues]] = []
     for item in items:
         try:

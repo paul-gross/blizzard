@@ -78,8 +78,7 @@ def fold_spend_by_name(rows: list[SpendStats]) -> list[SpendStats]:
     """Fold id-keyed spend rows minted apart into one row per name: a node row per
     ``(graph_name, node_name)`` keyed ``<graph_name>/<node_name>``, a graph row (no
     ``node_name``) per ``graph_name`` keyed by it. Measures sum under :class:`UsageTotal`'s
-    own contract — ``cost_partial`` ORs, ``estimated_cost_usd`` stays ``None`` unless a folded
-    row carried one. A row whose names are unresolved passes through under its id key. Key ascending."""
+    contract. A row whose names are unresolved passes through under its id key. Key ascending."""
     groups: dict[tuple[str | None, str | None, str], list[SpendStats]] = {}
     for row in rows:
         if row.graph_name is None:
@@ -126,9 +125,7 @@ class OutcomeStats:
 @domain_model
 @dataclass(frozen=True)
 class TransitionMovement:
-    """One ``transitions`` row already narrowed to what the folds below read — never touches the
-    domain's own :class:`~blizzard.hub.domain.chunk.model.TransitionFact`, which carries fields
-    (``choice_name``, executor) status derivation needs and these folds don't."""
+    """One ``transitions`` row narrowed to the fields the folds below read."""
 
     chunk_id: str
     epoch: int

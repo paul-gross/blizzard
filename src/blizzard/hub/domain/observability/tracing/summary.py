@@ -1,8 +1,7 @@
 """The step summary — every dimension and measure of one closed step, computed once.
 
 Contract: ``blizzard-product:/delivered/tracing/fleet-spans/spec/spans.md`` §Identity. Pure and OpenTelemetry-free: a
-:class:`StepFacts` and a closed :class:`NodeStep` in, one :class:`StepSummary` out. A span tree and an egress row are
-both mappings of it, so neither can disagree with the other about outcome, waits, asks or totals."""
+:class:`StepFacts` and a closed :class:`NodeStep` in, one :class:`StepSummary` out."""
 
 from __future__ import annotations
 

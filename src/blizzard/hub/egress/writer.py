@@ -236,7 +236,7 @@ def _value_problem(column: ColumnSpec, value: object) -> str | None:
 
 
 def _encoding_problem(value: str) -> str | None:
-    """A lone surrogate has no UTF-8 form, so Parquet cannot store it and NDJSON would only escape it."""
+    """A lone surrogate has no UTF-8 form."""
     try:
         value.encode("utf-8")
     except UnicodeEncodeError:

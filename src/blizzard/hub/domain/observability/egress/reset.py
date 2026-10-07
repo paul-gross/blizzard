@@ -1,8 +1,7 @@
 """Reset: moves one dataset's cursor to an instant the operator names, and records the moved window.
 
 Contract: ``blizzard-product:/plans/fact-egress/steps/spec/export.md`` §Operator surface and §Delivery semantics.
-The move is one appended cursor row, written under the lock the sweep holds for a whole pass: a pass reads its
-cursor when it starts and appends the advanced one when it ends, so a row appended mid-pass would be overwritten."""
+The move is one appended cursor row, written under the export pass lock."""
 
 from __future__ import annotations
 
