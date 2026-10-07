@@ -12,15 +12,12 @@ from datetime import UTC, datetime
 
 from blizzard.foundation.migration_source import MigrationSource
 from blizzard.foundation.roles import domain_model
-from blizzard.hub.domain.chunk.model import MigrationFact
+from blizzard.hub.domain.chunk.model import MigrationFact, MovementKind
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, Graph
 from blizzard.hub.domain.observability.tracing.facts import StepFacts, TracedMigration
 
-# Movement kinds rank as ``ChunkFacts.latest_movement`` ranks them on an exact tie.
+# The implicit entry placement is not a movement kind; it ranks below every one.
 _INITIAL_RANK = -1
-_TRANSITION_RANK = 0
-_MIGRATION_RANK = 1
-_RESTART_RANK = 2
 
 _BEGINNING = datetime.min.replace(tzinfo=UTC)
 
@@ -87,7 +84,7 @@ def movement_arrivals(facts: StepFacts) -> tuple[Arrival, ...]:
             Arrival(
                 transition.recorded_at,
                 transition.epoch,
-                _TRANSITION_RANK,
+                MovementKind.TRANSITION.rank,
                 transition.graph_id,
                 transition.to_node_id,
                 name,
@@ -99,12 +96,21 @@ def movement_arrivals(facts: StepFacts) -> tuple[Arrival, ...]:
         )
         name = _node_name(facts, migration.to_graph_id, landed)
         arrivals.append(
-            Arrival(migration.recorded_at, migration.epoch, _MIGRATION_RANK, migration.to_graph_id, landed, name)
+            Arrival(
+                migration.recorded_at, migration.epoch, MovementKind.MIGRATION.rank, migration.to_graph_id, landed, name
+            )
         )
     for restart in facts.restarts:
         name = _node_name(facts, restart.graph_id, restart.to_node_id)
         arrivals.append(
-            Arrival(restart.recorded_at, restart.epoch, _RESTART_RANK, restart.graph_id, restart.to_node_id, name)
+            Arrival(
+                restart.recorded_at,
+                restart.epoch,
+                MovementKind.RESTART.rank,
+                restart.graph_id,
+                restart.to_node_id,
+                name,
+            )
         )
     return tuple(sorted(arrivals, key=Arrival.order))
 
@@ -117,13 +123,13 @@ def _starting_graph_id(facts: StepFacts, arrivals: tuple[Arrival, ...]) -> str:
         return facts.pin_graph_id
     first = arrivals[0]
     for transition in facts.transitions:
-        if (transition.recorded_at, transition.epoch, _TRANSITION_RANK) == first.order():
+        if MovementKind.TRANSITION.order_key(transition.recorded_at, transition.epoch) == first.order():
             return transition.graph_id
     for migration in _movement_migrations(facts):
-        if (migration.recorded_at, migration.epoch, _MIGRATION_RANK) == first.order():
+        if MovementKind.MIGRATION.order_key(migration.recorded_at, migration.epoch) == first.order():
             return migration.from_graph_id
     for restart in facts.restarts:
-        if (restart.recorded_at, restart.epoch, _RESTART_RANK) == first.order():
+        if MovementKind.RESTART.order_key(restart.recorded_at, restart.epoch) == first.order():
             return restart.from_graph_id or restart.graph_id
     raise LookupError("the earliest movement fact was not found")  # pragma: no cover
 

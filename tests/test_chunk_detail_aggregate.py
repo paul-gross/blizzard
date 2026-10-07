@@ -10,6 +10,8 @@ from pathlib import Path
 
 import pytest
 
+from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.hub.domain.chunk.model import ChunkVerb, verb_legal_from
 from tests.support import build_hub, make_ready, pointer_token, report_lease
 
 pytestmark = pytest.mark.component
@@ -190,6 +192,46 @@ def test_detail_classifies_a_claimed_chunk_as_no_longer_deletable(tmp_path: Path
     assert detail["deletable"] is False
     assert detail["graph_editable"] is False
     assert (detail["pausable"], detail["completable"], detail["terminal"]) == (True, True, False)
+
+
+def test_detail_deletable_reads_the_delete_verb_legality_at_every_derived_status(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    hub.client.post("/api/graphs", json={"definition_yaml": _GATE_YAML})
+    seen: dict[ChunkStatus, bool] = {}
+
+    def new_chunk(ref: str) -> str:
+        token = pointer_token({"source": "default", "ref": ref})
+        return hub.client.post("/api/chunks", json={"tokens": [token]}).json()["chunk_id"]
+
+    def observe(chunk_id: str) -> None:
+        detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+        status = ChunkStatus(detail["status"])
+        assert detail["deletable"] is verb_legal_from(ChunkVerb.DELETE, status)
+        seen[status] = detail["deletable"]
+
+    not_ready = new_chunk("1")
+    observe(not_ready)
+
+    ready = new_chunk("2")
+    make_ready(hub, ready)
+    observe(ready)
+
+    claimed = new_chunk("3")
+    make_ready(hub, claimed)
+    hub.client.post(
+        "/api/fleet/routes",
+        json={"chunk_id": claimed, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e1"]},
+    )
+    report_lease(hub, claimed, epoch=1, seq=1)
+    observe(claimed)
+
+    done = new_chunk("4")
+    hub.client.post(f"/api/chunks/{done}/complete", json={"by": "operator"})
+    observe(done)
+
+    assert seen[ChunkStatus.NOT_READY] is True
+    assert seen[ChunkStatus.DONE] is False
+    assert len(seen) >= 3
 
 
 def test_detail_classifies_an_operator_completed_chunk_as_terminal(tmp_path: Path) -> None:

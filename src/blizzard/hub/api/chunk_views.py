@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Final, TypedDict
 
-from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, TERMINAL_STATUSES
+from blizzard.foundation.chunk_status import TERMINAL_STATUSES
 from blizzard.foundation.ids import Id
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.decisions import to_decision_view
@@ -326,7 +326,7 @@ class ChunkView:
             pausable=verb_legal_from(ChunkVerb.PAUSE, status),
             status_if_paused=self.facts.status_if_paused(),
             completable=not is_completion_replay(self.facts),
-            deletable=status in PRE_CLAIM_STATUSES,
+            deletable=verb_legal_from(ChunkVerb.DELETE, status),
             graph_editable=is_graph_editable(self.facts),
             terminal=status in TERMINAL_STATUSES,
             current_node_terminal=node_id == RESERVED_TERMINAL,

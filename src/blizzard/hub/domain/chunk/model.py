@@ -456,6 +456,23 @@ class MovementKind(StrEnum):
     MIGRATION = "migration"
     RESTART = "restart"
 
+    @property
+    def rank(self) -> int:
+        """The kind's place in an exact ``(recorded_at, epoch)`` tie: each family is recorded *after*
+        the movement it supersedes, so the later family outranks."""
+        return _MOVEMENT_KIND_RANK[self]
+
+    def order_key(self, recorded_at: datetime, epoch: int) -> tuple[datetime, int, int]:
+        """The key movements are ordered by — ``(recorded_at, epoch)``, the kind's rank breaking a tie."""
+        return (recorded_at, epoch, self.rank)
+
+
+_MOVEMENT_KIND_RANK: dict[MovementKind, int] = {
+    MovementKind.TRANSITION: 0,
+    MovementKind.MIGRATION: 1,
+    MovementKind.RESTART: 2,
+}
+
 
 @domain_model
 @dataclass(frozen=True)
@@ -466,6 +483,8 @@ class Movement:
     kind: MovementKind
     node_id: str | None
     executor: Executor
+    # The graph the movement stands on; ``None`` only for a transition recorded without one.
+    graph_id: str | None = None
 
 
 @domain_model
@@ -1074,27 +1093,36 @@ class ChunkFacts:
         )
         return max(epochs) if epochs else None
 
-    def latest_movement(self) -> Movement | None:
+    def latest_movement(self, as_of: datetime | None = None) -> Movement | None:
         """The chunk's newest movement fact, or ``None`` while it has not moved at all.
 
-        Ordered by ``(recorded_at, epoch)``, the kind's own rank breaking an exact tie:
-        each family is recorded *after* the movement it supersedes."""
-        ranked: list[tuple[datetime, int, int, Movement]] = []
-        transition = self.newest_transition()
-        if transition is not None:
-            movement = Movement(MovementKind.TRANSITION, transition.to_node_id, transition.to_node_executor)
-            ranked.append((transition.recorded_at, transition.epoch, 0, movement))
-        migration = self.newest_migration()
-        if migration is not None:
-            movement = Movement(MovementKind.MIGRATION, migration.landed_node_id, migration.landed_node_executor)
-            ranked.append((migration.recorded_at, migration.epoch, 1, movement))
-        restart = self.newest_restart()
-        if restart is not None:
-            movement = Movement(MovementKind.RESTART, restart.to_node_id, restart.to_node_executor)
-            ranked.append((restart.recorded_at, restart.epoch, 2, movement))
+        Ordered by :meth:`MovementKind.order_key` — ``(recorded_at, epoch)``, the kind's own rank
+        breaking an exact tie: each family is recorded *after* the movement it supersedes. With
+        ``as_of``, the newest movement recorded at or before that instant: each family is filtered
+        before it is ranked."""
+
+        def seen(recorded_at: datetime) -> bool:
+            return as_of is None or recorded_at <= as_of
+
+        ranked: list[tuple[tuple[datetime, int, int], Movement]] = []
+        transitions = [t for t in self.transitions if seen(t.recorded_at)]
+        if transitions:
+            t = max(transitions, key=lambda t: (t.recorded_at, t.epoch))
+            movement = Movement(MovementKind.TRANSITION, t.to_node_id, t.to_node_executor, t.graph_id)
+            ranked.append((MovementKind.TRANSITION.order_key(t.recorded_at, t.epoch), movement))
+        migrations = [m for m in self.migrations if seen(m.recorded_at)]
+        if migrations:
+            m = max(migrations, key=lambda m: (m.recorded_at, m.epoch))
+            movement = Movement(MovementKind.MIGRATION, m.landed_node_id, m.landed_node_executor, m.to_graph_id)
+            ranked.append((MovementKind.MIGRATION.order_key(m.recorded_at, m.epoch), movement))
+        restarts = [r for r in self.restarts if seen(r.recorded_at)]
+        if restarts:
+            r = max(restarts, key=lambda r: (r.recorded_at, r.epoch))
+            movement = Movement(MovementKind.RESTART, r.to_node_id, r.to_node_executor, r.graph_id)
+            ranked.append((MovementKind.RESTART.order_key(r.recorded_at, r.epoch), movement))
         if not ranked:
             return None
-        return max(ranked, key=lambda entry: entry[:3])[3]
+        return max(ranked, key=lambda entry: entry[0])[1]
 
     def current_node_id(self) -> str | None:
         """The chunk's current node id — the newest movement fact's target, else ``None``.
