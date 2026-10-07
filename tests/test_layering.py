@@ -3206,3 +3206,29 @@ def test_dto_check_admits_constructors_projections_and_properties(tmp_path: Path
     ]
     source = _DTO_PAGE + "".join(textwrap.indent(m, "    ") + "\n\n" for m in methods)
     assert _dto_method_violations(_plant_roles(tmp_path, {"hub/domain/mod.py": source})) == []
+
+
+_CONFIGURED_RECORD_VERBS = {"create", "list", "show", "edit", "retire", "enable"}
+_CONFIGURED_RECORD_NOUNS = {
+    "source": _CONFIGURED_RECORD_VERBS,
+    "repo": _CONFIGURED_RECORD_VERBS,
+    "secret": (_CONFIGURED_RECORD_VERBS - {"edit"}) | {"set"},
+    "scope": _CONFIGURED_RECORD_VERBS,
+    "routine": _CONFIGURED_RECORD_VERBS,
+}
+
+
+def test_every_configured_record_noun_carries_its_whole_verb_set() -> None:
+    import click
+
+    from blizzard.hub.cli import hub
+
+    ctx = click.Context(hub)
+    missing: dict[str, set[str]] = {}
+    for noun, required in _CONFIGURED_RECORD_NOUNS.items():
+        group = hub.get_command(ctx, noun)
+        assert isinstance(group, click.Group), f"hub {noun} is not a command group"
+        absent = required - set(group.list_commands(click.Context(group, parent=ctx)))
+        if absent:
+            missing[noun] = absent
+    assert missing == {}, f"configured-record nouns missing verbs: {missing}"

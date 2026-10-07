@@ -101,14 +101,24 @@ def test_a_validation_error_on_a_secret_route_echoes_no_input_but_other_routes_k
 
 def test_secret_set_reads_stdin_only_and_refuses_empty(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     _route_cli_through(monkeypatch, client)
-    assert _cli(["set", "gh-test"], stdin=f"{_SENTINEL}\r\n").exit_code == 0
+    created = _cli(["create", "gh-test"], stdin=f"{_SENTINEL}\r\n")
+    assert created.exit_code == 0
+    assert "revision 1" in created.output
+    duplicate = _cli(["create", "gh-test"], stdin="v1b\n")
+    assert duplicate.exit_code != 0
+    assert "secret set" in duplicate.output
+    assert "revision 1" in _cli(["show", "gh-test"]).output
     again = _cli(["set", "gh-test"], stdin="v2\n")
     assert again.exit_code == 0
     assert "revision 2" in again.output
     empty = _cli(["set", "gh-test"], stdin="\n")
     assert empty.exit_code != 0
     assert "empty" in empty.output
+    empty_create = _cli(["create", "gh-fresh"], stdin="\n")
+    assert empty_create.exit_code != 0
+    assert "empty" in empty_create.output
     assert _cli(["set", "gh-test", "an-argument"], stdin="v\n").exit_code != 0
+    assert _cli(["create", "gh-fresh", "an-argument"], stdin="v\n").exit_code != 0
     assert _cli(["retire", "gh-test"]).exit_code == 0
     assert "gh-test" not in _cli(["list"]).output
     assert "gh-test  r2  retired" in _cli(["list", "--include-retired"]).output
@@ -118,11 +128,21 @@ def test_secret_set_reads_stdin_only_and_refuses_empty(client: TestClient, monke
     assert "revision 2" in _cli(["show", "gh-test"]).output
 
 
+def test_secret_set_refuses_an_unknown_name_and_creates_nothing(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _route_cli_through(monkeypatch, client)
+    refused = _cli(["set", "never-made"], stdin="v\n")
+    assert refused.exit_code != 0
+    assert "secret create" in refused.output
+    assert client.get("/api/secrets/never-made").status_code == 404
+
+
 def test_an_active_repository_refuses_its_secret_s_retire_and_shows_under_used_by(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _route_cli_through(monkeypatch, client)
-    assert _cli(["set", "gh-test"], stdin=f"{_SENTINEL}\n").exit_code == 0
+    assert _cli(["create", "gh-test"], stdin=f"{_SENTINEL}\n").exit_code == 0
     created = client.post(
         "/api/repositories",
         json={
@@ -185,6 +205,7 @@ def test_a_planted_value_appears_on_no_surface(
             ["enable", "gh-test"],
         ):
             seen.append(_cli(args).output)
+        seen.append(_cli(["create", "gh-test"], stdin=f"{_SENTINEL}\n").output)
         seen.append(_cli(["set", "gh-test"], stdin=f"{_SENTINEL}\n").output)
     handle.shutdown(5.0)
     spans = repr([(s.name, dict(s.attributes or {})) for s in exporter.get_finished_spans()])

@@ -25,6 +25,7 @@ _ROUTINE_HARNESSES_HELP = (
     "The routine's default harness preference. Repeatable and ORDERED — the first entry "
     "that resolves at session mint wins."
 )
+_CLEARABLE = click.Choice(["model", "effort", "harnesses"])
 
 
 class RoutineListing(Listing):
@@ -135,6 +136,13 @@ def routine_show(cli: CliContext, routine_id: str) -> None:
 @click.option("--model", "default_model", multiple=True, help=_ROUTINE_MODEL_HELP)
 @click.option("--effort", "default_effort", default=None, help="The routine's default effort.")
 @click.option("--harnesses", "default_harnesses", multiple=True, help=_ROUTINE_HARNESSES_HELP)
+@click.option(
+    "--clear",
+    "clear",
+    multiple=True,
+    type=_CLEARABLE,
+    help="Clear a default back to unset; repeatable.",
+)
 def routine_edit(
     cli: CliContext,
     routine_id: str,
@@ -143,26 +151,35 @@ def routine_edit(
     default_model: tuple[str, ...],
     default_effort: str | None,
     default_harnesses: tuple[str, ...],
+    clear: tuple[str, ...],
 ) -> None:
     """Change ROUTINE_ID's graph, default scope, or model/effort/harnesses defaults; only the
-    options given change, and its name never changes here."""
-    resp = cli.get(
-        f"/api/routines/{routine_id}", "GET /routines/{id}", on_status={404: f"unknown routine {routine_id}"}
-    )
-    given: dict[str, Any] = {
-        "graph_name": graph_name,
-        "default_scope_slug": default_scope_slug,
-        "default_model": list(default_model) or None,
-        "default_effort": default_effort,
-        "default_harnesses": list(default_harnesses) or None,
+    options given change, and its name never changes here.
+
+    A given --model or --harnesses replaces the whole ordered list."""
+    body: dict[str, Any] = {
+        k: v
+        for k, v in {
+            "graph_name": graph_name,
+            "default_scope_slug": default_scope_slug,
+            "default_model": list(default_model) or None,
+            "default_effort": default_effort,
+            "default_harnesses": list(default_harnesses) or None,
+        }.items()
+        if v is not None
     }
-    body = {"name": resp.json()["name"], **{k: v for k, v in given.items() if v is not None}}
+    for field in clear:
+        key = f"default_{field}"
+        if key in body:
+            raise click.UsageError(f"--{field} and --clear {field} contradict each other")
+        body[key] = None if field == "effort" else []
+    if not body:
+        raise click.UsageError("nothing to change — give a field to set or --clear")
     resp = cli.send("patch", f"/api/routines/{routine_id}", json_body=body, door=True)
     if resp.status_code == httpx.codes.UNPROCESSABLE_ENTITY:
         raise click.ClickException(f"routine edit rejected: {cli.detail(resp, 'validation failed')}")
     cli.check(resp, "PATCH /routines/{id}", on_status={404: f"unknown routine {routine_id}"})
-    body = resp.json()
-    cli.show_lines(body, f"routine {routine_id} updated")
+    cli.show_lines(resp.json(), f"routine {routine_id} updated")
 
 
 @routine_group.group("scope")

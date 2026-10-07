@@ -17,7 +17,7 @@ and [install.md](./install.md#work-sources-and-forge-settings-are-records) owns 
 ## Work source records
 
 ```bash
-printf '%s' "$TOKEN" | blizzard hub secret set gh-token
+printf '%s' "$TOKEN" | blizzard hub secret create gh-token
 blizzard hub source create blizzard --provider github --locator paul-gross/blizzard --secret gh-token --annotate
 blizzard hub source list
 blizzard hub source show blizzard

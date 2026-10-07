@@ -49,7 +49,7 @@ def _repo(args: list[str]):  # type: ignore[no-untyped-def]
 
 
 def _seed() -> None:
-    assert _cli("secret", ["set", "gh-test"], stdin=_SENTINEL).exit_code == 0
+    assert _cli("secret", ["create", "gh-test"], stdin=_SENTINEL).exit_code == 0
     created = _repo(["create", "blizzard", *_COORDINATE, "--base-branch", "master", "--secret", "gh-test"])
     assert created.exit_code == 0, created.output
     assert "revision 1" in created.output
