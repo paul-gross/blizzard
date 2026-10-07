@@ -55,8 +55,7 @@ class Problem:
 
 class WorkerSession:
     """One worker command's state: the one HTTP client every request and the span post share,
-    and the command's span when a trace context was handed down. The ``runner`` group builds and
-    finishes it — a short-lived command has its own root, not a singleton."""
+    and the command's span when a trace context was handed down."""
 
     def __init__(
         self, collaborators: CliCollaborators, environ: Mapping[str, str] | None = None, *, group_path: str = ""

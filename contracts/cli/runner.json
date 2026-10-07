@@ -952,7 +952,7 @@
     "prompt": {
       "commands": {
         "clear": {
-          "help": "Drop the store override so the configured workspace prompt resolves again.\n\nThe one `prompt` verb that needs the running runner: the override lives in the runner's store,\nwhich only the daemon writes. Takes effect on subsequent spawns.",
+          "help": "Drop the store override so the configured workspace prompt resolves again.\n\nThe one `prompt` verb that needs a running runner. Takes effect on subsequent spawns.",
           "params": [
             {
               "help": "Runner runtime directory (overrides $BZ_RUNNER_DIR).",
@@ -1308,7 +1308,7 @@
           "type": "boolean"
         },
         {
-          "help": "End the chunk's open takeover instead of starting a session \u2014 the recovery for a stranded one. The loop may then touch the chunk's session again, and `runner requeue` is no longer refused for a takeover. Reports nothing open, exiting 0, when none is.",
+          "help": "End the chunk's open takeover instead of starting a session \u2014 the recovery for a stranded one. The runner resumes driving the chunk's session, and `runner requeue` is no longer refused for a takeover. Reports nothing open, exiting 0, when none is.",
           "hidden": false,
           "kind": "option",
           "name": "end",

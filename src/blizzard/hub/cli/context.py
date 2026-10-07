@@ -310,8 +310,7 @@ class CliContext:
         return resp
 
     def _headers(self, *, door: bool = False) -> dict[str, str]:
-        """``X-Blizzard-Door: cli`` when ``door`` — sent by the verbs that write a configured
-        record, so the hub records this client as the door; the ``Authorization: Bearer`` header
+        """``X-Blizzard-Door: cli`` when ``door``; the ``Authorization: Bearer`` header
         for this hub — absent when the local session store holds none, so every verb keeps working
         with no login — and the running operator command's ``traceparent`` when it is traced."""
         token = self.session_reader.load(self.hub_url)

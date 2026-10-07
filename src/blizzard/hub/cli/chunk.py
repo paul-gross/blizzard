@@ -287,9 +287,8 @@ def chunk_resume(cli: CliContext, chunk_id: str, by: str) -> None:
 def chunk_detach(cli: CliContext, chunk_id: str) -> None:
     """Forcibly release CHUNK from its runner.
 
-    A pure client of ``POST /api/chunks/{id}/detach``. The chunk re-derives ready at its current node; the
-    holding runner releases it on its next tick. 409 when no live route holds a claim — a stopped or done
-    chunk's leftover route holds none."""
+    The chunk is released from its runner and can be claimed again at its current node. Refused when
+    nothing holds the chunk — a stopped or done chunk is held by nothing."""
     resp = cli.post(
         f"/api/chunks/{chunk_id}/detach",
         "POST /chunks/{id}/detach",

@@ -150,8 +150,7 @@ def prompt_status(directory: str) -> None:
 def prompt_clear(ctx: click.Context, directory: str, runner_url: str | None) -> None:
     """Drop the store override so the configured workspace prompt resolves again.
 
-    The one `prompt` verb that needs the running runner: the override lives in the runner's store,
-    which only the daemon writes. Takes effect on subsequent spawns."""
+    The one `prompt` verb that needs a running runner. Takes effect on subsequent spawns."""
     with RunnerDaemon.reach("prompt clear", directory, runner_url, OperatorTrace.source(ctx)) as daemon:
         daemon.send("delete", "/api/workspace-prompt").raise_for_status()
     click.echo("workspace-prompt override cleared — the configured prompt applies on subsequent spawns")

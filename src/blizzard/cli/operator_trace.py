@@ -59,7 +59,7 @@ UNTRACED: ITraceHeaders = _Untraced()
 
 class OperatorTrace:
     """One operator command's state: the destination it will post to, and its root span once the
-    command's own name is known. The ``hub`` and ``runner`` groups build and finish it."""
+    command's own name is known."""
 
     def __init__(self, root: str, collaborators: CliCollaborators, environ: Mapping[str, str] | None = None) -> None:
         self._root = root

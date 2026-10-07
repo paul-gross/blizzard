@@ -273,7 +273,6 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
     # One broker for the process: `host` is the one composer building both the
     # served app and the ticked loop, so every writer and the stream route share it.
     broker = EventBroker()
-    # The platform spans stamp from the holder the graph seeds from the store's identity row.
     identity = RunnerIdentityHolder()
     graph = build_runner_process(
         config,
