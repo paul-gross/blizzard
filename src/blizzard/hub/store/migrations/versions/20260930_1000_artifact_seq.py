@@ -1,5 +1,8 @@
 """Artifacts' per-chunk ``seq``; backfill orders by epoch, time, then id.
 
+``artifact_id`` is a deterministic but arbitrary tiebreak for rows sharing one ``produced_at``;
+it is not their write order, which legacy rows never recorded.
+
 Revision ID: 20260930_1000_artifact_seq
 Revises: 20260929_1100_drop_open_pr_facts
 """
@@ -35,6 +38,8 @@ def upgrade() -> None:
     with op.batch_alter_table("artifacts") as batch:
         batch.add_column(sa.Column("seq", sa.Integer, nullable=True))
 
+    # artifact_id only makes the order total: it does not record which of two rows
+    # sharing an epoch and instant was written later.
     rows = bind.execute(
         sa.select(_ARTIFACTS.c.artifact_id, _ARTIFACTS.c.chunk_id).order_by(
             _ARTIFACTS.c.chunk_id, _ARTIFACTS.c.epoch, _ARTIFACTS.c.produced_at, _ARTIFACTS.c.artifact_id

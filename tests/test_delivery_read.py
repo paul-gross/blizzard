@@ -139,3 +139,33 @@ def test_landed_repos_keeps_the_newest_written_sha_per_repo() -> None:
     )
     assert landed.shas == {"acme/one": "new-sha", "acme/two": "two-sha"}
     assert landed.names == {"acme/one", "acme/two"}
+
+
+def test_blank_marker_alone_is_no_landing_and_leaves_the_pr_open() -> None:
+    view = DeliveryRead.of(
+        ChunkFacts(minted=True),
+        DeliverySources(
+            markers=[
+                marker("delivery-pr/acme/one/1", '{"repo":"acme/one","number":1,"url":"http://forge/acme/one/pull/1"}'),
+                marker("merged/acme/one", ""),
+                marker("merged/acme/two", "abc123"),
+            ]
+        ),
+    )
+    assert [r.repo for r in view.landed_repos] == ["acme/two"]
+    assert [p.number for p in view.open_prs] == [1]
+    assert view.closed_prs == []
+
+
+def test_blank_marker_written_after_a_sha_leaves_the_earlier_sha_standing() -> None:
+    landed = LandedRepos.of([marker("merged/acme/one", "sha-1"), marker("merged/acme/one", " \n", epoch=2)])
+    assert landed.shas == {"acme/one": "sha-1"}
+    assert landed.names == {"acme/one"}
+    assert LandedRepos.of([marker("merged/acme/one", "")]).names == frozenset()
+
+
+def test_blank_legacy_landed_entry_is_dropped() -> None:
+    view = DeliveryRead.of(
+        ChunkFacts(minted=True), DeliverySources(legacy_landed={"acme/one": "", "acme/two": "sha-2"})
+    )
+    assert [r.repo for r in view.landed_repos] == ["acme/two"]

@@ -34,6 +34,7 @@ from blizzard.hub.domain.chunk.model import (
     ChunkFacts,
     HubNodePollFact,
     LandedRepos,
+    is_landed_revision,
 )
 from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.delivery import IWriteChunkDeliveryRepository
@@ -457,7 +458,7 @@ class HubNodeExecutor:
             at=self._clock.now(),
         )
         # Only a fresh marker counts as landed; replay must not double-count.
-        if wrote and name.startswith(_MARKER_PREFIX):
+        if wrote and name.startswith(_MARKER_PREFIX) and is_landed_revision(content):
             self._delivery.record_delivery_repo_landed(
                 chunk_id, repo=name.removeprefix(_MARKER_PREFIX), commit_hash=content, at=self._clock.now()
             )

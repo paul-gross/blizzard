@@ -8,7 +8,7 @@ from urllib.parse import quote, urlsplit
 
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.artifact.model import StoredArtifact
-from blizzard.hub.domain.chunk.model import ChunkFacts, LandedRepos
+from blizzard.hub.domain.chunk.model import ChunkFacts, LandedRepos, is_landed_revision
 
 
 def board_chunk_url(public_url: str | None, chunk_id: str) -> str | None:
@@ -74,7 +74,8 @@ class DeliveryRead:
     @classmethod
     def of(cls, facts: ChunkFacts, sources: DeliverySources) -> DeliveryRead:
         prs: dict[tuple[str, int], DeliveryPr] = {}
-        landed = {**sources.legacy_landed, **LandedRepos.of(sources.markers).shas}
+        legacy = {repo: sha for repo, sha in sources.legacy_landed.items() if is_landed_revision(sha)}
+        landed = {**legacy, **LandedRepos.of(sources.markers).shas}
         script_prs: dict[str, tuple[str, int]] = {}
         script_epochs: dict[tuple[str, int], int] = {}
         external_epochs: set[int] = set()

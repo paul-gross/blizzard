@@ -718,6 +718,37 @@ def test_a_restart_mid_hub_node_run_fences_out_a_stale_marker_write(tmp_path: Pa
 
 
 @pytest.mark.component
+def test_a_blank_landing_marker_is_stored_but_records_no_landing(tmp_path: Path) -> None:
+    runner = FakeHubCommandRunner()
+    workdir = FakeHubWorkdir()
+    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=workdir)
+    chunk_id, _build_node_id, graph = _to_merge_node(hub)
+    merge_node = graph.node_by_name("merge")
+    assert merge_node is not None
+    before = hub.clock.now() - timedelta(seconds=1)  # landed_at is read strictly after
+
+    def intents() -> list[int]:
+        return [i.intent_id for i in hub.services.chunks.delivery.pending_close_intents() if i.chunk_id == chunk_id]
+
+    intents_before = intents()
+
+    def record(name: str, content: str) -> bool:
+        return hub.services.hub_node.record_marker(
+            chunk_id, node_id=merge_node.node_id, node_name="merge", epoch=1, name=name, content=content
+        )
+
+    assert record("merged/acme-blank", "  ") is True
+    names = {a.name for a in hub.services.chunks.artifacts.load_artifacts(chunk_id)}
+    assert "merged/acme-blank" in names
+    assert hub.services.chunks.delivery.count_landed_since("acme-blank", before) == 0
+    assert intents() == intents_before
+
+    assert record("merged/acme-widget", "sha:abc123") is True
+    assert hub.services.chunks.delivery.count_landed_since("acme-widget", before) == 1
+    assert len(intents()) > len(intents_before)
+
+
+@pytest.mark.component
 def test_a_stopped_chunk_fences_out_a_still_running_marker_write(tmp_path: Path) -> None:
     """Stop mints no epoch: terminality must fence the still-current run's marker
     (``bzh:epoch-fencing``), landing and close intent."""

@@ -27,6 +27,7 @@ from blizzard.hub.domain.chunk.model import (
     RouteReleasedFact,
     WorkItemMaterializationOutcome,
     WorkRef,
+    is_landed_revision,
 )
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead, ILockedWorkRefRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, EpochOwner, FenceRefusal, MintAdmission
@@ -134,6 +135,11 @@ QUESTIONS = QuestionQuery()
 
 # The ``merged/<repo>`` marker also appears in domain/chunk/model.py's ``LandedRepos``.
 MARKER_PREFIX = "merged/"
+
+
+def is_landing_marker(name: str, data: str) -> bool:
+    """Whether an artifact is a ``merged/<repo>`` marker naming a revision — the writes that owe close intents."""
+    return name.startswith(MARKER_PREFIX) and is_landed_revision(data)
 
 
 def insert_chunk_rows(conn: Connection, chunk: Chunk) -> None:

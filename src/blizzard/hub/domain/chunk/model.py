@@ -1389,6 +1389,11 @@ class ChunkFacts:
 _MARKER_PREFIX = "merged/"
 
 
+def is_landed_revision(content: str) -> bool:
+    """Whether a landing marker's content names a revision: blank content records no landing."""
+    return bool(content.strip())
+
+
 @domain_model
 @dataclass(frozen=True)
 class LandedRepos:
@@ -1404,7 +1409,9 @@ class LandedRepos:
     @classmethod
     def of(cls, artifacts: Sequence[StoredArtifact]) -> LandedRepos:
         shas = {
-            a.name.removeprefix(_MARKER_PREFIX): a.data.strip() for a in artifacts if a.name.startswith(_MARKER_PREFIX)
+            a.name.removeprefix(_MARKER_PREFIX): a.data.strip()
+            for a in artifacts
+            if a.name.startswith(_MARKER_PREFIX) and is_landed_revision(a.data)
         }
         return cls(frozenset(shas), shas)
 
