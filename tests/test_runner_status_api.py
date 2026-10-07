@@ -23,6 +23,7 @@ from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
+from blizzard.runner.hub.identity import ICurrentRunnerIdentity, RunnerIdentityHolder
 from blizzard.runner.leases import NewLease
 from blizzard.runner.status.view import RunnerStatusService
 from tests.runner_fakes import FakeHarness, FakeProbe, make_store, make_stores, registered_identity
@@ -40,6 +41,7 @@ def _app_with_status(
     env_pool: tuple[str, ...] | None = None,
     gates: tuple[str, ...] = (),
     runner_dir: str = "",
+    identity: ICurrentRunnerIdentity | None = None,
 ):  # type: ignore[no-untyped-def]
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}", max_agents=max_agents)
@@ -56,7 +58,7 @@ def _app_with_status(
         asks=store,
         takeover=store,
         escalations=store,
-        identity=registered_identity("rn_status", config.name),
+        identity=identity or registered_identity("rn_status", config.name),
         runner_name=config.name,
         workspace_id=config.workspace_id,
         max_agents=config.max_agents,
@@ -109,6 +111,24 @@ def test_summary_defaults_on_an_empty_store(tmp_path: Path) -> None:
     assert body["last_tick_at"] is None
     assert body["gates"] == []
     assert_all_timestamps_utc(body)
+
+
+@pytest.mark.component
+def test_patch_runner_reports_the_identity_get_reports(tmp_path: Path) -> None:
+    app, _ = _app_with_status(tmp_path, identity=RunnerIdentityHolder())
+
+    with TestClient(app) as client:
+        patched = client.patch("/api/runner", json={"paused": True, "by": "operator"})
+        read = client.get("/api/runner")
+
+    assert patched.status_code == 200
+    assert (patched.json()["runner_id"], patched.json()["runner_name"]) == (None, read.json()["runner_name"])
+    assert read.json()["runner_id"] is None
+    assert (patched.json()["local_paused"], patched.json()["hub_paused"], patched.json()["paused"]) == (
+        read.json()["pause"]["local"],
+        read.json()["pause"]["hub"],
+        read.json()["pause"]["effective"],
+    )
 
 
 @pytest.mark.component

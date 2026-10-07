@@ -10,6 +10,7 @@ import pytest
 from blizzard.runner.environments.repository import (
     EnvBinding,
     EnvironmentHeldError,
+    releasable_after_refusal,
     release_instants,
     require_unheld,
 )
@@ -32,6 +33,12 @@ def test_require_unheld_refuses_held_by_other() -> None:
     assert (refused.value.environment_id, refused.value.holder_chunk_id) == ("e1", "ch_other")
     require_unheld("ch_1", ["e2"], held)
     require_unheld("ch_other", ["e1"], held)
+
+
+def test_releasable_after_refusal_excludes_other_chunks_holdings() -> None:
+    held = [_binding("ch_other", "e1"), _binding("ch_1", "e2")]
+    assert releasable_after_refusal("ch_1", ["e1", "e2", "e3"], held) == ["e2", "e3"]
+    assert releasable_after_refusal("ch_1", ["e2", "e1"], []) == ["e2", "e1"]
 
 
 def test_release_of_unheld_is_noop() -> None:

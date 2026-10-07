@@ -10,11 +10,13 @@ import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.runner.environments.repository import EnvBinding
+from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.leases import Lease
 from blizzard.runner.lifecycle.model import TakeoverHolds
 from blizzard.runner.lifecycle.takeover import (
     TAKEOVER_TRANSITIONS,
     ChunkNotTakeable,
+    EscalationCommands,
     LiveWorkerConflict,
     OpenTakeover,
     SubmissionPending,
@@ -204,3 +206,52 @@ def test_takeover_skip_scoped_to_reference_epoch() -> None:
     holds = TakeoverHolds.of([takeover])
     assert holds.holds_lease(_lease(epoch=3))
     assert not holds.holds_lease(_lease(epoch=4))
+
+
+class _ResumeHarness:
+    """Stands in for the resolved owner: echoes what it was asked to resume."""
+
+    def resume_command(
+        self, session_cwd: str, session_id: str, *, model: str | None = None, effort: str | None = None
+    ) -> str:
+        return f"resume {session_id} in {session_cwd} ({model}/{effort})"
+
+
+_SESSION = SessionReference("cc", "sess-a")
+
+
+def _compose(**overrides: object) -> EscalationCommands:
+    fields: dict[str, object] = {
+        "session": _SESSION,
+        "bindings": [_BINDING],
+        "harness": _ResumeHarness(),
+        "model": "opus",
+        "effort": "high",
+        "workspace_root": "/ws",
+        "runner_dir": "/runner",
+    }
+    fields.update(overrides)
+    return EscalationCommands.compose("ch_1", **fields)  # type: ignore[arg-type]
+
+
+def test_escalation_commands_compose_resume_and_wrapped() -> None:
+    commands = _compose()
+
+    assert "sess-a" in commands.resume and "(opus/high)" in commands.resume
+    assert commands.wrapped == "blizzard runner takeover ch_1 --dir /runner"
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [{"session": None}, {"bindings": []}, {"harness": None}],
+    ids=["no-session", "no-held-binding", "unresolved-owner"],
+)
+def test_escalation_commands_compose_nothing_without_a_precondition(overrides: dict[str, object]) -> None:
+    assert _compose(**overrides) == EscalationCommands(resume="", wrapped=None)
+
+
+def test_escalation_commands_carry_no_wrapped_form_without_a_runner_dir() -> None:
+    commands = _compose(runner_dir="")
+
+    assert commands.resume
+    assert commands.wrapped is None

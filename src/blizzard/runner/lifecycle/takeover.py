@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import shlex
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
@@ -24,13 +24,14 @@ from blizzard.foundation.roles import domain_model
 from blizzard.runner.auth.tokens import IWriteTokenRepository
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.events.publisher import IRunnerEventPublisher
-from blizzard.runner.harness.adapter import WorkerPreamble
+from blizzard.runner.harness.adapter import IHarnessWorkerLifecycle, WorkerPreamble
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import IHarnessLifecycleRegistry, UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.hub.outbound_buffer import IWriteOutboundRepository
 from blizzard.runner.leases import Lease
 from blizzard.runner.leases.elicitation import IWriteElicitationRepository
+from blizzard.runner.leases.escalations import resume_workdir
 from blizzard.runner.leases.lease_auth import LeaseToken
 from blizzard.runner.node_steps.chunk_state import ChunkState
 from blizzard.runner.process.owned_process import IOwnedProcessControl, kill_owned_process
@@ -46,6 +47,7 @@ _FORWARDED_EXECUTION_VARS = ("PATH", "HOME")
 __all__ = [
     "TAKEOVER_TRANSITIONS",
     "ChunkNotTakeable",
+    "EscalationCommands",
     "IReadTakeoverRepository",
     "IWriteTakeoverRepository",
     "LiveWorkerConflict",
@@ -263,6 +265,47 @@ class TakeoverCommand:
         if not resume_command or not runner_dir:
             return None
         return cls(chunk_id, runner_dir).wrapped
+
+
+@domain_model
+@dataclass(frozen=True)
+class EscalationCommands:
+    """The raw resume command and its wrapped takeover form an escalation carries — the one
+    composition both the escalating write and the status read use. Wrapped-vs-raw rules:
+    `blizzard-context:/domain/humans/escalation.md` §The commands an escalation carries.
+
+    ``resume`` is ``""`` when no command can be composed; ``wrapped`` is ``None`` when no
+    raw command exists to wrap or the runner dir is unknown."""
+
+    resume: str
+    wrapped: str | None
+
+    @classmethod
+    def compose(
+        cls,
+        chunk_id: str,
+        *,
+        session: SessionReference | None,
+        bindings: Sequence[EnvBinding],
+        harness: IHarnessWorkerLifecycle | None,
+        model: str | None,
+        effort: str | None,
+        workspace_root: str,
+        runner_dir: str,
+    ) -> EscalationCommands:
+        """Composed from the escalation's own stamps (``model``, ``effort``), so a takeover
+        lands in exactly the configuration the parked session ran with, never a fresh
+        resolution. ``harness`` is the session owner already resolved, ``None`` when it cannot
+        be; a missing session, held binding, or harness composes no command."""
+        workdir = resume_workdir(session, bindings)
+        if session is None or workdir is None or harness is None:
+            return cls(resume="", wrapped=None)
+        resume = harness.resume_command(
+            SpawnCwd.of_session(workspace_root, workdir), session.session_id, model=model, effort=effort
+        )
+        return cls(
+            resume=resume, wrapped=TakeoverCommand.wrapped_for(chunk_id, resume_command=resume, runner_dir=runner_dir)
+        )
 
 
 class TakeoverError(Exception):

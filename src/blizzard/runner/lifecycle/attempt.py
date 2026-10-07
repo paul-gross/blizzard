@@ -19,12 +19,10 @@ from blizzard.foundation.trace_ids import StepKey, step_root
 from blizzard.runner.harness.adapter import IHarnessWorkerLifecycle
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
-from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.hub.client import ChunkEndedError, ChunkNotFoundError, HubClientError
 from blizzard.runner.hub.outbound import OutboundFacts
 from blizzard.runner.leases import Lease
 from blizzard.runner.leases.closure import NO_ACCEPTABLE_HARNESS_MINT
-from blizzard.runner.leases.escalations import resume_workdir
 from blizzard.runner.lifecycle.model import (
     FailureMove,
     OwnerUnresolvableMove,
@@ -37,7 +35,7 @@ from blizzard.runner.lifecycle.model import (
 from blizzard.runner.lifecycle.registration import registered_runner_id
 from blizzard.runner.lifecycle.session import SkippedHarness
 from blizzard.runner.lifecycle.spawn import Environments, SpawnContext, Spawner
-from blizzard.runner.lifecycle.takeover import TakeoverCommand
+from blizzard.runner.lifecycle.takeover import EscalationCommands
 from blizzard.runner.process.owned_process import interrupt_owned_process, kill_owned_process
 from blizzard.runner.transcripts.transcript_pump import PUMP_LEASE_MAX_SECONDS, TranscriptPump
 
@@ -225,28 +223,21 @@ class Attempt:
         the "no takeover command" branch below already covers."""
         lease = self.lease
         bindings = self.ctx.stores.environments.bindings_for_chunk(lease.chunk_id)
-        takeover = ""
-        wrapped = ""
         session = lease.session
         harness = self._resolve_harness(session, via="escalate") if session is not None else None
-        workdir = resume_workdir(session, bindings)
-        if session is not None and workdir is not None and harness is not None:
-            # Composed from the lease's own stamps, so a takeover lands in exactly
-            # the configuration the parked session ran with, never a fresh resolution.
-            takeover = harness.resume_command(
-                SpawnCwd.of_session(self.ctx.config.workspace_root, workdir),
-                session.session_id,
-                model=lease.resolved_model,
-                effort=lease.resolved_effort,
-            )
-            # Wrapped-vs-raw rules: `blizzard-context:/domain/humans/escalation.md` §The commands an escalation carries.
-            wrapped = (
-                TakeoverCommand.wrapped_for(
-                    lease.chunk_id, resume_command=takeover, runner_dir=self.ctx.config.runner_dir
-                )
-                or ""
-            )
-        else:
+        commands = EscalationCommands.compose(
+            lease.chunk_id,
+            session=session,
+            bindings=bindings,
+            harness=harness,
+            model=lease.resolved_model,
+            effort=lease.resolved_effort,
+            workspace_root=self.ctx.config.workspace_root,
+            runner_dir=self.ctx.config.runner_dir,
+        )
+        takeover = commands.resume
+        wrapped = commands.wrapped or ""
+        if not takeover:
             # No session, released bindings, or an unresolvable owner all compose nothing; the
             # logged fields say which (`blizzard-context:/domain/humans/escalation.md` §What each origin carries).
             _log.warning(

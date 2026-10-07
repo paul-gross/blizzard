@@ -41,6 +41,7 @@ from blizzard.runner.lifecycle.takeover import TakeoverCloseScope, TakeoverOpenS
 from blizzard.runner.loop.context import LoopConfig, ResolvedSubscription
 from blizzard.runner.loop.steps import Advance, ContextSample, ExternalUsageSample, Fill, Pull, SpendCeiling
 from blizzard.runner.node_steps.chunk_state import ChunkPause, ChunkState
+from blizzard.runner.status.view import RunnerStatusService
 from blizzard.runner.subscriptions.subscription_sampler import (
     ExternalSubscriptionUsageSnapshot,
     ExternalSubscriptionUsageWindow,
@@ -59,6 +60,7 @@ from tests.runner_fakes import (
     make_store,
     make_stores,
     record_usage,
+    registered_identity,
 )
 
 pytestmark = pytest.mark.component
@@ -690,7 +692,25 @@ def test_patch_runner_route_publishes_fact_changed(tmp_path: Path) -> None:
     store = _store(tmp_path)
     events = EventBroker()
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
-    app = create_app(config, runner_stores=make_stores(store), events=events)
+    status = RunnerStatusService(
+        FixedClock(_NOW),
+        pause=store,
+        lease_record=store,
+        outbound=store,
+        environments=store,
+        asks=store,
+        takeover=store,
+        escalations=store,
+        identity=registered_identity("rn_patch", config.name),
+        runner_name=config.name,
+        workspace_id=config.workspace_id,
+        max_agents=config.max_agents,
+        hub_url=config.hub_url,
+        env_pool=(),
+        workspace_root="",
+        harnesses=HarnessRegistry({}),
+    )
+    app = create_app(config, runner_stores=make_stores(store), runner_status=status, events=events)
 
     with TestClient(app) as client:
         resp = client.patch("/api/runner", json={"paused": True, "by": "operator"})

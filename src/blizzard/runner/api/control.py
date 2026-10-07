@@ -12,9 +12,7 @@ from pydantic import BaseModel
 
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.api.wiring import RunnerWiring
-from blizzard.runner.hub.identity import RunnerIdentity
-from blizzard.runner.status.view import PauseState, RunnerStatusService
-from blizzard.runner.throttle.pause import IReadPauseRepository
+from blizzard.runner.status.view import RunnerStatusService
 from blizzard.wire.runner_status import CapacitiesView, HubConnectivityView, PauseStateView, RunnerStatusView
 
 router = APIRouter(prefix="/api", tags=["runner"])
@@ -44,10 +42,16 @@ def patch_runner(request_body: RunnerControlPatch, request: Request) -> RunnerCo
     Independent of the hub's brake: it works with the hub unreachable, and neither reads nor
     writes the hub's flag. Not a drain: a live worker is left running."""
     wiring = RunnerWiring.of(request)
-    config = wiring.config()
+    status = wiring.status()
     wiring.pause().set_local_pause(paused=request_body.paused, by=request_body.by)
-    stores = wiring.read_stores()
-    return _view(stores.pause, stores.identity.runner_identity(), configured_name=config.name)
+    summary = status.summary()
+    return RunnerControlView(
+        runner_id=summary.runner_id,
+        runner_name=summary.runner_name,
+        local_paused=summary.pause.local,
+        hub_paused=summary.pause.hub,
+        paused=summary.pause.effective,
+    )
 
 
 @router.get("/runner", response_model=RunnerStatusView)
@@ -83,15 +87,4 @@ def _runner_status_view(service: RunnerStatusService) -> RunnerStatusView:
         ),
         last_tick_at=iso_utc(summary.last_tick_at) if summary.last_tick_at is not None else None,
         gates=list(summary.gates),
-    )
-
-
-def _view(pause: IReadPauseRepository, identity: RunnerIdentity | None, *, configured_name: str) -> RunnerControlView:
-    state = PauseState.of(local=pause.local_paused(), hub=pause.hub_paused(), local_reason=None)
-    return RunnerControlView(
-        runner_id=identity.runner_id if identity is not None else None,
-        runner_name=identity.runner_name if identity is not None else configured_name,
-        local_paused=state.local,
-        hub_paused=state.hub,
-        paused=state.effective,
     )
