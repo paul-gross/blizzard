@@ -22,7 +22,7 @@ from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
-from blizzard.runner.leases import NewLease
+from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.judgement.artifacts import PinnedGraphArtifact
 from tests.runner_fakes import make_store, make_stores, no_retry_clock
 

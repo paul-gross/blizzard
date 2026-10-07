@@ -13,7 +13,7 @@ from typing import Any
 from sqlalchemy import ColumnElement, Connection, and_, select
 
 from blizzard.foundation.roles import domain_model
-from blizzard.runner.leases import Lease, WorkRefStamp
+from blizzard.runner.leases.model import Lease, WorkRefStamp
 from blizzard.runner.store.schema import (
     binding_releases,
     env_bindings,

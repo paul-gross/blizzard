@@ -16,12 +16,12 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.usage import UsageLimit
-from blizzard.runner.leases import NewLease
 from blizzard.runner.leases.elicitation import (
     ELICITATION_STALENESS_THRESHOLD,
     ElicitationNotRecorded,
     ElicitationVerb,
 )
+from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.attempt import Attempt
 from blizzard.runner.lifecycle.dormant import DormantSession
 from blizzard.runner.lifecycle.judgement.judgement import Judgement

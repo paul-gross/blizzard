@@ -1,7 +1,7 @@
 """The write-protocol census — every write-only member
 :class:`~blizzard.runner.stores.IWriteRunnerStore` requires, whether declared on
 its own class body or on a concept Protocol it inherits (e.g.
-:class:`~blizzard.runner.leases.IWriteLeaseRecordRepository`), mapped to
+:class:`~blizzard.runner.leases.record.IWriteLeaseRecordRepository`), mapped to
 either the event kind its mutation publishes (:class:`Published`) or a stated reason it
 publishes nothing (:class:`Silent`). Exhaustiveness is carried by
 ``tests/test_runner_write_protocol_census.py``, this module's only reader — which is also
@@ -147,7 +147,7 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
         RunnerEventType.LEASE_CHANGED,
         "DormantSession.park_on_ask (runner/lifecycle/dormant.py) — cause='dormant'. The ask itself "
         "is already visible from record_ask's own 'asked' frame, but this write separately flips "
-        "LeaseActivity.state (runner/leases/__init__.py) to 'parked' via parked_lease_ids(), which GET "
+        "LeaseActivity.state (runner/leases/activity.py) to 'parked' via parked_lease_ids(), which GET "
         "/api/leases renders as the row's headline label — a real leases-rail transition, "
         "distinct from open_asks()'s own unaffected derivation.",
     ),

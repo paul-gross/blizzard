@@ -26,10 +26,10 @@ from blizzard.runner.hub.client import (
     RouteClaimOutcome,
     TerminalDenial,
 )
-from blizzard.runner.leases import Lease
 from blizzard.runner.leases.closure import ESCALATION_MINT, cause_of
 from blizzard.runner.leases.elicitation import PendingElicitation
 from blizzard.runner.leases.escalations import ParkedEscalation
+from blizzard.runner.leases.model import Lease
 from blizzard.runner.lifecycle.model import (
     COMPLETION_CLOSURES,
     LEASE_MOVES,

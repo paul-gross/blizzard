@@ -7,7 +7,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Protocol
 
-from blizzard.runner.leases import Lease
+from blizzard.runner.leases.model import Lease
 
 
 class IWorkerStdoutReader(Protocol):

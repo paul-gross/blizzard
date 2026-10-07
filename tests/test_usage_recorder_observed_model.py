@@ -22,8 +22,8 @@ from blizzard.runner.harness.opencode.usage.descendant_usage import OpenCodeDesc
 from blizzard.runner.harness.opencode.usage.price_cache import OpenCodeModelPrice, OpenCodeRate
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.usage import UsageSample
-from blizzard.runner.leases import NewLease
 from blizzard.runner.leases.internal.worker_stdout_files import WorkerStdoutFiles
+from blizzard.runner.leases.model import NewLease
 from blizzard.runner.usage.recorder import UsageRecorder
 from tests.repo_files import repo_root
 from tests.runner_fakes import FakeHarness, FakeProbe, FakeTranscriptSource, make_store

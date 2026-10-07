@@ -21,7 +21,7 @@ from blizzard.foundation.platform_tracing.received import (
 )
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryNames
 from blizzard.runner.hub.identity import ICurrentRunnerIdentity, RunnerIdentity
-from blizzard.runner.leases import Lease
+from blizzard.runner.leases.model import Lease
 from blizzard.runner.tracing.received_export import IReceivedTelemetryExport
 from blizzard.runner.tracing.receiver import (
     CLI_SERVICE_NAME,

@@ -21,8 +21,8 @@ from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.runner_event_types import LeaseChangeCause
 from blizzard.runner.hub.client import QueueEntry
-from blizzard.runner.leases import Lease
 from blizzard.runner.leases.closure import ESCALATION_MINT
+from blizzard.runner.leases.model import Lease
 from blizzard.runner.lifecycle.shutdown_drain import SHUTDOWN_DRAIN_DEADLINE
 from blizzard.runner.node_steps.chunk_state import ChunkGate, ChunkSpend, ChunkState
 from blizzard.runner.node_steps.envelope import Envelope, EnvelopeNode

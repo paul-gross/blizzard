@@ -30,7 +30,7 @@ from blizzard.hub.store import schema as hub_schema
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.internal.winter_cli import SubprocessWinterCli
 from blizzard.runner.harness.identity import OPENCODE_HARNESS_ID
-from blizzard.runner.leases import NewLease
+from blizzard.runner.leases.model import NewLease
 from blizzard.runner.store import schema as runner_schema
 from blizzard.tools.invariants import Invariants
 from tests.crash.support import (

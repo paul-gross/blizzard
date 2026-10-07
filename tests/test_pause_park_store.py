@@ -14,7 +14,8 @@ import pytest
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
-from blizzard.runner.leases import HEARTBEAT_STALENESS_THRESHOLD, NewLease
+from blizzard.runner.leases.activity import HEARTBEAT_STALENESS_THRESHOLD
+from blizzard.runner.leases.model import NewLease
 from blizzard.runner.loop.steps import Reap, ResumeIntents
 from tests.runner_fakes import FakeHarness, FakeHub, FakeProbe, FakeProvider, make_context, make_store, make_stores
 

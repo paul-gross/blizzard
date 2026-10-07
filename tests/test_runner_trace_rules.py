@@ -23,7 +23,7 @@ from blizzard.runner.harness.claude_code.telemetry_plan import (
 )
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryNames
 from blizzard.runner.hub.identity import RunnerIdentity, RunnerIdentityHolder
-from blizzard.runner.leases import Lease
+from blizzard.runner.leases.model import Lease
 from blizzard.runner.tracing.cursor import LeaseCursorKey
 from blizzard.runner.tracing.received_export import DisabledReceivedTelemetryExport
 from blizzard.runner.tracing.receiver import (

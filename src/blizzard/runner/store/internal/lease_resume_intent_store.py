@@ -9,7 +9,7 @@ from datetime import datetime
 from sqlalchemy import select
 
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.leases import IWriteLeaseResumeIntentRepository
+from blizzard.runner.leases.resume_intent import IWriteLeaseResumeIntentRepository
 from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.internal.base import OPEN_INTENT
 from blizzard.runner.store.schema import resume_clears, resume_intents

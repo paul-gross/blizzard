@@ -16,8 +16,9 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.repo_ref import repo_identity
 from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.environments.worktree import WorktreeGitError
-from blizzard.runner.leases import Lease, worker_lease
+from blizzard.runner.leases import worker_lease
 from blizzard.runner.leases.lease_auth import LeaseToken, LeaseTokenRejected
+from blizzard.runner.leases.model import Lease
 from blizzard.runner.leases.worker_lease import WorkerLease, WorkerLeaseStanding, WorkerVerb
 from blizzard.runner.lifecycle.judgement.git_commit_declaration import (
     GitCommitDeclaration,

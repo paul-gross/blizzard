@@ -18,7 +18,7 @@ from fastapi.testclient import TestClient
 from blizzard.runner.app import create_app
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.leases import NewLease
+from blizzard.runner.leases.model import NewLease
 from tests.runner_fakes import make_store, make_stores
 from tests.worker_http import bind_stubs
 

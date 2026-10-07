@@ -14,7 +14,8 @@ from blizzard.foundation.clock import FixedClock, SystemClock
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.registry import HarnessRegistry
 from blizzard.runner.hub.identity import RunnerIdentityHolder
-from blizzard.runner.leases import HEARTBEAT_STALENESS_THRESHOLD, NewLease
+from blizzard.runner.leases.activity import HEARTBEAT_STALENESS_THRESHOLD
+from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.registration import Registration
 from blizzard.runner.loop.context import LoopConfig, LoopContext
 from blizzard.runner.loop.steps import Fill, Pull, Reap, Resume

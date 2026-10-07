@@ -15,7 +15,7 @@ from blizzard.foundation.ids import SEGMENT_PREFIX, Id
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.batching import id_batches
 from blizzard.runner.harness.identity import SessionReference
-from blizzard.runner.leases import IWriteLeaseLivenessRepository, LeaseLivenessFacts
+from blizzard.runner.leases.liveness import IWriteLeaseLivenessRepository, LeaseLivenessFacts
 from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.internal.base import NO_NORMALIZER_VERSION, enqueue_transcript_final
 from blizzard.runner.store.schema import heartbeats, lease_context, lease_spawns, leases, transcript_segments

@@ -18,7 +18,7 @@ from blizzard.foundation.fact_kinds import USAGE_RECORDED
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.usage import UsageKind, UsageSample
-from blizzard.runner.leases import Lease, NewLease
+from blizzard.runner.leases.model import Lease, NewLease
 from blizzard.runner.store.schema import usage_facts
 from blizzard.runner.usage.recorder import UsageRecorder
 from tests.runner_fakes import make_store, make_usage_recorder

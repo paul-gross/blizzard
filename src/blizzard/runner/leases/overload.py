@@ -185,7 +185,7 @@ class IWriteOverloadRepository(IReadOverloadRepository, Protocol):
 class _IReadLeaseGeneration(Protocol):
     """The one lease-liveness read :func:`backing_off_facts` needs — declared locally
     rather than imported from ``leases``, which itself imports this module for
-    :class:`~blizzard.runner.leases.LocalLeaseService`'s own use of
+    :class:`~blizzard.runner.leases.activity.LocalLeaseService`'s own use of
     :func:`backing_off_facts` (a cycle either direction's concrete import would close)."""
 
     def lease_generations(self, lease_ids: Sequence[str]) -> dict[str, int]: ...

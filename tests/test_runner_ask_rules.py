@@ -7,7 +7,6 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from blizzard.runner.leases import Lease, WorkerLease
 from blizzard.runner.leases.asks import (
     ASK_TRANSITIONS,
     AskOnClosedLease,
@@ -18,6 +17,8 @@ from blizzard.runner.leases.asks import (
     newest_unforwarded,
     open_asks_of,
 )
+from blizzard.runner.leases.model import Lease
+from blizzard.runner.leases.worker_lease import WorkerLease
 
 pytestmark = pytest.mark.unit
 

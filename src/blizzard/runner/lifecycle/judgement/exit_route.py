@@ -11,7 +11,7 @@ from enum import StrEnum
 
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.harness.identity import SessionReference
-from blizzard.runner.leases import Lease
+from blizzard.runner.leases.model import Lease
 
 __all__ = ["ExitEntry", "ExitNotJudgeable", "ExitRoute", "JudgeableExit", "route_exit"]
 

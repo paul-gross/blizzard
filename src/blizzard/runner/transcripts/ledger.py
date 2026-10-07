@@ -384,7 +384,7 @@ class IWriteTranscriptLedgerRepository(IReadTranscriptLedgerRepository, Protocol
 
     def finalize_transcript_segment(self, segment_id: str, *, finalized_at: datetime) -> bool:
         """Close one segment out on its own, enqueuing its single final marker in the same
-        transaction — :meth:`~blizzard.runner.leases.IWriteLeaseRecordRepository.record_closure`'s
+        transaction — :meth:`~blizzard.runner.leases.record.IWriteLeaseRecordRepository.record_closure`'s
         per-segment half, for a segment whose lease closed long before it existed. ``False``
         when it was already finalized."""
         ...

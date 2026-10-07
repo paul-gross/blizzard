@@ -27,8 +27,8 @@ from blizzard.runner.hub.outbound_buffer import (
     submission_payload,
     transcript_truncated_event,
 )
-from blizzard.runner.leases import Lease
 from blizzard.runner.leases.asks import OpenAsk
+from blizzard.runner.leases.model import Lease
 from tests.runner_fakes import make_envelope
 
 pytestmark = pytest.mark.unit

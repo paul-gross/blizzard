@@ -12,11 +12,8 @@ from blizzard.runner.harness.health_cache import IReadHarnessHealth
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import IHarnessRegistry, UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource
-from blizzard.runner.leases import (
-    IReadLeaseSessionRepository,
-    Lease,
-    PoolHead,
-)
+from blizzard.runner.leases.model import Lease, PoolHead
+from blizzard.runner.leases.session import IReadLeaseSessionRepository
 from blizzard.runner.node_steps.envelope import EnvelopeNode, RotateBounds
 
 _log = get_logger("blizzard.runner.loop")

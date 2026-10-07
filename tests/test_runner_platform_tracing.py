@@ -54,7 +54,7 @@ from blizzard.runner.harness.claude_code.section import ClaudeCodeSection
 from blizzard.runner.harness.wiring import combined_telemetry_plan, declared_telemetry_names
 from blizzard.runner.hub.identity import ICurrentRunnerIdentity, RunnerIdentity, RunnerIdentityHolder
 from blizzard.runner.hub.outbound import OutboundFacts
-from blizzard.runner.leases import Lease, NewLease
+from blizzard.runner.leases.model import Lease, NewLease
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.steps import Advance
 from blizzard.runner.loop.tick import tick

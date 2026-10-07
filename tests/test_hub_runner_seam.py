@@ -17,8 +17,8 @@ from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionRefe
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.hub.chunk_status_cache import ReadThroughChunkViews
 from blizzard.runner.hub.internal.http_hub import HttpHubClient
-from blizzard.runner.leases import NewLease
 from blizzard.runner.leases.internal.worker_stdout_files import WorkerStdoutFiles
+from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.env_release import EnvironmentRelease
 from blizzard.runner.lifecycle.judgement.internal.elicitation_files import ElicitationFiles
 from blizzard.runner.lifecycle.session import HarnessSelector

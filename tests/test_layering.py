@@ -1336,7 +1336,7 @@ def test_hub_domain_packages_import_only_what_their_layer_allows() -> None:
 
 
 def _domain_init_reexports(domain_dir: Path) -> list[str]:
-    """Every hub domain package ``__init__.py`` holding anything beyond a docstring and the
+    """Every package ``__init__.py`` under ``domain_dir`` holding anything beyond a docstring and the
     ``from __future__ import annotations`` line — a package re-exports nothing, so each name has
     one import path."""
     offenders: list[str] = []
@@ -1352,6 +1352,11 @@ def _domain_init_reexports(domain_dir: Path) -> list[str]:
 
 def test_hub_domain_package_inits_re_export_nothing() -> None:
     assert _domain_init_reexports(_HUB_DOMAIN_DIR) == []
+
+
+def test_runner_node_package_inits_re_export_nothing() -> None:
+    nodes = [node for node in _RUNNER_PACKAGE_LAYERS if "/" not in node and (_RUNNER_DIR / node).is_dir()]
+    assert [f"{node}/{init}" for node in nodes for init in _domain_init_reexports(_RUNNER_DIR / node)] == []
 
 
 def test_a_domain_init_that_imports_a_name_is_flagged(tmp_path: Path) -> None:
@@ -1835,7 +1840,7 @@ def test_runner_package_layers_are_acyclic() -> None:
 
 
 def test_runner_domain_core_selection_holds_the_lease_model() -> None:
-    assert _RUNNER_DIR / "leases" / "__init__.py" in _runner_domain_core_files(_RUNNER_DIR, _RUNNER_PACKAGE_LAYERS)
+    assert _RUNNER_DIR / "leases" / "model.py" in _runner_domain_core_files(_RUNNER_DIR, _RUNNER_PACKAGE_LAYERS)
 
 
 #: A planted runner exercising the node, subnode, and edge kinds of :data:`_RUNNER_PACKAGE_LAYERS`.

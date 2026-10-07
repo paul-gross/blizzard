@@ -15,9 +15,9 @@ from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHar
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.hub.client import ChunkNotFoundError, HubClientError
 from blizzard.runner.hub.outbound import OutboundFacts
-from blizzard.runner.leases import Lease
 from blizzard.runner.leases.asks import OpenAsk
 from blizzard.runner.leases.elicitation import PendingElicitation
+from blizzard.runner.leases.model import Lease
 from blizzard.runner.leases.operator_requests import IReadAttachmentRepository
 from blizzard.runner.leases.overload import OverloadExit
 from blizzard.runner.lifecycle.attempt import Attempt

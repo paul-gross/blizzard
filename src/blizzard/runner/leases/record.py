@@ -4,10 +4,9 @@ identity."""
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Protocol
+from typing import Protocol
 
-if TYPE_CHECKING:
-    from blizzard.runner.leases import ClosedLease, Lease, NewLease
+from blizzard.runner.leases.model import ClosedLease, Lease, NewLease
 
 
 class IReadLeaseRecordRepository(Protocol):

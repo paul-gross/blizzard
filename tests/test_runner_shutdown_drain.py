@@ -9,7 +9,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.runner.leases import Lease
+from blizzard.runner.leases.model import Lease
 from blizzard.runner.lifecycle.shutdown_drain import SHUTDOWN_DRAIN_DEADLINE, ShutdownDrain
 from tests.runner_fakes import FakeProbe
 

@@ -6,14 +6,12 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING, Protocol
+from typing import Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.harness.identity import SessionReference
-
-if TYPE_CHECKING:
-    from blizzard.runner.leases import Lease
+from blizzard.runner.leases.model import Lease
 
 __all__ = [
     "IReadLeaseLivenessRepository",

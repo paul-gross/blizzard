@@ -21,8 +21,8 @@ from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.hub.client import ChunkEndedError, ChunkNotFoundError, HubClientError
 from blizzard.runner.hub.outbound import OutboundFacts
-from blizzard.runner.leases import Lease
 from blizzard.runner.leases.closure import NO_ACCEPTABLE_HARNESS_MINT
+from blizzard.runner.leases.model import Lease
 from blizzard.runner.lifecycle.model import (
     FailureMove,
     OwnerUnresolvableMove,

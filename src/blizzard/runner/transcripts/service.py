@@ -10,7 +10,8 @@ from __future__ import annotations
 from blizzard.runner.environments.repository import IReadEnvironmentRepository
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
-from blizzard.runner.leases import IReadLeaseRecordRepository, Lease
+from blizzard.runner.leases.model import Lease
+from blizzard.runner.leases.record import IReadLeaseRecordRepository
 from blizzard.runner.transcripts.archived_repository import IReadArchivedTranscriptRepository
 from blizzard.runner.transcripts.home import (
     ResolvedSegmentContent,

@@ -17,13 +17,14 @@ from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind
 from blizzard.foundation.fact_kinds import EVENT_RECORDED
 from blizzard.foundation.leases import LeaseClosureReason
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.store.utc import iso_utc
+from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.foundation.usage_windows import admit_usage_window
 from blizzard.runner.environments.repository import EnvBinding, group_bindings_by_chunk
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.hub.client import ChunkNotFoundError, HubClientError
-from blizzard.runner.leases import Lease, Liveness, as_utc
+from blizzard.runner.leases.activity import Liveness
+from blizzard.runner.leases.model import Lease
 from blizzard.runner.leases.overload import backing_off_facts
 from blizzard.runner.lifecycle.attempt import Attempt
 from blizzard.runner.lifecycle.claim import InterruptedClaims, ReadyQueue

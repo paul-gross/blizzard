@@ -52,7 +52,8 @@ from blizzard.runner.harness.preamble import (
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import NullTranscriptSource
 from blizzard.runner.hub.client import QueueEntry, SubscriptionDeclaration
-from blizzard.runner.leases import HEARTBEAT_STALENESS_THRESHOLD, NewLease
+from blizzard.runner.leases.activity import HEARTBEAT_STALENESS_THRESHOLD
+from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.attempt import Attempt
 from blizzard.runner.lifecycle.claim import InterruptedClaims, ReadyQueue
 from blizzard.runner.lifecycle.judgement.judgement import Judgement

@@ -19,7 +19,7 @@ from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.api.chunk_asks import _rows
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.leases import NewLease
+from blizzard.runner.leases.model import NewLease
 from blizzard.wire.chunk_asks import ChunkAsksSource
 from tests.runner_fakes import make_store, make_stores, no_retry_clock
 

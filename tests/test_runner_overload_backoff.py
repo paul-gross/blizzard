@@ -18,7 +18,7 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.overload import ProviderOverload
-from blizzard.runner.leases import NewLease
+from blizzard.runner.leases.model import NewLease
 from blizzard.runner.leases.overload import BACKOFF_LIMIT, backoff_delay
 from blizzard.runner.lifecycle.dormant import DormantSession
 from blizzard.runner.loop.steps import Advance

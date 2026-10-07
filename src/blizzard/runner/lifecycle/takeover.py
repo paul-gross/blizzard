@@ -29,10 +29,10 @@ from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import IHarnessLifecycleRegistry, UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.hub.outbound_buffer import IWriteOutboundRepository
-from blizzard.runner.leases import Lease
 from blizzard.runner.leases.elicitation import IWriteElicitationRepository
 from blizzard.runner.leases.escalations import resume_workdir
 from blizzard.runner.leases.lease_auth import LeaseToken
+from blizzard.runner.leases.model import Lease
 from blizzard.runner.node_steps.chunk_state import ChunkState
 from blizzard.runner.process.owned_process import IOwnedProcessControl, kill_owned_process
 
@@ -193,7 +193,7 @@ class IReadTakeoverRepository(Protocol):
     def lease_for_open_takeover(self, lease_id: str) -> Lease | None:
         """The lease by id iff an open takeover names it, regardless of the
         lease's own closure — the worker-authorization resolver's second half, alongside
-        :meth:`~blizzard.runner.leases.IReadLeaseRecordRepository.active_lease`. The
+        :meth:`~blizzard.runner.leases.record.IReadLeaseRecordRepository.active_lease`. The
         open-takeover fact is what authorizes a resumed session's worker verbs against the
         reference lease it names, not the lease's own activeness."""
         ...

@@ -15,7 +15,7 @@ from blizzard.foundation.roles import domain_model
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
-from blizzard.runner.leases import IReadLeaseRecordRepository
+from blizzard.runner.leases.record import IReadLeaseRecordRepository
 from blizzard.runner.transcripts.backfill import (
     SegmentOpening,
     TranscriptReshipError,

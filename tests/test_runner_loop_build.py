@@ -44,7 +44,7 @@ from blizzard.runner.harness.opencode.adapter import OpenCodeAdapter
 from blizzard.runner.harness.opencode.section import OpenCodeSection
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.wiring import publish_harness_bundle
-from blizzard.runner.leases import NewLease
+from blizzard.runner.leases.model import NewLease
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.loop_wiring import LoopWiring, PeriodicDriver, ResumeMarking, _LazyUsageHttpClient

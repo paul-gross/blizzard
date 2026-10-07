@@ -17,7 +17,7 @@ from blizzard.foundation.trace_ids import StepKey, step_root
 from blizzard.runner.hub.client import HubClientError, PushedFact
 from blizzard.runner.hub.outbound import buffered_completion, buffered_gate
 from blizzard.runner.hub.outbound_buffer import BufferedFact
-from blizzard.runner.leases import Lease
+from blizzard.runner.leases.model import Lease
 from blizzard.runner.lifecycle.attempt import Attempt, AttemptContext
 from blizzard.runner.lifecycle.held_chunk import HeldChunk, HeldChunkContext
 from blizzard.runner.lifecycle.model import (

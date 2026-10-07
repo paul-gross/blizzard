@@ -14,7 +14,8 @@ from blizzard.runner.harness.registry import IHarnessRegistry, UnavailableHarnes
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.transcript import TranscriptPosition
 from blizzard.runner.harness.usage import UsageKind, UsageSample
-from blizzard.runner.leases import IReadLeaseLivenessRepository, Lease
+from blizzard.runner.leases.liveness import IReadLeaseLivenessRepository
+from blizzard.runner.leases.model import Lease
 from blizzard.runner.leases.worker_stdout import IWorkerStdoutReader
 from blizzard.runner.transcripts.invocation_boundaries import (
     WORKER_STARTING_KINDS,

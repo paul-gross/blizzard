@@ -26,7 +26,7 @@ from blizzard.runner.harness.transcript import (
     TranscriptBatch,
     TranscriptPosition,
 )
-from blizzard.runner.leases import NewLease
+from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.attempt import Attempt
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.transcripts.ledger import (

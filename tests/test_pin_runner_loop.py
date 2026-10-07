@@ -20,7 +20,7 @@ from blizzard.runner.config import ConfigError, RunnerConfig
 from blizzard.runner.harness.adapter import ResumeHandle, WorkerHandle, WorkerPreamble
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.hub.client import QueueEntry
-from blizzard.runner.leases import NewLease
+from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.judgement.check_runner import DEFAULT_CHECK_TIMEOUT, CheckOutcome
 from blizzard.runner.lifecycle.judgement.judgement import Judgement
 from blizzard.runner.loop.context import DEFAULT_RETRIES_MAX, LoopConfig, ResolvedSubscription
