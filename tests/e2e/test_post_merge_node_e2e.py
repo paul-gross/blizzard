@@ -82,6 +82,7 @@ def _graph_yaml() -> str:
                     "choices": {
                         "landed": {"description": "Landed; run the post-merge acceptance check.", "to": "verify"},
                         "conflict": {"description": "Conflict; back to build.", "to": "build"},
+                        "failure": {"description": "Failed.", "to": "build"},
                     },
                 },
             },

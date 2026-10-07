@@ -253,6 +253,7 @@ def _graph_yaml() -> str:
                             "description": "A repo did not merge cleanly; kicked back to build.",
                             "to": "build",
                         },
+                        "failure": {"description": "A repo failed to land; kicked back to build.", "to": "build"},
                     }
                 },
             },

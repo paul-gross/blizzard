@@ -70,6 +70,7 @@ def _graph_yaml() -> str:
                     "choices": {
                         "landed": {"description": "Every repo merged cleanly.", "to": "done"},
                         "conflict": {"description": "A repo did not merge cleanly.", "to": "build"},
+                        "failure": {"description": "A repo failed to land.", "to": "done"},
                     },
                 },
             },
@@ -368,7 +369,12 @@ def _name_bound_graph_yaml() -> str:
                 "executor": "hub",
                 "run": [{"command": "true"}],
                 "session": "fresh",
-                "judgement": {"choices": {"landed": {"description": "Landed.", "to": "done"}}},
+                "judgement": {
+                    "choices": {
+                        "landed": {"description": "Landed.", "to": "done"},
+                        "failure": {"description": "Failed.", "to": "done"},
+                    }
+                },
             },
         },
     }

@@ -178,6 +178,7 @@ def _graph_yaml() -> str:
                     "choices": {
                         "landed": {"description": "Every repo merged cleanly.", "to": "done"},
                         "conflict": {"description": "A repo did not merge cleanly.", "to": "build"},
+                        "failure": {"description": "A repo failed to land.", "to": "build"},
                     },
                 },
             },
