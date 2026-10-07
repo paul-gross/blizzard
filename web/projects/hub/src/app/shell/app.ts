@@ -18,7 +18,7 @@ import { AppNav } from './nav/app-nav';
 import { AppNavMenu } from './nav/app-nav-menu';
 import { MobileTabBar } from './nav/mobile-tab-bar';
 import { MobileTitlebar } from './nav/mobile-titlebar';
-import { authState, connectionLabel } from './app.model';
+import { authState, connectionLabel, logoutErrorText } from './app.model';
 
 /**
  * The hub app shell — the titlebar, the top nav (or their mobile shell
@@ -189,6 +189,12 @@ export class App {
       if (this.live.authFailed()) redirectToLogin(this.router);
     });
   }
+
+  /** Whether a logout is in flight, handed to every Log out trigger so each disables. */
+  protected readonly logoutPending = computed(() => this.logoutMutation.isPending());
+
+  /** The failed logout's message, `null` while none; rendered outside any menu, which closes on trigger. */
+  protected readonly logoutError = computed(() => logoutErrorText(this.logoutMutation.error()));
 
   protected onLogout(): void {
     this.logoutMutation.mutate();

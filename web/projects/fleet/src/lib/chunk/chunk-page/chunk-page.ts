@@ -214,6 +214,7 @@ export class ChunkPage {
   protected readonly canResolve = computed(() => this.actions?.canResolve() ?? false);
   protected readonly resolvePending = computed(() => this.actions?.resolvePending() ?? false);
   protected readonly pendingAnswerQuestionIds = computed(() => this.actions?.pendingAnswerQuestionIds() ?? []);
+  protected readonly pendingGraphChunkIds = computed(() => this.actions?.pendingGraphChunkIds() ?? []);
   protected readonly actionError = computed(() => this.actions?.actionError() ?? null);
   protected readonly actionOutcome = computed(() => this.actions?.actionOutcome() ?? null);
 

@@ -1,9 +1,9 @@
 import { type Provider, computed, signal } from '@angular/core';
 import { type AnswerQuestionEvent, type ChunkPageActions, type EditGraphEvent, type ResolveDecisionEvent, errorMessage, hubClient, injectPendingMutationVariables, provideChunkPageDaemon } from 'fleet';
 import { type AnswerVars, injectAnswerQuestionMutation, injectResolveDecisionMutation, readAnswerFailure, readDecisionFailure } from '../chunks/human.mutations';
-import { answerQuestionMutationKey } from '../../core/mutation-keys';
+import { answerQuestionMutationKey, chunkSetGraphMutationKey } from '../../core/mutation-keys';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
-import { injectSetChunkGraphMutation } from '../chunks/edit.mutations';
+import { type ChunkGraphEditVars, injectSetChunkGraphMutation } from '../chunks/edit.mutations';
 
 /** The graphs view's own path segments — the target every hub composition site links a
  * graph badge to. */
@@ -32,6 +32,7 @@ export function injectHubChunkActions(): ChunkPageActions {
   const pendingAnswers = injectPendingMutationVariables<AnswerVars>(answerQuestionMutationKey);
   const resolveMutation = injectResolveDecisionMutation();
   const editGraphMutation = injectSetChunkGraphMutation();
+  const pendingGraphEdits = injectPendingMutationVariables<ChunkGraphEditVars>(chunkSetGraphMutationKey);
   const actionError = signal<string | null>(null);
   const actionOutcome = signal<string | null>(null);
 
@@ -48,6 +49,7 @@ export function injectHubChunkActions(): ChunkPageActions {
     canReadTranscripts: computed(() => hasPermission(meQuery.data(), 'transcript:read')),
     resolvePending: computed(() => resolveMutation.isPending()),
     pendingAnswerQuestionIds: computed(() => pendingAnswers().map((vars) => vars.questionId)),
+    pendingGraphChunkIds: computed(() => pendingGraphEdits().map((vars) => vars.chunkId)),
     actionError: actionError.asReadonly(),
     actionOutcome: actionOutcome.asReadonly(),
     graphLinkBase: GRAPH_LINK_BASE,

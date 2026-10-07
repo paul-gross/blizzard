@@ -4,8 +4,11 @@
       <span class="who-lbl">signed in</span>
       <span class="user" data-testid="identity-username">{{ user }}</span>
     </span>
+    @if (logoutError(); as error) {
+      <span class="logout-error" role="alert" data-testid="identity-logout-error">{{ error }}</span>
+    }
     @if (variant() === 'control') {
-      <fleet-kit-button class="logout" testid="identity-logout" (click)="logout()">Log out</fleet-kit-button>
+      <fleet-kit-button class="logout" testid="identity-logout" [disabled]="logoutPending()" (click)="logout()">Log out</fleet-kit-button>
     }
   </div>
 }

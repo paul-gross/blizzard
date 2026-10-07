@@ -28,7 +28,7 @@
               } @else {
                 <select
                   data-testid="users-table-role-select"
-                  [disabled]="!user.assignable_roles?.length"
+                  [disabled]="isPending(user) || !user.assignable_roles?.length"
                   (change)="onRoleChange(user.user_id, $event)"
                 >
                   @for (role of assignableRoles(); track role) {

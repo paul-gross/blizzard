@@ -1,7 +1,8 @@
-import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 import { KitButton } from 'fleet';
 
-import { injectRunnerLogoutMutation, injectRunnerSessionQuery, signedInUsername } from './auth.query';
+import { injectRunnerSessionQuery, signedInUsername } from './auth.query';
+import { RunnerLogout } from './runner-logout';
 
 /**
  * The panel header's identity control — the signed-in hub username
@@ -47,7 +48,13 @@ import { injectRunnerLogoutMutation, injectRunnerSessionQuery, signedInUsername 
 })
 export class LocalIdentity {
   protected readonly query = injectRunnerSessionQuery();
-  private readonly logoutMutation = injectRunnerLogoutMutation();
+  private readonly runnerLogout = inject(RunnerLogout);
+
+  /** Whether the logout is in flight; disables the control's button. */
+  protected readonly logoutPending = this.runnerLogout.pending;
+
+  /** The failed logout's message, rendered in the block outside any menu. */
+  protected readonly logoutError = this.runnerLogout.error;
 
   /** Which shape to render — `control` (the header block, with its own logout
    * button) or `label` (a non-focusable identity row for inside a menu panel,
@@ -62,14 +69,7 @@ export class LocalIdentity {
 
   /** Clears the session and reloads. Public so a `label`-shaped mount's sibling
    * menu item can invoke it through a template reference. */
-  async logout(): Promise<void> {
-    await this.logoutMutation.mutateAsync();
-    this.reload();
-  }
-
-  /** Full page load so the served shell's SSO gate re-evaluates the next visit —
-   * factored out so it can be stubbed in the component test. */
-  protected reload(): void {
-    globalThis.location.assign('/');
+  logout(): Promise<void> {
+    return this.runnerLogout.logout();
   }
 }

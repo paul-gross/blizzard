@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { CdkMenuTrigger } from '@angular/cdk/menu';
 import { KitAvatar, KitMenu, KitMenuItem, KitMenuPanel, ViewportMenu } from 'fleet';
 
@@ -30,6 +30,9 @@ import { KitAvatar, KitMenu, KitMenuItem, KitMenuPanel, ViewportMenu } from 'fle
   styleUrl: './app-nav-menu.css',
 })
 export class AppNavMenu {
+  /** Whether the logout is in flight; disables the `Log out` item. */
+  readonly logoutPending = input(false);
+
   /** Fired when `Log out` is triggered; the app root owns the mutation. */
   readonly logout = output<void>();
 }

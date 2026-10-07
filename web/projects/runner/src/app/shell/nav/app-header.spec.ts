@@ -4,7 +4,7 @@ import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { runnerClient, type runnerApi, type SseStatus } from 'fleet';
 import { type RequestClientStub, hiddenAtContainerWidth, settle, stubError, stubRequestClient } from 'fleet/testing';
-import { LocalIdentity } from '../../core/identity/app-identity';
+import { RunnerLogout } from '../../core/identity/runner-logout';
 import { RunnerLiveUpdates } from '../../core/live/runner-live-updates';
 import { vi } from 'vitest';
 
@@ -231,7 +231,7 @@ describe('AppHeader', () => {
     it('logs out through that item', async () => {
       withSession({ auth_enabled: true, username: 'alice' });
       const reload = vi
-        .spyOn(LocalIdentity.prototype as unknown as { reload: () => void }, 'reload')
+        .spyOn(RunnerLogout.prototype as unknown as { reload: () => void }, 'reload')
         .mockImplementation(() => undefined);
       const fixture = await render();
       const panel = await openMenu(fixture);

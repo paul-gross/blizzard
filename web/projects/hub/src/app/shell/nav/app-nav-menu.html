@@ -3,7 +3,7 @@
 </fleet-kit-menu>
 <ng-template #profileMenu>
   <fleet-kit-menu-panel testid="app-nav-menu-panel">
-    <fleet-kit-menu-item testid="nav-logout" (triggered)="logout.emit()">Log out</fleet-kit-menu-item>
+    <fleet-kit-menu-item testid="nav-logout" [disabled]="logoutPending()" (triggered)="logout.emit()">Log out</fleet-kit-menu-item>
     <fleet-kit-menu-item testid="nav-appearance" submenu [cdkMenuTriggerFor]="appearanceMenu">
       Appearance
     </fleet-kit-menu-item>

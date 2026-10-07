@@ -43,6 +43,9 @@ export class ChunkFacts {
    * `null`/pending resolves to `false` (hidden until confirmed). */
   readonly canControl = input(false);
 
+  /** Whether a graph repin is in flight for this chunk; disables the Set button. */
+  readonly graphPending = input(false);
+
   /** The graphs view's own path segments, before the graph id — when set, the Graph
    * row's value links there (`/graphs/:graphId`, `graphs-page.ts`) so the operator can
    * jump straight from a chunk to its pinned graph's structure. `null` (the default)

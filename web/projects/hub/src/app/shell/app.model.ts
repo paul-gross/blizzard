@@ -1,4 +1,5 @@
 import { type SseStatus } from 'fleet';
+import { errorMessage } from 'fleet/shell';
 
 /** The top-level session gate: `loading` while the identity read is pending, `unauthenticated` without an identity,
  * `lobby` for an identity holding no permission, else `ready`. */
@@ -23,4 +24,9 @@ export function connectionLabel(
   if (healthPending) return 'connecting…';
   if (healthError) return 'offline';
   return healthStatus ?? 'ok';
+}
+
+/** The logout failure as the shell renders it, `null` while there is none. */
+export function logoutErrorText(error: unknown): string | null {
+  return error === null || error === undefined ? null : errorMessage(error, 'Log out failed');
 }

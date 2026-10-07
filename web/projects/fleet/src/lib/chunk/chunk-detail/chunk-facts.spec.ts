@@ -241,6 +241,17 @@ describe('ChunkFacts', () => {
     }
   });
 
+  it('disables Set while a repin is in flight', async () => {
+    const fixture = TestBed.createComponent(ChunkFacts);
+    fixture.componentRef.setInput('detail', NOT_READY_DETAIL);
+    fixture.componentRef.setInput('canControl', true);
+    fixture.componentRef.setInput('graphPending', true);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector<HTMLButtonElement>('[data-testid="graph-submit"]')?.disabled).toBe(true);
+  });
+
   it('emits editGraph with the typed graph id when Set is activated', async () => {
     const fixture = TestBed.createComponent(ChunkFacts);
     fixture.componentRef.setInput('detail', NOT_READY_DETAIL);

@@ -1,10 +1,11 @@
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
 import { UsersTable } from './users-table';
-import { asyncState, KitAsyncState } from 'fleet';
-import { injectAssignRoleMutation } from './assign-role.mutations';
+import { asyncState, injectPendingMutationVariables, KitAsyncState } from 'fleet';
+import { injectAssignRoleMutation, type AssignRoleVars } from './assign-role.mutations';
 import { injectMeQuery } from '../core/auth/me.query';
 import { injectUsersQuery } from './users.query';
-import { assignRoleErrorText } from './admin-page.model';
+import { assignRoleMutationKey } from '../core/mutation-keys';
+import { assignRoleErrorText, pendingRoleUserIds } from './admin-page.model';
 
 /**
  * The `/admin` route — a container reading `injectUsersQuery()` (`GET /api/users`)
@@ -40,6 +41,11 @@ export class AdminPage {
   protected readonly usersQuery = injectUsersQuery();
   private readonly meQuery = injectMeQuery();
   private readonly assignRoleMutation = injectAssignRoleMutation();
+
+  private readonly pendingAssignments = injectPendingMutationVariables<AssignRoleVars>(assignRoleMutationKey);
+
+  /** The user ids a role assignment is in flight for — each row's select disables on its own id. */
+  protected readonly pendingUserIds = computed(() => pendingRoleUserIds(this.pendingAssignments()));
 
   protected readonly currentUserId = computed(() => this.meQuery.data()?.user_id ?? null);
   protected readonly assignableRoles = computed(() => this.meQuery.data()?.assignable_roles ?? []);

@@ -41,6 +41,17 @@ describe('AppNavMenu', () => {
     expect(inOverlay('[data-testid="nav-appearance-panel"]')).toBeNull();
   });
 
+  it('disables Log out while the logout is in flight', async () => {
+    const fixture = TestBed.createComponent(AppNavMenu);
+    fixture.componentRef.setInput('logoutPending', true);
+    await fixture.whenStable();
+
+    (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>('[data-testid="app-nav-menu"]')?.click();
+    await fixture.whenStable();
+
+    expect(inOverlay('[data-testid="nav-logout"]')?.getAttribute('aria-disabled')).toBe('true');
+  });
+
   it('opens the appearance switcher as a submenu of the profile menu (issue #161)', async () => {
     const fixture = TestBed.createComponent(AppNavMenu);
     await fixture.whenStable();

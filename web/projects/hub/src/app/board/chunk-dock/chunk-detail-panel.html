@@ -34,6 +34,7 @@
         [detail]="detail()"
         [canControl]="canControl()"
         [graphLinkBase]="graphLinkBase()"
+        [graphPending]="graphPending()"
         (editGraph)="editGraph.emit($event)"
       >
         <fleet-chunk-detail-token-breakdown token-breakdown [detail]="detail()" />

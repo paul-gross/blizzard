@@ -5,6 +5,7 @@ import { runnerClient } from 'fleet';
 import { type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
 import { vi } from 'vitest';
 
+import { RunnerLogout } from './runner-logout';
 import { LocalIdentity } from './app-identity';
 
 /** Render `LocalIdentity` with `GET /api/auth/session` answered by `session` and
@@ -24,7 +25,7 @@ async function render(session: unknown) {
   }).compileComponents();
   const fixture = TestBed.createComponent(LocalIdentity);
   // Never actually navigate the jsdom window on logout.
-  vi.spyOn(fixture.componentInstance as unknown as { reload: () => void }, 'reload').mockImplementation(() => undefined);
+  vi.spyOn(TestBed.inject(RunnerLogout) as unknown as { reload: () => void }, 'reload').mockImplementation(() => undefined);
   await settle(fixture);
   return { fixture, stub };
 }
@@ -107,8 +108,7 @@ describe('LocalIdentity', () => {
   it('POSTs /api/auth/logout and reloads when the logout control is activated', async () => {
     const { fixture, stub: s } = await render({ auth_enabled: true, username: 'alice' });
     stub = s;
-    const reload = fixture.componentInstance as unknown as { reload: () => void };
-    const reloadSpy = vi.spyOn(reload, 'reload');
+    const reloadSpy = vi.spyOn(TestBed.inject(RunnerLogout) as unknown as { reload: () => void }, 'reload');
     const el = fixture.nativeElement as HTMLElement;
 
     el.querySelector<HTMLButtonElement>('[data-testid="identity-logout"]')?.click();

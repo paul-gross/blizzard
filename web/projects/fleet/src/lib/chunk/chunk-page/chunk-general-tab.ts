@@ -14,6 +14,7 @@ import {
   type ResolveDecisionEvent,
   type WorkItemsState,
 } from '../chunk-detail';
+import { isPendingFor } from '../../core/mutation-pending';
 import { KitPanel, KitPanelHeader } from '../../kit/kit-panel';
 import { ChunkDelivery } from '../chunk-detail/chunk-delivery';
 
@@ -69,6 +70,15 @@ export class ChunkGeneralTab {
   /** The ids of the questions an answer mutation is in flight for, forwarded to
    * {@link ChunkAwaitingHuman}. */
   readonly pendingAnswerQuestionIds = input<readonly string[]>([]);
+
+  /** The ids of the chunks a graph repin is in flight for; the facts' Set button disables
+   * when this tab's own chunk is among them. */
+  readonly pendingGraphChunkIds = input<readonly string[]>([]);
+
+  /** Whether a graph repin is in flight for this tab's chunk. */
+  protected readonly graphPending = computed(() =>
+    isPendingFor(this.pendingGraphChunkIds(), (id) => id === this.detail().chunk_id),
+  );
 
   /** The graphs view's own path segments, forwarded to {@link ChunkFacts} and
    * {@link ChunkTimeline} — `null` (the default) withholds

@@ -101,6 +101,9 @@ export class ChunkDetailPanel {
    * {@link ChunkAwaitingHuman}. */
   readonly resolvePending = input(false);
 
+  /** Whether a graph repin is in flight for this chunk, forwarded to {@link ChunkFacts}. */
+  readonly graphPending = input(false);
+
   /** The ids of the questions an answer mutation is in flight for, forwarded to
    * {@link ChunkAwaitingHuman}. */
   readonly pendingAnswerQuestionIds = input<readonly string[]>([]);

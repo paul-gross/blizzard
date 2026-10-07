@@ -30,6 +30,8 @@ export interface ChunkPageActions {
   readonly resolvePending: Signal<boolean>;
   /** The questions an answer is in flight for, so a double tap cannot answer twice. */
   readonly pendingAnswerQuestionIds: Signal<readonly string[]>;
+  /** The chunks a graph repin is in flight for, so a double tap cannot repin twice. */
+  readonly pendingGraphChunkIds: Signal<readonly string[]>;
   /** The last action's failure, or `null` — cleared on the next attempt. */
   readonly actionError: Signal<string | null>;
   /** The last action's non-failure outcome that still needs saying (a lost answer race

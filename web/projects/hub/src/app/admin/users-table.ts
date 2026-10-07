@@ -36,6 +36,9 @@ export class UsersTable {
    * role-assignment API may grant. */
   readonly assignableRoles = input<readonly hubApi.Role[]>([]);
 
+  /** The user ids whose role assignment is in flight; each row's selector disables on its own id. */
+  readonly pendingUserIds = input<readonly string[]>([]);
+
   /** Fired with `{userId, role}` when a row's selector picks a new role. */
   readonly assignRole = output<{ userId: string; role: string }>();
 
@@ -45,6 +48,10 @@ export class UsersTable {
 
   protected isAssignableRole(role: hubApi.Role): boolean {
     return this.assignableRoles().includes(role);
+  }
+
+  protected isPending(user: UserView): boolean {
+    return this.pendingUserIds().includes(user.user_id);
   }
 
   protected onRoleChange(userId: string, event: Event): void {
