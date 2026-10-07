@@ -22,7 +22,7 @@ class ScopeListing(Listing):
 
 @click.group("scope")
 def scope_group() -> None:
-    """Operator verbs over scopes: create, list, edit, retire, re-enable."""
+    """Operator verbs over scopes: create, list, show, edit, retire, re-enable."""
 
 
 @scope_group.command("create", cls=FleetCommand)
@@ -43,6 +43,21 @@ def scope_list(cli: CliContext) -> None:
     """List every scope, newest first — slug, retired, description."""
     rows = cli.get("/api/scopes", "GET /scopes").json()
     cli.show(rows, ScopeListing(rows))
+
+
+@scope_group.command("show", cls=FleetCommand)
+@click.argument("slug")
+def scope_show(cli: CliContext, slug: str) -> None:
+    """Show SLUG's record — state, description, revision, and when it was created."""
+    body = cli.get(f"/api/scopes/{slug}", "GET /scopes/{slug}", on_status={404: f"unknown scope {slug}"}).json()
+    state = "retired" if body["retired"] else "enabled"
+    cli.show_lines(
+        body,
+        f"{body['slug']}  {state}",
+        f"description {body['description'] or '-'}",
+        f"revision {body['revision'] if body['revision'] is not None else '-'}",
+        f"created {body['created_at']}",
+    )
 
 
 @scope_group.command("edit", cls=FleetCommand)

@@ -4,7 +4,7 @@ A hub holds the repositories work lands in as stored records, managed with `bliz
 repository on a forge and the stored secret that authenticates against it:
 
 ```bash
-printf '%s' "$TOKEN" | blizzard hub secret set gh-token
+printf '%s' "$TOKEN" | blizzard hub secret create gh-token
 blizzard hub repo create blizzard --forge-api-url https://api.github.com --owner paul-gross --repo blizzard \
   --base-branch master --secret gh-token
 blizzard hub repo list

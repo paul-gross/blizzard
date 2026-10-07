@@ -141,3 +141,37 @@ def test_scope_retire_maps_an_unknown_scope(monkeypatch: pytest.MonkeyPatch) -> 
 
     assert result.exit_code != 0
     assert "ghost" in result.output
+
+
+@pytest.mark.unit
+def test_scope_show_prints_the_whole_record(monkeypatch: pytest.MonkeyPatch) -> None:
+    urls: list[str] = []
+
+    def fake_get(url: str, *, timeout: float) -> _FakeResponse:
+        urls.append(url)
+        return _FakeResponse(
+            200,
+            {"slug": "blizzard", "description": "the repo", "created_at": "t0", "retired": False, "revision": 3},
+        )
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    result = CliRunner().invoke(hub_group, ["scope", "show", "blizzard"], env={"BZ_HUB_URL": "http://hub.local:8421"})
+
+    assert result.exit_code == 0, result.output
+    assert urls == ["http://hub.local:8421/api/scopes/blizzard"]
+    assert "blizzard  enabled" in result.output
+    assert "description the repo" in result.output
+    assert "revision 3" in result.output
+    assert "created t0" in result.output
+
+
+@pytest.mark.unit
+def test_scope_show_maps_an_unknown_scope(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_get(url: str, *, timeout: float) -> _FakeResponse:
+        return _FakeResponse(404)
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    result = CliRunner().invoke(hub_group, ["scope", "show", "no-such"])
+
+    assert result.exit_code != 0
+    assert "unknown scope no-such" in result.output

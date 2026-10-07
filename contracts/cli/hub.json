@@ -4617,7 +4617,7 @@
           "short_help": "Mint a routine named NAME, running GRAPH_NAME with DEFAULT_SCOPE_SLUG's scope."
         },
         "edit": {
-          "help": "Change ROUTINE_ID's graph, default scope, or model/effort/harnesses defaults; only the\noptions given change, and its name never changes here.",
+          "help": "Change ROUTINE_ID's graph, default scope, or model/effort/harnesses defaults; only the\noptions given change, and its name never changes here.\n\nA given --model or --harnesses replaces the whole ordered list.",
           "params": [
             {
               "hidden": false,
@@ -4689,6 +4689,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "text"
+            },
+            {
+              "help": "Clear a default back to unset; repeatable.",
+              "hidden": false,
+              "kind": "option",
+              "name": "clear",
+              "opts": [
+                "--clear"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "choice"
             },
             {
               "help": "Print the raw response body as JSON.",
@@ -6155,15 +6167,99 @@
           ],
           "path": "hub scope retire",
           "short_help": "Retire SLUG \u2014 a reversible brake; in-flight users of it are untouched."
+        },
+        "show": {
+          "help": "Show SLUG's record \u2014 state, description, revision, and when it was created.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "slug",
+              "opts": [
+                "slug"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub scope show",
+          "short_help": "Show SLUG's record \u2014 state, description, revision, and when it was created."
         }
       },
-      "help": "Operator verbs over scopes: create, list, edit, retire, re-enable.",
+      "help": "Operator verbs over scopes: create, list, show, edit, retire, re-enable.",
       "params": [],
       "path": "hub scope",
-      "short_help": "Operator verbs over scopes: create, list, edit, retire, re-enable."
+      "short_help": "Operator verbs over scopes: create, list, show, edit, retire, re-enable."
     },
     "secret": {
       "commands": {
+        "create": {
+          "help": "Store a new secret NAME, its value read from stdin \u2014 never an argument.\n\nRefused for a name that already exists \u2014 replace it with `secret set`. Trailing CR/LF is\nstripped; an empty value is refused.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "name",
+              "opts": [
+                "name"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub secret create",
+          "short_help": "Store a new secret NAME, its value read from stdin \u2014 never an argument."
+        },
         "enable": {
           "help": "Re-enable a retired NAME.",
           "params": [
@@ -6311,7 +6407,7 @@
           "short_help": "Re-seal every secret under the hub's current key \u2014 offline, on the hub host."
         },
         "set": {
-          "help": "Store NAME's value, read from stdin \u2014 never an argument. Replaces an existing secret.\n\nTrailing CR/LF is stripped; an empty value is refused.",
+          "help": "Replace NAME's value, read from stdin \u2014 never an argument.\n\nRefused for a name that does not exist \u2014 create it with `secret create`. Trailing CR/LF is\nstripped; an empty value is refused.",
           "params": [
             {
               "hidden": false,
@@ -6350,7 +6446,7 @@
             }
           ],
           "path": "hub secret set",
-          "short_help": "Store NAME's value, read from stdin \u2014 never an argument."
+          "short_help": "Replace NAME's value, read from stdin \u2014 never an argument."
         },
         "show": {
           "help": "Show NAME's metadata \u2014 revision, who replaced it and when. Never its value.",
@@ -6395,10 +6491,10 @@
           "short_help": "Show NAME's metadata \u2014 revision, who replaced it and when."
         }
       },
-      "help": "Operator verbs over the write-only secret store: set, list, show, retire, enable, rotate-key.",
+      "help": "Operator verbs over the write-only secret store: create, set, list, show, retire, enable, rotate-key.",
       "params": [],
       "path": "hub secret",
-      "short_help": "Operator verbs over the write-only secret store: set, list, show, retire, enable, rotate-key."
+      "short_help": "Operator verbs over the write-only secret store: create, set, list, show, retire, enable, rotate-key."
     },
     "source": {
       "commands": {

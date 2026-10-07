@@ -1,6 +1,6 @@
 """``blizzard hub secret`` — operator verbs over the write-only secret store.
 
-``set`` reads the value from stdin only, so it never appears in argv, shell history, or
+``create`` and ``set`` read the value from stdin only, so it never appears in argv, shell history, or
 the process list; no verb prints a value."""
 
 from __future__ import annotations
@@ -27,23 +27,46 @@ class SecretListing(Listing):
 
 @click.group("secret")
 def secret_group() -> None:
-    """Operator verbs over the write-only secret store: set, list, show, retire, enable, rotate-key."""
+    """Operator verbs over the write-only secret store: create, set, list, show, retire, enable, rotate-key."""
+
+
+def _stdin_value() -> str:
+    value = click.get_text_stream("stdin").read().rstrip("\r\n")
+    if not value:
+        raise click.ClickException("refusing an empty secret value — pipe the value on stdin")
+    return value
+
+
+@secret_group.command("create", cls=FleetCommand)
+@click.argument("name")
+def secret_create(cli: CliContext, name: str) -> None:
+    """Store a new secret NAME, its value read from stdin — never an argument.
+
+    Refused for a name that already exists — replace it with `secret set`. Trailing CR/LF is
+    stripped; an empty value is refused."""
+    value = _stdin_value()
+    resp = cli.send("post", "/api/secrets", json_body={"name": name, "value": value}, door=True)
+    if resp.status_code == httpx.codes.CONFLICT:
+        raise click.ClickException(
+            f"{cli.detail(resp, f'secret {name} already exists')} — replace it with `secret set`"
+        )
+    cli.check(resp, "POST /secrets")
+    body = resp.json()
+    cli.show_lines(body, f"secret {name} created at revision {body['revision']}")
 
 
 @secret_group.command("set", cls=FleetCommand)
 @click.argument("name")
 def secret_set(cli: CliContext, name: str) -> None:
-    """Store NAME's value, read from stdin — never an argument. Replaces an existing secret.
+    """Replace NAME's value, read from stdin — never an argument.
 
-    Trailing CR/LF is stripped; an empty value is refused."""
-    value = click.get_text_stream("stdin").read().rstrip("\r\n")
-    if not value:
-        raise click.ClickException("refusing an empty secret value — pipe the value on stdin")
+    Refused for a name that does not exist — create it with `secret create`. Trailing CR/LF is
+    stripped; an empty value is refused."""
+    value = _stdin_value()
     resp = cli.send("put", f"/api/secrets/{name}/value", json_body={"value": value}, door=True)
     if resp.status_code == httpx.codes.NOT_FOUND:
-        resp = cli.post("/api/secrets", "POST /secrets", json_body={"name": name, "value": value}, door=True)
-    else:
-        cli.check(resp, "PUT /secrets/{name}/value", on_status={409: f"secret {name} cannot be replaced"})
+        raise click.ClickException(f"unknown secret {name} — create it with `secret create`")
+    cli.check(resp, "PUT /secrets/{name}/value", on_status={409: f"secret {name} cannot be replaced"})
     body = resp.json()
     cli.show_lines(body, f"secret {name} set at revision {body['revision']}")
 

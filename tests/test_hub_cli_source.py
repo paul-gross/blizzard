@@ -49,7 +49,7 @@ def _source(args: list[str]):  # type: ignore[no-untyped-def]
 
 
 def _seed(client: TestClient) -> None:
-    assert _cli("secret", ["set", "gh-demo"], stdin=_SENTINEL).exit_code == 0
+    assert _cli("secret", ["create", "gh-demo"], stdin=_SENTINEL).exit_code == 0
     created = _source(["create", "demo", "--provider", "github", "--locator", "acme/demo", "--secret", "gh-demo"])
     assert created.exit_code == 0, created.output
 
@@ -154,7 +154,7 @@ def _changes_count() -> int:
 
 
 def test_yaml_yml_and_json_files_apply(client: TestClient, tmp_path: Path) -> None:
-    assert _cli("secret", ["set", "gh-demo"], stdin=_SENTINEL).exit_code == 0
+    assert _cli("secret", ["create", "gh-demo"], stdin=_SENTINEL).exit_code == 0
     as_json = {
         "version": 1,
         "work_sources": [{"name": "from-json", "provider": "github", "locator": "acme/j", "secret": "gh-demo"}],
@@ -184,7 +184,7 @@ def test_an_unknown_extension_is_refused_before_any_request(client: TestClient, 
 
 
 def test_a_dry_run_prints_the_outcome_and_writes_nothing(client: TestClient, tmp_path: Path) -> None:
-    assert _cli("secret", ["set", "gh-demo"], stdin=_SENTINEL).exit_code == 0
+    assert _cli("secret", ["create", "gh-demo"], stdin=_SENTINEL).exit_code == 0
     path = tmp_path / "cfg.yaml"
     path.write_text(_APPLY_YAML)
     before = _changes_count()
@@ -200,7 +200,7 @@ def test_a_dry_run_prints_the_outcome_and_writes_nothing(client: TestClient, tmp
 
 
 def test_an_exported_document_applies_back_as_all_unchanged(client: TestClient, tmp_path: Path) -> None:
-    assert _cli("secret", ["set", "gh-demo"], stdin=_SENTINEL).exit_code == 0
+    assert _cli("secret", ["create", "gh-demo"], stdin=_SENTINEL).exit_code == 0
     path = tmp_path / "cfg.yaml"
     path.write_text(_APPLY_YAML)
     assert _config(["apply", str(path)]).exit_code == 0

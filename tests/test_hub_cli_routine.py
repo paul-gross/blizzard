@@ -369,58 +369,71 @@ def test_routine_show_maps_an_unknown_routine(monkeypatch: pytest.MonkeyPatch) -
     assert "rtn_ghost" in result.output
 
 
-@pytest.mark.unit
-def test_routine_edit_reads_the_current_name_then_patches(monkeypatch: pytest.MonkeyPatch) -> None:
-    get_calls: list[str] = []
-    patch_calls: list[tuple[str, object]] = []
+def _invoke_routine_edit(monkeypatch: pytest.MonkeyPatch, *args: str, status: int = 200) -> tuple[object, list[object]]:
+    patch_calls: list[object] = []
 
-    def fake_get(url: str, *, timeout: float) -> _FakeResponse:
-        get_calls.append(url)
-        return _FakeResponse(200, {"routine_id": "rtn_1", "name": "nightly", "graph_name": "alpha"})
+    def fake_get(url: str, *, timeout: float, **_: object) -> _FakeResponse:
+        raise AssertionError(f"routine edit must not read: {url}")
 
     def fake_patch(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
-        patch_calls.append((url, json))
-        return _FakeResponse(200, {"routine_id": "rtn_1", "name": "nightly", "graph_name": "beta"})
+        patch_calls.append(json)
+        return _FakeResponse(status, {"routine_id": "rtn_1", "name": "nightly", "graph_name": "beta"})
 
     monkeypatch.setattr(httpx, "get", fake_get)
     monkeypatch.setattr(httpx, "patch", fake_patch)
     result = CliRunner().invoke(
-        hub_group,
-        ["routine", "edit", "rtn_1", "--graph", "beta", "--scope", "blizzard"],
-        env={"BZ_HUB_URL": "http://hub.local:8421"},
+        hub_group, ["routine", "edit", "rtn_1", *args], env={"BZ_HUB_URL": "http://hub.local:8421"}
     )
+    return result, patch_calls
 
-    assert result.exit_code == 0, result.output
-    assert get_calls == ["http://hub.local:8421/api/routines/rtn_1"]
-    assert patch_calls == [
-        (
-            "http://hub.local:8421/api/routines/rtn_1",
-            {"name": "nightly", "graph_name": "beta", "default_scope_slug": "blizzard"},
-        )
-    ]
+
+@pytest.mark.unit
+def test_routine_edit_patches_without_reading_or_restating_the_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    result, patch_calls = _invoke_routine_edit(monkeypatch, "--graph", "beta", "--scope", "blizzard")
+
+    assert result.exit_code == 0, result.output  # type: ignore[attr-defined]
+    assert patch_calls == [{"graph_name": "beta", "default_scope_slug": "blizzard"}]
 
 
 @pytest.mark.unit
 def test_routine_edit_sends_only_the_options_given(monkeypatch: pytest.MonkeyPatch) -> None:
-    patch_calls: list[object] = []
+    result, patch_calls = _invoke_routine_edit(monkeypatch, "--effort", "high", "--model", "a", "--model", "b")
 
-    def fake_get(url: str, *, timeout: float) -> _FakeResponse:
-        return _FakeResponse(200, {"routine_id": "rtn_1", "name": "nightly", "graph_name": "alpha"})
+    assert result.exit_code == 0, result.output  # type: ignore[attr-defined]
+    assert patch_calls == [{"default_model": ["a", "b"], "default_effort": "high"}]
 
-    def fake_patch(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
-        patch_calls.append(json)
-        return _FakeResponse(200, {"routine_id": "rtn_1", "name": "nightly", "graph_name": "alpha"})
 
-    monkeypatch.setattr(httpx, "get", fake_get)
-    monkeypatch.setattr(httpx, "patch", fake_patch)
-    result = CliRunner().invoke(
-        hub_group,
-        ["routine", "edit", "rtn_1", "--effort", "high", "--model", "a", "--model", "b"],
-        env={"BZ_HUB_URL": "http://hub.local:8421"},
+@pytest.mark.unit
+def test_routine_edit_clear_sends_null_for_effort_and_empty_lists_for_the_rest(monkeypatch: pytest.MonkeyPatch) -> None:
+    result, patch_calls = _invoke_routine_edit(
+        monkeypatch, "--clear", "effort", "--clear", "model", "--clear", "harnesses"
     )
 
-    assert result.exit_code == 0, result.output
-    assert patch_calls == [{"name": "nightly", "default_model": ["a", "b"], "default_effort": "high"}]
+    assert result.exit_code == 0, result.output  # type: ignore[attr-defined]
+    assert patch_calls == [{"default_effort": None, "default_model": [], "default_harnesses": []}]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "args",
+    [["--effort", "low", "--clear", "effort"], ["--model", "m", "--clear", "model"], []],
+    ids=["effort-contradiction", "model-contradiction", "nothing-to-change"],
+)
+def test_routine_edit_refuses_a_usage_error_before_any_request(
+    monkeypatch: pytest.MonkeyPatch, args: list[str]
+) -> None:
+    result, patch_calls = _invoke_routine_edit(monkeypatch, *args)
+
+    assert result.exit_code == 2  # type: ignore[attr-defined]
+    assert patch_calls == []
+
+
+@pytest.mark.unit
+def test_routine_edit_maps_an_unknown_routine(monkeypatch: pytest.MonkeyPatch) -> None:
+    result, _ = _invoke_routine_edit(monkeypatch, "--graph", "beta", status=404)
+
+    assert result.exit_code != 0  # type: ignore[attr-defined]
+    assert "unknown routine rtn_1" in result.output  # type: ignore[attr-defined]
 
 
 @pytest.mark.unit

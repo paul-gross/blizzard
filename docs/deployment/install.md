@@ -87,7 +87,7 @@ Carry a file-configured hub across with the hub stopped, on the hub host, with i
 3. Delete the `[[work_source]]` blocks and unset the variables.
 4. Start the hub.
 
-A hosted or config-as-code deployment can skip the import: store each credential with `blizzard hub secret set`, then
+A hosted or config-as-code deployment can skip the import: store each credential with `blizzard hub secret create`, then
 declare the work sources and repositories in a [configuration document](./config-documents.md) and run
 `blizzard hub config apply`, removing the keys before the restart.
 

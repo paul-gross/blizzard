@@ -43,7 +43,7 @@ routines:
 [repositories](./repositories.md), and [scopes and routines](./routines-and-scopes.md) own the field meanings, and
 `GET /api/config/schema/work-sources`, `/repositories`, `/scopes`, and `/routines` serve each entry's JSON Schema. An
 unknown field is refused. `secrets` lists secret names that must already exist and be active; a document never carries
-a secret's value, so set one first with `blizzard hub secret set`.
+a secret's value, so set one first with `blizzard hub secret create`.
 
 A scope entry is keyed by its `slug`, a routine entry by its `name`. A routine's `scopes` states its linked scope set,
 its default scope always among it; an entry that leaves `scopes` out keeps the stored set. Every scope a routine entry

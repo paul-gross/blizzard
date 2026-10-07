@@ -6,7 +6,7 @@ resolving what it names, and nothing here filters by scope; that is a separate s
 
 ## Scopes
 
-`blizzard hub scope create <slug> [--description]`, `list`, `edit <slug> --description <text>`, `retire <slug>`, and
+`blizzard hub scope create <slug> [--description]`, `list`, `show <slug>`, `edit <slug> --description <text>`, `retire <slug>`, and
 `enable <slug>` are the scope verbs. `create` is a mint-or-no-op: naming an existing slug leaves its stored description
 untouched — `edit` is the only verb that changes it. `retire`/`enable` are a reversible brake: retiring a scope appends
 `scope.retired`, `enable` appends `scope.enabled`, and neither touches the stored slug or description. Retiring a
@@ -23,8 +23,8 @@ list. The selected child route remains in the URL, so a detail can still be open
 
 ## Routines
 
-`blizzard hub routine create <name> <graph_name> <default_scope_slug> [--model] [--effort]`, `list`,
-`show <routine_id>`, and `edit <routine_id> [--graph <name>] [--scope <slug>] [--model] [--effort]` are the routine
+`blizzard hub routine create <name> <graph_name> <default_scope_slug> [--model] [--effort] [--harnesses]`, `list`,
+`show <routine_id>`, and `edit <routine_id> [--graph <name>] [--scope <slug>] [--model] [--effort] [--harnesses] [--clear model|effort|harnesses]` are the routine
 verbs. `edit` sends only the options given; anything left out stands. `GRAPH_NAME` must resolve to a currently-enabled
 graph — a create or edit naming one that does not refuses, naming it. `DEFAULT_SCOPE_SLUG` is minted through the same
 path `scope create` uses if the slug is unseen, so a routine's default scope never needs a separate `scope create`
