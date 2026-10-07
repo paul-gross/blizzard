@@ -9,7 +9,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 
-from blizzard.auth_core import CONFIG_EDIT, FLEET_VIEW
+from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
@@ -69,7 +69,9 @@ def _stored(name: str, services: HubServices) -> ConfiguredRepository:
     return record
 
 
-@router.get("/repositories", response_model=RepositoriesListView, dependencies=[Depends(require(FLEET_VIEW))])
+@router.get(
+    "/repositories", response_model=RepositoriesListView, dependencies=[Depends(require(Permission.FLEET_VIEW))]
+)
 def list_repositories(
     services: Annotated[HubServices, Depends(get_services)], include_retired: bool = False
 ) -> RepositoriesListView:
@@ -81,7 +83,7 @@ def list_repositories(
 @router.post("/repositories", response_model=RepositorySummary, status_code=status.HTTP_201_CREATED)
 def create_repository(
     request: RepositoryDocument,
-    identity: Annotated[ResolvedIdentity, Depends(require(CONFIG_EDIT))],
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
     door: RequestDoor,
     services: Annotated[HubServices, Depends(get_services)],
 ) -> RepositorySummary:
@@ -104,7 +106,9 @@ def create_repository(
     return _summary(record)
 
 
-@router.get("/repositories/{name}", response_model=RepositorySummary, dependencies=[Depends(require(FLEET_VIEW))])
+@router.get(
+    "/repositories/{name}", response_model=RepositorySummary, dependencies=[Depends(require(Permission.FLEET_VIEW))]
+)
 def get_repository(name: str, services: Annotated[HubServices, Depends(get_services)]) -> RepositorySummary:
     """One repository, retired or not. 404 on an unknown name."""
     return _summary(_stored(name, services))
@@ -114,7 +118,7 @@ def get_repository(name: str, services: Annotated[HubServices, Depends(get_servi
 def patch_repository(
     name: str,
     request: RepositoryPatchRequest,
-    identity: Annotated[ResolvedIdentity, Depends(require(CONFIG_EDIT))],
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
     door: RequestDoor,
     services: Annotated[HubServices, Depends(get_services)],
     if_match: Annotated[int | None, Header()] = None,
@@ -139,7 +143,7 @@ def patch_repository(
 @router.post("/repositories/{name}/retire", response_model=RepositorySummary)
 def retire_repository(
     name: str,
-    identity: Annotated[ResolvedIdentity, Depends(require(CONFIG_EDIT))],
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
     door: RequestDoor,
     services: Annotated[HubServices, Depends(get_services)],
     if_match: Annotated[int | None, Header()] = None,
@@ -157,7 +161,7 @@ def retire_repository(
 @router.post("/repositories/{name}/enable", response_model=RepositorySummary)
 def enable_repository(
     name: str,
-    identity: Annotated[ResolvedIdentity, Depends(require(CONFIG_EDIT))],
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
     door: RequestDoor,
     services: Annotated[HubServices, Depends(get_services)],
     if_match: Annotated[int | None, Header()] = None,

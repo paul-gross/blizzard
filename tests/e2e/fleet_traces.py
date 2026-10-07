@@ -28,8 +28,8 @@ import httpx
 import pytest
 import sqlalchemy
 
+from blizzard.foundation import cli_spans
 from blizzard.foundation import trace_attributes as shared
-from blizzard.foundation.platform_tracing import attributes as platform_attr
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_ids import (
     ChunkRole,
@@ -562,12 +562,12 @@ def assert_platform_nesting(
 
     until = told_until(fleet)
     commands = [
-        s for s in platform if s.scope == platform_attr.CLI_SCOPE and s.start_ns < until.get(s.trace_id, s.start_ns + 1)
+        s for s in platform if s.scope == cli_spans.SCOPE_NAME and s.start_ns < until.get(s.trace_id, s.start_ns + 1)
     ]
     assert commands, "the file holds no worker command span"
     chains = 0
     for command in commands:
-        name = command.attributes.get(platform_attr.CLI_COMMAND)
+        name = command.attributes.get(cli_spans.ATTR_COMMAND)
         chunk = str(command.attributes.get(shared.CHUNK_ID))
         assert command.trace_id == f"{chunk_trace_id(chunk):032x}", f"command {name!r}: not in chunk {chunk}'s trace"
         node = command

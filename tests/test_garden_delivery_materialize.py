@@ -13,7 +13,7 @@ from typing import Any, cast
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.foundation.ids import FINDING_PREFIX, FINDING_SET_PREFIX, GARDEN_PROPOSAL_PREFIX, Id
+from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.hub.domain.chunk.model import Chunk, WorkRef
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
@@ -74,7 +74,7 @@ def _as_write_repo(repo: _FakeGardenDeliveryRepo) -> IWriteGardenDeliveryReposit
 
 
 def _fin() -> str:
-    return Id.mint_at(FINDING_PREFIX, _T0).value
+    return Id.mint_at(IdPrefix.FINDING, _T0).value
 
 
 def _add(
@@ -115,7 +115,7 @@ def test_deliver_builds_a_finding_and_its_add_fact_from_an_add_op() -> None:
 
     assert len(delta_materialization.new_findings) == 1
     finding = delta_materialization.new_findings[0]
-    assert finding.finding_id.startswith(f"{FINDING_PREFIX}_")
+    assert finding.finding_id.startswith(f"{IdPrefix.FINDING}_")
     assert finding.routine_name == "nightly"
     assert finding.scope_slug == "runner"
     assert finding.class_ == "stale-docstring"
@@ -127,7 +127,7 @@ def test_deliver_builds_a_finding_and_its_add_fact_from_an_add_op() -> None:
     assert [(f.finding_id, f.kind, f.note) for f in delta_materialization.facts] == [(finding.finding_id, "add", None)]
 
     fset = delta_materialization.finding_set
-    assert fset.finding_set_id.startswith(f"{FINDING_SET_PREFIX}_")
+    assert fset.finding_set_id.startswith(f"{IdPrefix.FINDING_SET}_")
     # The fact attributes to the very set it was delivered under.
     assert delta_materialization.facts[0].finding_set_id == fset.finding_set_id
     assert fset.artifact_id == "art_1"
@@ -308,7 +308,7 @@ def test_deliver_builds_a_proposal_and_its_finding_links() -> None:
     assert plan.deltas == []
     assert len(plan.proposals) == 1
     built = plan.proposals[0]
-    assert built.proposal_id.startswith(f"{GARDEN_PROPOSAL_PREFIX}_")
+    assert built.proposal_id.startswith(f"{IdPrefix.GARDEN_PROPOSAL}_")
     assert built.routine_name == "nightly"
     assert built.class_ == "remediate"
     assert built.title == "t"

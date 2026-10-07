@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.artifacts import ArtifactKind
-from blizzard.foundation.ids import ARTIFACT_PREFIX, Id
+from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.runner.harness.adapter import WorkerHandle
@@ -97,7 +97,7 @@ def _deliver_payload(tmp_path: Path, submitted: list[CompletionArtifact], *owner
             data=f"{a.branch_name}:{a.commit_hash}",
             repo=a.repo,
             forge=a.forge,
-            artifact_id=Id.mint(ARTIFACT_PREFIX, hub.clock).value,
+            artifact_id=Id.mint(IdPrefix.ARTIFACT, hub.clock).value,
             chunk_id=chunk_id,
             node_id=nodes["build"],
             node_name="build",

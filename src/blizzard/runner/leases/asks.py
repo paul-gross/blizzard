@@ -15,7 +15,7 @@ from types import MappingProxyType
 from typing import Protocol
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.ids import QUESTION_PREFIX, Id
+from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.identity import SessionReference
@@ -225,7 +225,7 @@ class AskService:
         (``bzh:domain-takes-objects``)."""
         check_askable(worker)
         lease = worker.lease
-        question_id = Id.mint(QUESTION_PREFIX, self._clock).value
+        question_id = Id.mint(IdPrefix.QUESTION, self._clock).value
         self._store.record_ask(
             lease_id=lease.lease_id,
             chunk_id=lease.chunk_id,

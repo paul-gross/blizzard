@@ -15,7 +15,7 @@ from sqlalchemy import Engine, insert, select
 from blizzard.auth_core import Role
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.garden_proposals import GardenProposalOrigin
-from blizzard.foundation.ids import USER_PREFIX, Id
+from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.work_items import WorkItemClosure, WorkItemPriority
 from blizzard.hub.auth.errors import RepoErrorFactory
@@ -72,7 +72,7 @@ def _source(tmp_path: Path) -> tuple[HubWorkSource, WorkItemStore, ChunkStores, 
 
 def _user(users: UserRepository, *, username: str) -> User:
     user = User(
-        user_id=Id.mint_at(USER_PREFIX, _T0).value,
+        user_id=Id.mint_at(IdPrefix.USER, _T0).value,
         username=username,
         display_name=username,
         email=None,

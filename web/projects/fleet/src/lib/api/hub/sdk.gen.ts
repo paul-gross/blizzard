@@ -221,7 +221,7 @@ export const callbackApiAuthNameCallbackGet = <ThrowOnError extends boolean = fa
  * Get Backlog
  *
  * The hub-ordered ``not_ready`` list, read-only and keyset-paginated
- * — an operator triage surface, requiring ``QUEUE_REORDER`` not ``FLEET_VIEW``.
+ * — an operator triage surface, requiring ``queue:reorder`` not ``fleet:view``.
  */
 export const getBacklogApiBacklogGet = <ThrowOnError extends boolean = false>(options?: Options<GetBacklogApiBacklogGetData, ThrowOnError>): RequestResult<GetBacklogApiBacklogGetResponses, GetBacklogApiBacklogGetErrors, ThrowOnError> => (options?.client ?? client).get<GetBacklogApiBacklogGetResponses, GetBacklogApiBacklogGetErrors, ThrowOnError>({ url: '/api/backlog', ...options });
 
@@ -2050,7 +2050,7 @@ export const assignRoleApiUsersUserIdRolePost = <ThrowOnError extends boolean = 
  * List Work Sources
  *
  * The built-in ``hub`` source and every stored work source, retired ones hidden unless
- * `include_retired`. No gate beyond `FLEET_VIEW`, since a client needs this to know which
+ * `include_retired`. No gate beyond `fleet:view`, since a client needs this to know which
  * sources gate their items.
  */
 export const listWorkSourcesApiWorkSourcesGet = <ThrowOnError extends boolean = false>(options?: Options<ListWorkSourcesApiWorkSourcesGetData, ThrowOnError>): RequestResult<ListWorkSourcesApiWorkSourcesGetResponses, ListWorkSourcesApiWorkSourcesGetErrors, ThrowOnError> => (options?.client ?? client).get<ListWorkSourcesApiWorkSourcesGetResponses, ListWorkSourcesApiWorkSourcesGetErrors, ThrowOnError>({ url: '/api/work-sources', ...options });

@@ -2,7 +2,7 @@
 plus the wire<->domain rendering the fleet router's ingest and lease-read routes share.
 The discovery route returns segment metadata and byte counts only —
 never turn content — so a caller must hold a ``segment_id`` from it before the content
-route answers anything. Gated on :data:`~blizzard.auth_core.TRANSCRIPT_READ`."""
+route answers anything. Gated on :attr:`~blizzard.auth_core.Permission.TRANSCRIPT_READ`."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from blizzard.auth_core import TRANSCRIPT_READ
+from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
@@ -130,7 +130,7 @@ def lease_content_view(
 @router.get(
     "/chunks/{chunk_id}/transcripts",
     response_model=TranscriptSegmentIndexView,
-    dependencies=[Depends(require(TRANSCRIPT_READ))],
+    dependencies=[Depends(require(Permission.TRANSCRIPT_READ))],
 )
 def list_transcript_segments(
     chunk_id: str, services: Annotated[HubServices, Depends(get_services)]
@@ -145,7 +145,7 @@ def list_transcript_segments(
 @router.get(
     "/chunks/{chunk_id}/transcripts/{segment_id}",
     response_model=TranscriptSegmentContentView,
-    dependencies=[Depends(require(TRANSCRIPT_READ))],
+    dependencies=[Depends(require(Permission.TRANSCRIPT_READ))],
 )
 def get_transcript_segment(
     chunk_id: str, segment_id: str, services: Annotated[HubServices, Depends(get_services)]

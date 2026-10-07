@@ -12,7 +12,7 @@ from typing import Any, cast
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.foundation.ids import FINDING_PREFIX
+from blizzard.foundation.ids import IdPrefix
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.hub.domain.chunk.model import Chunk, WorkRef
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
@@ -97,7 +97,7 @@ def test_deliver_builds_a_finding_and_its_add_fact_from_a_deferred_entry() -> No
 
     assert len(plan.new_findings) == 1
     finding = plan.new_findings[0]
-    assert finding.finding_id.startswith(f"{FINDING_PREFIX}_")
+    assert finding.finding_id.startswith(f"{IdPrefix.FINDING}_")
     assert finding.scope_slug == "blizzard"
     assert finding.class_ == "correctness"
     assert finding.locus == "a.py:1"

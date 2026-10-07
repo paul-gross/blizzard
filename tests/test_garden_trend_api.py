@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 from sqlalchemy import insert
 
-from blizzard.foundation.ids import ROUTINE_PREFIX, Id
+from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, ConfigChange, Door, RecordKind
 from blizzard.hub.domain.garden.routines import Routine
@@ -34,7 +34,7 @@ def _seed_scope(hub, slug: str = "blizzard") -> None:  # type: ignore[no-untyped
 
 def _seed_routine(hub, name: str = "nightly", *, default_scope_slug: str = "blizzard") -> None:  # type: ignore[no-untyped-def]
     routine = Routine(
-        routine_id=Id.mint_at(ROUTINE_PREFIX, _SINCE).value,
+        routine_id=Id.mint_at(IdPrefix.ROUTINE, _SINCE).value,
         name=name,
         graph_name="g",
         default_scope_slug=default_scope_slug,

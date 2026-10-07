@@ -1,6 +1,6 @@
 """Fact-egress operator-plane routes. Never ``/api/fleet/...``; a runner principal is refused. Status gates on
-:data:`~blizzard.auth_core.FLEET_VIEW` — it holds export state and a directory path, nothing a fleet viewer
-cannot already see — and the writes on :data:`~blizzard.auth_core.ANALYTICS_ADMIN`."""
+:attr:`~blizzard.auth_core.Permission.FLEET_VIEW` — it holds export state and a directory path, nothing a fleet viewer
+cannot already see — and the writes on :attr:`~blizzard.auth_core.Permission.ANALYTICS_ADMIN`."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 
-from blizzard.auth_core import ANALYTICS_ADMIN, FLEET_VIEW
+from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
@@ -31,7 +31,7 @@ from blizzard.wire.egress import (
 router = APIRouter(prefix="/api/egress", tags=["egress"], dependencies=[Depends(reject_runner_principal)])
 
 
-@router.get("/status", response_model=EgressStatusResponse, dependencies=[Depends(require(FLEET_VIEW))])
+@router.get("/status", response_model=EgressStatusResponse, dependencies=[Depends(require(Permission.FLEET_VIEW))])
 def egress_status(services: Annotated[HubServices, Depends(get_services)]) -> EgressStatusResponse:
     """Export on, off or rejected, each dataset's cursor and lag, the last pass and file, the last error and the
     free space."""
@@ -61,7 +61,7 @@ def egress_status(services: Annotated[HubServices, Depends(get_services)]) -> Eg
     )
 
 
-@router.post("/reset", response_model=EgressResetResponse, dependencies=[Depends(require(ANALYTICS_ADMIN))])
+@router.post("/reset", response_model=EgressResetResponse, dependencies=[Depends(require(Permission.ANALYTICS_ADMIN))])
 def egress_reset(
     request: EgressResetRequest, services: Annotated[HubServices, Depends(get_services)]
 ) -> EgressResetResponse:
@@ -85,7 +85,7 @@ def egress_reset(
     "/backfill",
     response_model=EgressBackfillResponse,
     responses={status.HTTP_502_BAD_GATEWAY: {"model": EgressBackfillFailure}},
-    dependencies=[Depends(require(ANALYTICS_ADMIN))],
+    dependencies=[Depends(require(Permission.ANALYTICS_ADMIN))],
 )
 def egress_backfill(
     request: EgressBackfillRequest, services: Annotated[HubServices, Depends(get_services)]

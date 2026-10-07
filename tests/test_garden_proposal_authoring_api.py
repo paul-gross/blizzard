@@ -11,7 +11,7 @@ import pytest
 from sqlalchemy import insert
 
 from blizzard.foundation.garden_proposals import GardenProposalClosureKind, GardenProposalOrigin
-from blizzard.foundation.ids import ROUTINE_PREFIX, Id
+from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, ConfigChange, Door, RecordKind
 from blizzard.hub.domain.garden.routines import Routine
 from blizzard.hub.store import schema as s
@@ -35,7 +35,7 @@ def _seed_scope(hub: HubHarness, slug: str = "blizzard") -> None:
 
 def _seed_routine(hub: HubHarness, name: str = "nightly", *, default_scope_slug: str = "blizzard") -> None:
     routine = Routine(
-        routine_id=Id.mint_at(ROUTINE_PREFIX, _NOW).value,
+        routine_id=Id.mint_at(IdPrefix.ROUTINE, _NOW).value,
         name=name,
         graph_name="g",
         default_scope_slug=default_scope_slug,

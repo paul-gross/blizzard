@@ -21,7 +21,7 @@ import httpx
 import pytest
 import uvicorn
 
-from blizzard.foundation.platform_tracing import attributes as platform_attr
+from blizzard.foundation import cli_spans
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.observability.egress.config import EgressConfig
@@ -637,7 +637,7 @@ def test_a_tail_sampling_decision_wait_splits_or_keeps_the_chunk_trace(
                 time.sleep(wait + 2)
                 kept = collector.kept_spans()
                 assert not [s for s in kept if s.is_step_root], "a short decision_wait still kept a step root"
-                assert not [s for s in kept if s.scope == platform_attr.CLI_SCOPE], (
+                assert not [s for s in kept if s.scope == cli_spans.SCOPE_NAME], (
                     "a short decision_wait still kept the worker commands' spans"
                 )
             else:

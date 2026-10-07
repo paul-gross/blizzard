@@ -37,6 +37,7 @@ _KERNEL_DIRS = (_FOUNDATION_DIR, _WIRE_DIR, _AUTH_CORE_DIR)
 _NON_KERNEL_PACKAGES = ("blizzard.hub", "blizzard.runner", "blizzard.cli", "blizzard.tools")
 
 _MOVED_HOMES = {
+    "EgressState": "blizzard.foundation.egress_state",
     "RESERVED_HUB_SOURCE_NAME": "blizzard.hub.domain.kernel.hub_source",
     "KNOWN_WORK_SOURCE_PROVIDERS": "blizzard.hub.domain.config.work_sources",
     "ROUTE_TOKEN_WARN": "blizzard.hub.domain.execution.auth.route",

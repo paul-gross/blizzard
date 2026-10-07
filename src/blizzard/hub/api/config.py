@@ -1,8 +1,8 @@
 """Configuration routes — the served document schemas, the change log, and the declarative
 document: ``POST /apply`` reconciles one, ``GET /export`` writes the current one.
 
-The schemas, the change log and the export are read-only (``FLEET_VIEW``); an apply needs
-``CONFIG_EDIT`` and writes through ``ConfigAuthoring`` like every other configured-record verb,
+The schemas, the change log and the export are read-only (``Permission.FLEET_VIEW``); an apply needs
+``Permission.CONFIG_EDIT`` and writes through ``ConfigAuthoring`` like every other configured-record verb,
 always as ``Door.APPLY`` — the door is never read from the request (``bzh:config-apply``)."""
 
 from __future__ import annotations
@@ -13,9 +13,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import ValidationError
 from starlette.concurrency import run_in_threadpool
 
-from blizzard.auth_core import CONFIG_EDIT, FLEET_VIEW
+from blizzard.auth_core import Permission
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.ids import ROUTINE_PREFIX, Id, IdPrefix
+from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
@@ -62,8 +62,8 @@ router = APIRouter(
 UNCHANGED = "unchanged"
 
 
-#: Each read route gates itself, so the apply route gates on `CONFIG_EDIT` alone.
-_VIEW = Depends(require(FLEET_VIEW))
+#: Each read route gates itself, so the apply route gates on `Permission.CONFIG_EDIT` alone.
+_VIEW = Depends(require(Permission.FLEET_VIEW))
 
 #: The largest page of the change log a caller may request.
 MAX_CHANGES_LIMIT = 200
@@ -166,7 +166,7 @@ def _declaration(document: ConfigDocument, clock: IClock) -> ConfigDeclaration:
         routines.append(
             RoutineDeclaration(
                 name=routine.name,
-                routine_id=Id.mint(ROUTINE_PREFIX, clock).value,
+                routine_id=Id.mint(IdPrefix.ROUTINE, clock).value,
                 graph_name=routine.graph_name,
                 default_scope_slug=routine.default_scope_slug,
                 default_model=routine.default_model,
@@ -286,7 +286,7 @@ _APPLY_BODY = {
 @router.post("/apply", response_model=ConfigApplyResponse, openapi_extra={"requestBody": _APPLY_BODY})
 async def apply_config(
     request: Request,
-    identity: Annotated[ResolvedIdentity, Depends(require(CONFIG_EDIT))],
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
     services: Annotated[HubServices, Depends(get_services)],
     dry_run: bool = False,
 ) -> ConfigApplyResponse:

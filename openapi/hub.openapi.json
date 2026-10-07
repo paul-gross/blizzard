@@ -1234,7 +1234,6 @@
         "enum": [
           "minted",
           "promoted",
-          "edited",
           "grouped",
           "claimed",
           "node-completed",
@@ -1252,7 +1251,8 @@
           "stopped",
           "completed",
           "hub-advanced",
-          "deleted"
+          "deleted",
+          "edited"
         ],
         "type": "string"
       },
@@ -1277,7 +1277,6 @@
                 "enum": [
                   "minted",
                   "promoted",
-                  "edited",
                   "grouped",
                   "claimed",
                   "node-completed",
@@ -1295,7 +1294,8 @@
                   "stopped",
                   "completed",
                   "hub-advanced",
-                  "deleted"
+                  "deleted",
+                  "edited"
                 ],
                 "type": "string"
               },
@@ -15138,7 +15138,7 @@
     },
     "/api/backlog": {
       "get": {
-        "description": "The hub-ordered ``not_ready`` list, read-only and keyset-paginated\n\u2014 an operator triage surface, requiring ``QUEUE_REORDER`` not ``FLEET_VIEW``.",
+        "description": "The hub-ordered ``not_ready`` list, read-only and keyset-paginated\n\u2014 an operator triage surface, requiring ``queue:reorder`` not ``fleet:view``.",
         "operationId": "get_backlog_api_backlog_get",
         "parameters": [
           {
@@ -23100,7 +23100,7 @@
     },
     "/api/work-sources": {
       "get": {
-        "description": "The built-in ``hub`` source and every stored work source, retired ones hidden unless\n`include_retired`. No gate beyond `FLEET_VIEW`, since a client needs this to know which\nsources gate their items.",
+        "description": "The built-in ``hub`` source and every stored work source, retired ones hidden unless\n`include_retired`. No gate beyond `fleet:view`, since a client needs this to know which\nsources gate their items.",
         "operationId": "list_work_sources_api_work_sources_get",
         "parameters": [
           {

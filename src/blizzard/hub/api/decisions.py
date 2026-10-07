@@ -13,7 +13,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 
-from blizzard.auth_core import FLEET_VIEW, GATE_RESOLVE
+from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
@@ -92,7 +92,7 @@ def to_decision_view(row: GateDecision, runner_names: Mapping[str, str]) -> Deci
     )
 
 
-@router.get("/decisions", response_model=OpenDecisionsResponse, dependencies=[Depends(require(FLEET_VIEW))])
+@router.get("/decisions", response_model=OpenDecisionsResponse, dependencies=[Depends(require(Permission.FLEET_VIEW))])
 def list_decisions(services: Annotated[HubServices, Depends(get_services)]) -> OpenDecisionsResponse:
     """The fleet's open (unresolved) decisions — gate surfacing."""
     rows = services.chunks.decisions.list_open_decisions()
@@ -107,7 +107,7 @@ def resolve_decision(
     decision_id: str,
     request: DecisionResolutionRequest,
     services: Annotated[HubServices, Depends(get_services)],
-    identity: Annotated[ResolvedIdentity, Depends(require(GATE_RESOLVE))],
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.GATE_RESOLVE))],
 ) -> object:
     """Resolve an open decision, first-write-wins CAS.
 

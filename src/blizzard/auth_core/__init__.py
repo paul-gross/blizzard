@@ -53,54 +53,47 @@ class Permission(StrEnum):
     #: since a transcript carries everything a worker saw, not just the fleet's state.
     TRANSCRIPT_READ = "transcript:read"
     #: Force a transcript-event re-derivation, or replay a window of fleet traces — mutations
-    #: or re-sends, so above the read-only :data:`TRANSCRIPT_READ`.
+    #: or re-sends, so above the read-only :attr:`TRANSCRIPT_READ`.
     ANALYTICS_ADMIN = "analytics:admin"
     #: Write a configured record — today the secret store. Held by ``admin``+.
     CONFIG_EDIT = "config:edit"
 
 
-FLEET_VIEW = Permission.FLEET_VIEW
-CHUNK_INGEST = Permission.CHUNK_INGEST
-CHUNK_CONTROL = Permission.CHUNK_CONTROL
-QUESTION_ANSWER = Permission.QUESTION_ANSWER
-GATE_RESOLVE = Permission.GATE_RESOLVE
-QUEUE_REORDER = Permission.QUEUE_REORDER
-RUNNER_PAUSE = Permission.RUNNER_PAUSE
-RUNNER_RETIRE = Permission.RUNNER_RETIRE
-RUNNER_ADD = Permission.RUNNER_ADD
-GRAPH_EDIT = Permission.GRAPH_EDIT
-USER_MANAGE = Permission.USER_MANAGE
-TRANSCRIPT_READ = Permission.TRANSCRIPT_READ
-ANALYTICS_ADMIN = Permission.ANALYTICS_ADMIN
-CONFIG_EDIT = Permission.CONFIG_EDIT
-
 #: ``guest`` — read everything, mutate nothing.
-_GUEST_PERMISSIONS: frozenset[Permission] = frozenset({FLEET_VIEW})
+_GUEST_PERMISSIONS: frozenset[Permission] = frozenset({Permission.FLEET_VIEW})
 
 #: Every permission a ``contributor`` (or higher) holds.
 _CONTRIBUTOR_PERMISSIONS: frozenset[Permission] = _GUEST_PERMISSIONS | frozenset(
     {
-        CHUNK_INGEST,
-        CHUNK_CONTROL,
-        QUESTION_ANSWER,
-        GATE_RESOLVE,
-        QUEUE_REORDER,
-        TRANSCRIPT_READ,
+        Permission.CHUNK_INGEST,
+        Permission.CHUNK_CONTROL,
+        Permission.QUESTION_ANSWER,
+        Permission.GATE_RESOLVE,
+        Permission.QUEUE_REORDER,
+        Permission.TRANSCRIPT_READ,
     }
 )
 
 #: ``admin`` adds fleet-identity/runner writes, graph-authoring, and user
 #: administration (the admin page, ``user:manage``) on top of ``contributor``.
 _ADMIN_PERMISSIONS: frozenset[Permission] = _CONTRIBUTOR_PERMISSIONS | frozenset(
-    {RUNNER_PAUSE, RUNNER_RETIRE, RUNNER_ADD, GRAPH_EDIT, USER_MANAGE, ANALYTICS_ADMIN, CONFIG_EDIT}
+    {
+        Permission.RUNNER_PAUSE,
+        Permission.RUNNER_RETIRE,
+        Permission.RUNNER_ADD,
+        Permission.GRAPH_EDIT,
+        Permission.USER_MANAGE,
+        Permission.ANALYTICS_ADMIN,
+        Permission.CONFIG_EDIT,
+    }
 )
 
 #: ``superuser`` holds every permission that exists — in #91 that is exactly the
-#: ``admin`` bundle (see :data:`USER_MANAGE`'s note on the grant-admin rule).
+#: ``admin`` bundle (see :attr:`Permission.USER_MANAGE`'s note on the grant-admin rule).
 _SUPERUSER_PERMISSIONS: frozenset[Permission] = _ADMIN_PERMISSIONS
 
 #: The static role -> permission-bundle map (``bzh:domain-core``) — code, never DB.
-#: ``pending`` holds no permissions at all; ``guest`` holds exactly :data:`FLEET_VIEW`.
+#: ``pending`` holds no permissions at all; ``guest`` holds exactly :attr:`Permission.FLEET_VIEW`.
 ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
     Role.PENDING: frozenset(),
     Role.GUEST: _GUEST_PERMISSIONS,

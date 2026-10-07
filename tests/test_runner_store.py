@@ -13,7 +13,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 import sqlalchemy as sa
 
-from blizzard.foundation.ids import SEGMENT_PREFIX, Id
+from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.runner.harness.fingerprint import PreambleFingerprint
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.usage import UsageKind, UsageSample
@@ -1223,7 +1223,7 @@ def _pin_next_segment_id_suffixes(monkeypatch, suffixes):  # type: ignore[no-unt
 
     def fake(cls, prefix, at):  # type: ignore[no-untyped-def]
         minted = real(cls, prefix, at)
-        return Id(prefix, minted.ulid[:-1] + queued.pop(0)) if prefix == SEGMENT_PREFIX and queued else minted
+        return Id(prefix, minted.ulid[:-1] + queued.pop(0)) if prefix == IdPrefix.SEGMENT and queued else minted
 
     monkeypatch.setattr(Id, "mint_at", classmethod(fake))
 

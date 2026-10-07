@@ -13,7 +13,7 @@ from enum import Enum
 from typing import Protocol
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.ids import FINDING_PREFIX, Id
+from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
@@ -118,7 +118,7 @@ def build_review_plan(
     new_findings: list[NewReviewFinding] = []
     facts: list[NewReviewFindingFact] = []
     for entry in validated.deferred:
-        finding_id = Id.mint_at(FINDING_PREFIX, at).value
+        finding_id = Id.mint_at(IdPrefix.FINDING, at).value
         new_findings.append(
             NewReviewFinding(
                 finding_id=finding_id,

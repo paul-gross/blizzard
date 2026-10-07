@@ -20,32 +20,6 @@ class HubEventType(StrEnum):
     EVENT_LOGGED = "event-logged"
 
 
-#: What fact family drove a ``chunk-changed`` frame — each emit site names
-#: its own cause statically.
-ChunkChangeCause = Literal[
-    "minted",
-    "promoted",
-    "edited",
-    "grouped",
-    "claimed",
-    "node-completed",
-    "migrated",
-    "decision-submitted",
-    "decision-resolved",
-    "question-asked",
-    "question-answered",
-    "escalated",
-    "requeued",
-    "restarted",
-    "detached",
-    "paused",
-    "resumed",
-    "stopped",
-    "completed",
-    "hub-advanced",
-    "deleted",
-]
-
 #: The causes the activity read backfills from a durable chunk fact: all but ``edited``, which records none.
 ActivityChunkChangeCause = Literal[
     "minted",
@@ -69,6 +43,10 @@ ActivityChunkChangeCause = Literal[
     "hub-advanced",
     "deleted",
 ]
+
+#: What fact family drove a ``chunk-changed`` frame — each emit site names
+#: its own cause statically. ``edited`` is the one cause with no durable fact behind it.
+ChunkChangeCause = Literal[ActivityChunkChangeCause, "edited"]
 
 #: What a ``runner-changed`` frame reports — see
 #: the hub event broker's ``publish_runner_changed``.

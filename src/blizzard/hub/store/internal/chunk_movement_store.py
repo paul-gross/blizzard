@@ -17,7 +17,7 @@ from datetime import datetime
 from sqlalchemy import Connection, select, update
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.ids import MIGRATION_PREFIX, Id
+from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.migration_source import MigrationSource
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
@@ -326,7 +326,7 @@ class ChunkMovementStore:
         if refusal is not None:
             return refusal
         resolved_migration_id = (
-            migration_id if migration_id is not None else Id.mint(MIGRATION_PREFIX, self._clock).value
+            migration_id if migration_id is not None else Id.mint(IdPrefix.MIGRATION, self._clock).value
         )
         conn.execute(
             s.chunk_migrations.insert().values(
@@ -486,7 +486,7 @@ class ChunkMovementStore:
         it and re-enters — and no ``decision_id``, which is the restart fact's alone."""
         conn.execute(
             s.chunk_migrations.insert().values(
-                migration_id=Id.mint(MIGRATION_PREFIX, self._clock).value,
+                migration_id=Id.mint(IdPrefix.MIGRATION, self._clock).value,
                 chunk_id=chunk_id,
                 from_node_id=from_node_id,
                 from_graph_id=from_graph_id,

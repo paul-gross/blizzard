@@ -8,6 +8,8 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from blizzard.foundation.egress_state import EgressState
+
 
 class EgressDatasetStatus(BaseModel):
     """One configured dataset: ``cursor_at`` is its position in time, ``None`` before its first pass;
@@ -25,7 +27,7 @@ class EgressStatusResponse(BaseModel):
     is not on or the directory cannot be read. ``backfill_max_window_seconds`` is the widest window one backfill
     may write."""
 
-    state: Literal["on", "off", "rejected"]
+    state: EgressState
     rejected_setting: str | None
     rejected_value: str | None
     directory: str | None

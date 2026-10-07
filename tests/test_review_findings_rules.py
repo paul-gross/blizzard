@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 import pytest
 
 from blizzard.foundation.artifacts import ArtifactKind
-from blizzard.foundation.ids import FINDING_PREFIX, Id
+from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import Chunk, WorkRef
@@ -108,7 +108,7 @@ def test_each_deferred_entry_mints_one_finding_and_one_add_fact_in_order() -> No
     )
     assert plan.new_scope_description == "Minted by review delivery on chunk ch_9"
     ids = [finding.finding_id for finding in plan.new_findings]
-    assert all(Id.parse(i) is not None and i.startswith(f"{FINDING_PREFIX}_") for i in ids)
+    assert all(Id.parse(i) is not None and i.startswith(f"{IdPrefix.FINDING}_") for i in ids)
     assert len(set(ids)) == 2
     assert plan.new_findings == [
         NewReviewFinding(

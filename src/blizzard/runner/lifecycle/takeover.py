@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Protocol
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.fact_kinds import LEASE_MINTED
-from blizzard.foundation.ids import TAKEOVER_PREFIX, Id
+from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.auth.tokens import IWriteTokenRepository
 from blizzard.runner.environments.provider import AcquiredEnvironment
@@ -494,7 +494,7 @@ class TakeoverService:
         except (UnknownHarnessError, UnavailableHarnessError) as exc:
             raise TakeoverOwnerUnresolvable(str(exc)) from exc
         now = self._clock.now()
-        takeover_id = Id.mint(TAKEOVER_PREFIX, self._clock).value
+        takeover_id = Id.mint(IdPrefix.TAKEOVER, self._clock).value
         fence_epoch = admission.fence_epoch
 
         # Fact-before-command (bzh:crash-correctness): recorded — and so reachable by

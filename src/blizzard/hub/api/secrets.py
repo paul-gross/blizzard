@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from blizzard.auth_core import CONFIG_EDIT, FLEET_VIEW
+from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
@@ -79,7 +79,7 @@ def _existing(services: HubServices, raw: str) -> SecretMetadata:
 @router.post("", response_model=SecretView, status_code=status.HTTP_201_CREATED)
 def create_secret(
     request: SecretCreateRequest,
-    identity: Annotated[ResolvedIdentity, Depends(require(CONFIG_EDIT))],
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
     door: RequestDoor,
     services: Annotated[HubServices, Depends(get_services)],
 ) -> SecretView:
@@ -101,7 +101,7 @@ def create_secret(
 def replace_secret(
     name: str,
     request: SecretReplaceRequest,
-    identity: Annotated[ResolvedIdentity, Depends(require(CONFIG_EDIT))],
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
     door: RequestDoor,
     services: Annotated[HubServices, Depends(get_services)],
     if_match: Annotated[int | None, Header()] = None,
@@ -123,7 +123,7 @@ def replace_secret(
     return secret_view(replaced, retired=False, references=services.secret_references.referrers_of([name])[name])
 
 
-@router.get("", response_model=list[SecretView], dependencies=[Depends(require(FLEET_VIEW))])
+@router.get("", response_model=list[SecretView], dependencies=[Depends(require(Permission.FLEET_VIEW))])
 def list_secrets(
     services: Annotated[HubServices, Depends(get_services)], include_retired: bool = False
 ) -> list[SecretView]:
@@ -134,7 +134,7 @@ def list_secrets(
     return [secret_view(r, retired=r.name in retired, references=references[r.name]) for r in records]
 
 
-@router.get("/{name}", response_model=SecretView, dependencies=[Depends(require(FLEET_VIEW))])
+@router.get("/{name}", response_model=SecretView, dependencies=[Depends(require(Permission.FLEET_VIEW))])
 def get_secret(name: str, services: Annotated[HubServices, Depends(get_services)]) -> SecretView:
     """One secret's metadata; 404 on an unknown name."""
     record = _existing(services, name)
@@ -148,7 +148,7 @@ def get_secret(name: str, services: Annotated[HubServices, Depends(get_services)
 @router.post("/{name}/retire", response_model=SecretView)
 def retire_secret(
     name: str,
-    identity: Annotated[ResolvedIdentity, Depends(require(CONFIG_EDIT))],
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
     door: RequestDoor,
     services: Annotated[HubServices, Depends(get_services)],
 ) -> SecretView:
@@ -165,7 +165,7 @@ def retire_secret(
 @router.post("/{name}/enable", response_model=SecretView)
 def enable_secret(
     name: str,
-    identity: Annotated[ResolvedIdentity, Depends(require(CONFIG_EDIT))],
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
     door: RequestDoor,
     services: Annotated[HubServices, Depends(get_services)],
 ) -> SecretView:

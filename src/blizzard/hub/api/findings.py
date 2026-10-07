@@ -14,7 +14,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from blizzard.auth_core import CHUNK_CONTROL, FLEET_VIEW
+from blizzard.auth_core import Permission
 from blizzard.foundation.findings import FindingFactKind
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
@@ -119,7 +119,7 @@ def _reread(findings: list[Finding], services: HubServices) -> list[FindingView]
     return views
 
 
-@router.get("/findings", response_model=FindingsPageView, dependencies=[Depends(require(FLEET_VIEW))])
+@router.get("/findings", response_model=FindingsPageView, dependencies=[Depends(require(Permission.FLEET_VIEW))])
 def list_findings(
     services: Annotated[HubServices, Depends(get_services)],
     routine: Annotated[str | None, Query()] = None,
@@ -155,7 +155,9 @@ def list_findings(
     return FindingsPageView(findings=[finding_view(f) for f in page.findings], next_cursor=page.next_cursor)
 
 
-@router.get("/findings/{finding_id}", response_model=FindingDetailView, dependencies=[Depends(require(FLEET_VIEW))])
+@router.get(
+    "/findings/{finding_id}", response_model=FindingDetailView, dependencies=[Depends(require(Permission.FLEET_VIEW))]
+)
 def get_finding(finding_id: str, services: Annotated[HubServices, Depends(get_services)]) -> FindingDetailView:
     """One finding's whole record, plus its whole fact chain oldest-first;
     404 on an unknown id."""
@@ -197,7 +199,7 @@ def _refusals_mapped() -> Iterator[None]:
 def resolve_findings(
     request: FindingExitRequest,
     services: Annotated[HubServices, Depends(get_services)],
-    identity: Annotated[ResolvedIdentity, Depends(require(CHUNK_CONTROL))],
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
 ) -> list[FindingView]:
     """Resolve every finding in `finding_ids`, recording NOTE: the work that answers a
     finding landed. 404 for an unknown id, 409 for a finding already exited (reopen it
@@ -210,7 +212,7 @@ def resolve_findings(
 def confirm_gone_findings(
     request: FindingExitRequest,
     services: Annotated[HubServices, Depends(get_services)],
-    identity: Annotated[ResolvedIdentity, Depends(require(CHUNK_CONTROL))],
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
 ) -> list[FindingView]:
     """Confirm by hand that every finding in `finding_ids` no longer reproduces,
     recording NOTE. 404 for an unknown id, 409 for a finding already exited, 422 for a
@@ -222,7 +224,7 @@ def confirm_gone_findings(
 def wont_fix_findings(
     request: FindingExitRequest,
     services: Annotated[HubServices, Depends(get_services)],
-    identity: Annotated[ResolvedIdentity, Depends(require(CHUNK_CONTROL))],
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
 ) -> list[FindingView]:
     """Withdraw every finding in `finding_ids` as won't-fix, recording NOTE: the ground
     hasn't moved, a person has decided it doesn't merit standing regardless. 404 for an
@@ -234,7 +236,7 @@ def wont_fix_findings(
 def not_a_finding_findings(
     request: FindingExitRequest,
     services: Annotated[HubServices, Depends(get_services)],
-    identity: Annotated[ResolvedIdentity, Depends(require(CHUNK_CONTROL))],
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
 ) -> list[FindingView]:
     """Withdraw every finding in `finding_ids` as not a finding, recording NOTE. 404 for
     an unknown id, 409 for a finding already exited, 422 for a blank note or a duplicate id."""
@@ -245,7 +247,7 @@ def not_a_finding_findings(
 def supersede_findings(
     request: FindingSupersedeRequest,
     services: Annotated[HubServices, Depends(get_services)],
-    identity: Annotated[ResolvedIdentity, Depends(require(CHUNK_CONTROL))],
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
 ) -> list[FindingView]:
     """Withdraw every finding in `finding_ids` as superseded by `superseded_by`,
     recording NOTE. 404 for an unknown id in either `finding_ids` or `superseded_by`
@@ -263,7 +265,7 @@ def supersede_findings(
 def reopen_findings(
     request: FindingExitRequest,
     services: Annotated[HubServices, Depends(get_services)],
-    identity: Annotated[ResolvedIdentity, Depends(require(CHUNK_CONTROL))],
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
 ) -> list[FindingView]:
     """Reopen every finding in `finding_ids`, undoing whichever exit or `gone` fact was
     newest, recording NOTE. 404 for an unknown id, 409 for a finding already live, 422 for

@@ -14,7 +14,7 @@ from sqlalchemy import or_, select, tuple_
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.ids import ARTIFACT_PREFIX, Id
+from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.delivery_read import DeliverySources
@@ -215,7 +215,7 @@ class ChunkArtifactsStore:
                 return False
             conn.execute(
                 s.artifacts.insert().values(
-                    artifact_id=Id.mint(ARTIFACT_PREFIX, self._clock).value,
+                    artifact_id=Id.mint(IdPrefix.ARTIFACT, self._clock).value,
                     chunk_id=chunk_id,
                     node_id=node_id,
                     node_name=node_name,

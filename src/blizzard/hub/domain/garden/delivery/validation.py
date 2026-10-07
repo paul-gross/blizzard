@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Protocol
 
-from blizzard.foundation.ids import FINDING_PREFIX, Id
+from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.garden.findings.bucket import FindingBucket
 from blizzard.hub.domain.garden.formats import (
@@ -128,7 +128,7 @@ def is_finding_id_shaped(value: str) -> bool:
     resolves against a `ref` an `add` op in this same delivery carries. Shared with
     `materialize` so the discrimination is asked once."""
     parsed = Id.parse(value)
-    return parsed is not None and parsed.has_prefix(FINDING_PREFIX)
+    return parsed is not None and parsed.has_prefix(IdPrefix.FINDING)
 
 
 def single_repo_of(delta: DeliveredDelta) -> str | None:
@@ -315,7 +315,7 @@ def _check_known_id(
     exited_ids: frozenset[str] = frozenset(),
 ) -> None:
     if not is_finding_id_shaped(finding_id):
-        raise GardenDeliveryRejected(f"finding id {finding_id!r} is not a well-formed {FINDING_PREFIX}_<ULID> id")
+        raise GardenDeliveryRejected(f"finding id {finding_id!r} is not a well-formed {IdPrefix.FINDING}_<ULID> id")
     live_scope = live_findings.get(finding_id)
     if live_scope is None:
         if finding_id in exited_ids:

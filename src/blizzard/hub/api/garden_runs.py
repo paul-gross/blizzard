@@ -9,7 +9,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from blizzard.auth_core import FLEET_VIEW
+from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
@@ -124,7 +124,7 @@ def _run_delta_view(delta: RunDelta, names: GraphNames) -> RunDeltaView:
     )
 
 
-@router.get("/runs", response_model=list[RunRowView], dependencies=[Depends(require(FLEET_VIEW))])
+@router.get("/runs", response_model=list[RunRowView], dependencies=[Depends(require(Permission.FLEET_VIEW))])
 def list_runs(
     services: Annotated[HubServices, Depends(get_services)],
     since: Annotated[str | None, Query()] = None,
@@ -145,7 +145,7 @@ def list_runs(
     return [_run_row_view(row, names) for row in rows]
 
 
-@router.get("/runs/{chunk_id}", response_model=RunDeltaView, dependencies=[Depends(require(FLEET_VIEW))])
+@router.get("/runs/{chunk_id}", response_model=RunDeltaView, dependencies=[Depends(require(Permission.FLEET_VIEW))])
 def run_delta(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> RunDeltaView:
     """One run's full detail: its routine, scope, mode, derived outcome, and, per
     finding-set it delivered, the added/observed/gone entries its own artifact

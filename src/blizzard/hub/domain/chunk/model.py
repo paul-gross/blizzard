@@ -18,7 +18,7 @@ from blizzard.foundation.chunk_migration import MigrationMode
 from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, TERMINAL_STATUSES, ChunkStatus
 from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind, EventLogSeverity
 from blizzard.foundation.hub_event_types import ActivityChunkChangeCause
-from blizzard.foundation.ids import CHUNK_PREFIX, Id
+from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.migration_source import MigrationSource
 from blizzard.foundation.node_steps import Executor
 from blizzard.foundation.roles import domain_model
@@ -212,7 +212,7 @@ def mint_chunk(
     one home here; a routine run is the first to source one, from its own
     routine's defaults."""
     return Chunk(
-        chunk_id=Id.mint_at(CHUNK_PREFIX, at).value,
+        chunk_id=Id.mint_at(IdPrefix.CHUNK, at).value,
         graph_id=graph_id,
         work_refs=list(work_refs),
         minted_at=at,

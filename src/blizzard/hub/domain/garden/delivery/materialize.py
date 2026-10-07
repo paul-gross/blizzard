@@ -14,7 +14,7 @@ from enum import Enum
 from typing import Protocol
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.ids import FINDING_PREFIX, FINDING_SET_PREFIX, GARDEN_PROPOSAL_PREFIX, Id
+from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
@@ -183,13 +183,13 @@ def build_delivery_plan(
     for delta, artifact_id in zip(validated.deltas, delta_artifact_ids, strict=True):
         # Minted before the facts loop below: every fact this delta produces
         # attributes to the set that carried it.
-        finding_set_id = Id.mint_at(FINDING_SET_PREFIX, at).value
+        finding_set_id = Id.mint_at(IdPrefix.FINDING_SET, at).value
         new_findings: list[NewFinding] = []
         facts: list[NewFindingFact] = []
         single_repo = single_repo_of(delta)
         for op in delta.findings:
             if isinstance(op, FindingAddOp):
-                finding_id = Id.mint_at(FINDING_PREFIX, at).value
+                finding_id = Id.mint_at(IdPrefix.FINDING, at).value
                 if op.ref is not None:
                     finding_id_by_ref[op.ref] = finding_id
                 introduced_at = (
@@ -237,7 +237,7 @@ def build_delivery_plan(
 
     proposals = [
         NewProposal(
-            proposal_id=Id.mint_at(GARDEN_PROPOSAL_PREFIX, at).value,
+            proposal_id=Id.mint_at(IdPrefix.GARDEN_PROPOSAL, at).value,
             routine_name=validated.run.routine_name,
             class_=candidate.class_,
             title=candidate.title,

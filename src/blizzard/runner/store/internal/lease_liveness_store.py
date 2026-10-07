@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 
 from sqlalchemy import Connection, and_, func, select
 
-from blizzard.foundation.ids import SEGMENT_PREFIX, Id
+from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.batching import id_batches
 from blizzard.runner.harness.identity import SessionReference
@@ -112,7 +112,7 @@ def _open_transcript_segment(
             enqueue_transcript_final(conn, prior_segment, at=at)
     conn.execute(
         transcript_segments.insert().values(
-            segment_id=Id.mint_at(SEGMENT_PREFIX, at).value,
+            segment_id=Id.mint_at(IdPrefix.SEGMENT, at).value,
             chunk_id=str(context_row.chunk_id),
             node_id=str(context_row.node_id),
             epoch=int(context_row.epoch),

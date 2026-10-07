@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 import pytest
 
 from blizzard.foundation.artifacts import ArtifactKind
-from blizzard.foundation.ids import FINDING_PREFIX, FINDING_SET_PREFIX, GARDEN_PROPOSAL_PREFIX, Id
+from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import Chunk, WorkRef
@@ -161,7 +161,7 @@ def test_an_empty_delta_still_mints_one_finding_set_and_nothing_else() -> None:
     )
 
     [delta] = plan.deltas
-    assert delta.finding_set.finding_set_id.startswith(f"{FINDING_SET_PREFIX}_")
+    assert delta.finding_set.finding_set_id.startswith(f"{IdPrefix.FINDING_SET}_")
     parsed = Id.parse(delta.finding_set.finding_set_id)
     assert parsed is not None and parsed.minted_at == _AT
     assert (delta.finding_set.artifact_id, delta.finding_set.scope_slug, delta.finding_set.revisions) == (
@@ -173,7 +173,7 @@ def test_an_empty_delta_still_mints_one_finding_set_and_nothing_else() -> None:
 
 
 def test_each_op_maps_to_its_fact_and_a_gone_on_a_delivered_finding_resolves() -> None:
-    delivered, gone, observed = (Id.mint_at(FINDING_PREFIX, _AT).value for _ in range(3))
+    delivered, gone, observed = (Id.mint_at(IdPrefix.FINDING, _AT).value for _ in range(3))
     validated = ValidatedDelivery(
         run=_RUN,
         deltas=[
@@ -214,7 +214,7 @@ def test_each_op_maps_to_its_fact_and_a_gone_on_a_delivered_finding_resolves() -
 
 
 def test_a_proposal_citing_a_ref_carries_the_id_its_add_minted() -> None:
-    live = Id.mint_at(FINDING_PREFIX, _AT).value
+    live = Id.mint_at(IdPrefix.FINDING, _AT).value
     validated = ValidatedDelivery(
         run=_RUN,
         deltas=[_delta([{"op": "add", "class": "c", "locus": "a.py:1", "summary": "s", "ref": "r1"}])],
@@ -233,7 +233,7 @@ def test_a_proposal_citing_a_ref_carries_the_id_its_add_minted() -> None:
 
     [proposal] = plan.proposals
     minted = plan.deltas[0].new_findings[0].finding_id
-    assert proposal.proposal_id.startswith(f"{GARDEN_PROPOSAL_PREFIX}_")
+    assert proposal.proposal_id.startswith(f"{IdPrefix.GARDEN_PROPOSAL}_")
     assert (proposal.routine_name, proposal.class_, proposal.title, proposal.body) == ("nightly", "c", "t", "b")
     assert (proposal.source_artifact_id, proposal.ref, proposal.finding_ids) == ("art_docket", "p1", [minted, live])
 

@@ -4,25 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from blizzard.auth_core import (
-    ANALYTICS_ADMIN,
-    CHUNK_CONTROL,
-    CHUNK_INGEST,
-    CONFIG_EDIT,
-    FLEET_VIEW,
-    GATE_RESOLVE,
-    GRAPH_EDIT,
-    QUESTION_ANSWER,
-    QUEUE_REORDER,
-    ROLE_PERMISSIONS,
-    RUNNER_ADD,
-    RUNNER_PAUSE,
-    RUNNER_RETIRE,
-    TRANSCRIPT_READ,
-    USER_MANAGE,
-    Role,
-    expand,
-)
+from blizzard.auth_core import ROLE_PERMISSIONS, Permission, Role, expand
 
 pytestmark = pytest.mark.unit
 
@@ -33,31 +15,31 @@ def test_pending_holds_no_permissions() -> None:
 
 def test_guest_holds_fleet_view_and_nothing_else() -> None:
     all_permissions = {
-        FLEET_VIEW,
-        CHUNK_INGEST,
-        CHUNK_CONTROL,
-        QUESTION_ANSWER,
-        GATE_RESOLVE,
-        QUEUE_REORDER,
-        RUNNER_PAUSE,
-        RUNNER_RETIRE,
-        RUNNER_ADD,
-        GRAPH_EDIT,
-        USER_MANAGE,
-        TRANSCRIPT_READ,
-        ANALYTICS_ADMIN,
-        CONFIG_EDIT,
+        Permission.FLEET_VIEW,
+        Permission.CHUNK_INGEST,
+        Permission.CHUNK_CONTROL,
+        Permission.QUESTION_ANSWER,
+        Permission.GATE_RESOLVE,
+        Permission.QUEUE_REORDER,
+        Permission.RUNNER_PAUSE,
+        Permission.RUNNER_RETIRE,
+        Permission.RUNNER_ADD,
+        Permission.GRAPH_EDIT,
+        Permission.USER_MANAGE,
+        Permission.TRANSCRIPT_READ,
+        Permission.ANALYTICS_ADMIN,
+        Permission.CONFIG_EDIT,
     }
     guest = expand(Role.GUEST)
-    assert FLEET_VIEW in guest
-    assert guest == {FLEET_VIEW}
-    assert guest & (all_permissions - {FLEET_VIEW}) == frozenset()
+    assert Permission.FLEET_VIEW in guest
+    assert guest == {Permission.FLEET_VIEW}
+    assert guest & (all_permissions - {Permission.FLEET_VIEW}) == frozenset()
 
 
 def test_fleet_view_belongs_to_guest_and_above() -> None:
     for role in (Role.GUEST, Role.CONTRIBUTOR, Role.ADMIN, Role.SUPERUSER):
-        assert FLEET_VIEW in expand(role)
-    assert FLEET_VIEW not in expand(Role.PENDING)
+        assert Permission.FLEET_VIEW in expand(role)
+    assert Permission.FLEET_VIEW not in expand(Role.PENDING)
 
 
 def test_every_role_is_declared_in_the_map() -> None:
@@ -83,42 +65,42 @@ def test_user_manage_is_admin_and_above() -> None:
     "only ``superuser`` grants ``admin``" rule lives in user management (#94), not
     this permission's tier."""
     for role in (Role.ADMIN, Role.SUPERUSER):
-        assert USER_MANAGE in expand(role)
+        assert Permission.USER_MANAGE in expand(role)
     for role in (Role.PENDING, Role.GUEST, Role.CONTRIBUTOR):
-        assert USER_MANAGE not in expand(role)
+        assert Permission.USER_MANAGE not in expand(role)
 
 
 def test_runner_pause_and_graph_edit_are_admin_and_above() -> None:
     for role in (Role.ADMIN, Role.SUPERUSER):
-        assert RUNNER_PAUSE in expand(role)
-        assert GRAPH_EDIT in expand(role)
+        assert Permission.RUNNER_PAUSE in expand(role)
+        assert Permission.GRAPH_EDIT in expand(role)
     for role in (Role.PENDING, Role.GUEST, Role.CONTRIBUTOR):
-        assert RUNNER_PAUSE not in expand(role)
-        assert GRAPH_EDIT not in expand(role)
+        assert Permission.RUNNER_PAUSE not in expand(role)
+        assert Permission.GRAPH_EDIT not in expand(role)
 
 
 def test_runner_add_is_admin_and_above() -> None:
     """``runner:add`` mints a runner credential, so a contributor never holds it."""
     for role in (Role.ADMIN, Role.SUPERUSER):
-        assert RUNNER_ADD in expand(role)
+        assert Permission.RUNNER_ADD in expand(role)
     for role in (Role.PENDING, Role.GUEST, Role.CONTRIBUTOR):
-        assert RUNNER_ADD not in expand(role)
+        assert Permission.RUNNER_ADD not in expand(role)
 
 
 def test_runner_retire_is_admin_and_above() -> None:
     for role in (Role.ADMIN, Role.SUPERUSER):
-        assert RUNNER_RETIRE in expand(role)
+        assert Permission.RUNNER_RETIRE in expand(role)
     for role in (Role.PENDING, Role.GUEST, Role.CONTRIBUTOR):
-        assert RUNNER_RETIRE not in expand(role)
+        assert Permission.RUNNER_RETIRE not in expand(role)
 
 
 def test_analytics_admin_is_admin_and_above() -> None:
     """``analytics:admin`` gates the forced re-derive route — a
     mutation, so above the read-only ``transcript:read``, not ``contributor``+."""
     for role in (Role.ADMIN, Role.SUPERUSER):
-        assert ANALYTICS_ADMIN in expand(role)
+        assert Permission.ANALYTICS_ADMIN in expand(role)
     for role in (Role.PENDING, Role.GUEST, Role.CONTRIBUTOR):
-        assert ANALYTICS_ADMIN not in expand(role)
+        assert Permission.ANALYTICS_ADMIN not in expand(role)
 
 
 def test_transcript_read_is_contributor_and_above() -> None:
@@ -126,13 +108,19 @@ def test_transcript_read_is_contributor_and_above() -> None:
     ``guest``, which holds every other read: a transcript carries everything a worker
     saw, not just the fleet's state."""
     for role in (Role.CONTRIBUTOR, Role.ADMIN, Role.SUPERUSER):
-        assert TRANSCRIPT_READ in expand(role)
+        assert Permission.TRANSCRIPT_READ in expand(role)
     for role in (Role.PENDING, Role.GUEST):
-        assert TRANSCRIPT_READ not in expand(role)
+        assert Permission.TRANSCRIPT_READ not in expand(role)
 
 
 def test_operating_write_permissions_are_contributor_and_above() -> None:
-    operating = {CHUNK_INGEST, CHUNK_CONTROL, QUESTION_ANSWER, GATE_RESOLVE, QUEUE_REORDER}
+    operating = {
+        Permission.CHUNK_INGEST,
+        Permission.CHUNK_CONTROL,
+        Permission.QUESTION_ANSWER,
+        Permission.GATE_RESOLVE,
+        Permission.QUEUE_REORDER,
+    }
     for role in (Role.CONTRIBUTOR, Role.ADMIN, Role.SUPERUSER):
         assert operating <= expand(role)
     assert operating.isdisjoint(expand(Role.PENDING))
@@ -145,6 +133,6 @@ def test_expand_returns_a_frozenset() -> None:
 
 def test_config_edit_is_admin_and_above() -> None:
     for role in (Role.ADMIN, Role.SUPERUSER):
-        assert CONFIG_EDIT in expand(role)
+        assert Permission.CONFIG_EDIT in expand(role)
     for role in (Role.PENDING, Role.GUEST, Role.CONTRIBUTOR):
-        assert CONFIG_EDIT not in expand(role)
+        assert Permission.CONFIG_EDIT not in expand(role)

@@ -13,7 +13,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 
-from blizzard.auth_core import FLEET_VIEW, QUESTION_ANSWER
+from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
@@ -68,7 +68,9 @@ def asked_question(fact: QuestionAsked) -> AskedQuestion:
     )
 
 
-@router.post("/questions", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require(QUESTION_ANSWER))])
+@router.post(
+    "/questions", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require(Permission.QUESTION_ANSWER))]
+)
 def ask_question(fact: QuestionAsked, services: Annotated[HubServices, Depends(get_services)]) -> dict[str, str]:
     """Land a ``question.asked`` row — the chunk parks ``waiting_on_human``; 409 when fenced out."""
     if services.chunks.record.get(fact.chunk_id) is None:
@@ -88,7 +90,7 @@ def answer_question(
     question_id: str,
     request: AnswerRequest,
     services: Annotated[HubServices, Depends(get_services)],
-    identity: Annotated[ResolvedIdentity, Depends(require(QUESTION_ANSWER))],
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.QUESTION_ANSWER))],
 ) -> object:
     """Answer a question first-write-wins; 409 carries the winning answer.
 
@@ -125,7 +127,7 @@ def answer_question(
     return result
 
 
-@router.get("/questions", response_model=list[QuestionView], dependencies=[Depends(require(FLEET_VIEW))])
+@router.get("/questions", response_model=list[QuestionView], dependencies=[Depends(require(Permission.FLEET_VIEW))])
 def list_open_questions(services: Annotated[HubServices, Depends(get_services)]) -> list[QuestionView]:
     """Every open (unanswered) question across the fleet — the ``hub status`` surface."""
     rows = services.chunks.questions.list_open_questions()

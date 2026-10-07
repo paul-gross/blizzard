@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
 
 from pydantic import BaseModel
+
+from blizzard.foundation.trace_export.settings import TracingState
 
 
 class ReceiverStatus(BaseModel):
@@ -22,7 +23,7 @@ class TraceStatusResponse(BaseModel):
     ``receiver`` is the runner's span-receiver tally, ``None`` on the hub. ``replay_max_window_seconds`` is the
     widest window one replay request may cover."""
 
-    state: Literal["enabled", "disabled", "rejected"]
+    state: TracingState
     endpoint: str | None
     rejected_setting: str | None
     rejected_value: str | None

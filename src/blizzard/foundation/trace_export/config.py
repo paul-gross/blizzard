@@ -4,8 +4,8 @@ import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 
+from blizzard.foundation.cli_spans import SCOPE_NAME
 from blizzard.foundation.cli_spans import SERVICE_NAME as CLI_SERVICE_NAME
-from blizzard.foundation.platform_tracing.attributes import CLI_SCOPE
 from blizzard.foundation.roles import domain_model
 
 RESERVED_SERVICE_NAMES = frozenset({"blizzard-hub", "blizzard-runner", "blizzard-chunk", CLI_SERVICE_NAME})
@@ -65,7 +65,7 @@ class TracingConfig:
             entry = f"tracing.worker_program_services.{scope}"
             if not scope.strip():
                 raise invalid("tracing.worker_program_services has an empty scope name")
-            if scope == CLI_SCOPE:
+            if scope == SCOPE_NAME:
                 raise invalid(f"{entry} maps the CLI scope, whose service.name is fixed")
             if not isinstance(name, str) or not name.strip():
                 raise invalid(f"{entry} must be a non-empty string, got {name!r}")

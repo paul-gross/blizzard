@@ -18,7 +18,7 @@ from blizzard.foundation.garden_proposals import (
     GardenProposalItemOutcome,
     GardenProposalOrigin,
 )
-from blizzard.foundation.ids import GARDEN_PROPOSAL_PREFIX, Id
+from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.garden.findings.model import Finding
 from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
@@ -479,7 +479,7 @@ class GardenProposalAuthoring:
         existence is the caller's own resolution, not checked here."""
         at = self._clock.now()
         draft = GardenProposal.operator(
-            Id.mint_at(GARDEN_PROPOSAL_PREFIX, at).value,
+            Id.mint_at(IdPrefix.GARDEN_PROPOSAL, at).value,
             created_by=created_by,
             routine_name=routine.name if routine is not None else None,
             class_=class_,

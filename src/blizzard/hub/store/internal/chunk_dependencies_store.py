@@ -13,7 +13,7 @@ from datetime import datetime
 from sqlalchemy import Connection, select, update
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.ids import DEPENDENCY_EDGE_PREFIX, Id
+from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.chunk.model import DependencyEdge
 from blizzard.hub.domain.chunk.ports.dependencies import FoldTarget, IWriteChunkDependenciesRepository
@@ -91,7 +91,7 @@ class ChunkDependenciesStore:
     def _declare_conn(  # type: ignore[no-untyped-def]
         self, conn, dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at: datetime
     ) -> DependencyEdge:
-        dependency_id = Id.mint_at(DEPENDENCY_EDGE_PREFIX, at).value
+        dependency_id = Id.mint_at(IdPrefix.DEPENDENCY_EDGE, at).value
         conn.execute(
             s.chunk_dependencies.insert().values(
                 dependency_id=dependency_id,
@@ -158,7 +158,7 @@ class ChunkDependenciesStore:
                     .values(released_at=at, released_by=by)
                 )
             for dependent_chunk_id, prerequisite_chunk_id, declared_at in target.mint:
-                dependency_id = Id.mint_at(DEPENDENCY_EDGE_PREFIX, at).value
+                dependency_id = Id.mint_at(IdPrefix.DEPENDENCY_EDGE, at).value
                 conn.execute(
                     s.chunk_dependencies.insert().values(
                         dependency_id=dependency_id,
