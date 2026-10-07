@@ -9,6 +9,7 @@ import signal
 import types
 from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 
 import click
@@ -18,6 +19,7 @@ from blizzard.cli.host_directory import HostDirectory
 from blizzard.cli.runtime import build_early_shutdown_server, click_exception_on, run_init, run_migrate
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.operator_sessions.internal.session_file import SessionFile
+from blizzard.foundation.roles import collaborator
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import RevisionMismatchError
 from blizzard.runner.app import HostedApp, build_hosted_app
@@ -79,8 +81,17 @@ def _http_hub_clients(hub_url: str, runner_token: str, operator_token: str | Non
         yield HttpHubClient(runner_http), HttpHubRunnerAdmin(operator_http, operator_token=operator_token)
 
 
-# The seam a test replaces to hand `init` canned hub answers instead of a live hub.
-hub_clients: Callable[[str, str, str | None], AbstractContextManager[InitHubClients]] = _http_hub_clients
+@collaborator
+@dataclass(frozen=True)
+class InitCollaborators:
+    """What ``init`` reaches the hub through: an invoker hands its own to the root group as ``obj``;
+    with none, ``init`` builds the HTTP one."""
+
+    hub_clients: Callable[[str, str, str | None], AbstractContextManager[InitHubClients]]
+
+    def join_with(self, config: RunnerConfig) -> AbstractContextManager[InitHubClients]:
+        """The identity read and the add for ``config``'s hub, under its held token and the operator's session."""
+        return self.hub_clients(config.hub_url, config.hub_token, SessionFile.of().load(config.hub_url))
 
 
 @click.command()
@@ -91,7 +102,8 @@ hub_clients: Callable[[str, str, str | None], AbstractContextManager[InitHubClie
     is_flag=True,
     help="Add the runner again when its hub does not know its token — only after that hub's data was reset.",
 )
-def init(directory: str, hub_url: str | None, allow_readd: bool) -> None:
+@click.pass_context
+def init(ctx: click.Context, directory: str, hub_url: str | None, allow_readd: bool) -> None:
     """Scaffold config + data dir + a migrated store under DIRECTORY, then join the runner to its
     hub. Idempotent.
 
@@ -106,10 +118,14 @@ def init(directory: str, hub_url: str | None, allow_readd: bool) -> None:
     )
     with click_exception_on(ConfigError):
         config = RunnerConfig.load(Path(directory))
-    _join_hub(config, allow_readd=allow_readd)
+    collaborators = ctx.find_object(InitCollaborators) or InitCollaborators(_http_hub_clients)
+    with collaborators.join_with(config) as (identity, admin):
+        _join_hub(config, identity, admin, allow_readd=allow_readd)
 
 
-def _join_hub(config: RunnerConfig, *, allow_readd: bool) -> None:
+def _join_hub(
+    config: RunnerConfig, identity: ITokenIdentityReader, admin: IHubRunnerAdmin, *, allow_readd: bool
+) -> None:
     """Keep the runner the held token names, or add one and write its token; any stop exits
     non-zero with nothing added."""
     token_file = HubTokenFile.of(config.root, config.token_env)
@@ -120,8 +136,7 @@ def _join_hub(config: RunnerConfig, *, allow_readd: bool) -> None:
     )
     hub = config.hub_url
     try:
-        with hub_clients(hub, config.hub_token, SessionFile.of().load(hub)) as (identity, admin):
-            joined = RunnerBootstrap(identity, admin, token_file).join(config.name, held=held, allow_readd=allow_readd)
+        joined = RunnerBootstrap(identity, admin, token_file).join(config.name, held=held, allow_readd=allow_readd)
     except BootstrapStopped as exc:
         from_env = held is not None and held.from_process_env
         raise click.ClickException(_stopped(exc, config, token_file, from_env=from_env)) from exc

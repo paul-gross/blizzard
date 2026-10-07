@@ -15,21 +15,22 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from click.testing import CliRunner
 from sqlalchemy import insert
 
 from blizzard.cli.main import blizzard
+from blizzard.cli.operator_trace import UNTRACED
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.cli.daemon import LOCAL_CLIENT_TIMEOUT
 from blizzard.runner.cli.transcript import _daemon_holding
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.store import schema as runner_schema
+from tests.runner_init_fakes import init_runner
 
 pytestmark = pytest.mark.unit
 
 
 def test_root_lists_hub_and_runner() -> None:
-    result = CliRunner().invoke(blizzard, ["--help"])
+    result = init_runner().invoke(blizzard, ["--help"])
     assert result.exit_code == 0
     assert "hub" in result.output
     assert "runner" in result.output
@@ -37,7 +38,7 @@ def test_root_lists_hub_and_runner() -> None:
 
 def test_hub_lists_its_verbs() -> None:
     # The operator verbs are grouped by noun.
-    result = CliRunner().invoke(blizzard, ["hub", "--help"])
+    result = init_runner().invoke(blizzard, ["hub", "--help"])
     assert result.exit_code == 0
     for verb in ("init", "migrate", "host", "status", "chunk", "runner", "graph", "queue", "decision", "question"):
         assert verb in result.output
@@ -47,26 +48,26 @@ def test_hub_removed_flat_verbs_are_unknown() -> None:
     """Flat verbs removed no longer name a command in `--help` (matched by
     each line's own first token, not a substring), and invoking one fails with click's
     unknown-command error rather than silently delegating."""
-    result = CliRunner().invoke(blizzard, ["hub", "--help"])
+    result = init_runner().invoke(blizzard, ["hub", "--help"])
     assert result.exit_code == 0
     listed = {line.split()[0] for line in result.output.splitlines() if line.startswith("  ") and line.split()}
     for verb in ("answer", "ingest", "promote", "requeue", "decisions", "decide", "pause-chunk", "resume-chunk"):
         assert verb not in listed
 
-    invoked = CliRunner().invoke(blizzard, ["hub", "promote", "ch_42"])
+    invoked = init_runner().invoke(blizzard, ["hub", "promote", "ch_42"])
     assert invoked.exit_code != 0
     assert "No such command 'promote'" in invoked.output
 
 
 def test_runner_lists_its_verbs() -> None:
-    result = CliRunner().invoke(blizzard, ["runner", "--help"])
+    result = init_runner().invoke(blizzard, ["runner", "--help"])
     assert result.exit_code == 0
     for verb in ("init", "migrate", "host", "heartbeat", "ask", "takeover", "requeue", "transcript"):
         assert verb in result.output
 
 
 def test_hub_init_and_migrate(tmp_path: Path) -> None:
-    runner = CliRunner()
+    runner = init_runner()
     root = str(tmp_path / "hub")
 
     init_result = runner.invoke(blizzard, ["hub", "init", root])
@@ -82,7 +83,7 @@ def test_hub_migrate_rejects_a_leftover_pm_source_block(tmp_path: Path) -> None:
     dogfooding deploy runs `migrate` before `systemctl restart`, so a `host`-only guard
     would pass migrate, take the hub down at restart, and the runner with it."""
     root = tmp_path / "hub"
-    runner = CliRunner()
+    runner = init_runner()
     assert runner.invoke(blizzard, ["hub", "init", str(root)]).exit_code == 0
 
     config_path = root / "blizzard-hub.toml"
@@ -101,7 +102,7 @@ def test_hub_migrate_refuses_a_db_url_copied_from_elsewhere(tmp_path: Path) -> N
     """`cp -r <live-store>/* <copy>/ && blizzard hub migrate --dir <copy>`
     must refuse rather than silently migrate the live store — an absolute db_url is
     written in directly to model an unpatched-era init or an explicit override."""
-    runner = CliRunner()
+    runner = init_runner()
     live = tmp_path / "live"
     assert runner.invoke(blizzard, ["hub", "init", str(live)]).exit_code == 0
     live_db_url = f"sqlite:///{(live / 'data' / 'hub.db').resolve()}"
@@ -123,7 +124,7 @@ def test_hub_migrate_refuses_a_db_url_copied_from_elsewhere(tmp_path: Path) -> N
 def test_hub_init_produces_a_config_a_copy_can_migrate_from_with_no_flags(tmp_path: Path) -> None:
     """Acceptance: a freshly-inited dir can be `cp -r`'d and driven from the copy with
     no flags — `hub init`'s output embeds no absolute default path."""
-    runner = CliRunner()
+    runner = init_runner()
     original = tmp_path / "original"
     assert runner.invoke(blizzard, ["hub", "init", str(original)]).exit_code == 0
 
@@ -138,7 +139,7 @@ def test_hub_init_refuses_a_db_url_copied_from_elsewhere(tmp_path: Path) -> None
     """`init` is idempotent and re-running it on an already-inited directory takes the
     same ``HubConfig.load`` path `migrate`/`host` do — it must refuse the same way rather
     than crash with a raw traceback, and accept the same escape hatch."""
-    runner = CliRunner()
+    runner = init_runner()
     live = tmp_path / "live"
     assert runner.invoke(blizzard, ["hub", "init", str(live)]).exit_code == 0
     live_db_url = f"sqlite:///{(live / 'data' / 'hub.db').resolve()}"
@@ -162,7 +163,7 @@ def test_dev_check_invariants_refuses_a_hub_db_url_copied_from_elsewhere(tmp_pat
     """`blizzard dev check-invariants --hub-dir` loads a `HubConfig` the same way `migrate`/
     `host`/`init` do, and must refuse a copied-in external db_url the same clean way rather
     than crash — it accepts the same escape hatch too."""
-    runner = CliRunner()
+    runner = init_runner()
     live = tmp_path / "live"
     assert runner.invoke(blizzard, ["hub", "init", str(live)]).exit_code == 0
     live_db_url = f"sqlite:///{(live / 'data' / 'hub.db').resolve()}"
@@ -187,7 +188,7 @@ def test_dev_check_invariants_asks_for_active_lease_process_is_live(tmp_path: Pa
     """A live operator is never mid-crash-recovery-window — the check must run with
     ``after_recovery=True``, or a genuinely leaked provisional generation goes unreported."""
     root = tmp_path / "runner"
-    runner = CliRunner()
+    runner = init_runner()
     assert runner.invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
 
     engine = create_engine_from_url(RunnerConfig.load(root).db_url)
@@ -211,7 +212,7 @@ def test_dev_check_invariants_asks_for_active_lease_process_is_live(tmp_path: Pa
 
 def test_runner_init(tmp_path: Path) -> None:
     root = str(tmp_path / "runner")
-    result = CliRunner().invoke(blizzard, ["runner", "init", root])
+    result = init_runner().invoke(blizzard, ["runner", "init", root])
     assert result.exit_code == 0, result.output
     assert (tmp_path / "runner" / "blizzard-runner.toml").exists()
 
@@ -224,7 +225,7 @@ _DAEMONS = [("hub", "BZ_HUB_DIR", "blizzard-hub.toml"), ("runner", "BZ_RUNNER_DI
 @pytest.mark.parametrize(("daemon", "env_var", "config_name"), _DAEMONS)
 def test_dir_resolves_from_env_when_flag_absent(daemon: str, env_var: str, config_name: str, tmp_path: Path) -> None:
     root = tmp_path / "runtime"
-    cli = CliRunner()
+    cli = init_runner()
     assert cli.invoke(blizzard, [daemon, "init", str(root)], env={env_var: None}).exit_code == 0
 
     # No --dir: the env names the runtime root, and `migrate` finds the store there.
@@ -236,7 +237,7 @@ def test_dir_resolves_from_env_when_flag_absent(daemon: str, env_var: str, confi
 @pytest.mark.parametrize(("daemon", "env_var", "config_name"), _DAEMONS)
 def test_dir_flag_beats_env(daemon: str, env_var: str, config_name: str, tmp_path: Path) -> None:
     root = tmp_path / "runtime"
-    cli = CliRunner()
+    cli = init_runner()
     assert cli.invoke(blizzard, [daemon, "init", str(root)], env={env_var: None}).exit_code == 0
 
     # The env names a dir that was never initialized, so this only succeeds if --dir wins.
@@ -249,7 +250,7 @@ def test_dir_flag_beats_env(daemon: str, env_var: str, config_name: str, tmp_pat
 def test_dir_defaults_to_cwd_when_neither_set(
     daemon: str, env_var: str, config_name: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    cli = CliRunner()
+    cli = init_runner()
     assert cli.invoke(blizzard, [daemon, "init", str(tmp_path)], env={env_var: None}).exit_code == 0
     monkeypatch.chdir(tmp_path)
 
@@ -264,14 +265,14 @@ def test_init_directory_argument_resolves_from_env(daemon: str, env_var: str, co
     # `init`'s positional DIRECTORY honors the same variable, so a band-aimed env
     # scaffolds the root it names rather than the cwd.
     root = tmp_path / "runtime"
-    result = CliRunner().invoke(blizzard, [daemon, "init"], env={env_var: str(root)})
+    result = init_runner().invoke(blizzard, [daemon, "init"], env={env_var: str(root)})
     assert result.exit_code == 0, result.output
     assert (root / config_name).exists()
 
 
 @pytest.mark.parametrize(("daemon", "env_var", "config_name"), _DAEMONS)
 def test_dir_help_names_the_env_fallback(daemon: str, env_var: str, config_name: str) -> None:
-    result = CliRunner().invoke(blizzard, [daemon, "migrate", "--help"])
+    result = init_runner().invoke(blizzard, [daemon, "migrate", "--help"])
     assert result.exit_code == 0
     assert f"${env_var}" in result.output
 
@@ -281,7 +282,7 @@ def test_dir_help_names_the_env_fallback(daemon: str, env_var: str, config_name:
 @pytest.mark.parametrize(("daemon", "env_var", "config_name"), _DAEMONS)
 def test_host_accepts_positional_directory(daemon: str, env_var: str, config_name: str, tmp_path: Path) -> None:
     root = tmp_path / "runtime"
-    result = CliRunner().invoke(blizzard, [daemon, "host", str(root)], env={env_var: None})
+    result = init_runner().invoke(blizzard, [daemon, "host", str(root)], env={env_var: None})
     assert result.exit_code != 0
     assert str(root) in result.output
     assert "serving blizzard" not in result.output
@@ -290,7 +291,7 @@ def test_host_accepts_positional_directory(daemon: str, env_var: str, config_nam
 @pytest.mark.parametrize(("daemon", "env_var", "config_name"), _DAEMONS)
 def test_host_dir_option_still_works(daemon: str, env_var: str, config_name: str, tmp_path: Path) -> None:
     root = tmp_path / "runtime"
-    result = CliRunner().invoke(blizzard, [daemon, "host", "--dir", str(root)], env={env_var: None})
+    result = init_runner().invoke(blizzard, [daemon, "host", "--dir", str(root)], env={env_var: None})
     assert result.exit_code != 0
     assert str(root) in result.output
     assert "serving blizzard" not in result.output
@@ -299,7 +300,7 @@ def test_host_dir_option_still_works(daemon: str, env_var: str, config_name: str
 @pytest.mark.parametrize(("daemon", "env_var", "config_name"), _DAEMONS)
 def test_host_positional_and_dir_option_agreeing(daemon: str, env_var: str, config_name: str, tmp_path: Path) -> None:
     root = tmp_path / "runtime"
-    result = CliRunner().invoke(blizzard, [daemon, "host", str(root), "--dir", str(root)], env={env_var: None})
+    result = init_runner().invoke(blizzard, [daemon, "host", str(root), "--dir", str(root)], env={env_var: None})
     assert result.exit_code != 0
     assert str(root) in result.output
     assert "disagree" not in result.output
@@ -309,7 +310,9 @@ def test_host_positional_and_dir_option_agreeing(daemon: str, env_var: str, conf
 def test_host_positional_and_dir_option_conflict(daemon: str, env_var: str, config_name: str, tmp_path: Path) -> None:
     positional = tmp_path / "positional"
     flagged = tmp_path / "flagged"
-    result = CliRunner().invoke(blizzard, [daemon, "host", str(positional), "--dir", str(flagged)], env={env_var: None})
+    result = init_runner().invoke(
+        blizzard, [daemon, "host", str(positional), "--dir", str(flagged)], env={env_var: None}
+    )
     assert result.exit_code != 0
     assert str(positional) in result.output
     assert str(flagged) in result.output
@@ -322,14 +325,14 @@ def test_host_positional_beats_ambient_env_dir(daemon: str, env_var: str, config
     # explicit --dir does), so a disagreeing positional wins outright, silently.
     positional = tmp_path / "positional"
     ambient = tmp_path / "ambient"
-    result = CliRunner().invoke(blizzard, [daemon, "host", str(positional)], env={env_var: str(ambient)})
+    result = init_runner().invoke(blizzard, [daemon, "host", str(positional)], env={env_var: str(ambient)})
     assert result.exit_code != 0
     assert str(positional) in result.output
     assert "disagree" not in result.output
 
 
 def test_hub_host_help_shows_directory_argument() -> None:
-    result = CliRunner().invoke(blizzard, ["hub", "host", "--help"])
+    result = init_runner().invoke(blizzard, ["hub", "host", "--help"])
     assert result.exit_code == 0
     assert "DIRECTORY" in result.output
 
@@ -338,9 +341,9 @@ def test_runner_status_errors_cleanly_with_no_daemon_serving(tmp_path: Path) -> 
     # `status` is a pure client of the local API, same as `pause`/`start` —
     # no socket, no store fallback, a clean error naming the missing daemon.
     root = tmp_path / "runner"
-    assert CliRunner().invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
+    assert init_runner().invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
 
-    result = CliRunner().invoke(blizzard, ["runner", "status", "--dir", str(root)])
+    result = init_runner().invoke(blizzard, ["runner", "status", "--dir", str(root)])
 
     assert result.exit_code != 0
     assert "no runner daemon is serving" in result.output
@@ -374,19 +377,19 @@ def test_a_stale_socket_file_is_not_a_serving_daemon(tmp_path: Path) -> None:
     """The single-writer guard probes rather than stats: a socket an ungraceful exit left
     behind must not refuse a verb nothing is actually holding."""
     root = tmp_path / "runner"
-    assert CliRunner().invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
+    assert init_runner().invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
     RunnerConfig.socket_path_for(root).write_bytes(b"")
 
-    assert _daemon_holding(RunnerConfig.load(root)) is None
+    assert _daemon_holding(RunnerConfig.load(root), UNTRACED) is None
 
 
 def test_a_daemon_answering_its_socket_is_holding_the_store(tmp_path: Path) -> None:
     root = tmp_path / "runner"
-    assert CliRunner().invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
+    assert init_runner().invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
     server = _serve_on(RunnerConfig.socket_path_for(root), _OK)
 
     try:
-        assert _daemon_holding(RunnerConfig.load(root)) is not None
+        assert _daemon_holding(RunnerConfig.load(root), UNTRACED) is not None
     finally:
         server.close()
 
@@ -396,11 +399,11 @@ def test_an_ambiguous_liveness_answer_fails_closed(reply: bytes | None, expected
     """A wedged or unhealthy daemon still HOLDS the single-writer store. Resolving either
     ambiguity toward "nothing there" would let the verb write concurrently with it."""
     root = tmp_path / "runner"
-    assert CliRunner().invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
+    assert init_runner().invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
     server = _serve_on(RunnerConfig.socket_path_for(root), reply)
 
     try:
-        holding = _daemon_holding(RunnerConfig.load(root))
+        holding = _daemon_holding(RunnerConfig.load(root), UNTRACED)
     finally:
         server.close()
 
@@ -411,9 +414,9 @@ def test_runner_transcript_backfill_refuses_while_the_lane_is_off(tmp_path: Path
     # `[transcripts] ship` is false in a scaffolded config, and a backfill
     # into a lane the operator has switched off would ship content they never enabled.
     root = tmp_path / "runner"
-    assert CliRunner().invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
+    assert init_runner().invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
 
-    result = CliRunner().invoke(blizzard, ["runner", "transcript", "backfill", "--dir", str(root)])
+    result = init_runner().invoke(blizzard, ["runner", "transcript", "backfill", "--dir", str(root)])
 
     assert result.exit_code != 0
     assert "[transcripts] ship is false" in result.output
@@ -429,10 +432,10 @@ def test_runner_transcript_backfill_drives_its_whole_production_route(tmp_path: 
     directly, so without this the composition-root wiring the operator actually runs
     (CLI -> LoopWiring.backfill_transcripts -> the report line) is named by no gating test."""
     root = tmp_path / "runner"
-    assert CliRunner().invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
+    assert init_runner().invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
     _enable_transcript_shipping(root)
 
-    result = CliRunner().invoke(blizzard, ["runner", "transcript", "backfill", "--dir", str(root), "--dry-run"])
+    result = init_runner().invoke(blizzard, ["runner", "transcript", "backfill", "--dir", str(root), "--dry-run"])
 
     assert result.exit_code == 0, result.output
     assert "would import 0, already present 0, gone 0" in result.output
@@ -443,10 +446,10 @@ def test_runner_transcript_reship_drives_its_whole_production_route(tmp_path: Pa
     constructs the service directly, so the CLI -> `LoopWiring.reship_transcript` ->
     `TranscriptReshipError` -> `ClickException` route is otherwise named by no gating test."""
     root = tmp_path / "runner"
-    assert CliRunner().invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
+    assert init_runner().invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
     _enable_transcript_shipping(root)
 
-    result = CliRunner().invoke(blizzard, ["runner", "transcript", "reship", "seg_nope", "--dir", str(root)])
+    result = init_runner().invoke(blizzard, ["runner", "transcript", "reship", "seg_nope", "--dir", str(root)])
 
     assert result.exit_code != 0
     assert "no such transcript segment: seg_nope" in result.output
@@ -456,12 +459,12 @@ def test_runner_transcript_reship_refuses_while_a_daemon_holds_the_store(tmp_pat
     """The shared `_transcript_config` guard reaches the second verb too — the whole reason
     it was extracted, and a regression here is silent store corruption, not a failed command."""
     root = tmp_path / "runner"
-    assert CliRunner().invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
+    assert init_runner().invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
     _enable_transcript_shipping(root)
     server = _serve_on(RunnerConfig.socket_path_for(root), _OK)
 
     try:
-        result = CliRunner().invoke(blizzard, ["runner", "transcript", "reship", "seg_x", "--dir", str(root)])
+        result = init_runner().invoke(blizzard, ["runner", "transcript", "reship", "seg_x", "--dir", str(root)])
     finally:
         server.close()
 
@@ -472,12 +475,12 @@ def test_runner_transcript_reship_refuses_while_a_daemon_holds_the_store(tmp_pat
 def test_runner_transcript_backfill_refuses_while_a_daemon_holds_the_store(tmp_path: Path) -> None:
     """The single-writer guard, exercised through the verb rather than the helper alone."""
     root = tmp_path / "runner"
-    assert CliRunner().invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
+    assert init_runner().invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
     _enable_transcript_shipping(root)
     server = _serve_on(RunnerConfig.socket_path_for(root), _OK)
 
     try:
-        result = CliRunner().invoke(blizzard, ["runner", "transcript", "backfill", "--dir", str(root)])
+        result = init_runner().invoke(blizzard, ["runner", "transcript", "backfill", "--dir", str(root)])
     finally:
         server.close()
 
@@ -489,9 +492,9 @@ def test_runner_takeover_errors_cleanly_with_no_daemon_serving(tmp_path: Path) -
     # `takeover` is a pure client of the local API too — no socket, no store
     # fallback, a clean error naming the missing daemon.
     root = tmp_path / "runner"
-    assert CliRunner().invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
+    assert init_runner().invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
 
-    result = CliRunner().invoke(blizzard, ["runner", "takeover", "ch_1", "--dir", str(root)])
+    result = init_runner().invoke(blizzard, ["runner", "takeover", "ch_1", "--dir", str(root)])
 
     assert result.exit_code != 0
     assert "no runner daemon is serving" in result.output
@@ -500,7 +503,7 @@ def test_runner_takeover_errors_cleanly_with_no_daemon_serving(tmp_path: Path) -
 def test_hub_host_refuses_a_db_url_copied_from_elsewhere(tmp_path: Path) -> None:
     """`host` applies the same --dir isolation guard as `migrate` — it
     fails before ever announcing "serving", let alone binding a socket."""
-    runner = CliRunner()
+    runner = init_runner()
     live = tmp_path / "live"
     assert runner.invoke(blizzard, ["hub", "init", str(live)]).exit_code == 0
     live_db_url = f"sqlite:///{(live / 'data' / 'hub.db').resolve()}"
@@ -523,7 +526,7 @@ def test_runner_host_without_a_token_names_both_ways_to_get_one(
 ) -> None:
     """A runner the hub already lists takes an enroll, not a second add under a fresh id, so the
     no-token warning names both."""
-    runner = CliRunner()
+    runner = init_runner()
     root = tmp_path / "runner"
     assert runner.invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
     (root / ".env").unlink()
@@ -547,7 +550,7 @@ def test_runner_host_reports_a_missing_runner_prompt_file_as_a_clean_error(tmp_p
     """A configured-but-missing ``runner_prompt_file`` fails at boot as a
     clean CLI error: ``PeriodicDriver`` resolves it before any socket binds, rather than
     silently killing the reconciliation loop while uvicorn keeps serving."""
-    runner = CliRunner()
+    runner = init_runner()
     root = tmp_path / "runner"
     assert runner.invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
     config_path = root / "blizzard-runner.toml"

@@ -11,7 +11,7 @@ from typing import Any, Protocol
 import click
 import httpx
 
-from blizzard.cli.operator_trace import OperatorTrace
+from blizzard.cli.operator_trace import ITraceHeaders
 from blizzard.foundation.operator_sessions import IReadSessionStore
 from blizzard.foundation.roles import dto
 
@@ -44,17 +44,21 @@ class RawBody:
 @dataclass(frozen=True)
 class CliContext:
     """One operator verb's invocation — the resolved hub, the read-only local session
-    seam (``bzh:controller-read-only``), and whether to print JSON."""
+    seam (``bzh:controller-read-only``), where its requests' trace headers come from, and whether to print JSON."""
 
     hub_url: str
     session_reader: IReadSessionStore
+    trace: ITraceHeaders
     as_json: bool = False
 
     @classmethod
-    def of(cls, hub_url: str | None, session_reader: IReadSessionStore, as_json: bool = False) -> CliContext:
+    def of(
+        cls, hub_url: str | None, session_reader: IReadSessionStore, trace: ITraceHeaders, as_json: bool = False
+    ) -> CliContext:
         return cls(
             hub_url=hub_url or os.environ.get(ENV_HUB_URL, DEFAULT_HUB_URL),
             session_reader=session_reader,
+            trace=trace,
             as_json=as_json,
         )
 
@@ -313,4 +317,4 @@ class CliContext:
         token = self.session_reader.load(self.hub_url)
         headers = {"Authorization": f"Bearer {token}"} if token else {}
         door_header = {"X-Blizzard-Door": "cli"} if door else {}
-        return {**door_header, **headers, **OperatorTrace.headers()}
+        return {**door_header, **headers, **self.trace.headers()}

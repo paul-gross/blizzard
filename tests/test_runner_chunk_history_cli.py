@@ -61,8 +61,8 @@ def test_history_gets_the_lease_scoped_route_with_inherited_identity_and_token(
         calls.append((url, headers))
         return _FakeResponse(text=_HISTORY_TEXT)
 
-    bind_stubs(monkeypatch, get=fake_get)
-    result = CliRunner().invoke(runner_group, ["chunk", "history"], env=_ENV)
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(runner_group, ["chunk", "history"], env=_ENV)
 
     assert result.exit_code == 0, result.output
     assert calls == [
@@ -79,9 +79,9 @@ def test_history_omits_the_token_header_when_absent(monkeypatch: pytest.MonkeyPa
         calls.append(headers)
         return _FakeResponse(text="[]")
 
-    bind_stubs(monkeypatch, get=fake_get)
+    bound = bind_stubs(get=fake_get)
     env = {k: v for k, v in _ENV.items() if k != "BLIZZARD_LEASE_TOKEN"}
-    result = CliRunner().invoke(runner_group, ["chunk", "history"], env=env)
+    result = bound.runner.invoke(runner_group, ["chunk", "history"], env=env)
 
     assert result.exit_code == 0, result.output
     assert calls == [{}]
@@ -96,8 +96,8 @@ def test_history_errors_without_identity(monkeypatch: pytest.MonkeyPatch) -> Non
         attempted = True
         return _FakeResponse()
 
-    bind_stubs(monkeypatch, get=fake_get)
-    result = CliRunner().invoke(
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(
         runner_group, ["chunk", "history"], env={"BLIZZARD_LEASE_ID": "", "BLIZZARD_RUNNER_URL": ""}
     )
 
@@ -107,22 +107,20 @@ def test_history_errors_without_identity(monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 @pytest.mark.unit
-def test_history_surfaces_a_403_as_a_nonzero_exit_with_the_hub_detail(monkeypatch: pytest.MonkeyPatch) -> None:
-    bind_stubs(
-        monkeypatch, get=lambda *a, **k: _RejectingResponse({"detail": "presented token does not authorize lease"})
-    )
-    result = CliRunner().invoke(runner_group, ["chunk", "history"], env=_ENV)
+def test_history_surfaces_a_403_as_a_nonzero_exit_with_the_hub_detail() -> None:
+    bound = bind_stubs(get=lambda *a, **k: _RejectingResponse({"detail": "presented token does not authorize lease"}))
+    result = bound.runner.invoke(runner_group, ["chunk", "history"], env=_ENV)
 
     assert result.exit_code != 0
     assert "presented token does not authorize lease" in result.output
 
 
 @pytest.mark.unit
-def test_history_surfaces_a_404_as_a_nonzero_exit(monkeypatch: pytest.MonkeyPatch) -> None:
-    bind_stubs(
-        monkeypatch, get=lambda *a, **k: _RejectingResponse({"detail": "no active lease or open takeover for lease_9"})
+def test_history_surfaces_a_404_as_a_nonzero_exit() -> None:
+    bound = bind_stubs(
+        get=lambda *a, **k: _RejectingResponse({"detail": "no active lease or open takeover for lease_9"})
     )
-    result = CliRunner().invoke(runner_group, ["chunk", "history"], env=_ENV)
+    result = bound.runner.invoke(runner_group, ["chunk", "history"], env=_ENV)
 
     assert result.exit_code != 0
     assert "no active lease or open takeover for lease_9" in result.output
@@ -155,8 +153,8 @@ def test_chunk_asks_gets_the_lease_scoped_asks_route(monkeypatch: pytest.MonkeyP
         calls.append((url, headers))
         return _FakeResponse(text="[]")
 
-    bind_stubs(monkeypatch, get=fake_get)
-    result = CliRunner().invoke(runner_group, ["chunk", "asks"], env=_ENV)
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(runner_group, ["chunk", "asks"], env=_ENV)
 
     assert result.exit_code == 0, result.output
     assert calls == [("http://127.0.0.1:8431/api/leases/lease_9/asks", {"X-Blizzard-Lease-Token": "the-lease-token"})]

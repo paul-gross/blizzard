@@ -10,8 +10,8 @@ from typing import TYPE_CHECKING
 import click
 import httpx
 
+from blizzard.cli.collaborators import CliCollaborators
 from blizzard.cli.operator_trace import exit_code_of
-from blizzard.foundation.roles import collaborator
 from blizzard.foundation.trace_ids import DerivedContext, parse_traceparent
 
 if TYPE_CHECKING:
@@ -53,16 +53,15 @@ class Problem:
         return str(detail) if detail else ""
 
 
-# The seam a test replaces to hand the session a client over a canned transport.
-client_factory: Callable[[], httpx.Client] = httpx.Client
-
-
 class WorkerSession:
     """One worker command's state: the one HTTP client every request and the span post share,
     and the command's span when a trace context was handed down. The ``runner`` group builds and
     finishes it — a short-lived command has its own root, not a singleton."""
 
-    def __init__(self, environ: Mapping[str, str] | None = None, *, group_path: str = "") -> None:
+    def __init__(
+        self, collaborators: CliCollaborators, environ: Mapping[str, str] | None = None, *, group_path: str = ""
+    ) -> None:
+        self._collaborators = collaborators
         self._environ = os.environ if environ is None else environ
         self._group_path = group_path
         self._client: httpx.Client | None = None
@@ -70,25 +69,18 @@ class WorkerSession:
         self._parent = self._traced_parent()
 
     @classmethod
-    def untraced(cls) -> WorkerSession:
-        return cls({})
-
-    @classmethod
     def current(cls) -> WorkerSession:
-        """The session of the command being run; a context the ``runner`` group did not build
-        gets an untraced one, kept so it still shares one client."""
+        """The session of the command being run. A call made outside a ``runner``-group invocation
+        has none — a programming error, so it fails rather than building one."""
         ctx = click.get_current_context(silent=True)
-        if ctx is None:
-            return cls.untraced()
-        meta = ctx.find_root().meta
-        session = meta.get(_SESSION_META_KEY)
+        session = ctx.find_root().meta.get(_SESSION_META_KEY) if ctx is not None else None
         if session is None:
-            session = meta[_SESSION_META_KEY] = cls.untraced()
+            raise RuntimeError("no worker session: a worker call must run inside a `blizzard runner` invocation")
         return session
 
     @classmethod
-    def begin(cls, ctx: click.Context) -> WorkerSession:
-        session = cls(group_path=ctx.command_path)
+    def begin(cls, ctx: click.Context, collaborators: CliCollaborators) -> WorkerSession:
+        session = cls(collaborators, group_path=ctx.command_path)
         ctx.find_root().meta[_SESSION_META_KEY] = session
         return session
 
@@ -105,7 +97,7 @@ class WorkerSession:
 
     def client(self) -> httpx.Client:
         if self._client is None:
-            self._client = client_factory()
+            self._client = self._collaborators.client_factory()
         return self._client
 
     def open_span(self) -> str | None:
@@ -123,6 +115,7 @@ class WorkerSession:
                 self._command(ctx.command_path if ctx else self._group_path),
                 chunk_id=self._environ.get(ENV_CHUNK_ID, ""),
                 lease_id=self._environ.get(ENV_LEASE_ID, ""),
+                clock=self._collaborators.clock,
             )
         return self._span.traceparent
 
@@ -167,7 +160,6 @@ class WorkerSession:
             self.finish(code)
 
 
-@collaborator
 @dataclass(frozen=True)
 class WorkerCall:
     """A spawned worker's ambient identity — the runner it reports to, and the lease it acts

@@ -16,8 +16,10 @@ import pytest
 from click.testing import CliRunner, Result
 
 from blizzard.cli import operator_trace
+from blizzard.cli.collaborators import CliCollaborators
 from blizzard.foundation import cli_spans
 from blizzard.foundation.otlp_destination import OtlpDestination, parse_headers
+from blizzard.foundation.span_clock import Clock
 from blizzard.foundation.trace_ids import parse_traceparent
 from blizzard.hub.cli import hub as hub_group
 from blizzard.runner.cli import daemon as runner_daemon
@@ -46,9 +48,9 @@ class _Collector:
         return [json.loads(r.content)["resourceSpans"][0]["scopeSpans"][0]["spans"][0] for r in self.requests]
 
 
-def _bind(monkeypatch: pytest.MonkeyPatch, collector: _Collector) -> None:
-    monkeypatch.setattr(
-        operator_trace, "client_factory", lambda: httpx.Client(transport=httpx.MockTransport(collector))
+def _bind(collector: _Collector) -> CliCollaborators:
+    return CliCollaborators(
+        client_factory=lambda: httpx.Client(transport=httpx.MockTransport(collector)), clock=Clock()
     )
 
 
@@ -65,16 +67,16 @@ class _HubCalls:
         return httpx.Response(self.status, json={"chunks": [], "next_cursor": None}, request=request)
 
 
-def _hub(argv: list[str], env: dict[str, str] | None = None) -> Result:
-    return CliRunner().invoke(hub_group, argv, env={**_OPERATOR_ENV, **(env or {})})
+def _hub(bound: CliCollaborators | None, argv: list[str], env: dict[str, str] | None = None) -> Result:
+    return CliRunner().invoke(hub_group, argv, env={**_OPERATOR_ENV, **(env or {})}, obj=bound)
 
 
 def test_a_hub_command_is_one_root_span_its_context_injected(monkeypatch: pytest.MonkeyPatch) -> None:
     collector, hub = _Collector(), _HubCalls()
-    _bind(monkeypatch, collector)
+    bound = _bind(collector)
     monkeypatch.setattr(httpx, "get", hub)
 
-    result = _hub(["chunk", "list"])
+    result = _hub(bound, ["chunk", "list"])
 
     assert result.exit_code == 0, result.output
     [span] = collector.spans()
@@ -90,10 +92,10 @@ def test_a_hub_command_is_one_root_span_its_context_injected(monkeypatch: pytest
 
 def test_the_payload_names_the_command_and_exit_code_and_carries_no_argument(monkeypatch: pytest.MonkeyPatch) -> None:
     collector = _Collector()
-    _bind(monkeypatch, collector)
+    bound = _bind(collector)
     monkeypatch.setattr(httpx, "get", _HubCalls(status=500))
 
-    result = _hub(["chunk", "show", _PLANTED])
+    result = _hub(bound, ["chunk", "show", _PLANTED])
 
     assert result.exit_code == 1
     body = collector.requests[0].content.decode()
@@ -109,10 +111,11 @@ def test_the_payload_names_the_command_and_exit_code_and_carries_no_argument(mon
 
 def test_the_configured_service_name_and_headers_reach_the_send(monkeypatch: pytest.MonkeyPatch) -> None:
     collector = _Collector()
-    _bind(monkeypatch, collector)
+    bound = _bind(collector)
     monkeypatch.setattr(httpx, "get", _HubCalls())
 
     _hub(
+        bound,
         ["chunk", "list"],
         {
             "OTEL_SERVICE_NAME": "ops-laptop",
@@ -144,10 +147,10 @@ def test_nothing_is_sent_and_no_request_is_traced_when_the_gate_is_closed(
     monkeypatch: pytest.MonkeyPatch, env: dict[str, str]
 ) -> None:
     collector, hub = _Collector(), _HubCalls()
-    _bind(monkeypatch, collector)
+    bound = _bind(collector)
     monkeypatch.setattr(httpx, "get", hub)
 
-    result = _hub(["chunk", "list"], env)
+    result = _hub(bound, ["chunk", "list"], env)
 
     assert result.exit_code == 0, result.output
     assert collector.requests == []
@@ -157,19 +160,19 @@ def test_nothing_is_sent_and_no_request_is_traced_when_the_gate_is_closed(
 @pytest.mark.parametrize("argv", [["host", "--help"], ["record-marker", "--help"]])
 def test_a_daemon_or_marker_command_is_never_traced(monkeypatch: pytest.MonkeyPatch, argv: list[str]) -> None:
     collector = _Collector()
-    _bind(monkeypatch, collector)
+    bound = _bind(collector)
 
-    _hub(argv)
+    _hub(bound, argv)
 
     assert collector.requests == []
 
 
 def test_a_command_run_through_the_hyphenated_alias_is_still_rooted_at_hub(monkeypatch: pytest.MonkeyPatch) -> None:
     collector = _Collector()
-    _bind(monkeypatch, collector)
+    bound = _bind(collector)
     monkeypatch.setattr(httpx, "get", _HubCalls())
 
-    CliRunner().invoke(hub_group, ["chunk", "list"], env=_OPERATOR_ENV, prog_name="blizzard-hub")
+    CliRunner().invoke(hub_group, ["chunk", "list"], env=_OPERATOR_ENV, prog_name="blizzard-hub", obj=bound)
 
     assert collector.spans()[0]["name"] == "hub chunk list"
 
@@ -186,9 +189,9 @@ def test_a_runner_operator_verb_is_a_span_and_its_requests_carry_the_context(mon
 
     real = httpx.Client
     monkeypatch.setattr(runner_daemon.httpx, "Client", lambda **kw: real(transport=httpx.MockTransport(answer), **kw))
-    monkeypatch.setattr(operator_trace, "client_factory", lambda: real(transport=httpx.MockTransport(answer)))
+    bound = CliCollaborators(client_factory=lambda: real(transport=httpx.MockTransport(answer)), clock=Clock())
 
-    CliRunner().invoke(runner_group, ["status", "--runner-url", "http://127.0.0.1:1"], env=_OPERATOR_ENV)
+    CliRunner().invoke(runner_group, ["status", "--runner-url", "http://127.0.0.1:1"], env=_OPERATOR_ENV, obj=bound)
 
     [span] = collector.spans()
     assert span["name"] == "runner status"
@@ -201,8 +204,10 @@ def test_the_unix_socket_client_carries_the_context(tmp_path: Path) -> None:
     def group() -> None: ...
 
     @group.command("probe")
-    def probe() -> None:
-        click.echo(runner_daemon.uds_client(tmp_path / "s.sock").headers.get("traceparent", ""))
+    @click.pass_context
+    def probe(ctx: click.Context) -> None:
+        client = runner_daemon.uds_client(tmp_path / "s.sock", operator_trace.OperatorTrace.source(ctx))
+        click.echo(client.headers.get("traceparent", ""))
 
     result = CliRunner().invoke(group, ["probe"], env=_OPERATOR_ENV)
 
@@ -215,9 +220,9 @@ def test_a_provider_call_of_external_usage_carries_no_trace_header() -> None:
 
 def test_a_refused_send_changes_neither_output_nor_exit_code(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(httpx, "get", _HubCalls())
-    _bind(monkeypatch, _Collector(status=500))
+    bound = _bind(_Collector(status=500))
 
-    traced = _hub(["chunk", "list"])
+    traced = _hub(bound, ["chunk", "list"])
     monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
     plain = CliRunner().invoke(hub_group, ["chunk", "list"], env={"BZ_HUB_URL": _OPERATOR_ENV["BZ_HUB_URL"]})
 
@@ -236,7 +241,9 @@ def test_a_hung_endpoint_gives_up_at_the_cap_and_changes_neither_output_nor_exit
     listener.listen(8)
     try:
         started = time.monotonic()
-        hung = _hub(["chunk", "list"], {"OTEL_EXPORTER_OTLP_ENDPOINT": f"http://127.0.0.1:{listener.getsockname()[1]}"})
+        hung = _hub(
+            None, ["chunk", "list"], {"OTEL_EXPORTER_OTLP_ENDPOINT": f"http://127.0.0.1:{listener.getsockname()[1]}"}
+        )
         elapsed = time.monotonic() - started
     finally:
         listener.close()
@@ -271,7 +278,7 @@ def test_headers_parse_as_percent_decoded_key_value_pairs() -> None:
 
 
 def test_a_root_span_has_a_trace_of_its_own_and_hex_ids() -> None:
-    span = cli_spans.CliSpan.root("hub chunk list")
+    span = cli_spans.CliSpan.root("hub chunk list", clock=Clock())
     span.finish(0)
     payload = span.payload()["resourceSpans"][0]["scopeSpans"][0]["spans"][0]
     assert payload["traceId"] == f"{span.trace_id:032x}" and len(payload["traceId"]) == 32
@@ -280,9 +287,9 @@ def test_a_root_span_has_a_trace_of_its_own_and_hex_ids() -> None:
     assert span.traceparent == f"00-{payload['traceId']}-{payload['spanId']}-01"
 
 
-def _clocked(wall: int = 5_000, ticks: tuple[int, ...] = (0, 0, 40)) -> cli_spans.Clock:
+def _clocked(wall: int = 5_000, ticks: tuple[int, ...] = (0, 0, 40)) -> Clock:
     monotonic = iter(ticks)
-    return cli_spans.Clock(wall_ns=lambda: wall, monotonic_ns=lambda: next(monotonic))
+    return Clock(wall_ns=lambda: wall, monotonic_ns=lambda: next(monotonic))
 
 
 def test_a_root_span_carries_its_service_name_times_and_no_chunk_or_lease_attribute() -> None:
@@ -400,9 +407,9 @@ def test_the_operator_trace_records_the_exit_code_its_command_ends_in(
     monkeypatch: pytest.MonkeyPatch, command: str, code: str, status: dict | None
 ) -> None:
     collector = _Collector()
-    _bind(monkeypatch, collector)
+    bound = _bind(collector)
 
-    CliRunner().invoke(_grouped(), [command], env=_OPERATOR_ENV)
+    CliRunner().invoke(_grouped(), [command], env=_OPERATOR_ENV, obj=bound)
 
     [span] = collector.spans()
     assert span["name"] == f"hub {command}"
@@ -411,7 +418,7 @@ def test_the_operator_trace_records_the_exit_code_its_command_ends_in(
 
 
 def test_the_operator_trace_returns_the_commands_value_and_finishes_once() -> None:
-    trace = operator_trace.OperatorTrace("hub", {})
+    trace = operator_trace.OperatorTrace("hub", CliCollaborators.production(), {})
     finished: list[int] = []
     trace.finish = finished.append  # type: ignore[method-assign]
 

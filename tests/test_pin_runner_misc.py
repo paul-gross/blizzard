@@ -13,7 +13,6 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
-from click.testing import CliRunner
 from fastapi.testclient import TestClient
 
 from blizzard.auth_core import Role
@@ -209,8 +208,8 @@ def test_the_deprecated_pm_items_cli_alias_still_reads_the_work_item(monkeypatch
         calls.append(url)
         return _FakeLocalResponse('{"items": []}')
 
-    bind_stubs(monkeypatch, get=fake_get)
-    result = CliRunner().invoke(
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(
         runner_group,
         ["pm-items", "ch_1"],
         env={"BLIZZARD_RUNNER_URL": "http://127.0.0.1:8431/"},

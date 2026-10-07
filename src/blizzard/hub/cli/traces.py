@@ -10,6 +10,7 @@ import click
 import httpx
 
 from blizzard.cli.window import refuse_future_until, replay_windows, resume_since, since_option, until_option
+from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.roles import dto
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.cli.command import FleetCommand
@@ -73,7 +74,7 @@ def traces_replay(cli: CliContext, since: datetime, until: datetime, dry_run: bo
     """Tell every step that closed and chunk that finished in [since, until) again, with the live sweep's span
     ids. The live cursor does not move, so spans the backend already holds arrive again — it dedupes on their
     ids. A range over replay_max_window is told in windows; a failure names the --since to resume from."""
-    refuse_future_until(until)
+    refuse_future_until(until, SystemClock())
     status = cli.get("/api/traces/status", "GET /traces/status").json()
     windows = replay_windows(since, until, status.get("replay_max_window_seconds"))
     total = {"steps": 0, "chunks": 0, "spans": 0, "batches": 0, "windows": 0}

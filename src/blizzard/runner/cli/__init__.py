@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import click
 
+from blizzard.cli.collaborators import CliCollaborators
 from blizzard.cli.operator_trace import OperatorGroup
 from blizzard.runner.cli.worker_call import WorkerSession
 
@@ -50,7 +51,7 @@ class _RunnerGroup(OperatorGroup):
     beneath it; the two never both open a span, since a worker's environment is never an operator's."""
 
     def invoke(self, ctx: click.Context) -> object:
-        return WorkerSession.begin(ctx).run(lambda: super(_RunnerGroup, self).invoke(ctx))
+        return WorkerSession.begin(ctx, CliCollaborators.of(ctx)).run(lambda: super(_RunnerGroup, self).invoke(ctx))
 
 
 @click.group(cls=_RunnerGroup, lazy=_COMMANDS, trace_root="runner", invoke_without_command=True)

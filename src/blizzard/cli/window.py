@@ -9,7 +9,7 @@ from typing import Any, overload
 
 import click
 
-from blizzard.foundation.clock import IClock, SystemClock
+from blizzard.foundation.clock import IClock
 from blizzard.foundation.store.utc import iso_utc
 
 _ZONED = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})")
@@ -63,10 +63,9 @@ def until_option(*, required: bool = False) -> Any:
     )
 
 
-def refuse_future_until(until: datetime, clock: IClock | None = None) -> None:
-    """Refuse an ``--until`` past the caller's clock before any window is sent, so a range is never half told.
-    A short-lived CLI process wires its own clock here; tests hand one in."""
-    if until.astimezone(UTC) > (clock or SystemClock()).now():
+def refuse_future_until(until: datetime, clock: IClock) -> None:
+    """Refuse an ``--until`` past the caller's clock before any window is sent, so a range is never half told."""
+    if until.astimezone(UTC) > clock.now():
         raise click.ClickException("--until must not be in the future")
 
 

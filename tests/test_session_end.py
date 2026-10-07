@@ -12,7 +12,6 @@ from pathlib import Path
 
 import httpx
 import pytest
-from click.testing import CliRunner
 from fastapi.testclient import TestClient
 
 from blizzard.runner.app import create_app
@@ -120,8 +119,8 @@ def test_session_end_verb_posts_inherited_identity(monkeypatch: pytest.MonkeyPat
         calls.append(url)
         return _FakeResponse()
 
-    bind_stubs(monkeypatch, post=fake_post)
-    result = CliRunner().invoke(
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(
         runner_group,
         ["session-end"],
         env={"BLIZZARD_LEASE_ID": "lease_9", "BLIZZARD_RUNNER_URL": "http://127.0.0.1:8431/"},
@@ -140,8 +139,8 @@ def test_session_end_verb_skips_on_elicitation_marker(monkeypatch: pytest.Monkey
         calls.append(url)
         return _FakeResponse()
 
-    bind_stubs(monkeypatch, post=fake_post)
-    result = CliRunner().invoke(
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(
         runner_group,
         ["session-end"],
         env={
@@ -165,8 +164,10 @@ def test_session_end_verb_soft_fails_without_identity(monkeypatch: pytest.Monkey
         posted = True
         return _FakeResponse()
 
-    bind_stubs(monkeypatch, post=fake_post)
-    result = CliRunner().invoke(runner_group, ["session-end"], env={"BLIZZARD_LEASE_ID": "", "BLIZZARD_RUNNER_URL": ""})
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(
+        runner_group, ["session-end"], env={"BLIZZARD_LEASE_ID": "", "BLIZZARD_RUNNER_URL": ""}
+    )
 
     assert result.exit_code == 0  # soft-fail, never raise
     assert "skipping" in result.output
@@ -180,8 +181,8 @@ def test_session_end_verb_soft_fails_when_runner_unreachable(monkeypatch: pytest
     def fake_post(*args: object, **kwargs: object) -> _FakeResponse:
         raise httpx.ConnectError("connection refused")
 
-    bind_stubs(monkeypatch, post=fake_post)
-    result = CliRunner().invoke(
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(
         runner_group,
         ["session-end"],
         env={"BLIZZARD_LEASE_ID": "lease_9", "BLIZZARD_RUNNER_URL": "http://127.0.0.1:1/"},

@@ -9,16 +9,15 @@ from __future__ import annotations
 
 import os
 from collections.abc import Callable, Mapping
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol
 
 import click
 
+from blizzard.cli.collaborators import CliCollaborators
 from blizzard.cli.lazy_group import LazyGroup
 from blizzard.foundation.trace_export.settings import configured_endpoint, export_switched_off
 
 if TYPE_CHECKING:
-    import httpx
-
     from blizzard.foundation.cli_spans import CliSpan
     from blizzard.foundation.otlp_destination import OtlpDestination
 
@@ -33,16 +32,6 @@ _NEVER_TRACED = frozenset({"host", "record-marker"})
 _META_KEY = "blizzard.cli.operator_trace"
 
 
-def _short_lived_client() -> httpx.Client:
-    import httpx
-
-    return httpx.Client()
-
-
-# The seam a test replaces to hand the finishing send a client over a canned transport.
-client_factory: Callable[[], httpx.Client] = _short_lived_client
-
-
 def exit_code_of(exc: BaseException) -> int:
     """The process exit code a command's exception ends in, as click's ``main`` would turn it."""
     if isinstance(exc, (click.exceptions.Exit, click.ClickException)):
@@ -52,19 +41,36 @@ def exit_code_of(exc: BaseException) -> int:
     return 1
 
 
+class ITraceHeaders(Protocol):
+    """Where a request's trace headers come from: the running command's trace, or nothing."""
+
+    def headers(self) -> dict[str, str]: ...
+
+
+class _Untraced:
+    """The header source of a command no operator group ran — it carries none."""
+
+    def headers(self) -> dict[str, str]:
+        return {}
+
+
+UNTRACED: ITraceHeaders = _Untraced()
+
+
 class OperatorTrace:
     """One operator command's state: the destination it will post to, and its root span once the
     command's own name is known. The ``hub`` and ``runner`` groups build and finish it."""
 
-    def __init__(self, root: str, environ: Mapping[str, str] | None = None) -> None:
+    def __init__(self, root: str, collaborators: CliCollaborators, environ: Mapping[str, str] | None = None) -> None:
         self._root = root
+        self._collaborators = collaborators
         self._environ = os.environ if environ is None else environ
         self._destination = self._resolve_destination()
         self._span: CliSpan | None = None
 
     @classmethod
-    def begin(cls, ctx: click.Context, root: str) -> OperatorTrace:
-        trace = cls(root)
+    def begin(cls, ctx: click.Context, root: str, collaborators: CliCollaborators) -> OperatorTrace:
+        trace = cls(root, collaborators)
         ctx.find_root().meta[_META_KEY] = trace
         return trace
 
@@ -73,13 +79,15 @@ class OperatorTrace:
         return ctx.find_root().meta.get(_META_KEY)
 
     @classmethod
-    def headers(cls) -> dict[str, str]:
-        """The ``traceparent`` a request of the running command carries — empty when untraced."""
-        ctx = click.get_current_context(silent=True)
-        trace = cls.of(ctx) if ctx is not None else None
-        if trace is None or trace._span is None:
+    def source(cls, ctx: click.Context) -> ITraceHeaders:
+        """The header source of the command ``ctx`` belongs to — :data:`UNTRACED` when no operator group ran."""
+        return cls.of(ctx) or UNTRACED
+
+    def headers(self) -> dict[str, str]:
+        """The ``traceparent`` a request of this command carries — empty until its span opens."""
+        if self._span is None:
             return {}
-        return {TRACEPARENT_HEADER: trace._span.traceparent}
+        return {TRACEPARENT_HEADER: self._span.traceparent}
 
     def _resolve_destination(self) -> OtlpDestination | None:
         """The endpoint to post to, only when this is an operator: not a worker's environment, and
@@ -106,7 +114,9 @@ class OperatorTrace:
             return
         from blizzard.foundation import cli_spans
 
-        self._span = cli_spans.CliSpan.root(" ".join([self._root, *names]), service_name=_service_name(self._environ))
+        self._span = cli_spans.CliSpan.root(
+            " ".join([self._root, *names]), service_name=_service_name(self._environ), clock=self._collaborators.clock
+        )
 
     @staticmethod
     def _names(group: click.Group, ctx: click.Context, args: list[str]) -> list[str]:
@@ -143,7 +153,7 @@ class OperatorTrace:
         from blizzard.foundation import cli_spans
 
         span.finish(exit_code)
-        client = client_factory()
+        client = self._collaborators.client_factory()
         if cli_spans.send(
             client,
             destination.url,
@@ -179,4 +189,5 @@ class OperatorGroup(LazyGroup):
         return super().resolve_command(ctx, args)
 
     def invoke(self, ctx: click.Context) -> object:
-        return OperatorTrace.begin(ctx, self._trace_root).run(lambda: super(OperatorGroup, self).invoke(ctx))
+        trace = OperatorTrace.begin(ctx, self._trace_root, CliCollaborators.of(ctx))
+        return trace.run(lambda: super(OperatorGroup, self).invoke(ctx))

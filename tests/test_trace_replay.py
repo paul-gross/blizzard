@@ -402,7 +402,7 @@ def test_the_cli_refuses_a_future_until_before_sending_any_window(
     hub, _ = _hub(tmp_path)
     bodies = _relay(hub, monkeypatch)
     now = hub.clock.now()
-    monkeypatch.setattr("blizzard.cli.window.SystemClock", lambda: hub.clock)
+    monkeypatch.setattr("blizzard.hub.cli.traces.SystemClock", lambda: hub.clock)
     start = now - timedelta(seconds=3600 * 3)
 
     result = CliRunner().invoke(

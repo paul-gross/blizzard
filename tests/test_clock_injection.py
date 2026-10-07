@@ -73,9 +73,9 @@ _CLOCK_COMPOSITION_ROOTS: dict[Path, str] = {
     _HUB_DIR / "composition.py": "build_hub_core and build_services — the hub's process-graph composition root",
     _RUNNER_DIR / "app.py": "build_hosted_app — the runner's served-app composition root",
     _RUNNER_DIR / "composition.py": "build_runner_process — the runner's hosted process graph",
-    _SRC_DIR
-    / "cli"
-    / "window.py": "the shared window flags' future-until check — a short-lived CLI process's own composition root",
+    _HUB_DIR / "cli" / "traces.py": "a short-lived CLI process's own composition root",
+    _HUB_DIR / "cli" / "egress.py": "a short-lived CLI process's own composition root",
+    _RUNNER_DIR / "cli" / "traces.py": "a short-lived CLI process's own composition root",
     _RUNNER_DIR / "cli" / "runtime.py": "a short-lived CLI process's own composition root",
     _RUNNER_DIR / "cli" / "external_usage.py": "a short-lived CLI process's own composition root",
 }

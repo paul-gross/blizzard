@@ -20,6 +20,7 @@ from blizzard.runner.harness.claude_code.ambient import (
 )
 from blizzard.runner.harness.claude_code.health import ClaudeCodeHealthProbe
 from blizzard.runner.harness.health import HarnessHealthCause, HarnessHealthEvidence, evaluate_harness_health
+from tests.runner_init_fakes import init_runner
 
 pytestmark = pytest.mark.component
 
@@ -125,7 +126,7 @@ def test_status_names_the_conflicting_file_and_key_without_contents(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     runtime = tmp_path / "runner"
-    assert CliRunner().invoke(runner_group, ["init", str(runtime)]).exit_code == 0
+    assert init_runner().invoke(runner_group, ["init", str(runtime)]).exit_code == 0
     managed = _write(tmp_path / "managed-settings.json", {"allowManagedHooksOnly": True, "note": _SECRET})
     monkeypatch.setattr("blizzard.runner.harness.claude_code.ambient_conflicts.MANAGED_SETTINGS_PATHS", (managed,))
 

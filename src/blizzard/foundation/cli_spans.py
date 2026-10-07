@@ -12,12 +12,11 @@ import os
 import secrets
 import sys
 import threading
-import time
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Protocol
 
-from blizzard.foundation.roles import collaborator
+from blizzard.foundation.span_clock import Clock
 from blizzard.foundation.trace_attributes import CHUNK_ID
 from blizzard.foundation.trace_ids import SAMPLED, DerivedContext, format_traceparent
 
@@ -43,24 +42,6 @@ class Poster(Protocol):
     """The slice of an HTTP client a send needs."""
 
     def post(self, url: str, *, content: bytes, headers: Mapping[str, str], timeout: float) -> object: ...
-
-
-@collaborator
-@dataclass(frozen=True)
-class Clock:
-    """Epoch nanoseconds from one wall-clock anchor plus monotonic deltas, so a span's duration
-    never goes negative when the wall clock steps. Both sources are injectable."""
-
-    wall_ns: Callable[[], int] = time.time_ns
-    monotonic_ns: Callable[[], int] = time.monotonic_ns
-    _anchor: tuple[int, int] = field(init=False, repr=False, compare=False)
-
-    def __post_init__(self) -> None:
-        object.__setattr__(self, "_anchor", (self.wall_ns(), self.monotonic_ns()))
-
-    def now_ns(self) -> int:
-        wall, monotonic = self._anchor
-        return wall + (self.monotonic_ns() - monotonic)
 
 
 def _random_span_id() -> int:
@@ -95,12 +76,11 @@ class CliSpan:
         parent: DerivedContext,
         command: str,
         *,
+        clock: Clock,
         chunk_id: str = "",
         lease_id: str = "",
-        clock: Clock | None = None,
         new_span_id: Callable[[], int] = _random_span_id,
     ) -> CliSpan:
-        clock = clock or Clock()
         return cls(
             parent.trace_id,
             parent.span_id,
@@ -119,13 +99,12 @@ class CliSpan:
         cls,
         command: str,
         *,
+        clock: Clock,
         service_name: str = SERVICE_NAME,
-        clock: Clock | None = None,
         new_id: Callable[[], int] = _random_trace_id,
         new_span_id: Callable[[], int] = _random_span_id,
     ) -> CliSpan:
         """A fresh, always-sampled trace with this span as its root."""
-        clock = clock or Clock()
         return cls(new_id(), None, new_span_id(), command, "", "", service_name, clock, clock.now_ns())
 
     @property
