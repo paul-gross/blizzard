@@ -77,6 +77,17 @@ def test_a_sparse_patch_sets_only_its_field_and_moves_the_revision_by_one(hub: H
     assert row["diff"] == [{"field": "default_effort", "old": None, "new": "high"}]
 
 
+def test_a_patch_restating_a_since_retired_graph_applies_the_other_fields(hub: HubHarness) -> None:
+    rid = _create(hub)["routine_id"]
+    graph_id = hub.client.get("/api/graphs").json()[0]["graph_id"]
+    assert hub.client.post(f"/api/graphs/{graph_id}/retire", json={}).status_code in (200, 202)
+
+    resp = hub.client.patch(f"/api/routines/{rid}", json={"graph_name": "alpha", "default_effort": "high"})
+
+    assert resp.status_code == 200, resp.text
+    assert (resp.json()["default_effort"], resp.json()["revision"]) == ("high", 2)
+
+
 def test_an_older_clis_full_payload_still_succeeds(hub: HubHarness) -> None:
     _mint_graph(hub, "beta")
     created = _create(hub)

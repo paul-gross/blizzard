@@ -7,7 +7,7 @@ and requires the named graph resolve to an enabled mint."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import StrEnum
@@ -115,6 +115,14 @@ def require_graph_resolves(graph: Graph | None, graph_name: str) -> Graph:
     if graph is None:
         raise RoutineGraphUnresolvedError(graph_name)
     return graph
+
+
+def require_graph_change_resolves(current: str | None, stated: str, resolves: Callable[[str], bool]) -> None:
+    """A routine's graph is checked when it is created (``current`` is ``None``) or moved to another
+    graph, and refused when ``stated`` does not resolve to an enabled one. Restating the graph a
+    routine already points at is not pointing, so it is accepted without resolving."""
+    if stated != current and not resolves(stated):
+        raise RoutineGraphUnresolvedError(stated)
 
 
 @domain_model
@@ -382,6 +390,9 @@ class RoutineAuthoring:
         self._scope_registry = scope_registry
         self._clock = clock
 
+    def _resolves(self, graph_name: str) -> bool:
+        return self._graphs.get_enabled_by_name(graph_name) is not None
+
     def create(
         self,
         *,
@@ -395,7 +406,7 @@ class RoutineAuthoring:
     ) -> Routine:
         harnesses = validated_harnesses(default_harnesses or [])
         require_name_free(self._routines.get_by_name(name), name)
-        require_graph_resolves(self._graphs.get_enabled_by_name(graph_name), graph_name)
+        require_graph_change_resolves(None, graph_name, self._resolves)
         scope, scope_mint = self._scope_registry.resolve(default_scope_slug, ctx)
         routine, change = Routine.new(
             routine_id=Id.mint(IdPrefix.ROUTINE, self._clock).value,
@@ -414,12 +425,12 @@ class RoutineAuthoring:
 
     def edit(self, routine: Routine, edit: RoutineEdit, ctx: ChangeContext, *, if_match: int | None = None) -> Routine:
         """Apply a sparse edit. Graph resolution and default-scope minting run only when their
-        field is present; an edit that changes nothing writes nothing. A new default is
+        field is present and, for the graph, changes it; an edit that changes nothing writes nothing. A new default is
         linked; a previous default is deliberately left linked — the routine still sweeps
         it, and a set larger than its default is legal."""
         decided = routine.edit(edit, ctx, if_match=if_match, at=self._clock.now())
         if isinstance(edit.graph_name, str):
-            require_graph_resolves(self._graphs.get_enabled_by_name(edit.graph_name), edit.graph_name)
+            require_graph_change_resolves(routine.graph_name, edit.graph_name, self._resolves)
         if decided is None:
             return routine
         edited, change = decided

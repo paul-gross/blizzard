@@ -298,3 +298,11 @@ def test_a_stored_routine_keeps_its_graph_even_when_that_graph_no_longer_resolve
     stored = replace(_stored_routine(), graph_name="retired-graph")
     plan = _plan(ConfigDeclaration(routines=(_routine_entry(graph_name="retired-graph"),)), _garden(routines=(stored,)))
     assert [o.op for o in plan.outcomes] == [None]
+
+
+def test_a_stored_routine_moving_to_an_unenabled_graph_is_refused_on_graph_name() -> None:
+    with pytest.raises(ApplyEntryRefused) as refused:
+        _plan(
+            ConfigDeclaration(routines=(_routine_entry(graph_name="missing"),)), _garden(routines=(_stored_routine(),))
+        )
+    assert isinstance(refused.value.cause, ConfigFieldError) and refused.value.cause.field == "graph_name"

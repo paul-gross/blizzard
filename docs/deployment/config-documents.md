@@ -48,7 +48,8 @@ a secret's value, so set one first with `blizzard hub secret create`.
 A scope entry is keyed by its `slug`, a routine entry by its `name`. A routine's `scopes` states its linked scope set,
 its default scope always among it; an entry that leaves `scopes` out keeps the stored set. Every scope a routine entry
 names, as its `default_scope_slug` or in `scopes`, must be stored already or declared in the same document's `scopes`
-section, and its `graph_name` must name an enabled graph; otherwise the entry is refused. An apply never creates a scope
+section, and its `graph_name` must name an enabled graph when the entry creates the routine or moves it to another graph;
+otherwise the entry is refused. An apply never creates a scope
 the document does not declare.
 
 The file's extension picks the format: `.yaml` and `.yml` read as YAML, `.json` as JSON. Over HTTP the `Content-Type`

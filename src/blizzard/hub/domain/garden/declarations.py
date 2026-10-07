@@ -1,9 +1,8 @@
 """Scope and routine entries of a configuration document (``bzh:config-apply``).
 
 The apply planner reconciles these through the record Protocol ``config`` owns; each entry carries the
-garden rules a document write is held to, so an apply refuses exactly what the scope and routine verbs
-refuse. An apply never mints a scope implicitly: a routine entry may only name a scope that is stored or
-declared in the same document."""
+garden rules a document write is held to, with one departure from the verbs: an apply never mints a scope
+implicitly, so a routine entry may only name a scope that is stored or declared in the same document."""
 
 from __future__ import annotations
 
@@ -15,7 +14,13 @@ from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.config.apply import DeclarableRecord, DeclaredReferences
 from blizzard.hub.domain.config.changes import ChangeContext, ConfigChange
 from blizzard.hub.domain.config.work_sources import ConfigFieldError
-from blizzard.hub.domain.garden.routines import SCOPES_FIELD, Routine, RoutineEdit
+from blizzard.hub.domain.garden.routines import (
+    SCOPES_FIELD,
+    Routine,
+    RoutineEdit,
+    RoutineGraphUnresolvedError,
+    require_graph_change_resolves,
+)
 from blizzard.hub.domain.garden.scopes import Scope, ScopeEdit, ScopeSlug, ScopeSlugError
 from blizzard.hub.domain.graph.harnesses import InvalidHarnesses, validated_harnesses
 
@@ -65,9 +70,14 @@ class RoutineDeclaration:
             validated_harnesses(list(self.default_harnesses))
         except InvalidHarnesses as exc:
             raise ConfigFieldError("default_harnesses", str(exc)) from exc
-        moved = not isinstance(stored, Routine) or stored.graph_name != self.graph_name
-        if moved and self.graph_name not in refs.enabled_graphs:
-            raise ConfigFieldError("graph_name", f"no enabled graph named {self.graph_name!r} exists")
+        try:
+            require_graph_change_resolves(
+                stored.graph_name if isinstance(stored, Routine) else None,
+                self.graph_name,
+                lambda name: name in refs.enabled_graphs,
+            )
+        except RoutineGraphUnresolvedError as exc:
+            raise ConfigFieldError("graph_name", str(exc)) from exc
         if self.default_scope_slug not in refs.scopes:
             raise ConfigFieldError("default_scope_slug", _unknown_scope(self.default_scope_slug))
         for slug in self.scopes or ():
