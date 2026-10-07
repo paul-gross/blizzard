@@ -85,6 +85,7 @@ from blizzard.runner.leases.asks import AskService
 from blizzard.runner.leases.liveness import LeaseLivenessService
 from blizzard.runner.leases.session import LeaseSessionService
 from blizzard.runner.lifecycle.judgement.git_commit_declaration import GitCommitDeclarationService
+from blizzard.runner.lifecycle.judgement.internal.elicitation_files import ElicitationFiles
 from blizzard.runner.lifecycle.takeover import TakeoverService
 from blizzard.runner.loop_wiring import ResumeMarking
 from blizzard.runner.operator.attachments import AttachmentService
@@ -303,6 +304,7 @@ def create_app(
     app.state.selftests = selftests or SelfTestService(
         scratch_git=SubprocessScratchGit(),
         process=process,
+        elicitation_replies=ElicitationFiles(root=""),
         clock=clock,
         results=runner_stores.selftest_results if runner_stores else None,
     )

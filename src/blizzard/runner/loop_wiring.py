@@ -29,7 +29,7 @@ from blizzard.runner.hub.client import IHubClient
 from blizzard.runner.hub.internal.http_hub import HttpHubClient
 from blizzard.runner.leases.worker_stdout import WorkerStdoutFiles
 from blizzard.runner.lifecycle.env_release import EnvironmentRelease
-from blizzard.runner.lifecycle.judgement.elicitation_files import ElicitationFiles
+from blizzard.runner.lifecycle.judgement.internal.elicitation_files import ElicitationFiles
 from blizzard.runner.lifecycle.judgement.internal.subprocess_check_runner import SubprocessCheckRunner
 from blizzard.runner.lifecycle.session import HarnessSelector, SessionResolver
 from blizzard.runner.lifecycle.shutdown_drain import ShutdownDrain

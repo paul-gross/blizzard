@@ -39,6 +39,7 @@ from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, NullTranscriptSource
 from blizzard.runner.harness.usage import UsageKind, UsageLimit, UsageSample
 from blizzard.runner.harness.wiring import build_production_harness_registry
+from blizzard.runner.lifecycle.judgement.internal.elicitation_files import ElicitationFiles
 from blizzard.runner.listeners import Listeners, Uds
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from blizzard.runner.selftest.checks import SelfTest
@@ -465,6 +466,7 @@ def test_selftest_run_that_exceeds_its_budget_fails_loudly_instead_of_hanging(tm
     service = SelfTestService(
         scratch_git=_StubScratchGit(tmp_path / "scratch"),
         process=_NeverAliveProcessProbe(),
+        elicitation_replies=ElicitationFiles(root=""),
         clock=SystemClock(),
         run_budget_seconds=0.2,
     )
@@ -491,6 +493,7 @@ def test_unavailable_harness_adapter_is_rejected_as_service_unavailable(tmp_path
     service = SelfTestService(
         scratch_git=_StubScratchGit(tmp_path / "scratch"),
         process=_NeverAliveProcessProbe(),
+        elicitation_replies=ElicitationFiles(root=""),
         clock=SystemClock(),
     )
     client = TestClient(
@@ -684,7 +687,7 @@ def test_resume_check_reaps_the_resumed_pid_before_the_scratch_repo_is_torn_down
     probe = _RecordingProcessProbe()
     adapter = _FixedPidAdapter(spawn_pid=111, resume_pid=222)
 
-    checks = SelfTest(adapter, SubprocessScratchGit(), probe).run()
+    checks = SelfTest(adapter, SubprocessScratchGit(), probe, ElicitationFiles(root="")).run()
 
     by_name = {c.name: c for c in checks}
     # `_FixedPidAdapter` never actually edits/commits, so `end_to_end_edit_commit`

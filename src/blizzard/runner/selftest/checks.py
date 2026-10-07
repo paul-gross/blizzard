@@ -22,7 +22,7 @@ from blizzard.runner.harness.adapter import (
     WorkerHandle,
     WorkerPreamble,
 )
-from blizzard.runner.lifecycle.judgement.elicitation_files import ElicitationFiles
+from blizzard.runner.lifecycle.judgement.elicitation_files import IReadElicitationReply
 from blizzard.runner.node_steps.envelope import Choice, Envelope, EnvelopeNode
 from blizzard.runner.process.probe import IProcessProbe
 from blizzard.runner.selftest.model import (
@@ -98,6 +98,7 @@ class Scratch:
     adapter: IHarnessSelfTestSeam
     scratch_git: IScratchGit
     process: IProcessProbe
+    elicitation_replies: IReadElicitationReply
     workdir: str
     session_id: str
 
@@ -191,7 +192,7 @@ class Judge(Check):
         # The detached launch/collect shape: the canary waits out the same
         # bounded poll `end_to_end_edit_commit` uses, then reads the reply back itself.
         exited = Worker(scratch.process, handle.pid).wait_for_exit(handle.process_start_time)
-        choice = scratch.adapter.parse_verdict(ElicitationFiles(root="").read(output_path)) if exited else None
+        choice = scratch.adapter.parse_verdict(scratch.elicitation_replies.read(output_path)) if exited else None
         return judge_verdict(exited=exited, choice=choice)
 
 
@@ -277,6 +278,7 @@ class SelfTest:
     adapter: IHarnessSelfTestSeam
     scratch_git: IScratchGit
     process: IProcessProbe
+    elicitation_replies: IReadElicitationReply
 
     def run(self) -> list[SelfTestCheck]:
         with self.scratch_git.new_scratch_repo() as repo:
@@ -284,6 +286,7 @@ class SelfTest:
                 adapter=self.adapter,
                 scratch_git=self.scratch_git,
                 process=self.process,
+                elicitation_replies=self.elicitation_replies,
                 workdir=repo.workdir,
                 session_id=f"selftest-{uuid.uuid4().hex[:12]}",
             )

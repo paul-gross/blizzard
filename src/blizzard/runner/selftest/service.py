@@ -13,6 +13,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import SELFTEST_PREFIX, Id
 from blizzard.runner.harness.adapter import IHarnessSelfTestSeam
 from blizzard.runner.harness.selftest_result import IWriteSelfTestResultRepository
+from blizzard.runner.lifecycle.judgement.elicitation_files import IReadElicitationReply
 from blizzard.runner.process.probe import IProcessProbe
 from blizzard.runner.selftest.checks import SelfTest
 from blizzard.runner.selftest.model import SelfTestCheck, SelfTestRun
@@ -36,12 +37,14 @@ class SelfTestService:
         *,
         scratch_git: IScratchGit,
         process: IProcessProbe,
+        elicitation_replies: IReadElicitationReply,
         clock: IClock,
         run_budget_seconds: float = _DEFAULT_RUN_BUDGET_SECONDS,
         results: IWriteSelfTestResultRepository | None = None,
     ) -> None:
         self._scratch_git = scratch_git
         self._process = process
+        self._elicitation_replies = elicitation_replies
         self._clock = clock
         self._run_budget_seconds = run_budget_seconds
         self._results = results
@@ -69,7 +72,7 @@ class SelfTestService:
 
         def _run() -> None:
             try:
-                checks = SelfTest(adapter, self._scratch_git, self._process).run()
+                checks = SelfTest(adapter, self._scratch_git, self._process, self._elicitation_replies).run()
             except Exception as exc:  # a checks-runner bug must still resolve the job, never wedge it
                 outcome.append(([], str(exc)))
                 return

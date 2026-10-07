@@ -17,6 +17,7 @@ import pytest
 from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.process_launch import ProcessLauncher
+from blizzard.runner.lifecycle.judgement.internal.elicitation_files import ElicitationFiles
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from blizzard.runner.selftest.checks import SelfTest
 from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessScratchGit
@@ -54,7 +55,7 @@ def _selftest(bin_dir: Path, passthrough: tuple[str, ...], executor: ThreadPoolE
         process=process,
         launcher=ProcessLauncher(process, executor=executor),
     )
-    return SelfTest(adapter, SubprocessScratchGit(), process)
+    return SelfTest(adapter, SubprocessScratchGit(), process, ElicitationFiles(root=""))
 
 
 def test_a_fenced_selftest_passes_every_check_against_the_mock(

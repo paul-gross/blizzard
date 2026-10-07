@@ -50,7 +50,7 @@ from blizzard.runner.leases.lease_auth import LeaseToken
 from blizzard.runner.leases.worker_stdout import WorkerStdoutFiles
 from blizzard.runner.lifecycle.env_release import EnvironmentRelease
 from blizzard.runner.lifecycle.judgement.artifacts import IWriteGraphArtifactRepository, PinnedGraphArtifact
-from blizzard.runner.lifecycle.judgement.elicitation_files import ElicitationFiles
+from blizzard.runner.lifecycle.judgement.elicitation_files import IElicitationFiles
 from blizzard.runner.lifecycle.model import (
     MintOwnerSource,
     chunk_paused,
@@ -177,7 +177,7 @@ class SpawnContext(TranscriptPumpContext, Protocol):
     @property
     def worker_scratch(self) -> WorkerScratchDirs: ...
     @property
-    def elicitation_files(self) -> ElicitationFiles: ...
+    def elicitation_files(self) -> IElicitationFiles: ...
     @property
     def stores(self) -> SpawnStores: ...
     @property
