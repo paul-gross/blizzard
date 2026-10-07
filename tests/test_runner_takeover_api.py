@@ -7,7 +7,7 @@ domain level by ``tests/test_runner_takeover.py``).
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -158,6 +158,37 @@ def test_open_with_force_over_a_live_worker_kills_it_and_fences_the_epoch(tmp_pa
     record = store.open_takeover_for_chunk("ch_1")
     assert record is not None
     assert record.fence_epoch == 2
+
+
+@pytest.mark.component
+def test_open_over_a_needs_human_chunk_with_a_requeue_pending_is_409(tmp_path: Path) -> None:
+    app, store = _app_with_takeover(tmp_path)
+    _seed_lease(store)
+    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=_NOW)
+    store.record_requeue(chunk_id="ch_1", at=_NOW + timedelta(seconds=1))  # after the lease: not yet consumed
+
+    with TestClient(app) as client:
+        resp = client.post("/api/chunks/ch_1/takeovers", json={})
+
+    assert resp.status_code == 409, resp.text
+    assert store.open_takeover_for_chunk("ch_1") is None
+
+
+@pytest.mark.component
+def test_forced_open_over_a_buffered_submission_is_409(tmp_path: Path) -> None:
+    probe = FakeProbe(alive={(100, "start-100")})
+    app, store = _app_with_takeover(tmp_path, probe=probe)
+    _seed_lease(store)
+    store.enqueue_outbound(
+        kind="completion.submitted", chunk_id="ch_1", lease_id="lease_1", payload="{}", created_at=_NOW
+    )
+
+    with TestClient(app) as client:
+        resp = client.post("/api/chunks/ch_1/takeovers", json={"force": True})
+
+    assert resp.status_code == 409, resp.text
+    assert store.open_takeover_for_chunk("ch_1") is None
+    assert probe.killed == []
 
 
 @pytest.mark.component
