@@ -18,6 +18,7 @@ from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.claude_code.health import ClaudeCodeHealthProbe
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.health_cache import HarnessHealthCache
+from blizzard.runner.harness.internal.committed_corpus import CommittedCorpus
 from blizzard.runner.harness.opencode.health import OpenCodeHealthProbe
 from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
@@ -33,14 +34,14 @@ def test_opencode_probe_authentication_shells_out_to_the_real_binary_and_reads_i
     mock_opencode = require_opencode_cli_surface(bin_dir)
     auth_path = tmp_path / "opencode" / "auth.json"
 
-    probe = OpenCodeHealthProbe(str(mock_opencode), auth_path=auth_path)
+    probe = OpenCodeHealthProbe(str(mock_opencode), auth_path=auth_path, corpus=CommittedCorpus())
     assert probe.probe_authentication() is False  # the binary responds, but no credential file exists yet
 
     auth_path.parent.mkdir(parents=True, exist_ok=True)
     auth_path.write_text(json.dumps({"anthropic": {"type": "oauth"}}))
     assert probe.probe_authentication() is True
 
-    unreachable = OpenCodeHealthProbe(str(tmp_path / "no-such-binary"), auth_path=auth_path)
+    unreachable = OpenCodeHealthProbe(str(tmp_path / "no-such-binary"), auth_path=auth_path, corpus=CommittedCorpus())
     assert unreachable.probe_authentication() is False  # a credential file alone is not enough
 
 
@@ -81,7 +82,10 @@ def test_claude_code_probe_and_cache_read_available_against_the_real_mock_binary
         launcher=ProcessLauncher(process, executor=spawn_executor),
     )
     cache = HarnessHealthCache(
-        clock=FixedClock(datetime(2026, 1, 1, tzinfo=UTC)), probes={"claude_code": probe}, selftest_results=None
+        corpus=CommittedCorpus(),
+        clock=FixedClock(datetime(2026, 1, 1, tzinfo=UTC)),
+        probes={"claude_code": probe},
+        selftest_results=None,
     )
 
     result = cache.refresh("claude_code", adapter=adapter, observed_version=adapter.observe_version())

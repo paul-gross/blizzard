@@ -35,6 +35,7 @@ from blizzard.runner.harness.compatibility import (
     ProbeObservation,
     classify_observation,
 )
+from blizzard.runner.harness.internal.committed_corpus import CommittedCorpus
 from blizzard.runner.harness.offline_compatibility import admitted_corpus_versions
 from blizzard.runner.harness.opencode.compatibility.attach import (
     OpenCodeAttachProxy,
@@ -83,7 +84,7 @@ pytestmark = pytest.mark.unit
 _PACKAGE_ROOT = repo_root() / "src" / "blizzard" / "runner" / "harness"
 # Keyed off the admitted range's own committed corpus — there is exactly
 # one committed corpus today, but this stays correct once a second one lands.
-_AN_ADMITTED_OPENCODE_VERSION = admitted_corpus_versions("opencode", ADMITTED_OPENCODE_RANGE)[0]
+_AN_ADMITTED_OPENCODE_VERSION = admitted_corpus_versions(CommittedCorpus(), "opencode", ADMITTED_OPENCODE_RANGE)[0]
 _CORPUS_DIR = _PACKAGE_ROOT / "contracts" / "opencode" / _AN_ADMITTED_OPENCODE_VERSION
 
 

@@ -13,6 +13,7 @@ from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.bundle import HarnessLayout, HarnessSource, published_snapshot
 from blizzard.runner.harness.declaration import SharedHarnessInputs
 from blizzard.runner.harness.identity import OPENCODE_HARNESS_ID
+from blizzard.runner.harness.internal.committed_corpus import CommittedCorpus
 from blizzard.runner.harness.opencode.adapter import OpenCodeAdapter
 from blizzard.runner.harness.opencode.bundle import OPENCODE_BUNDLE_LAYOUT, opencode_bundle_layout
 from blizzard.runner.harness.opencode.health import OpenCodeHealthProbe
@@ -106,7 +107,7 @@ class OpenCodeDeclaration:
             if section.auth_path is not None
             else resolve_opencode_auth_path(shared.worker_env.variables)
         )
-        return OpenCodeHealthProbe(binary=section.binary, auth_path=auth_path)
+        return OpenCodeHealthProbe(binary=section.binary, auth_path=auth_path, corpus=CommittedCorpus())
 
     def publish_layout(self, section: OpenCodeSection, *, autonomy: Autonomy, runtime_root: Path) -> HarnessLayout:
         return opencode_bundle_layout(section.worker_config_at(runtime_root))

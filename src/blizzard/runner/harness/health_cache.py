@@ -16,7 +16,7 @@ from blizzard.foundation.logging import get_logger
 from blizzard.runner.harness.adapter import IHarnessHealthProbe
 from blizzard.runner.harness.admission import admission_verdict
 from blizzard.runner.harness.health import HarnessHealthEvidence, HarnessHealthResult, evaluate_harness_health
-from blizzard.runner.harness.offline_compatibility import classify_offline
+from blizzard.runner.harness.offline_compatibility import ICompatibilityCorpus, classify_offline
 from blizzard.runner.harness.selftest_result import IReadSelfTestResultRepository, selftest_failed
 
 _log = get_logger("blizzard.runner.harness.health_cache")
@@ -65,6 +65,8 @@ class HarnessHealthCache:
 
     clock: IClock
     probes: Mapping[str, IHarnessHealthProbe]
+    #: The committed fixture corpus a version is classified against offline.
+    corpus: ICompatibilityCorpus
     #: ``None`` on a store-free composition (the OpenAPI exporter, a unit test) — reads as never-run.
     selftest_results: IReadSelfTestResultRepository | None
     #: Per-harness declared (tier, native-model) pairs this runner resolves through it specifically.
@@ -108,7 +110,7 @@ class HarnessHealthCache:
                 version_declared=supported_version is not None,
                 version_admitted=admission_verdict(normalized_version, supported_version),
                 version_classification=(
-                    classify_offline(harness_id, normalized_version, supported_version)
+                    classify_offline(self.corpus, harness_id, normalized_version, supported_version)
                     if supported_version is not None and classifies_offline
                     else None
                 ),

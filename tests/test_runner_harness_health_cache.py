@@ -14,10 +14,11 @@ import pytest
 from packaging.specifiers import SpecifierSet
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.runner.harness import health_cache
 from blizzard.runner.harness.compatibility import CompatibilityClassification
 from blizzard.runner.harness.health import DeclaredDegradation, HarnessHealthCause
 from blizzard.runner.harness.health_cache import HarnessHealthCache
+from blizzard.runner.harness.internal.committed_corpus import CommittedCorpus
+from blizzard.runner.harness.offline_compatibility import ICompatibilityCorpus, classify_offline
 from blizzard.runner.harness.opencode.compatibility.probe import ADMITTED_OPENCODE_RANGE, PINNED_OPENCODE_VERSION
 from blizzard.runner.harness.opencode.version import normalize_opencode_version
 from blizzard.runner.harness.selftest_result import LatestSelfTestResult
@@ -80,18 +81,26 @@ class _FakeSelftestResults:
         return self.record
 
 
-def _cache(probe: _FakeProbe, results: _FakeSelftestResults, *, clock: FixedClock) -> HarnessHealthCache:
-    return HarnessHealthCache(clock=clock, probes={_HARNESS_ID: probe}, selftest_results=results)
+def _cache(
+    probe: _FakeProbe, results: _FakeSelftestResults, *, clock: FixedClock, corpus: ICompatibilityCorpus | None = None
+) -> HarnessHealthCache:
+    return HarnessHealthCache(
+        corpus=corpus or CommittedCorpus(), clock=clock, probes={_HARNESS_ID: probe}, selftest_results=results
+    )
 
 
 def test_unknown_harness_reports_no_result() -> None:
-    cache = HarnessHealthCache(clock=FixedClock(_NOW), probes={}, selftest_results=_FakeSelftestResults())
+    cache = HarnessHealthCache(
+        corpus=CommittedCorpus(), clock=FixedClock(_NOW), probes={}, selftest_results=_FakeSelftestResults()
+    )
     assert cache.refresh("unknown", adapter=_FakeAdapter(), observed_version=None) is None
     assert cache.get("unknown") is None
 
 
 def test_observed_version_is_none_before_any_refresh() -> None:
-    cache = HarnessHealthCache(clock=FixedClock(_NOW), probes={}, selftest_results=_FakeSelftestResults())
+    cache = HarnessHealthCache(
+        corpus=CommittedCorpus(), clock=FixedClock(_NOW), probes={}, selftest_results=_FakeSelftestResults()
+    )
     assert cache.observed_version(_HARNESS_ID) is None
 
 
@@ -127,7 +136,11 @@ def test_refresh_after_the_window_elapses_recomputes() -> None:
     clock = FixedClock(_NOW)
     probe = _FakeProbe()
     cache = HarnessHealthCache(
-        clock=clock, probes={_HARNESS_ID: probe}, selftest_results=_FakeSelftestResults(), refresh_seconds=60.0
+        corpus=CommittedCorpus(),
+        clock=clock,
+        probes={_HARNESS_ID: probe},
+        selftest_results=_FakeSelftestResults(),
+        refresh_seconds=60.0,
     )
     cache.refresh(_HARNESS_ID, adapter=_FakeAdapter(), observed_version="1.0")
     clock.advance(timedelta(seconds=61))
@@ -208,33 +221,24 @@ def test_a_raw_version_outside_the_admitted_range_is_incompatible() -> None:
     assert result.cause is HarnessHealthCause.INCOMPATIBLE_VERSION
 
 
-def test_a_non_admitted_version_with_a_real_corpus_entry_still_reads_incompatible(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_a_non_admitted_version_with_a_real_corpus_entry_still_reads_incompatible(tmp_path: Path) -> None:
     """Membership is checked before any corpus lookup: a real fixture manifest that would
     classify `supported` on its own still reads `INCOMPATIBLE_VERSION` once non-admitted."""
     stray_version = "1.18.24"
     manifest_dir = tmp_path / "opencode" / stray_version
     manifest_dir.mkdir(parents=True)
     (manifest_dir / "manifest.json").write_text(json.dumps({"live_evidence": {"classification": "supported"}}))
-    real_classify_offline = health_cache.classify_offline
-    monkeypatch.setattr(
-        health_cache,
-        "classify_offline",
-        lambda harness_id, version, admitted_range: real_classify_offline(
-            harness_id, version, admitted_range, corpus_root=tmp_path
-        ),
-    )
+    corpus = CommittedCorpus(tmp_path)
     # Prove the fixture alone would classify `supported` once the range actually reaches it,
     # isolating what membership overrides below.
     assert (
-        real_classify_offline("opencode", stray_version, SpecifierSet(">=1.0.0,<2.0"), corpus_root=tmp_path)
+        classify_offline(corpus, "opencode", stray_version, SpecifierSet(">=1.0.0,<2.0"))
         is CompatibilityClassification.SUPPORTED
     )
 
     clock = FixedClock(_NOW)
     probe = _FakeProbe(supported=ADMITTED_OPENCODE_RANGE)
-    cache = _cache(probe, _FakeSelftestResults(), clock=clock)
+    cache = _cache(probe, _FakeSelftestResults(), clock=clock, corpus=corpus)
 
     result = cache.refresh(_HARNESS_ID, adapter=_FakeAdapter(), observed_version=stray_version)
 
@@ -292,6 +296,7 @@ def test_unmapped_configured_tier_is_reported() -> None:
     clock = FixedClock(_NOW)
     probe = _FakeProbe()
     cache = HarnessHealthCache(
+        corpus=CommittedCorpus(),
         clock=clock,
         probes={_HARNESS_ID: probe},
         selftest_results=_FakeSelftestResults(),

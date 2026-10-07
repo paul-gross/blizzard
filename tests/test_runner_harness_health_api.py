@@ -30,6 +30,7 @@ from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.health import DeclaredDegradation
 from blizzard.runner.harness.health_cache import HarnessHealthCache
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID
+from blizzard.runner.harness.internal.committed_corpus import CommittedCorpus
 from blizzard.runner.harness.opencode.adapter import OpenCodeAdapter
 from blizzard.runner.harness.opencode.compatibility.probe import ADMITTED_OPENCODE_RANGE_DISPLAY
 from blizzard.runner.harness.opencode.health import OpenCodeHealthProbe
@@ -87,6 +88,7 @@ def test_reports_missing_binary_for_an_unresolvable_configured_path(tmp_path: Pa
     )
     harnesses = HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=adapter)})
     health = HarnessHealthCache(
+        corpus=CommittedCorpus(),
         clock=FixedClock(datetime(2026, 1, 1, tzinfo=UTC)),
         probes={CLAUDE_CODE_HARNESS_ID: ClaudeCodeHealthProbe(binary=claude_code(config).binary)},
         selftest_results=None,
@@ -115,6 +117,7 @@ def test_reports_available_with_a_declared_degradation(tmp_path: Path, spawn_exe
     )
     harnesses = HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=adapter)})
     health = HarnessHealthCache(
+        corpus=CommittedCorpus(),
         clock=FixedClock(datetime(2026, 1, 1, tzinfo=UTC)),
         probes={CLAUDE_CODE_HARNESS_ID: _HealthyWithDegradationProbe()},
         selftest_results=None,
@@ -155,13 +158,14 @@ def test_a_misconfigured_opencode_corpus_degrades_only_opencode(tmp_path: Path, 
             OPENCODE_HARNESS_ID: HarnessBinding(adapter=opencode_adapter),
         }
     )
-    # `corpus_root=tmp_path` is empty: no manifest to read.
+    # `corpus=CommittedCorpus(tmp_path)` is empty: no manifest to read.
     health = HarnessHealthCache(
+        corpus=CommittedCorpus(),
         clock=FixedClock(datetime(2026, 1, 1, tzinfo=UTC)),
         probes={
             CLAUDE_CODE_HARNESS_ID: _HealthyWithDegradationProbe(),
             OPENCODE_HARNESS_ID: OpenCodeHealthProbe(
-                binary=opencode(config).binary, auth_path=None, corpus_root=tmp_path
+                binary=opencode(config).binary, auth_path=None, corpus=CommittedCorpus(tmp_path)
             ),
         },
         selftest_results=None,
@@ -199,10 +203,13 @@ def test_admitted_range_surfaces_per_binding(tmp_path: Path, spawn_executor: Exe
         }
     )
     health = HarnessHealthCache(
+        corpus=CommittedCorpus(),
         clock=FixedClock(datetime(2026, 1, 1, tzinfo=UTC)),
         probes={
             CLAUDE_CODE_HARNESS_ID: ClaudeCodeHealthProbe(binary=claude_code(config).binary),
-            OPENCODE_HARNESS_ID: OpenCodeHealthProbe(binary=opencode(config).binary, auth_path=None),
+            OPENCODE_HARNESS_ID: OpenCodeHealthProbe(
+                binary=opencode(config).binary, auth_path=None, corpus=CommittedCorpus()
+            ),
         },
         selftest_results=None,
     )
