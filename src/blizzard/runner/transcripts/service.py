@@ -1,9 +1,7 @@
-"""The transcript route's domain read model — resolves a lease's transcript to
-a home. Holds only read-only seams (``bzh:repository-split``),
-so a controller may hold it directly (``bzh:controller-read-only``). ``leases.lease(lease_id)``
-spans closure — unlike ``active_lease`` — because a transcript outlives its lease. Local until
-acked, hub after (:meth:`TranscriptService.for_lease`); the runner-plane's
-chunk-scoped segment reads resolve locally too, through that same session-file read."""
+"""The transcript read model — resolves a lease's transcript to its home
+(``src/blizzard/runner/transcripts/home.py``). Holds only read-only seams (``bzh:repository-split``).
+``leases.lease(lease_id)`` spans closure — unlike ``active_lease`` — because a transcript outlives
+its lease. Chunk-scoped segment reads resolve through the same session-file read."""
 
 from __future__ import annotations
 
@@ -54,8 +52,6 @@ class TranscriptService:
         if lease is None:
             return None
         if lease.session_id is None:
-            # Minted at FILL, spawn-return not yet recorded — the agent has not started a
-            # session yet, on either side.
             return ResolvedTranscript.local(Transcript.spawning())
         # Resolve even when the archived copy may answer: the persisted owner governs this
         # concrete session's transcript, and an archive must not conceal an absent owner.
@@ -71,7 +67,7 @@ class TranscriptService:
         ):
             return ResolvedTranscript.local(self._read_local(lease))
 
-        # Closed and fully acked: the hub is the home, the file its fallback.
+        # The non-local home: src/blizzard/runner/transcripts/home.py.
         archived = self._archived.read_turns(chunk_id=lease.chunk_id, node_id=lease.node_id, epoch=lease.epoch)
         resolved = ResolvedTranscript.from_archive(lease.session_id, archived)
         if resolved is not None:

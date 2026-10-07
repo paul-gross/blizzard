@@ -48,8 +48,7 @@ class HeldChunk:
                 self.chunk_id, next_envelope, Environments(bindings).acquired, via="apply-response"
             )
         elif move is ApplyMove.HOLD_PAUSED:
-            # The binding is held; once the pause lifts, FILL's adopt of the running chunk at this
-            # runner's own epoch enters the node through its declared session (`adopt_enters_node`).
+            # The binding is held; the node entry after the pause lifts is `adopt_enters_node`'s.
             _log.info("next node waits out the chunk's pause — holding envs", chunk_id=self.chunk_id)
         elif move is ApplyMove.HOLD_FOR_HUB_NODE:
             _log.info("hub node took over — holding envs until terminal", chunk_id=self.chunk_id)
@@ -64,11 +63,7 @@ class HeldChunk:
             _log.info("chunk parked at human gate", chunk_id=self.chunk_id)  # waiting_on_human
 
     def drive(self, takeovers: TakeoverHolds | None = None) -> None:
-        """Drive a chunk the runner holds with no active lease (:func:`held_chunk_move`).
-
-        Every shape holds its environments until a terminal outcome. An open takeover over the
-        chunk suppresses only the moves that would start a session or move the chunk on under the
-        person; an ended chunk is still released and a hub node still stepped."""
+        """Drive a chunk the runner holds with no active lease (:func:`held_chunk_move`)."""
         try:
             view = self.ctx.chunk_views.get(self.chunk_id)
         except ChunkNotFoundError:

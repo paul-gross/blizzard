@@ -163,8 +163,7 @@ class SpawnConfig(TranscriptPumpConfig, Protocol):
 
 
 class SpawnContext(TranscriptPumpContext, Protocol):
-    """What a spawn and an attempt read. One seam for both, since :class:`Spawner` builds an
-    ``Attempt`` and ``Attempt`` builds a :class:`Spawner`, each handing the other its own ``ctx``."""
+    """What a spawn and an attempt read."""
 
     @property
     def process(self) -> IProcessProbe: ...
@@ -536,8 +535,6 @@ class Spawner:
         — used only by the two zero-budget, never-spawned escalation mints; every ordinary caller
         leaves it unset. ``harness_id=None`` is the escalation-only mode: no member of the
         acceptable set resolved, so it resolves no stamps and records no mint owner."""
-        # Mint above the max of both floors (bzh:epoch-fencing, #112): the local fence alone is 0
-        # for a chunk this runner never drove, so a migrated chunk would mint below hub truth.
         epoch = next_lease_epoch(self.ctx.stores.lease_record.latest_epoch(chunk_id), envelope.epoch)
         lease_id = Id.mint(IdPrefix.LEASE, self.ctx.clock).value
         node = envelope.node

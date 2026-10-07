@@ -147,8 +147,7 @@ class TranscriptSegmentState:
 
     @property
     def truncated(self) -> bool:
-        """Lost content, by either path: a marked truncation or a shipping stop. The one
-        definition the segment index, the segment's content view, and its final record share."""
+        """Lost content, by either path: a marked truncation or a shipping stop."""
         return self._truncated()
 
     def _truncated(self) -> bool:

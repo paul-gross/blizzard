@@ -21,7 +21,7 @@ __all__ = [
     "pre_read",
 ]
 
-#: One window's outcome; ``not_attempted`` (nothing read) and ``stuck`` (cursor unmoved) both count as incomplete.
+#: One window's outcome; ``not_attempted`` and ``stuck`` count as incomplete: a finalizing segment gets no later window.
 PumpOutcome = Literal["caught_up", "incomplete", "not_attempted", "stuck"]
 
 

@@ -81,9 +81,8 @@ _REFUSAL_TEXT: Mapping[RequeueStanding, str] = MappingProxyType(
 @domain_model
 @dataclass(frozen=True)
 class RequeueScope:
-    """The chunk-keyed facts :func:`requeue_mark` reads, resolved at the edge
-    (``bzh:domain-takes-objects``): the runner holds no chunk entity to load, so this
-    names exactly the facts the rule checks rather than an aggregate."""
+    """The chunk-keyed facts :func:`requeue_mark` reads (``bzh:domain-takes-objects``): the
+    chunk's open takeover, its open escalation, and the environments held for it."""
 
     chunk_id: str
     open_takeover: OpenTakeover | None

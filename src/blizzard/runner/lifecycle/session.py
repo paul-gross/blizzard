@@ -66,7 +66,7 @@ class SessionResolver:
     transcripts_wired: bool = False
 
     def resolve_resume(self, chunk_id: str, node: EnvelopeNode, spawn_cwd: str | None) -> ResumeTarget:
-        """The prior session this spawn resumes, or ``None`` to mint fresh (#115, #144), paired
+        """The prior session this spawn resumes, or ``None`` to mint fresh, paired
         with the owner a rotated named pool's replacement must mint under. **Only the
         resume-vs-mint decision** — the configuration a spawn runs under resolves in
         ``session_stamps``. Loads the facts :func:`resume_target` decides over."""
@@ -100,11 +100,8 @@ class SessionResolver:
     def session_stamps(
         self, node: EnvelopeNode, resume: ResumedSession | None, *, harness_id: str
     ) -> tuple[str | None, str | None, str | None]:
-        """The (model, effort, compaction_window) this spawn runs under, and stamps (#144).
-
-        **The stamp describes the session, not the preference.** A spawn that *resumes* inherits
-        all three from the resumed session's own recorded lease, riding ``resume`` from
-        :meth:`resumption` — and an inherited ``None`` stays *unknown*."""
+        """The (model, effort, compaction_window) this spawn runs under, and stamps. A resume's
+        come from ``ResumedSession.inherited_stamps``."""
         if resume is not None:
             return resume.inherited_stamps()
         harness = self.harnesses.model_resolution(harness_id)
@@ -247,9 +244,7 @@ class HarnessSelector:
     def select(self, node: EnvelopeNode) -> HarnessSelection:
         """The earliest member of ``node.session_harnesses`` this runner can dispatch to, in
         declared order — a member the registry cannot serve, or one health has withdrawn,
-        is skipped and recorded. A single member skips the model check only
-        when nothing in ``node.session_model`` is an authored (``blizzard:``-namespaced) tier;
-        an authored tier this harness cannot map is never silently substituted (worker-spawn.md)."""
+        is skipped and recorded. Whether the model check applies is ``selection_is_strict``'s."""
         strict = selection_is_strict(node)
         skipped: list[SkippedHarness] = []
         for harness_id in node.session_harnesses:

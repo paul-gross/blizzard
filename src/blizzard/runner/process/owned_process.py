@@ -2,7 +2,7 @@
 recorded process identity.
 
 :class:`OwnedProcess` decides from probe readings what may be signalled; the three free functions read
-:class:`IOwnedProcessControl`, the seam the loop's ``/proc`` probe binds, and send the signal it chose."""
+:class:`IOwnedProcessControl` and send the signal it chose."""
 
 from __future__ import annotations
 
@@ -20,9 +20,9 @@ class IOwnedProcessControl(Protocol):
         ...
 
     def group_alive(self, pgid: int) -> bool:
-        """True iff process group ``pgid`` still has at least one live member — a
-        signal-0 ``killpg`` probe, unlike :meth:`is_alive`'s single-pid, start-time-checked
-        one: a group can outlive its recorded leader when a descendant it spawned survives."""
+        """True iff process group ``pgid`` still has at least one live member — unlike
+        :meth:`is_alive`, not start-time-checked: a group can outlive its recorded leader when a
+        descendant it spawned survives."""
         ...
 
     def kill(self, pid: int) -> None:
@@ -30,14 +30,13 @@ class IOwnedProcessControl(Protocol):
         ...
 
     def kill_group(self, pgid: int) -> None:
-        """Best-effort SIGKILL to an entire owned process group — the group a two-phase
-        spawn recorded, never one inferred from a bare pid. Never raises if already gone."""
+        """Best-effort SIGKILL to an entire owned process group — a recorded group, never one
+        inferred from a bare pid. Never raises if already gone."""
         ...
 
     def interrupt_group(self, pgid: int) -> None:
-        """Best-effort SIGINT to an entire owned process group — the graceful-shutdown
-        drain's own signal, distinct from :meth:`kill_group`'s SIGKILL. Never raises if
-        already gone."""
+        """Best-effort SIGINT to an entire owned process group — a graceful interrupt, distinct
+        from :meth:`kill_group`'s SIGKILL. Never raises if already gone."""
         ...
 
 

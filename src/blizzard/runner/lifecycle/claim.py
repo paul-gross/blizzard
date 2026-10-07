@@ -164,8 +164,7 @@ class ReadyQueue:
         """Pick this runner's entry out of this fill's one peeked snapshot,
         left in place until ``claim_one()`` knows the outcome and drops it itself —
         a later ``claim_one()`` this same ``Fill.run()`` must not silently move past an
-        entry whose outcome is still undetermined. Strict holds at a marked head;
-        reach-ahead scans for the first unmarked entry."""
+        entry whose outcome is still undetermined."""
         return pick_claim_entry(self._entries, strict=self.ctx.config.queue_strict)
 
     def _acquire(self, entry: QueueEntry) -> list[AcquiredEnvironment] | None:
@@ -252,19 +251,14 @@ class ReadyQueue:
 
 @dataclass(frozen=True)
 class InterruptedClaims:
-    """Reconcile bindings left in FILL's bind→claim→spawn window.
-
-    Before FILL peeks new work, recover a node entry ADVANCE will not make, or release
-    an orphan. A strictly newer hub epoch belongs to ADVANCE."""
+    """Reconcile bindings left in the bind→claim→spawn window: recover a lease-less node entry
+    this runner owns, or release an orphan (``interrupted_claim_move``)."""
 
     ctx: ClaimContext
 
     def reconcile(self, *, braked: bool = False) -> None:
-        """``braked`` — either pause brake is engaged: the reclaim arm, the only one that makes a
-        new hub claim, keeps its binding instead of claiming; every other arm still runs.
-
-        An open takeover holding the chunk suppresses only the adopt arm — a restart-entry adopt
-        would spawn into the person's workdir, so it keeps the binding and waits."""
+        """Reconcile every held binding with no active lease. ``braked`` — either pause brake is
+        engaged."""
         runner_id = registered_runner_id(self.ctx.identity)
         if runner_id is None:
             return
@@ -323,11 +317,7 @@ class InterruptedClaims:
             )
 
     def _owns_node_entry(self, chunk_id: str, view: ChunkState, bindings: list[EnvBinding]) -> bool:
-        """Whether FILL, not ADVANCE, spawns this running chunk's lease-less current node.
-
-        ADVANCE enters a strictly newer hub epoch through the node's declared session, so
-        FILL keeps the runner's own epoch (a suppressed or interrupted respawn), the current
-        restart entry, and a first claim with no lease in this binding tenure."""
+        """``src/blizzard/runner/lifecycle/model.py``'s ``owns_node_entry``, over this chunk's stores."""
         open_escalation = self.ctx.stores.escalations.open_escalation_for_chunk(chunk_id)
         bound_at = min(binding.bound_at for binding in bindings)
         return owns_node_entry(

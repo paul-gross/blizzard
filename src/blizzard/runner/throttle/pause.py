@@ -215,18 +215,14 @@ class IReadPauseRepository(Protocol):
     """Read-only pause-brake and daemon-liveness queries (held by read-path edges)."""
 
     def hub_contact_at(self) -> datetime | None:
-        """When the runner last **successfully** reached the hub, or ``None`` if never.
+        """The instant of the last successful hub contact, or ``None`` if never.
 
-        :meth:`~IWritePauseRepository.set_hub_paused` is only called after a successful hub
-        round trip (``runner/lifecycle/registration.py``), so its ``updated_at`` **is** the last-successful-
-        contact instant — no separate fact needed (``bzh:facts-not-status``)."""
+        The hub pause mirror is written only on a successful hub round trip, so its newest write
+        **is** that instant — no separate fact needed (``bzh:facts-not-status``)."""
         ...
 
     def hub_paused(self) -> bool:
-        """The last hub pause brake value mirrored locally — consulted before claiming new work.
-
-        Defaults False when it has never been synced. A runner claims nothing before its first
-        registration, so the default holds only from then until its first successful pause fetch."""
+        """The last hub pause brake value mirrored locally; False when it has never been synced."""
         ...
 
     def local_paused(self) -> bool:
@@ -245,25 +241,21 @@ class IReadPauseRepository(Protocol):
     def last_daemon_liveness(self) -> datetime | None:
         """When the runner was last known alive, or ``None`` if it never ticked.
 
-        The crash-time reference startup recovery classifies staleness against, stamped
-        each tick, so the newest value is when the daemon died to within one tick."""
+        Stamped once per liveness beat, so after a crash the newest value is when the daemon
+        died, to within one beat."""
         ...
 
     def pause_parked_lease_ids(self) -> set[str]:
         """Leases dormant on an operator pause — a pause-park fact with no later
         pause-resume at or after it and no closure of its lease.
 
-        A hub-terminal chunk closes its lease, and the lease closure closes its park.
-
-        The pause-park half of
-        :meth:`~blizzard.runner.leases.asks.IReadAskRepository.parked_lease_ids`'s union."""
+        A hub-terminal chunk closes its lease, and the lease closure closes its park."""
         ...
 
     def open_pause_parks(self) -> dict[str, PausePark]:
         """Every open pause park by lease id — :meth:`pause_parked_lease_ids`'s leases, each with
-        its ``parked_at`` and the elicitation its interrupt signalled. Hoisted once
-        per tick (``bzh:bulk-reconstitution``) for the teardown ADVANCE completes over later
-        ticks. A lease re-parked across a crash reads its newest park. A park closes with its
+        its ``parked_at`` and the elicitation its interrupt signalled, read in one query
+        (``bzh:bulk-reconstitution``). A lease re-parked across a crash reads its newest park. A park closes with its
         lease: a hub-terminal chunk closes the lease, and the closed lease's park drops out of
         this read from then on."""
         ...
@@ -280,7 +272,7 @@ class IWritePauseRepository(IReadPauseRepository, Protocol):
         ...
 
     def set_hub_paused(self, *, paused: bool, at: datetime) -> None:
-        """Mirror the hub's pause brake locally (upsert) — read back before claiming new work."""
+        """Mirror the hub's pause brake locally (upsert), stamped ``at``."""
         ...
 
     def record_local_pause(

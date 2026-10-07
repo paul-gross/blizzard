@@ -80,10 +80,8 @@ class AttemptContext(SpawnContext, Protocol): ...
 @dataclass(frozen=True)
 class Attempt:
     """One minted lease, and the moves that end it — fail (which requeues or escalates),
-    abandon, park on an operator pause, and preempt on an operator restart.
-
-    Which move a caller takes is decided by the node's retry budget, by whether the hub still
-    routes this chunk here, and by whether its fence rose; each records its own closure."""
+    abandon, park on an operator pause, and preempt on an operator restart. Each records its
+    own closure."""
 
     ctx: AttemptContext
     lease: Lease
@@ -99,11 +97,7 @@ class Attempt:
         )
 
     def fail(self, *, reason: LeaseChangeCause, via: str) -> None:
-        """Close a failed attempt, then abandon, requeue at the node, or escalate per :func:`failure_move`.
-
-        A chunk the hub routes elsewhere (or no longer knows) is abandoned before any retry. An
-        escalation defers while locally paused, since this tick's flush cannot retract it; a retry
-        whose owner this runner can no longer dispatch to escalates instead."""
+        """Close a failed attempt, then abandon, retry, defer, or escalate per :func:`failure_move`."""
         lease = self.lease
         now = self.ctx.clock.now()
         self._kill_process()  # best-effort hygiene; the epoch fence is the guarantee

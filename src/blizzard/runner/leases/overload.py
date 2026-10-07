@@ -170,8 +170,7 @@ class IWriteOverloadRepository(IReadOverloadRepository, Protocol):
     ) -> OverloadExit | None:
         """Durably record one overload exit. Insert-if-absent keyed on
         ``(lease_id, epoch, invocation_kind, invocation_identity)`` — re-classifying the
-        same exit on a later pass writes nothing, mirroring ``nudge_facts``'s own
-        check-then-insert (``bzh:sql-portable``), and returns the exit already standing
+        same exit on a later pass writes nothing and returns the exit already standing
         for that invocation; ``None`` when this call inserted it."""
         ...
 

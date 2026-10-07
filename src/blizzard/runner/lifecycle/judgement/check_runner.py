@@ -1,4 +1,4 @@
-"""The check-runner seam — the runner executes a node's ``checks:`` at worker exit.
+"""The check-runner seam — runs one declared check command.
 
 Running a declared check is deterministic-shell work (``bzh:deterministic-shell`` — no
 model call), reached only through this injected seam (``bzh:pluggable-seams``)."""
@@ -28,11 +28,10 @@ class CheckOutcome:
 
 
 class ICheckRunner(Protocol):
-    """Run one deterministic check command in a leased worktree, read-only to the loop."""
+    """Run one deterministic check command in a worktree."""
 
     def run(self, command: str, cwd: str, timeout: int) -> CheckOutcome:
         """Run ``command`` in ``cwd`` under a ``timeout`` (seconds), returning its
         pass/fail and a bounded output tail. A non-zero exit or a timeout is a failed
-        outcome, never a raise. The child environment is the worker-env allowlist
-        (``bzh:worker-env-allowlist``), never an ``os.environ`` copy."""
+        outcome, never a raise. Child environment: ``bzh:worker-env-allowlist``."""
         ...

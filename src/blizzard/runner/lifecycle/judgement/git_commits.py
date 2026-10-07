@@ -147,10 +147,8 @@ class DeclaredCommits:
 
     def verify(self) -> list[CompletionArtifact]:
         """Confirm every declaration this instance has not already resolved, in declaration
-        order, then converge the lease's whole confirmed set by repository identity.
-
-        Pointers agreeing on branch and commit submit as one; disagreeing pointers are
-        all submitted and reported. Return only groups new or changed since the last call."""
+        order, then converge the lease's whole confirmed set (``converge_pointers``).
+        Return only groups new or changed since the last call."""
         origins = self._origins()
         changed = False
         for key, declared in self.ctx.stores.git_commit_declarations.git_commit_declarations_for_lease(

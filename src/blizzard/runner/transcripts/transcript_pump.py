@@ -287,9 +287,7 @@ class TranscriptPump:
         shipped: _ShippedBytesMirror,
         bindings_by_chunk: dict[str, list[EnvBinding]],
     ) -> PumpOutcome:
-        """Advance ``segment`` one read window forward. ``"not_attempted"`` (nothing read) and ``"stuck"``
-        (the cursor didn't move) are incomplete to ``pump_lease``, since a finalizing segment gets no later
-        tick; otherwise ``"caught_up"``/``"incomplete"`` from ``batch.complete``.
+        """Advance ``segment`` one read window forward and return its ``PumpOutcome``.
         :func:`~blizzard.runner.transcripts.shipping.pre_read` and ``plan_window`` decide; this carries it out."""
         chunk_max_bytes = self._chunk_max_bytes
         budget_before = shipped.before(segment.chunk_id)

@@ -179,19 +179,14 @@ class OutboundDrain:
 
         Between the closure and any next-attempt spawn sits the boundary the per-chunk spend cap
         checks at: the attempt just closed is genuinely done, so parking here kills nothing live."""
-        # Only an advancing completion can reach the cap, so only then is the spend read.
         breach = self._spend_cap_breach(lease) if response.outcome == ApplyOutcome.NEXT else None
         move = completion_move(response.outcome, capped=breach is not None)
         if move is CompletionMove.FAIL:
-            # A semantic rejection — a stale-epoch or terminal completion. The attempt failed;
-            # requeue or escalate. The chunk never advanced.
             _log.warning("completion rejected on flush", chunk_id=lease.chunk_id, detail=response.detail or "")
             Attempt(self.ctx, lease).fail(reason=LeaseClosureReason.FAILED, via="pull")
             return
         if move is CompletionMove.ESCALATE_SPEND_CAP and breach is not None:
             cost, cap = breach
-            # Closed escalated, so the escalation reads open here like any other, and the next node is
-            # not entered, so no attempt there is spent.
             closure = COMPLETION_CLOSURES[move]
             attempt = Attempt(self.ctx, lease)
             attempt.close(closure.reason, self.ctx.clock.now(), escalation_cause=closure.escalation_cause)
@@ -207,9 +202,7 @@ class OutboundDrain:
     def _spend_cap_breach(self, lease: Lease) -> tuple[ChunkSpend, float] | None:
         """The chunk's spend and the cap it reached, when it has (:func:`spend_cap_reached`).
 
-        Reads the hub-derived total (``bzh:facts-not-status``), never a local sum. That total is
-        a LOWER BOUND — a row with no billed cost contributes $0, estimate or not — so the cap
-        trips conservatively, and its PARTIAL is the total's ``billed_partial``."""
+        Reads the hub-derived total (``bzh:facts-not-status``), never a local sum."""
         cap = self.ctx.config.chunk_cap_usd
         if cap is None:
             return None

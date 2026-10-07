@@ -269,7 +269,7 @@ class FactPushAck:
 @dataclass(frozen=True)
 class TranscriptPush:
     """One buffered transcript record as it is pushed: its lane ``seq`` and its body — the
-    record's every field but ``seq``, in the canonical turn format the pump rendered."""
+    record's every field but ``seq``, in the canonical turn format."""
 
     seq: int
     body: dict[str, Any]
@@ -345,7 +345,7 @@ class IHubClient(IChunkStatusReader, Protocol):
     """The runner's client of the hub API. Outbound-only."""
 
     def peek_queue(self, capabilities: Sequence[HarnessCapability], *, policy: str) -> list[QueueEntry]:
-        """The FILL read (``POST /api/fleet/queue/peek``) — at most one queue entry matching ``capabilities``
+        """``POST /api/fleet/queue/peek`` — at most one queue entry matching ``capabilities``
         under ``policy``; a refusal raises ``HubClientError``."""
         ...
 
@@ -382,10 +382,9 @@ class IHubClient(IChunkStatusReader, Protocol):
 
     def hub_advance(self, chunk_id: str) -> HubAdvanceResponse:
         """``POST /api/fleet/chunks/{id}/hub-advance`` — drive a chunk parked at a generic
-        hub command node one step (#65/#66).
+        hub command node one step.
 
-        ``ran=False`` means the hub declined to run a step this call — simply retried on a
-        later :class:`~blizzard.runner.loop.steps.Advance` tick."""
+        ``ran=False`` means the hub declined to run a step this call; a later call may run it."""
         ...
 
     def get_question(self, question_id: str) -> HubQuestion:
@@ -405,17 +404,15 @@ class IHubClient(IChunkStatusReader, Protocol):
         gates: tuple[str, ...] = (),
     ) -> RegistrationReply:
         """``POST /api/fleet/runners`` — register the runner this client's token names under its
-        declared ``name``, and learn its hub-minted id from the reply. Idempotent, and the liveness
-        heartbeat, called before the paused read. Every optional field, ``subscriptions`` included,
+        declared ``name``, and learn its hub-minted id from the reply. Idempotent, and refreshes the
+        runner's liveness at the hub. Every optional field, ``subscriptions`` included,
         is unconditionally overwritten each call; ``subscriptions`` is always a list, never omitted.
         ``gates`` is the runner's own configured human-gate node names — reported for display, never
         read back to enforce. A refused token raises :class:`HubClientError`."""
         ...
 
     def fetch_runner_paused(self, runner_id: str) -> bool:
-        """``GET /api/fleet/runners/{id}`` — the runner's declarative pause brake.
-
-        Read on the outbound pull; never a push into the box."""
+        """``GET /api/fleet/runners/{id}`` — the runner's declarative pause brake, read outbound."""
         ...
 
     def rekey_route_token(self, chunk_id: str) -> str:
@@ -427,8 +424,7 @@ class IHubClient(IChunkStatusReader, Protocol):
 
 
 class ITokenIdentityReader(Protocol):
-    """Ask the hub who this client's runner bearer token belongs to — narrowed from the hub
-    client's binding (``bzh:seam-size-ceiling``), since only the runner's setup asks it."""
+    """Ask the hub who this client's runner bearer token belongs to (``bzh:seam-size-ceiling``)."""
 
     def identity(self) -> TokenIdentity | TokenRefusal:
         """``GET /api/fleet/identity`` — the token's runner, or the hub's typed ``401`` refusal
@@ -440,8 +436,9 @@ class ITokenIdentityReader(Protocol):
 
 class IHubRunnerAdmin(Protocol):
     """The one runner-side call made under an operator's credential rather than a runner token:
-    adding a runner. The binding presents the operator's signed-in session for the hub when one is
-    held, and no credential otherwise — a hub without sign-in admits that, any other answers 401."""
+    adding a runner. Its credential is the operator's signed-in session for the hub when one is
+    held, and none otherwise — never a runner token. A hub without sign-in admits no credential;
+    any other answers 401."""
 
     def add_runner(self, name: str) -> IssuedIdentity:
         """``POST /api/runners`` — add a runner under the initial ``name``; the hub mints its id and

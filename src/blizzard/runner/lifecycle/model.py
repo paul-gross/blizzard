@@ -81,7 +81,7 @@ LEASE_MOVES: Mapping[LeaseState, frozenset[LeaseMove]] = MappingProxyType(
     }
 )
 
-#: The moves the runner's own brake holds back: starting a process, killing an irreplaceable worker, or escalating.
+#: Moves the brake defers; a flushed escalation cannot be retracted when the brake lifts.
 BRAKE_DEFERRED_MOVES: frozenset[LeaseMove] = frozenset(
     {LeaseMove.RETRY, LeaseMove.ESCALATE, LeaseMove.REAP_STALLED, LeaseMove.START_PROCESS}
 )
@@ -116,9 +116,8 @@ def routed_away(view: ChunkState, runner_id: str) -> bool:
 @domain_model
 @dataclass(frozen=True)
 class TakeoverHolds:
-    """Every open takeover, as the one skip the loop steps apply: a person holding a session keeps
-    every loop step off the leases it covers — the reference lease and anything at or below the
-    takeover's fence. A lease minted after a re-claim sits above that and is the loop's again."""
+    """Every open takeover, as one skip: a lease or chunk any of them holds
+    (``OpenTakeover.holds``)."""
 
     takeovers: tuple[OpenTakeover, ...] = ()
 
@@ -203,8 +202,8 @@ class ClaimVerdict(StrEnum):
 @domain_model
 @dataclass(frozen=True)
 class ClaimDisposition:
-    """What FILL does after one claim: whether the peeked entry leaves the snapshot, whether the
-    binding is released, and whether filling continues this tick."""
+    """What follows one claim: whether the peeked entry leaves the snapshot, whether the
+    binding is released, and whether claiming continues."""
 
     verdict: ClaimVerdict
     drop_entry: bool
@@ -613,10 +612,10 @@ def held_chunk_reads_local_epoch(view: ChunkState) -> bool:
 
 def held_chunk_move(view: ChunkState, *, runner_id: str, local_latest_epoch: int, taken_over: bool) -> HeldChunkMove:
     """A held chunk with no active lease: an ended chunk releases; a decided gate whose route left
-    this runner releases, a decided gate still here resolves; a running chunk at a strictly newer
-    hub epoch enters its node; a chunk at a hub node is stepped. The strictly-higher epoch is
-    load-bearing: a just-escalated chunk still derives ``running`` at the SAME epoch until its fact
-    flushes, and would re-spawn forever."""
+    this runner releases, one still here resolves; a running chunk at a strictly newer hub epoch
+    enters its node (a just-escalated one stays at the SAME epoch until its fact flushes); a chunk
+    at a hub node is stepped. Non-releasing moves hold the environments until a terminal outcome.
+    ``taken_over`` holds only moves that start a session or advance the chunk."""
     move = _held_chunk_move(view, runner_id=runner_id, local_latest_epoch=local_latest_epoch)
     if taken_over and move in TAKEOVER_SUPPRESSED_HELD_MOVES:
         return HeldChunkMove.HOLD
@@ -698,7 +697,8 @@ def decision_move(outcome: ApplyOutcome) -> DecisionMove:
 
 
 def spend_cap_reached(cost: ChunkSpend, cap: float | None) -> bool:
-    """The chunk's hub-derived spend — a lower bound — has reached the per-chunk cap."""
+    """The chunk's hub-derived spend has reached the per-chunk cap. The spend is a lower bound — a
+    row with no billed cost contributes $0, estimate or not — so the cap trips conservatively."""
     return cap is not None and cost.cost_usd >= cap
 
 
@@ -754,7 +754,9 @@ def resumable(
 ) -> bool:
     """Whether a restart marks the lease for same-lease resume: spawned, and neither held by a
     takeover, parked, mid-submission, mid-elicitation, nor backing off — each would wake a second
-    process on the session, or skip a wait already durable."""
+    process on the session, or skip a wait already durable. A mid-elicitation lease re-minted
+    instead would leave the stale elicitation record to be misread as the resumed generation's
+    own verdict."""
     if not spawned(lease) or taken_over:
         return False
     lease_id = lease.lease_id
@@ -765,7 +767,8 @@ def resumable(
 
 def crash_orphaned(lease: Lease, *, session_ended: bool, alive: bool, stale: bool) -> bool:
     """Of the resumable leases, a crash orphaned those whose session neither declared itself done,
-    nor survived the crash, nor had already gone stale before it — the last is ADVANCE's to judge."""
+    nor survived the crash, nor had already gone stale before it. A stale one is judged as a dead
+    session instead, consuming a retry only if no verdict comes."""
     return not session_ended and not alive and not stale
 
 

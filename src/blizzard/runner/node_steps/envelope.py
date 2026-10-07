@@ -2,7 +2,7 @@
 
 The pre-prompt (base prompt plus any arrival addendum, already inlined), the node's config, the
 chunk's work refs, the node-scope artifacts resolved latest-by-epoch, and the mint's graph-scope
-declarations. The hub client maps the wire envelope to it (``bzh:data-roles``)."""
+declarations."""
 
 from __future__ import annotations
 

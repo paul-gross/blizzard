@@ -198,8 +198,7 @@ class TranscriptLedgerStore:
 
     def stop_transcript_segment_shipping(self, segment_id: str, *, reason: str) -> bool:
         with self._store.begin() as conn:
-            # `IS NULL` guards: a segment already stopped keeps its first reason, and a
-            # finalized one takes no stop (`SEGMENT_TRANSITIONS`).
+            # `IS NULL` guards on `shipping_stopped_reason` and `finalized_at` (`SEGMENT_TRANSITIONS`).
             result = conn.execute(
                 transcript_segments.update()
                 .where(transcript_segments.c.segment_id == segment_id)
@@ -377,7 +376,7 @@ class TranscriptLedgerStore:
                 .where(transcript_outbound_buffer.c.seq.in_(seqs))
                 .where(transcript_outbound_buffer.c.final.is_(False))
             )
-            # Only a pending marker takes the ack: an acked one keeps its first `acked_at`.
+            # Only `acked_at IS NULL` markers take the update.
             conn.execute(
                 transcript_outbound_buffer.update()
                 .where(transcript_outbound_buffer.c.seq.in_(seqs))

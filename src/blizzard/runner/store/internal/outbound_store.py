@@ -86,8 +86,7 @@ class OutboundStore:
         self.ack_outbound_batch([seq], acked_at=acked_at)
 
     def ack_outbound_batch(self, seqs: list[int], *, acked_at: datetime) -> None:
-        # Only a pending row takes the ack (`OUTBOUND_TRANSITIONS`): an acked one keeps its
-        # first `acked_at`.
+        # Only `acked_at IS NULL` rows take the update (`OUTBOUND_TRANSITIONS`).
         with self._store.begin() as conn:
             conn.execute(
                 outbound_buffer.update()

@@ -348,9 +348,8 @@ class HttpHubClient:
 
 
 class HttpHubRunnerAdmin:
-    """The operator-credentialed add over an injected ``httpx.Client``: it presents
-    ``operator_token`` — the operator's signed-in session for this hub — when there is one, and no
-    credential otherwise."""
+    """Runner add over an injected ``httpx.Client``, sending ``operator_token`` as a Bearer
+    credential when set and no credential otherwise."""
 
     def __init__(self, client: httpx.Client, *, operator_token: str | None) -> None:
         self._client = client

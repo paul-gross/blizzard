@@ -152,9 +152,8 @@ class DormantSession:
         _log.info("chunk parked on question", chunk_id=lease.chunk_id, question_id=ask.question_id)
 
     def restart_or_release(self, fenced: Fenced) -> None:
-        """Park a paused chunk, else preempt a lease a restart fenced out while the runner was
-        down, else resume in place, else abandon it if the hub reassigned its chunk, or if the
-        hub no longer knows it at all (:func:`restart_disposition`)."""
+        """Apply this restart-marked lease's disposition: ``src/blizzard/runner/lifecycle/model.py``'s
+        ``restart_disposition``."""
         lease = self.lease
         try:
             view = self.ctx.chunk_views.get(lease.chunk_id)
@@ -400,11 +399,9 @@ class DormantSession:
         if judgement is None:
             return  # hub unreachable — `resume_after` is durable; retry next tick
         if lease.session is not None:
-            # The standing "judge" boundary is reused, not reopened (`record_boundary_open`'s
-            # check-then-insert never mints a second row for one (lease, generation, kind)) —
-            # record an advance past the overloaded elicitation's own signal, or the fresh one's own
-            # classification would re-read that same signal off the transcript forever. Keyed
-            # by the superseded elicitation, so a replay while it still stands writes nothing.
+            # The standing "judge" boundary is reused, not reopened: advance it past the overloaded
+            # elicitation's own signal, or the fresh one's classification would re-read that
+            # same signal off the transcript forever.
             generation = self.ctx.stores.liveness.lease_generation(lease.lease_id)
             workdir = judgement.bindings[0].workdir if judgement.bindings else None
             start_position, start_unreadable = self.ctx.resolve_boundary_start(lease.session, workdir)
@@ -447,11 +444,9 @@ class DormantSession:
         if judgement is None:
             return  # hub unreachable — the park is durable; retry next tick
         if lease.session is not None:
-            # The standing "judge" boundary is reused, not reopened (`record_boundary_open`'s
-            # check-then-insert never mints a second row for one (lease, generation, kind)) —
-            # record an advance past the limited elicitation's own signal, or the fresh one's own
-            # classification would re-read that same signal off the transcript forever. Keyed
-            # by the superseded elicitation, so a replay while it still stands writes nothing.
+            # The standing "judge" boundary is reused, not reopened: advance it past the limited
+            # elicitation's own signal, or the fresh one's classification would re-read that
+            # same signal off the transcript forever.
             generation = self.ctx.stores.liveness.lease_generation(lease.lease_id)
             workdir = judgement.bindings[0].workdir if judgement.bindings else None
             start_position, start_unreadable = self.ctx.resolve_boundary_start(lease.session, workdir)

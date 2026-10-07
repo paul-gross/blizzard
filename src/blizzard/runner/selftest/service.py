@@ -30,7 +30,7 @@ class SelfTestService:
     """Mint selftest runs and execute them off the request thread.
 
     The caller resolves the harness id to its seam and hands both in. Concurrent runs for one
-    harness are legal; the last to finish records the result."""
+    harness are legal."""
 
     def __init__(
         self,

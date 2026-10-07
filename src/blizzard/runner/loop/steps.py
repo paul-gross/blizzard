@@ -243,16 +243,7 @@ class ResumeIntents:
         return marked
 
     def _resumable(self) -> Iterator[Lease]:
-        """Active, session-bearing leases that are neither parked, mid-submission, nor
-        mid-elicitation — an unspawned one is REAP's residue, with nothing to resume.
-
-        The elicitation exclusion matters on both callers: a graceful
-        restart-resume would otherwise wake a second process on the same session, and an
-        ungraceful crash-orphan scan would otherwise leave the pre-resume elicitation's stale
-        record to be misread as the resumed generation's own verdict — neither path may
-        re-mint or resume a lease whose elicitation is in flight. A backing-off lease is
-        excluded the same way: its own ``resume_after`` is already durable,
-        and either restart path re-marking it would wake it early, skipping the wait."""
+        """The active leases a restart may mark for same-lease resume (``resumable``)."""
         parked = self.stores.asks.parked_lease_ids()
         pending = self.stores.outbound.pending_submission_lease_ids()
         eliciting = self.stores.elicitations.in_flight_elicitation_lease_ids()
@@ -270,8 +261,6 @@ class ResumeIntents:
                 yield lease
 
     def _crash_orphaned(self, ended: Container[str], process: IProcessProbe, crashed_at: datetime) -> Iterator[Lease]:
-        # Declared done (SessionEnd fired) is ADVANCE's to judge; orphaned-but-alive is REAP's to re-adopt;
-        # gone stale before the crash, ADVANCE judges the dead session, a retry consumed only if no verdict comes.
         for lease in self._resumable():
             liveness = Liveness.of(
                 lease,
@@ -336,13 +325,12 @@ class Pull(Step):
         _CP_PULL_AFTER.reached()
 
     def _sync_registry(self) -> None:
-        """Register, record the identity the reply names, and mirror the hub's pause brake locally."""
+        """``src/blizzard/runner/lifecycle/registration.py``'s ``Registration``."""
         Registration(self.ctx).run()
 
     def _reconcile_leases(self) -> None:
-        """Reconcile every active lease against its chunk's view — abandon, park, or preempt it
-        per ``lease_reconcile_move`` — from one ``ctx.chunk_views.get`` per lease. A transport
-        failure leaves the lease as it is."""
+        """Reconcile every active lease against its chunk's view (``lease_reconcile_move``), from
+        one ``ctx.chunk_views.get`` per lease. A transport failure leaves the lease as it is."""
         ctx = self.ctx
         runner_id = registered_runner_id(ctx.identity)
         if runner_id is None:
@@ -479,12 +467,10 @@ class Advance(Step):
                 alive=lease.pid is not None and ctx.process.is_alive(lease.pid, lease.process_start_time or ""),
             )
             if move is AdvanceMove.ON_UNPAUSE and park is not None:
-                # Dormant on an operator pause — finish the park's teardown, resume when it lifts.
                 DormantSession(ctx, lease).on_unpause(park, in_flight_elicitations.get(lease.lease_id))
             elif move is AdvanceMove.ON_ANSWER:
-                DormantSession(ctx, lease).on_answer()  # dormant on a question — resume on the answer
+                DormantSession(ctx, lease).on_answer()
             elif move is AdvanceMove.ON_OVERLOAD_BACKOFF:
-                # No-ops until `resume_after` passes, then wakes the same lease/epoch/session in place.
                 DormantSession(ctx, lease).on_overload_backoff(backing_off[lease.lease_id])
             elif move is AdvanceMove.EXITED:
                 self._advance_exited_worker(lease)
@@ -512,8 +498,6 @@ class Advance(Step):
         elicitation = ctx.stores.elicitations.in_flight_elicitation(lease.lease_id, lease.epoch)
         move = exited_worker_elicitation_move(
             in_flight=elicitation is not None,
-            # Live and under the staleness bound — `collect` would early-return anyway, so the
-            # envelope/binding fetch it never uses is skipped.
             still_pending=elicitation is not None and elicitation_still_pending(ctx, elicitation),
         )
         if move is ExitedMove.AWAIT_ELICITATION:
