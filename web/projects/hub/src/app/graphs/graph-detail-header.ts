@@ -1,6 +1,8 @@
 import { ChangeDetectionStrategy, Component, input, output, signal } from '@angular/core';
 
-import { KitButton, KitConfirmDialog } from 'fleet';
+import { KitBadge, KitButton, KitConfirmDialog } from 'fleet';
+
+import { lifecycleTone } from '../core/lifecycle-tone';
 
 /**
  * The graph detail panel's own header content — the lifecycle text, graph id,
@@ -25,7 +27,7 @@ import { KitButton, KitConfirmDialog } from 'fleet';
 @Component({
   selector: 'app-graph-detail-header',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitButton, KitConfirmDialog],
+  imports: [KitBadge, KitButton, KitConfirmDialog],
   templateUrl: './graph-detail-header.html',
   styleUrl: './graph-detail-header.css',
 })
@@ -54,6 +56,9 @@ export class GraphDetailHeader {
 
   /** Emitted with the graph id once the operator confirms Enable. */
   readonly enable = output<string>();
+
+  /** The lifecycle badge's tone, from the hub's one lifecycle owner. */
+  protected readonly lifecycleTone = lifecycleTone;
 
   protected readonly pendingConfirm = signal<{
     readonly heading: string;

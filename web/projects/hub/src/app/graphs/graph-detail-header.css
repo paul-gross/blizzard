@@ -11,20 +11,11 @@
   color: var(--label-dim);
   font-size: var(--fs-xs);
 }
-/* Plain text, not a badge — no border. The graph id sits mid-row (next to the
-   panel's own name label); this span and the retire/re-enable control after it
+/* A text-variant kit badge — no border. The graph id sits mid-row (next to the
+   panel's own name label); this badge and the retire/re-enable control after it
    are the row's trailing cluster, pushed hard right against `.p-hdr`'s
    `justify-content: space-between` the same way `finding-list.css`'s `.fl-ref`
    does one level down: `margin-left: auto` on the first item of the cluster. */
 .lifecycle {
   margin-left: auto;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-size: var(--fs-xs);
-}
-.lifecycle.enabled {
-  color: var(--cyan);
-}
-.lifecycle.retired {
-  color: var(--red);
 }

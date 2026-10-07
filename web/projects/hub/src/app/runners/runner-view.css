@@ -132,16 +132,3 @@
   flex-wrap: wrap;
   gap: 3px;
 }
-.badge.paused {
-  border: 1px solid var(--line);
-  font-size: var(--fs-label);
-  letter-spacing: 0.12em;
-  padding: 0 4px;
-}
-/* Distinct hues so "who stopped it" reads at a glance, not just from the text. */
-.badge.paused.hub {
-  color: var(--amber-hi);
-}
-.badge.paused.local {
-  color: var(--label-dim);
-}

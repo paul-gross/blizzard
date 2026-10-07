@@ -17,6 +17,16 @@ async function loadDesignTokens(): Promise<void> {
   document.head.appendChild(styleEl);
 }
 
+/** The computed colour a design token resolves to, read off a probe element. */
+function tokenColor(token: string): string {
+  const probe = document.createElement('span');
+  probe.style.color = `var(${token})`;
+  document.body.appendChild(probe);
+  const color = getComputedStyle(probe).color;
+  probe.remove();
+  return color;
+}
+
 /**
  * The runner registry's rate-limit pace bars, the tooled half of
  * `blizzard-context:/verification/blizzard.md`'s `web:shell-sweep` method — a real,
@@ -366,6 +376,46 @@ describe('runner registry identity layout shell sweep (web:shell-sweep)', () => 
       root.remove();
     }
   });
+
+  it.each([390, 1280])(
+    'draws both pause badges as soft kit pills in their tone colours, matching never connected, at %ipx',
+    async (width) => {
+      await loadDesignTokens();
+      const pausedRow: RunnerRow = {
+        ...IDENTITY_ROWS[0],
+        runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYNPAUS',
+        locally_paused: true,
+        hub_paused: true,
+      };
+      const fixture = await render([pausedRow, IDENTITY_ROWS[2]]);
+      const root = fixture.nativeElement as HTMLElement;
+      document.body.appendChild(root);
+      await fixture.whenStable();
+
+      try {
+        await page.viewport(width, 800);
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+
+        const row = root.querySelector<HTMLElement>('[data-runner="rn_01KXKVVF1J3D6H6VYZ3XYNPAUS"]')!;
+        const local = row.querySelector<HTMLElement>('[data-testid="runner-locally-paused"] .badge')!;
+        const hub = row.querySelector<HTMLElement>('[data-testid="runner-hub-paused"] .badge')!;
+        const never = getComputedStyle(root.querySelector<HTMLElement>('[data-testid="runner-never-connected"] .badge')!);
+        expect(local.textContent?.trim()).toBe('LOCALLY PAUSED');
+        expect(hub.textContent?.trim()).toBe('HUB PAUSED');
+        expect(getComputedStyle(local).color).toBe(tokenColor('--label-dim'));
+        expect(getComputedStyle(hub).color).toBe(tokenColor('--amber-hi'));
+        for (const badge of [getComputedStyle(local), getComputedStyle(hub)]) {
+          expect(badge.borderTopStyle).toBe('solid');
+          expect(badge.borderTopLeftRadius).toBe(never.borderTopLeftRadius);
+          expect(parseFloat(badge.borderTopLeftRadius)).toBeGreaterThan(0);
+          expect(badge.fontSize).toBe(never.fontSize);
+        }
+        expect(row.scrollWidth, `paused runner row overflows horizontally at ${width}px`).toBeLessThanOrEqual(row.clientWidth);
+      } finally {
+        root.remove();
+      }
+    },
+  );
 });
 
 describe('runner registry pace bars layout shell sweep (web:shell-sweep, blizzard#218)', () => {

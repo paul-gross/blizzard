@@ -1,11 +1,7 @@
 <span class="gid" data-testid="graph-detail-graph-id">{{ graphId() }}</span>
-<span
-  class="lifecycle"
-  data-testid="graph-detail-lifecycle-badge"
-  [class.retired]="renderedRetired()"
-  [class.enabled]="!renderedRetired()"
-  >{{ renderedRetired() ? 'retired' : 'enabled' }}</span
->
+<fleet-kit-badge class="lifecycle" data-testid="graph-detail-lifecycle-badge" [tone]="lifecycleTone(renderedRetired())">{{
+  renderedRetired() ? 'retired' : 'enabled'
+}}</fleet-kit-badge>
 <!-- Retire/re-enable are graph authoring — gated on graph:edit, an admin-tier
      permission: a contributor sees the lifecycle text but not the control. The
      control shown stays keyed off the real `retired()`, not the pending
