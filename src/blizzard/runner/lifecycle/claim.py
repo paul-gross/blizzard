@@ -21,6 +21,7 @@ from blizzard.runner.environments.repository import (
     EnvironmentHeldError,
     IWriteEnvironmentRepository,
     group_bindings_by_chunk,
+    releasable_after_refusal,
     require_unheld,
 )
 from blizzard.runner.harness.capability_snapshot import HarnessCapability
@@ -221,14 +222,16 @@ class ReadyQueue:
             environment_id=exc.environment_id,
             holder_chunk_id=exc.holder_chunk_id,
         )
-        held_by_others = {
-            binding.environment_id
-            for binding in self.ctx.stores.environments.held_bindings()
-            if binding.chunk_id != entry.chunk_id
-        }
-        for env in acquired:
-            if env.environment_id not in held_by_others:
-                self.ctx.provider.release(env.environment_id)
+        giveback = set(
+            releasable_after_refusal(
+                entry.chunk_id,
+                [env.environment_id for env in acquired],
+                self.ctx.stores.environments.held_bindings(),
+            )
+        )
+        self.ctx.env_release.release_binding(
+            entry.chunk_id, [env for env in acquired if env.environment_id in giveback]
+        )
         self._entries.remove(entry)
 
     def _route_claim(self, chunk_id: str, acquired: list[AcquiredEnvironment]) -> ClaimRequest:

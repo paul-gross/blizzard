@@ -20,6 +20,7 @@ __all__ = [
     "IReadEnvironmentRepository",
     "IWriteEnvironmentRepository",
     "group_bindings_by_chunk",
+    "releasable_after_refusal",
     "release_instants",
     "require_unheld",
 ]
@@ -54,10 +55,23 @@ class EnvBinding:
         return max(now, self.bound_at)
 
 
+def _holders_other_than(chunk_id: str, held: Sequence[EnvBinding]) -> dict[str, str]:
+    """Each environment id in ``held`` mapped to the chunk holding it, ``chunk_id``'s own bindings excluded."""
+    return {binding.environment_id: binding.chunk_id for binding in held if binding.chunk_id != chunk_id}
+
+
+def releasable_after_refusal(chunk_id: str, environment_ids: Iterable[str], held: Sequence[EnvBinding]) -> list[str]:
+    """The ``environment_ids`` ``chunk_id`` may give back after :func:`require_unheld` refused it:
+    those no other chunk holds in ``held``, in the order given. An environment another chunk holds
+    stays with its holder — releasing it would free it under that chunk."""
+    holders = _holders_other_than(chunk_id, held)
+    return [environment_id for environment_id in environment_ids if environment_id not in holders]
+
+
 def require_unheld(chunk_id: str, environment_ids: Iterable[str], held: Sequence[EnvBinding]) -> None:
     """Refuse to let ``chunk_id`` bind any of ``environment_ids`` that another chunk holds in
     ``held`` (:class:`EnvironmentHeldError`)."""
-    holders = {binding.environment_id: binding.chunk_id for binding in held if binding.chunk_id != chunk_id}
+    holders = _holders_other_than(chunk_id, held)
     for environment_id in environment_ids:
         holder = holders.get(environment_id)
         if holder is not None:
