@@ -14,7 +14,8 @@ import pytest
 from blizzard.runner.cli.runtime import _publish_harness_bundle
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.autonomy import Autonomy
-from blizzard.runner.harness.bundle import HarnessBundleError, HarnessComposition, published_snapshot
+from blizzard.runner.harness.bundle import HarnessBundleError, HarnessComposition
+from blizzard.runner.harness.internal.bundle_publisher import published_snapshot
 from blizzard.runner.harness.opencode.adapter import OpenCodeAdapter
 from blizzard.runner.harness.opencode.bundle import (
     _compose,

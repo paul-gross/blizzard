@@ -28,7 +28,7 @@ from blizzard.runner.harness.wiring import (
     build_production_harness_health_probes,
     build_production_harness_registry,
 )
-from blizzard.runner.process.probe import LinuxProcessProbe
+from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from tests.harness_sections import with_claude_code, with_opencode
 from tests.runner_fakes import FakeHarness, FakeTranscriptSource
 

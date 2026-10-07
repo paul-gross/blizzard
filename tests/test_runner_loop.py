@@ -38,6 +38,7 @@ from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.health_cache import HARNESS_VERSION_REFRESH_SECONDS, HarnessHealthCache
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.internal.committed_corpus import CommittedCorpus
 from blizzard.runner.harness.preamble import (
     DEFAULT_BLIZZARD_PREAMBLE,
     RESUME_BLIZZARD_UNCHANGED,
@@ -495,6 +496,7 @@ def test_harness_selection_skips_a_member_health_has_withdrawn():  # type: ignor
             return None
 
     health = HarnessHealthCache(
+        corpus=CommittedCorpus(),
         clock=FixedClock(datetime(2026, 1, 1, tzinfo=UTC)),
         probes={"h_unhealthy": _NeverBinaryProbe()},
         selftest_results=_NoSelftestResults(),

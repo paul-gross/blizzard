@@ -68,10 +68,10 @@ from blizzard.runner.hub.client import (
     TranscriptPushAck,
 )
 from blizzard.runner.hub.identity import RunnerIdentity, RunnerIdentityHolder
-from blizzard.runner.leases.worker_stdout import WorkerStdoutFiles
+from blizzard.runner.leases.internal.worker_stdout_files import WorkerStdoutFiles
 from blizzard.runner.lifecycle.env_release import EnvironmentRelease
 from blizzard.runner.lifecycle.judgement.check_runner import CheckOutcome, ICheckRunner
-from blizzard.runner.lifecycle.judgement.elicitation_files import ElicitationFiles
+from blizzard.runner.lifecycle.judgement.internal.elicitation_files import ElicitationFiles
 from blizzard.runner.lifecycle.session import HarnessSelector, SessionResolver
 from blizzard.runner.loop.context import LoopConfig, LoopContext, ResolvedSubscription
 from blizzard.runner.loop_wiring import LoopWiring

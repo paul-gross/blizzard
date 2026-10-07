@@ -13,7 +13,8 @@ from packaging.version import Version
 
 from blizzard.runner.harness.claude_code.health import ADMITTED_CLAUDE_CODE_RANGE, ClaudeCodeHealthProbe
 from blizzard.runner.harness.compatibility import CompatibilityProbe
-from blizzard.runner.harness.offline_compatibility import DEFAULT_CORPUS_ROOT, admitted_corpus_versions
+from blizzard.runner.harness.internal.committed_corpus import DEFAULT_CORPUS_ROOT, CommittedCorpus
+from blizzard.runner.harness.offline_compatibility import admitted_corpus_versions
 from blizzard.runner.harness.opencode.compatibility.probe import ADMITTED_OPENCODE_RANGE
 from blizzard.runner.harness.opencode.health import OpenCodeHealthProbe
 from tests.repo_files import repo_root
@@ -23,7 +24,7 @@ pytestmark = pytest.mark.component
 _PACKAGE_ROOT = repo_root() / "src" / "blizzard" / "runner" / "harness"
 # Keyed off the admitted range's own committed corpus — there is exactly
 # one committed corpus today, but this stays correct once a second one lands.
-_AN_ADMITTED_OPENCODE_VERSION = admitted_corpus_versions("opencode", ADMITTED_OPENCODE_RANGE)[0]
+_AN_ADMITTED_OPENCODE_VERSION = admitted_corpus_versions(CommittedCorpus(), "opencode", ADMITTED_OPENCODE_RANGE)[0]
 _CORPUS_DIR = _PACKAGE_ROOT / "contracts" / "opencode" / _AN_ADMITTED_OPENCODE_VERSION
 
 
@@ -32,7 +33,7 @@ def _manifest() -> dict:
 
 
 def test_opencode_health_probe_declares_the_pinned_versions_absences() -> None:
-    probe = OpenCodeHealthProbe("opencode", auth_path=None)
+    probe = OpenCodeHealthProbe("opencode", auth_path=None, corpus=CommittedCorpus())
 
     manifest = _manifest()
     assert probe.supported_version() == ADMITTED_OPENCODE_RANGE
@@ -63,10 +64,10 @@ def test_claude_code_health_probe_declares_an_admitted_range_and_no_degradations
 
 
 def test_opencode_health_probe_construction_survives_a_missing_corpus_manifest(tmp_path: Path) -> None:
-    """Construction over a ``corpus_root`` with no manifest does not raise.
+    """Construction over a corpus root with no manifest does not raise.
     ``supported_version`` still reports the declared range; ``declared_degradations`` is
     empty since there is no manifest to read one from."""
-    probe = OpenCodeHealthProbe("opencode", auth_path=None, corpus_root=tmp_path)
+    probe = OpenCodeHealthProbe("opencode", auth_path=None, corpus=CommittedCorpus(tmp_path))
 
     assert probe.supported_version() == ADMITTED_OPENCODE_RANGE
     assert probe.declared_degradations() == ()
@@ -75,7 +76,7 @@ def test_opencode_health_probe_construction_survives_a_missing_corpus_manifest(t
 def test_opencode_health_probe_declared_degradations_come_from_the_corpus_manifest() -> None:
     """``declared_degradations`` equals the committed corpus manifest's entries, read from
     ``DEFAULT_CORPUS_ROOT``."""
-    probe = OpenCodeHealthProbe("opencode", auth_path=None, corpus_root=DEFAULT_CORPUS_ROOT)
+    probe = OpenCodeHealthProbe("opencode", auth_path=None, corpus=CommittedCorpus(DEFAULT_CORPUS_ROOT))
 
     manifest = _manifest()
     manifest_degradations = {(entry["probe"], entry["summary"]) for entry in manifest["declared_degradations"]}

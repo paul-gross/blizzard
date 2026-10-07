@@ -9,8 +9,14 @@ import click
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.config import ConfigError, RunnerConfig
 from blizzard.runner.environments.factory import build_workspace_provider
-from blizzard.runner.harness.bundle import HarnessBundleNotPublished, published_snapshot, require_published
-from blizzard.runner.harness.wiring import declared, harness_catalog, inspect_harness_bundle, shared_inputs
+from blizzard.runner.harness.bundle import HarnessBundleNotPublished, require_published
+from blizzard.runner.harness.wiring import (
+    declared,
+    harness_catalog,
+    inspect_harness_bundle,
+    published_harness_snapshot,
+    shared_inputs,
+)
 
 
 @click.group("harness")
@@ -50,7 +56,7 @@ def harness_status(directory: str) -> None:
     except ConfigError as exc:
         raise click.ClickException(str(exc)) from exc
     try:
-        snapshot = require_published(config.harness_config_dir, published_snapshot(config.root))
+        snapshot = require_published(config.harness_config_dir, published_harness_snapshot(config.root))
     except HarnessBundleNotPublished as exc:
         raise click.ClickException(str(exc)) from exc
     click.echo(f"snapshot: {snapshot}")

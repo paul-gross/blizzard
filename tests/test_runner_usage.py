@@ -27,7 +27,7 @@ from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import TranscriptPosition
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.leases import NewLease
-from blizzard.runner.leases.worker_stdout import WorkerStdoutFiles
+from blizzard.runner.leases.internal.worker_stdout_files import WorkerStdoutFiles
 from blizzard.runner.lifecycle.dormant import DormantSession
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.steps import Advance, Resume, ResumeIntents

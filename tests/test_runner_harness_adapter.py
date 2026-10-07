@@ -26,7 +26,7 @@ from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.node_steps.envelope import Envelope
-from blizzard.runner.process.probe import LinuxProcessProbe
+from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from tests import transcript_fixtures
 from tests.conftest import _WORKER_IDENTITY_ENV
 from tests.runner_fakes import FakeProbe, make_envelope

@@ -676,7 +676,8 @@ def test_with_no_collector_usage_is_the_root_alone(spawn_executor: Executor) -> 
 
 
 def test_the_fixture_files_are_not_a_corpus(tmp_path: Path) -> None:
+    from blizzard.runner.harness.internal.committed_corpus import CommittedCorpus
     from blizzard.runner.harness.offline_compatibility import admitted_corpus_versions
     from blizzard.runner.harness.opencode.compatibility.probe import ADMITTED_OPENCODE_RANGE
 
-    assert "1.18.32" not in admitted_corpus_versions("opencode", ADMITTED_OPENCODE_RANGE)
+    assert "1.18.32" not in admitted_corpus_versions(CommittedCorpus(), "opencode", ADMITTED_OPENCODE_RANGE)

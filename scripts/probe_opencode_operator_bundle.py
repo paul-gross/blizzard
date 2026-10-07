@@ -22,15 +22,16 @@ from pathlib import Path
 from blizzard.foundation.node_steps import Executor, JudgedBy
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import WorkerPreamble
-from blizzard.runner.harness.bundle import HarnessBundleError, published_snapshot
+from blizzard.runner.harness.bundle import HarnessBundleError
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
+from blizzard.runner.harness.internal.bundle_publisher import published_snapshot
 from blizzard.runner.harness.opencode.adapter import OpenCodeAdapter
 from blizzard.runner.harness.opencode.bundle import check_ambient_plugins
 from blizzard.runner.harness.opencode.declaration import OPENCODE_DECLARATION
 from blizzard.runner.harness.opencode.section import OpenCodeSection
 from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.wiring import publish_harness_bundle
-from blizzard.runner.process.probe import LinuxProcessProbe
+from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from blizzard.wire.envelope import NodeConfig, NodeEnvelope
 from blizzard.wire.graph import SessionMode
 

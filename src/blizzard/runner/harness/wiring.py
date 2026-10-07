@@ -17,7 +17,7 @@ from blizzard.foundation.roles import domain_model
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.harness.adapter import IHarnessHealthProbe
 from blizzard.runner.harness.autonomy import Autonomy
-from blizzard.runner.harness.bundle import BundleSnapshot, HarnessLayout, HarnessSource, inspect_bundle, publish_bundle
+from blizzard.runner.harness.bundle import BundleSnapshot, HarnessLayout, HarnessSource
 from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_SECTION, ClaudeCodeSection
 from blizzard.runner.harness.declaration import (
     HarnessSection,
@@ -27,10 +27,11 @@ from blizzard.runner.harness.declaration import (
 )
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryPlan
+from blizzard.runner.harness.internal.bundle_publisher import inspect_bundle, publish_bundle, published_snapshot
 from blizzard.runner.harness.opencode.section import OPENCODE_SECTION
 from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
-from blizzard.runner.process.probe import LinuxProcessProbe
+from blizzard.runner.process.probe import IProcessProbe
 
 #: The catalog order: Claude Code first, so it is the default harness whenever it is enabled.
 HARNESS_SECTION_KINDS: tuple[IHarnessSectionKind, ...] = (CLAUDE_CODE_SECTION, OPENCODE_SECTION)
@@ -170,7 +171,7 @@ def build_production_harness_registry(
     settings: HarnessSettings,
     *,
     executor: Executor,
-    process: LinuxProcessProbe,
+    process: IProcessProbe,
     bundle: BundleSnapshot | None = None,
     harness_telemetry: HarnessTelemetryPlan | None = None,
 ) -> HarnessRegistry:
@@ -223,6 +224,11 @@ def inspect_harness_bundle(config_dir: Path) -> tuple[HarnessSource, ...]:
     return inspect_bundle(config_dir, bundle_layouts())
 
 
+def published_harness_snapshot(runtime_root: Path) -> Path | None:
+    """The snapshot ``runtime_root``'s ``current`` resolves to, or ``None`` when nothing is published."""
+    return published_snapshot(runtime_root)
+
+
 __all__ = [
     "HARNESS_SECTION_KINDS",
     "HarnessSections",
@@ -239,5 +245,6 @@ __all__ = [
     "harness_cli_groups",
     "inspect_harness_bundle",
     "publish_harness_bundle",
+    "published_harness_snapshot",
     "shared_inputs",
 ]

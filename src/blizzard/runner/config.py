@@ -28,7 +28,7 @@ from blizzard.runner.harness.bundle import HARNESS_CONFIG_DIRNAME
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.wiring import HarnessSections, HarnessSettings
 from blizzard.runner.harness.workspace_prompts import PACKAGED, UnknownWorkspacePromptSample
-from blizzard.runner.hub.token_file import HubTokenFile
+from blizzard.runner.hub.token_file import ENV_FILENAME, assigned_token
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC
 from blizzard.runner.transcripts.caps import CHUNK_TRANSCRIPT_MAX_BYTES, TRANSCRIPT_RECORD_MAX_BYTES
 
@@ -159,7 +159,12 @@ def _hub_token(root: Path, token_env: str) -> str:
     """The hub bearer token: the process environment's ``token_env``, else the runtime dir's
     ``.env`` assignment of it — so a token ``runner init`` wrote is read with no environment set,
     and one the environment supplies overrides it."""
-    return os.environ.get(token_env, "") or HubTokenFile.of(root, token_env).held()
+    if token := os.environ.get(token_env, ""):
+        return token
+    try:
+        return assigned_token((root / ENV_FILENAME).read_text(), token_env)
+    except FileNotFoundError:
+        return ""
 
 
 def _runner_name(raw: dict[str, object], path: Path) -> tuple[str, str | None]:

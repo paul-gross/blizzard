@@ -17,6 +17,7 @@ from blizzard.runner.harness.selftest_result import (
     LatestSelfTestResult,
     SelfTestTerminalStatus,
 )
+from blizzard.runner.lifecycle.judgement.internal.elicitation_files import ElicitationFiles
 from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessScratchGit
 from blizzard.runner.selftest.service import SelfTestService
 from tests.runner_fakes import make_store
@@ -87,6 +88,7 @@ def test_selftest_service_persists_a_completed_runs_outcome_through_a_wired_repo
     service = SelfTestService(
         scratch_git=SubprocessScratchGit(),
         process=_RecordingProcessProbe(),
+        elicitation_replies=ElicitationFiles(root=""),
         clock=clock,
         results=_SlowWriter(store),
     )

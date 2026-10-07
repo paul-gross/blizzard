@@ -31,10 +31,10 @@ from blizzard.runner.harness.transcript import IHarnessTranscriptSource
 from blizzard.runner.hub.chunk_status_cache import IChunkViews
 from blizzard.runner.hub.client import IHubClient
 from blizzard.runner.hub.identity import RunnerIdentityHolder
-from blizzard.runner.leases.worker_stdout import WorkerStdoutFiles
+from blizzard.runner.leases.worker_stdout import IWorkerStdoutFiles
 from blizzard.runner.lifecycle.env_release import EnvironmentRelease
 from blizzard.runner.lifecycle.judgement.check_runner import ICheckRunner
-from blizzard.runner.lifecycle.judgement.elicitation_files import ElicitationFiles
+from blizzard.runner.lifecycle.judgement.elicitation_files import IElicitationFiles
 from blizzard.runner.lifecycle.session import HarnessSelector, SessionResolver
 from blizzard.runner.loop.retention_floor import RetentionPasses
 from blizzard.runner.process.probe import IProcessProbe
@@ -169,8 +169,8 @@ class LoopContext:
     process: IProcessProbe
     worktree_git: IWorktreeGit
     config: LoopConfig
-    worker_files: WorkerStdoutFiles
-    elicitation_files: ElicitationFiles
+    worker_files: IWorkerStdoutFiles
+    elicitation_files: IElicitationFiles
     #: The per-lease scratch directory (`BLIZZARD_TMPDIR`), removed at lease closure.
     worker_scratch: WorkerScratchDirs
     usage: UsageRecorder

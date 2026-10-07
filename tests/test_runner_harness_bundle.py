@@ -14,10 +14,11 @@ from click.testing import CliRunner
 
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.config import CONFIG_FILENAME, ConfigError, RunnerConfig
-from blizzard.runner.harness import bundle as bundle_module
 from blizzard.runner.harness.autonomy import Autonomy
-from blizzard.runner.harness.bundle import HarnessBundleError, published_snapshot
+from blizzard.runner.harness.bundle import CompanionEscapes, HarnessBundleError, companion_path
 from blizzard.runner.harness.claude_code.section import ClaudeCodeSection
+from blizzard.runner.harness.internal import bundle_publisher as bundle_module
+from blizzard.runner.harness.internal.bundle_publisher import published_snapshot
 from blizzard.runner.harness.opencode.bundle import check_ambient_plugins, plugin_identity
 from blizzard.runner.harness.opencode.section import OpenCodeSection
 from blizzard.runner.harness.wiring import publish_harness_bundle
@@ -603,3 +604,21 @@ def test_status_prints_the_effective_settings_path_and_flags_without_contents(tm
     assert f"claude-code effective settings: {snapshot}/claude-code/settings.json" in result.output
     assert f"--mcp-config={snapshot}/claude-code/mcp.json" in result.output
     assert _SECRET not in result.output
+
+
+@pytest.mark.parametrize(
+    ("reference", "expected"),
+    [("./a/../b.json", "b.json"), ("sub/c.json", "sub/c.json"), ("/etc/x", None), ("~/x", None)],
+)
+def test_a_companion_reference_resolves_to_a_bundle_relative_path_or_is_skipped(
+    reference: str, expected: str | None
+) -> None:
+    resolved = companion_path(reference)
+
+    assert (str(resolved) if resolved is not None else None) == expected
+
+
+@pytest.mark.parametrize("reference", ["../up.json", "a/../../up.json", "."])
+def test_a_companion_reference_that_escapes_the_harness_directory_is_refused(reference: str) -> None:
+    with pytest.raises(CompanionEscapes):
+        companion_path(reference)

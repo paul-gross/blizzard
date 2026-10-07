@@ -12,7 +12,7 @@ from click.testing import CliRunner
 
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.config import CONFIG_FILENAME
-from blizzard.runner.harness.bundle import published_snapshot
+from blizzard.runner.harness.internal.bundle_publisher import published_snapshot
 
 pytestmark = pytest.mark.component
 

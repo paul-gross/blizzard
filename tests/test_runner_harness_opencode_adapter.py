@@ -22,6 +22,7 @@ from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import HarnessSpawnError, ResumeHandle, WorkerIdentityError, WorkerPreamble
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.identity import OPENCODE_HARNESS_ID
+from blizzard.runner.harness.internal.committed_corpus import CommittedCorpus
 from blizzard.runner.harness.offline_compatibility import admitted_corpus_versions
 from blizzard.runner.harness.opencode.adapter import (
     _MAX_IDENTITY_PREAMBLE_LINES,
@@ -40,14 +41,14 @@ from blizzard.runner.harness.opencode.usage.price_cache import (
 from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.lifecycle.session import HarnessSelection, HarnessSelector, SkippedHarness
-from blizzard.runner.process.probe import LinuxProcessProbe
+from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from tests.opencode_usage_limit_fixture import USAGE_LIMIT_EVENT
 from tests.repo_files import repo_root
 from tests.runner_fakes import FakeProbe, make_envelope
 from tests.support_opencode_binary import worker_binary
 
 # The oldest committed corpus inside the admitted range — stays correct as corpora are added.
-_AN_ADMITTED_OPENCODE_VERSION = admitted_corpus_versions("opencode", ADMITTED_OPENCODE_RANGE)[0]
+_AN_ADMITTED_OPENCODE_VERSION = admitted_corpus_versions(CommittedCorpus(), "opencode", ADMITTED_OPENCODE_RANGE)[0]
 _CORPUS_DIR = (
     repo_root() / "src" / "blizzard" / "runner" / "harness" / "contracts" / "opencode" / _AN_ADMITTED_OPENCODE_VERSION
 )

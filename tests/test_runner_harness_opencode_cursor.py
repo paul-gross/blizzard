@@ -9,6 +9,7 @@ import json
 
 import pytest
 
+from blizzard.runner.harness.internal.committed_corpus import CommittedCorpus
 from blizzard.runner.harness.offline_compatibility import admitted_corpus_versions
 from blizzard.runner.harness.opencode.compatibility.probe import ADMITTED_OPENCODE_RANGE
 from blizzard.runner.harness.opencode.shapes import parse_session_export
@@ -24,7 +25,7 @@ from tests.repo_files import repo_root
 pytestmark = pytest.mark.unit
 
 # The oldest committed corpus inside the admitted range — stays correct as corpora are added.
-_AN_ADMITTED_OPENCODE_VERSION = admitted_corpus_versions("opencode", ADMITTED_OPENCODE_RANGE)[0]
+_AN_ADMITTED_OPENCODE_VERSION = admitted_corpus_versions(CommittedCorpus(), "opencode", ADMITTED_OPENCODE_RANGE)[0]
 _CORPUS_DIR = (
     repo_root() / "src" / "blizzard" / "runner" / "harness" / "contracts" / "opencode" / _AN_ADMITTED_OPENCODE_VERSION
 )

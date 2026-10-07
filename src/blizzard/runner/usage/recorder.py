@@ -15,7 +15,7 @@ from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.transcript import TranscriptPosition
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.leases import IReadLeaseLivenessRepository, Lease
-from blizzard.runner.leases.worker_stdout import WorkerStdoutFiles
+from blizzard.runner.leases.worker_stdout import IWorkerStdoutReader
 from blizzard.runner.transcripts.invocation_boundaries import (
     WORKER_STARTING_KINDS,
     InvocationBoundary,
@@ -42,7 +42,7 @@ class UsageRecorder:
     leases: IReadLeaseLivenessRepository
     usage: IWriteUsageRepository
     clock: IClock
-    worker_files: WorkerStdoutFiles
+    worker_files: IWorkerStdoutReader
     workspace_root: str
     #: Required; every recorded session's owner resolves through this registry, with no single-harness fallback.
     harnesses: IHarnessRegistry
