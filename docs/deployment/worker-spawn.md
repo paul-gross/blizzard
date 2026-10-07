@@ -275,8 +275,8 @@ entirely rather than falling back within it, so the single-harness fallback abov
 — a multi-harness set instead moves on to the next member, and only escalates (`no-acceptable-harness`,
 [observability.md](./observability.md)) once every member is exhausted. A retry keeps its prior lease's own owner when
 that owner is still a member of the (possibly since-edited) acceptable set, and escalates the same way when it has
-fallen out of one. A rotated session pool's replacement is a fresh mint instead: it walks the set from its first member and
-escalates the same way, whatever owned the session it replaces.
+fallen out of one. A rotated session pool's replacement is a fresh mint instead: it walks the set from its first member
+and escalates the same way, whatever owned the session it replaces.
 
 ## OpenCode configuration
 
