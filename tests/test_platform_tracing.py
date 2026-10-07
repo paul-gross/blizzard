@@ -27,7 +27,6 @@ from opentelemetry.trace import (
 from sqlalchemy import create_engine, text
 
 from blizzard.foundation.platform_tracing.attributes import CALLER, annotate_caller
-from blizzard.foundation.platform_tracing.exclusion import is_excluded
 from blizzard.foundation.platform_tracing.handle import (
     DisabledPlatformTracing,
     IPlatformTracing,
@@ -39,6 +38,7 @@ from blizzard.foundation.platform_tracing.internal.sampling import sampler
 from blizzard.foundation.platform_tracing.tracer import NoopPlatformTracer
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_ids import DerivedContext, SpanRole, StepKey
+from blizzard.runner.tracing.exclusion import is_excluded
 
 pytestmark = pytest.mark.unit
 
@@ -293,7 +293,8 @@ def test_a_span_started_before_the_stamp_answers_is_never_exported_and_later_spa
 def test_importing_the_package_with_tracing_off_loads_no_sdk_or_instrumentation() -> None:
     code = (
         "import sys, json\n"
-        "from blizzard.foundation.platform_tracing import attributes, exclusion, handle, semconv, tracer\n"
+        "from blizzard.foundation.platform_tracing import attributes, handle, semconv, tracer\n"
+        "from blizzard.runner.tracing.exclusion import is_excluded\n"
         "from blizzard.foundation.trace_export.config import TracingConfig\n"
         "h = handle.build_platform_tracing(TracingConfig(), {'OTEL_EXPORTER_OTLP_ENDPOINT': 'http://x:4318'},"
         " resource={}, scope='s', scope_version='1')\n"

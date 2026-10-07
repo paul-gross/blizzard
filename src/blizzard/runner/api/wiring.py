@@ -18,10 +18,6 @@ from starlette.datastructures import State
 
 from blizzard.foundation.clock import IClock, IMonotonicClock
 from blizzard.foundation.platform_tracing.handle import DisabledPlatformTracing, IPlatformTracing
-from blizzard.foundation.platform_tracing.received_export import (
-    DisabledReceivedTelemetryExport,
-    IReceivedTelemetryExport,
-)
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.health_cache import IReadHarnessHealth
@@ -40,6 +36,10 @@ from blizzard.runner.selftest.service import SelfTestService
 from blizzard.runner.status.view import RunnerStatusService
 from blizzard.runner.stores import RunnerReadStores
 from blizzard.runner.throttle.pause import PauseService
+from blizzard.runner.tracing.received_export import (
+    DisabledReceivedTelemetryExport,
+    IReceivedTelemetryExport,
+)
 from blizzard.runner.tracing.receiver_limits import ReceiverBounds, ReceiverCounter, SpanRateLimiter
 from blizzard.runner.tracing.receiving import TelemetryReceiver
 from blizzard.runner.tracing.replay import LeaseTraceReplay

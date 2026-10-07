@@ -2,7 +2,7 @@
 renewed on that slug's own cadence, off the reconciliation tick.
 
 Directly callable (``bzh:steppable-loop``); ``runner host`` runs it on its own
-:class:`~blizzard.foundation.periodic_pass_driver.PeriodicPassDriver`, so a renewal blocked on
+:class:`~blizzard.runner.usage.periodic_pass_driver.PeriodicPassDriver`, so a renewal blocked on
 the vendor CLI never holds the tick (``bzh:lane-contract`` clause 5)."""
 
 from __future__ import annotations

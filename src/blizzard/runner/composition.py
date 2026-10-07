@@ -23,11 +23,6 @@ from blizzard.foundation.platform_tracing.handle import (
     IPlatformTracing,
     build_platform_tracing,
 )
-from blizzard.foundation.platform_tracing.received_export import (
-    DisabledReceivedTelemetryExport,
-    IReceivedTelemetryExport,
-    build_received_telemetry_export,
-)
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.internal.store_status_reader import SqlAlchemyStoreStatusReader
 from blizzard.foundation.store.readiness import ReadinessService
@@ -91,6 +86,11 @@ from blizzard.runner.tracing.platform import (
     PLATFORM_INSTRUMENTATION_SCOPE,
     PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
     identity_stamp,
+)
+from blizzard.runner.tracing.received_export import (
+    DisabledReceivedTelemetryExport,
+    IReceivedTelemetryExport,
+    build_received_telemetry_export,
 )
 from blizzard.runner.tracing.receiver_limits import ReceiverBounds, ReceiverCounter, SpanRateLimiter
 from blizzard.runner.tracing.replay import LeaseTraceReplay

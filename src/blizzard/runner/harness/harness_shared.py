@@ -14,10 +14,10 @@ from collections.abc import Callable, Iterator, Mapping, Sequence
 from typing import IO
 
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.platform_tracing.signals import TelemetrySignal
 from blizzard.foundation.trace_export.settings import SUPPORTED_PROTOCOL
 from blizzard.runner.harness.adapter import WorkerPreamble
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
+from blizzard.runner.harness.telemetry_signals import TelemetrySignal
 
 _log = get_logger("blizzard.runner.harness")
 

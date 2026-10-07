@@ -12,13 +12,13 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from blizzard.foundation.harness_telemetry_outcome import HarnessTelemetryOutcome
-from blizzard.foundation.platform_tracing.signals import TelemetrySignal, signal_exportable
 from blizzard.runner.harness.bundle import BundleSnapshot
 from blizzard.runner.harness.claude_code.bundle import ClaudeCodeBundleDelivery
 from blizzard.runner.harness.claude_code.section import ClaudeCodeSection
 from blizzard.runner.harness.claude_code.telemetry import RUNNER_OWNED_NAMES, operator_configured
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryPlan
+from blizzard.runner.harness.telemetry_signals import TelemetrySignal, signal_exportable
 
 __all__ = ["plan_harness_telemetry"]
 

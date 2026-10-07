@@ -43,10 +43,6 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.harness_telemetry_outcome import HarnessTelemetryOutcome
 from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.foundation.platform_tracing.handle import IPlatformTracing, build_platform_tracing
-from blizzard.foundation.platform_tracing.received_export import (
-    IReceivedTelemetryExport,
-    build_received_telemetry_export,
-)
 from blizzard.foundation.tokens import TokenHash
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.settings import TracingSettings
@@ -71,6 +67,10 @@ from blizzard.runner.tracing.platform import (
     PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
     TICK_STEP,
     identity_stamp,
+)
+from blizzard.runner.tracing.received_export import (
+    IReceivedTelemetryExport,
+    build_received_telemetry_export,
 )
 from blizzard.runner.tracing.receiver import MAX_BODY_BYTES
 from blizzard.runner.tracing.receiver_limits import (

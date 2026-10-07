@@ -18,7 +18,6 @@ from blizzard.cli.host_directory import HostDirectory
 from blizzard.cli.runtime import build_early_shutdown_server, click_exception_on, run_init, run_migrate
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.operator_sessions.internal.session_file import SessionFile
-from blizzard.foundation.periodic_pass_driver import PeriodicPassDriver
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import RevisionMismatchError
 from blizzard.runner.app import HostedApp, build_hosted_app
@@ -57,6 +56,7 @@ from blizzard.runner.runtime import ensure_current_revision, init_environment, m
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.stores import RunnerReadStores
 from blizzard.runner.tracing.sweep import announce_rejected_tracing
+from blizzard.runner.usage.periodic_pass_driver import PeriodicPassDriver
 
 ENV_TICK_SECONDS = "BZ_RUNNER_TICK_SECONDS"
 DEFAULT_TICK_SECONDS = 30.0

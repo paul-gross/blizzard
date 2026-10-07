@@ -19,7 +19,6 @@ from blizzard.foundation.platform_tracing.received import (
     ReceivedMetrics,
     ReceivedSpan,
 )
-from blizzard.foundation.platform_tracing.received_export import IReceivedTelemetryExport
 from blizzard.runner.harness.harness_telemetry_plan import (
     CLAUDE_CODE_LOGS_SCOPE,
     CLAUDE_CODE_METRICS_SCOPE,
@@ -27,6 +26,7 @@ from blizzard.runner.harness.harness_telemetry_plan import (
 )
 from blizzard.runner.hub.identity import ICurrentRunnerIdentity, RunnerIdentity
 from blizzard.runner.leases import Lease
+from blizzard.runner.tracing.received_export import IReceivedTelemetryExport
 from blizzard.runner.tracing.receiver import (
     CLI_SERVICE_NAME,
     Admission,
