@@ -23,6 +23,7 @@ from blizzard.hub.domain.garden.routines import IWriteRoutineRepository, Routine
 from blizzard.hub.domain.garden.scopes import ScopeMint
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.config_change_store import append_change
+from blizzard.hub.store.internal.newest_fact import newest_retired_select
 from blizzard.hub.store.internal.scope_store import ensure_scope
 from blizzard.hub.store.schema import routine_lifecycle_facts, routine_scopes, routines
 
@@ -236,15 +237,9 @@ def _is_retired(conn: Connection, routine_id: str) -> bool:
 
 
 def _retired_ids(conn: Connection) -> set[str]:
-    rows = conn.execute(
-        select(routine_lifecycle_facts.c.routine_id, routine_lifecycle_facts.c.retired).order_by(
-            routine_lifecycle_facts.c.id
-        )
-    ).all()
-    newest: dict[str, bool] = {}
-    for row in rows:
-        newest[row.routine_id] = row.retired  # newest-fact-wins: ascending id order overwrites
-    return {routine_id for routine_id, retired in newest.items() if retired}
+    return set(
+        conn.execute(newest_retired_select(routine_lifecycle_facts, routine_lifecycle_facts.c.routine_id)).scalars()
+    )
 
 
 def _conforms_routine_store(x: RoutineStore) -> IWriteRoutineRepository:

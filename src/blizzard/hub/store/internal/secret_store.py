@@ -30,6 +30,7 @@ from blizzard.hub.domain.config.secrets import (
 )
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.config_change_store import append_change
+from blizzard.hub.store.internal.newest_fact import newest_retired_select
 from blizzard.hub.store.internal.secret_referrers import active_referrers
 from blizzard.hub.store.schema import secret_lifecycle_facts, secrets
 
@@ -132,15 +133,9 @@ class SecretStore:
 
     def retired_names(self) -> set[str]:
         with self._store.read("retired_names") as conn:
-            rows = conn.execute(
-                select(secret_lifecycle_facts.c.name, secret_lifecycle_facts.c.retired).order_by(
-                    secret_lifecycle_facts.c.id
-                )
-            ).all()
-        newest: dict[str, bool] = {}
-        for row in rows:
-            newest[row.name] = row.retired  # ascending id order: the newest fact overwrites
-        return {name for name, retired in newest.items() if retired}
+            return set(
+                conn.execute(newest_retired_select(secret_lifecycle_facts, secret_lifecycle_facts.c.name)).scalars()
+            )
 
     def key_ids_in_use(self) -> set[str]:
         with self._store.read("key_ids_in_use") as conn:

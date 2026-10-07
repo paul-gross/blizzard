@@ -412,3 +412,19 @@ def _has_table(engine, name: str) -> bool:  # type: ignore[no-untyped-def]
     from sqlalchemy import inspect
 
     return name in inspect(engine).get_table_names()
+
+
+def test_newest_escalation_per_chunk_breaks_a_recorded_at_tie_by_id(tmp_path: Path) -> None:
+    store, engine, _clock = _store(tmp_path)
+    with engine.begin() as conn:
+        seed_chunk(conn, "ch_tie", graph_id="gr_1", at=_T0)
+        for command in ("first", "second"):
+            conn.execute(
+                insert(s.escalations).values(
+                    chunk_id="ch_tie", epoch=1, takeover_command=command, recorded_at=_at(10), cause=None, detail=None
+                )
+            )
+
+    newest = store.escalations._newest_escalation_per_chunk()  # type: ignore[attr-defined]
+
+    assert {chunk_id: row.takeover_command for chunk_id, row in newest.items()} == {"ch_tie": "second"}

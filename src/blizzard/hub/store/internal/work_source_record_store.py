@@ -12,6 +12,7 @@ from sqlalchemy import insert, select, update
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 
+from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.config.changes import ConfigChange
 from blizzard.hub.domain.config.work_sources import (
     ConfigRevisionConflict,
@@ -24,13 +25,17 @@ from blizzard.hub.domain.config.work_sources import (
 )
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.config_change_store import append_change
-from blizzard.hub.store.internal.secret_referrers import retired_names_query
+from blizzard.hub.store.internal.newest_fact import newest_retired_select
 from blizzard.hub.store.internal.secret_store import secret_unavailable
 from blizzard.hub.store.schema import work_source_lifecycle_facts, work_sources
 
 
-def _retired_names_query():  # type: ignore[no-untyped-def]
-    return retired_names_query(work_source_lifecycle_facts)
+def _retired_names(conn: Connection, names: list[str] | None = None) -> set[str]:
+    facts = work_source_lifecycle_facts
+    found: set[str] = set()
+    for batch in id_batches(names) if names is not None else [None]:
+        found.update(conn.execute(newest_retired_select(facts, facts.c.name, batch)).scalars())
+    return found
 
 
 def _check_secret(conn: Connection, secret: str | None) -> None:
@@ -178,15 +183,13 @@ class WorkSourceRecordStore:
             return {}
         with self._store.read("get_many") as conn:
             rows = conn.execute(select(work_sources).where(work_sources.c.name.in_(names))).all()
-            retired = set(
-                conn.execute(_retired_names_query().where(work_source_lifecycle_facts.c.name.in_(names))).scalars()
-            )
+            retired = _retired_names(conn, names)
         return {row.name: self._of(row, retired=row.name in retired) for row in rows}
 
     def list_all(self, *, include_retired: bool) -> list[ConfiguredWorkSource]:
         with self._store.read("list_all") as conn:
             rows = conn.execute(select(work_sources).order_by(work_sources.c.name)).all()
-            retired = set(conn.execute(_retired_names_query()).scalars())
+            retired = _retired_names(conn)
         return [
             self._of(row, retired=row.name in retired) for row in rows if include_retired or row.name not in retired
         ]

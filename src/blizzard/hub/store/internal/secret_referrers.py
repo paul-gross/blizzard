@@ -6,11 +6,12 @@ kind; retired derives from each kind's newest lifecycle fact (``bzh:facts-not-st
 
 from __future__ import annotations
 
-from sqlalchemy import Table, func, select
+from sqlalchemy import Table, select
 from sqlalchemy.engine import Connection
 
 from blizzard.hub.domain.config.changes import ISecretReferences, RecordKind, RecordRef
 from blizzard.hub.store.errors import HubStoreConnections
+from blizzard.hub.store.internal.newest_fact import newest_retired_select
 from blizzard.hub.store.schema import (
     repositories,
     repository_lifecycle_facts,
@@ -25,12 +26,6 @@ _REFERRING: tuple[tuple[RecordKind, Table, Table], ...] = (
 )
 
 
-def retired_names_query(facts: Table):  # type: ignore[no-untyped-def]
-    """Names whose newest lifecycle fact in ``facts`` reads retired."""
-    newest = select(func.max(facts.c.id)).group_by(facts.c.name)
-    return select(facts.c.name).where(facts.c.id.in_(newest), facts.c.retired.is_(True))
-
-
 def active_referrers(conn: Connection, secret_names: list[str]) -> dict[str, list[RecordRef]]:
     """For each secret name, the active records naming it, ordered by kind then key."""
     found: dict[str, list[RecordRef]] = {name: [] for name in secret_names}
@@ -39,7 +34,9 @@ def active_referrers(conn: Connection, secret_names: list[str]) -> dict[str, lis
     for kind, table, facts in _REFERRING:
         rows = conn.execute(
             select(table.c.secret_name, table.c.name)
-            .where(table.c.secret_name.in_(secret_names), table.c.name.not_in(retired_names_query(facts)))
+            .where(
+                table.c.secret_name.in_(secret_names), table.c.name.not_in(newest_retired_select(facts, facts.c.name))
+            )
             .order_by(table.c.name)
         ).all()
         for row in rows:
