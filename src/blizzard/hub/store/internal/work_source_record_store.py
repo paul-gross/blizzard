@@ -181,10 +181,13 @@ class WorkSourceRecordStore:
     def get_many(self, names: list[str]) -> dict[str, ConfiguredWorkSource]:
         if not names:
             return {}
+        found: dict[str, ConfiguredWorkSource] = {}
         with self._store.read("get_many") as conn:
-            rows = conn.execute(select(work_sources).where(work_sources.c.name.in_(names))).all()
             retired = _retired_names(conn, names)
-        return {row.name: self._of(row, retired=row.name in retired) for row in rows}
+            for batch in id_batches(names):
+                rows = conn.execute(select(work_sources).where(work_sources.c.name.in_(batch))).all()
+                found.update({row.name: self._of(row, retired=row.name in retired) for row in rows})
+        return found
 
     def list_all(self, *, include_retired: bool) -> list[ConfiguredWorkSource]:
         with self._store.read("list_all") as conn:

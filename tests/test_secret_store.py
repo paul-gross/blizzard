@@ -12,6 +12,7 @@ import pytest
 from sqlalchemy import Engine, select, update
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.store import batching as batching_module
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.config.changes import ChangeContext, Door
@@ -173,6 +174,15 @@ def test_catalog_reads_metadata_in_bulk_and_the_key_ids_in_use(world: _World) ->
     assert world.store.get_many([]) == {}
     assert [r.name for r in world.store.list_all()] == ["a", "b"]
     assert world.store.key_ids_in_use() == {world.raw("a").key_id}
+
+
+def test_get_many_reads_past_one_batch(world: _World, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(batching_module, "BATCH_SIZE", 2)
+    names = [f"s{i}" for i in range(5)]
+    for name in names:
+        world.create(name, "x")
+
+    assert set(world.store.get_many([*names, "absent"])) == set(names)
 
 
 def test_a_secret_name_is_a_slug() -> None:

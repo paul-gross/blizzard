@@ -187,10 +187,13 @@ class RepositoryRecordStore:
     def get_many(self, names: list[str]) -> dict[str, ConfiguredRepository]:
         if not names:
             return {}
+        found: dict[str, ConfiguredRepository] = {}
         with self._store.read("get_many") as conn:
-            rows = conn.execute(select(repositories).where(repositories.c.name.in_(names))).all()
             retired = _retirements(conn, names)
-        return {row.name: self._of(row, retired_at=retired.get(row.name)) for row in rows}
+            for batch in id_batches(names):
+                rows = conn.execute(select(repositories).where(repositories.c.name.in_(batch))).all()
+                found.update({row.name: self._of(row, retired_at=retired.get(row.name)) for row in rows})
+        return found
 
     def list_all(self, *, include_retired: bool) -> list[ConfiguredRepository]:
         with self._store.read("list_all") as conn:
