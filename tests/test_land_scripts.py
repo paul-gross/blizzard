@@ -2369,6 +2369,15 @@ def test_a_patch_parses_into_blocks_positioned_in_old_file_lines() -> None:
     ]
 
 
+def test_runs_ending_a_hunk_accumulate_into_the_totals_across_hunks() -> None:
+    patch = "@@ -1,2 +0,0 @@\n-a\n-b\n@@ -9 +8,2 @@\n-c\n+d\n+e"
+
+    assert base_merge.parse_blocks(_patch_file(patch, 2, 3)) == [
+        _Block(1, 2, 0, ("-a", "-b")),
+        _Block(9, 1, 2, ("-c", "+d", "+e")),
+    ]
+
+
 def test_a_single_line_hunk_header_means_a_count_of_one() -> None:
     assert base_merge.parse_blocks(_patch_file("@@ -5 +5 @@\n-a\n+b", 1, 1)) == [_Block(5, 1, 1, ("-a", "+b"))]
 
