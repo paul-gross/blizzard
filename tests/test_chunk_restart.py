@@ -583,7 +583,9 @@ def test_the_restart_is_the_movement_the_chunk_stands_on(tmp_path) -> None:  # t
     assert facts is not None
     migration, restart = facts.migrations[0], facts.restarts[0]
     assert (migration.recorded_at, migration.epoch) == (restart.recorded_at, restart.epoch)
-    assert facts.latest_movement() == Movement(MovementKind.RESTART, restart.to_node_id, Executor.RUNNER)
+    assert facts.latest_movement() == Movement(
+        MovementKind.RESTART, restart.to_node_id, Executor.RUNNER, restart.graph_id
+    )
     assert facts.entered_by_restart() is True
 
 

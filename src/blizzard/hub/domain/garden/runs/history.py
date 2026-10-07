@@ -205,39 +205,20 @@ class IReadGardenRunRepository(Protocol):
         ...
 
 
-def _movement_as_of(facts: ChunkFacts, at: datetime, *, default_graph_id: str) -> tuple[str, str | None] | None:
-    """The `(graph_id, node_id)` the chunk stood on at `at` — `ChunkFacts.latest_movement`'s
-    own family ranking, restricted to movements no later than `at`. Needed because a
-    migration recorded after an escalation opened can re-pin the chunk elsewhere while
-    the escalation stays open (a migration never supersedes it, `bzh:facts-not-status`),
-    so `chunk.graph_id` alone would read the new pin, not the one escalated from."""
-    ranked: list[tuple[datetime, int, int, str, str | None]] = []
-    transitions = [t for t in facts.transitions if t.recorded_at <= at]
-    if transitions:
-        t = max(transitions, key=lambda t: (t.recorded_at, t.epoch))
-        ranked.append((t.recorded_at, t.epoch, 0, t.graph_id or default_graph_id, t.to_node_id))
-    migrations = [m for m in facts.migrations if m.recorded_at <= at]
-    if migrations:
-        m = max(migrations, key=lambda m: (m.recorded_at, m.epoch))
-        ranked.append((m.recorded_at, m.epoch, 1, m.to_graph_id, m.landed_node_id))
-    restarts = [r for r in facts.restarts if r.recorded_at <= at]
-    if restarts:
-        r = max(restarts, key=lambda r: (r.recorded_at, r.epoch))
-        ranked.append((r.recorded_at, r.epoch, 2, r.graph_id, r.to_node_id))
-    if not ranked:
-        return None
-    _, _, _, graph_id, node_id = max(ranked, key=lambda entry: entry[:3])
-    return graph_id, node_id
-
-
 def _escalation(chunk_graph_id: str, facts: ChunkFacts) -> RunEscalation | None:
     """The open escalation a `NEEDS_HUMAN` chunk carries, or `None` on any other
     outcome — `ChunkFacts.status` returning `NEEDS_HUMAN` implies one exists."""
     escalation = facts.open_escalation()
     if escalation is None:
         return None
-    movement = _movement_as_of(facts, escalation.recorded_at, default_graph_id=chunk_graph_id)
-    graph_id, node_id = movement if movement is not None else (chunk_graph_id, None)
+    # A migration recorded after the escalation opened can re-pin the chunk elsewhere while the escalation
+    # stays open (a migration never supersedes it, `bzh:facts-not-status`), so `chunk.graph_id` alone
+    # would read the new pin, not the one escalated from.
+    movement = facts.latest_movement(as_of=escalation.recorded_at)
+    if movement is None:
+        graph_id, node_id = chunk_graph_id, None
+    else:
+        graph_id, node_id = movement.graph_id or chunk_graph_id, movement.node_id
     return RunEscalation(
         graph_id=graph_id,
         node_id=node_id,
