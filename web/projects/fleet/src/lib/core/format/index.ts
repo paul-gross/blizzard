@@ -5,15 +5,17 @@
  * barrel is purely the public re-export surface, one line per module.
  */
 
-export { compactRef, ENTITY_DISPLAY, type EntityDisplay } from '../compact-ref';
+export { compactRef } from '../compact-ref';
 export { RUNNER_NAME_SEPARATOR, runnerDisplayName, runnerTitle } from '../runner-display-name';
 export { formatCost, formatTokens, hasCostFigure } from '../cost-format';
 export { errorMessage } from '../error-message';
 export { harnessName } from '../harness-name';
 export { nodeStepKey, parseNodeStepKey } from '../node-step';
-export { LANES, STATUS_LANE, STATUS_TONE, laneCounts, laneFor, type Lane } from '../chunk-lanes';
+export { LANES, STATUS_LANE, STATUS_TONE, laneCounts, type Lane } from '../chunk-lanes';
 export {
   formatWhen,
+  formatClockTime,
+  formatRefreshedAgo,
   formatAbsolute,
   formatAge,
   formatHeldFor,
@@ -22,8 +24,4 @@ export {
   formatUtcYmd,
   formatLocalClockWithDay,
   type LocalClockWithDay,
-  SKEW_TOLERANCE_MS,
 } from '../when';
-// formatClockTime (activity-panel.ts) is intentionally not re-exported here — it
-// has exactly one fleet-internal caller today, which imports it directly from
-// `../when`; no consumer outside this library needs it.

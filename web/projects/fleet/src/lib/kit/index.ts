@@ -13,7 +13,7 @@ export { KitAsyncState, type KitAsyncStateValue } from './kit-async-state';
 export { KitAvatar } from './kit-avatar';
 export { KitBackBar } from './kit-back-bar';
 export { KitBadge, toneColor } from './kit-badge';
-export { KitBeacon, type BeaconTone } from './kit-beacon';
+export { KitBeacon } from './kit-beacon';
 export { KitButton } from './kit-button';
 export { KitChip, KitChips, type KitChipOption } from './kit-chips';
 export { KitMarkdown } from './kit-markdown';

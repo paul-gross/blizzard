@@ -32,6 +32,8 @@ export * from './lib/core/mutation-pending';
 export * from './lib/transcripts';
 export * from './lib/core/url-selection';
 export * from './lib/core/viewport';
+export * from './lib/core/query-state';
+export * from './lib/core/polling';
 export * from './lib/shell/mobile-chrome';
 
 export {
@@ -84,8 +86,6 @@ export {
   hubWorkItemKey,
   hubWorkItemsKey,
 } from './lib/core/query-keys';
-export * from './lib/core/query-state';
-export { LIVE_COVERED_POLL_BACKSTOP_MS, RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS } from './lib/core/polling';
 
 export * as hubApi from './lib/api/hub';
 export * as runnerApi from './lib/api/runner';
@@ -100,10 +100,6 @@ export * as runnerApi from './lib/api/runner';
 export { client as runnerClient } from './lib/api/runner/client.gen';
 export { client as hubClient } from './lib/api/hub/client.gen';
 export type { Client } from './lib/api/hub/client';
-export type { HubEventPayload } from './lib/sse/fleet-live';
-export { formatClockTime, formatRefreshedAgo, formatWhen } from './lib/core/when';
-export { completeCopy, deleteCopy, detachCopy } from './lib/chunk/chunk-detail/chunk-action-copy';
-export { ChunkDelivery } from './lib/chunk/chunk-detail/chunk-delivery';
 export type {
   RepositoryDocument,
   RepositoryPatchRequest,

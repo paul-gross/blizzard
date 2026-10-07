@@ -1,1 +1,1 @@
-export { createCopyFlash, type CopyFlash } from './copy-flash';
+export { createCopyFlash } from './copy-flash';

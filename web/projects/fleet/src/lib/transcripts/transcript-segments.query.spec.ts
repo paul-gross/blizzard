@@ -15,8 +15,6 @@ import {
   TranscriptFetchError,
   injectChunkTranscriptSegmentQuery,
   injectChunkTranscriptsQuery,
-  injectHubChunkTranscriptSegmentQuery,
-  injectHubChunkTranscriptsQuery,
   shouldRetryTranscriptFetch,
 } from './transcript-segments.query';
 
@@ -42,7 +40,11 @@ describe('shouldRetryTranscriptFetch', () => {
 })
 class TestTranscriptsQueryHost {
   readonly chunkId = signal<string | null>('ch_1');
-  readonly query = injectHubChunkTranscriptsQuery(() => this.chunkId());
+  readonly query = injectChunkTranscriptsQuery(
+    () => hubClient,
+    () => 'hub',
+    () => this.chunkId(),
+  );
 }
 
 @Component({
@@ -54,14 +56,16 @@ class TestTranscriptSegmentQueryHost {
   readonly chunkId = signal<string | null>('ch_1');
   readonly segmentId = signal<string | null>(null);
   readonly final = signal<boolean | null>(false);
-  readonly query = injectHubChunkTranscriptSegmentQuery(
+  readonly query = injectChunkTranscriptSegmentQuery(
+    () => hubClient,
+    () => 'hub',
     () => this.chunkId(),
     () => this.segmentId(),
     () => this.final(),
   );
 }
 
-describe('injectHubChunkTranscriptsQuery', () => {
+describe('injectChunkTranscriptsQuery — hub plane', () => {
   let stub: RequestClientStub;
   afterEach(() => stub?.restore());
 
@@ -80,7 +84,7 @@ describe('injectHubChunkTranscriptsQuery', () => {
   });
 });
 
-describe('injectHubChunkTranscriptSegmentQuery', () => {
+describe('injectChunkTranscriptSegmentQuery — hub plane', () => {
   let stub: RequestClientStub;
   afterEach(() => stub?.restore());
 
@@ -151,7 +155,7 @@ describe('injectHubChunkTranscriptSegmentQuery', () => {
 });
 
 /** A real call site passes `client`/`plane` as closed-over constants, exactly like
- * {@link injectHubChunkTranscriptsQuery} does internally — never as reactive Angular
+ * the hub-plane hosts above do — never as reactive Angular
  * inputs, since which plane a component reads from never changes over its lifetime. One
  * host class per plane mirrors that: each closes over its own plane's client the same way
  * a hub-app or runner-app call site would. */

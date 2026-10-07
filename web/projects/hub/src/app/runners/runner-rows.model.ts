@@ -57,7 +57,7 @@ export interface SubscriptionPace {
   /** "refreshed 5m ago" against {@link sampledAt}, or `null` alongside it. */
   readonly refreshedLabel: string | null;
   /** {@link sampledAt}'s age tier, or `null` alongside it — `null` too for a stamp
-   * unparseable or beyond {@link SKEW_TOLERANCE_MS} in the future
+   * unparseable or beyond the clock-skew tolerance in the future
    * (`bzh:utc-instants`): never a confident tier for a reading the clock can't trust. */
   readonly freshness: SubscriptionFreshness | null;
   /** The newest reported miss's own reason, or `null` when there is none. */

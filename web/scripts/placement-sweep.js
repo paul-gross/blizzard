@@ -375,4 +375,13 @@ function placementViolations() {
   return lines;
 }
 
-module.exports = { assertPlacementDetectorWorks, placementViolations, sweepPlacement };
+module.exports = {
+  assertPlacementDetectorWorks,
+  placementViolations,
+  sweepPlacement,
+  createProgram,
+  walkTs,
+  moduleSpecifiers,
+  isUnder,
+  toPosix,
+};
