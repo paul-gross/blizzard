@@ -253,7 +253,7 @@ describe('ChunkAwaitingHuman', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     const line = el.querySelector('[data-testid="decision-resolved-line"]')?.textContent?.replace(/\s+/g, ' ').trim();
-    expect(line).toBe(`approve by alice, ${formatWhen('2026-07-13T00:02:00Z')}`);
+    expect(line).toBe(`approve by alice, ${formatWhen('2026-07-13T00:02:00Z', new Date())}`);
     expect(el.querySelector('[data-testid="decision-node"]')?.textContent).toContain('approve-gate');
     expect(el.querySelector('[data-testid="decision-choice"]')).toBeNull();
     expect(el.querySelector('[data-testid="open-decision"]')).toBeNull();

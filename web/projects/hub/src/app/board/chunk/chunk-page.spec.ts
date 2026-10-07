@@ -644,7 +644,7 @@ describe('Mobile chunk drill-down', () => {
     );
 
     const outcome = el.querySelector('[data-testid="mobile-chunk-action-outcome"]');
-    expect(outcome?.textContent).toContain(`reject by alice, ${formatWhen('2026-07-16T11:21:00.000Z')}`);
+    expect(outcome?.textContent).toContain(`reject by alice, ${formatWhen('2026-07-16T11:21:00.000Z', new Date())}`);
     expect(el.querySelector('[data-testid="mobile-chunk-action-error"]')).toBeNull();
   });
 

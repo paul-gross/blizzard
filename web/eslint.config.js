@@ -4,6 +4,17 @@ const { defineConfig } = require("eslint/config");
 const tseslint = require("typescript-eslint");
 const angular = require("angular-eslint");
 
+// No frontend code reads the wall clock implicitly (`bzh:frontend-formatters`): a time
+// helper takes `now` from `injectNowSignal` (a display that must advance) or
+// `FLEET_CLOCK` (a single reading). Both live in `fleet/lib/core/now-signal/`, the one
+// place exempt from this ban.
+const CLOCK_MESSAGE =
+  "Read the clock through `injectNowSignal` (a ticking display) or `FLEET_CLOCK` (a single reading), never a raw `Date.now()` / zero-arg `new Date()`.";
+const CLOCK_SELECTORS = [
+  { selector: "NewExpression[callee.name='Date'][arguments.length=0]", message: CLOCK_MESSAGE },
+  { selector: "CallExpression[callee.object.name='Date'][callee.property.name='now']", message: CLOCK_MESSAGE },
+];
+
 module.exports = defineConfig([
   {
     files: ["**/*.ts"],
@@ -62,6 +73,13 @@ module.exports = defineConfig([
     },
   },
   {
+    files: ["projects/**/*.ts"],
+    ignores: ["**/*.spec.ts", "projects/fleet/src/lib/core/now-signal/**"],
+    rules: {
+      "no-restricted-syntax": ["error", ...CLOCK_SELECTORS],
+    },
+  },
+  {
     files: ["**/*.html"],
     extends: [
       angular.configs.templateRecommended,
@@ -74,11 +92,14 @@ module.exports = defineConfig([
   // since every symbol added under the feature directory becomes public with no diff on
   // the barrel. Scoped to `projects/*/src/lib/**/index.ts` so fleet's own top-level
   // `public-api.ts` — which legitimately stars its sub-barrels — stays legal.
+  // Flat config replaces a rule's options per matching block, so this block restates
+  // the clock ban alongside its own selector.
   {
     files: ["projects/*/src/lib/**/index.ts"],
     rules: {
       "no-restricted-syntax": [
         "error",
+        ...CLOCK_SELECTORS,
         {
           selector: "ExportAllDeclaration",
           message: "A sub-barrel exports only what a consumer outside the feature directory imports — name it.",

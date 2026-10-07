@@ -40,7 +40,7 @@ export const FACT_KIND_LABELS: Readonly<Record<hubApi.FindingFactKind, string>> 
  * re-sorted here). The single owner of this derivation (`canon:one-owner`,
  * `chunk-timeline-rows.ts`'s own precedent).
  */
-export function deriveFactTimelineRows(facts: readonly FindingFactView[]): readonly FindingFactRow[] {
+export function deriveFactTimelineRows(facts: readonly FindingFactView[], now: Date): readonly FindingFactRow[] {
   const labels: Readonly<Partial<Record<string, string>>> = FACT_KIND_LABELS;
   return facts.map((fact, index) => ({
     key: `${index}`,
@@ -48,7 +48,7 @@ export function deriveFactTimelineRows(facts: readonly FindingFactView[]): reado
     label: labels[fact.kind] ?? fact.kind,
     note: fact.note ?? null,
     actor: fact.actor ?? null,
-    when: formatWhen(fact.recorded_at),
+    when: formatWhen(fact.recorded_at, now),
     whenTitle: formatAbsolute(fact.recorded_at),
     proposalId: fact.proposal_id ?? null,
     supersededBy: fact.superseded_by ?? null,

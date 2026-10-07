@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
+import { injectNowSignal } from '../core/now-signal';
 import { formatAbsolute, formatLocalClockWithDay, type LocalClockWithDay } from '../core/when';
 import type { TranscriptSidechain, TranscriptTool, TranscriptTurn } from './transcript-turn';
 
@@ -103,6 +104,9 @@ export class TranscriptViewer {
     return this.inputPreviewsByTool().get(tool) ?? '';
   }
 
+  /** The tick `turnClockInfo` reads against, so the day label rolls over at midnight. */
+  private readonly now = injectNowSignal(60_000);
+
   protected sidechainLabel(sidechain: TranscriptSidechain): string {
     const who = sidechain.agent_type ?? sidechain.agent_id ?? 'subagent';
     return sidechain.link === 'unlinked' ? `${who} · unlinked` : who;
@@ -114,7 +118,7 @@ export class TranscriptViewer {
    * (`bzh:utc-instants`): display decoration over a UTC instant.
    */
   protected turnClockInfo(iso: string | null): LocalClockWithDay | null {
-    return formatLocalClockWithDay(iso);
+    return formatLocalClockWithDay(iso, new Date(this.now()));
   }
 
   /** {@link turnClockInfo}'s full local date + time, for the stamp's hover tooltip. */

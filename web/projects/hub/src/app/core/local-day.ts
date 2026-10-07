@@ -3,18 +3,18 @@
  * Shared by the desktop titlebar ({@link App}) and the mobile glance board
  * ({@link GlanceBoard}), so both read the same local-midnight window and share
  * one `injectHubFleetSpendQuery` cache entry rather than opening two. */
-export function startOfLocalDayIso(): string {
-  const now = new Date();
+export function startOfLocalDayIso(nowMs: number): string {
+  const now = new Date(nowMs);
   return new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
 }
 
 /** The local midnight *before* {@link startOfLocalDayIso}'s — "yesterday"'s own
  * start. The two share one owner of the day boundary so yesterday
  * rolls over with today by construction: the header's yesterday window is
- * `[startOfPreviousLocalDayIso(), startOfLocalDayIso())`, and a caller reading
+ * `[startOfPreviousLocalDayIso(now), startOfLocalDayIso(now))`, and a caller reading
  * both a tick apart either side of midnight can never see them disagree about
  * where today starts. */
-export function startOfPreviousLocalDayIso(): string {
-  const now = new Date();
+export function startOfPreviousLocalDayIso(nowMs: number): string {
+  const now = new Date(nowMs);
   return new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1).toISOString();
 }

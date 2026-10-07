@@ -2,8 +2,10 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient } from 'fleet';
+import { FLEET_CLOCK, hubClient } from 'fleet';
 import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+
+import { vi } from 'vitest';
 
 import { GlanceBoard } from './glance-board';
 
@@ -327,6 +329,27 @@ describe('GlanceBoard — attention bucketing and vitals', () => {
     const row = el.querySelector('[data-testid="glance-spend-row"]');
     expect(row?.textContent).toContain('$18.40');
     expect(row?.textContent).toContain('6.1M tok');
+  });
+
+  it('re-opens the spend-today read on the next day once the minute tick crosses midnight', async () => {
+    let nowMs = new Date(2026, 6, 16, 23, 59, 30).getTime();
+    TestBed.overrideProvider(FLEET_CLOCK, { useValue: () => nowMs });
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    try {
+      const fixture = TestBed.createComponent(GlanceBoard);
+      await settle(fixture);
+      const sinceOf = (day: Date): string => `since=${encodeURIComponent(day.toISOString())}`;
+      const spendUrls = (): string[] => stub.forRoute('/api/spend', 'GET').map((r) => r.search);
+      expect(spendUrls().some((u) => u.includes(sinceOf(new Date(2026, 6, 16))))).toBe(true);
+
+      nowMs = new Date(2026, 6, 17, 0, 0, 30).getTime();
+      vi.advanceTimersByTime(60_000);
+      await settle(fixture);
+
+      expect(spendUrls().some((u) => u.includes(sinceOf(new Date(2026, 6, 17))))).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('renders status pills in the soft variant (mock screen C\'s muted, fully-rounded pill)', async () => {

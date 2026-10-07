@@ -2,7 +2,7 @@ import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { vi } from 'vitest';
 
-import { injectNowSignal } from './now-signal';
+import { FLEET_CLOCK, injectNowSignal } from './now-signal';
 
 @Component({
   selector: 'fleet-test-host',
@@ -34,6 +34,18 @@ describe('injectNowSignal', () => {
     const second = fixture.componentInstance.now();
 
     expect(second).toBeGreaterThan(first);
+  });
+
+  it('reads its initial value and every tick through FLEET_CLOCK', () => {
+    let clock = 5_000;
+    TestBed.overrideProvider(FLEET_CLOCK, { useValue: () => clock });
+    const fixture = TestBed.createComponent(TestHost);
+    fixture.detectChanges();
+    expect(fixture.componentInstance.now()).toBe(5_000);
+
+    clock = 9_000;
+    vi.advanceTimersByTime(1000);
+    expect(fixture.componentInstance.now()).toBe(9_000);
   });
 
   it('clears its interval when the host is destroyed', () => {

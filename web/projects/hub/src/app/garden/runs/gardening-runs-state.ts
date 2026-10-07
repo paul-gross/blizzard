@@ -1,5 +1,5 @@
-import { computed, Injectable, type Signal } from '@angular/core';
-import { asyncState, type KitAsyncStateValue } from 'fleet';
+import { computed, inject, Injectable, type Signal } from '@angular/core';
+import { FLEET_CLOCK, asyncState, type KitAsyncStateValue } from 'fleet';
 import { defaultRoutineWindow } from '../core/routine-window';
 import { injectHubRunsQuery } from './garden-runs.query';
 import { mintedAtFor, runListRows } from './gardening-runs-state.model';
@@ -15,13 +15,13 @@ import { type RunListRowVm } from './run-list';
  * This read cannot, because its key carries a window cut from the wall clock — two
  * independent constructions would key on two different instants and fetch the same
  * endpoint twice, to subtly different answers. The window is therefore computed
- * once, here, and a page reload is what refreshes it.
+ * once, here, off `FLEET_CLOCK`, and a page reload is what refreshes it.
  */
 @Injectable()
 export class GardeningRunsState {
   /** The list's fixed reporting window. Shares the routine trend/sweeps vocabulary
    * rather than the read's own 24-hour server default. */
-  private readonly window = defaultRoutineWindow(Date.now());
+  private readonly window = defaultRoutineWindow(inject(FLEET_CLOCK)());
 
   readonly runsQuery = injectHubRunsQuery(() => this.window.since);
 

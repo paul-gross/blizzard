@@ -316,7 +316,7 @@ describe('ChunkDetail container', () => {
     await settle(fixture);
 
     const outcome = el.querySelector('[data-testid="action-outcome"]')?.textContent ?? '';
-    expect(outcome).toContain(`reject by alice, ${formatWhen('2026-07-13T00:01:00Z')}`);
+    expect(outcome).toContain(`reject by alice, ${formatWhen('2026-07-13T00:01:00Z', new Date())}`);
     expect(el.querySelector('[data-testid="action-error"]')).toBeNull();
   });
 

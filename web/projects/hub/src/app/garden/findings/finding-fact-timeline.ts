@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
-import { type FindingFactView, KitAsyncState } from 'fleet';
+import { type FindingFactView, KitAsyncState, injectNowSignal } from 'fleet';
 import { deriveFactTimelineRows, type FindingFactRow } from './finding-fact-timeline-rows';
 
 /**
@@ -24,5 +24,8 @@ import { deriveFactTimelineRows, type FindingFactRow } from './finding-fact-time
 export class FleetFindingFactTimeline {
   readonly facts = input.required<readonly FindingFactView[]>();
 
-  protected readonly rows = computed<readonly FindingFactRow[]>(() => deriveFactTimelineRows(this.facts()));
+  protected readonly rows = computed<readonly FindingFactRow[]>(() => deriveFactTimelineRows(this.facts(), new Date(this.now())));
+
+  /** The tick the stamps read against, so "HH:MM" rolls over to "Yesterday". */
+  private readonly now = injectNowSignal(60_000);
 }

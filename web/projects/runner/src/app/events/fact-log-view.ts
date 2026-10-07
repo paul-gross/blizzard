@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
-import { compactRef, formatAbsolute, formatLocalClockWithDay, type LocalClockWithDay, type runnerApi } from 'fleet';
+import { compactRef, formatAbsolute, formatLocalClockWithDay, injectNowSignal, type LocalClockWithDay, type runnerApi } from 'fleet';
 
 /**
  * {@link FactLog}'s presentational sibling (`bzh:frontend-container-presentational`):
@@ -16,6 +16,9 @@ export class FactLogView {
   /** The newest-first facts to render. */
   readonly facts = input<readonly runnerApi.FactView[]>([]);
 
+  /** The tick `clockInfo` reads against, so the day label rolls over at midnight. */
+  private readonly now = injectNowSignal(60_000);
+
   protected ref(id: string): string {
     return compactRef(id);
   }
@@ -23,7 +26,7 @@ export class FactLogView {
   /** The fact's browser-local clock time, plus day context when it's not from
    * today — the ledger reads as a tail -f, but an operator can be anywhere. */
   protected clockInfo(fact: runnerApi.FactView): LocalClockWithDay | null {
-    return formatLocalClockWithDay(fact.created_at);
+    return formatLocalClockWithDay(fact.created_at, new Date(this.now()));
   }
 
   /** {@link clockInfo}'s full local date + time, for the stamp's hover tooltip. */

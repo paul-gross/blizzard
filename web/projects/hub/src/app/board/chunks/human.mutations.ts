@@ -109,10 +109,10 @@ function readDecisionConflict(error: unknown): DecisionConflict | null {
  * "<choice> by <who>, <when>" — and anything else as "Resolve failed.". Pinned per surface by
  * `chunk-detail.spec.ts` and `chunk-page.spec.ts`'s lost-resolve-race cases.
  */
-export function readDecisionFailure(error: unknown): AnswerFailure {
+export function readDecisionFailure(error: unknown, now: Date): AnswerFailure {
   const winner = readDecisionConflict(error);
   if (!winner) return { kind: 'error', message: errorMessage(error, 'Resolve failed.') };
-  const when = winner.resolved_at ? `, ${formatWhen(winner.resolved_at)}` : '';
+  const when = winner.resolved_at ? `, ${formatWhen(winner.resolved_at, now)}` : '';
   return { kind: 'outcome', message: `${winner.resolved_choice} by ${winner.already_resolved_by}${when}` };
 }
 

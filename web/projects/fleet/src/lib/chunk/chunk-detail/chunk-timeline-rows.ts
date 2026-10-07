@@ -100,7 +100,7 @@ export interface StepUsageTotal {
  * `sort-artifacts.ts`/`transcript-steps.ts` establish for their own lists) —
  * {@link ChunkTimeline} reads it rather than re-deriving it inline.
  */
-export function deriveHistoryRows(detail: ChunkDetail): readonly HistoryRow[] {
+export function deriveHistoryRows(detail: ChunkDetail, now: Date): readonly HistoryRow[] {
   const transitions: HistoryRow[] = (detail.history ?? [])
     // An entry transition (no origin node) judged nothing — the node it entered
     // shows up as the next row's origin, or as the in-flight row below.
@@ -120,7 +120,7 @@ export function deriveHistoryRows(detail: ChunkDetail): readonly HistoryRow[] {
       actor: null,
       title: null,
       crossesGraph: false,
-      when: formatWhen(t.recorded_at),
+      when: formatWhen(t.recorded_at, now),
       whenTitle: formatAbsolute(t.recorded_at),
       sortKey: t.recorded_at,
     }));
@@ -140,7 +140,7 @@ export function deriveHistoryRows(detail: ChunkDetail): readonly HistoryRow[] {
     actor: null,
     title: null,
     crossesGraph: true,
-    when: formatWhen(m.recorded_at),
+    when: formatWhen(m.recorded_at, now),
     whenTitle: formatAbsolute(m.recorded_at),
     sortKey: m.recorded_at,
   }));
@@ -158,7 +158,7 @@ export function deriveHistoryRows(detail: ChunkDetail): readonly HistoryRow[] {
     actor: null,
     title: bounceReason(b.envelope),
     crossesGraph: false,
-    when: formatWhen(b.recorded_at),
+    when: formatWhen(b.recorded_at, now),
     whenTitle: formatAbsolute(b.recorded_at),
     sortKey: b.recorded_at,
   }));
@@ -179,7 +179,7 @@ export function deriveHistoryRows(detail: ChunkDetail): readonly HistoryRow[] {
       actor: r.restarted_by,
       title: null,
       crossesGraph,
-      when: formatWhen(r.recorded_at),
+      when: formatWhen(r.recorded_at, now),
       whenTitle: formatAbsolute(r.recorded_at),
       sortKey: r.recorded_at,
     };

@@ -4,6 +4,7 @@ import { RouterLink } from '@angular/router';
 import type { ChunkDetail } from '../../api/hub';
 import { formatCost, formatTokens, STEP_COST_PARTIAL_TITLE } from '../../core/cost-format';
 import { harnessName } from '../../core/harness-name';
+import { injectNowSignal } from '../../core/now-signal';
 import { KitAsyncState } from '../../kit/kit-async-state';
 import { KitBadge } from '../../kit/kit-badge';
 import {
@@ -117,7 +118,10 @@ export class ChunkTimeline {
     (event.currentTarget as Element).querySelector<HTMLElement>('a.step-link')?.click();
   }
 
-  protected readonly historyRows = computed<readonly HistoryRow[]>(() => deriveHistoryRows(this.detail()));
+  protected readonly historyRows = computed<readonly HistoryRow[]>(() => deriveHistoryRows(this.detail(), new Date(this.now())));
+
+  /** The tick `historyRows` stamps read against, so "HH:MM" rolls over to "Yesterday". */
+  private readonly now = injectNowSignal(60_000);
 
   /** When true, each row is labelled with its graph; a single-graph chunk shows no
    * graph badge (it would be noise). See {@link deriveMultiGraph}. */

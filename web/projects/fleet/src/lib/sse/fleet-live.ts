@@ -27,6 +27,7 @@ import {
   hubQueueKey,
   hubRunnersKey,
 } from '../core/query-keys';
+import { FLEET_CLOCK } from '../core/now-signal';
 import { LiveInvalidationSpine } from './live-invalidation-spine';
 import { type SseStatus, SseService } from './sse.service';
 
@@ -258,6 +259,7 @@ export class FleetLiveUpdates {
   private readonly queryClient = inject(QueryClient);
   private readonly injector = inject(EnvironmentInjector);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly clock = inject(FLEET_CLOCK);
   private seq = 0;
   private readonly _log = signal<readonly LoggedEvent[]>([]);
   private readonly spine = new LiveInvalidationSpine<HubEventPayload, HubEventType>({
@@ -316,7 +318,7 @@ export class FleetLiveUpdates {
         const replacement: LoggedEvent = { seq: prev[existing].seq, at: prev[existing].at, type, data, key: data.key ?? undefined };
         return [...prev.slice(0, existing), replacement, ...prev.slice(existing + 1)];
       }
-      const entry: LoggedEvent = { seq: ++this.seq, type, data, at: Date.now(), key: data.key ?? undefined };
+      const entry: LoggedEvent = { seq: ++this.seq, type, data, at: this.clock(), key: data.key ?? undefined };
       const next = [...prev, entry];
       return next.length > LOG_LIMIT ? next.slice(next.length - LOG_LIMIT) : next;
     });

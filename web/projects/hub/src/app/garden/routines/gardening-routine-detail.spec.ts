@@ -2,7 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, type ParamMap } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient, type MeResponse } from 'fleet';
+import { FLEET_CLOCK, hubClient, type MeResponse } from 'fleet';
 import { OPERATOR_ME_RESPONSE, settle, stubError, stubRequestClient, type RequestClientStub } from 'fleet/testing';
 import { BehaviorSubject } from 'rxjs';
 import { vi } from 'vitest';
@@ -140,6 +140,16 @@ describe('GardeningRoutineDetail', () => {
     await settle(fixture, 12);
     return fixture;
   }
+
+  it('cuts the trend read’s window from FLEET_CLOCK, 28 days back', async () => {
+    const nowMs = Date.UTC(2026, 6, 16, 12, 0, 0);
+    TestBed.overrideProvider(FLEET_CLOCK, { useValue: () => nowMs });
+    await render({ params: { routineName: 'nightly' } });
+
+    const search = stub.forRoute('/api/routines/trend', 'GET').map((r) => r.search).join('\n');
+    expect(search).toContain(`since=${encodeURIComponent(new Date(nowMs - 28 * 24 * 60 * 60 * 1000).toISOString())}`);
+    expect(search).toContain(`until=${encodeURIComponent(new Date(nowMs).toISOString())}`);
+  });
 
   it('shows its own empty state on the bare child route, selecting nothing', async () => {
     const fixture = await render();
