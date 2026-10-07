@@ -1,4 +1,4 @@
-import type { KitAsyncStateValue } from '../kit/kit-async-state';
+import type { KitAsyncStateValue } from '../../kit/kit-async-state';
 
 /** The structural shape `asyncState`/`asyncStateOf` need from a query — exactly
  * what `injectQuery()`'s return value exposes, named so this file needs no

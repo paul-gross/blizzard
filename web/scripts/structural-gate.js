@@ -32,6 +32,10 @@
  * Also the placement sweep (`placement-sweep.js`, `bzh:frontend-placement`): every
  * `fleet/src/lib/` unit must be reached by both apps, and no `fleet` file imports an app.
  *
+ * Also the disjoint-diffs sweep (`disjoint-diffs-sweep.js`, `bzh:frontend-disjoint-diffs`): every
+ * export of a `fleet` sub-barrel needs a consumer outside that sub-barrel's directory, and
+ * `public-api.ts` re-exports only sub-barrels, save the generated client and the query-key registry.
+ *
  * Also the wire-conformist sweeps (`wire-conformist-sweep.js`), neither with an exemption
  * list: hand-written TS never cites a backend `.py` file, and a generated client function from
  * `fleet/src/lib/api/{hub,runner}/sdk.gen.ts` is named only inside a `*.query.ts` or
@@ -57,6 +61,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const ts = require('typescript');
 const { assertPlacementDetectorWorks, placementViolations } = require('./placement-sweep');
+const { assertDisjointDiffsDetectorWorks, disjointDiffsViolations } = require('./disjoint-diffs-sweep');
 const {
   assertBackendCitationDetectorWorks,
   backendCitationViolations,
@@ -1039,6 +1044,7 @@ function main() {
   assertInvalidateReturnedDetectorWorks();
   assertNoCacheWriteDetectorWorks();
   assertPlacementDetectorWorks();
+  assertDisjointDiffsDetectorWorks();
   assertBackendCitationDetectorWorks();
   assertClientCallPlacementDetectorWorks();
   assertPackageLayersDetectorWorks();
@@ -1114,6 +1120,7 @@ function main() {
   }
 
   const placementLines = placementViolations();
+  const disjointDiffsLines = disjointDiffsViolations();
   const backendCitationLines = backendCitationViolations();
   const clientCallLines = clientCallPlacementViolations();
 
@@ -1135,6 +1142,7 @@ function main() {
     invalidateDiscardedViolations.length > 0 ||
     cacheWriteViolations.length > 0 ||
     placementLines.length > 0 ||
+    disjointDiffsLines.length > 0 ||
     backendCitationLines.length > 0 ||
     clientCallLines.length > 0 ||
     packageLayerLines.length > 0 ||
@@ -1199,6 +1207,15 @@ function main() {
           'and never import an app from fleet; a reasoned exemption goes in PLACEMENT_EXEMPT_UNITS with a one-line reason.',
       );
     }
+    if (disjointDiffsLines.length > 0) {
+      console.error('structural-gate: fleet barrel exports outside the disjoint-diffs rule:\n');
+      for (const line of disjointDiffsLines) console.error(line);
+      console.error(
+        '\nDrop an export nothing outside its feature directory imports from its sub-barrel (delete the symbol if ' +
+          'nothing else uses it), and re-export from the root only through a sub-barrel; the generated client and ' +
+          'the query-key registry are the root\'s only direct sources (ROOT_DIRECT_EXPORT_ALLOWED).',
+      );
+    }
     if (backendCitationLines.length > 0) {
       console.error('structural-gate: backend .py citations in hand-written TS:\n');
       for (const line of backendCitationLines) console.error(line);
@@ -1245,6 +1262,7 @@ function main() {
   console.log('structural-gate: mutation-hook invalidation sweep clean.');
   console.log('structural-gate: mutation-hook cache-write sweep clean.');
   console.log('structural-gate: placement sweep clean.');
+  console.log('structural-gate: disjoint-diffs sweep clean.');
   console.log('structural-gate: backend-citation sweep clean.');
   console.log('structural-gate: client-call placement sweep clean.');
   console.log('structural-gate: package-layers sweep clean.');

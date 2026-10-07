@@ -1,4 +1,5 @@
-export { pauseCopy, resumeCopy } from './chunk-action-copy';
+export { completeCopy, deleteCopy, detachCopy, pauseCopy, resumeCopy } from './chunk-action-copy';
+export { ChunkDelivery } from './chunk-delivery';
 // The dock's presentational siblings a second shell re-stacks — the hub's chunk
 // detail page composes exactly these, in one column instead of three. Which siblings
 // belong here is `bzh:frontend-disjoint-diffs`.
@@ -14,6 +15,5 @@ export { deriveWorkItemsState } from './work-items-state';
 export type { WorkItemsState, WorkItemsQuery } from './work-items-state';
 export { ChunkTimeline } from './chunk-timeline';
 export { ChunkTimelineSelection } from './chunk-timeline-selection';
-export type { HistoryRow, ActiveRow, StepUsageTotal } from './chunk-timeline-rows';
 export { ChunkTokenBreakdown } from './chunk-token-breakdown';
 export type { TransitionView, ArtifactView, DecisionView, ChunkEscalationView, ChunkUsageTotalView, ChunkUsageView } from '../../api/hub';

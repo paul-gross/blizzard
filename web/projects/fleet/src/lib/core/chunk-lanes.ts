@@ -46,11 +46,6 @@ export const STATUS_LANE: Record<ChunkStatus, string> = {
   done: 'done',
 };
 
-/** The board lane a chunk's status belongs to — total, since every status has one. */
-export function laneFor(status: ChunkStatus): string {
-  return STATUS_LANE[status];
-}
-
 /**
  * The all-time per-lane counts — the hub's per-status counts folded through
  * {@link STATUS_LANE}, the one fold the titlebar and the board columns both render from

@@ -3,7 +3,6 @@ import { injectQuery } from '@tanstack/angular-query-experimental';
 import * as hubApi from '../api/hub';
 import type { TranscriptSegmentContentView, TranscriptSegmentIndexView } from '../api/hub';
 import type { Client } from '../api/hub/client';
-import { client as hubClient } from '../api/hub/client.gen';
 import * as runnerApi from '../api/runner';
 import { chunkTranscriptSegmentKey, chunkTranscriptsKey, type TranscriptPlane } from '../core/query-keys';
 
@@ -81,17 +80,6 @@ export function injectChunkTranscriptsQuery(
   });
 }
 
-/** The hub-plane transcript index query — a thin, permanently-hub-bound alias of
- * {@link injectChunkTranscriptsQuery} for callers that only
- * ever read the hub's own transcripts and have no reason to thread a client through. */
-export function injectHubChunkTranscriptsQuery(chunkId: () => string | null) {
-  return injectChunkTranscriptsQuery(
-    () => hubClient,
-    () => 'hub',
-    chunkId,
-  );
-}
-
 /**
  * `GET /api/chunks/{chunk_id}/transcripts/{segment_id}` read — one segment's turns,
  * fetched lazily: `enabled` only once
@@ -140,21 +128,4 @@ export function injectChunkTranscriptSegmentQuery(
       refetchInterval: false as const,
     };
   });
-}
-
-/** The hub-plane segment-content query — see {@link injectHubChunkTranscriptsQuery}'s own
- * doc for why a hub-bound alias of {@link injectChunkTranscriptSegmentQuery} stays
- * alongside it. */
-export function injectHubChunkTranscriptSegmentQuery(
-  chunkId: () => string | null,
-  segmentId: () => string | null,
-  final: () => boolean | null,
-) {
-  return injectChunkTranscriptSegmentQuery(
-    () => hubClient,
-    () => 'hub',
-    chunkId,
-    segmentId,
-    final,
-  );
 }
