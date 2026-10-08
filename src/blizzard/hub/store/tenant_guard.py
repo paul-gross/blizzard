@@ -35,12 +35,11 @@ from sqlalchemy.sql.selectable import (
 )
 
 from blizzard.hub.store import schema
+from blizzard.hub.store.scoped import TENANT_COLUMN, is_tenant_owned
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION
 
 #: The environment variable that switches the hub's guard on, set to ``1``. A subprocess inherits it.
 GUARD_ENVIRONMENT_VARIABLE = "BLIZZARD_TENANT_GUARD"
-
-_TENANT_COLUMN = "tenant_id"
 
 _Scope = frozenset[int]
 
@@ -53,13 +52,9 @@ class UnscopedTenantStatement(Exception):
         self.violations = tuple(violations)
 
 
-def _is_tenant_owned(table: Table) -> bool:
-    return _tenant_key(table) is not None and table.name not in schema.GLOBAL_TABLES
-
-
 def _tenant_key(table: Table) -> str | None:
     """The key the ``tenant_id`` column is addressed by in values and parameters."""
-    return next((column.key for column in table.columns if column.name == _TENANT_COLUMN), None)
+    return next((column.key for column in table.columns if column.name == TENANT_COLUMN), None)
 
 
 def _named_insert_keys(insert: Insert, table: Table) -> frozenset[str]:
@@ -166,7 +161,7 @@ class TenantStatementGuard:
         if not (isinstance(table, Table) and self._guards(table)):
             return
         if _tenant_key(table) not in parameter_keys | _named_insert_keys(insert, table):
-            violations.append(f"insert into tenant-owned table {table.name} without {_TENANT_COLUMN}")
+            violations.append(f"insert into tenant-owned table {table.name} without {TENANT_COLUMN}")
 
     def _require_pins(
         self,
@@ -183,11 +178,11 @@ class TenantStatementGuard:
             if not any(_pins_tenant(conjunct, leaf) for conjunct in conjuncts):
                 violations.append(
                     f"{verb} names tenant-owned table {_leaf_name(leaf, table)} "
-                    f"without a {_TENANT_COLUMN} equality in its WHERE or join ON"
+                    f"without a {TENANT_COLUMN} equality in its WHERE or join ON"
                 )
 
     def _guards(self, table: Table) -> bool:
-        return table.metadata is self._metadata and _is_tenant_owned(table)
+        return table.metadata is self._metadata and is_tenant_owned(table)
 
 
 def _parameter_keys(multiparams: Sequence[Mapping[str, Any]], params: Mapping[str, Any]) -> frozenset[str]:
@@ -250,7 +245,7 @@ def _pins_tenant(conjunct: ClauseElement, leaf: FromClause) -> bool:
 
 
 def _is_tenant_column(side: ClauseElement, leaf: FromClause) -> bool:
-    return isinstance(side, ColumnClause) and side.table is leaf and side.name == _TENANT_COLUMN
+    return isinstance(side, ColumnClause) and side.table is leaf and side.name == TENANT_COLUMN
 
 
 _HUB_GUARD = TenantStatementGuard(schema.metadata)
