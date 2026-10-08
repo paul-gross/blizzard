@@ -10,7 +10,7 @@ from __future__ import annotations
 import base64
 from datetime import datetime
 
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 
@@ -184,7 +184,7 @@ class SecretStore:
         with self._store.write("reseal", expect=(SecretRotationConflict,)) as conn:
             for change in changes:
                 moved = conn.execute(
-                    update(secrets)
+                    self._store.update(secrets)
                     .where(
                         secrets.c.name == change.name,
                         secrets.c.revision == change.revision,

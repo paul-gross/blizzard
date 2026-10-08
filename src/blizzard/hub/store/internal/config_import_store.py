@@ -79,7 +79,7 @@ class ConfigImportStore:
         repo = func.coalesce(artifacts.c.repo, artifacts.c.name)
         with self._store.read("commit_coordinates") as conn:
             rows = conn.execute(
-                select(artifacts.c.forge, repo.label("repo"))
+                self._store.select(artifacts, artifacts.c.forge, repo.label("repo"))
                 .where(artifacts.c.kind == ArtifactKind.GIT_COMMIT.value)
                 .distinct()
                 .order_by(artifacts.c.forge, repo)

@@ -1,11 +1,15 @@
 """The tenants revision creates the tenant record and the hub-level tables beside it, and carries
 every existing row into one first tenant: a fresh ``ten_`` id named ``default``, created by ``migration``.
+The tenant_id backfill then keys every table outside the global list and stamps each existing row with
+that tenant.
 
-Seeded with literal SQL rather than importing ``src/blizzard/hub/store/schema.py``, whose tables keep
-changing shape after this revision."""
+Seeded with literal SQL, or with rows built from the store's reflected shape at the pinned revision,
+rather than importing ``src/blizzard/hub/store/schema.py``, whose tables keep changing shape after
+these revisions."""
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -27,6 +31,7 @@ pytestmark = pytest.mark.component
 
 _BEFORE = "20261008_1000_drop_work_item_proposals"
 _TENANTS = "20261008_1100_tenants"
+_BACKFILL = "20261008_1200_tenant_id_backfill"
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 _ADDED = {"tenants", "tenant_deletions", "invitations", "invitation_facts", "hub_event_log"}
 
@@ -320,3 +325,152 @@ def test_the_global_list_names_exactly_the_tables_that_carry_no_tenant_key() -> 
         )
         == GLOBAL_TABLES
     )
+
+
+_ALLOWED_VALUES = re.compile(r"^\s*(\w+)\s+IN\s*\(\s*'([^']*)'")
+
+
+def _seed_every_tenant_owned_table(engine: sa.Engine) -> set[str]:
+    """One row in every table outside the global list, built from the store's reflected shape: every
+    column without a server default gets a value of its own type, or the first value its ``IN (...)``
+    CHECK constraint allows; filling every column satisfies the "this column implies that one" checks.
+    Foreign keys stay unenforced on the store's connections, so no parent row is needed."""
+    reflected = sa.MetaData()
+    reflected.reflect(engine)
+    inspector = sa.inspect(engine)
+    seeded: set[str] = set()
+    with engine.begin() as conn:
+        for table in reflected.sorted_tables:
+            if table.name in GLOBAL_TABLES or table.name == "alembic_version":
+                continue
+            allowed = {
+                match.group(1): match.group(2)
+                for check in inspector.get_check_constraints(table.name)
+                if (match := _ALLOWED_VALUES.match(check["sqltext"])) is not None
+            }
+            row = {
+                column.name: allowed.get(column.name, _value_for(column))
+                for column in table.columns
+                if column.server_default is None
+            }
+            conn.execute(sa.insert(table).values(row))
+            seeded.add(table.name)
+    return seeded
+
+
+def _value_for(column: sa.Column) -> object:
+    try:
+        python_type = column.type.python_type
+    except NotImplementedError:
+        return f"{column.name}-1"
+    if python_type is bool:
+        return False
+    if python_type is int:
+        return 1
+    if python_type is float:
+        return 1.0
+    if python_type is datetime:
+        return _T0
+    if python_type is bytes:
+        return b"1"
+    return f"{column.name}-1"
+
+
+def _keyed_tables(engine: sa.Engine) -> dict[str, bool]:
+    """Every table outside the global list, and whether it carries ``tenant_id``."""
+    inspector = sa.inspect(engine)
+    return {
+        table: any(column["name"] == "tenant_id" for column in inspector.get_columns(table))
+        for table in _tables(engine) - GLOBAL_TABLES
+    }
+
+
+def _tenants_of(engine: sa.Engine, table: str) -> list[str | None]:
+    with engine.connect() as conn:
+        return list(conn.execute(sa.select(sa.column("tenant_id")).select_from(sa.table(table))).scalars())
+
+
+def test_a_carried_over_store_reaches_head_with_every_row_in_the_first_tenant(tmp_path: Path) -> None:
+    db_url, engine = _store(tmp_path)
+    runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
+    try:
+        runner.upgrade(_BEFORE)
+        seeded = _seed_every_tenant_owned_table(engine)
+        before = _row_counts(engine)
+
+        runner.upgrade("head")
+
+        [(tenant_id, *_)] = _tenant_rows(engine)
+        assert _keyed_tables(engine) == dict.fromkeys(_tables(engine) - GLOBAL_TABLES, True)
+        assert seeded == set(before) - GLOBAL_TABLES
+        assert {table: _row_counts(engine)[table] for table in seeded} == {table: before[table] for table in seeded}
+        assert {table: set(_tenants_of(engine, table)) for table in seeded} == {table: {tenant_id} for table in seeded}
+    finally:
+        engine.dispose()
+
+
+def test_a_rerun_of_the_backfill_over_a_partly_keyed_store_finishes(tmp_path: Path) -> None:
+    """Re-entry: a run that stopped after keying some tables, and stamping some of their rows, is
+    completed — no column added twice, every row still null stamped."""
+    db_url, engine = _store(tmp_path)
+    runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
+    try:
+        runner.upgrade(_BEFORE)
+        with engine.begin() as conn:
+            for statement in _SEED:
+                conn.execute(sa.text(statement), {"at": _T0})
+        runner.upgrade(_TENANTS)
+        [(tenant_id, *_)] = _tenant_rows(engine)
+        with engine.begin() as conn:
+            conn.execute(sa.text("ALTER TABLE graphs ADD COLUMN tenant_id VARCHAR"))
+            conn.execute(sa.text("ALTER TABLE chunks ADD COLUMN tenant_id VARCHAR"))
+            conn.execute(
+                sa.text("UPDATE chunks SET tenant_id = :tenant WHERE chunk_id = 'ch_1'"), {"tenant": tenant_id}
+            )
+
+        runner.upgrade(_BACKFILL)
+
+        assert all(_keyed_tables(engine).values())
+        assert [c["name"] for c in sa.inspect(engine).get_columns("chunks")].count("tenant_id") == 1
+        for table in ("graphs", "chunks", "event_log"):
+            assert set(_tenants_of(engine, table)) == {tenant_id}, table
+    finally:
+        engine.dispose()
+
+
+def test_the_backfill_refuses_a_store_holding_two_tenants_and_changes_nothing(tmp_path: Path) -> None:
+    db_url, engine = _store(tmp_path)
+    runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
+    try:
+        runner.upgrade(_TENANTS)
+        with engine.begin() as conn:
+            conn.execute(
+                sa.text("INSERT INTO tenants VALUES ('ten_01J9Z3M0P8QK7V2S4W6X8Y0A1B', 'second', :at, 'migration')"),
+                {"at": _T0},
+            )
+
+        with pytest.raises(RuntimeError, match="needs exactly one"):
+            runner.upgrade(_BACKFILL)
+
+        assert runner.current_revision() == _TENANTS
+        assert {table for table, keyed in _keyed_tables(engine).items() if keyed} == {"invitations", "invitation_facts"}
+    finally:
+        engine.dispose()
+
+
+def test_the_backfill_downgrade_removes_exactly_the_column_it_added(tmp_path: Path) -> None:
+    db_url, engine = _store(tmp_path)
+    runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
+    try:
+        runner.upgrade(_BEFORE)
+        _seed_every_tenant_owned_table(engine)
+        runner.upgrade(_TENANTS)
+        schema_before, counts_before = _schema(engine), _row_counts(engine)
+
+        runner.upgrade(_BACKFILL)
+        runner.downgrade(_TENANTS)
+
+        assert _schema(engine) == schema_before
+        assert _row_counts(engine) == counts_before
+    finally:
+        engine.dispose()

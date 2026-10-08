@@ -334,24 +334,25 @@ def route_of_conn(conn: Connection, chunk_id: str) -> Route | None:
 
 
 def lock_chunk_row(conn: Connection, chunk_id: str) -> None:
-    """Take the chunk row's write lock, as the transaction's FIRST statement — a no-op
-    ``UPDATE`` on a row the caller already knows exists (``bzh:sql-portable``,
-    ``bzh:store-exclusive-write``; ``tests/test_route_seq_concurrency.py``). Takes
-    SQLite's single writer lock before any later read; on Postgres, queues a concurrent
-    locker of the same row. Every guard read a decision rests on must follow this call."""
+    """Take the chunk row's write lock, as the first statement after the scoped write's own
+    tenant-row lock — a no-op ``UPDATE`` on a row the caller already knows exists
+    (``bzh:sql-portable``, ``bzh:store-exclusive-write``; ``tests/test_route_seq_concurrency.py``).
+    On SQLite the tenant-row lock already took the single writer lock, so no later read races a
+    writer; on Postgres, this queues a concurrent locker of the same row. Every guard read a
+    decision rests on must follow this call."""
     conn.execute(statements_of(conn).update(s.chunks).where(s.chunks.c.chunk_id == chunk_id).values(chunk_id=chunk_id))
 
 
 def lock_keys(conn: Connection, namespace: str, keys: Sequence[str]) -> None:
     """Take the write lock of each ``(namespace, key)`` row of ``keyed_locks``, in sorted key
-    order, as the transaction's FIRST statements — for a decision whose race has no existing
-    row to lock (``bzh:store-exclusive-write``). A no-op ``UPDATE`` on an absent row locks
-    nothing, so each row is first inserted if unseen: in its own savepoint, so a concurrent
-    insert of the same key loses with an ``IntegrityError`` that rolls back only that insert
-    (the shape of ``review_findings_store._mint_scope_if_unseen``). The ``UPDATE`` then locks
-    a row that exists: SQLite's single writer lock on the first statement; on Postgres, a
-    concurrent locker of the same key queues behind this transaction's commit. Rows are
-    never deleted."""
+    order, as the first statements after the scoped write's own tenant-row lock — for a
+    decision whose race has no existing row to lock (``bzh:store-exclusive-write``). A no-op
+    ``UPDATE`` on an absent row locks nothing, so each row is first inserted if unseen: in its
+    own savepoint, so a concurrent insert of the same key loses with an ``IntegrityError`` that
+    rolls back only that insert (the shape of ``review_findings_store._mint_scope_if_unseen``).
+    The ``UPDATE`` then locks a row that exists: on SQLite the tenant-row lock already holds the
+    single writer lock; on Postgres, a concurrent locker of the same key queues behind this
+    transaction's commit. Rows are never deleted."""
     stmts = statements_of(conn)
     lock = s.keyed_locks
     for key in sorted(set(keys)):

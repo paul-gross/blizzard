@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunk.ports.questions import IReadChunkQuestionsRepository
 from blizzard.hub.domain.config.carry_over import IReadConfigImports
 from blizzard.hub.domain.config.changes import IReadConfigChanges
 from blizzard.hub.domain.garden.findings.model import IReadFindingRepository
@@ -177,6 +179,12 @@ _SINGLETON_REASON = (
     "release history."
 )
 
+# Reads whose tenant predicate no index serves until 20261008_1300_tenant_keys rebuilds their keys to lead with tenant_id.
+_UNTIL_TENANT_KEYS_REASON = (
+    "the read now carries a tenant_id predicate, and no index on this table leads with tenant_id until "
+    "20261008_1300_tenant_keys rebuilds its keys; that revision removes this entry."
+)
+
 # The legacy-config import runs once per hub, offline, by an operator — never on a serving path.
 _ONE_SHOT_IMPORT_REASON = (
     "read only by `blizzard hub config import-legacy`, an offline verb an operator runs once per hub."
@@ -186,6 +194,22 @@ HUB_ALLOWED_SCANS: list[TableWideAllowance | MethodScopedAllowance] = [
     # --- the one-shot legacy-config import ----------------------------------------------
     TableWideAllowance("config_import_facts", 50, _RARE_OPERATOR_EVENT_REASON),
     MethodScopedAllowance(IReadConfigImports, "commit_coordinates", "artifacts", 200, _ONE_SHOT_IMPORT_REASON),
+    # --- tenant-predicate scans, until the keys lead with tenant_id -------------------
+    MethodScopedAllowance(
+        IReadChunkFactsRepository, "load_all_facts", "chunk_promoted", 200, _UNTIL_TENANT_KEYS_REASON
+    ),
+    MethodScopedAllowance(
+        IReadChunkFactsRepository, "load_all_facts", "decision_resolutions", 200, _UNTIL_TENANT_KEYS_REASON
+    ),
+    MethodScopedAllowance(
+        IReadChunkFactsRepository, "load_all_facts", "delivery_landed", 200, _UNTIL_TENANT_KEYS_REASON
+    ),
+    MethodScopedAllowance(
+        IReadChunkFactsRepository, "load_all_facts", "question_answers", 200, _UNTIL_TENANT_KEYS_REASON
+    ),
+    MethodScopedAllowance(
+        IReadChunkQuestionsRepository, "list_open_questions", "question_answers", 200, _UNTIL_TENANT_KEYS_REASON
+    ),
     # --- fleet-wide-by-design snapshot reads ------------------------------
     TableWideAllowance("chunk_bounces", 200, _FLEET_SNAPSHOT_REASON),
     TableWideAllowance("chunk_completed", 200, _FLEET_SNAPSHOT_REASON),
