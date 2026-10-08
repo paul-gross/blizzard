@@ -27,6 +27,58 @@ from blizzard.foundation.store.utc import UtcDateTime
 
 metadata = MetaData()
 
+# --- The global list -----------------------------------------------------------
+# Every table that carries no tenant key, each with why it is global. Every other table is
+# tenant-owned. A name here may precede the revision that creates its table.
+
+GLOBAL_TABLES: frozenset[str] = frozenset(
+    {
+        "tenants",  # the boundary itself
+        "tenant_deletions",  # the boundary itself: the audit of a teardown outlives its tenant
+        "users",  # identity is resolved before a tenant is
+        "identities",  # identity is resolved before a tenant is
+        "sessions",  # identity is resolved before a tenant is
+        "auth_state",  # identity is resolved before a tenant is
+        "auth_facts",  # the sign-in and security log of hub-level identities
+        "superuser_bootstrap",  # the first claim of the hub administrator role
+        "hub_admin_facts",  # who holds the hub administrator role, the role above every tenant
+        "config_import_facts",  # the hub-level carry-over of a file-configured hub, read at startup
+        "membership_facts",  # carries tenant_id as data, but is read hub-wide to list a person's tenants
+        "hub_event_log",  # occurrences of the hub's own machinery, which concern no tenant
+        "trace_cursor",  # trace export is hub configuration with one destination
+        "egress_cursor",  # fact egress is hub configuration with one destination
+    }
+)
+
+# --- The tenant boundary -------------------------------------------------------
+# A tenant is named by its id alone; ``name`` is a display label, unique nowhere and never
+# resolved. ``created_by`` is the creating user's id, or ``migration`` for the carried-over tenant.
+
+tenants = Table(
+    "tenants",
+    metadata,
+    Column("tenant_id", String, primary_key=True),  # ten_<ulid>
+    Column("name", String, nullable=False),
+    Column("created_at", UtcDateTime, nullable=False),
+    Column("created_by", String, nullable=False),
+)
+
+# The audit of one tenant's teardown, written when the tenant closes; ``deleted_at`` and
+# ``rows_removed`` are recorded when the drain completes. It outlives the tenant it names, so
+# ``tenant_id`` carries no foreign key.
+tenant_deletions = Table(
+    "tenant_deletions",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("tenant_id", String, nullable=False),
+    Column("name", String, nullable=False),
+    Column("deleted_at", UtcDateTime, nullable=True),
+    Column("deleted_by", String, nullable=False),
+    Column("rows_removed", Integer, nullable=True),
+)
+
+Index("ix_tenant_deletions_tenant_id", tenant_deletions.c.tenant_id)
+
 # --- Workflow graphs (immutable definitions, reified) -------------------------
 
 graphs = Table(
@@ -1317,6 +1369,48 @@ superuser_bootstrap = Table(
     Column("updated_at", UtcDateTime, nullable=False),
 )
 
+# --- Invitations -----------------------------------------------------------------
+# One invitation admits one email address into one tenant with one role. ``email`` is stored
+# lowercased; ``token_hash`` is the sha256 of the link's token, which is never stored.
+
+invitations = Table(
+    "invitations",
+    metadata,
+    Column("invitation_id", String, primary_key=True),  # inv_<ulid>
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_invitations_tenant_id"), nullable=False),
+    Column("email", String, nullable=False),
+    Column("role", String, nullable=False),  # blizzard.auth_core.Role value
+    Column("token_hash", String, nullable=False),
+    Column("created_by", String, nullable=False),
+    Column("created_at", UtcDateTime, nullable=False),
+    Column("expires_at", UtcDateTime, nullable=False),
+)
+
+Index("ix_invitations_tenant_id", invitations.c.tenant_id)
+Index("ix_invitations_token_hash", invitations.c.token_hash)
+
+# What became of an invitation (``bzh:facts-not-status``): ``accepted`` with the accepting
+# user, or ``revoked`` with the revoking admin. At most one per invitation — it is used once.
+invitation_facts = Table(
+    "invitation_facts",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_invitation_facts_tenant_id"), nullable=False),
+    Column(
+        "invitation_id",
+        String,
+        ForeignKey("invitations.invitation_id", name="fk_invitation_facts_invitation_id"),
+        nullable=False,
+    ),
+    Column("kind", String, nullable=False),
+    Column("actor_user_id", String, nullable=False),
+    Column("recorded_at", UtcDateTime, nullable=False),
+    UniqueConstraint("invitation_id", name="uq_invitation_facts_invitation_id"),
+    CheckConstraint("kind IN ('accepted', 'revoked')", name="ck_invitation_facts_kind"),
+)
+
+Index("ix_invitation_facts_tenant_id", invitation_facts.c.tenant_id)
+
 # --- Operational event log (event_log) ---------------------------
 # ``chunk_id``/``runner_id`` are nullable — runner-scoped/hub-authored, respectively. ``detail`` is opaque JSON.
 
@@ -1337,6 +1431,21 @@ event_log = Table(
 
 # The read's own sort key (newest-first) — indexed so ordering never scans the table.
 Index("ix_event_log_recorded_at", event_log.c.recorded_at)
+
+# The hub's own occurrences — its exports, startup, migration check, and tenant teardowns —
+# which concern no tenant, chunk, or runner. Read only by hub administrators.
+hub_event_log = Table(
+    "hub_event_log",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("recorded_at", UtcDateTime, nullable=False),
+    Column("severity", String, nullable=False),
+    Column("kind", String, nullable=False),
+    Column("message", Text, nullable=False),
+    Column("detail", Text, nullable=True),
+)
+
+Index("ix_hub_event_log_recorded_at", hub_event_log.c.recorded_at)
 
 # --- Trace export cursor (trace_cursor) ---------------------------------------
 # Append-only, one row per advancing sweep; the newest row is the position.

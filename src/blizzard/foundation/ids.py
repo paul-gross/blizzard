@@ -51,6 +51,8 @@ class IdPrefix(StrEnum):
     DEPENDENCY_EDGE = "dep"  # a chunk_dependencies row
     CONFIG_APPLY = "apl"  # one declarative config apply — groups the change rows it writes
     RUNNER = "rn"  # a runner — minted with its bearer token when the runner is added; never changes
+    TENANT = "ten"  # a tenant — minted once, never reused; its name never stands in for it
+    INVITATION = "inv"  # an invitation into one tenant
 
 
 @domain_model

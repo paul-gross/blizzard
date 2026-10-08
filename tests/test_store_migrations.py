@@ -23,7 +23,7 @@ from blizzard.runner import runtime as runner_runtime
 from blizzard.runner.store import MIGRATIONS_DIR as RUNNER_MIGRATIONS_DIR
 from blizzard.runner.store import schema as runner_schema
 from tests.conftest import Daemon
-from tests.support import migrate_to, seed_chunk, seed_graph
+from tests.support import MIGRATION_CLOCK, migrate_to, seed_chunk, seed_graph
 
 pytestmark = pytest.mark.unit
 
@@ -614,7 +614,7 @@ def test_routine_scopes_seeds_from_findings_finding_sets_and_routine_defaults(tm
     pair ``findings``/``finding_sets`` carried plus each routine's default; an empty or
     unmatched ``routine_name`` is skipped, and a duplicate pair inserted only once."""
     url = f"sqlite:///{tmp_path / 'hub.db'}"
-    runner = MigrationRunner(script_location=HUB_MIGRATIONS_DIR, url=url)
+    runner = MigrationRunner(script_location=HUB_MIGRATIONS_DIR, url=url, clock=MIGRATION_CLOCK)
     runner.upgrade(_ROUTINE_SCOPES_JOIN_PARENT)
 
     engine = create_engine_from_url(url)
@@ -1008,7 +1008,7 @@ def test_event_log_runner_id_becomes_nullable_and_downgrade_restores_the_hub_sen
     stated reason): the pre-reshape shape is ``NOT NULL``, exactly what the frozen
     creating revision now declares."""
     url = f"sqlite:///{tmp_path / 'store.db'}"
-    runner = MigrationRunner(script_location=HUB_MIGRATIONS_DIR, url=url)
+    runner = MigrationRunner(script_location=HUB_MIGRATIONS_DIR, url=url, clock=MIGRATION_CLOCK)
 
     def _nullable() -> bool:
         engine = create_engine_from_url(url)
@@ -1151,7 +1151,7 @@ def test_transcript_segments_content_digest_backfills_and_carries_markers_forwar
     no decompression; a marker matching the retired whole-segment formula carries forward,
     one that doesn't stays stale for the next pass to correctly re-derive."""
     url = f"sqlite:///{tmp_path / 'store.db'}"
-    runner = MigrationRunner(script_location=HUB_MIGRATIONS_DIR, url=url)
+    runner = MigrationRunner(script_location=HUB_MIGRATIONS_DIR, url=url, clock=MIGRATION_CLOCK)
     runner.upgrade("20260907_1000_event_log_runner_id_nullable")
 
     rows = [(0, False, b"AAAA"), (1, False, b"BBBB")]
@@ -1249,7 +1249,7 @@ def test_transcript_segments_content_digest_resumes_after_an_interrupted_first_p
     retried `upgrade()` must finish the backfill and the NOT NULL close, not short-circuit
     on column presence alone the way a bare `_has_column` guard would."""
     url = f"sqlite:///{tmp_path / 'store.db'}"
-    runner = MigrationRunner(script_location=HUB_MIGRATIONS_DIR, url=url)
+    runner = MigrationRunner(script_location=HUB_MIGRATIONS_DIR, url=url, clock=MIGRATION_CLOCK)
     runner.upgrade("20260907_1000_event_log_runner_id_nullable")
 
     rows = [(0, False, b"AAAA"), (1, False, b"BBBB")]
@@ -1455,7 +1455,7 @@ def test_frozen_table_lacks_a_later_revisions_columns(
     correct freeze from one that wrongly absorbed a later reshape, so a store migrated to the
     reshaping revision's parent must show the pre-reshape shape and head the post-reshape one."""
     url = f"sqlite:///{tmp_path / 'store.db'}"
-    runner = MigrationRunner(script_location=_MIGRATIONS_DIRS[tree], url=url)
+    runner = MigrationRunner(script_location=_MIGRATIONS_DIRS[tree], url=url, clock=MIGRATION_CLOCK)
 
     def _columns() -> set[str]:
         engine = create_engine_from_url(url)

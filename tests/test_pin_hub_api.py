@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import signal
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -19,6 +20,7 @@ from fastapi.testclient import TestClient
 
 from blizzard.auth_core import Permission
 from blizzard.cli.runtime import _EarlyShutdownServer
+from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.hub.api.auth_session import require
@@ -27,6 +29,9 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.store import MIGRATIONS_DIR
 
 pytestmark = pytest.mark.unit
+
+# What a revision that stamps a time reads (``migration_clock``).
+_MIGRATION_CLOCK = FixedClock(datetime(2026, 7, 12, tzinfo=UTC))
 
 _WALKING_SKELETON = "20260713_1218_hub_walking_skeleton"
 _DELIVERY_PR_FACTS = "20260714_0819_hub_delivery_pr_facts"
@@ -40,7 +45,7 @@ _CHUNK_DEFAULTS = "20260728_1410_hub_chunk_defaults"
 def _store(tmp_path: Path, revision: str) -> tuple[MigrationRunner, str]:
     """A scratch hub store migrated from ``base`` up to exactly ``revision``."""
     url = f"sqlite:///{tmp_path}/hub.db"
-    runner = MigrationRunner(script_location=MIGRATIONS_DIR, url=url)
+    runner = MigrationRunner(script_location=MIGRATIONS_DIR, url=url, clock=_MIGRATION_CLOCK)
     runner.upgrade(revision)
     return runner, url
 
@@ -94,7 +99,7 @@ def test_delivery_pr_opened_gains_its_uniqueness_only_at_the_revision_that_adds_
     _runner, url = _store(tmp_path, _DELIVERY_PR_FACTS)
     assert _unique_constraint_names(url, "delivery_pr_opened") == set()
 
-    MigrationRunner(script_location=MIGRATIONS_DIR, url=url).upgrade(_PR_OPENED_IDEMPOTENT)
+    MigrationRunner(script_location=MIGRATIONS_DIR, url=url, clock=_MIGRATION_CLOCK).upgrade(_PR_OPENED_IDEMPOTENT)
     assert "uq_delivery_pr_opened_chunk_repo" in _unique_constraint_names(url, "delivery_pr_opened")
 
 
@@ -119,7 +124,7 @@ def test_pr_opened_upgrade_keeps_only_the_earliest_duplicate(tmp_path: Path) -> 
     finally:
         engine.dispose()
 
-    MigrationRunner(script_location=MIGRATIONS_DIR, url=url).upgrade(_PR_OPENED_IDEMPOTENT)
+    MigrationRunner(script_location=MIGRATIONS_DIR, url=url, clock=_MIGRATION_CLOCK).upgrade(_PR_OPENED_IDEMPOTENT)
 
     engine = create_engine_from_url(url)
     try:
@@ -156,7 +161,7 @@ def test_pm_pointer_reshape_backfills_and_survives_a_down_then_up_cycle(tmp_path
             eng.dispose()
         return (row[0], row[1])
 
-    runner = MigrationRunner(script_location=MIGRATIONS_DIR, url=url)
+    runner = MigrationRunner(script_location=MIGRATIONS_DIR, url=url, clock=_MIGRATION_CLOCK)
     runner.upgrade(_PM_POINTER_SOURCE_REF)
     assert _pointer("source, ref") == ("blizzard", "26")
 
@@ -183,7 +188,7 @@ def test_chunk_defaults_retains_model_and_backfills_no_default_model(tmp_path: P
     finally:
         engine.dispose()
 
-    MigrationRunner(script_location=MIGRATIONS_DIR, url=url).upgrade(_CHUNK_DEFAULTS)
+    MigrationRunner(script_location=MIGRATIONS_DIR, url=url, clock=_MIGRATION_CLOCK).upgrade(_CHUNK_DEFAULTS)
 
     engine = create_engine_from_url(url)
     try:

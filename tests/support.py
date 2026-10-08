@@ -85,7 +85,7 @@ from blizzard.hub.egress.writer import (
     validate_batch,
 )
 from blizzard.hub.events.broker import EventBroker
-from blizzard.hub.runtime import migration_runner
+from blizzard.hub.runtime import Migrations
 from blizzard.hub.secrets import hub_key_provider, secret_cipher
 from blizzard.hub.store import schema
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
@@ -116,6 +116,9 @@ def hub_store_connections(engine: Engine) -> HubStoreConnections:
 
 
 OP = ChangeContext(actor="op", door=Door.API)
+
+#: The clock a test's hub migration hands the revisions that stamp a time (``migration_clock``).
+MIGRATION_CLOCK = FixedClock(datetime(2026, 7, 12, tzinfo=UTC))
 
 
 def config_authoring(engine: Engine, *, keys: IHubKeyProvider, clock: IClock) -> ConfigAuthoring:
@@ -792,7 +795,7 @@ def hub_migration_prototype() -> Path:
             _hub_prototype_tmp = tempfile.TemporaryDirectory(prefix="blizzard-hub-migration-proto-")
             root = Path(_hub_prototype_tmp.name)
             db_url = f"sqlite:///{root / 'hub.db'}"
-            migration_runner(HubConfig(root=root, db_url=db_url)).upgrade("head")
+            Migrations(HubConfig(root=root, db_url=db_url), MIGRATION_CLOCK).runner.upgrade("head")
             checkpoint_sqlite(db_url)
             _hub_prototype_db = root / "hub.db"
         return _hub_prototype_db
@@ -885,7 +888,7 @@ def build_hub(
     # copying over it would discard that state, so only a fresh directory takes the copy.
     db_path = tmp_path / "hub.db"
     if db_path.exists():
-        migration_runner(config).upgrade("head")
+        Migrations(config, MIGRATION_CLOCK).runner.upgrade("head")
     else:
         shutil.copyfile(hub_migration_prototype(), db_path)
     engine = create_engine_from_url(db_url)
@@ -1377,7 +1380,7 @@ def migrate_to(tmp_path: Path, revision: str) -> tuple[MigrationRunner, Engine]:
     rows. The returned runner is the same handle a test upgrades onward from (e.g. to
     ``"head"``) once its seed is in place."""
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
-    runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
+    runner = Migrations(HubConfig(root=tmp_path, db_url=db_url), MIGRATION_CLOCK).runner
     runner.upgrade(revision)
     return runner, create_engine_from_url(db_url)
 

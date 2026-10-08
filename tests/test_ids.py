@@ -28,6 +28,13 @@ def test_mint_is_prefixed_and_well_formed() -> None:
     assert chunk_id.has_prefix(IdPrefix.CHUNK)
 
 
+@pytest.mark.parametrize(("prefix", "tag"), [(IdPrefix.TENANT, "ten"), (IdPrefix.INVITATION, "inv")])
+def test_tenant_and_invitation_ids_carry_their_prefix(prefix: IdPrefix, tag: str) -> None:
+    value = Id.mint(prefix, _clock()).value
+    assert value.startswith(f"{tag}_")
+    assert Id.parse(value) == Id(tag, value.removeprefix(f"{tag}_"))
+
+
 def test_has_prefix_rejects_wrong_prefix_and_malformed() -> None:
     assert not Id.mint(IdPrefix.CHUNK, _clock()).has_prefix("gr")
     assert Id.parse("ch_tooshort") is None
