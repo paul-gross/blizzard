@@ -18,7 +18,8 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.hub.domain.runners.registration import RunnerAddition
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
-from tests.support import hub_store_connections, migrate_to
+from blizzard.hub.tenancy import TenantId
+from tests.support import migrate_to, scoped_connections
 
 pytestmark = pytest.mark.component
 
@@ -174,7 +175,7 @@ def _picture(tmp_path: Path, columns: list[tuple[str, str]]) -> _Picture:
 
 
 def _registry(tmp_path: Path) -> RunnerRegistryStore:
-    return RunnerRegistryStore(hub_store_connections(create_engine_from_url(_db_url(tmp_path))))
+    return RunnerRegistryStore(scoped_connections(create_engine_from_url(_db_url(tmp_path)), TenantId("ten_A")))
 
 
 def _minted(tmp_path: Path) -> dict[str, str]:

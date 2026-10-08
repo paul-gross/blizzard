@@ -63,7 +63,8 @@ from blizzard.hub.store.internal.scope_store import ScopeStore
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
-from tests.support import hub_store_connections
+from blizzard.hub.tenancy import TenantId
+from tests.support import scoped_connections
 
 pytestmark = pytest.mark.component
 
@@ -301,7 +302,7 @@ def _schema_missing_engine(tmp_path: Path) -> Engine:
 def test_a_driver_fault_through_each_adapter_raises_the_wrapped_error_and_logs_once(
     case: _AdapterCase, tmp_path: Path
 ) -> None:
-    adapter = case.build(hub_store_connections(_schema_missing_engine(tmp_path)))
+    adapter = case.build(scoped_connections(_schema_missing_engine(tmp_path), TenantId("ten_A")))
 
     with capture_logs() as logs, pytest.raises(HubStoreError) as exc_info:
         case.drive(adapter)

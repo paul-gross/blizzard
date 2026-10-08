@@ -99,8 +99,9 @@ from blizzard.hub.store.internal.repository_record_store import RepositoryRecord
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from blizzard.hub.store.internal.secret_store import SecretStore
 from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
+from blizzard.hub.store.scoped import ScopedConnections, is_tenant_owned
 from blizzard.hub.system_artifacts import PackagedSystemArtifacts
-from blizzard.hub.tenancy import HUB_SCOPED_OPTION, TenantId
+from blizzard.hub.tenancy import HUB_SCOPED_OPTION, StoreScope, TenantId
 from blizzard.hub.work_sources.annotator import IWorkAnnotator, WorkAnnotateError, WorkStatusMarker
 from blizzard.hub.work_sources.closer import IWorkCloser, WorkCloseError, WorkItemGoneError
 from blizzard.hub.work_sources.editor import IWorkEditor
@@ -111,18 +112,21 @@ from blizzard.wire.work_source import WorkSourceDocument
 _GRAPH_T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 
-def hub_store_connections(engine: Engine) -> HubStoreConnections:
+def hub_store_connections(engine: Engine) -> ScopedConnections:
     """The ``hub/store/internal/`` seam every adapter test wires over its
-    own migrated engine — one helper so every adapter's test file constructs it
-    identically."""
-    return HubStoreConnections(engine, HubStoreErrorFactory(get_logger("test")))
+    own migrated engine, confined to the store's only tenant — one helper so every
+    adapter's test file constructs it identically."""
+    return scoped_connections(engine, default_tenant(engine))
+
+
+def scoped_connections(engine: Engine, tenant: TenantId) -> ScopedConnections:
+    """The seam confined to ``tenant`` as the test names it, read from nowhere — for a store with no
+    tenant to read: one built from the bare schema, one behind the tenant revision, one gone."""
+    return hub_level_connections(engine).scoped(StoreScope(tenant))
 
 
 def hub_level_connections(engine: Engine) -> HubStoreConnections:
-    """The unscoped seam, for the adapters over global tables (identity, exports, cross-tenant reads).
-
-    Today this is what ``hub_store_connections`` returns; once that helper hands out a default-tenant
-    scope, a global-table adapter keeps wiring over this one."""
+    """The unscoped seam, for the adapters over global tables (identity, exports, cross-tenant reads)."""
     return HubStoreConnections(engine, HubStoreErrorFactory(get_logger("test")))
 
 
@@ -145,18 +149,13 @@ def default_tenant(engine: Engine) -> TenantId:
     return tenant
 
 
-def _is_tenant_owned(table: sa.Table) -> bool:
-    """Whether ``table`` is tenant-owned: it carries ``tenant_id`` and is not on the global list."""
-    return "tenant_id" in table.c and table.name not in schema.GLOBAL_TABLES
-
-
 def stamp(table: sa.Table, /, **values: Any) -> dict[str, Any]:
     """``values`` for a raw test insert into ``table``, carrying the store's tenant when the table is
     tenant-owned and the caller named none — what the scoped insert stamps in production.
 
     The tenant is a scalar subquery over ``tenants``, so a raw write needs no engine in hand; it names
     the store's only tenant, the same one ``default_tenant`` reads."""
-    if _is_tenant_owned(table) and "tenant_id" not in values:
+    if is_tenant_owned(table) and "tenant_id" not in values:
         values["tenant_id"] = sa.select(schema.tenants.c.tenant_id).scalar_subquery()
     return values
 

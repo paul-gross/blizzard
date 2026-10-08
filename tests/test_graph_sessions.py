@@ -21,7 +21,8 @@ from blizzard.hub.domain.graph.model import SESSION_KNOWN_KEYS, GraphDoc, GraphP
 from blizzard.hub.domain.graph.validation import Validator
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.schema import metadata
-from tests.support import hub_store_connections
+from blizzard.hub.tenancy import TenantId
+from tests.support import scoped_connections
 
 pytestmark = pytest.mark.unit
 
@@ -380,7 +381,7 @@ def test_reify_carries_the_node_session_reference() -> None:
 def _store() -> GraphStore:
     engine = create_engine("sqlite://")
     metadata.create_all(engine)
-    return GraphStore(hub_store_connections(engine))
+    return GraphStore(scoped_connections(engine, TenantId("ten_A")))
 
 
 def test_mint_and_load_round_trip_the_declarations_identically() -> None:

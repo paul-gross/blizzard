@@ -174,11 +174,13 @@ from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStor
 from blizzard.hub.store.internal.scope_store import ScopeStore
 from blizzard.hub.store.internal.secret_referrers import SecretReferrersStore
 from blizzard.hub.store.internal.secret_store import SecretStore
+from blizzard.hub.store.internal.sole_tenant import SoleTenantConnections
 from blizzard.hub.store.internal.trace_store import TraceStore
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
+from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.system_artifacts import PACKAGED as SYSTEM_ARTIFACTS_PACKAGED
 from blizzard.hub.system_artifacts import PackagedSystemArtifacts
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
@@ -381,6 +383,9 @@ class HubCore:
     copy (pinned by ``tests/test_hub_core_sharing.py``)."""
 
     store_connections: HubStoreConnections
+    #: The same store confined to its only tenant — the scope a single-tenant hub's adapters over
+    #: tenant-owned tables hold.
+    tenant_connections: ScopedConnections
     auth_errors: RepoErrorFactory
     users: UserRepository
     registry: RunnerRegistryStore
@@ -444,7 +449,9 @@ def build_process_core(engine: Engine) -> HubCore:
 
 def build_hub_core(engine: Engine, *, clock: IClock) -> HubCore:
     """Build the :class:`HubCore`."""
-    store_connections = HubStoreConnections(engine, HubStoreErrorFactory(get_logger("blizzard.hub.store")))
+    store_errors = HubStoreErrorFactory(get_logger("blizzard.hub.store"))
+    store_connections = HubStoreConnections(engine, store_errors)
+    tenant_connections = SoleTenantConnections(engine, store_errors)
     auth_errors = RepoErrorFactory(get_logger("blizzard.hub.auth"))
     registry = RunnerRegistryStore(store_connections)
     work_item_store = WorkItemStore(store_connections)
@@ -462,6 +469,7 @@ def build_hub_core(engine: Engine, *, clock: IClock) -> HubCore:
     garden_proposal_closure_store = GardenProposalClosureStore(store_connections)
     return HubCore(
         store_connections=store_connections,
+        tenant_connections=tenant_connections,
         auth_errors=auth_errors,
         users=UserRepository(store_connections, auth_errors),
         registry=registry,
