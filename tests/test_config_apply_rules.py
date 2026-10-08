@@ -267,7 +267,7 @@ def test_a_stored_routine_as_declared_is_unchanged_and_a_retired_one_is_enabled(
 
 
 def test_a_stored_scope_edits_only_a_stated_description() -> None:
-    stored = Scope(slug="core", description="old", created_at=_AT, revision=2)
+    stored = Scope(scope_id="scp_core", slug="core", description="old", created_at=_AT, revision=2)
     unstated = _plan(ConfigDeclaration(scopes=(_scope_entry(),)), _garden(scopes=(stored,)))
     assert unstated.writes == ()
     created = _plan(ConfigDeclaration(scopes=(_scope_entry(description="new"),)), _garden())

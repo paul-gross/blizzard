@@ -22,7 +22,7 @@ from blizzard.hub.domain.garden.scopes import Scope, ScopeEdit, ScopeSlug
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal.scope_store import ScopeStore
-from blizzard.hub.store.schema import config_changes, scope_lifecycle_facts
+from blizzard.hub.store.schema import config_changes, scope_lifecycle_facts, scopes
 from tests.support import hub_store_connections
 
 pytestmark = pytest.mark.component
@@ -61,8 +61,10 @@ def _changes(engine: Engine) -> list[tuple[str, str, int, str]]:
 
 
 def _facts(engine: Engine) -> list[tuple[str, bool, str]]:
+    conns = hub_store_connections(engine)
+    of_scope = conns.scope_join(scope_lifecycle_facts, scopes, scope_lifecycle_facts.c.scope_id == scopes.c.scope_id)
     with engine.connect() as conn:
-        facts = hub_store_connections(engine).select(scope_lifecycle_facts)
+        facts = conns.select(of_scope, scopes.c.slug, scope_lifecycle_facts.c.retired, scope_lifecycle_facts.c.set_by)
         rows = conn.execute(facts.order_by(scope_lifecycle_facts.c.id)).all()
     return [(row.slug, row.retired, row.set_by) for row in rows]
 

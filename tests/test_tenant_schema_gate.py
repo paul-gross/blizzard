@@ -39,9 +39,7 @@ _LONG_NAMES_KEPT: dict[str, str] = {
 }
 
 # Keys the build check still fails, each naming the revision that rescopes it; that revision deletes its entry.
-_PENDING_KEYS: dict[str, str] = {
-    "scopes: primary key (slug)": "20261008_1500_scope_surrogate",
-}
+_PENDING_KEYS: dict[str, str] = {}
 
 Rule = Callable[[sa.MetaData, frozenset[str]], list[str]]
 

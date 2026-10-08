@@ -15,6 +15,7 @@ from enum import StrEnum
 from typing import ClassVar, Protocol
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.config.changes import (
     FIELDED_RECORD_TRANSITIONS,
@@ -86,10 +87,11 @@ class ScopeEdit:
 @domain_model
 @dataclass(frozen=True)
 class Scope:
-    """A stored scope — a configured record keyed by its slug; ``retired`` derives from the
-    newest lifecycle fact. Each verb returns the record with its :class:`ConfigChange`, or
-    ``None`` when it changes nothing."""
+    """A stored scope — a configured record keyed by its ``scp_`` id and named by its slug
+    within its tenant; ``retired`` derives from the newest lifecycle fact. Each verb returns
+    the record with its :class:`ConfigChange`, or ``None`` when it changes nothing."""
 
+    scope_id: str
     slug: str
     description: str
     created_at: datetime
@@ -124,8 +126,10 @@ class Scope:
 
     @classmethod
     def new(cls, slug: ScopeSlug, description: str, ctx: ChangeContext, *, at: datetime) -> tuple[Scope, ConfigChange]:
-        """A fresh scope at revision 1, with its ``create`` change."""
-        record = cls(slug=slug.value, description=description, created_at=at)
+        """A fresh scope at revision 1, its id minted at ``at``, with its ``create`` change."""
+        record = cls(
+            scope_id=Id.mint_at(IdPrefix.SCOPE, at).value, slug=slug.value, description=description, created_at=at
+        )
         created = (FieldChange(_DESCRIPTION, None, description),)
         return record, ConfigChange.of(ctx, RecordKind.SCOPE, record.slug, 1, ChangeOp.CREATE, created, at)
 
@@ -196,8 +200,8 @@ class IWriteScopeRepository(IReadScopeRepository, Protocol):
     record write."""
 
     def ensure(self, record: Scope, *, change: ConfigChange) -> Scope:
-        """Insert ``record`` with its ``create`` change if its slug is unseen; otherwise read
-        back the stored scope unchanged and write nothing — first-write-wins, never
+        """Insert ``record`` with its ``create`` change if its slug is unseen in the tenant;
+        otherwise read back the stored scope (and its id) unchanged and write nothing — first-write-wins, never
         overwriting a stored description."""
         ...
 

@@ -20,7 +20,7 @@ from blizzard.hub.store.internal.garden_proposal_closure_store import GardenProp
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
 from blizzard.hub.store.internal.run_context_store import RunContextStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
-from tests.support import HubHarness, build_hub, hub_store_connections, seed_work_item
+from tests.support import HubHarness, build_hub, hub_store_connections, seed_scope, seed_work_item
 
 pytestmark = pytest.mark.component
 
@@ -36,6 +36,7 @@ def _seed_chunk(hub: HubHarness, *, with_run_context: bool = True) -> str:
     items = WorkItemStore(store_connections)
     item = seed_work_item(items, graph_id="gr_garden", author=WorkItemAuthor.user("u_1"), at=_NOW)
     if with_run_context:
+        seed_scope(store_connections, _SCOPE, at=_NOW)
         RunContextStore(store_connections).record(
             item.work_item_id, RunContext(routine_name=_ROUTINE, scope_slug=_SCOPE, mode="dry_run")
         )
@@ -43,6 +44,7 @@ def _seed_chunk(hub: HubHarness, *, with_run_context: bool = True) -> str:
 
 
 def _seed_finding(hub: HubHarness, finding_id: str) -> None:
+    seed_scope(hub_store_connections(hub.engine), _SCOPE, at=_NOW)
     FindingStore(hub_store_connections(hub.engine)).add(
         finding_id,
         routine_name=_ROUTINE,

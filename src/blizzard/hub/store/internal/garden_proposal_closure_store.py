@@ -99,7 +99,7 @@ class GardenProposalClosureStore:
         return result
 
     def find_by_item(self, source: str, ref: str) -> GardenProposalClosure | None:
-        """Filtered on `ix_garden_proposal_closures_source_ref` — `source`/`ref` are
+        """Filtered on `ix_garden_proposal_closures_tenant_source_ref` — `source`/`ref` are
         null on a pass or a declined accept, so an unminted item never joins a row here
         regardless of what a caller passes."""
         with self._store.read("find_by_item") as conn:

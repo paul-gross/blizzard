@@ -105,6 +105,8 @@ def _retirement_engine(tmp_path: Path, *, depth: int) -> Engine:
     tmp_path.mkdir()
     engine = build_hub(tmp_path).engine
     with engine.begin() as conn:
+        for key in _KEYS:
+            conn.execute(insert(s.scopes).values(stamp(s.scopes, slug=key, description="", created_at=_T0)))
         for n in range(depth):
             for key in _KEYS:
                 last_retired = key != "k2"

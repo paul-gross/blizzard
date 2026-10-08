@@ -17,6 +17,7 @@ from blizzard.hub.domain.garden.review.materialize import (
     ReviewFindingsPlan,
 )
 from blizzard.hub.store.internal.chunk_rows import fence, lock_chunk_row, next_artifact_seq
+from blizzard.hub.store.internal.scope_store import scope_ids_of
 from blizzard.hub.store.schema import artifacts, finding_facts, findings, scopes
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
 
@@ -46,9 +47,10 @@ class ReviewFindingsStore:
 
     @staticmethod
     def _mint_scope_if_unseen(conn, slug: str, description: str, at) -> None:  # type: ignore[no-untyped-def]
-        """Mint `slug` if this select finds it unseen. The insert runs in its own
-        savepoint, not the outer `deliver` transaction, so a concurrent mint of the same
-        slug loses the race with an `IntegrityError` that rolls back only this nested
+        """Mint `slug` — a fresh `scp_` id stamped `at` — if this select finds it unseen in the
+        tenant. The insert runs in its own savepoint, not the outer `deliver` transaction, so a
+        concurrent mint of the same slug loses the race on `uq_scopes_tenant_slug` with an
+        `IntegrityError` that rolls back only this nested
         write — the rest of the delivery still commits, first-write-wins like
         `ScopeStore.ensure`. Invisible on sqlite, which serializes writers."""
         stmts = statements_of(conn)
@@ -57,7 +59,14 @@ class ReviewFindingsStore:
             return
         try:
             with conn.begin_nested():
-                conn.execute(stmts.insert(scopes).values(slug=slug, description=description, created_at=at))
+                conn.execute(
+                    stmts.insert(scopes).values(
+                        scope_id=Id.mint_at(IdPrefix.SCOPE, at).value,
+                        slug=slug,
+                        description=description,
+                        created_at=at,
+                    )
+                )
         except IntegrityError:
             pass
 
@@ -73,12 +82,14 @@ class ReviewFindingsStore:
                 self._mint_scope_if_unseen(conn, scope_slug, plan.new_scope_description, plan.at)
 
             if plan.new_findings:
+                scope_ids = scope_ids_of(conn, [f.scope_slug for f in plan.new_findings])
                 conn.execute(
                     self._store.insert(findings),
                     [
                         {
                             "finding_id": f.finding_id,
                             "routine_name": None,
+                            "scope_id": scope_ids.get(f.scope_slug),
                             "scope_slug": f.scope_slug,
                             "class_": f.class_,
                             "locus": f.locus,

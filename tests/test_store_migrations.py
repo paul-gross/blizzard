@@ -584,6 +584,7 @@ def test_runner_lease_closure_escalation_cause_survives_migration_roundtrip(tmp_
 
 
 _ROUTINE_SCOPES_JOIN_PARENT = "20260905_1100_hub_runner_external_usage_slug"
+_ROUTINE_SCOPES_JOIN = "20260906_1130_routine_scopes_join"
 
 
 def test_routine_scopes_table_survives_migration_roundtrip(tmp_path: Path) -> None:
@@ -665,7 +666,7 @@ def test_routine_scopes_seeds_from_findings_finding_sets_and_routine_defaults(tm
     finally:
         engine.dispose()
 
-    runner.upgrade("head")
+    runner.upgrade(_ROUTINE_SCOPES_JOIN)
 
     engine = create_engine_from_url(url)
     try:

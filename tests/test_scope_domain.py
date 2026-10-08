@@ -84,7 +84,14 @@ def _as_write_repo(repo: _FakeScopeRepo) -> IWriteScopeRepository:
 
 
 def _scope(*, description: str = "old", revision: int = 1, retired: bool = False) -> Scope:
-    return Scope(slug="blizzard", description=description, created_at=_T0, revision=revision, retired=retired)
+    return Scope(
+        scope_id="scp_blizzard",
+        slug="blizzard",
+        description=description,
+        created_at=_T0,
+        revision=revision,
+        retired=retired,
+    )
 
 
 # --- The model's verbs --------------------------------------------------------

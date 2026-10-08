@@ -234,7 +234,7 @@ def test_create_naming_an_unseen_default_scope_mints_it_in_the_same_write() -> N
 
 
 def test_create_naming_a_stored_default_scope_mints_nothing() -> None:
-    stored = Scope(slug="blizzard", description="", created_at=_T0)
+    stored = Scope(scope_id="scp_blizzard", slug="blizzard", description="", created_at=_T0)
     authoring, routines, _, _ = _authoring(scopes=_FakeScopeRepo(stored={"blizzard": stored}))
 
     _create(authoring)
@@ -449,7 +449,7 @@ class TestRoutineScopeMembership:
     a no-op writes nothing, and unlink refuses a routine's own default scope."""
 
     def _scope(self, slug: str) -> Scope:
-        return Scope(slug=slug, description="", created_at=_T0)
+        return Scope(scope_id=f"scp_{slug}", slug=slug, description="", created_at=_T0)
 
     def _membership(self, repo: _FakeRoutineScopeRepo) -> RoutineScopeMembership:
         return RoutineScopeMembership(routine_scopes=_as_write_routine_scopes(repo), clock=FixedClock(instant=_T0))

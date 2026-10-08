@@ -28,6 +28,7 @@ from blizzard.hub.store.schema import (
     chunks,
     finding_facts,
     finding_sets,
+    scopes,
     work_item_runs,
     work_items,
 )
@@ -35,23 +36,27 @@ from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements, state
 
 
 def _run_identity_join(stmts: ScopedStatements) -> Join:
-    """The chunk -> chunk_work_refs -> work_items -> work_item_runs join every read here
-    starts from — a run's own identity, minted once at `RunService.run`'s own act. Each
-    joined side is confined to the tenant in its own ``ON``."""
+    """The chunk -> chunk_work_refs -> work_items -> work_item_runs -> scopes join every read
+    here starts from — a run's own identity, minted once at `RunService.run`'s own act. Each
+    joined side is confined to the tenant in its own ``ON``, and the natural-key join onto
+    ``work_items`` carries tenant equality there too."""
     with_refs = stmts.scope_join(chunks, chunk_work_refs, chunk_work_refs.c.chunk_id == chunks.c.chunk_id)
     with_items = stmts.scope_join(
         with_refs,
         work_items,
-        (work_items.c.source == chunk_work_refs.c.source) & (work_items.c.ref == chunk_work_refs.c.ref),
+        (work_items.c.tenant_id == chunk_work_refs.c.tenant_id)
+        & (work_items.c.source == chunk_work_refs.c.source)
+        & (work_items.c.ref == chunk_work_refs.c.ref),
     )
-    return stmts.scope_join(with_items, work_item_runs, work_item_runs.c.work_item_id == work_items.c.work_item_id)
+    with_runs = stmts.scope_join(with_items, work_item_runs, work_item_runs.c.work_item_id == work_items.c.work_item_id)
+    return stmts.scope_join(with_runs, scopes, scopes.c.scope_id == work_item_runs.c.scope_id)
 
 
 _IDENTITY_COLUMNS = (
     chunks.c.chunk_id,
     chunks.c.minted_at,
     work_item_runs.c.routine_name,
-    work_item_runs.c.scope_slug,
+    scopes.c.slug.label("scope_slug"),
     work_item_runs.c.mode,
 )
 

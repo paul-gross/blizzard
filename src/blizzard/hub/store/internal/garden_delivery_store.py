@@ -19,6 +19,7 @@ from blizzard.hub.domain.garden.delivery.materialize import (
 )
 from blizzard.hub.store.internal.chunk_rows import fence, lock_chunk_row, next_artifact_seq
 from blizzard.hub.store.internal.finding_store import lock_findings, moved_findings
+from blizzard.hub.store.internal.scope_store import scope_ids_of
 from blizzard.hub.store.schema import (
     artifacts,
     finding_facts,
@@ -153,6 +154,13 @@ class GardenDeliveryStore:
             if moved_findings(conn, {fid: state for fid, state in plan.expect.items() if fid in written}):
                 return DeliveryOutcome.GUARD_LOST
             finding_set_rows = [d.finding_set for d in surviving_deltas]
+            # Every delta names the run's own scope (validation), stored before the run was minted;
+            # a slug the tenant does not hold maps to no id, which the NOT NULL link refuses.
+            scope_ids = (
+                scope_ids_of(conn, [f.scope_slug for f in new_findings] + [fs.scope_slug for fs in finding_set_rows])
+                if new_findings or finding_set_rows
+                else {}
+            )
 
             if new_findings:
                 conn.execute(
@@ -161,6 +169,7 @@ class GardenDeliveryStore:
                         {
                             "finding_id": f.finding_id,
                             "routine_name": f.routine_name,
+                            "scope_id": scope_ids.get(f.scope_slug),
                             "scope_slug": f.scope_slug,
                             "class_": f.class_,
                             "locus": f.locus,
@@ -180,6 +189,7 @@ class GardenDeliveryStore:
                             "finding_set_id": fs.finding_set_id,
                             "artifact_id": fs.artifact_id,
                             "chunk_id": plan.chunk_id,
+                            "scope_id": scope_ids.get(fs.scope_slug),
                             "scope_slug": fs.scope_slug,
                             "routine_name": plan.run.routine_name,
                             "revisions": json.dumps(fs.revisions),

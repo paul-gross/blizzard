@@ -228,25 +228,27 @@ graph_policy_facts = Table(
 )
 Index("ix_graph_policy_facts_tenant_id", graph_policy_facts.c.tenant_id)
 
-# --- Scopes (operator-authored, slug-keyed buckets) ---
+# --- Scopes (operator-authored buckets: a surrogate id, a slug named per tenant) ---
 
 scopes = Table(
     "scopes",
     metadata,
-    Column("slug", String, primary_key=True),
+    Column("scope_id", String, nullable=False, info={"hub_unique": True}),  # scp_<ulid>
+    Column("slug", String, nullable=False),
     Column("description", Text, nullable=False),
     Column("created_at", UtcDateTime, nullable=False),
     Column("revision", Integer, nullable=False, server_default="1"),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_scopes_tenant_id"), nullable=False),
+    PrimaryKeyConstraint("scope_id", name="pk_scopes"),
+    UniqueConstraint("tenant_id", "slug", name="uq_scopes_tenant_slug"),
 )
-Index("ix_scopes_tenant_id", scopes.c.tenant_id)
 
 # Scope retire/enable facts: append-only, newest wins.
 scope_lifecycle_facts = Table(
     "scope_lifecycle_facts",
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
-    Column("slug", String, ForeignKey("scopes.slug"), nullable=False),
+    Column("scope_id", String, ForeignKey("scopes.scope_id", name="fk_scope_lifecycle_facts_scopes"), nullable=False),
     Column("retired", Boolean, nullable=False),  # retired derives from the newest fact
     Column("set_at", UtcDateTime, nullable=False),
     Column("set_by", String, nullable=False),
@@ -425,7 +427,7 @@ routines = Table(
     Column("routine_id", String, primary_key=True, info={"hub_unique": True}),  # rtn_<ulid>
     Column("name", String, nullable=False),
     Column("graph_name", String, nullable=False),  # a graph *name*, not a graph_id
-    Column("default_scope_slug", String, ForeignKey("scopes.slug"), nullable=False),
+    Column("default_scope_id", String, ForeignKey("scopes.scope_id", name="fk_routines_scopes"), nullable=False),
     # Nullable JSON model preferences and effort; empty means express none.
     Column("default_model", Text, nullable=True),
     Column("default_effort", String, nullable=True),
@@ -442,13 +444,14 @@ routines = Table(
 routine_scopes = Table(
     "routine_scopes",
     metadata,
-    Column("routine_id", String, ForeignKey("routines.routine_id"), primary_key=True),
-    Column("scope_slug", String, ForeignKey("scopes.slug"), primary_key=True),
+    Column("routine_id", String, ForeignKey("routines.routine_id"), nullable=False),
+    Column("scope_id", String, ForeignKey("scopes.scope_id", name="fk_routine_scopes_scopes"), nullable=False),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_routine_scopes_tenant_id"), nullable=False),
+    PrimaryKeyConstraint("routine_id", "scope_id", name="pk_routine_scopes"),
 )
 Index("ix_routine_scopes_tenant_id", routine_scopes.c.tenant_id)
 
-Index("ix_routine_scopes_scope_slug", routine_scopes.c.scope_slug)
+Index("ix_routine_scopes_scope_id", routine_scopes.c.scope_id)
 
 # The routine's reversible retire/enable brake — scope_lifecycle_facts's own shape.
 routine_lifecycle_facts = Table(
@@ -621,7 +624,9 @@ findings = Table(
     Column("finding_id", String, primary_key=True, info={"hub_unique": True}),  # fin_<ulid>
     # Routine name; null for review-sourced findings.
     Column("routine_name", String, nullable=True),
-    Column("scope_slug", String, ForeignKey("scopes.slug"), nullable=False),
+    Column("scope_id", String, ForeignKey("scopes.scope_id", name="fk_findings_scopes"), nullable=False),
+    # The scope's slug as the label the finding reads key on, resolved within the row's tenant.
+    Column("scope_slug", String, nullable=False),
     Column("class", String, key="class_", nullable=False),  # the deployment's own vocabulary; opaque to the hub
     Column("locus", String, nullable=False),  # a repo-relative path, optionally :line/::symbol; opaque to the hub
     Column("summary", Text, nullable=False),
@@ -705,7 +710,9 @@ finding_sets = Table(
     Column("finding_set_id", String, primary_key=True, info={"hub_unique": True}),  # fins_<ulid>
     Column("artifact_id", String, ForeignKey("artifacts.artifact_id"), nullable=False, unique=True),
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),  # the run that delivered it
-    Column("scope_slug", String, ForeignKey("scopes.slug"), nullable=False),
+    Column("scope_id", String, ForeignKey("scopes.scope_id", name="fk_finding_sets_scopes"), nullable=False),
+    # The scope's slug as the label the set's reads key on, resolved within the row's tenant.
+    Column("scope_slug", String, nullable=False),
     # Routine name; a chunk's mixed-source pointers cannot identify it.
     Column("routine_name", String, nullable=False, server_default=""),
     Column("revisions", Text, nullable=False),  # JSON {repo: revision} (`bzh:sql-portable`)
@@ -2109,7 +2116,7 @@ work_item_runs = Table(
     metadata,
     Column("work_item_id", String, ForeignKey("work_items.work_item_id"), primary_key=True),
     Column("routine_name", String, nullable=False),
-    Column("scope_slug", String, ForeignKey("scopes.slug"), nullable=False),
+    Column("scope_id", String, ForeignKey("scopes.scope_id", name="fk_work_item_runs_scopes"), nullable=False),
     Column("mode", String, nullable=False),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_work_item_runs_tenant_id"), nullable=False),
 )

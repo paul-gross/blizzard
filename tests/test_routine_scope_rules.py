@@ -29,8 +29,8 @@ pytestmark = pytest.mark.unit
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 _CTX = ChangeContext(actor="operator", door=Door.API)
 _GRAPH = Graph(graph_id="gr_1", name="default", entry_node_id="nd_1", nodes=[], edges=[], created_at=_T0)
-_SCOPE = Scope(slug="blizzard", description="the hub itself", created_at=_T0)
-_OTHER_SCOPE = Scope(slug="runner", description="", created_at=_T0)
+_SCOPE = Scope(scope_id="scp_blizzard", slug="blizzard", description="the hub itself", created_at=_T0)
+_OTHER_SCOPE = Scope(scope_id="scp_runner", slug="runner", description="", created_at=_T0)
 _ROUTINE = Routine(
     routine_id="rtn_1",
     name="gardening",

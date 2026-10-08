@@ -71,6 +71,7 @@ from blizzard.hub.domain.config.repositories import RepositoryFields
 from blizzard.hub.domain.config.secrets import IHubKeyProvider, SecretAlreadyExists, SecretName
 from blizzard.hub.domain.execution.auth.produces import PRODUCES_WARN
 from blizzard.hub.domain.execution.auth.route import ROUTE_TOKEN_WARN
+from blizzard.hub.domain.garden.scopes import Scope, ScopeSlug
 from blizzard.hub.domain.graph.model import Edge, Graph, Node
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.observability.egress.config import EgressConfig
@@ -97,6 +98,7 @@ from blizzard.hub.store.internal.config_import_store import ConfigImportStore
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
+from blizzard.hub.store.internal.scope_store import ScopeStore
 from blizzard.hub.store.internal.secret_store import SecretStore
 from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
 from blizzard.hub.store.scoped import ScopedConnections, is_tenant_owned
@@ -158,7 +160,55 @@ def stamp(table: sa.Table, /, **values: Any) -> dict[str, Any]:
     none or several — never one picked from many: a test with a second tenant names the one it means."""
     if is_tenant_owned(table) and "tenant_id" not in values:
         values["tenant_id"] = sole_tenant_subquery()
+    return _with_scope_id(table, values)
+
+
+#: The column each scope-linked table names its scope's slug by in a raw test seed, and whether the
+#: table keeps that slug beside ``scope_id`` as its own label.
+_SCOPE_SLUG_COLUMNS: dict[str, tuple[str, str, bool]] = {
+    "scope_lifecycle_facts": ("slug", "scope_id", False),
+    "routines": ("default_scope_slug", "default_scope_id", False),
+    "routine_scopes": ("scope_slug", "scope_id", False),
+    "work_item_runs": ("scope_slug", "scope_id", False),
+    "findings": ("scope_slug", "scope_id", True),
+    "finding_sets": ("scope_slug", "scope_id", True),
+}
+
+
+def _with_scope_id(table: sa.Table, values: dict[str, Any]) -> dict[str, Any]:
+    """A raw seed's scope surrogate, as the scope adapters write it: a ``scopes`` row naming no
+    ``scope_id`` gets a fresh ``scp_`` id; a row naming its scope by slug gets that slug's
+    ``scope_id`` within the row's tenant."""
+    if table.name == "scopes" and "scope_id" not in values:
+        at = values.get("created_at")
+        values["scope_id"] = Id.mint_at(IdPrefix.SCOPE, at if isinstance(at, datetime) else datetime.now(UTC)).value
+        return values
+    linked = _SCOPE_SLUG_COLUMNS.get(table.name)
+    if linked is None:
+        return values
+    slug_column, id_column, keeps_slug = linked
+    if id_column in values or slug_column not in values:
+        return values
+    slug = values[slug_column] if keeps_slug else values.pop(slug_column)
+    tenant = values["tenant_id"]
+    named = isinstance(tenant, str)
+    # Raw SQL, which the tenant guard does not walk: the row's tenant may itself be the sole-tenant
+    # subquery, which the guard does not read as naming a tenant.
+    tenant_sql = ":seed_scope_tenant" if named else _SOLE_TENANT_SQL
+    lookup = sa.text(f"SELECT scope_id FROM scopes WHERE slug = :seed_scope_slug AND tenant_id = ({tenant_sql})")
+    lookup = lookup.bindparams(seed_scope_slug=slug, **({"seed_scope_tenant": tenant} if named else {}))
+    values[id_column] = lookup.columns(sa.column("scope_id", sa.String)).scalar_subquery()
     return values
+
+
+_SOLE_TENANT_SQL = "SELECT tenant_id FROM tenants WHERE (SELECT count(*) FROM tenants) = 1"
+
+
+def seed_scope(conns: ScopedConnections, slug: str, *, at: datetime) -> str:
+    """Store a scope named ``slug`` in ``conns``' tenant through its adapter unless one is stored — the
+    parent a run, link or finding naming ``slug`` needs — and return its ``scope_id``."""
+    record, change = Scope.new(ScopeSlug.parse(slug), "", OP, at=at)
+    return ScopeStore(conns).ensure(record, change=change).scope_id
 
 
 def sole_tenant_subquery() -> sa.ScalarSelect[Any]:

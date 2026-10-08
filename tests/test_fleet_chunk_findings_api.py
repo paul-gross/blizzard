@@ -19,7 +19,7 @@ from blizzard.hub.domain.chunk.model import WorkItemAuthor
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
-from tests.support import HubHarness, build_hub, hub_store_connections, seed_work_item
+from tests.support import HubHarness, build_hub, hub_store_connections, seed_scope, seed_work_item
 
 pytestmark = pytest.mark.component
 
@@ -29,6 +29,7 @@ _SCOPE = "blizzard"
 
 
 def _seed_finding(hub: HubHarness, finding_id: str) -> None:
+    seed_scope(hub_store_connections(hub.engine), _SCOPE, at=_NOW)
     FindingStore(hub_store_connections(hub.engine)).add(
         finding_id,
         routine_name=_ROUTINE,

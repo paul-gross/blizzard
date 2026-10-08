@@ -33,7 +33,7 @@ _GRAPH = Graph(graph_id="gr_1", name="default", entry_node_id="nd_1", nodes=[], 
 _ROUTINE = Routine(
     routine_id="rtn_1", name="gardening", graph_name="default", default_scope_slug="blizzard", created_at=_T0
 )
-_SCOPE = Scope(slug="blizzard", description="the hub itself", created_at=_T0)
+_SCOPE = Scope(scope_id="scp_blizzard", slug="blizzard", description="the hub itself", created_at=_T0)
 _BASELINE = FindingSet(
     finding_set_id="fins_1",
     artifact_id="art_1",

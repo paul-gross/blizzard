@@ -829,6 +829,7 @@ def test_every_finding_the_worker_read_shows_is_a_citable_proposal_finding(tmp_p
     neighbour = Id.mint(IdPrefix.FINDING, hub.clock).value
     review = Id.mint(IdPrefix.FINDING, hub.clock).value
     _seed_finding(hub, own)
+    _seed_scope(hub, "other-scope")
     _seed_finding(hub, neighbour, scope_slug="other-scope")
     _seed_review_finding(hub, review)
 

@@ -20,7 +20,7 @@ from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal.run_context_store import RunContextStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
-from tests.support import chunk_stores, hub_store_connections, seed_chunk, seed_graph
+from tests.support import chunk_stores, hub_store_connections, seed_chunk, seed_graph, seed_scope
 
 pytestmark = pytest.mark.component
 
@@ -34,6 +34,7 @@ def _stores(tmp_path: Path) -> tuple[WorkItemStore, ChunkStores, RunContextStore
     with engine.begin() as conn:
         seed_graph(conn, "gr_1", at=_NOW)
     conns = hub_store_connections(engine)
+    seed_scope(conns, "blizzard", at=_NOW)
     return WorkItemStore(conns), chunk_stores(engine, FixedClock(_NOW)), RunContextStore(conns), engine
 
 

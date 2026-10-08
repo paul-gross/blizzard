@@ -54,7 +54,7 @@ _ROUTINE = Routine(
     default_model=["opus"],
     default_effort="high",
 )
-_DEFAULT_SCOPE = Scope(slug="blizzard", description="the hub itself", created_at=_T0)
+_DEFAULT_SCOPE = Scope(scope_id="scp_blizzard", slug="blizzard", description="the hub itself", created_at=_T0)
 
 
 @dataclass
@@ -269,7 +269,7 @@ def test_run_retired_default_scope_is_refused() -> None:
 
 
 def test_run_retired_override_scope_is_refused() -> None:
-    cold = Scope(slug="cold", description="", created_at=_T0)
+    cold = Scope(scope_id="scp_cold", slug="cold", description="", created_at=_T0)
     scopes = _FakeScopes(scopes={"blizzard": _DEFAULT_SCOPE, "cold": cold}, retired={"cold"})
     service, *_ = _service(scopes=scopes, routine_scopes=_FakeRoutineScopes(related=["blizzard", "cold"]))
 
@@ -278,7 +278,7 @@ def test_run_retired_override_scope_is_refused() -> None:
 
 
 def test_run_refuses_an_override_outside_the_routines_related_set() -> None:
-    unrelated = Scope(slug="unrelated", description="", created_at=_T0)
+    unrelated = Scope(scope_id="scp_unrelated", slug="unrelated", description="", created_at=_T0)
     scopes = _FakeScopes(scopes={"blizzard": _DEFAULT_SCOPE, "unrelated": unrelated})
     service, *_ = _service(scopes=scopes)  # routine_scopes defaults to just ["blizzard"]
 
@@ -290,7 +290,7 @@ def test_run_refuses_a_related_check_before_the_retire_check() -> None:
     """An unrelated, also-retired scope is refused for being unrelated
     — the retire brake never runs against a scope the routine has no set
     membership for at all."""
-    unrelated = Scope(slug="unrelated", description="", created_at=_T0)
+    unrelated = Scope(scope_id="scp_unrelated", slug="unrelated", description="", created_at=_T0)
     scopes = _FakeScopes(scopes={"blizzard": _DEFAULT_SCOPE, "unrelated": unrelated}, retired={"unrelated"})
     service, *_ = _service(scopes=scopes)
 

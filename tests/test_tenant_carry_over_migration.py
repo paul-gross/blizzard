@@ -337,8 +337,8 @@ _ALLOWED_VALUES = re.compile(r"^\s*(\w+)\s+IN\s*\(\s*'([^']*)'")
 def _seed_every_tenant_owned_table(engine: sa.Engine) -> set[str]:
     """One row in every table outside the global list, built from the store's reflected shape: every
     column without a server default gets a value of its own type, or the first value its ``IN (...)``
-    CHECK constraint allows; filling every column satisfies the "this column implies that one" checks.
-    Foreign keys stay unenforced on the store's connections, so no parent row is needed."""
+    CHECK constraint allows; filling every column satisfies the "this column implies that one" checks. A foreign-key
+    column takes its parent column's value, so every link names the row the seed puts in its parent."""
     reflected = sa.MetaData()
     reflected.reflect(engine)
     inspector = sa.inspect(engine)
@@ -363,6 +363,8 @@ def _seed_every_tenant_owned_table(engine: sa.Engine) -> set[str]:
 
 
 def _value_for(column: sa.Column) -> object:
+    if column.foreign_keys:
+        return _value_for(next(iter(column.foreign_keys)).column)
     try:
         python_type = column.type.python_type
     except NotImplementedError:

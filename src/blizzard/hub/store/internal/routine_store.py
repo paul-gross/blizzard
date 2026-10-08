@@ -1,9 +1,10 @@
 """SQLAlchemy adapter for the routine repository seam (package-private).
 
 All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). Name uniqueness is enforced
-by :class:`~blizzard.hub.domain.garden.routines.RoutineAuthoring`; ``uq_routines_name`` backstops a
-concurrent create, its ``IntegrityError`` re-raised as ``RoutineNameTakenError``, never swallowed.
-Every write commits its change row — and a default scope's mint — in the same transaction."""
+by :class:`~blizzard.hub.domain.garden.routines.RoutineAuthoring`; ``uq_routines_tenant_name`` backstops
+a concurrent create, its ``IntegrityError`` re-raised as ``RoutineNameTakenError``, never swallowed.
+The default and linked scopes are stored by ``scope_id`` and read back as slugs, each resolved within
+the tenant. Every write commits its change row — and a default scope's mint — in the same transaction."""
 
 from __future__ import annotations
 
@@ -12,6 +13,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
+from sqlalchemy import Select
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 
@@ -23,9 +25,9 @@ from blizzard.hub.domain.garden.routines import IWriteRoutineRepository, Routine
 from blizzard.hub.domain.garden.scopes import ScopeMint
 from blizzard.hub.store.internal.config_change_store import append_change
 from blizzard.hub.store.internal.newest_fact import newest_retired_select
-from blizzard.hub.store.internal.scope_store import ensure_scope
-from blizzard.hub.store.schema import routine_lifecycle_facts, routine_scopes, routines
-from blizzard.hub.store.scoped import ScopedConnections, statements_of
+from blizzard.hub.store.internal.scope_store import ensure_scope, scope_id_of
+from blizzard.hub.store.schema import routine_lifecycle_facts, routine_scopes, routines, scopes
+from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements, statements_of
 
 
 @adapter_model
@@ -47,10 +49,10 @@ MODEL = ModelColumn()
 HARNESSES = ModelColumn()
 
 
-def _columns(routine: Routine) -> dict[str, object]:
+def _columns(stmts: ScopedStatements, routine: Routine) -> dict[str, object]:
     return {
         "graph_name": routine.graph_name,
-        "default_scope_slug": routine.default_scope_slug,
+        "default_scope_id": scope_id_of(stmts, routine.default_scope_slug),
         "default_model": MODEL.encode(routine.default_model),
         "default_effort": routine.default_effort,
         "default_harnesses": HARNESSES.encode(routine.default_harnesses),
@@ -58,15 +60,19 @@ def _columns(routine: Routine) -> dict[str, object]:
 
 
 def link_scope(conn: Connection, routine_id: str, scope_slug: str) -> None:
-    """Link ``scope_slug`` into ``routine_id``'s set inside the caller's transaction; a
-    no-op when already linked."""
+    """Link the tenant's scope named ``scope_slug`` into ``routine_id``'s set inside the
+    caller's transaction; a no-op when already linked."""
+    stmts = statements_of(conn)
+    links = stmts.scope_join(routine_scopes, scopes, routine_scopes.c.scope_id == scopes.c.scope_id)
     linked = conn.execute(
-        statements_of(conn)
-        .select(routine_scopes, routine_scopes.c.scope_slug)
-        .where(routine_scopes.c.routine_id == routine_id, routine_scopes.c.scope_slug == scope_slug)
+        stmts.select(links, routine_scopes.c.scope_id).where(
+            routine_scopes.c.routine_id == routine_id, scopes.c.slug == scope_slug
+        )
     ).first()
     if linked is None:
-        conn.execute(statements_of(conn).insert(routine_scopes).values(routine_id=routine_id, scope_slug=scope_slug))
+        conn.execute(
+            stmts.insert(routine_scopes).values(routine_id=routine_id, scope_id=scope_id_of(stmts, scope_slug))
+        )
 
 
 def move_revision(conn: Connection, routine: Routine, from_revision: int, **values: object) -> None:
@@ -93,7 +99,7 @@ def insert_routine(conn: Connection, routine: Routine, change: ConfigChange) -> 
         .values(
             routine_id=routine.routine_id,
             name=routine.name,
-            **_columns(routine),
+            **_columns(statements_of(conn), routine),
             created_at=routine.created_at,
             revision=routine.revision,
         )
@@ -104,7 +110,7 @@ def insert_routine(conn: Connection, routine: Routine, change: ConfigChange) -> 
 
 def update_routine(conn: Connection, routine: Routine, from_revision: int, change: ConfigChange) -> None:
     """The edit body, inside the caller's transaction: the compare-and-set, the default-scope link, the change."""
-    move_revision(conn, routine, from_revision, **_columns(routine))
+    move_revision(conn, routine, from_revision, **_columns(statements_of(conn), routine))
     link_scope(conn, routine.routine_id, routine.default_scope_slug)
     append_change(conn, change)
 
@@ -130,18 +136,28 @@ def record_routine_lifecycle(
 
 
 def set_linked_scopes(
-    conn: Connection, routine: Routine, scopes: Sequence[str], *, from_revision: int, change: ConfigChange
+    conn: Connection, routine: Routine, linked: Sequence[str], *, from_revision: int, change: ConfigChange
 ) -> None:
-    """Move ``routine``'s linked set to exactly ``scopes`` with the compare-and-set and the change."""
+    """Move ``routine``'s linked set to exactly the scopes named ``linked`` with the
+    compare-and-set and the change."""
     move_revision(conn, routine, from_revision)
+    stmts = statements_of(conn)
+    kept = stmts.select(scopes, scopes.c.scope_id).where(scopes.c.slug.in_(list(linked)))
     conn.execute(
-        statements_of(conn)
-        .delete(routine_scopes)
-        .where(routine_scopes.c.routine_id == routine.routine_id, routine_scopes.c.scope_slug.not_in(list(scopes)))
+        stmts.delete(routine_scopes).where(
+            routine_scopes.c.routine_id == routine.routine_id, routine_scopes.c.scope_id.not_in(kept)
+        )
     )
-    for slug in scopes:
+    for slug in linked:
         link_scope(conn, routine.routine_id, slug)
     append_change(conn, change)
+
+
+def _routine_select(stmts: ScopedStatements) -> Select:  # type: ignore[type-arg]
+    """Every ``routines`` column beside its default scope's slug, labelled
+    ``default_scope_slug`` — the one read :meth:`RoutineStore._of` maps."""
+    with_scope = stmts.scope_join(routines, scopes, routines.c.default_scope_id == scopes.c.scope_id)
+    return stmts.select(with_scope, *routines.c, scopes.c.slug.label("default_scope_slug"))
 
 
 class RoutineStore:
@@ -196,21 +212,21 @@ class RoutineStore:
             return found
         with self._store.read("get_many_by_name") as conn:
             for batch in id_batches(names):
-                rows = conn.execute(self._store.select(routines).where(routines.c.name.in_(batch))).all()
+                rows = conn.execute(_routine_select(self._store).where(routines.c.name.in_(batch))).all()
                 retired = _retired_ids(conn, [row.routine_id for row in rows])
                 found.update({row.name: self._of(row, retired=row.routine_id in retired) for row in rows})
         return found
 
     def _one(self, where, operation: str) -> Routine | None:  # type: ignore[no-untyped-def]
         with self._store.read(operation) as conn:
-            row = conn.execute(self._store.select(routines).where(where)).one_or_none()
+            row = conn.execute(_routine_select(self._store).where(where)).one_or_none()
             if row is None:
                 return None
             return self._of(row, retired=_is_retired(conn, row.routine_id))
 
     def list_all(self) -> list[Routine]:
         with self._store.read("list_all") as conn:
-            rows = conn.execute(self._store.select(routines).order_by(routines.c.created_at.desc())).all()
+            rows = conn.execute(_routine_select(self._store).order_by(routines.c.created_at.desc())).all()
             retired = _retired_ids(conn)
         return [self._of(row, retired=row.routine_id in retired) for row in rows]
 

@@ -37,7 +37,8 @@ def _store_and_engine(tmp_path: Path) -> tuple[FindingStore, Engine]:
     with engine.begin() as conn:
         conn.execute(
             sa.text(
-                "INSERT INTO scopes (slug, description, created_at, tenant_id) VALUES ('blizzard', '', :now, :tenant)"
+                "INSERT INTO scopes (scope_id, slug, description, created_at, tenant_id)"
+                " VALUES ('scp_blizzard', 'blizzard', '', :now, :tenant)"
             ),
             {"now": _T0, "tenant": default_tenant(engine)},
         )

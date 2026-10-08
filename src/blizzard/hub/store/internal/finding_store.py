@@ -1,7 +1,9 @@
 """SQLAlchemy adapter for the finding repository seam (package-private).
 
 All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``); the
-no-stored-column contract this reads over is `src/blizzard/hub/store/schema.py`'s own."""
+no-stored-column contract this reads over is `src/blizzard/hub/store/schema.py`'s own. A finding
+and a finding set link their scope by ``scope_id`` (resolved within the tenant at the write) and
+keep its slug beside it as the label every read here keys on."""
 
 from __future__ import annotations
 
@@ -26,6 +28,7 @@ from blizzard.hub.domain.garden.findings.model import (
     derive_liveness,
 )
 from blizzard.hub.domain.kernel.pagination import MalformedCursor, decode_cursor, encode_cursor
+from blizzard.hub.store.internal.scope_store import scope_id_of
 from blizzard.hub.store.schema import finding_facts, finding_sets, findings
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements, statements_of
 
@@ -131,6 +134,7 @@ class FindingStore:
                 self._store.insert(findings).values(
                     finding_id=finding_id,
                     routine_name=routine_name,
+                    scope_id=scope_id_of(self._store, scope_slug),
                     scope_slug=scope_slug,
                     class_=class_,
                     locus=locus,
@@ -249,7 +253,7 @@ class FindingStore:
         return finding, facts
 
     def list_for(self, routine_name: str, scope_slug: str, *, include_gone: bool = False) -> list[Finding]:
-        """The pass's own bucket read — filtered on `ix_findings_routine_scope`,
+        """The pass's own bucket read — filtered on `ix_findings_tenant_routine_scope`,
         ordered by `finding_id` so every backend returns the same rows."""
         with self._store.read("list_for") as conn:
             rows = conn.execute(
@@ -285,7 +289,7 @@ class FindingStore:
         return [f for f in result if include_gone or f.live]
 
     def list_by_source(self, *, scope_slug: str, source: str, include_gone: bool = False) -> list[Finding]:
-        """Filtered on `ix_findings_scope_source`."""
+        """Filtered on `ix_findings_tenant_scope_source`."""
         with self._store.read("list_by_source") as conn:
             rows = conn.execute(
                 self._store.select(findings)
@@ -333,7 +337,7 @@ class FindingStore:
 
     def count_by_class(self, routine_name: str, class_: str) -> int:
         """How often `class_` recurs for `routine_name` — filtered on
-        `ix_findings_routine_class`."""
+        `ix_findings_tenant_routine_class`."""
         with self._store.read("count_by_class") as conn:
             return conn.execute(
                 self._store.select(findings, func.count()).where(
@@ -425,6 +429,7 @@ class FindingSetStore:
                     finding_set_id=finding_set_id,
                     artifact_id=artifact_id,
                     chunk_id=chunk_id,
+                    scope_id=scope_id_of(self._store, scope_slug),
                     scope_slug=scope_slug,
                     routine_name=routine_name,
                     revisions=json.dumps(revisions),
