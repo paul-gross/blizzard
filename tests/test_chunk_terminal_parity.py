@@ -18,7 +18,7 @@ from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import fence, lock_chunk_row
 from blizzard.hub.store.internal.chunk_terminal_predicates import maybe_live
-from tests.support import HubHarness
+from tests.support import HubHarness, hub_scoped, stamp
 from tests.support_chunk_world import every_branch, hub_with_graph
 
 pytestmark = pytest.mark.component
@@ -32,25 +32,31 @@ def _park_a_question_and_a_decision_on_every_chunk(hub: HubHarness, chunk_ids: l
         for chunk_id in chunk_ids:
             conn.execute(
                 insert(s.questions).values(
-                    question_id=f"qn_{chunk_id}",
-                    chunk_id=chunk_id,
-                    node_id="nd_1",
-                    runner_id="r",
-                    epoch=_EPOCH,
-                    question="continue?",
-                    options="[]",
-                    asked_at=at,
+                    stamp(
+                        s.questions,
+                        question_id=f"qn_{chunk_id}",
+                        chunk_id=chunk_id,
+                        node_id="nd_1",
+                        runner_id="r",
+                        epoch=_EPOCH,
+                        question="continue?",
+                        options="[]",
+                        asked_at=at,
+                    )
                 )
             )
             conn.execute(
                 insert(s.decisions).values(
-                    decision_id=f"dec_{chunk_id}",
-                    chunk_id=chunk_id,
-                    node_id="nd_1",
-                    node_name="gate",
-                    epoch=_EPOCH,
-                    choices=json.dumps([{"name": "ok", "description": "go"}]),
-                    submitted_at=at,
+                    stamp(
+                        s.decisions,
+                        decision_id=f"dec_{chunk_id}",
+                        chunk_id=chunk_id,
+                        node_id="nd_1",
+                        node_name="gate",
+                        epoch=_EPOCH,
+                        choices=json.dumps([{"name": "ok", "description": "go"}]),
+                        submitted_at=at,
+                    )
                 )
             )
 
@@ -79,7 +85,7 @@ def test_every_terminal_form_agrees_with_the_derived_status(tmp_path: Path) -> N
     open_question_chunks = {q.chunk_id for q in hub.services.chunks.questions.list_open_questions()} - residue
     open_decision_chunks = {d.chunk_id for d in hub.services.chunks.decisions.list_open_decisions()} - residue
     with hub.engine.connect() as conn:
-        kept = set(conn.execute(select(s.chunks.c.chunk_id).where(maybe_live())).scalars())
+        kept = set(conn.execute(hub_scoped(select(s.chunks.c.chunk_id).where(maybe_live()))).scalars())
 
     assert open_question_chunks == live_ids
     assert open_decision_chunks == live_ids

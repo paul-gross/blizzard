@@ -19,7 +19,7 @@ from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_closure_store import insert_garden_proposal_closure_row
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
 from blizzard.hub.store.internal.routine_store import RoutineStore
-from tests.support import HubHarness, build_hub, hub_store_connections
+from tests.support import HubHarness, build_hub, hub_store_connections, stamp
 
 pytestmark = pytest.mark.component
 
@@ -30,7 +30,7 @@ _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 
 def _seed_scope(hub: HubHarness, slug: str = "blizzard") -> None:
     with hub.engine.begin() as conn:
-        conn.execute(insert(s.scopes).values(slug=slug, description="", created_at=_NOW))
+        conn.execute(insert(s.scopes).values(stamp(s.scopes, slug=slug, description="", created_at=_NOW)))
 
 
 def _seed_routine(hub: HubHarness, name: str = "nightly", *, default_scope_slug: str = "blizzard") -> None:

@@ -68,7 +68,7 @@ from tests.crash.support import (
 from tests.crash_points import discover_crash_points
 from tests.otlp_sink import OtlpSink, otlp_sink
 from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
-from tests.support import create_repositories, fixture_repository, free_port
+from tests.support import create_repositories, fixture_repository, free_port, hub_scoped
 
 pytestmark = pytest.mark.crash_sweep
 
@@ -474,7 +474,9 @@ def test_kill9_at_migrate_crash_point(crash_env: CrashEnv, tmp_path: Path, point
         hub_engine = create_engine_from_url(HubConfig.load(hub_dir).db_url)
         with hub_engine.connect() as conn:
             migrations = conn.execute(
-                select(hub_schema.chunk_migrations).where(hub_schema.chunk_migrations.c.chunk_id == chunk_id)
+                hub_scoped(
+                    select(hub_schema.chunk_migrations).where(hub_schema.chunk_migrations.c.chunk_id == chunk_id)
+                )
             ).all()
         assert len(migrations) == 1, "the migration fact was not durably recorded before the crash"
 
@@ -566,10 +568,14 @@ def test_kill9_at_migrate_crash_point_for_an_intended_migration(
         hub_engine = create_engine_from_url(HubConfig.load(hub_dir).db_url)
         with hub_engine.connect() as conn:
             migrations = conn.execute(
-                select(hub_schema.chunk_migrations).where(hub_schema.chunk_migrations.c.chunk_id == chunk_id)
+                hub_scoped(
+                    select(hub_schema.chunk_migrations).where(hub_schema.chunk_migrations.c.chunk_id == chunk_id)
+                )
             ).all()
             intent = conn.execute(
-                select(hub_schema.chunks.c.intended_migration).where(hub_schema.chunks.c.chunk_id == chunk_id)
+                hub_scoped(
+                    select(hub_schema.chunks.c.intended_migration).where(hub_schema.chunks.c.chunk_id == chunk_id)
+                )
             ).scalar_one()
         assert len(migrations) == 1, "the migration fact was not durably recorded before the crash"
         assert intent is None, "the intent was not durably cleared alongside the migration fact"
@@ -652,7 +658,9 @@ def test_kill9_at_migrate_crash_point_landing_on_a_hub_node(crash_env: CrashEnv,
         hub_engine = create_engine_from_url(HubConfig.load(hub_dir).db_url)
         with hub_engine.connect() as conn:
             migrations = conn.execute(
-                select(hub_schema.chunk_migrations).where(hub_schema.chunk_migrations.c.chunk_id == chunk_id)
+                hub_scoped(
+                    select(hub_schema.chunk_migrations).where(hub_schema.chunk_migrations.c.chunk_id == chunk_id)
+                )
             ).all()
         assert len(migrations) == 1, "the migration fact was not durably recorded before the crash"
 
@@ -2388,7 +2396,9 @@ def _live_exec_slots(hub_dir: Path) -> int:
     try:
         with engine.connect() as conn:
             rows = conn.execute(
-                select(hub_schema.hub_exec_slot.c.slot_id).where(hub_schema.hub_exec_slot.c.released_at.is_(None))
+                hub_scoped(
+                    select(hub_schema.hub_exec_slot.c.slot_id).where(hub_schema.hub_exec_slot.c.released_at.is_(None))
+                )
             ).all()
         return len(rows)
     finally:
@@ -3210,11 +3220,13 @@ def test_kill9_at_close_crash_point(crash_env: CrashEnv, tmp_path: Path, point: 
         hub_engine = create_engine_from_url(HubConfig.load(hub_dir).db_url)
         with hub_engine.connect() as conn:
             outcomes = conn.execute(
-                select(hub_schema.work_item_closures.c.outcome).where(
-                    (hub_schema.work_item_closures.c.chunk_id == chunk_id)
-                    & (hub_schema.work_item_closures.c.source == "hub")
-                    & (hub_schema.work_item_closures.c.ref == ref)
-                    & (hub_schema.work_item_closures.c.outcome.in_(["closed", "gone"]))
+                hub_scoped(
+                    select(hub_schema.work_item_closures.c.outcome).where(
+                        (hub_schema.work_item_closures.c.chunk_id == chunk_id)
+                        & (hub_schema.work_item_closures.c.source == "hub")
+                        & (hub_schema.work_item_closures.c.ref == ref)
+                        & (hub_schema.work_item_closures.c.outcome.in_(["closed", "gone"]))
+                    )
                 )
             ).all()
         assert len(outcomes) == 1, f"ref {ref} carries {len(outcomes)} terminal closure outcomes, not exactly one"
@@ -3252,8 +3264,10 @@ def _trace_cursor_rows(hub_dir: Path) -> list[tuple[int, int]]:
     try:
         with engine.connect() as conn:
             rows = conn.execute(
-                select(hub_schema.trace_cursor.c.id, hub_schema.trace_cursor.c.span_count).order_by(
-                    hub_schema.trace_cursor.c.id
+                hub_scoped(
+                    select(hub_schema.trace_cursor.c.id, hub_schema.trace_cursor.c.span_count).order_by(
+                        hub_schema.trace_cursor.c.id
+                    )
                 )
             ).all()
     finally:
@@ -3376,11 +3390,13 @@ def _egress_cursor_rows(hub_dir: Path) -> list[tuple[str, int, list[str]]]:
     try:
         with engine.connect() as conn:
             rows = conn.execute(
-                select(
-                    hub_schema.egress_cursor.c.dataset,
-                    hub_schema.egress_cursor.c.row_count,
-                    hub_schema.egress_cursor.c.files,
-                ).order_by(hub_schema.egress_cursor.c.id)
+                hub_scoped(
+                    select(
+                        hub_schema.egress_cursor.c.dataset,
+                        hub_schema.egress_cursor.c.row_count,
+                        hub_schema.egress_cursor.c.files,
+                    ).order_by(hub_schema.egress_cursor.c.id)
+                )
             ).all()
     finally:
         engine.dispose()

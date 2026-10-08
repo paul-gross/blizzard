@@ -27,7 +27,7 @@ from blizzard.hub.store.schema import (
     secrets,
     work_sources,
 )
-from tests.support import seed_chunk, seed_graph
+from tests.support import hub_scoped, seed_chunk, seed_graph, stamp
 
 pytestmark = pytest.mark.component
 
@@ -75,18 +75,21 @@ def hub(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> HubConfig:
             for index, (forge, repo) in enumerate(_COMMITS):
                 conn.execute(
                     sa.insert(artifacts).values(
-                        artifact_id=f"art_{index}",
-                        chunk_id="ch_1",
-                        node_id="nd_1",
-                        node_name="build",
-                        epoch=1,
-                        name=repo,
-                        kind="git_commit",
-                        data="main:abc",
-                        repo=repo,
-                        forge=forge,
-                        produced_at=_AT,
-                        seq=index,
+                        stamp(
+                            artifacts,
+                            artifact_id=f"art_{index}",
+                            chunk_id="ch_1",
+                            node_id="nd_1",
+                            node_name="build",
+                            epoch=1,
+                            name=repo,
+                            kind="git_commit",
+                            data="main:abc",
+                            repo=repo,
+                            forge=forge,
+                            produced_at=_AT,
+                            seq=index,
+                        )
                     )
                 )
     finally:
@@ -160,7 +163,7 @@ def test_a_record_the_store_already_holds_is_skipped_and_still_referenced(hub: H
     engine = create_engine_from_url(hub.db_url)
     try:
         with engine.begin() as conn:
-            conn.execute(sa.delete(config_import_facts))
+            conn.execute(hub_scoped(sa.delete(config_import_facts)))
     finally:
         engine.dispose()
     before = _rows(hub)
@@ -204,18 +207,23 @@ def test_a_refused_write_rolls_back_every_earlier_write(hub: HubConfig) -> None:
         with engine.begin() as conn:
             conn.execute(
                 sa.insert(secrets).values(
-                    name="bz-shared-token",
-                    ciphertext="x",
-                    nonce="x",
-                    key_id="k",
-                    revision=1,
-                    replaced_at=_AT,
-                    replaced_by="op",
-                    created_at=_AT,
+                    stamp(
+                        secrets,
+                        name="bz-shared-token",
+                        ciphertext="x",
+                        nonce="x",
+                        key_id="k",
+                        revision=1,
+                        replaced_at=_AT,
+                        replaced_by="op",
+                        created_at=_AT,
+                    )
                 )
             )
             conn.execute(
-                sa.insert(secret_lifecycle_facts).values(name="bz-shared-token", retired=True, set_at=_AT, set_by="op")
+                sa.insert(secret_lifecycle_facts).values(
+                    stamp(secret_lifecycle_facts, name="bz-shared-token", retired=True, set_at=_AT, set_by="op")
+                )
             )
     finally:
         engine.dispose()

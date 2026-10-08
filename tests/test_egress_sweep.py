@@ -49,6 +49,7 @@ from tests.support import (
     added_runner,
     count_queries,
     count_rows_read,
+    hub_scoped,
     hub_store_connections,
     ingest,
     seed_runner,
@@ -135,13 +136,13 @@ def _closed_step(hub: HubHarness, graph: Graph, ref: int, *, usage: int = 1) -> 
 
 def _kinds(hub: HubHarness) -> list[str]:
     with hub.engine.connect() as conn:
-        rows = conn.execute(sa.select(schema.event_log.c.kind).order_by(schema.event_log.c.id)).all()
+        rows = conn.execute(hub_scoped(sa.select(schema.event_log.c.kind).order_by(schema.event_log.c.id))).all()
     return [r.kind for r in rows if r.kind.startswith("egress-")]
 
 
 def _cursor_rows(hub: HubHarness) -> int:
     with hub.engine.connect() as conn:
-        return conn.execute(sa.select(sa.func.count()).select_from(schema.egress_cursor)).scalar_one()
+        return conn.execute(hub_scoped(sa.select(sa.func.count()).select_from(schema.egress_cursor))).scalar_one()
 
 
 def _rows(writer: InMemoryEgressWriter, dataset: str) -> list[dict[str, object]]:
@@ -378,7 +379,7 @@ def test_a_failed_write_holds_the_cursor_backs_off_and_is_announced_once(
     assert _store(hub).newest_cursor("steps") == start
     assert _kinds(hub) == ["egress-write-failed"]
     with hub.engine.connect() as conn:
-        detail = json.loads(conn.execute(sa.select(schema.event_log.c.detail)).scalar_one())
+        detail = json.loads(conn.execute(hub_scoped(sa.select(schema.event_log.c.detail))).scalar_one())
     assert detail["cause"] == failure.cause.value
     assert detail.get("free_bytes") == failure.free_bytes
 

@@ -28,7 +28,7 @@ from blizzard.hub.domain.chunk.ports.record import IWriteChunkRecordRepository
 from blizzard.hub.domain.graph.authoring import Reification
 from blizzard.hub.domain.graph.model import GraphDoc
 from blizzard.hub.store import schema as s
-from tests.support import build_hub, chunk_stores, make_ready, pointer_token, report_lease
+from tests.support import build_hub, chunk_stores, hub_scoped, make_ready, pointer_token, report_lease
 
 unit = pytest.mark.unit
 component = pytest.mark.component
@@ -280,8 +280,10 @@ def test_record_migration_is_idempotent_on_replay(tmp_path: Path) -> None:
     # A crash-replay re-enters harmlessly: writes nothing, no duplicate migration or artifact.
     assert do_migrate() is None
     with hub.engine.connect() as conn:
-        migrations = conn.execute(select(s.chunk_migrations).where(s.chunk_migrations.c.chunk_id == chunk_id)).all()
-        artifacts = conn.execute(select(s.artifacts).where(s.artifacts.c.chunk_id == chunk_id)).all()
+        migrations = conn.execute(
+            hub_scoped(select(s.chunk_migrations).where(s.chunk_migrations.c.chunk_id == chunk_id))
+        ).all()
+        artifacts = conn.execute(hub_scoped(select(s.artifacts).where(s.artifacts.c.chunk_id == chunk_id))).all()
     assert len(migrations) == 1
     assert len([a for a in artifacts if a.name == "triage-notes"]) == 1
 

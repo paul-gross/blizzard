@@ -15,7 +15,7 @@ from sqlalchemy import insert
 
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
-from tests.support import build_hub, hub_store_connections
+from tests.support import build_hub, hub_scoped, hub_store_connections, stamp
 
 pytestmark = pytest.mark.component
 
@@ -24,7 +24,7 @@ _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 
 def _seed_scope(hub, slug: str) -> None:  # type: ignore[no-untyped-def]
     with hub.engine.begin() as conn:
-        conn.execute(insert(s.scopes).values(slug=slug, description="", created_at=_NOW))
+        conn.execute(insert(s.scopes).values(stamp(s.scopes, slug=slug, description="", created_at=_NOW)))
 
 
 def test_list_returns_a_routines_live_findings_under_one_scope_and_nothing_else(tmp_path: Path) -> None:
@@ -191,18 +191,25 @@ def test_list_narrows_to_source(tmp_path: Path) -> None:
     with hub.engine.begin() as conn:
         conn.execute(
             insert(s.findings).values(
-                finding_id="fin_review",
-                routine_name=None,
-                scope_slug="blizzard",
-                class_="correctness",
-                locus="b.py:1",
-                summary="s2",
-                source="review",
-                severity="should-fix",
-                raised_by_chunk_id="ch_1",
+                stamp(
+                    s.findings,
+                    finding_id="fin_review",
+                    routine_name=None,
+                    scope_slug="blizzard",
+                    class_="correctness",
+                    locus="b.py:1",
+                    summary="s2",
+                    source="review",
+                    severity="should-fix",
+                    raised_by_chunk_id="ch_1",
+                )
             )
         )
-        conn.execute(insert(s.finding_facts).values(finding_id="fin_review", kind="add", recorded_at=_NOW))
+        conn.execute(
+            insert(s.finding_facts).values(
+                stamp(s.finding_facts, finding_id="fin_review", kind="add", recorded_at=_NOW)
+            )
+        )
 
     resp = hub.client.get("/api/findings", params={"scope": "blizzard", "source": "review"})
     assert resp.status_code == 200, resp.text
@@ -495,7 +502,7 @@ def test_get_unknown_id_is_404(tmp_path: Path) -> None:
 
 def _seeded_scopes(hub) -> set[str]:  # type: ignore[no-untyped-def]
     with hub.engine.connect() as conn:
-        return {row.slug for row in conn.execute(s.scopes.select())}
+        return {row.slug for row in conn.execute(hub_scoped(s.scopes.select()))}
 
 
 def _seed_finding(hub, finding_id: str, *, scope: str = "blizzard") -> None:  # type: ignore[no-untyped-def]

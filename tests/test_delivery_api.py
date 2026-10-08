@@ -9,7 +9,7 @@ import pytest
 from sqlalchemy import event
 
 from blizzard.hub.store import schema as s
-from tests.support import build_hub, count_queries, ingest
+from tests.support import build_hub, count_queries, ingest, stamp
 
 pytestmark = pytest.mark.component
 _NOW = datetime(2026, 1, 1, tzinfo=UTC)
@@ -18,16 +18,19 @@ _NOW = datetime(2026, 1, 1, tzinfo=UTC)
 def _marker(conn, chunk_id: str, name: str, data: str, index: int) -> None:  # type: ignore[no-untyped-def]
     conn.execute(
         s.artifacts.insert().values(
-            artifact_id=f"art_delivery_{index}",
-            chunk_id=chunk_id,
-            node_id="nd_delivery",
-            node_name="deliver",
-            epoch=1,
-            name=name,
-            kind="asset",
-            data=data,
-            produced_at=_NOW,
-            seq=index,
+            stamp(
+                s.artifacts,
+                artifact_id=f"art_delivery_{index}",
+                chunk_id=chunk_id,
+                node_id="nd_delivery",
+                node_name="deliver",
+                epoch=1,
+                name=name,
+                kind="asset",
+                data=data,
+                produced_at=_NOW,
+                seq=index,
+            )
         )
     )
 

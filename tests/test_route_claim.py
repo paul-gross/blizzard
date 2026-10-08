@@ -9,7 +9,7 @@ import pytest
 from sqlalchemy import select
 
 from blizzard.hub.store import schema as s
-from tests.support import build_hub, make_ready, pointer_token, report_lease
+from tests.support import build_hub, hub_scoped, make_ready, pointer_token, report_lease
 
 pytestmark = pytest.mark.component
 
@@ -197,7 +197,9 @@ def test_hub_persists_only_the_tokens_sha256_hash(tmp_path: Path) -> None:
     token = hub.client.post("/api/fleet/routes", json=_claim_body(chunk_id)).json()["route_token"]
 
     with hub.engine.connect() as conn:
-        row = conn.execute(select(s.route_token_minted).where(s.route_token_minted.c.chunk_id == chunk_id)).one()
+        row = conn.execute(
+            hub_scoped(select(s.route_token_minted).where(s.route_token_minted.c.chunk_id == chunk_id))
+        ).one()
     assert row.token_hash != token  # the plaintext never lands in the store
     assert row.token_hash == hashlib.sha256(token.encode("utf-8")).hexdigest()
 

@@ -22,7 +22,7 @@ from blizzard.hub.domain.garden.scopes import Scope, ScopeSlug
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingSetStore
-from tests.support import HubHarness, build_hub, hub_store_connections
+from tests.support import HubHarness, build_hub, hub_scoped, hub_store_connections, stamp
 
 pytestmark = pytest.mark.component
 
@@ -67,7 +67,7 @@ def _default_scope(hub: HubHarness, routine: Routine) -> Scope:
 
 def _work_item_count(hub: HubHarness) -> int:
     with hub.engine.connect() as conn:
-        return conn.execute(sa.select(sa.func.count()).select_from(s.work_items)).scalar_one()
+        return conn.execute(hub_scoped(sa.select(sa.func.count()).select_from(s.work_items))).scalar_one()
 
 
 def test_full_mode_mints_and_ingests_leaving_the_chunk_not_ready(tmp_path: Path) -> None:
@@ -320,19 +320,22 @@ def _seed_baseline(hub: HubHarness, *, graph_id: str, routine_name: str, scope_s
     (``GardenDeliveryStore.deliver``), which this test has no delivery plan to drive."""
     now = datetime(2026, 7, 1, tzinfo=UTC)
     with hub.engine.begin() as conn:
-        conn.execute(s.chunks.insert().values(chunk_id="ch_prior", graph_id=graph_id, minted_at=now))
+        conn.execute(s.chunks.insert().values(stamp(s.chunks, chunk_id="ch_prior", graph_id=graph_id, minted_at=now)))
         conn.execute(
             s.artifacts.insert().values(
-                artifact_id="art_prior",
-                chunk_id="ch_prior",
-                node_id="nd_1",
-                node_name="survey",
-                epoch=1,
-                name="findings",
-                kind="asset",
-                data="[]",
-                produced_at=now,
-                seq=1,
+                stamp(
+                    s.artifacts,
+                    artifact_id="art_prior",
+                    chunk_id="ch_prior",
+                    node_id="nd_1",
+                    node_name="survey",
+                    epoch=1,
+                    name="findings",
+                    kind="asset",
+                    data="[]",
+                    produced_at=now,
+                    seq=1,
+                )
             )
         )
     FindingSetStore(hub_store_connections(hub.engine)).create(

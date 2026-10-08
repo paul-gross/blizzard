@@ -18,7 +18,7 @@ from blizzard.hub.domain.graph.model import Graph, Node
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
-from tests.support import HubHarness, build_hub, hub_store_connections, seed_lease, seed_work_item
+from tests.support import HubHarness, build_hub, hub_scoped, hub_store_connections, seed_lease, seed_work_item
 
 pytestmark = pytest.mark.component
 
@@ -98,7 +98,7 @@ def _post(hub: HubHarness, chunk_id: str, *, node_id: str = _NODE_ID, epoch: int
 
 def _finding_count(hub: HubHarness) -> int:
     with hub.engine.begin() as conn:
-        return len(conn.execute(select(s.findings)).all())
+        return len(conn.execute(hub_scoped(select(s.findings))).all())
 
 
 # --- recorded --------------------------------------------------------------
@@ -114,7 +114,7 @@ def test_a_deferred_entry_is_recorded_as_a_review_sourced_finding(tmp_path: Path
     assert resp.status_code == 200, resp.text
     assert resp.json() == {"outcome": "recorded", "detail": ""}
     with hub.engine.begin() as conn:
-        row = conn.execute(select(s.findings)).one()
+        row = conn.execute(hub_scoped(select(s.findings))).one()
     assert row.source == "review"
     assert row.severity == "should-fix"
     assert row.raised_by_chunk_id == chunk_id
@@ -155,7 +155,7 @@ def test_an_unnamed_scope_is_minted_on_delivery(tmp_path: Path) -> None:
     assert resp.status_code == 200, resp.text
     assert resp.json()["outcome"] == "recorded"
     with hub.engine.begin() as conn:
-        assert conn.execute(select(s.scopes).where(s.scopes.c.slug == "brand-new")).one()
+        assert conn.execute(hub_scoped(select(s.scopes).where(s.scopes.c.slug == "brand-new"))).one()
 
 
 # --- invalid -----------------------------------------------------------------
@@ -287,7 +287,10 @@ def test_a_delivery_for_a_stopped_chunk_is_a_409_and_lands_nothing(tmp_path: Pat
     assert _finding_count(hub) == 0
     with hub.engine.begin() as conn:
         assert (
-            conn.execute(select(s.artifacts).where(s.artifacts.c.name == "review-findings-delivered")).first() is None
+            conn.execute(
+                hub_scoped(select(s.artifacts).where(s.artifacts.c.name == "review-findings-delivered"))
+            ).first()
+            is None
         )
 
 

@@ -19,7 +19,7 @@ from blizzard.hub.domain.garden.findings.model import FACT_KINDS, FindingFact, d
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
-from tests.support import count_queries, count_rows_read, hub_store_connections
+from tests.support import count_queries, count_rows_read, hub_store_connections, stamp
 
 pytestmark = pytest.mark.component
 
@@ -46,19 +46,26 @@ def _finding(engine: Engine, finding_id: str, facts: list[tuple[str, int]]) -> N
     with engine.begin() as conn:
         conn.execute(
             insert(s.findings).values(
-                finding_id=finding_id,
-                routine_name="nightly",
-                scope_slug="blizzard",
-                class_="c",
-                locus="l",
-                summary="x",
-                introduced=None,
-                introduced_at=_T0,
-                source="routine",
+                stamp(
+                    s.findings,
+                    finding_id=finding_id,
+                    routine_name="nightly",
+                    scope_slug="blizzard",
+                    class_="c",
+                    locus="l",
+                    summary="x",
+                    introduced=None,
+                    introduced_at=_T0,
+                    source="routine",
+                )
             )
         )
         for kind, seconds in facts:
-            conn.execute(insert(s.finding_facts).values(finding_id=finding_id, kind=kind, recorded_at=_at(seconds)))
+            conn.execute(
+                insert(s.finding_facts).values(
+                    stamp(s.finding_facts, finding_id=finding_id, kind=kind, recorded_at=_at(seconds))
+                )
+            )
 
 
 def _fixtures() -> dict[str, list[tuple[str, int]]]:

@@ -19,7 +19,7 @@ from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.run_context_store import RunContextStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
-from tests.support import HubHarness, build_hub, hub_store_connections, seed_work_item
+from tests.support import HubHarness, build_hub, hub_store_connections, seed_work_item, stamp
 
 pytestmark = pytest.mark.component
 
@@ -76,18 +76,23 @@ def _seed_review_finding(hub: HubHarness, finding_id: str, *, scope_slug: str = 
     with hub.engine.begin() as conn:
         conn.execute(
             insert(s.findings).values(
-                finding_id=finding_id,
-                routine_name=None,
-                scope_slug=scope_slug,
-                class_="correctness",
-                locus="a.py:1",
-                summary="s",
-                source="review",
-                severity="should-fix",
-                raised_by_chunk_id=chunk_id,
+                stamp(
+                    s.findings,
+                    finding_id=finding_id,
+                    routine_name=None,
+                    scope_slug=scope_slug,
+                    class_="correctness",
+                    locus="a.py:1",
+                    summary="s",
+                    source="review",
+                    severity="should-fix",
+                    raised_by_chunk_id=chunk_id,
+                )
             )
         )
-        conn.execute(insert(s.finding_facts).values(finding_id=finding_id, kind="add", recorded_at=_NOW))
+        conn.execute(
+            insert(s.finding_facts).values(stamp(s.finding_facts, finding_id=finding_id, kind="add", recorded_at=_NOW))
+        )
 
 
 def test_404s_on_an_unknown_chunk(tmp_path: Path) -> None:

@@ -15,7 +15,7 @@ from sqlalchemy import select
 
 from blizzard.hub.api import chunk_dependencies as chunk_dependencies_module
 from blizzard.hub.store import schema as s
-from tests.support import HubHarness, build_hub, ingest, report_lease
+from tests.support import HubHarness, build_hub, hub_scoped, ingest, report_lease, stamp
 
 pytestmark = pytest.mark.component
 
@@ -53,7 +53,9 @@ def _strand_by_direct_delete(hub: HubHarness, chunk_id: str) -> None:
     race (``bzh:invariant-checker``'s ``NoStandingDependencyOntoEphemeralChunk``) the same way."""
     with hub.engine.begin() as conn:
         conn.execute(
-            s.chunk_deleted.insert().values(chunk_id=chunk_id, deleted_at=hub.clock.now(), deleted_by="operator")
+            s.chunk_deleted.insert().values(
+                stamp(s.chunk_deleted, chunk_id=chunk_id, deleted_at=hub.clock.now(), deleted_by="operator")
+            )
         )
 
 
@@ -62,7 +64,9 @@ def _rows(hub: HubHarness) -> list[dict[str, Any]]:
     refusal that inserted *or* updated a row shows up as an inequality, not just a count
     that happens to match."""
     with hub.engine.connect() as conn:
-        rows = conn.execute(select(s.chunk_dependencies).order_by(s.chunk_dependencies.c.dependency_id)).mappings()
+        rows = conn.execute(
+            hub_scoped(select(s.chunk_dependencies).order_by(s.chunk_dependencies.c.dependency_id))
+        ).mappings()
         return [dict(row) for row in rows]
 
 

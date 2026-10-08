@@ -26,7 +26,7 @@ from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.garden_proposal_closure_store import insert_garden_proposal_closure_row
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
 from blizzard.hub.store.internal.routine_store import RoutineStore
-from tests.support import build_hub, hub_store_connections
+from tests.support import build_hub, hub_store_connections, stamp
 
 pytestmark = pytest.mark.component
 
@@ -38,7 +38,7 @@ _UNTIL = datetime(2026, 1, 15, tzinfo=UTC)
 
 def _seed_scope(hub, slug: str = "blizzard") -> None:  # type: ignore[no-untyped-def]
     with hub.engine.begin() as conn:
-        conn.execute(insert(s.scopes).values(slug=slug, description="", created_at=_SINCE))
+        conn.execute(insert(s.scopes).values(stamp(s.scopes, slug=slug, description="", created_at=_SINCE)))
 
 
 def _seed_routine(hub, name: str = "nightly", *, default_scope_slug: str = "blizzard") -> None:  # type: ignore[no-untyped-def]
@@ -57,14 +57,17 @@ def _seed_finding(hub, finding_id: str, *, routine_name: str = "nightly", scope_
     with hub.engine.begin() as conn:
         conn.execute(
             insert(s.findings).values(
-                finding_id=finding_id,
-                routine_name=routine_name,
-                scope_slug=scope_slug,
-                class_="stale-docstring",
-                locus="a.py:1",
-                summary="s",
-                introduced=None,
-                introduced_at=None,
+                stamp(
+                    s.findings,
+                    finding_id=finding_id,
+                    routine_name=routine_name,
+                    scope_slug=scope_slug,
+                    class_="stale-docstring",
+                    locus="a.py:1",
+                    summary="s",
+                    introduced=None,
+                    introduced_at=None,
+                )
             )
         )
 

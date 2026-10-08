@@ -28,7 +28,7 @@ from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
 from tests.repo_files import repo_root
-from tests.support import HubHarness, hub_store_connections
+from tests.support import HubHarness, hub_scoped, hub_store_connections
 from tests.test_egress_sweep import _closed_step, _kinds, _node_id
 from tests.trace_hub import trace_hub
 
@@ -311,7 +311,7 @@ def test_a_hashing_policy_without_its_key_keeps_exporting_everything_but_events(
 
     assert _kinds(hub) == ["egress-config-rejected"]
     with hub.engine.connect() as conn:
-        detail = json.loads(conn.execute(sa.select(schema.event_log.c.detail)).scalar_one())
+        detail = json.loads(conn.execute(hub_scoped(sa.select(schema.event_log.c.detail))).scalar_one())
     assert detail == {"setting": "egress.path_key_env", "value": "BZ_EGRESS_PATH_KEY"}
     assert len(world.rows("steps")) == 1
     assert world.files("invocations")

@@ -11,7 +11,7 @@ import pytest
 from sqlalchemy import select
 
 from blizzard.hub.store import schema as s
-from tests.support import build_hub
+from tests.support import build_hub, hub_scoped
 from tests.test_garden_delivery_api import (
     _SCOPE,
     _add_op,
@@ -70,4 +70,4 @@ def test_a_proposal_with_a_blank_field_refuses_the_delivery(tmp_path: Path, fiel
     assert resp.json() == {"outcome": "invalid", "detail": f"proposal 'p1' has a blank {field}"}
     assert _finding_count(hub) == 0
     with hub.engine.begin() as conn:
-        assert conn.execute(select(s.garden_proposals)).all() == []
+        assert conn.execute(hub_scoped(select(s.garden_proposals))).all() == []

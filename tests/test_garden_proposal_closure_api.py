@@ -20,7 +20,7 @@ from blizzard.hub.domain.garden.proposals.closure import _compose_minted_body
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
-from tests.support import HubHarness, build_hub, emitted_events, hub_store_connections
+from tests.support import HubHarness, build_hub, emitted_events, hub_store_connections, stamp
 
 pytestmark = pytest.mark.component
 
@@ -29,7 +29,7 @@ _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 
 def _seed(hub: HubHarness, *, proposal_id: str = "gprop_1", body: str = "the case") -> None:
     with hub.engine.begin() as conn:
-        conn.execute(s.scopes.insert().values(slug="blizzard", description="", created_at=_NOW))
+        conn.execute(s.scopes.insert().values(stamp(s.scopes, slug="blizzard", description="", created_at=_NOW)))
     FindingStore(hub_store_connections(hub.engine)).add(
         "fin_1",
         routine_name="nightly",
@@ -135,7 +135,7 @@ def test_accept_with_no_body_override_mints_the_proposals_body_wrapped_in_the_te
 def test_accept_a_proposal_citing_no_findings_mints_a_bare_item(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     with hub.engine.begin() as conn:
-        conn.execute(s.scopes.insert().values(slug="blizzard", description="", created_at=_NOW))
+        conn.execute(s.scopes.insert().values(stamp(s.scopes, slug="blizzard", description="", created_at=_NOW)))
     GardenProposalStore(hub_store_connections(hub.engine)).create(
         "gprop_1",
         origin=GardenProposalOrigin.ROUTINE_RUN,

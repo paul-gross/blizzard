@@ -27,6 +27,7 @@ from blizzard.hub.api.auth_session import require
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.config import HubConfig
 from blizzard.hub.store import MIGRATIONS_DIR
+from tests.support import hub_scoped_engine
 
 pytestmark = pytest.mark.unit
 
@@ -51,7 +52,7 @@ def _store(tmp_path: Path, revision: str) -> tuple[MigrationRunner, str]:
 
 
 def _columns(url: str, table: str) -> set[str]:
-    engine = create_engine_from_url(url)
+    engine = hub_scoped_engine(create_engine_from_url(url))
     try:
         return {c["name"] for c in sa.inspect(engine).get_columns(table)}
     finally:
@@ -59,7 +60,7 @@ def _columns(url: str, table: str) -> set[str]:
 
 
 def _unique_constraint_names(url: str, table: str) -> set[str]:
-    engine = create_engine_from_url(url)
+    engine = hub_scoped_engine(create_engine_from_url(url))
     try:
         return {c["name"] or "" for c in sa.inspect(engine).get_unique_constraints(table)}
     finally:
@@ -111,7 +112,7 @@ def test_pr_opened_upgrade_keeps_only_the_earliest_duplicate(tmp_path: Path) -> 
     constraint add: every row but the earliest (lowest ``id``) per (chunk_id, repo) is
     deleted, and a distinct (chunk_id, repo) pair is untouched."""
     _runner, url = _store(tmp_path, _PM_POINTER_SOURCE_REF)
-    engine = create_engine_from_url(url)
+    engine = hub_scoped_engine(create_engine_from_url(url))
     insert = sa.text(
         "INSERT INTO delivery_pr_opened (id, chunk_id, repo, pr_number, pr_url, commit_hash, opened_at)"
         " VALUES (:id, :chunk_id, :repo, :n, 'http://pr', 'abc', '2026-01-01 00:00:00')"
@@ -126,7 +127,7 @@ def test_pr_opened_upgrade_keeps_only_the_earliest_duplicate(tmp_path: Path) -> 
 
     MigrationRunner(script_location=MIGRATIONS_DIR, url=url, clock=_MIGRATION_CLOCK).upgrade(_PR_OPENED_IDEMPOTENT)
 
-    engine = create_engine_from_url(url)
+    engine = hub_scoped_engine(create_engine_from_url(url))
     try:
         with engine.connect() as conn:
             surviving = sorted(r.id for r in conn.execute(sa.text("SELECT id FROM delivery_pr_opened")).all())
@@ -140,7 +141,7 @@ def test_pm_pointer_reshape_backfills_and_survives_a_down_then_up_cycle(tmp_path
     revision's own table shape, and ``downgrade()``'s canonicalized reconstruction (the
     constant placeholder owner) re-upgrades to the identical ``(source, ref)``."""
     _runner, url = _store(tmp_path, _RUNNER_LOCAL_PAUSE)
-    engine = create_engine_from_url(url)
+    engine = hub_scoped_engine(create_engine_from_url(url))
     try:
         with engine.begin() as conn:
             conn.execute(
@@ -153,7 +154,7 @@ def test_pm_pointer_reshape_backfills_and_survives_a_down_then_up_cycle(tmp_path
         engine.dispose()
 
     def _pointer(column: str) -> tuple[str, str]:
-        eng = create_engine_from_url(url)
+        eng = hub_scoped_engine(create_engine_from_url(url))
         try:
             with eng.connect() as conn:
                 row = conn.execute(sa.text(f"SELECT {column} FROM chunk_pm_pointers WHERE id = 1")).one()
@@ -176,7 +177,7 @@ def test_chunk_defaults_retains_model_and_backfills_no_default_model(tmp_path: P
     """``chunks.model`` is kept (it is the only record of what a pre-#144 chunk ran) and
     ``default_model`` is left NULL rather than filled in from it."""
     _runner, url = _store(tmp_path, _GRAPH_SESSIONS)
-    engine = create_engine_from_url(url)
+    engine = hub_scoped_engine(create_engine_from_url(url))
     try:
         with engine.begin() as conn:
             conn.execute(
@@ -190,7 +191,7 @@ def test_chunk_defaults_retains_model_and_backfills_no_default_model(tmp_path: P
 
     MigrationRunner(script_location=MIGRATIONS_DIR, url=url, clock=_MIGRATION_CLOCK).upgrade(_CHUNK_DEFAULTS)
 
-    engine = create_engine_from_url(url)
+    engine = hub_scoped_engine(create_engine_from_url(url))
     try:
         with engine.connect() as conn:
             row = conn.execute(sa.text("SELECT model, default_model FROM chunks WHERE chunk_id = 'ch_old'")).one()

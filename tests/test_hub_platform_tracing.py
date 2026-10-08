@@ -35,7 +35,7 @@ from blizzard.hub.domain.observability.tracing.attributes import (
     PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
     resource_attributes,
 )
-from tests.support import RunnerFleetClient, seed_runner, seed_user
+from tests.support import RunnerFleetClient, hub_scoped, seed_runner, seed_user
 
 pytestmark = pytest.mark.component
 
@@ -340,9 +340,11 @@ def test_hub_run_steps_parent_on_the_derived_hub_exec_span_and_the_driving_reque
         assert advanced.json()["outcome_choice"] == "success", advanced.text
     with app.state.engine.connect() as conn:
         slots = conn.execute(
-            select(s.hub_exec_slot.c.slot_id)
-            .where(s.hub_exec_slot.c.holder_chunk_id == chunk_id)
-            .order_by(s.hub_exec_slot.c.acquired_at)
+            hub_scoped(
+                select(s.hub_exec_slot.c.slot_id)
+                .where(s.hub_exec_slot.c.holder_chunk_id == chunk_id)
+                .order_by(s.hub_exec_slot.c.acquired_at)
+            )
         ).all()
     spans = _spans(handle, exporter)
     assert len(slots) == 2

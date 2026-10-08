@@ -34,6 +34,7 @@ from tests.support import (
     InMemoryTraceExporter,
     count_queries,
     count_rows_read,
+    hub_scoped,
     hub_store_connections,
     ingest,
 )
@@ -57,19 +58,19 @@ def _store(hub: HubHarness) -> TraceStore:
 
 def _row_count(hub: HubHarness) -> int:
     with hub.engine.connect() as conn:
-        return conn.execute(sa.select(sa.func.count()).select_from(schema.trace_cursor)).scalar_one()
+        return conn.execute(hub_scoped(sa.select(sa.func.count()).select_from(schema.trace_cursor))).scalar_one()
 
 
 def _kinds(hub: HubHarness) -> list[str]:
     with hub.engine.connect() as conn:
-        rows = conn.execute(sa.select(schema.event_log.c.kind).order_by(schema.event_log.c.id)).all()
+        rows = conn.execute(hub_scoped(sa.select(schema.event_log.c.kind).order_by(schema.event_log.c.id))).all()
     return [r.kind for r in rows if r.kind.startswith("trace-")]
 
 
 def _skipped_detail(hub: HubHarness) -> dict:  # type: ignore[type-arg]
     with hub.engine.connect() as conn:
         row = conn.execute(
-            sa.select(schema.event_log.c.detail).where(schema.event_log.c.kind == "trace-window-skipped")
+            hub_scoped(sa.select(schema.event_log.c.detail).where(schema.event_log.c.kind == "trace-window-skipped"))
         ).one()
     return json.loads(row.detail) if isinstance(row.detail, str) else row.detail
 

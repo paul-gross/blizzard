@@ -28,7 +28,7 @@ from blizzard.hub.secrets import (
 from blizzard.hub.secrets.rotation import rotate_keys
 from blizzard.hub.store import schema
 from blizzard.hub.store.internal.secret_store import SecretStore
-from tests.support import OP, config_authoring, hub_store_connections
+from tests.support import OP, config_authoring, hub_scoped, hub_store_connections
 
 pytestmark = pytest.mark.component
 
@@ -136,7 +136,7 @@ def test_a_concurrent_replace_rolls_the_whole_rotation_back(world: _World, monke
     def list_then_race():  # type: ignore[no-untyped-def]
         rows = real_list()
         with world.engine.begin() as conn:  # a replace lands after the read, before the commit
-            conn.execute(update(schema.secrets).where(schema.secrets.c.name == "slack").values(revision=2))
+            conn.execute(hub_scoped(update(schema.secrets).where(schema.secrets.c.name == "slack").values(revision=2)))
         return rows
 
     monkeypatch.setattr(world.store, "list_sealed", list_then_race)

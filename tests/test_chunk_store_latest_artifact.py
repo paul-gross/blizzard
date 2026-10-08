@@ -13,7 +13,7 @@ import sqlalchemy as sa
 from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.store.schema import artifacts
-from tests.support import HubHarness, build_hub, ingest
+from tests.support import HubHarness, build_hub, ingest, stamp
 
 pytestmark = pytest.mark.component
 
@@ -76,16 +76,19 @@ def test_an_exact_tie_resolves_to_the_highest_artifact_id_not_to_insertion_order
         ):
             conn.execute(
                 sa.insert(artifacts).values(
-                    artifact_id=artifact_id,
-                    chunk_id=chunk_id,
-                    node_id=node_id,
-                    node_name="survey",
-                    epoch=1,
-                    name="seeded-tie",
-                    kind="asset",
-                    data=node_id,
-                    produced_at=at,
-                    seq=1,
+                    stamp(
+                        artifacts,
+                        artifact_id=artifact_id,
+                        chunk_id=chunk_id,
+                        node_id=node_id,
+                        node_name="survey",
+                        epoch=1,
+                        name="seeded-tie",
+                        kind="asset",
+                        data=node_id,
+                        produced_at=at,
+                        seq=1,
+                    )
                 )
             )
 
@@ -110,16 +113,19 @@ def test_latest_artifacts_matches_latest_artifact_per_name_and_drops_an_unknown_
         ):
             conn.execute(
                 sa.insert(artifacts).values(
-                    artifact_id=artifact_id,
-                    chunk_id=chunk_id,
-                    node_id=node_id,
-                    node_name="survey",
-                    epoch=epoch,
-                    name=name,
-                    kind="asset",
-                    data=artifact_id,
-                    produced_at=at,
-                    seq=1,
+                    stamp(
+                        artifacts,
+                        artifact_id=artifact_id,
+                        chunk_id=chunk_id,
+                        node_id=node_id,
+                        node_name="survey",
+                        epoch=epoch,
+                        name=name,
+                        kind="asset",
+                        data=artifact_id,
+                        produced_at=at,
+                        seq=1,
+                    )
                 )
             )
 

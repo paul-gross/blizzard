@@ -25,7 +25,7 @@ from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.routine_scope_store import RoutineScopeStore
 from blizzard.hub.store.internal.routine_store import RoutineStore
 from blizzard.hub.store.internal.scope_store import ScopeStore
-from tests.support import hub_store_connections
+from tests.support import hub_scoped, hub_store_connections, stamp
 
 pytestmark = pytest.mark.component
 
@@ -37,7 +37,7 @@ def _store_and_engine(tmp_path: Path) -> tuple[RoutineStore, Engine]:
     migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
     engine = create_engine_from_url(db_url)
     with engine.begin() as conn:
-        conn.execute(s.scopes.insert().values(slug="blizzard", description="", created_at=_NOW))
+        conn.execute(s.scopes.insert().values(stamp(s.scopes, slug="blizzard", description="", created_at=_NOW)))
     return RoutineStore(hub_store_connections(engine)), engine
 
 
@@ -73,7 +73,7 @@ def _create(store: RoutineStore, routine: Routine, *, scope_mint: ScopeMint | No
 
 def _changes(engine: Engine) -> list[tuple[str, str, int, str]]:
     with engine.connect() as conn:
-        rows = conn.execute(select(s.config_changes).order_by(s.config_changes.c.id)).all()
+        rows = conn.execute(hub_scoped(select(s.config_changes).order_by(s.config_changes.c.id))).all()
     return [(row.record_kind, row.record_key, row.revision, row.op) for row in rows]
 
 
@@ -267,7 +267,7 @@ def _routine_scope_store(tmp_path: Path) -> tuple[RoutineScopeStore, Routine, En
     routine_store, engine = _store_and_engine(tmp_path)
     routine = _create(routine_store, _routine())
     with engine.begin() as conn:
-        conn.execute(s.scopes.insert().values(slug="other", description="", created_at=_NOW))
+        conn.execute(s.scopes.insert().values(stamp(s.scopes, slug="other", description="", created_at=_NOW)))
     return RoutineScopeStore(hub_store_connections(engine)), routine, engine
 
 

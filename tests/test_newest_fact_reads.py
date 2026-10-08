@@ -23,7 +23,7 @@ from blizzard.hub.store.internal.scope_store import ScopeStore
 from blizzard.hub.store.internal.secret_store import SecretStore
 from blizzard.hub.store.internal.trace_store import TraceStore
 from blizzard.hub.store.internal.work_source_record_store import _retired_names
-from tests.support import build_hub, count_rows_read, hub_store_connections
+from tests.support import build_hub, count_rows_read, hub_store_connections, stamp
 
 pytestmark = pytest.mark.component
 
@@ -40,19 +40,36 @@ def _engine(tmp_path: Path, *, depth: int) -> Engine:
             last = n == depth - 1
             for key in _KEYS:
                 conn.execute(
-                    insert(s.queue_positions).values(chunk_id=key, position=7.0 if last else float(n), set_at=_T0)
-                )
-                conn.execute(insert(s.runner_pause_facts).values(runner_id=key, paused=last, set_at=_T0, set_by="op"))
-                conn.execute(
-                    insert(s.runner_local_pause_facts).values(
-                        runner_id=key, paused=last, set_at=_T0, set_by="op", reason="cause" if last else f"stale{n}"
+                    insert(s.queue_positions).values(
+                        stamp(s.queue_positions, chunk_id=key, position=7.0 if last else float(n), set_at=_T0)
                     )
                 )
                 conn.execute(
-                    insert(s.runner_lifecycle_facts).values(runner_id=key, retired=last, set_at=_T0, set_by="op")
+                    insert(s.runner_pause_facts).values(
+                        stamp(s.runner_pause_facts, runner_id=key, paused=last, set_at=_T0, set_by="op")
+                    )
                 )
                 conn.execute(
-                    insert(s.graph_lifecycle_facts).values(graph_id=key, retired=last, set_at=_T0, set_by="op")
+                    insert(s.runner_local_pause_facts).values(
+                        stamp(
+                            s.runner_local_pause_facts,
+                            runner_id=key,
+                            paused=last,
+                            set_at=_T0,
+                            set_by="op",
+                            reason="cause" if last else f"stale{n}",
+                        )
+                    )
+                )
+                conn.execute(
+                    insert(s.runner_lifecycle_facts).values(
+                        stamp(s.runner_lifecycle_facts, runner_id=key, retired=last, set_at=_T0, set_by="op")
+                    )
+                )
+                conn.execute(
+                    insert(s.graph_lifecycle_facts).values(
+                        stamp(s.graph_lifecycle_facts, graph_id=key, retired=last, set_at=_T0, set_by="op")
+                    )
                 )
     return engine
 
@@ -87,12 +104,24 @@ def _retirement_engine(tmp_path: Path, *, depth: int) -> Engine:
                 last_retired = key != "k2"
                 retired = last_retired if n == depth - 1 else not last_retired
                 common = {"retired": retired, "set_at": _T0, "set_by": "op"}
-                conn.execute(insert(s.secret_lifecycle_facts).values(name=key, **common))
-                conn.execute(insert(s.routine_lifecycle_facts).values(routine_id=key, **common))
-                conn.execute(insert(s.scope_lifecycle_facts).values(slug=key, **common))
-                conn.execute(insert(s.repository_lifecycle_facts).values(name=key, **common))
-                conn.execute(insert(s.work_source_lifecycle_facts).values(name=key, **common))
-                conn.execute(insert(s.graph_lifecycle_facts).values(graph_id=key, **common))
+                conn.execute(
+                    insert(s.secret_lifecycle_facts).values(stamp(s.secret_lifecycle_facts, name=key, **common))
+                )
+                conn.execute(
+                    insert(s.routine_lifecycle_facts).values(stamp(s.routine_lifecycle_facts, routine_id=key, **common))
+                )
+                conn.execute(insert(s.scope_lifecycle_facts).values(stamp(s.scope_lifecycle_facts, slug=key, **common)))
+                conn.execute(
+                    insert(s.repository_lifecycle_facts).values(stamp(s.repository_lifecycle_facts, name=key, **common))
+                )
+                conn.execute(
+                    insert(s.work_source_lifecycle_facts).values(
+                        stamp(s.work_source_lifecycle_facts, name=key, **common)
+                    )
+                )
+                conn.execute(
+                    insert(s.graph_lifecycle_facts).values(stamp(s.graph_lifecycle_facts, graph_id=key, **common))
+                )
     return engine
 
 
@@ -144,7 +173,9 @@ def test_newest_failure_reads_keep_the_old_failure_after_a_recovery(tmp_path: Pa
         ):
             conn.execute(
                 insert(s.event_log).values(
-                    recorded_at=_T0.replace(minute=n), severity="warning", kind=kind, message=f"m{n}"
+                    stamp(
+                        s.event_log, recorded_at=_T0.replace(minute=n), severity="warning", kind=kind, message=f"m{n}"
+                    )
                 )
             )
     store = hub_store_connections(engine)

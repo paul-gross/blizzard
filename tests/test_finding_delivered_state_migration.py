@@ -15,6 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner
+from tests.support import hub_scoped_engine
 
 pytestmark = pytest.mark.component
 
@@ -85,7 +86,7 @@ def test_upgrade_admits_delivered_and_preserves_existing_rows(tmp_path: Path) ->
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     runner.upgrade(_BEFORE)
-    engine = create_engine_from_url(db_url)
+    engine = hub_scoped_engine(create_engine_from_url(db_url))
     _seed(engine)
 
     runner.upgrade("head")
@@ -108,7 +109,7 @@ def test_upgrade_still_rejects_a_kind_outside_the_widened_vocabulary(tmp_path: P
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     runner.upgrade(_BEFORE)
-    engine = create_engine_from_url(db_url)
+    engine = hub_scoped_engine(create_engine_from_url(db_url))
     _seed(engine)
     runner.upgrade("head")
 
@@ -120,7 +121,7 @@ def test_downgrade_narrows_the_constraint_and_preserves_existing_rows(tmp_path: 
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     runner.upgrade(_BEFORE)
-    engine = create_engine_from_url(db_url)
+    engine = hub_scoped_engine(create_engine_from_url(db_url))
     _seed(engine)
     runner.upgrade("head")
 
@@ -138,7 +139,7 @@ def test_downgrade_then_upgrade_round_trips(tmp_path: Path) -> None:
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     runner.upgrade(_BEFORE)
-    engine = create_engine_from_url(db_url)
+    engine = hub_scoped_engine(create_engine_from_url(db_url))
     _seed(engine)
     runner.upgrade("head")
 

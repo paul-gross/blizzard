@@ -15,7 +15,7 @@ from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsReposi
 from blizzard.hub.domain.chunk.ports.delivery import IWriteChunkDeliveryRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.store import schema as s
-from tests.support import HubHarness, build_hub, ingest
+from tests.support import HubHarness, build_hub, hub_scoped, ingest
 
 pytestmark = pytest.mark.component
 
@@ -37,8 +37,10 @@ def _land(hub: HubHarness, chunk_id: str, *, repo: str = "widget") -> None:
 def _pending_intents(hub: HubHarness) -> set[tuple[str, str, str]]:
     with hub.engine.connect() as conn:
         rows = conn.execute(
-            select(s.close_intents.c.chunk_id, s.close_intents.c.source, s.close_intents.c.ref).where(
-                s.close_intents.c.retired_at.is_(None)
+            hub_scoped(
+                select(s.close_intents.c.chunk_id, s.close_intents.c.source, s.close_intents.c.ref).where(
+                    s.close_intents.c.retired_at.is_(None)
+                )
             )
         ).all()
     return {(r.chunk_id, r.source, r.ref) for r in rows}
@@ -71,10 +73,12 @@ def test_a_replayed_landing_marker_enqueues_nothing_new(tmp_path: Path) -> None:
 
     with hub.engine.connect() as conn:
         rows = conn.execute(
-            select(s.close_intents).where(
-                (s.close_intents.c.chunk_id == chunk_id)
-                & (s.close_intents.c.source == "default")
-                & (s.close_intents.c.ref == "1")
+            hub_scoped(
+                select(s.close_intents).where(
+                    (s.close_intents.c.chunk_id == chunk_id)
+                    & (s.close_intents.c.source == "default")
+                    & (s.close_intents.c.ref == "1")
+                )
             )
         ).all()
     assert len(rows) == 1

@@ -27,6 +27,7 @@ from tests.support import (
     offending_index_scans,
     seed_chunk_record,
     seed_graph,
+    stamp,
 )
 from tests.test_fleet_auth import _bearer, _enroll, _register
 
@@ -53,14 +54,17 @@ def _transition(engine: Engine, chunk_id: str, to_node: str, *, epoch: int, at: 
     with engine.begin() as conn:
         conn.execute(
             insert(s.transitions).values(
-                transition_id=f"tr_{chunk_id}_{epoch}_{to_node}",
-                chunk_id=chunk_id,
-                graph_id="gr_1",
-                from_node_id=None,
-                to_node_id=to_node,
-                epoch=epoch,
-                runner_id="r",
-                recorded_at=_at(at),
+                stamp(
+                    s.transitions,
+                    transition_id=f"tr_{chunk_id}_{epoch}_{to_node}",
+                    chunk_id=chunk_id,
+                    graph_id="gr_1",
+                    from_node_id=None,
+                    to_node_id=to_node,
+                    epoch=epoch,
+                    runner_id="r",
+                    recorded_at=_at(at),
+                )
             )
         )
 
@@ -73,12 +77,20 @@ def _terminate(hub: HubHarness, chunk_id: str, path: int) -> None:
     kind = path % 3
     with engine.begin() as conn:
         if kind == 0:
-            conn.execute(insert(s.chunk_stopped).values(chunk_id=chunk_id, stopped_at=_at(10)))
+            conn.execute(insert(s.chunk_stopped).values(stamp(s.chunk_stopped, chunk_id=chunk_id, stopped_at=_at(10))))
         elif kind == 1:
-            conn.execute(insert(s.chunk_completed).values(chunk_id=chunk_id, completed_at=_at(10), completed_by="op"))
+            conn.execute(
+                insert(s.chunk_completed).values(
+                    stamp(s.chunk_completed, chunk_id=chunk_id, completed_at=_at(10), completed_by="op")
+                )
+            )
         else:
-            conn.execute(insert(s.chunk_stopped).values(chunk_id=chunk_id, stopped_at=_at(10)))
-            conn.execute(insert(s.chunk_completed).values(chunk_id=chunk_id, completed_at=_at(11), completed_by="op"))
+            conn.execute(insert(s.chunk_stopped).values(stamp(s.chunk_stopped, chunk_id=chunk_id, stopped_at=_at(10))))
+            conn.execute(
+                insert(s.chunk_completed).values(
+                    stamp(s.chunk_completed, chunk_id=chunk_id, completed_at=_at(11), completed_by="op")
+                )
+            )
     if path % 5 == 4:
         _transition(engine, chunk_id, RESERVED_TERMINAL, epoch=3, at=12)
 
@@ -106,7 +118,9 @@ def _held(hub: HubHarness, chunk_id: str, ref: str) -> None:
 def _escalate(engine: Engine, chunk_id: str) -> None:
     with engine.begin() as conn:
         conn.execute(
-            insert(s.escalations).values(chunk_id=chunk_id, epoch=1, takeover_command="resume", recorded_at=_at(5))
+            insert(s.escalations).values(
+                stamp(s.escalations, chunk_id=chunk_id, epoch=1, takeover_command="resume", recorded_at=_at(5))
+            )
         )
 
 
@@ -119,14 +133,22 @@ def _add_terminal_only_history(hub: HubHarness) -> None:
         _held(hub, deleted, f"d{i}")
         with hub.engine.begin() as conn:
             conn.execute(
-                insert(s.chunk_grouped).values(chunk_id=grouped, grouped_into="ch_live_00", grouped_at=_at(300))
+                insert(s.chunk_grouped).values(
+                    stamp(s.chunk_grouped, chunk_id=grouped, grouped_into="ch_live_00", grouped_at=_at(300))
+                )
             )
-            conn.execute(insert(s.chunk_deleted).values(chunk_id=deleted, deleted_at=_at(300), deleted_by="op"))
+            conn.execute(
+                insert(s.chunk_deleted).values(
+                    stamp(s.chunk_deleted, chunk_id=deleted, deleted_at=_at(300), deleted_by="op")
+                )
+            )
         escalated, held = f"ch_escalated_stopped_{i}", f"ch_held_done_{i}"
         _mint(hub, escalated, index=400 + i)
         _escalate(hub.engine, escalated)
         with hub.engine.begin() as conn:
-            conn.execute(insert(s.chunk_stopped).values(chunk_id=escalated, stopped_at=_at(500)))
+            conn.execute(
+                insert(s.chunk_stopped).values(stamp(s.chunk_stopped, chunk_id=escalated, stopped_at=_at(500)))
+            )
         _held(hub, held, f"h{i}")
         _done_by_transition(hub, held)
 
@@ -137,7 +159,15 @@ def _hub(tmp_path: Path, *, live: int, terminal: int) -> HubHarness:
         seed_graph(conn, "gr_1", at=_T0)
         conn.execute(
             insert(s.graph_nodes).values(
-                node_id="nd_1", graph_id="gr_1", name="nd_1", executor="runner", session="resume", judged_by="worker"
+                stamp(
+                    s.graph_nodes,
+                    node_id="nd_1",
+                    graph_id="gr_1",
+                    name="nd_1",
+                    executor="runner",
+                    session="resume",
+                    judged_by="worker",
+                )
             )
         )
     for i in range(live):
@@ -231,7 +261,15 @@ def test_a_done_prerequisite_unblocks_its_dependent_and_a_stopped_one_does_not(t
         seed_graph(conn, "gr_1", at=_T0)
         conn.execute(
             insert(s.graph_nodes).values(
-                node_id="nd_1", graph_id="gr_1", name="nd_1", executor="runner", session="resume", judged_by="worker"
+                stamp(
+                    s.graph_nodes,
+                    node_id="nd_1",
+                    graph_id="gr_1",
+                    name="nd_1",
+                    executor="runner",
+                    session="resume",
+                    judged_by="worker",
+                )
             )
         )
     token = _token(hub)
@@ -239,15 +277,18 @@ def test_a_done_prerequisite_unblocks_its_dependent_and_a_stopped_one_does_not(t
         _mint(hub, chunk_id, index=i)
     _done_by_transition(hub, "ch_done")
     with hub.engine.begin() as conn:
-        conn.execute(insert(s.chunk_stopped).values(chunk_id="ch_stopped", stopped_at=_at(5)))
+        conn.execute(insert(s.chunk_stopped).values(stamp(s.chunk_stopped, chunk_id="ch_stopped", stopped_at=_at(5))))
         for dependent, prerequisite in [("ch_after_done", "ch_done"), ("ch_after_stopped", "ch_stopped")]:
             conn.execute(
                 insert(s.chunk_dependencies).values(
-                    dependency_id=f"dep_{dependent}",
-                    dependent_chunk_id=dependent,
-                    prerequisite_chunk_id=prerequisite,
-                    declared_at=_at(6),
-                    declared_by="op",
+                    stamp(
+                        s.chunk_dependencies,
+                        dependency_id=f"dep_{dependent}",
+                        dependent_chunk_id=dependent,
+                        prerequisite_chunk_id=prerequisite,
+                        declared_at=_at(6),
+                        declared_by="op",
+                    )
                 )
             )
 

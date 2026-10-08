@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
 from blizzard.hub.store import schema as s
-from tests.support import HubHarness, build_hub, seed_runner
+from tests.support import HubHarness, build_hub, hub_scoped, seed_runner
 
 pytestmark = pytest.mark.component
 
@@ -37,14 +37,16 @@ def _enroll(hub: HubHarness, runner_id: str = "runner-a") -> httpx.Response:
 def _token_hash_column(hub: HubHarness, runner_id: str) -> str | None:
     with hub.engine.connect() as conn:
         row = conn.execute(
-            select(s.runner_registrations.c.token_hash).where(s.runner_registrations.c.runner_id == runner_id)
+            hub_scoped(
+                select(s.runner_registrations.c.token_hash).where(s.runner_registrations.c.runner_id == runner_id)
+            )
         ).one()
         return row.token_hash
 
 
 def _registrations(hub: HubHarness) -> int:
     with hub.engine.connect() as conn:
-        return int(conn.execute(select(func.count()).select_from(s.runner_registrations)).scalar_one())
+        return int(conn.execute(hub_scoped(select(func.count()).select_from(s.runner_registrations))).scalar_one())
 
 
 # Enrollment itself

@@ -14,7 +14,14 @@ import pytest
 import sqlalchemy as sa
 
 from blizzard.hub.store import schema as s
-from tests.support import assert_all_timestamps_utc, build_hub, pointer_token, report_escalation, report_lease
+from tests.support import (
+    assert_all_timestamps_utc,
+    build_hub,
+    hub_scoped,
+    pointer_token,
+    report_escalation,
+    report_lease,
+)
 
 pytestmark = pytest.mark.component
 
@@ -412,13 +419,18 @@ def test_requeue_of_a_detached_escalated_chunk_writes_no_route_release(tmp_path:
     assert report_escalation(hub, chunk_id, epoch=1, seq=2)["applied"] == [2]
     assert hub.client.post(f"/api/chunks/{chunk_id}/detach").status_code == 202
     with hub.engine.connect() as conn:
-        released_before = conn.execute(sa.select(sa.func.count()).select_from(s.route_released)).scalar_one()
+        released_before = conn.execute(
+            hub_scoped(sa.select(sa.func.count()).select_from(s.route_released))
+        ).scalar_one()
 
     hub.clock.advance(timedelta(seconds=1))
     assert hub.client.post(f"/api/chunks/{chunk_id}/requeues").status_code == 202
 
     with hub.engine.connect() as conn:
-        assert conn.execute(sa.select(sa.func.count()).select_from(s.route_released)).scalar_one() == released_before
+        assert (
+            conn.execute(hub_scoped(sa.select(sa.func.count()).select_from(s.route_released))).scalar_one()
+            == released_before
+        )
     assert released_before == 1
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "ready"
 

@@ -19,7 +19,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
-from tests.support import chunk_stores
+from tests.support import chunk_stores, hub_scoped_engine
 
 pytestmark = pytest.mark.component
 
@@ -33,7 +33,7 @@ def test_upgrade_creates_chunk_deleted_and_leaves_preexisting_chunks_claimable(t
 
     # Migrate to the revision before chunk_deleted, then mint and promote a chunk the old way.
     runner.upgrade(_BEFORE)
-    engine = create_engine_from_url(db_url)
+    engine = hub_scoped_engine(create_engine_from_url(db_url))
     with engine.begin() as conn:
         conn.execute(
             insert(s.graphs).values(graph_id="gr_1", name="g", entry_node_id="nd_1", definition_yaml="", created_at=_T0)

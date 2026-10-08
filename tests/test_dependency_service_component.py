@@ -16,7 +16,7 @@ from blizzard.hub.domain.chunk.dependencies import NoStandingDependencyToRelease
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.model import DependencyEdge
 from blizzard.hub.store import schema as s
-from tests.support import HubHarness, build_hub, claim_route, ingest
+from tests.support import HubHarness, build_hub, claim_route, hub_scoped, ingest
 
 pytestmark = pytest.mark.component
 
@@ -46,7 +46,7 @@ def test_an_edge_onto_a_done_prerequisite_is_accepted_with_no_satisfaction_state
     assert edge.prerequisite_chunk_id == prerequisite_id
     assert edge.standing is True
     with hub.engine.connect() as conn:
-        rows = conn.execute(select(s.chunk_dependencies)).mappings().all()
+        rows = conn.execute(hub_scoped(select(s.chunk_dependencies))).mappings().all()
     assert len(rows) == 1
     assert set(rows[0]) == {
         "dependency_id",
@@ -118,7 +118,7 @@ def test_a_second_release_of_the_same_pair_is_refused_and_the_first_release_stan
         hub.services.dependencies.release(edge, by="user:carol")
 
     with hub.engine.connect() as conn:
-        rows = conn.execute(select(s.chunk_dependencies)).mappings().all()
+        rows = conn.execute(hub_scoped(select(s.chunk_dependencies))).mappings().all()
     assert len(rows) == 1
     assert rows[0]["released_by"] == "user:bob"
     assert rows[0]["released_at"] == released.released_at

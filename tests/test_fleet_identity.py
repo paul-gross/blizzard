@@ -18,7 +18,7 @@ from blizzard.hub import runtime as hub_runtime
 from blizzard.hub.config import HubConfig
 from blizzard.hub.secrets import ENV_SECRET_KEY
 from blizzard.hub.store import schema as s
-from tests.support import HubHarness, build_hub, seed_runner
+from tests.support import HubHarness, build_hub, hub_scoped, seed_runner
 
 pytestmark = pytest.mark.component
 
@@ -36,7 +36,7 @@ def _identity(hub: HubHarness, token: str | None) -> tuple[int, dict[str, object
 
 def _event_rows(hub: HubHarness) -> int:
     with hub.engine.connect() as conn:
-        return int(conn.execute(sa.select(sa.func.count()).select_from(s.event_log)).scalar_one())
+        return int(conn.execute(hub_scoped(sa.select(sa.func.count()).select_from(s.event_log))).scalar_one())
 
 
 def test_a_token_names_its_added_runner_before_it_ever_registers(tmp_path: Path) -> None:

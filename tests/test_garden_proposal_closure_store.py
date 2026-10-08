@@ -27,7 +27,7 @@ from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_closure_store import GardenProposalClosureStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
-from tests.support import build_hub, count_queries, hub_store_connections
+from tests.support import build_hub, count_queries, hub_scoped, hub_store_connections, stamp
 
 pytestmark = pytest.mark.component
 
@@ -36,7 +36,7 @@ _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 
 def _seed_proposal(hub, *, proposal_id: str = "gprop_1") -> None:  # type: ignore[no-untyped-def]
     with hub.engine.begin() as conn:
-        conn.execute(s.scopes.insert().values(slug="blizzard", description="", created_at=_NOW))
+        conn.execute(s.scopes.insert().values(stamp(s.scopes, slug="blizzard", description="", created_at=_NOW)))
     store = hub_store_connections(hub.engine)
     FindingStore(store).add(
         "fin_1",
@@ -62,7 +62,7 @@ def _seed_proposal(hub, *, proposal_id: str = "gprop_1") -> None:  # type: ignor
 
 def _seed_proposals(hub, proposal_ids: list[str]) -> None:  # type: ignore[no-untyped-def]
     with hub.engine.begin() as conn:
-        conn.execute(s.scopes.insert().values(slug="blizzard", description="", created_at=_NOW))
+        conn.execute(s.scopes.insert().values(stamp(s.scopes, slug="blizzard", description="", created_at=_NOW)))
     store = hub_store_connections(hub.engine)
     findings = FindingStore(store)
     proposals = GardenProposalStore(store)
@@ -175,7 +175,7 @@ def test_record_pass_returns_false_on_a_second_call(tmp_path: Path) -> None:
     assert second is False
     with hub.engine.connect() as conn:
         rows = conn.execute(
-            select(s.garden_proposal_closures).where(s.garden_proposal_closures.c.proposal_id == "gprop_1")
+            hub_scoped(select(s.garden_proposal_closures).where(s.garden_proposal_closures.c.proposal_id == "gprop_1"))
         ).all()
     assert len(rows) == 1
     assert rows[0].reason == "r1"
@@ -247,7 +247,7 @@ def test_accept_create_mints_the_closure_item_and_chunk_atomically_and_is_idempo
 
     with hub.engine.connect() as conn:
         rows = conn.execute(
-            select(s.garden_proposal_closures).where(s.garden_proposal_closures.c.proposal_id == "gprop_1")
+            hub_scoped(select(s.garden_proposal_closures).where(s.garden_proposal_closures.c.proposal_id == "gprop_1"))
         ).all()
     assert len(rows) == 1
 

@@ -22,6 +22,7 @@ from blizzard.hub.store import schema as hub
 from blizzard.runner.runtime import init_environment as init_runner
 from blizzard.runner.store import schema as runner
 from blizzard.tools.invariants import HubInvariants, RunnerInvariants
+from tests.support import hub_scoped, stamp
 
 _NOW = datetime(2026, 7, 14, tzinfo=UTC)
 
@@ -72,14 +73,21 @@ def test_two_live_hub_exec_slots_are_a_violation(tmp_path: Path) -> None:
     engine = _hub_engine(tmp_path)
     with engine.begin() as conn:
         for chunk_id in ("ch_1", "ch_2"):
-            conn.execute(insert(hub.chunks).values(chunk_id=chunk_id, graph_id="gr_1", minted_at=_NOW, model="m"))
+            conn.execute(
+                insert(hub.chunks).values(
+                    stamp(hub.chunks, chunk_id=chunk_id, graph_id="gr_1", minted_at=_NOW, model="m")
+                )
+            )
             conn.execute(
                 insert(hub.hub_exec_slot).values(
-                    slot_id=f"hes_{chunk_id}",
-                    holder_chunk_id=chunk_id,
-                    node_id="nd_merge",
-                    acquired_at=_NOW,
-                    released_at=None,
+                    stamp(
+                        hub.hub_exec_slot,
+                        slot_id=f"hes_{chunk_id}",
+                        holder_chunk_id=chunk_id,
+                        node_id="nd_merge",
+                        acquired_at=_NOW,
+                        released_at=None,
+                    )
                 )
             )
     slugs = {v.invariant for v in HubInvariants(engine).run()}
@@ -88,7 +96,9 @@ def test_two_live_hub_exec_slots_are_a_violation(tmp_path: Path) -> None:
     # The release is itself a durable fact: recording it leaves exactly one live slot.
     with engine.begin() as conn:
         conn.execute(
-            update(hub.hub_exec_slot).where(hub.hub_exec_slot.c.slot_id == "hes_ch_2").values(released_at=_NOW)
+            hub_scoped(
+                update(hub.hub_exec_slot).where(hub.hub_exec_slot.c.slot_id == "hes_ch_2").values(released_at=_NOW)
+            )
         )
     assert HubInvariants(engine).run() == []
 

@@ -13,7 +13,7 @@ from blizzard.foundation.garden_proposals import GardenProposalOrigin
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
-from tests.support import HubHarness, build_hub, hub_store_connections
+from tests.support import HubHarness, build_hub, hub_store_connections, stamp
 
 pytestmark = pytest.mark.component
 
@@ -22,7 +22,7 @@ _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 
 def _seed(hub: HubHarness) -> None:
     with hub.engine.begin() as conn:
-        conn.execute(s.scopes.insert().values(slug="blizzard", description="", created_at=_NOW))
+        conn.execute(s.scopes.insert().values(stamp(s.scopes, slug="blizzard", description="", created_at=_NOW)))
     FindingStore(hub_store_connections(hub.engine)).add(
         "fin_1",
         routine_name="nightly",
