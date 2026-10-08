@@ -81,6 +81,8 @@ def _newest_note_per_owner(*, pinned: bool) -> sa.Select[Any]:
 
 
 _aliased = notes.alias("n2")
+_double_aliased = notes.alias("n3").alias("n4")
+_triple_aliased = notes.alias("n5").alias("n6").alias("n7")
 
 
 def _newest_id_per_owner() -> sa.Select[Any]:
@@ -154,6 +156,18 @@ _UNSCOPED: list[Any] = [
         None,
         "select names tenant-owned table notes (as n2) ",
         id="alias-unpinned-beside-pinned-base",
+    ),
+    pytest.param(
+        sa.select(_double_aliased).where(_double_aliased.c.id == 1),
+        None,
+        "select names tenant-owned table notes (as n4) ",
+        id="alias-of-alias-unpinned",
+    ),
+    pytest.param(
+        sa.select(_triple_aliased).where(_triple_aliased.c.id == 1),
+        None,
+        "select names tenant-owned table notes (as n7) ",
+        id="alias-of-alias-of-alias-unpinned",
     ),
     pytest.param(
         sa.select(notes).where(
@@ -403,6 +417,12 @@ _SCOPED: list[Any] = [
         None,
         id="alias-pinned",
     ),
+    pytest.param(sa.select(_double_aliased).where(_double_aliased.c.tenant_id == _T), None, id="alias-of-alias-pinned"),
+    pytest.param(
+        sa.select(_triple_aliased).where(_triple_aliased.c.tenant_id == _T),
+        None,
+        id="alias-of-alias-of-alias-pinned",
+    ),
     pytest.param(
         sa.select(notes).where(
             notes.c.tenant_id == _T,
@@ -546,6 +566,7 @@ def _builder_statements() -> list[Any]:
     return [
         pytest.param(_scoped.select(notes), id="select"),
         pytest.param(_scoped.select(_aliased, _aliased.c.id), id="select-alias"),
+        pytest.param(_scoped.select(_double_aliased, _double_aliased.c.id), id="select-alias-of-alias"),
         pytest.param(sa.select(_scoped.exists(notes, notes.c.id > 0)), id="exists"),
         pytest.param(_scoped.select(notes, notes.c.id).where(_scoped.exists(owners, on_owner)), id="correlated-exists"),
         pytest.param(

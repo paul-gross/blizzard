@@ -149,7 +149,7 @@ class TenantStatementGuard:
             raise UnscopedTenantStatement(sorted(set(walk.violations)), statement)
 
     def guards(self, leaf: FromClause) -> bool:
-        """Whether ``leaf`` is a tenant-owned table of this guard's ``MetaData``, or an alias of one."""
+        """Whether ``leaf`` is a tenant-owned table of this guard's ``MetaData``, or an alias (of an alias…) of it."""
         table = _underlying_table(leaf)
         return table is not None and table.metadata is self._metadata and is_tenant_owned(table)
 
@@ -309,11 +309,11 @@ def _flatten(from_: FromClause, conditions: list[_Condition]) -> list[FromClause
 
 
 def _underlying_table(leaf: FromClause) -> Table | None:
-    if isinstance(leaf, Table):
-        return leaf
-    if isinstance(leaf, Alias) and isinstance(leaf.element, Table):
-        return leaf.element
-    return None
+    """The table ``leaf`` is, or the one an alias (of an alias…) of it names, unwrapped as the scoped seam does;
+    ``None`` for a join, a subquery, or any other derived FROM."""
+    while isinstance(leaf, Alias):
+        leaf = leaf.element
+    return leaf if isinstance(leaf, Table) else None
 
 
 def _leaf_name(leaf: FromClause, table: Table) -> str:
