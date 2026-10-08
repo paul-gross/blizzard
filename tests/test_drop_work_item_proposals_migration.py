@@ -1,7 +1,7 @@
 """The drop-work-item-proposals revision removes ``work_item_proposals``,
 ``work_item_materializations``, ``work_item_strikes``, and ``graph_nodes.proposes_work_items``.
 
-Seeded with literal SQL rather than importing ``schema.py``, which no longer declares any of them."""
+Seeded with literal SQL rather than importing ``src/blizzard/hub/store/schema.py``, which no longer declares any of them."""
 
 from __future__ import annotations
 
