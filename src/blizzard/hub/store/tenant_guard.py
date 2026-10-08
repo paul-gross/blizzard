@@ -2,8 +2,11 @@
 without naming its tenant.
 
 It walks every compiled ``Select``, ``Update`` and ``Delete``, nested ones included, and fails when a tenant-owned table
-appears in a ``FROM`` without a ``tenant_id`` equality among the conjuncts of that statement's ``WHERE`` or a join's
-``ON``; and every ``Insert`` into a tenant-owned table whose column list lacks ``tenant_id``. A statement carrying the
+is rendered in a ``FROM`` without being scoped; and every ``Insert`` into a tenant-owned table whose column list lacks
+``tenant_id``. A table is scoped by an equality among the conjuncts of a condition that filters its rows — the
+statement's ``WHERE``, an inner join's ``ON``, or the ``ON`` of the left outer join it is the right side of — that
+equates its ``tenant_id`` to a bound value, to the ``tenant_id`` of a tenant-owned table it correlates to, or to the
+``tenant_id`` of another table in the statement that is scoped. A statement carrying the
 :data:`~blizzard.hub.tenancy.HUB_SCOPED_OPTION` execution option, on itself or on its connection or engine, is
 deliberately cross-tenant and passes unwalked. Raw SQL (``text()``, ``exec_driver_sql``) is not walked.
 
@@ -15,15 +18,27 @@ with ``BLIZZARD_TENANT_GUARD=1`` — production leaves it off.
 from __future__ import annotations
 
 import os
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy import Engine, MetaData, Table, event
 from sqlalchemy.engine import Connection
 from sqlalchemy.sql import operators
-from sqlalchemy.sql.dml import Delete, Insert, Update
-from sqlalchemy.sql.elements import BinaryExpression, BooleanClauseList, ClauseElement, ColumnClause, Grouping
+from sqlalchemy.sql.base import _from_objects
+from sqlalchemy.sql.dml import Delete, DeleteDMLState, Insert, Update, UpdateDMLState
+from sqlalchemy.sql.elements import (
+    BinaryExpression,
+    BindParameter,
+    BooleanClauseList,
+    Cast,
+    ClauseElement,
+    ColumnClause,
+    Grouping,
+    TypeCoerce,
+)
 from sqlalchemy.sql.selectable import (
+    CTE,
     Alias,
     AliasedReturnsRows,
     CompoundSelect,
@@ -34,14 +49,13 @@ from sqlalchemy.sql.selectable import (
     TableClause,
 )
 
+from blizzard.foundation.roles import adapter_model
 from blizzard.hub.store import schema
 from blizzard.hub.store.scoped import TENANT_COLUMN, is_tenant_owned
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION
 
 #: The environment variable that switches the hub's guard on, set to ``1``. A subprocess inherits it.
 GUARD_ENVIRONMENT_VARIABLE = "BLIZZARD_TENANT_GUARD"
-
-_Scope = frozenset[int]
 
 
 class UnscopedTenantStatement(Exception):
@@ -75,8 +89,36 @@ def _rendered(statement: ClauseElement) -> str:
         return type(statement).__name__
 
 
+@adapter_model
+@dataclass(frozen=True)
+class _Enclosing:
+    """What a nested statement may correlate to, as SQLAlchemy's compiler tracks it: ``correlate`` holds the FROM
+    elements of every enclosing statement, ``siblings`` those of the one directly enclosing it."""
+
+    correlate: frozenset[FromClause] = frozenset()
+    siblings: frozenset[FromClause] = frozenset()
+
+
+_TOP = _Enclosing()
+
+
+@dataclass(frozen=True)
+class _Condition:
+    """A ``WHERE`` or a join's ``ON``, with the leaves whose rows it filters: a ``WHERE`` and an inner join's ``ON``
+    filter every leaf they span, a left outer join's ``ON`` only its right side, a full join's ``ON`` none."""
+
+    clause: ClauseElement | None
+    filters: frozenset[FromClause]
+
+
 class TenantStatementGuard:
-    """Checks statements against the tenant-owned tables of one ``MetaData``."""
+    """Checks statements against the tenant-owned tables of one ``MetaData``.
+
+    It decides which tables each statement renders in its ``FROM`` the way SQLAlchemy's compiler does: a subquery in a
+    ``WHERE``, a column or an ``EXISTS`` auto-correlates to the enclosing FROM elements only when it names more than
+    one FROM element, and never under ``correlate(None)``; a subquery in a ``FROM`` is not auto-correlated to its
+    siblings unless it is ``LATERAL``; a CTE is rendered at the top-level ``WITH`` and correlates to nothing. A
+    correlated table is the enclosing statement's to scope."""
 
     def __init__(self, metadata: MetaData) -> None:
         self._metadata = metadata
@@ -101,88 +143,148 @@ class TenantStatementGuard:
         ``parameter_keys`` are the keys of the parameters it executes with, which add to an insert's column list."""
         if not isinstance(statement, Select | CompoundSelect | Insert | Update | Delete):
             return
-        violations: list[str] = []
-        self._walk(statement, frozenset(), frozenset(), parameter_keys, violations, set())
-        if violations:
-            raise UnscopedTenantStatement(sorted(set(violations)), statement)
+        walk = _Walk(self, parameter_keys)
+        walk.visit(statement, _TOP)
+        if walk.violations:
+            raise UnscopedTenantStatement(sorted(set(walk.violations)), statement)
 
-    def _walk(
-        self,
-        element: ClauseElement,
-        nested: _Scope,
-        derived: _Scope,
-        parameter_keys: frozenset[str],
-        violations: list[str],
-        seen: set[tuple[int, _Scope, _Scope]],
+    def guards(self, leaf: FromClause) -> bool:
+        """Whether ``leaf`` is a tenant-owned table of this guard's ``MetaData``, or an alias of one."""
+        table = _underlying_table(leaf)
+        return table is not None and table.metadata is self._metadata and is_tenant_owned(table)
+
+
+class _Walk:
+    """One statement's walk, mirroring the compiler's descent: each nested statement sees the FROM elements it may
+    correlate to, and each ``SELECT``, ``UPDATE`` and ``DELETE`` must scope every tenant-owned table it renders."""
+
+    def __init__(self, guard: TenantStatementGuard, parameter_keys: frozenset[str]) -> None:
+        self._guard = guard
+        self._parameter_keys = parameter_keys
+        self._seen: set[tuple[int, _Enclosing, bool, bool]] = set()
+        self.violations: list[str] = []
+
+    def visit(
+        self, element: ClauseElement, enclosing: _Enclosing, *, asfrom: bool = False, lateral: bool = False
     ) -> None:
-        """``nested`` holds the FROM elements a subquery in a ``WHERE``, a column or an ``EXISTS`` may correlate to —
-        its enclosing statements' own; ``derived`` those a subquery in a ``FROM`` may, which excludes its sibling FROM
-        elements unless it is ``LATERAL``. A correlated element is the enclosing statement's to scope."""
-        key = (id(element), nested, derived)
-        if key in seen or isinstance(element, TableClause | ColumnClause):
+        """Walk ``element``; ``asfrom`` when it is rendered in a ``FROM``, ``lateral`` when that FROM is ``LATERAL``."""
+        key = (id(element), enclosing, asfrom, lateral)
+        if key in self._seen or isinstance(element, TableClause | ColumnClause):
             return
-        seen.add(key)
+        self._seen.add(key)
         if isinstance(element, Select):
-            own = self._check_select(element, nested, violations)
-            nested, derived = nested | own, nested
+            self._visit_select(element, enclosing, asfrom=asfrom, lateral=lateral)
+        elif isinstance(element, CompoundSelect):
+            for arm in element.selects:
+                self.visit(arm, enclosing, asfrom=asfrom, lateral=lateral)
+            self._visit_expressions(element, enclosing, skip=frozenset(map(id, element.selects)))
         elif isinstance(element, Update | Delete):
-            own = self._check_dml_where(element, nested, violations)
-            nested, derived = nested | own, nested
+            self._visit_dml(element)
         elif isinstance(element, Insert):
-            self._check_insert(element, parameter_keys, violations)
-        elif isinstance(element, AliasedReturnsRows) and not isinstance(element, Lateral):
-            nested = derived
-        for child in element.get_children():
-            self._walk(child, nested, derived, frozenset(), violations, seen)
+            self._check_insert(element)
+            self._visit_expressions(element, _TOP)
+        elif isinstance(element, CTE):
+            self.visit(element.element, _TOP, asfrom=True)
+        elif isinstance(element, Join):
+            self.visit(element.left, enclosing, asfrom=True)
+            self.visit(element.right, enclosing, asfrom=True)
+            if element.onclause is not None:
+                self.visit(element.onclause, enclosing)
+        elif isinstance(element, AliasedReturnsRows):
+            self.visit(element.element, enclosing, asfrom=True, lateral=lateral or isinstance(element, Lateral))
+        else:
+            for child in element.get_children():
+                self.visit(child, enclosing)
 
-    def _check_select(self, select: Select[Any], nested: _Scope, violations: list[str]) -> _Scope:
-        froms = select.get_final_froms()
-        leaves: list[FromClause] = []
-        onclauses: list[ClauseElement] = []
+    def _visit_select(self, select: Select[Any], enclosing: _Enclosing, *, asfrom: bool, lateral: bool) -> None:
+        state = select._compile_state_factory(select, select._default_compiler())
+        if asfrom and not lateral:
+            froms = state._get_display_froms([*enclosing.correlate - enclosing.siblings], [])
+        else:
+            froms = state._get_display_froms([*enclosing.correlate], [*enclosing.siblings])
+        own = frozenset(_from_objects(*froms))
+        inner = _Enclosing(enclosing.correlate | own, own)
+        self._require_pins(froms, [], select.whereclause, enclosing, "select")
         for from_ in froms:
-            if id(from_) not in nested:
-                _flatten(from_, leaves, onclauses)
-        own = [leaf for leaf in leaves if id(leaf) not in nested]
-        self._require_pins(own, [select.whereclause, *onclauses], "select", violations)
-        return frozenset(id(leaf) for leaf in own) | frozenset(id(from_) for from_ in froms)
+            self.visit(from_, inner, asfrom=True)
+        self._visit_expressions(select, inner)
 
-    def _check_dml_where(self, statement: Update | Delete, nested: _Scope, violations: list[str]) -> _Scope:
-        leaves: list[FromClause] = []
-        _flatten(statement.table, leaves, [])
-        for from_ in _column_froms(statement):
-            if id(from_) not in nested and all(from_ is not leaf for leaf in leaves):
-                leaves.append(from_)
+    def _visit_dml(self, statement: Update | Delete) -> None:
+        state = statement._compile_state_factory(statement, statement._default_compiler())
+        assert isinstance(state, UpdateDMLState | DeleteDMLState)
+        extra: Sequence[FromClause] = state._extra_froms
+        main = [statement.table]
+        own = frozenset(_from_objects(*main, *extra))
+        inner = _Enclosing(own, own)
         verb = "update" if isinstance(statement, Update) else "delete"
-        self._require_pins(leaves, [statement.whereclause], verb, violations)
-        return frozenset(id(leaf) for leaf in leaves)
+        self._require_pins(main, extra, statement.whereclause, _TOP, verb)
+        for from_ in extra:
+            self.visit(from_, inner, asfrom=True)
+        self._visit_expressions(statement, inner)
 
-    def _check_insert(self, insert: Insert, parameter_keys: frozenset[str], violations: list[str]) -> None:
+    def _visit_expressions(
+        self, element: ClauseElement, enclosing: _Enclosing, *, skip: frozenset[int] = frozenset()
+    ) -> None:
+        """Walk ``element``'s children other than the FROM elements its FROM already rendered — a CTE excepted, which
+        renders at the top-level ``WITH`` wherever it is attached."""
+        for child in element.get_children():
+            if id(child) in skip or (isinstance(child, FromClause) and not isinstance(child, CTE)):
+                continue
+            self.visit(child, enclosing)
+
+    def _check_insert(self, insert: Insert) -> None:
         table = insert.table
-        if not (isinstance(table, Table) and self._guards(table)):
+        if not (isinstance(table, Table) and self._guard.guards(table)):
             return
-        if _tenant_key(table) not in parameter_keys | _named_insert_keys(insert, table):
-            violations.append(f"insert into tenant-owned table {table.name} without {TENANT_COLUMN}")
+        if _tenant_key(table) not in self._parameter_keys | _named_insert_keys(insert, table):
+            self.violations.append(f"insert into tenant-owned table {table.name} without {TENANT_COLUMN}")
 
     def _require_pins(
         self,
-        leaves: Sequence[FromClause],
-        conditions: Sequence[ClauseElement | None],
+        froms: Sequence[FromClause],
+        extra: Sequence[FromClause],
+        where: ClauseElement | None,
+        enclosing: _Enclosing,
         verb: str,
-        violations: list[str],
     ) -> None:
-        conjuncts = [conjunct for condition in conditions for conjunct in _conjuncts(condition)]
-        for leaf in leaves:
-            table = _underlying_table(leaf)
-            if table is None or not self._guards(table):
-                continue
-            if not any(_pins_tenant(conjunct, leaf) for conjunct in conjuncts):
-                violations.append(
+        """Require every tenant-owned leaf of ``froms`` and ``extra`` to be scoped: equated, by a condition that
+        filters it, to a value, to a tenant-owned table it correlates to, or to another scoped leaf's ``tenant_id``."""
+        leaves: list[FromClause] = []
+        conditions: list[_Condition] = []
+        for from_ in [*froms, *extra]:
+            leaves.extend(_flatten(from_, conditions))
+        conditions.append(_Condition(where, frozenset(leaves)))
+        guarded = [leaf for leaf in leaves if self._guard.guards(leaf)]
+        if not guarded:
+            return
+        anchors = frozenset(from_ for from_ in enclosing.correlate if self._guard.guards(from_))
+        scoped: set[FromClause] = set()
+        edges: list[tuple[FromClause, FromClause]] = []
+        for condition in conditions:
+            for left, right in _tenant_equalities(condition.clause):
+                for this, other in ((left, right), (right, left)):
+                    leaf = _tenant_leaf(this, leaves)
+                    if leaf is None or leaf not in condition.filters:
+                        continue
+                    other_leaf = _tenant_leaf(other, leaves)
+                    if other_leaf is not None:
+                        if other_leaf is not leaf:
+                            edges.append((leaf, other_leaf))
+                    elif _is_value(other) or _tenant_leaf(other, anchors) is not None:
+                        scoped.add(leaf)
+        grew = True
+        while grew:
+            reached = {leaf for leaf, other in edges if other in scoped} - scoped
+            scoped |= reached
+            grew = bool(reached)
+        for leaf in guarded:
+            if leaf not in scoped:
+                table = _underlying_table(leaf)
+                assert table is not None
+                self.violations.append(
                     f"{verb} names tenant-owned table {_leaf_name(leaf, table)} "
                     f"without a {TENANT_COLUMN} equality in its WHERE or join ON"
                 )
-
-    def _guards(self, table: Table) -> bool:
-        return table.metadata is self._metadata and is_tenant_owned(table)
 
 
 def _parameter_keys(multiparams: Sequence[Mapping[str, Any]], params: Mapping[str, Any]) -> frozenset[str]:
@@ -190,27 +292,20 @@ def _parameter_keys(multiparams: Sequence[Mapping[str, Any]], params: Mapping[st
     return frozenset(str(key) for key in (*params, *first))
 
 
-def _flatten(from_: FromClause, leaves: list[FromClause], onclauses: list[ClauseElement]) -> None:
-    if isinstance(from_, Join):
-        _flatten(from_.left, leaves, onclauses)
-        _flatten(from_.right, leaves, onclauses)
-        if from_.onclause is not None:
-            onclauses.append(from_.onclause)
+def _flatten(from_: FromClause, conditions: list[_Condition]) -> list[FromClause]:
+    """The leaves of ``from_``, adding each join's ``ON`` to ``conditions`` with the leaves it filters."""
+    if not isinstance(from_, Join):
+        return [from_]
+    left = _flatten(from_.left, conditions)
+    right = _flatten(from_.right, conditions)
+    if from_.full:
+        filters: list[FromClause] = []
+    elif from_.isouter:
+        filters = right
     else:
-        leaves.append(from_)
-
-
-def _column_froms(statement: Update | Delete) -> Iterator[FromClause]:
-    """The FROM elements an ``UPDATE … FROM`` or ``DELETE … USING`` reaches through its own columns, nested
-    statements excluded."""
-    stack: list[ClauseElement] = list(statement.get_children())
-    while stack:
-        element = stack.pop()
-        if isinstance(element, Select | AliasedReturnsRows):
-            continue
-        if isinstance(element, ColumnClause) and isinstance(element.table, FromClause):
-            yield element.table
-        stack.extend(element.get_children())
+        filters = [*left, *right]
+    conditions.append(_Condition(from_.onclause, frozenset(filters)))
+    return [*left, *right]
 
 
 def _underlying_table(leaf: FromClause) -> Table | None:
@@ -237,15 +332,25 @@ def _conjuncts(condition: ClauseElement | None) -> Iterator[ClauseElement]:
         yield condition
 
 
-def _pins_tenant(conjunct: ClauseElement, leaf: FromClause) -> bool:
-    if not isinstance(conjunct, BinaryExpression) or conjunct.operator is not operators.eq:
-        return False
-    pinned = [_is_tenant_column(side, leaf) for side in (conjunct.left, conjunct.right)]
-    return any(pinned) and not all(pinned)
+def _tenant_equalities(condition: ClauseElement | None) -> Iterator[tuple[ClauseElement, ClauseElement]]:
+    """The operands of each top-level equality in ``condition``."""
+    for conjunct in _conjuncts(condition):
+        if isinstance(conjunct, BinaryExpression) and conjunct.operator is operators.eq:
+            yield conjunct.left, conjunct.right
 
 
-def _is_tenant_column(side: ClauseElement, leaf: FromClause) -> bool:
-    return isinstance(side, ColumnClause) and side.table is leaf and side.name == TENANT_COLUMN
+def _tenant_leaf(side: ClauseElement, leaves: Iterable[FromClause]) -> FromClause | None:
+    """The leaf among ``leaves`` whose ``tenant_id`` column ``side`` is."""
+    if not (isinstance(side, ColumnClause) and side.name == TENANT_COLUMN):
+        return None
+    return next((leaf for leaf in leaves if side.table is leaf), None)
+
+
+def _is_value(side: ClauseElement) -> bool:
+    """Whether ``side`` is a bound value — a parameter or a literal, possibly grouped or cast — naming no column."""
+    while isinstance(side, Grouping | Cast | TypeCoerce):
+        side = side.clause if isinstance(side, Cast | TypeCoerce) else side.element
+    return isinstance(side, BindParameter)
 
 
 _HUB_GUARD = TenantStatementGuard(schema.metadata)

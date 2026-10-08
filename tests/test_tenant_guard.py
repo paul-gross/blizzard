@@ -13,6 +13,7 @@ import sqlalchemy as sa
 from sqlalchemy import Engine, event
 
 from blizzard.hub.store import schema
+from blizzard.hub.store.scoped import ScopedStatements
 from blizzard.hub.store.tenant_guard import (
     GUARD_ENVIRONMENT_VARIABLE,
     TenantStatementGuard,
@@ -20,7 +21,7 @@ from blizzard.hub.store.tenant_guard import (
     guard_hub_statement,
     install_tenant_guard,
 )
-from blizzard.hub.tenancy import HUB_SCOPED_OPTION
+from blizzard.hub.tenancy import HUB_SCOPED_OPTION, StoreScope, TenantId
 
 pytestmark = pytest.mark.unit
 
@@ -80,6 +81,41 @@ def _newest_note_per_owner(*, pinned: bool) -> sa.Select[Any]:
 
 
 _aliased = notes.alias("n2")
+
+
+def _newest_id_per_owner() -> sa.Select[Any]:
+    """Each owner's newest note id, grouped over the whole table: nothing in it names a tenant."""
+    return sa.select(sa.func.max(notes.c.id)).group_by(notes.c.owner_id)
+
+
+def _owner_counts(*, pinned: bool) -> sa.Subquery:
+    """Notes per owner — a grouped subquery an ``UPDATE … FROM`` or ``DELETE … USING`` reads."""
+    counted = sa.select(notes.c.owner_id, sa.func.count().label("n")).group_by(notes.c.owner_id)
+    return (counted.where(notes.c.tenant_id == _T) if pinned else counted).subquery()
+
+
+def _update_from_owner_counts(*, pinned: bool) -> sa.Update:
+    counts = _owner_counts(pinned=pinned)
+    return (
+        sa.update(notes)
+        .where(notes.c.tenant_id == _T, notes.c.owner_id == counts.c.owner_id)
+        .values(body=sa.cast(counts.c.n, sa.String))
+    )
+
+
+def _delete_using_owner_counts(*, pinned: bool) -> sa.Delete:
+    counts = _owner_counts(pinned=pinned)
+    return sa.delete(notes).where(notes.c.tenant_id == _T, notes.c.owner_id == counts.c.owner_id)
+
+
+def _owner_lateral(*, pinned: bool) -> sa.Select[Any]:
+    """A ``LATERAL`` read of each note's owner, correlated to the note beside it in ``FROM``."""
+    owner = sa.select(owners.c.id).where(owners.c.id == notes.c.owner_id)
+    lateral = (owner.where(owners.c.tenant_id == _T) if pinned else owner).lateral("owner")
+    return (
+        sa.select(notes.c.id, lateral.c.id).select_from(notes).join(lateral, sa.true()).where(notes.c.tenant_id == _T)
+    )
+
 
 _UNSCOPED: list[Any] = [
     pytest.param(sa.select(notes), None, "select names tenant-owned table notes ", id="select-without-where"),
@@ -172,6 +208,142 @@ _UNSCOPED: list[Any] = [
         "select names tenant-owned table owners ",
         id="delete-with-unpinned-subquery",
     ),
+    pytest.param(
+        sa.select(notes.c.body).where(notes.c.tenant_id == _T, notes.c.id.in_(_newest_id_per_owner())),
+        None,
+        "select names tenant-owned table notes ",
+        id="in-subquery-over-its-own-table-does-not-correlate",
+    ),
+    pytest.param(
+        sa.delete(notes).where(notes.c.tenant_id == _T, notes.c.id.not_in(_newest_id_per_owner())),
+        None,
+        "select names tenant-owned table notes ",
+        id="delete-not-in-subquery-over-its-own-table",
+    ),
+    pytest.param(
+        sa.select(notes.c.id, sa.select(sa.func.count()).select_from(notes).scalar_subquery()).where(
+            notes.c.tenant_id == _T
+        ),
+        None,
+        "select names tenant-owned table notes ",
+        id="scalar-count-over-its-own-table-does-not-correlate",
+    ),
+    pytest.param(
+        sa.select(notes).where(
+            notes.c.tenant_id == _T,
+            sa.exists(
+                sa.select(owners.c.id).where(owners.c.id == notes.c.owner_id, owners.c.tenant_id == _T).correlate(None)
+            ),
+        ),
+        None,
+        "select names tenant-owned table notes ",
+        id="correlate-none-reads-the-outer-table-unscoped",
+    ),
+    pytest.param(
+        sa.select(notes.c.id).where(
+            notes.c.tenant_id == _T,
+            notes.c.owner_id.in_(sa.select(sa.select(notes.c.owner_id).group_by(notes.c.owner_id).cte("c").c.owner_id)),
+        ),
+        None,
+        "select names tenant-owned table notes ",
+        id="cte-does-not-correlate",
+    ),
+    pytest.param(
+        sa.select(notes.c.id).where(
+            notes.c.tenant_id == _T,
+            notes.c.owner_id.in_(sa.select(sa.select(notes.c.owner_id).subquery().c.owner_id)),
+        ),
+        None,
+        "select names tenant-owned table notes ",
+        id="derived-table-in-a-where-subquery-does-not-correlate",
+    ),
+    pytest.param(
+        _update_from_owner_counts(pinned=False),
+        None,
+        "select names tenant-owned table notes ",
+        id="update-from-unpinned-subquery",
+    ),
+    pytest.param(
+        _delete_using_owner_counts(pinned=False),
+        None,
+        "select names tenant-owned table notes ",
+        id="delete-using-unpinned-subquery",
+    ),
+    pytest.param(
+        sa.select(notes).join(tenants, notes.c.tenant_id == tenants.c.tenant_id),
+        None,
+        "select names tenant-owned table notes ",
+        id="tenant-equated-to-a-global-table",
+    ),
+    pytest.param(
+        sa.select(notes.c.id, owners.c.id).where(
+            notes.c.tenant_id == owners.c.tenant_id, notes.c.owner_id == owners.c.id
+        ),
+        None,
+        "select names tenant-owned table owners ",
+        id="two-tables-equated-only-to-each-other",
+    ),
+    pytest.param(
+        sa.select(notes.c.id, _aliased.c.id).where(notes.c.tenant_id == _aliased.c.tenant_id),
+        None,
+        "select names tenant-owned table notes (as n2) ",
+        id="self-join-equated-only-to-itself",
+    ),
+    pytest.param(
+        sa.select(notes).where(notes.c.tenant_id == notes.c.body),
+        None,
+        "select names tenant-owned table notes ",
+        id="tenant-equated-to-another-column",
+    ),
+    pytest.param(
+        sa.select(notes).where(notes.c.tenant_id == sa.func.coalesce(notes.c.tenant_id, _T)),
+        None,
+        "select names tenant-owned table notes ",
+        id="tenant-equated-to-a-function-of-itself",
+    ),
+    pytest.param(
+        sa.select(notes).where(notes.c.tenant_id == sa.literal_column("tenant_id")),
+        None,
+        "select names tenant-owned table notes ",
+        id="tenant-equated-to-a-literal-column",
+    ),
+    pytest.param(
+        sa.update(notes)
+        .where(notes.c.tenant_id == owners.c.tenant_id, owners.c.id == notes.c.owner_id)
+        .values(body="x"),
+        None,
+        "update names tenant-owned table notes ",
+        id="update-equated-to-another-table",
+    ),
+    pytest.param(
+        sa.select(tenants).where(sa.exists(sa.select(notes.c.id).where(notes.c.tenant_id == tenants.c.tenant_id))),
+        None,
+        "select names tenant-owned table notes ",
+        id="correlated-to-a-global-table",
+    ),
+    pytest.param(
+        sa.select(notes.c.id, owners.c.id).select_from(
+            notes.outerjoin(
+                owners, sa.and_(owners.c.id == notes.c.owner_id, notes.c.tenant_id == _T, owners.c.tenant_id == _T)
+            )
+        ),
+        None,
+        "select names tenant-owned table notes ",
+        id="left-join-on-does-not-scope-its-preserved-side",
+    ),
+    pytest.param(
+        sa.select(notes.c.id, owners.c.id).select_from(
+            notes.outerjoin(
+                owners,
+                sa.and_(owners.c.id == notes.c.owner_id, notes.c.tenant_id == _T, owners.c.tenant_id == _T),
+                full=True,
+            )
+        ),
+        None,
+        "select names tenant-owned table owners ",
+        id="full-join-on-scopes-neither-side",
+    ),
+    pytest.param(_owner_lateral(pinned=False), None, "select names tenant-owned table owners ", id="lateral-unpinned"),
     pytest.param(sa.insert(notes).values(id=1, body="x"), None, "insert into tenant-owned table notes", id="insert"),
     pytest.param(
         sa.insert(notes), [{"id": 1}, {"id": 2}], "insert into tenant-owned table notes", id="insert-executemany"
@@ -252,6 +424,65 @@ _SCOPED: list[Any] = [
         None,
         id="union-pinned",
     ),
+    pytest.param(
+        sa.select(notes.c.id).where(
+            notes.c.tenant_id == _T,
+            notes.c.owner_id.in_(
+                sa.select(
+                    sa.select(notes.c.owner_id)
+                    .where(notes.c.tenant_id == _T)
+                    .group_by(notes.c.owner_id)
+                    .cte("c")
+                    .c.owner_id
+                )
+            ),
+        ),
+        None,
+        id="cte-pinned",
+    ),
+    pytest.param(
+        sa.select(notes).where(
+            notes.c.tenant_id == _T,
+            sa.exists(
+                sa.select(owners.c.id).where(owners.c.id == notes.c.owner_id, owners.c.tenant_id == _T).correlate(notes)
+            ),
+        ),
+        None,
+        id="explicitly-correlated-exists-pinned",
+    ),
+    pytest.param(
+        _update_from_owner_counts(pinned=True),
+        None,
+        id="update-from-pinned-subquery",
+    ),
+    pytest.param(
+        sa.select(notes.c.id, owners.c.id, _aliased.c.id).where(
+            notes.c.tenant_id == _T,
+            owners.c.tenant_id == notes.c.tenant_id,
+            _aliased.c.tenant_id == owners.c.tenant_id,
+            owners.c.id == notes.c.owner_id,
+            _aliased.c.owner_id == owners.c.id,
+        ),
+        None,
+        id="pin-reached-through-tenant-equalities",
+    ),
+    pytest.param(
+        sa.select(notes).where(
+            notes.c.tenant_id == _T,
+            sa.exists(
+                sa.select(owners.c.id).where(owners.c.id == notes.c.owner_id, owners.c.tenant_id == notes.c.tenant_id)
+            ),
+        ),
+        None,
+        id="correlated-to-the-enclosing-pinned-table",
+    ),
+    pytest.param(
+        sa.select(notes.c.id, owners.c.id)
+        .select_from(notes.outerjoin(owners, owners.c.id == notes.c.owner_id, full=True))
+        .where(notes.c.tenant_id == _T, owners.c.tenant_id == _T),
+        None,
+        id="full-join-pinned-in-where",
+    ),
     pytest.param(sa.select(sa.literal(1)), None, id="from-less-select"),
     pytest.param(sa.select(tenants), None, id="global-table-carrying-tenant-id"),
     pytest.param(sa.select(plain), None, id="table-without-tenant-id"),
@@ -289,6 +520,64 @@ _SCOPED: list[Any] = [
 @pytest.mark.parametrize(("statement", "params"), _SCOPED)
 def test_a_scoped_statement_runs(engine: Engine, statement: Statement, params: Params) -> None:
     _run(engine, statement, params)
+
+
+# Shapes SQLite cannot run, checked without executing.
+_SCOPED_BEYOND_SQLITE: list[Any] = [
+    pytest.param(_owner_lateral(pinned=True), id="lateral-pinned"),
+    pytest.param(
+        _delete_using_owner_counts(pinned=True),
+        id="delete-using-pinned-subquery",
+    ),
+]
+
+
+@pytest.mark.parametrize("statement", _SCOPED_BEYOND_SQLITE)
+def test_a_scoped_statement_beyond_sqlite_passes_the_check(statement: Statement) -> None:
+    TenantStatementGuard(_md).check(statement)
+
+
+_scoped = ScopedStatements(StoreScope(TenantId(_T)))
+
+
+def _builder_statements() -> list[Any]:
+    """What the scoped seam's builders emit, alone and composed."""
+    on_owner = owners.c.id == notes.c.owner_id
+    return [
+        pytest.param(_scoped.select(notes), id="select"),
+        pytest.param(_scoped.select(_aliased, _aliased.c.id), id="select-alias"),
+        pytest.param(sa.select(_scoped.exists(notes, notes.c.id > 0)), id="exists"),
+        pytest.param(_scoped.select(notes, notes.c.id).where(_scoped.exists(owners, on_owner)), id="correlated-exists"),
+        pytest.param(
+            _scoped.select(notes, notes.c.id).where(~_scoped.exists(owners, on_owner)), id="correlated-not-exists"
+        ),
+        pytest.param(_scoped.select(_scoped.scope_join(notes, owners, on_owner), notes.c.id), id="scope-join-inner"),
+        pytest.param(
+            _scoped.select(_scoped.scope_join(notes, owners, on_owner, isouter=True), notes.c.id),
+            id="scope-join-outer",
+        ),
+        pytest.param(
+            _scoped.select(
+                _scoped.scope_join(
+                    _scoped.scope_join(notes, owners, on_owner),
+                    _aliased,
+                    _aliased.c.owner_id == owners.c.id,
+                    isouter=True,
+                ),
+                notes.c.id,
+            ),
+            id="scope-join-chained",
+        ),
+        pytest.param(sa.union(_scoped.select(notes, notes.c.id), _scoped.select(owners, owners.c.id)), id="union"),
+        pytest.param(_scoped.insert(notes).values(id=1, body="x"), id="insert"),
+        pytest.param(_scoped.update(notes).where(notes.c.id == 1).values(body="y"), id="update"),
+        pytest.param(_scoped.delete(notes).where(notes.c.id == 1), id="delete"),
+    ]
+
+
+@pytest.mark.parametrize("statement", _builder_statements())
+def test_what_the_scoped_builders_emit_passes_the_guard(engine: Engine, statement: Statement) -> None:
+    _run(engine, statement)
 
 
 def test_a_statement_marked_hub_scoped_runs_unwalked(engine: Engine) -> None:
