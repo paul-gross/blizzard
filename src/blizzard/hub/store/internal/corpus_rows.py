@@ -63,8 +63,11 @@ from blizzard.hub.tenancy import TenantId
 
 def open_tenant(table: Any) -> ColumnElement[bool]:
     """``table``'s rows that belong to an open tenant — one with no ``tenant_deletions`` row, whether
-    a closed tenant's drain is still running or done."""
-    return table.c.tenant_id.not_in(select(s.tenant_deletions.c.tenant_id))
+    a closed tenant's drain is still running or done. A row naming no tenant belongs to none, so it
+    is left out whatever ``tenant_deletions`` holds: ``NOT IN`` alone would admit it while that
+    table is empty."""
+    tenant = table.c.tenant_id
+    return and_(tenant.is_not(None), tenant.not_in(select(s.tenant_deletions.c.tenant_id)))
 
 
 # --- closing candidates --------------------------------------------------------------

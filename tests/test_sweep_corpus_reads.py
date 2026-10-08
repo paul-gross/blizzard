@@ -1,7 +1,7 @@
 """The sweep corpus reads (``SweepCorpusReads``) over a real, migrated store holding three tenants —
 the carried-over one, a second open one, and a closed one: every corpus read returns the open
-tenants' rows only, each tagged with its tenant; the probes count every tenant; and every statement
-the group issues carries the hub-scoped marker."""
+tenants' rows only, each tagged with its tenant, and never a row naming no tenant; the probes count
+every tenant; and every statement the group issues carries the hub-scoped marker."""
 
 from __future__ import annotations
 
@@ -43,21 +43,21 @@ class _World:
         self.carried = default_tenant(self.engine)
         self.corpus = SweepCorpusReads(partial(hub_scoped_read, hub_level_connections(self.engine)))
         for tenant in (_OPEN, _CLOSED):
-            self._insert(s.tenants, tenant_id=tenant, name=tenant, created_at=_AT, created_by="test")
+            self.insert(s.tenants, tenant_id=tenant, name=tenant, created_at=_AT, created_by="test")
         for tenant in (self.carried, _OPEN, _CLOSED):
             self._seed_tenant(tenant)
 
     def close(self, tenant: TenantId) -> None:
-        self._insert(s.tenant_deletions, tenant_id=tenant, name=tenant, deleted_by="test")
+        self.insert(s.tenant_deletions, tenant_id=tenant, name=tenant, deleted_by="test")
 
-    def _insert(self, table: sa.Table, **values: Any) -> None:
+    def insert(self, table: sa.Table, **values: Any) -> None:
         with self.engine.begin() as conn:
             conn.execute(hub_scoped(sa.insert(table).values(**values)))
 
     def _seed_tenant(self, tenant: TenantId) -> None:
         """A live chunk and a deleted one, each holding a work ref and a pending close intent, and
         a visible, derived transcript segment of the live chunk — every row in ``tenant``."""
-        self._insert(
+        self.insert(
             s.graphs,
             tenant_id=tenant,
             graph_id=f"gr_{tenant}",
@@ -67,16 +67,14 @@ class _World:
             created_at=_AT,
         )
         for chunk_id in (_live(tenant), _gone(tenant)):
-            self._insert(
-                s.chunks, tenant_id=tenant, chunk_id=chunk_id, graph_id=f"gr_{tenant}", minted_at=_AT, model=""
-            )
-            self._insert(s.chunk_work_refs, tenant_id=tenant, chunk_id=chunk_id, source="src", ref=chunk_id)
-            self._insert(
+            self.insert(s.chunks, tenant_id=tenant, chunk_id=chunk_id, graph_id=f"gr_{tenant}", minted_at=_AT, model="")
+            self.insert(s.chunk_work_refs, tenant_id=tenant, chunk_id=chunk_id, source="src", ref=chunk_id)
+            self.insert(
                 s.close_intents, tenant_id=tenant, chunk_id=chunk_id, source="src", ref=chunk_id, enqueued_at=_AT
             )
-        self._insert(s.chunk_deleted, tenant_id=tenant, chunk_id=_gone(tenant), deleted_at=_AT, deleted_by="test")
+        self.insert(s.chunk_deleted, tenant_id=tenant, chunk_id=_gone(tenant), deleted_at=_AT, deleted_by="test")
         self._seed_export_facts(tenant)
-        self._insert(
+        self.insert(
             s.transcript_segments,
             tenant_id=tenant,
             segment_id=_segment(tenant),
@@ -94,7 +92,7 @@ class _World:
             received_at=_AT,
             content_digest="d",
         )
-        self._insert(
+        self.insert(
             s.transcript_event_derivations,
             tenant_id=tenant,
             segment_id=_segment(tenant),
@@ -109,7 +107,7 @@ class _World:
         """The live chunk's closing transition, lease, usage and a dropped segment — what the trace and
         egress sweeps read."""
         live = _live(tenant)
-        self._insert(
+        self.insert(
             s.transitions,
             tenant_id=tenant,
             transition_id=f"tr_{tenant}",
@@ -120,8 +118,8 @@ class _World:
             runner_id="r1",
             recorded_at=_AT,
         )
-        self._insert(s.lease_facts, tenant_id=tenant, chunk_id=live, epoch=1, runner_id="r1", minted_at=_AT)
-        self._insert(
+        self.insert(s.lease_facts, tenant_id=tenant, chunk_id=live, epoch=1, runner_id="r1", minted_at=_AT)
+        self.insert(
             s.usage_facts,
             tenant_id=tenant,
             chunk_id=live,
@@ -136,7 +134,7 @@ class _World:
             cache_create_tokens=0,
             recorded_at=_AT,
         )
-        self._insert(
+        self.insert(
             s.transcript_event_drops,
             tenant_id=tenant,
             segment_id=f"sg_dropped_{tenant}",
@@ -229,6 +227,32 @@ def test_backfill_epochs_are_the_open_tenants_each_with_its_tenant(world: _World
     drops = world.corpus.epoch_drops(every)
     assert {(m.tenant, m.segment_id) for m in markers} == {(t, _segment(t)) for t in (world.carried, _OPEN)}
     assert {(d.tenant, d.segment_id) for d in drops} == {(t, f"sg_dropped_{t}") for t in (world.carried, _OPEN)}
+
+
+@pytest.mark.parametrize("closed", [False, True], ids=["no-tenant-closed", "a-tenant-closed"])
+def test_a_row_naming_no_tenant_is_left_out_whether_or_not_a_tenant_is_closed(tmp_path: Path, closed: bool) -> None:
+    world = _World(tmp_path)
+    if closed:
+        world.close(_CLOSED)
+    live = _live(world.carried)
+    world.insert(s.chunk_work_refs, tenant_id=None, chunk_id=live, source="src", ref="untenanted")
+    world.insert(
+        s.usage_facts,
+        tenant_id=None,
+        chunk_id=live,
+        node_id="nd_1",
+        epoch=1,
+        runner_id="r1",
+        kind="untenanted",
+        model="m",
+        input_tokens=1,
+        output_tokens=1,
+        cache_read_tokens=0,
+        cache_create_tokens=0,
+        recorded_at=_AT,
+    )
+    assert None not in {row.tenant for row in world.corpus.live_work_refs()}
+    assert None not in {row.tenant for row in world.corpus.usage_after(UsagePosition(_BEFORE), _AFTER, 50)}
 
 
 def test_the_probes_count_every_tenant_and_a_close_moves_the_work_refs_probe(tmp_path: Path) -> None:

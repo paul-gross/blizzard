@@ -5,12 +5,12 @@ derivation, and the trace and egress exports.
 Each corpus read answers, beside every row, the tenant the row belongs to, and leaves out every
 closed tenant — one with a ``tenant_deletions`` row, whether its drain is still running or done —
 through the one predicate ``corpus_rows.open_tenant``, applied to every tenant-owned table a read
-returns rows of. A probe that gates a pass (``bzh:probe-gated-pass``) stays hub-wide: it counts every
-tenant's rows, closed or not. Chunk ids are hub-minted, so a filter on a chunk id needs no tenant
-beside it; a segment id is runner-minted, so a read that matches one segment row against another
-matches the tenant too. The group reads and never writes: whatever a pass then does with a row, it
-does in that row's tenant. The trace and egress reads' statements live in ``corpus_rows`` and run on
-the marked connection this group opens."""
+returns rows of; the same predicate leaves out a row naming no tenant. A probe that gates a pass
+(``bzh:probe-gated-pass``) stays hub-wide: it counts every tenant's rows, closed or not. Chunk ids
+are hub-minted, so a filter on a chunk id needs no tenant beside it; a segment id is runner-minted,
+so a read that matches one segment row against another matches the tenant too. The group reads and
+never writes: whatever a pass then does with a row, it does in that row's tenant. The trace and
+egress reads' statements live in ``corpus_rows`` and run on the marked connection this group opens."""
 
 from __future__ import annotations
 
