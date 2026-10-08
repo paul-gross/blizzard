@@ -289,6 +289,101 @@ def test_hub_acquires_no_connection_outside_the_store_seam() -> None:
     assert not violations, f"E — hub/ must route every connection through HubStoreConnections: {violations}"
 
 
+_TENANT_GUARD_MODULE = "blizzard.hub.store.tenant_guard"
+_HUB_SCOPED_NAMES = frozenset({"HUB_SCOPED_OPTION", "blizzard_hub_scoped"})
+
+
+def _tenant_seam_breaches(src_root: Path) -> list[str]:
+    """Each place under ``src_root`` (a ``blizzard`` package root) that reaches the tenant seam from outside it: an
+    import of the statement guard outside ``hub/store/`` and the hub app that installs it; the hub-scoped exemption
+    named outside ``hub/tenancy.py``, ``hub/store/`` and the invariant checker; ``ScopedConnections`` constructed
+    outside ``hub/store/`` rather than opened through ``HubStoreConnections.scoped``."""
+    store_dir = src_root / "hub" / "store"
+    guard_importers = (src_root / "hub" / "app.py",)
+    exemption_holders = (src_root / "hub" / "tenancy.py", src_root / "tools" / "invariants.py")
+    breaches: list[str] = []
+    for path in sorted(src_root.rglob("*.py")):
+        if path.is_relative_to(store_dir):
+            continue
+        where = path.relative_to(src_root.parent)
+        for node in ast.walk(ast.parse(path.read_text(), filename=str(path))):
+            if isinstance(node, ast.Import | ast.ImportFrom) and path not in guard_importers:
+                if isinstance(node, ast.Import):
+                    modules = [alias.name for alias in node.names]
+                else:
+                    base = _absolute_module(path, src_root, node)
+                    modules = [base, *(f"{base}.{alias.name}" for alias in node.names)]
+                if _TENANT_GUARD_MODULE in modules:
+                    breaches.append(f"{where}:{node.lineno} imports {_TENANT_GUARD_MODULE}")
+            if path not in exemption_holders and _HUB_SCOPED_NAMES.intersection(_names_spelled(node)):
+                breaches.append(f"{where}:{getattr(node, 'lineno', '?')} names the hub-scoped exemption")
+            if isinstance(node, ast.Call) and _terminal(node.func) == "ScopedConnections":
+                breaches.append(f"{where}:{node.lineno} constructs ScopedConnections")
+    return breaches
+
+
+def _names_spelled(node: ast.AST) -> list[str]:
+    """The identifiers or string a node spells: an imported name, a bare name, an attribute, a string literal."""
+    if isinstance(node, ast.ImportFrom):
+        return [alias.name for alias in node.names]
+    if isinstance(node, ast.Name):
+        return [node.id]
+    if isinstance(node, ast.Attribute):
+        return [node.attr]
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return [node.value]
+    return []
+
+
+def test_the_tenant_seam_is_reached_only_through_its_own_doors() -> None:
+    """``bzh:tenant-scoped-store`` and ``bzh:hub-scoped-reads-confined``: the statement guard is installed by the hub
+    app alone, a scoped connections object is opened only through ``HubStoreConnections.scoped``, and the exemption
+    that lets a statement past the guard is named only by the tenant primitives, the store, and the invariant
+    checker's cross-tenant audits."""
+    breaches = _tenant_seam_breaches(_SRC_DIR)
+    assert not breaches, f"tenant seam — reached from outside its own doors: {breaches}"
+
+
+def _plant_tenant_seam(tmp_path: Path, rel: str, text: str) -> list[str]:
+    src = tmp_path / "blizzard"
+    (src / rel).parent.mkdir(parents=True, exist_ok=True)
+    (src / rel).write_text(text)
+    return _tenant_seam_breaches(src)
+
+
+@pytest.mark.parametrize(
+    ("rel", "text"),
+    [
+        ("hub/domain/x.py", "from blizzard.hub.store.tenant_guard import install_tenant_guard\n"),
+        ("hub/domain/x.py", "import blizzard.hub.store.tenant_guard\n"),
+        ("hub/domain/x.py", "from blizzard.hub.store import tenant_guard\n"),
+        ("hub/composition.py", "from .store.tenant_guard import install_tenant_guard\n"),
+        ("hub/domain/x.py", "from blizzard.hub.tenancy import HUB_SCOPED_OPTION\n"),
+        ("hub/api/x.py", "import blizzard.hub.tenancy as t\nOPTIONS = {t.HUB_SCOPED_OPTION: True}\n"),
+        ("hub/api/x.py", 'OPTIONS = {"blizzard_hub_scoped": True}\n'),
+        ("hub/domain/x.py", "conn = ScopedConnections(engine, errors, scope)\n"),
+        ("hub/composition.py", "conn = scoped.ScopedConnections(engine, errors, scope)\n"),
+    ],
+)
+def test_tenant_seam_check_catches_every_breach(tmp_path: Path, rel: str, text: str) -> None:
+    assert _plant_tenant_seam(tmp_path, rel, text)
+
+
+@pytest.mark.parametrize(
+    ("rel", "text"),
+    [
+        ("hub/app.py", "from blizzard.hub.store.tenant_guard import install_tenant_guard\n"),
+        ("hub/store/scoped.py", "from blizzard.hub.tenancy import HUB_SCOPED_OPTION\nScopedConnections(e, r, s)\n"),
+        ("hub/store/internal/x.py", "from blizzard.hub.tenancy import HUB_SCOPED_OPTION\n"),
+        ("hub/tenancy.py", 'HUB_SCOPED_OPTION = "blizzard_hub_scoped"\n'),
+        ("tools/invariants.py", "from blizzard.hub.tenancy import HUB_SCOPED_OPTION\n"),
+        ("hub/domain/x.py", "connections = core.connections.scoped(scope)\n"),
+    ],
+)
+def test_tenant_seam_check_admits_its_own_doors(tmp_path: Path, rel: str, text: str) -> None:
+    assert _plant_tenant_seam(tmp_path, rel, text) == []
+
+
 _EVENT_LOG_SERVICE_FILE = _HUB_DIR / "domain" / "chunk" / "event_log.py"
 _CHUNK_EVENTS_STORE_FILE = _HUB_DIR / "store" / "internal" / "chunk_events_store.py"
 

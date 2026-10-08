@@ -21,6 +21,7 @@ from fastapi import Depends, FastAPI, Request, status
 from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy import Engine
 
 from blizzard import __version__
 from blizzard.foundation.forwarded import TrustedProxies
@@ -98,6 +99,7 @@ from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.secrets import KeyCoverage, hub_key_provider, require_hub_key
 from blizzard.hub.secrets.rotation import RotationResult, rotate_keys
+from blizzard.hub.store.tenant_guard import install_tenant_guard
 from blizzard.hub.work_sources.internal.factory import WorkSourceEntry
 from blizzard.wire.components import HUB_SCHEMA_COMPONENTS
 
@@ -240,9 +242,16 @@ def _refuse_retired_runner(_request: Request, exc: Exception) -> JSONResponse:
     return JSONResponse(status_code=status.HTTP_403_FORBIDDEN, content={"detail": str(exc)})
 
 
+def open_hub_engine(db_url: str) -> Engine:
+    """The hub process's engine, opened after the tenant statement guard is installed — so a hub started with
+    ``BLIZZARD_TENANT_GUARD=1`` checks every statement it runs."""
+    install_tenant_guard()
+    return create_engine_from_url(db_url)
+
+
 def rotate_secret_keys(config: HubConfig, environ: Mapping[str, str]) -> RotationResult:
     """The offline ``rotate-key`` wiring: the store and key source opened directly, no app."""
-    engine = create_engine_from_url(config.db_url)
+    engine = open_hub_engine(config.db_url)
     try:
         return rotate_keys(build_process_core(engine).secrets, environ, data_dir=config.data_dir)
     finally:
@@ -254,7 +263,7 @@ def import_legacy_config(config: HubConfig, environ: Mapping[str, str]) -> Impor
     built, then the store and key source opened directly, no app."""
     require_hub_key(environ, data_dir=config.data_dir)
     legacy = read_legacy_keys(config.config_path, environ)
-    engine = create_engine_from_url(config.db_url)
+    engine = open_hub_engine(config.db_url)
     try:
         core = build_process_core(engine)
         authoring = build_config_authoring(core, secret_keys=hub_key_provider(environ, data_dir=config.data_dir))
@@ -411,7 +420,7 @@ def build_hosted_app(
         scope=PLATFORM_INSTRUMENTATION_SCOPE,
         scope_version=PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
     )
-    engine = create_engine_from_url(config.db_url)
+    engine = open_hub_engine(config.db_url)
     platform_tracing.instrument_engine(engine)
     reader = SqlAlchemyStoreStatusReader(engine)
     expected = migration_runner(config).script_head()
