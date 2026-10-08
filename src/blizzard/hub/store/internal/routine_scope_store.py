@@ -13,16 +13,16 @@ from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.config.changes import ConfigChange
 from blizzard.hub.domain.config.work_sources import ConfigRevisionConflict
 from blizzard.hub.domain.garden.routines import IWriteRoutineScopeRepository, Routine
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.config_change_store import append_change
 from blizzard.hub.store.internal.routine_store import link_scope, move_revision
 from blizzard.hub.store.schema import routine_scopes
+from blizzard.hub.store.scoped import ScopedConnections
 
 
 class RoutineScopeStore:
     """Read-write ``routine_scopes`` adapter over the hub store engine."""
 
-    def __init__(self, store: HubStoreConnections) -> None:
+    def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
     def list_scopes(self, routine_id: str) -> list[str]:

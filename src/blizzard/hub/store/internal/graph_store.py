@@ -36,7 +36,6 @@ from blizzard.hub.domain.graph.model import (
     RunStep,
     SessionDecl,
 )
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import lock_keys
 from blizzard.hub.store.internal.newest_fact import newest_retired_select
 from blizzard.hub.store.schema import (
@@ -49,6 +48,7 @@ from blizzard.hub.store.schema import (
     graph_sessions,
     graphs,
 )
+from blizzard.hub.store.scoped import ScopedConnections
 
 
 @adapter_model
@@ -291,7 +291,7 @@ class LockedGraphName:
 class GraphStore:
     """Read-write graph adapter over the hub store engine."""
 
-    def __init__(self, store: HubStoreConnections) -> None:
+    def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
     @contextmanager

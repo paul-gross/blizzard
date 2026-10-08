@@ -16,8 +16,8 @@ from blizzard.foundation.clock import IClock
 from blizzard.hub.auth.models import Session
 from blizzard.hub.auth.sessions import IReadSessionRepository
 from blizzard.hub.domain.chunk.model import ChunkFacts
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
+from blizzard.hub.store.scoped import ScopedConnections
 from tests.support import HubHarness, build_hub, hub_store_connections, ingest, seed_session, seed_user
 from tests.test_decisions_api import _GATE_YAML
 from tests.test_questions_api import _asked
@@ -29,7 +29,7 @@ class _CountingFactsStore(ChunkFactsStore):
     """Counts ``load_facts`` per chunk id — the seam a write verb's route
     (``ChunkChanged.before``/``publish``) and its domain gate both reach through."""
 
-    def __init__(self, store: HubStoreConnections, clock: IClock) -> None:
+    def __init__(self, store: ScopedConnections, clock: IClock) -> None:
         super().__init__(store, clock)
         self.load_facts_calls: dict[str, int] = {}
 

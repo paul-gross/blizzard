@@ -24,8 +24,8 @@ from blizzard.hub.domain.observability.transcripts import (
     lost_turns,
 )
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal import chunk_rows
+from blizzard.hub.store.scoped import ScopedConnections
 
 # --- statements: nothing below executes a statement built elsewhere, so the unit tier
 # compiles the real ones under both dialects (`bzh:sql-portable`).
@@ -248,7 +248,7 @@ def _update_still_rejected_stmt(record: TranscriptSlice, *, byte_count: int, rea
 class TranscriptSegmentStore:
     """Read-write transcript-segment adapter over the hub store engine."""
 
-    def __init__(self, store: HubStoreConnections) -> None:
+    def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
     # --- reads ----------------------------------------------------------------

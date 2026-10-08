@@ -22,11 +22,11 @@ from blizzard.hub.domain.config.changes import ConfigChange
 from blizzard.hub.domain.config.work_sources import ConfigRevisionConflict
 from blizzard.hub.domain.garden.routines import IWriteRoutineRepository, Routine, RoutineNameTakenError
 from blizzard.hub.domain.garden.scopes import ScopeMint
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.config_change_store import append_change
 from blizzard.hub.store.internal.newest_fact import newest_retired_select
 from blizzard.hub.store.internal.scope_store import ensure_scope
 from blizzard.hub.store.schema import routine_lifecycle_facts, routine_scopes, routines
+from blizzard.hub.store.scoped import ScopedConnections
 
 
 @adapter_model
@@ -143,7 +143,7 @@ def set_linked_scopes(
 class RoutineStore:
     """Read-write routine adapter over the hub store engine."""
 
-    def __init__(self, store: HubStoreConnections) -> None:
+    def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
     def create(self, routine: Routine, *, change: ConfigChange, scope_mint: ScopeMint | None) -> Routine:

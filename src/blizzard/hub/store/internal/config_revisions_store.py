@@ -8,8 +8,8 @@ from sqlalchemy import Table, select
 
 from blizzard.hub.domain.config.changes import RecordKind
 from blizzard.hub.domain.config.revisions import ConfigRevisions, IReadConfigRevisions
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.schema import repositories, secrets, work_sources
+from blizzard.hub.store.scoped import ScopedConnections
 
 _REFERRING: dict[RecordKind, Table] = {
     RecordKind.WORK_SOURCE: work_sources,
@@ -18,7 +18,7 @@ _REFERRING: dict[RecordKind, Table] = {
 
 
 class ConfigRevisionsStore:
-    def __init__(self, store: HubStoreConnections) -> None:
+    def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
     def revisions(self, kind: RecordKind, key: str) -> ConfigRevisions | None:

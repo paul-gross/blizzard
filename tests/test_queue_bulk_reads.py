@@ -18,9 +18,9 @@ from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.model import ChunkFacts
 from blizzard.hub.domain.chunk.ports.queue import IWriteChunkQueueRepository
 from blizzard.hub.domain.operations.queue import QueueService
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
+from blizzard.hub.store.scoped import ScopedConnections
 from tests.support import build_hub, capture_statements, count_queries, hub_store_connections, ingest
 
 pytestmark = pytest.mark.component
@@ -100,7 +100,7 @@ class _CountingFactsStore(ChunkFactsStore):
     """Counts the bulk and per-chunk facts seams, so a test can pin which shape a peek
     actually reaches."""
 
-    def __init__(self, store: HubStoreConnections, clock: IClock) -> None:
+    def __init__(self, store: ScopedConnections, clock: IClock) -> None:
         super().__init__(store, clock)
         self.load_all_facts_calls = 0
         self.load_live_statuses_calls = 0

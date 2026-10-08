@@ -26,8 +26,8 @@ from blizzard.hub.domain.garden.findings.model import (
     derive_liveness,
 )
 from blizzard.hub.domain.kernel.pagination import MalformedCursor, decode_cursor, encode_cursor
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.schema import finding_facts, finding_sets, findings
+from blizzard.hub.store.scoped import ScopedConnections
 
 #: `list_page`'s cursor: a plain `finding_id`, already total unlike chunks' `minted_at`.
 _CURSOR_ARITY = 1
@@ -104,7 +104,7 @@ def facts_by_finding(conn: Connection, finding_ids: list[str]) -> dict[str, list
 class FindingStore:
     """Read-write finding adapter over the hub store engine."""
 
-    def __init__(self, store: HubStoreConnections) -> None:
+    def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
     def add(
@@ -390,7 +390,7 @@ def _conforms_finding_store(x: FindingStore) -> IWriteFindingRepository:
 class FindingSetStore:
     """Read-write finding-set adapter over the hub store engine."""
 
-    def __init__(self, store: HubStoreConnections) -> None:
+    def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
     def create(

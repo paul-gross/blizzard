@@ -24,10 +24,11 @@ from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.store import schema as hub
-from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
+from blizzard.hub.store.errors import HubStoreErrorFactory
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
 from blizzard.hub.store.internal.chunk_rows import DEFAULT_MODEL
+from blizzard.hub.store.internal.sole_tenant import SoleTenantConnections
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from blizzard.runner.process.probe import IProcessProbe
 from blizzard.runner.store import schema as runner
@@ -1104,7 +1105,7 @@ class HubInvariants:
                 violations.extend(check.run())
         with self.engine.connect() as conn:
             violations.extend(MigrationsAtomic(conn).run())
-        store_connections = HubStoreConnections(self.engine, HubStoreErrorFactory(get_logger("blizzard.hub.store")))
+        store_connections = SoleTenantConnections(self.engine, HubStoreErrorFactory(get_logger("blizzard.hub.store")))
         facts_store = ChunkFactsStore(store_connections, self.clock)
         record_store = ChunkRecordStore(store_connections, self.clock)
         for facts_check in (

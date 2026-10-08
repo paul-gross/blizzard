@@ -31,11 +31,11 @@ from blizzard.hub.domain.config.work_sources import (
     WorkSourceNameTaken,
     WorkSourceSecretUnavailable,
 )
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal import repository_record_store as repository_writes
 from blizzard.hub.store.internal import work_source_record_store as work_source_writes
 from blizzard.hub.store.internal.secret_store import insert_secret
 from blizzard.hub.store.schema import artifacts, config_import_facts
+from blizzard.hub.store.scoped import ScopedConnections
 
 #: What a create body's in-transaction checks raise when a concurrent write took its claim first.
 _REFUSALS = (
@@ -68,7 +68,7 @@ def _append_fact(conn: Connection, fact: ConfigImportFact) -> None:
 
 
 class ConfigImportStore:
-    def __init__(self, store: HubStoreConnections) -> None:
+    def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
     def recorded(self) -> bool:

@@ -28,8 +28,8 @@ from blizzard.hub.domain.runners.registration import (
     TokenRotation,
 )
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.newest_fact import newest_fact_select
+from blizzard.hub.store.scoped import ScopedConnections
 
 
 def locked_token_hash(conn: Connection, runner_id: str) -> str | None:
@@ -48,7 +48,7 @@ def locked_token_hash(conn: Connection, runner_id: str) -> str | None:
 class RunnerRegistryStore:
     """Read-write fleet-registry adapter over the hub store engine."""
 
-    def __init__(self, store: HubStoreConnections) -> None:
+    def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
     # --- reads --------------------------------------------------------------

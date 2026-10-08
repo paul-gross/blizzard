@@ -10,7 +10,6 @@ from sqlalchemy import Table, select
 from sqlalchemy.engine import Connection
 
 from blizzard.hub.domain.config.changes import ISecretReferences, RecordKind, RecordRef
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.newest_fact import newest_retired_select
 from blizzard.hub.store.schema import (
     repositories,
@@ -18,6 +17,7 @@ from blizzard.hub.store.schema import (
     work_source_lifecycle_facts,
     work_sources,
 )
+from blizzard.hub.store.scoped import ScopedConnections
 
 #: Each referring kind: its record table and its lifecycle-fact table.
 _REFERRING: tuple[tuple[RecordKind, Table, Table], ...] = (
@@ -47,7 +47,7 @@ def active_referrers(conn: Connection, secret_names: list[str]) -> dict[str, lis
 class SecretReferrersStore:
     """The secret view's referrers adapter over the hub store."""
 
-    def __init__(self, store: HubStoreConnections) -> None:
+    def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
     def referrers_of(self, names: list[str]) -> dict[str, list[RecordRef]]:

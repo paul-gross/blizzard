@@ -13,7 +13,6 @@ from sqlalchemy import update
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.lifecycle import IWriteChunkLifecycleRepository
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import (
     conn_of,
     enqueue_close_intents,
@@ -21,12 +20,13 @@ from blizzard.hub.store.internal.chunk_rows import (
     next_route_seq,
     route_of_conn,
 )
+from blizzard.hub.store.scoped import ScopedConnections
 
 
 class ChunkLifecycleStore:
     """The chunk's terminal and paused/resumed facts."""
 
-    def __init__(self, store: HubStoreConnections) -> None:
+    def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
     def is_ephemeral(self, chunk_id: str) -> bool:

@@ -17,9 +17,9 @@ from blizzard.hub.domain.garden.review.materialize import (
     ReviewFindingsOutcome,
     ReviewFindingsPlan,
 )
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import fence, lock_chunk_row, next_artifact_seq
 from blizzard.hub.store.schema import artifacts, finding_facts, findings, scopes
+from blizzard.hub.store.scoped import ScopedConnections
 
 #: Keyed on `chunk_id` alone: a chunk owes at most one review-findings delivery.
 _DELIVERED_MARKER_NAME = "review-findings-delivered"
@@ -30,7 +30,7 @@ class ReviewFindingsStore:
     clock (`bzh:injected-clock`) — every timestamp arrives already stamped on
     `ReviewFindingsPlan.at`."""
 
-    def __init__(self, store: HubStoreConnections) -> None:
+    def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
     def already_delivered(self, *, chunk_id: str) -> bool:

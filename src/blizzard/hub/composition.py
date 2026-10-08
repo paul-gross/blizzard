@@ -424,7 +424,7 @@ class LiveConfig:
 
 def build_live_config(core: HubCore, *, secret_keys: IHubKeyProvider) -> LiveConfig:
     return LiveConfig(
-        objects=ConfigObjectCache(ConfigRevisionsStore(core.store_connections)),
+        objects=ConfigObjectCache(ConfigRevisionsStore(core.tenant_connections)),
         secrets=StoreSecretReader(catalog=core.secrets, sealed=core.secrets, cipher=secret_cipher(secret_keys)),
     )
 
@@ -453,9 +453,9 @@ def build_hub_core(engine: Engine, *, clock: IClock) -> HubCore:
     store_connections = HubStoreConnections(engine, store_errors)
     tenant_connections = SoleTenantConnections(engine, store_errors)
     auth_errors = RepoErrorFactory(get_logger("blizzard.hub.auth"))
-    registry = RunnerRegistryStore(store_connections)
-    work_item_store = WorkItemStore(store_connections)
-    chunk_stores = build_chunk_stores(store_connections, clock, registry=registry)
+    registry = RunnerRegistryStore(tenant_connections)
+    work_item_store = WorkItemStore(tenant_connections)
+    chunk_stores = build_chunk_stores(tenant_connections, clock, registry=registry)
     cycle_lock = threading.Lock()
     delete = DeleteService(
         items=work_item_store,
@@ -463,10 +463,10 @@ def build_hub_core(engine: Engine, *, clock: IClock) -> HubCore:
         exclusive=chunk_stores.exclusive,
         cycle_lock=cycle_lock,
     )
-    finding_store = FindingStore(store_connections)
+    finding_store = FindingStore(tenant_connections)
     finding_exit = FindingExitService(repo=finding_store, clock=clock)
-    garden_proposal_store = GardenProposalStore(store_connections)
-    garden_proposal_closure_store = GardenProposalClosureStore(store_connections)
+    garden_proposal_store = GardenProposalStore(tenant_connections)
+    garden_proposal_closure_store = GardenProposalClosureStore(tenant_connections)
     return HubCore(
         store_connections=store_connections,
         tenant_connections=tenant_connections,
@@ -481,13 +481,13 @@ def build_hub_core(engine: Engine, *, clock: IClock) -> HubCore:
         finding_exit=finding_exit,
         garden_proposal_store=garden_proposal_store,
         garden_proposal_closure_store=garden_proposal_closure_store,
-        secrets=SecretStore(store_connections),
-        work_source_records=WorkSourceRecordStore(store_connections),
-        repository_records=RepositoryRecordStore(store_connections),
-        secret_referrers=SecretReferrersStore(store_connections),
-        config_changes=ConfigChangeStore(store_connections),
-        config_apply=ConfigApplyStore(store_connections),
-        config_import=ConfigImportStore(store_connections),
+        secrets=SecretStore(tenant_connections),
+        work_source_records=WorkSourceRecordStore(tenant_connections),
+        repository_records=RepositoryRecordStore(tenant_connections),
+        secret_referrers=SecretReferrersStore(tenant_connections),
+        config_changes=ConfigChangeStore(tenant_connections),
+        config_apply=ConfigApplyStore(tenant_connections),
+        config_import=ConfigImportStore(tenant_connections),
         work_item_edits=WorkItemEditService(
             items=work_item_store,
             work_refs=chunk_stores.work_refs,
@@ -574,6 +574,7 @@ def build_services(
     ``oauth_providers``."""
     clock = core.clock
     store_connections = core.store_connections
+    tenant_connections = core.tenant_connections
     chunk_stores = core.chunk_stores
     work_item_store = core.work_item_store
     finding_store = core.finding_store
@@ -597,15 +598,15 @@ def build_services(
     chunk_hub_exec = chunk_stores.hub_exec
     chunk_dependencies = chunk_stores.dependencies
     chunk_exclusive = chunk_stores.exclusive
-    graph_store = GraphStore(store_connections)
-    transcript_store = TranscriptSegmentStore(store_connections)
-    event_store = TranscriptEventStore(store_connections)
+    graph_store = GraphStore(tenant_connections)
+    transcript_store = TranscriptSegmentStore(tenant_connections)
+    event_store = TranscriptEventStore(tenant_connections)
     event_derivation_service = EventDerivationService(
         events=event_store, facts=chunk_facts, record=chunk_record, clock=clock
     )
     event_derivation = EventDerivationReconciler(service=event_derivation_service, events=event_store, clock=clock)
-    analytics_event_queries = AnalyticsEventQueryStore(store_connections)
-    operational_analytics = AnalyticsOperationalStore(store_connections)
+    analytics_event_queries = AnalyticsEventQueryStore(tenant_connections)
+    operational_analytics = AnalyticsOperationalStore(tenant_connections)
     marker_authority = MarkerAuthority()
     # Recording an event is what publishes it (``bzh:operational-event-log``) — one
     # service, shared by every event-authoring call site below, over the same store and
@@ -758,17 +759,17 @@ def build_services(
     signing = SigningKeyService(signing_keys_dir) if signing_keys_dir is not None else None
     auth_throttle = IpThrottle(clock=clock)
     graph_mint = GraphMintService(graphs=graph_store, clock=clock)
-    scope_store = ScopeStore(store_connections)
+    scope_store = ScopeStore(tenant_connections)
     scope_registry = ScopeRegistry(scopes=scope_store, clock=clock)
-    routine_store = RoutineStore(store_connections)
-    routine_scope_store = RoutineScopeStore(store_connections)
-    finding_set_store = FindingSetStore(store_connections)
-    run_context_store = RunContextStore(store_connections)
-    garden_delivery_store = GardenDeliveryStore(store_connections)
-    review_findings_store = ReviewFindingsStore(store_connections)
-    garden_trend_store = GardenTrendStore(store_connections)
-    garden_sweeps_store = GardenSweepsStore(store_connections)
-    garden_run_store = GardenRunStore(store_connections)
+    routine_store = RoutineStore(tenant_connections)
+    routine_scope_store = RoutineScopeStore(tenant_connections)
+    finding_set_store = FindingSetStore(tenant_connections)
+    run_context_store = RunContextStore(tenant_connections)
+    garden_delivery_store = GardenDeliveryStore(tenant_connections)
+    review_findings_store = ReviewFindingsStore(tenant_connections)
+    garden_trend_store = GardenTrendStore(tenant_connections)
+    garden_sweeps_store = GardenSweepsStore(tenant_connections)
+    garden_run_store = GardenRunStore(tenant_connections)
     finding_bucket = FindingBucketReader(finding_store)
     garden_formats = GardenFormats()
     # Bound as `.resolve` (a plain `delivery.validation.CommitResolver` callable), not the bare
@@ -999,7 +1000,7 @@ def build_services(
         annotation=AnnotationReconciler(
             work_refs=chunk_work_refs,
             work_sources=work_sources,
-            memory=ForgeAnnotationStore(store_connections),
+            memory=ForgeAnnotationStore(tenant_connections),
             clock=clock,
             full_pass_floor=timedelta(seconds=FULL_PASS_FLOOR_INTERVALS * annotation_interval_seconds),
         ),

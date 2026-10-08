@@ -21,13 +21,13 @@ from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, DependencyEdge, W
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead, ILockedWorkRefRead
 from blizzard.hub.domain.runners.registration import RunnerRegistration
 from blizzard.hub.domain.runners.route import Route
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_dependencies_store import ChunkDependenciesStore
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
 from blizzard.hub.store.internal.chunk_rows import is_ephemeral_id, lock_chunk_row, lock_keys, route_of_conn
 from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
+from blizzard.hub.store.scoped import ScopedConnections
 
 
 @dataclass(frozen=True)
@@ -95,7 +95,7 @@ class ChunkExclusiveWrites:
 
     def __init__(
         self,
-        store: HubStoreConnections,
+        store: ScopedConnections,
         *,
         facts: ChunkFactsStore,
         record: ChunkRecordStore,

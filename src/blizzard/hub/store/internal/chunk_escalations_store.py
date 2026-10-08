@@ -16,7 +16,6 @@ from blizzard.hub.domain.chunk.ports.escalations import IWriteChunkEscalationsRe
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import (
     ephemeral_ids_select,
     fence,
@@ -24,12 +23,13 @@ from blizzard.hub.store.internal.chunk_rows import (
     record_hub_lease,
 )
 from blizzard.hub.store.internal.chunk_terminal_predicates import maybe_live
+from blizzard.hub.store.scoped import ScopedConnections
 
 
 class ChunkEscalationsStore:
     """The chunk's escalation and delivery-bounce facts."""
 
-    def __init__(self, store: HubStoreConnections, clock: IClock, *, facts: IReadChunkFactsRepository) -> None:
+    def __init__(self, store: ScopedConnections, clock: IClock, *, facts: IReadChunkFactsRepository) -> None:
         self._store = store
         self._clock = clock
         self._facts = facts

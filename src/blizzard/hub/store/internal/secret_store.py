@@ -29,11 +29,11 @@ from blizzard.hub.domain.config.secrets import (
     SecretRotationConflict,
     require_unreferenced,
 )
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.config_change_store import append_change
 from blizzard.hub.store.internal.newest_fact import newest_retired_select
 from blizzard.hub.store.internal.secret_referrers import active_referrers
 from blizzard.hub.store.schema import secret_lifecycle_facts, secrets
+from blizzard.hub.store.scoped import ScopedConnections
 
 _METADATA = (
     secrets.c.name,
@@ -78,7 +78,7 @@ def insert_secret(
 class SecretStore:
     """Read-write secret adapter over the hub store."""
 
-    def __init__(self, store: HubStoreConnections) -> None:
+    def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
     def create(self, name: str, *, sealed: SealedValue, at: datetime, by: str, change: ConfigChange) -> SecretMetadata:

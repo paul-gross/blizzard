@@ -17,15 +17,15 @@ from blizzard.hub.domain.chunk.model import AnswerOutcome, NodeQuestion
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
 from blizzard.hub.domain.chunk.ports.questions import IWriteChunkQuestionsRepository
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import QUESTIONS, fence, lock_chunk_row
 from blizzard.hub.store.internal.chunk_terminal_predicates import chunk_is_terminal
+from blizzard.hub.store.scoped import ScopedConnections
 
 
 class ChunkQuestionsStore:
     """The chunk's asked/answered/delivered question facts."""
 
-    def __init__(self, store: HubStoreConnections, clock: IClock) -> None:
+    def __init__(self, store: ScopedConnections, clock: IClock) -> None:
         self._store = store
         self._clock = clock
 

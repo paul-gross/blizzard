@@ -11,14 +11,14 @@ import json
 from sqlalchemy import select
 
 from blizzard.hub.domain.garden.runs.sweeps import IReadGardenSweepsRepository, SweepFact
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.schema import artifacts, finding_sets
+from blizzard.hub.store.scoped import ScopedConnections
 
 
 class GardenSweepsStore:
     """Read-only garden-sweeps adapter over the hub store engine."""
 
-    def __init__(self, store: HubStoreConnections) -> None:
+    def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
     def sweeps_for_routine(self, routine_name: str) -> list[SweepFact]:

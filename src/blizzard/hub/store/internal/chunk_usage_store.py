@@ -15,8 +15,8 @@ from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.model import UsageTotal
 from blizzard.hub.domain.chunk.ports.usage import IWriteChunkUsageRepository
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.usage_aggregate import usage_aggregate_columns
+from blizzard.hub.store.scoped import ScopedConnections
 
 
 def _usage_total_stmt(since: datetime, until: datetime | None) -> Select[Any]:
@@ -32,7 +32,7 @@ def _usage_total_stmt(since: datetime, until: datetime | None) -> Select[Any]:
 class ChunkUsageStore:
     """The chunk's token/cost usage facts."""
 
-    def __init__(self, store: HubStoreConnections, clock: IClock) -> None:
+    def __init__(self, store: ScopedConnections, clock: IClock) -> None:
         self._store = store
         self._clock = clock
 

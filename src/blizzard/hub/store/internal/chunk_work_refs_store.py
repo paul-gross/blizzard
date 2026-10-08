@@ -23,16 +23,16 @@ from blizzard.hub.domain.chunk.ports.work_refs import (
     resolve_live_holders,
 )
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore, status_family_tables
 from blizzard.hub.store.internal.chunk_rows import conn_of, ephemeral_ids, ephemeral_ids_in
 from blizzard.hub.store.internal.chunk_terminal_predicates import maybe_live
+from blizzard.hub.store.scoped import ScopedConnections
 
 
 class ChunkWorkRefsStore:
     """The chunk's held work refs — the pointers back to the work item(s) it serves."""
 
-    def __init__(self, store: HubStoreConnections, clock: IClock, *, facts: ChunkFactsStore) -> None:
+    def __init__(self, store: ScopedConnections, clock: IClock, *, facts: ChunkFactsStore) -> None:
         self._store = store
         self._clock = clock
         self._facts = facts

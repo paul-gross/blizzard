@@ -12,8 +12,8 @@ from pathlib import Path
 import pytest
 
 from blizzard.hub.domain.graph.model import Graph
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.graph_store import GraphStore
+from blizzard.hub.store.scoped import ScopedConnections
 from tests.support import build_hub, hub_store_connections, ingest
 
 pytestmark = pytest.mark.component
@@ -23,7 +23,7 @@ class _CountingGraphStore(GraphStore):
     """Counts calls to the fully-reifying `get`, so a test can pin that the detail
     route reaches it only through `_pending`'s own conditional path."""
 
-    def __init__(self, store: HubStoreConnections) -> None:
+    def __init__(self, store: ScopedConnections) -> None:
         super().__init__(store)
         self.get_calls = 0
 

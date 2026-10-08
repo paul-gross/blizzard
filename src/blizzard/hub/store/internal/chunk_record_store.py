@@ -23,7 +23,6 @@ from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead, ILockedW
 from blizzard.hub.domain.chunk.ports.record import ChunkPage, IWriteChunkRecordRepository
 from blizzard.hub.domain.kernel.pagination import MalformedCursor, decode_cursor, encode_cursor
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import (
     DEFAULT_HARNESSES,
     DEFAULT_MODEL,
@@ -38,6 +37,7 @@ from blizzard.hub.store.internal.chunk_rows import (
     work_ref_conn_of,
 )
 from blizzard.hub.store.internal.chunk_terminal_predicates import settled_done
+from blizzard.hub.store.scoped import ScopedConnections
 
 #: `(minted_at, chunk_id)` — the tiebreak `minted_at desc` alone lacks.
 _CURSOR_ARITY = 2
@@ -74,7 +74,7 @@ def _chunk_page_stmt(after: tuple[datetime, str] | None, limit: int, done_since:
 class ChunkRecordStore:
     """The chunk row itself — mint, listing, and the repin columns."""
 
-    def __init__(self, store: HubStoreConnections, clock: IClock) -> None:
+    def __init__(self, store: ScopedConnections, clock: IClock) -> None:
         self._store = store
         self._clock = clock
 

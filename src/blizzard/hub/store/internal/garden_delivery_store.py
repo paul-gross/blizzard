@@ -19,7 +19,6 @@ from blizzard.hub.domain.garden.delivery.materialize import (
     DeliveryPlan,
     IWriteGardenDeliveryRepository,
 )
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import fence, lock_chunk_row, next_artifact_seq
 from blizzard.hub.store.internal.finding_store import lock_findings, moved_findings
 from blizzard.hub.store.schema import (
@@ -30,6 +29,7 @@ from blizzard.hub.store.schema import (
     garden_proposal_findings,
     garden_proposals,
 )
+from blizzard.hub.store.scoped import ScopedConnections
 
 _DELIVERED_MARKER_NAME = "garden-delivered"
 
@@ -39,7 +39,7 @@ class GardenDeliveryStore:
     clock (`bzh:injected-clock`) — every timestamp arrives already stamped on
     `DeliveryPlan.at`, so this adapter makes no time decisions, only insert decisions."""
 
-    def __init__(self, store: HubStoreConnections) -> None:
+    def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
     def already_delivered(self, *, chunk_id: str, node_id: str, epoch: int) -> bool:

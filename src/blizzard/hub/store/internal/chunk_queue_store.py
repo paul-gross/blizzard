@@ -16,15 +16,15 @@ from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.queue import IWriteChunkQueueRepository
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import conn_of, insert_promote_rows, row_exists
 from blizzard.hub.store.internal.newest_fact import newest_fact_select
+from blizzard.hub.store.scoped import ScopedConnections
 
 
 class ChunkQueueStore:
     """The chunk's promotion and queue/backlog-position facts."""
 
-    def __init__(self, store: HubStoreConnections, clock: IClock) -> None:
+    def __init__(self, store: ScopedConnections, clock: IClock) -> None:
         self._store = store
         self._clock = clock
 

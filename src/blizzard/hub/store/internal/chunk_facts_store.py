@@ -41,10 +41,10 @@ from blizzard.hub.domain.chunk.model import (
 )
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_decisions_store import decision_closure_ids
 from blizzard.hub.store.internal.chunk_rows import ephemeral_ids_select, graph_id_of_batch
 from blizzard.hub.store.internal.chunk_terminal_predicates import maybe_live, settled_done, settled_stopped
+from blizzard.hub.store.scoped import ScopedConnections
 
 #: Every fact family `ChunkFacts` carries — the default selection for `load_facts` and kin.
 _ALL_FAMILIES: frozenset[str] = frozenset(
@@ -138,7 +138,7 @@ def _rows(conn, table, batch: Sequence[str] | None, *columns):  # type: ignore[n
 class ChunkFactsStore:
     """Read-only chunk-facts adapter — the fleet's fact-derivation projection."""
 
-    def __init__(self, store: HubStoreConnections, clock: IClock) -> None:
+    def __init__(self, store: ScopedConnections, clock: IClock) -> None:
         self._store = store
         self._clock = clock
 

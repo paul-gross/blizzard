@@ -21,7 +21,6 @@ from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochOwner, FenceRef
 from blizzard.hub.domain.chunk.ports.route import IWriteChunkRouteRepository
 from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import (
     conn_of,
     latest_epoch,
@@ -31,6 +30,7 @@ from blizzard.hub.store.internal.chunk_rows import (
     record_epoch_owner,
     route_of_conn,
 )
+from blizzard.hub.store.scoped import ScopedConnections
 
 _ROUTE_PREFIX = "route"
 
@@ -38,7 +38,7 @@ _ROUTE_PREFIX = "route"
 class ChunkRouteStore:
     """The chunk's claim/route lifecycle — created, released, re-keyed."""
 
-    def __init__(self, store: HubStoreConnections, clock: IClock) -> None:
+    def __init__(self, store: ScopedConnections, clock: IClock) -> None:
         self._store = store
         self._clock = clock
 

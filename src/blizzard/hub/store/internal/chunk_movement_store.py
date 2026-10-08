@@ -24,7 +24,6 @@ from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, EpochOwner, FenceRefusal
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import (
     DEFAULT_MODEL,
     conn_of,
@@ -38,12 +37,13 @@ from blizzard.hub.store.internal.chunk_rows import (
     next_route_seq,
     record_epoch_owner,
 )
+from blizzard.hub.store.scoped import ScopedConnections
 
 
 class ChunkMovementStore:
     """The chunk's graph movement — transitions, migrations, restarts, requeues."""
 
-    def __init__(self, store: HubStoreConnections, clock: IClock) -> None:
+    def __init__(self, store: ScopedConnections, clock: IClock) -> None:
         self._store = store
         self._clock = clock
 

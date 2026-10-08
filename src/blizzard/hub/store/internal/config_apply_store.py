@@ -32,11 +32,11 @@ from blizzard.hub.domain.config.work_sources import (
 )
 from blizzard.hub.domain.garden.routines import SCOPES_FIELD, Routine, RoutineNameTakenError
 from blizzard.hub.domain.garden.scopes import Scope, ScopeSlugTakenError
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal import repository_record_store as repository_writes
 from blizzard.hub.store.internal import routine_store as routine_writes
 from blizzard.hub.store.internal import scope_store as scope_writes
 from blizzard.hub.store.internal import work_source_record_store as work_source_writes
+from blizzard.hub.store.scoped import ScopedConnections
 
 #: What a write's in-transaction checks raise; each is located at its document entry.
 _REFUSALS = (
@@ -67,7 +67,7 @@ class _DryRunRollback(Exception):
 
 
 class ConfigApplyStore:
-    def __init__(self, store: HubStoreConnections) -> None:
+    def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
     def apply(self, writes: Sequence[PlannedWrite], *, dry_run: bool) -> None:

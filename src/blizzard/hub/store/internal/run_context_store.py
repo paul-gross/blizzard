@@ -2,7 +2,7 @@
 All ``sqlalchemy`` usage is confined here
 (``bzh:dependency-inversion``). Resolves a chunk's first work ref straight against
 ``work_items`` rather than composing another store instance (``bzh:repository-split``)
-— this store depends only on :class:`HubStoreConnections`."""
+— this store depends only on :class:`ScopedConnections`."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from sqlalchemy.engine import Connection
 from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.garden.run_context import IWriteRunContextRepository, RunContext
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.errors import HubStoreConnections
+from blizzard.hub.store.scoped import ScopedConnections
 
 
 def insert_run_context_row(conn: Connection, work_item_id: str, context: RunContext) -> None:
@@ -32,7 +32,7 @@ def insert_run_context_row(conn: Connection, work_item_id: str, context: RunCont
 class RunContextStore:
     """Read-write run-context adapter over the hub store engine."""
 
-    def __init__(self, store: HubStoreConnections) -> None:
+    def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
     def for_chunk(self, chunk: Chunk) -> RunContext | None:

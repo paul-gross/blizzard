@@ -22,7 +22,6 @@ from blizzard.hub.domain.garden.runs.history import (
     RunDeliveries,
     RunIdentity,
 )
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.schema import (
     artifacts,
     chunk_work_refs,
@@ -32,6 +31,7 @@ from blizzard.hub.store.schema import (
     work_item_runs,
     work_items,
 )
+from blizzard.hub.store.scoped import ScopedConnections
 
 # The chunk -> chunk_work_refs -> work_items -> work_item_runs join every read here
 # starts from — a run's own identity, minted once at `RunService.run`'s own act.
@@ -80,7 +80,7 @@ def _identity_of(row: object) -> RunIdentity:
 class GardenRunStore:
     """Read-only garden-run adapter over the hub store engine."""
 
-    def __init__(self, store: HubStoreConnections) -> None:
+    def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
     def runs_in_window(self, *, since: datetime, until: datetime) -> list[RunDeliveries]:

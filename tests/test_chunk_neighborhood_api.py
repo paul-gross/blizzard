@@ -15,8 +15,8 @@ import pytest
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.model import ChunkFacts
 from blizzard.hub.domain.chunk.ports.dependencies import IWriteChunkDependenciesRepository
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
+from blizzard.hub.store.scoped import ScopedConnections
 from tests.support import HubHarness, build_hub, chunk_stores, count_queries, hub_store_connections, ingest
 
 pytestmark = pytest.mark.component
@@ -123,7 +123,7 @@ class _CountingFactsStore(ChunkFactsStore):
     """Counts calls to the bulk and per-chunk facts reads, the ``tests/test_blocked_marking_api.py``
     shape, so a test can pin exactly how many facts reads one route call costs."""
 
-    def __init__(self, store: HubStoreConnections, clock: IClock) -> None:
+    def __init__(self, store: ScopedConnections, clock: IClock) -> None:
         super().__init__(store, clock)
         self.load_all_facts_calls = 0
         self.load_facts_calls = 0

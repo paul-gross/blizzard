@@ -18,7 +18,6 @@ from blizzard.hub.domain.chunk.model import PendingCloseIntent, WorkItemCloseOut
 from blizzard.hub.domain.chunk.ports.delivery import IWriteChunkDeliveryRepository
 from blizzard.hub.domain.work_items.closure import TERMINAL_CLOSE_OUTCOMES
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import (
     enqueue_close_intents,
     ephemeral_ids_select,
@@ -27,12 +26,13 @@ from blizzard.hub.store.internal.chunk_rows import (
     next_route_seq,
     record_hub_lease,
 )
+from blizzard.hub.store.scoped import ScopedConnections
 
 
 class ChunkDeliveryStore:
     """The chunk's landing and closure facts."""
 
-    def __init__(self, store: HubStoreConnections) -> None:
+    def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
     def landed_repos(self, chunk_id: str) -> set[str]:

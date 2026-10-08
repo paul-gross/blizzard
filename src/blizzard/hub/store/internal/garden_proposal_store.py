@@ -31,8 +31,8 @@ from blizzard.hub.domain.garden.proposals.model import (
 )
 from blizzard.hub.domain.kernel.pagination import MalformedCursor, decode_cursor, encode_cursor
 from blizzard.hub.domain.kernel.unset import UnsetType
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.schema import garden_proposal_closures, garden_proposal_findings, garden_proposals
+from blizzard.hub.store.scoped import ScopedConnections
 
 #: `list_page`'s cursor, already total: `(created_at, proposal_id)`.
 _CURSOR_ARITY = 2
@@ -71,7 +71,7 @@ def _proposal_page_stmt(
 class GardenProposalStore:
     """Read-write garden-proposal adapter over the hub store engine."""
 
-    def __init__(self, store: HubStoreConnections) -> None:
+    def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
     def create(

@@ -29,7 +29,6 @@ from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_dependencies_store import release_outgoing_edges_conn
 from blizzard.hub.store.internal.chunk_rows import (
     conn_of,
@@ -38,6 +37,7 @@ from blizzard.hub.store.internal.chunk_rows import (
 )
 from blizzard.hub.store.internal.garden_proposal_closure_store import insert_garden_proposal_closure_row
 from blizzard.hub.store.internal.run_context_store import insert_run_context_row
+from blizzard.hub.store.scoped import ScopedConnections
 
 
 class WorkItemStore:
@@ -45,7 +45,7 @@ class WorkItemStore:
     / :class:`~blizzard.hub.domain.chunk.model.IWriteWorkItemRepository`, confined to
     ``store/internal/`` (``bzh:repository-split``)."""
 
-    def __init__(self, store: HubStoreConnections) -> None:
+    def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
     def get(self, source: str, ref: str) -> HubWorkItem | None:

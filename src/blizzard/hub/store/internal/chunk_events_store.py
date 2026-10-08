@@ -25,7 +25,7 @@ from blizzard.foundation.event_log import (
 from blizzard.hub.domain.chunk.model import DEFAULT_EVENT_LIST_LIMIT, ActivityEntry, OperationalEvent
 from blizzard.hub.domain.chunk.ports.events import IWriteChunkEventsRepository
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.errors import HubStoreConnections
+from blizzard.hub.store.scoped import ScopedConnections
 
 # The hub coordinator's own reserved ``transitions.runner_id`` — the only fact-table
 # difference between a ``hub-advanced`` and a ``node-completed`` transition.
@@ -243,7 +243,7 @@ def _chunk_deleted_activity_stmt() -> Select[Any]:
 class ChunkEventsStore:
     """The fleet's operational event log and the per-chunk change-activity feed."""
 
-    def __init__(self, store: HubStoreConnections, clock: IClock) -> None:
+    def __init__(self, store: ScopedConnections, clock: IClock) -> None:
         self._store = store
         self._clock = clock
 

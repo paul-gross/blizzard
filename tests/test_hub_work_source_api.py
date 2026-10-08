@@ -17,9 +17,9 @@ from blizzard.auth_core import Role
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.hub_event_types import HubEventType
 from blizzard.hub.domain.chunk.model import ChunkFacts, WorkRef
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
+from blizzard.hub.store.scoped import ScopedConnections
 from tests.support import (
     FakeWorkSource,
     build_hub,
@@ -35,7 +35,7 @@ pytestmark = pytest.mark.component
 
 
 class _CountingFactsStore(ChunkFactsStore):
-    def __init__(self, store: HubStoreConnections, clock: IClock) -> None:
+    def __init__(self, store: ScopedConnections, clock: IClock) -> None:
         super().__init__(store, clock)
         self.load_facts_calls = 0
 
@@ -48,7 +48,7 @@ class _CountingWorkRefsStore(ChunkWorkRefsStore):
     """Counts calls to the pointer-liveness reads (mirrors
     ``tests/test_list_chunks_bulk_reads.py``'s own counting store)."""
 
-    def __init__(self, store: HubStoreConnections, clock: IClock, *, facts: ChunkFactsStore) -> None:
+    def __init__(self, store: ScopedConnections, clock: IClock, *, facts: ChunkFactsStore) -> None:
         super().__init__(store, clock, facts=facts)
         self.find_live_holder_calls = 0
         self.live_holders_calls = 0

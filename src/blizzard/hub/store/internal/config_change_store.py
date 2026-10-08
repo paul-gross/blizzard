@@ -19,8 +19,8 @@ from blizzard.hub.domain.config.changes import (
     IReadConfigChanges,
     RecordKind,
 )
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.schema import config_changes
+from blizzard.hub.store.scoped import ScopedConnections
 
 
 def append_change(conn: Connection, change: ConfigChange) -> None:
@@ -42,7 +42,7 @@ def append_change(conn: Connection, change: ConfigChange) -> None:
 class ConfigChangeStore:
     """Read adapter over the change log."""
 
-    def __init__(self, store: HubStoreConnections) -> None:
+    def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
     def page(

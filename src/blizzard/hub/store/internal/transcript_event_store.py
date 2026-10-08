@@ -32,7 +32,7 @@ from blizzard.hub.domain.observability.analytics.events import (
 )
 from blizzard.hub.domain.observability.transcripts import TranscriptTurn
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.errors import HubStoreConnections
+from blizzard.hub.store.scoped import ScopedConnections
 
 # --- statements: nothing below executes a statement built elsewhere, so the unit tier
 # compiles the real ones under both dialects (`bzh:sql-portable`).
@@ -301,7 +301,7 @@ def _decode_turns(records: Sequence[Any]) -> list[TranscriptTurn]:
 class TranscriptEventStore:
     """Read-write transcript-event adapter over the hub store engine."""
 
-    def __init__(self, store: HubStoreConnections) -> None:
+    def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
     # --- reads ----------------------------------------------------------------

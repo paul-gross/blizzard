@@ -23,11 +23,11 @@ from blizzard.hub.domain.config.work_sources import (
     WorkSourceNameTaken,
     WorkSourceSecretUnavailable,
 )
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.config_change_store import append_change
 from blizzard.hub.store.internal.newest_fact import newest_retired_select
 from blizzard.hub.store.internal.secret_store import secret_unavailable
 from blizzard.hub.store.schema import work_source_lifecycle_facts, work_sources
+from blizzard.hub.store.scoped import ScopedConnections
 
 
 def _retired_names(conn: Connection, names: list[str] | None = None) -> set[str]:
@@ -137,7 +137,7 @@ def _revision(conn: Connection, name: str) -> int:
 class WorkSourceRecordStore:
     """Read-write work-source adapter over the hub store."""
 
-    def __init__(self, store: HubStoreConnections) -> None:
+    def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
     def create(self, record: ConfiguredWorkSource, *, change: ConfigChange) -> ConfiguredWorkSource:

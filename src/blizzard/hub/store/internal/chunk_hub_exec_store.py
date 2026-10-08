@@ -21,7 +21,6 @@ from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.hub_exec import IWriteChunkHubExecRepository
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import (
     enqueue_close_intents,
     fence,
@@ -32,12 +31,13 @@ from blizzard.hub.store.internal.chunk_rows import (
     next_route_seq,
     record_hub_lease,
 )
+from blizzard.hub.store.scoped import ScopedConnections
 
 
 class ChunkHubExecStore:
     """The generic hub command node's own execution-slot and step-transition facts (#65)."""
 
-    def __init__(self, store: HubStoreConnections, clock: IClock) -> None:
+    def __init__(self, store: ScopedConnections, clock: IClock) -> None:
         self._store = store
         self._clock = clock
 

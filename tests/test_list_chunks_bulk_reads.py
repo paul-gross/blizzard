@@ -16,11 +16,11 @@ from blizzard.hub.domain.chunk.model import ChunkFacts, WorkRef
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.kernel.pagination import MAX_LIMIT
 from blizzard.hub.domain.runners.route import Route
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_route_store import ChunkRouteStore
 from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
 from blizzard.hub.store.internal.graph_store import GraphStore
+from blizzard.hub.store.scoped import ScopedConnections
 from tests.support import (
     build_hub,
     count_queries,
@@ -70,7 +70,7 @@ class _CountingFactsStore(ChunkFactsStore):
     `list_chunks` actually reaches — mirrors `test_load_all_facts_store`'s own
     `_CountingFactsStore`."""
 
-    def __init__(self, store: HubStoreConnections, clock: IClock) -> None:
+    def __init__(self, store: ScopedConnections, clock: IClock) -> None:
         super().__init__(store, clock)
         self.load_all_facts_calls = 0
         self.load_facts_calls = 0
@@ -88,7 +88,7 @@ class _CountingRouteStore(ChunkRouteStore):
     """Counts calls to the bulk and per-chunk route reads, the route-seam counterpart
     to `_CountingFactsStore`."""
 
-    def __init__(self, store: HubStoreConnections, clock: IClock) -> None:
+    def __init__(self, store: ScopedConnections, clock: IClock) -> None:
         super().__init__(store, clock)
         self.load_all_routes_calls = 0
         self.route_of_calls = 0
@@ -128,7 +128,7 @@ class _CountingWorkRefsStore(ChunkWorkRefsStore):
     """Counts calls to the pointer-liveness reads, so a test can pin that a fan-out
     read never reaches the per-pointer `find_live_holder`."""
 
-    def __init__(self, store: HubStoreConnections, clock: IClock, *, facts: ChunkFactsStore) -> None:
+    def __init__(self, store: ScopedConnections, clock: IClock, *, facts: ChunkFactsStore) -> None:
         super().__init__(store, clock, facts=facts)
         self.find_live_holder_calls = 0
         self.live_holders_calls = 0
@@ -171,7 +171,7 @@ class _CountingGraphStore(GraphStore):
     """Counts calls to the fully-reifying `get`, so a test can pin that `list_chunks`
     never reaches it."""
 
-    def __init__(self, store: HubStoreConnections) -> None:
+    def __init__(self, store: ScopedConnections) -> None:
         super().__init__(store)
         self.get_calls = 0
 

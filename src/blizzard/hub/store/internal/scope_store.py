@@ -16,10 +16,10 @@ from sqlalchemy.exc import IntegrityError
 from blizzard.hub.domain.config.changes import ConfigChange
 from blizzard.hub.domain.config.work_sources import ConfigRevisionConflict
 from blizzard.hub.domain.garden.scopes import IWriteScopeRepository, Scope, ScopeMint
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.config_change_store import append_change
 from blizzard.hub.store.internal.newest_fact import newest_retired_select
 from blizzard.hub.store.schema import scope_lifecycle_facts, scopes
+from blizzard.hub.store.scoped import ScopedConnections
 
 
 def ensure_scope(conn: Connection, mint: ScopeMint) -> bool:
@@ -85,7 +85,7 @@ def record_scope_lifecycle(
 class ScopeStore:
     """Read-write scope adapter over the hub store."""
 
-    def __init__(self, store: HubStoreConnections) -> None:
+    def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
     def ensure(self, record: Scope, *, change: ConfigChange) -> Scope:

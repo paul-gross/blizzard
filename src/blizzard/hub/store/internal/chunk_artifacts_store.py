@@ -21,7 +21,6 @@ from blizzard.hub.domain.chunk.delivery_read import DeliverySources
 from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import (
     enqueue_close_intents,
     fence,
@@ -29,12 +28,13 @@ from blizzard.hub.store.internal.chunk_rows import (
     lock_chunk_row,
     next_artifact_seq,
 )
+from blizzard.hub.store.scoped import ScopedConnections
 
 
 class ChunkArtifactsStore:
     """The chunk's node/step artifacts, including the generic hub command node's own."""
 
-    def __init__(self, store: HubStoreConnections, clock: IClock) -> None:
+    def __init__(self, store: ScopedConnections, clock: IClock) -> None:
         self._store = store
         self._clock = clock
 

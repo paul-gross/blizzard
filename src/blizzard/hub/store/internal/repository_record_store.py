@@ -23,11 +23,11 @@ from blizzard.hub.domain.config.repositories import (
     RepositorySecretUnavailable,
 )
 from blizzard.hub.domain.config.work_sources import ConfigRevisionConflict
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.config_change_store import append_change
 from blizzard.hub.store.internal.newest_fact import newest_retired_select
 from blizzard.hub.store.internal.secret_store import secret_unavailable
 from blizzard.hub.store.schema import repositories, repository_lifecycle_facts
+from blizzard.hub.store.scoped import ScopedConnections
 
 
 def _retirements(conn: Connection, names: list[str] | None = None) -> dict[str, datetime]:
@@ -143,7 +143,7 @@ def _revision(conn: Connection, name: str) -> int:
 class RepositoryRecordStore:
     """Read-write repository adapter over the hub store."""
 
-    def __init__(self, store: HubStoreConnections) -> None:
+    def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
     def create(self, record: ConfiguredRepository, *, change: ConfigChange) -> ConfiguredRepository:

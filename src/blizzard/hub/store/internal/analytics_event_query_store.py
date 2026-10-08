@@ -21,7 +21,7 @@ from blizzard.hub.domain.observability.analytics.queries import (
     QueriedEvent,
 )
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.errors import HubStoreConnections
+from blizzard.hub.store.scoped import ScopedConnections
 
 #: ``events``' cursor is the shared codec over one part: the last row's id.
 _CURSOR_ARITY = 1
@@ -133,7 +133,7 @@ def _to_record(row: Any) -> QueriedEvent:
 class AnalyticsEventQueryStore:
     """Read-only analytics-event query adapter over the hub store engine."""
 
-    def __init__(self, store: HubStoreConnections) -> None:
+    def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
     def events(self, criteria: EventQueryCriteria, *, cursor: str | None = None, limit: int) -> EventPage:

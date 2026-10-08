@@ -20,7 +20,6 @@ from blizzard.hub.domain.chunk.ports.decisions import IWriteChunkDecisionsReposi
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import (
     conn_of,
     enqueue_close_intents,
@@ -30,6 +29,7 @@ from blizzard.hub.store.internal.chunk_rows import (
     next_artifact_seq,
 )
 from blizzard.hub.store.internal.chunk_terminal_predicates import chunk_is_terminal
+from blizzard.hub.store.scoped import ScopedConnections
 
 #: Every fact table whose ``decision_id`` column closes a decision — the resolving
 #: transition, the migration (#90), the unresolvable-target escalation (#110), or the
@@ -42,7 +42,7 @@ _DECISION_CLOSURE_TABLES = (s.transitions, s.chunk_migrations, s.escalations, s.
 class ChunkDecisionsStore:
     """The chunk's decision facts."""
 
-    def __init__(self, store: HubStoreConnections, clock: IClock) -> None:
+    def __init__(self, store: ScopedConnections, clock: IClock) -> None:
         self._store = store
         self._clock = clock
 

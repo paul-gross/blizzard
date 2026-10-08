@@ -16,8 +16,8 @@ from blizzard.foundation.garden_proposals import GardenProposalClosureKind, Gard
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.garden.proposals.closure import GardenProposalClosure, IWriteGardenProposalClosureRepository
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.schema import garden_proposal_closures, garden_proposals
+from blizzard.hub.store.scoped import ScopedConnections
 
 
 def insert_garden_proposal_closure_row(
@@ -65,7 +65,7 @@ class GardenProposalClosureStore:
     """Read-write garden-proposal-closure adapter over the hub store engine — the pass
     and accept-declining-to-mint writes, plus every closure read."""
 
-    def __init__(self, store: HubStoreConnections) -> None:
+    def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
     def get(self, proposal_id: str) -> GardenProposalClosure | None:
