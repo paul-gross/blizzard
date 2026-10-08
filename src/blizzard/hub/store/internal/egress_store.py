@@ -26,6 +26,7 @@ from blizzard.hub.domain.observability.egress.rows import AttributedUsage
 from blizzard.hub.domain.observability.tracing.cursor import CursorKey
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
+from blizzard.hub.store.scoped import ScopedConnections
 
 _FAILED: EventLogKind = "egress-write-failed"
 _LATCH_KINDS: tuple[EventLogKind, ...] = (_FAILED, "egress-write-recovered")
@@ -33,10 +34,12 @@ _NO_FILES = json.dumps([])
 
 
 class EgressStore:
-    """The egress export's usage reads and its cursor's appends."""
+    """The egress export's usage reads and its cursor's appends. The cursor is hub-level; the export's failure and
+    recovery events are read from ``events``, the event log its sweep records them in."""
 
-    def __init__(self, store: HubStoreConnections, *, usage: IReadUsageCorpus) -> None:
+    def __init__(self, store: HubStoreConnections, *, events: ScopedConnections, usage: IReadUsageCorpus) -> None:
         self._store = store
+        self._events = events
         self._usage = usage
 
     def newest_cursor(self, dataset: str) -> EgressCheckpoint | None:
@@ -67,12 +70,12 @@ class EgressStore:
         """The newest failure event — filtered in the query, so a later recovery never hides it."""
         c = s.event_log.c
         stmt = (
-            select(c.kind, c.recorded_at, c.message)
+            self._events.select(s.event_log, c.kind, c.recorded_at, c.message)
             .where(c.kind == _FAILED)
             .order_by(c.recorded_at.desc(), c.id.desc())
             .limit(1)
         )
-        with self._store.read("egress_newest_failure") as conn:
+        with self._events.read("egress_newest_failure") as conn:
             row = conn.execute(stmt).first()
         return EgressWriteFailure(row.recorded_at, row.message) if row is not None else None
 
@@ -82,8 +85,13 @@ class EgressStore:
     def newest_egress_latch(self) -> EventLogKind | None:
         """Walks the event log newest-first to the first match — run once per process start, not per pass."""
         c = s.event_log.c
-        stmt = select(c.kind).where(c.kind.in_(_LATCH_KINDS)).order_by(c.recorded_at.desc(), c.id.desc()).limit(1)
-        with self._store.read("egress_newest_latch") as conn:
+        stmt = (
+            self._events.select(s.event_log, c.kind)
+            .where(c.kind.in_(_LATCH_KINDS))
+            .order_by(c.recorded_at.desc(), c.id.desc())
+            .limit(1)
+        )
+        with self._events.read("egress_newest_latch") as conn:
             kind = conn.execute(stmt).scalar_one_or_none()
         return next((k for k in _LATCH_KINDS if k == kind), None)
 

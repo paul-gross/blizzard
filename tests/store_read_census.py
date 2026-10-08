@@ -102,7 +102,6 @@ from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
 from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.domain.work_items.closure import IReadCloseIntentCorpus
 from blizzard.hub.secrets import hub_key_provider, secret_cipher
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import MARKER_PREFIX
 from blizzard.hub.store.internal.config_apply_store import ConfigApplyStore
 from blizzard.hub.store.internal.config_import_store import ConfigImportStore
@@ -121,6 +120,7 @@ from blizzard.hub.store.internal.trace_store import TraceStore
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
+from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.runner.auth.tokens import IReadTokenRepository
 from blizzard.runner.composition import build_stores
 from blizzard.runner.environments.repository import IReadEnvironmentRepository
@@ -868,9 +868,10 @@ def _label(ref: WorkRef) -> str | None:
     return f"{ref.source}#{ref.ref}"
 
 
-def _trace_store_of(connections: HubStoreConnections, hub: HubHarness) -> TraceStore:
+def _trace_store_of(connections: ScopedConnections, hub: HubHarness) -> TraceStore:
     return TraceStore(
         connections,
+        events=connections,
         corpus=hub.services.hub_scoped_reads.corpus,
         graphs=hub.services.graphs,
         names=hub.services.registry,
@@ -878,8 +879,8 @@ def _trace_store_of(connections: HubStoreConnections, hub: HubHarness) -> TraceS
     )
 
 
-def _egress_store_of(connections: HubStoreConnections, hub: HubHarness) -> EgressStore:
-    return EgressStore(connections, usage=hub.services.hub_scoped_reads.corpus)
+def _egress_store_of(connections: ScopedConnections, hub: HubHarness) -> EgressStore:
+    return EgressStore(connections, events=connections, usage=hub.services.hub_scoped_reads.corpus)
 
 
 def _ht(offset_seconds: float) -> datetime:
@@ -964,7 +965,7 @@ class HubWorld:
     hub: HubHarness
     engine: Engine
     clock: FixedClock
-    store_connections: HubStoreConnections
+    store_connections: ScopedConnections
     write: ChunkStores
     read: ChunkReadStores
     auth_state: IReadAuthStateRepository

@@ -42,6 +42,7 @@ pytestmark = pytest.mark.component
 def _store(hub: HubHarness) -> TraceStore:
     return TraceStore(
         hub_store_connections(hub.engine),
+        events=hub_store_connections(hub.engine),
         corpus=build_hub_scoped_reads(hub_level_connections(hub.engine)).corpus,
         graphs=hub.services.graphs,
         names=hub.services.registry,

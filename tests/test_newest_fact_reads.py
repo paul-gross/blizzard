@@ -187,12 +187,12 @@ def test_newest_failure_reads_keep_the_old_failure_after_a_recovery(tmp_path: Pa
     store = hub_store_connections(engine)
 
     corpus = build_hub_scoped_reads(hub_level_connections(engine)).corpus
-    egress = EgressStore(store, usage=corpus).newest_egress_failure()
-    export = TraceStore(store, corpus=corpus, graphs=None, names=None, label=None).newest_export_failure()  # type: ignore[arg-type]
+    egress = EgressStore(store, events=store, usage=corpus).newest_egress_failure()
+    export = TraceStore(store, events=store, corpus=corpus, graphs=None, names=None, label=None).newest_export_failure()  # type: ignore[arg-type]
 
     assert egress is not None and egress.message == "m0"
     assert export is not None and export.message == "m2"
-    assert count_rows_read(engine, lambda: EgressStore(store, usage=corpus).newest_egress_failure()) <= 1
+    assert count_rows_read(engine, lambda: EgressStore(store, events=store, usage=corpus).newest_egress_failure()) <= 1
 
 
 # --- the newest-fact read is confined to its scope, inner group-by included -----------------------

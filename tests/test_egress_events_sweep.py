@@ -293,7 +293,9 @@ def test_status_reports_the_events_cursor_and_its_lag_and_reset_moves_it(tmp_pat
     assert resp.status_code == 200, resp.text
     assert resp.json()["direction"] == "repeated"
     usage = build_hub_scoped_reads(hub_level_connections(hub.engine)).corpus
-    moved = EgressStore(hub_store_connections(hub.engine), usage=usage).newest_cursor("events")
+    moved = EgressStore(
+        hub_store_connections(hub.engine), events=hub_store_connections(hub.engine), usage=usage
+    ).newest_cursor("events")
     assert moved is not None
     assert moved.events == EventsPosition(derived_at - timedelta(1))
     world.sweep()

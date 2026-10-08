@@ -768,6 +768,7 @@ def build_services(
     event_log = EventLogService(events=chunk_events, publisher=events)
     trace_store = TraceStore(
         store_connections,
+        events=tenant_connections,
         corpus=core.hub_scoped_reads.corpus,
         graphs=graph_store,
         names=registry_store,
@@ -805,7 +806,7 @@ def build_services(
         if egress_config.directory is not None
         else None
     )
-    egress_store = EgressStore(store_connections, usage=core.hub_scoped_reads.corpus)
+    egress_store = EgressStore(store_connections, events=tenant_connections, usage=core.hub_scoped_reads.corpus)
     egress_event_reads = core.hub_scoped_reads.corpus
     egress_pass_lock = threading.Lock()
     egress_unavailable = egress_writer if isinstance(egress_writer, EgressUnavailable) else None

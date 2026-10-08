@@ -162,6 +162,7 @@ def test_planted_content_hydrated_through_the_store_never_reaches_a_row(tmp_path
 
     facts = TraceStore(
         hub_store_connections(hub.engine),
+        events=hub_store_connections(hub.engine),
         corpus=build_hub_scoped_reads(hub_level_connections(hub.engine)).corpus,
         graphs=hub.services.graphs,
         names=hub.services.registry,

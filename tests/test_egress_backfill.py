@@ -45,7 +45,12 @@ def _service(hub: HubHarness, config: EgressConfig, writer: InMemoryEgressWriter
     corpus = build_hub_scoped_reads(hub_level_connections(hub.engine)).corpus
     return EgressBackfill(
         steps=TraceStore(
-            connections, corpus=corpus, graphs=hub.services.graphs, names=hub.services.registry, label=label
+            connections,
+            events=connections,
+            corpus=corpus,
+            graphs=hub.services.graphs,
+            names=hub.services.registry,
+            label=label,
         ),
         egress=_store(hub),
         event_reads=corpus,

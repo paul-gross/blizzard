@@ -250,7 +250,7 @@ def test_the_backfill_reads_select_epochs_minted_in_the_window_and_their_markers
 
 def test_the_events_cursor_round_trips(tmp_path: Path) -> None:
     engine = _engine(tmp_path)
-    store = EgressStore(hub_store_connections(engine), usage=_store(engine))
+    store = EgressStore(hub_store_connections(engine), events=hub_store_connections(engine), usage=_store(engine))
     position = EventsPosition(_at(10), "sg_a", _V1)
 
     store.append_cursor(EgressCheckpoint("events", None, UsagePosition(_at(0)), 3, ("a", "m"), _at(11), position))

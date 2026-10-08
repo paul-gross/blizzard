@@ -28,24 +28,28 @@ from blizzard.hub.domain.observability.tracing.repository import (
 )
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
+from blizzard.hub.store.scoped import ScopedConnections
 
 _FAILED: EventLogKind = "trace-export-failed"
 _LATCH_KINDS: tuple[EventLogKind, ...] = (_FAILED, "trace-export-recovered")
 
 
 class TraceStore:
-    """The trace export's reads and its cursor's appends."""
+    """The trace export's reads and its cursor's appends. The cursor is hub-level; the export's failure and recovery
+    events are read from ``events``, the event log its sweep records them in."""
 
     def __init__(
         self,
         store: HubStoreConnections,
         *,
+        events: ScopedConnections,
         corpus: IReadStepCorpus,
         graphs: IReadManyGraphs,
         names: IReadRunnerNames,
         label: WorkRefLabel,
     ) -> None:
         self._store = store
+        self._events = events
         self._corpus = corpus
         self._graphs = graphs
         self._names = names
@@ -89,20 +93,25 @@ class TraceStore:
         """The newest failure event — filtered in the query, so a later recovery never hides it."""
         c = s.event_log.c
         stmt = (
-            select(c.kind, c.recorded_at, c.message)
+            self._events.select(s.event_log, c.kind, c.recorded_at, c.message)
             .where(c.kind == _FAILED)
             .order_by(c.recorded_at.desc(), c.id.desc())
             .limit(1)
         )
-        with self._store.read("newest_export_failure") as conn:
+        with self._events.read("newest_export_failure") as conn:
             row = conn.execute(stmt).first()
         return TraceExportFailure(row.recorded_at, row.message) if row is not None else None
 
     def newest_export_latch(self) -> EventLogKind | None:
         """Walks the event log newest-first to the first match — run once per process start, not per pass."""
         c = s.event_log.c
-        stmt = select(c.kind).where(c.kind.in_(_LATCH_KINDS)).order_by(c.recorded_at.desc(), c.id.desc()).limit(1)
-        with self._store.read("newest_export_latch") as conn:
+        stmt = (
+            self._events.select(s.event_log, c.kind)
+            .where(c.kind.in_(_LATCH_KINDS))
+            .order_by(c.recorded_at.desc(), c.id.desc())
+            .limit(1)
+        )
+        with self._events.read("newest_export_latch") as conn:
             kind = conn.execute(stmt).scalar_one_or_none()
         return next((k for k in _LATCH_KINDS if k == kind), None)
 

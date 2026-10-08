@@ -82,7 +82,9 @@ def _app(hub: HubHarness) -> FastAPI:
 
 def _store(hub: HubHarness) -> EgressStore:
     return EgressStore(
-        hub_store_connections(hub.engine), usage=build_hub_scoped_reads(hub_level_connections(hub.engine)).corpus
+        hub_store_connections(hub.engine),
+        events=hub_store_connections(hub.engine),
+        usage=build_hub_scoped_reads(hub_level_connections(hub.engine)).corpus,
     )
 
 
@@ -93,9 +95,14 @@ def _sweep(
     corpus = build_hub_scoped_reads(hub_level_connections(hub.engine)).corpus
     return EgressSweep(
         steps=TraceStore(
-            connections, corpus=corpus, graphs=hub.services.graphs, names=hub.services.registry, label=label
+            connections,
+            events=connections,
+            corpus=corpus,
+            graphs=hub.services.graphs,
+            names=hub.services.registry,
+            label=label,
         ),
-        egress=store or EgressStore(connections, usage=corpus),
+        egress=store or EgressStore(connections, events=connections, usage=corpus),
         event_reads=corpus,
         paths=_PATHS,
         writer=writer,
@@ -566,6 +573,7 @@ def test_a_crash_before_the_cursor_writes_the_same_rows_again_in_new_files(tmp_p
             first,
             store=DiesBeforeCursor(
                 hub_store_connections(hub.engine),
+                events=hub_store_connections(hub.engine),
                 usage=build_hub_scoped_reads(hub_level_connections(hub.engine)).corpus,
             ),
         ).sweep()

@@ -10,7 +10,6 @@ from __future__ import annotations
 import base64
 from datetime import datetime
 
-from sqlalchemy import select
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 
@@ -148,7 +147,7 @@ class SecretStore:
 
     def key_ids_in_use(self) -> set[str]:
         with self._store.read("key_ids_in_use") as conn:
-            return set(conn.execute(select(secrets.c.key_id).distinct()).scalars())
+            return set(conn.execute(self._store.select(secrets, secrets.c.key_id).distinct()).scalars())
 
     def get_sealed(self, name: str) -> SealedSecret | None:
         with self._store.read("get_sealed") as conn:
@@ -174,8 +173,8 @@ class SecretStore:
     def list_sealed(self) -> list[SealedSecret]:
         with self._store.read("list_sealed") as conn:
             rows = conn.execute(
-                select(
-                    secrets.c.name, secrets.c.revision, secrets.c.key_id, secrets.c.ciphertext, secrets.c.nonce
+                self._store.select(
+                    secrets, secrets.c.name, secrets.c.revision, secrets.c.key_id, secrets.c.ciphertext, secrets.c.nonce
                 ).order_by(secrets.c.name)
             ).all()
         return [self._sealed_of(row) for row in rows]
