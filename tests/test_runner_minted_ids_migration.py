@@ -23,6 +23,7 @@ from tests.support import hub_store_connections, migrate_to
 pytestmark = pytest.mark.component
 
 _BEFORE = "20261006_0900_config_import_facts"  # the head just before this revision
+_REVISION = "20261006_1200_runner_minted_ids"
 _T0 = datetime(2026, 7, 15, 0, 45, 16, 12000, tzinfo=UTC)
 _T1 = _T0 + timedelta(days=80)
 
@@ -191,7 +192,7 @@ def _registrations_columns(tmp_path: Path) -> dict[str, bool]:
 
 def test_every_runner_is_keyed_by_a_minted_id_named_after_its_old_one(tmp_path: Path) -> None:
     runner, _columns = _seed(tmp_path)
-    runner.upgrade("head")
+    runner.upgrade(_REVISION)
 
     minted = _minted(tmp_path)
     assert set(minted) == set(_RUNNERS)
@@ -214,7 +215,7 @@ def test_every_runner_is_keyed_by_a_minted_id_named_after_its_old_one(tmp_path: 
 
 def test_tokens_brakes_and_retirement_follow_the_minted_id(tmp_path: Path) -> None:
     runner, _columns = _seed(tmp_path)
-    runner.upgrade("head")
+    runner.upgrade(_REVISION)
     minted = _minted(tmp_path)
     registry = _registry(tmp_path)
 
@@ -235,7 +236,7 @@ def test_tokens_brakes_and_retirement_follow_the_minted_id(tmp_path: Path) -> No
 def test_every_runner_id_column_follows_except_the_hubs_rows_and_unregistered_ids(tmp_path: Path) -> None:
     runner, columns = _seed(tmp_path)
     before, _registrations, payloads_before = _picture(tmp_path, columns)
-    runner.upgrade("head")
+    runner.upgrade(_REVISION)
     after, _registrations, payloads = _picture(tmp_path, columns)
     minted = _minted(tmp_path)
 
@@ -275,7 +276,7 @@ def test_a_runner_registered_as_hub_moves_but_the_hubs_own_executor_rows_stay_pu
                 _seed_row(conn, table, {"runner_id": _HUB}, n=n)
     finally:
         engine.dispose()
-    runner.upgrade("head")
+    runner.upgrade(_REVISION)
 
     minted = _minted(tmp_path)
     assert set(minted) == {_HUB} and minted[_HUB].startswith("rn_")
@@ -288,7 +289,7 @@ def test_a_runner_registered_as_hub_moves_but_the_hubs_own_executor_rows_stay_pu
 def test_downgrade_restores_the_old_ids_and_a_second_upgrade_mints_the_same_ones(tmp_path: Path) -> None:
     runner, columns = _seed(tmp_path)
     before = _picture(tmp_path, columns)
-    runner.upgrade("head")
+    runner.upgrade(_REVISION)
     after = _picture(tmp_path, columns)
 
     runner.downgrade(_BEFORE)
@@ -297,7 +298,7 @@ def test_downgrade_restores_the_old_ids_and_a_second_upgrade_mints_the_same_ones
     assert not any(shape[c] for c in ("workspace_id", "registered_at", "last_seen_at"))
     assert _picture(tmp_path, columns) == before
 
-    runner.upgrade("head")
+    runner.upgrade(_REVISION)
     assert _picture(tmp_path, columns) == after
 
 

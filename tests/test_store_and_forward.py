@@ -315,7 +315,7 @@ def test_runner_drain_acks_a_replayed_completion_during_a_slow_hub_node_and_flus
     assert identity is not None
     store.record_runner_identity(identity)
     ctx.identity.hold(identity)
-    submission = {**_completion(build_node_id, epoch=1), "check_results": [], "proposals": []}
+    submission = {**_completion(build_node_id, epoch=1), "check_results": []}
     ctx.stores.outbound.enqueue_outbound(
         kind=COMPLETION_KIND,
         chunk_id=chunk_id,

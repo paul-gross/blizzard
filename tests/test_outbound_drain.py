@@ -43,7 +43,6 @@ _COMPLETION_PAYLOAD = json.dumps(
             "from_node_id": "nd_build",
             "check_results": [],
             "artifacts": [],
-            "proposals": [],
             "decision_id": None,
             "route_token": None,
         }

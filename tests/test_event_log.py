@@ -259,7 +259,6 @@ def test_list_open_escalations_applies_supersession_fleet_wide(tmp_path: Path) -
         runner_id="r1",
         at=_at(20),
         artifacts=[],
-        proposals=[],
         admission=EpochAdmission.AT_OR_ABOVE,
     )
 

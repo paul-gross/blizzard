@@ -590,8 +590,7 @@ class ChunkDetail(BaseModel):
 
 
 class ChunkDecisionStatusView(BaseModel):
-    """A live gate decision's identity and resolution — no ``choices``,
-    no ``docket``."""
+    """A live gate decision's identity and resolution — no ``choices``."""
 
     decision_id: str
     node_id: str

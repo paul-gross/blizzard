@@ -39,12 +39,10 @@ class WorkItemState(StrEnum):
 
 class WorkItemVerb(StrEnum):
     """Every verb that reads or changes a work item's state: the operator's ``EDIT`` and ``WITHDRAW``,
-    an update proposal's ``APPEND_EVIDENCE``, the close-intent drain's ``DELIVER``, and a holding
-    chunk's read-through ``READ``."""
+    the close-intent drain's ``DELIVER``, and a holding chunk's read-through ``READ``."""
 
     EDIT = "edit"
     WITHDRAW = "withdraw"
-    APPEND_EVIDENCE = "append-evidence"
     DELIVER = "deliver"
     READ = "read"
 
@@ -74,7 +72,6 @@ _OPEN_ELSE_NOOP: Mapping[WorkItemState, Transition] = {
 _TRANSITIONS: Mapping[WorkItemVerb, Mapping[WorkItemState, Transition]] = {
     WorkItemVerb.EDIT: _OPEN_ONLY,
     WorkItemVerb.WITHDRAW: _OPEN_ONLY,
-    WorkItemVerb.APPEND_EVIDENCE: _OPEN_ONLY,
     WorkItemVerb.DELIVER: _OPEN_ELSE_NOOP,
     WorkItemVerb.READ: {
         WorkItemState.OPEN: Transition.APPLY,

@@ -1,18 +1,15 @@
 """The completion submission — a node-step's atomic, fenced write.
 
 ``POST /chunks/{id}/completions`` submits one node-step's completion: the judgement
-choice, the check results, the step's artifacts, and its proposed work items — **one
-atomic, epoch-fenced write**. A stale epoch is rejected before either enters the store.
+choice, the check results, and the step's artifacts — **one atomic, epoch-fenced
+write**. A stale epoch is rejected before either enters the store.
 """
 
 from __future__ import annotations
 
-from typing import Annotated, Literal
-
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel
 
 from blizzard.foundation.artifacts import ArtifactKind
-from blizzard.foundation.work_items import WorkItemPriority
 
 
 class SubmittedArtifact(BaseModel):
@@ -29,33 +26,6 @@ class SubmittedArtifact(BaseModel):
     content: str | None = None
     # Explicit attach, rather than the judgement fallback.
     attached: bool = False
-
-
-class CreateWorkItemProposal(BaseModel):
-    """A proposed new work item — a title, a markdown body, and a stated priority."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    kind: Literal["create"] = "create"
-    title: str
-    body: str
-    stated_priority: WorkItemPriority = WorkItemPriority.NORMAL
-
-
-class UpdateWorkItemProposal(BaseModel):
-    """A proposed update to an existing work item — its ``{source, ref}`` pointer plus
-    evidence to append. Unresolvable at apply time (a closed, withdrawn, or nonexistent
-    item) is recorded, not refused — resolving the pointer is left to materialization."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    kind: Literal["update"] = "update"
-    source: str
-    ref: str
-    evidence: str
-
-
-WorkItemProposal = Annotated[CreateWorkItemProposal | UpdateWorkItemProposal, Field(discriminator="kind")]
 
 
 class CheckResult(BaseModel):
@@ -76,8 +46,6 @@ class CompletionSubmission(BaseModel):
     # Runner-executed checks; empty when no checks are declared.
     check_results: list[CheckResult] = []
     artifacts: list[SubmittedArtifact] = []
-    # Legal only from nodes declaring `proposes_work_items`.
-    proposals: list[WorkItemProposal] = []
     # Required to transition out of a human-judged gate.
     decision_id: str | None = None
     # Enqueue-time route token; optional.

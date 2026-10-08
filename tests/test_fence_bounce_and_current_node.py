@@ -133,7 +133,6 @@ def test_a_racing_duplicate_completion_answers_as_a_replay_and_writes_nothing_tw
             runner_id="r1",
             at=chunk.hub.clock.now(),
             artifacts=[],
-            proposals=[],
         )
 
     result = _held_by_a_writer(chunk, lambda: chunk.complete("build", epoch=1, choice="pass"), _land_the_first)
@@ -157,7 +156,6 @@ def test_a_racing_duplicate_runner_config_decision_opens_one_decision(tmp_path: 
             choices=[DecisionChoice(name="pass", description="")],
             at=chunk.hub.clock.now(),
             artifacts=[],
-            proposals=[],
             imposed_by_runner_id="r1",
         )
 

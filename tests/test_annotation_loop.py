@@ -99,8 +99,7 @@ class _FakeServices:
     """A minimal stand-in for ``HubServices`` — only the attributes ``_lifespan``
     reads: ``annotation`` (the forge-status sweep, ``None`` when no source opts in), ``close_drain``
     (started unconditionally, no source gate), ``event_derivation``
-    (started unconditionally too), and ``work_item_materialization``
-    (the same), ``trace_export`` (``None`` — tracing is off), and ``egress_export`` (``None`` — no directory)."""
+    (started unconditionally too), ``trace_export`` (``None`` — tracing is off), and ``egress_export`` (``None`` — no directory)."""
 
     def __init__(
         self,
@@ -108,13 +107,11 @@ class _FakeServices:
         work_sources: _FakeWorkSources,
         close_drain: _CountingReconciler | None = None,
         event_derivation: _CountingReconciler | None = None,
-        work_item_materialization: _CountingReconciler | None = None,
         annotation: _CountingReconciler | None = None,
     ) -> None:
         self.work_sources = work_sources
         self.close_drain = close_drain or _CountingReconciler()
         self.event_derivation = event_derivation or _CountingReconciler()
-        self.work_item_materialization = work_item_materialization or _CountingReconciler()
         self.annotation = annotation
         self.trace_export = None
         self.egress_export = None
@@ -151,25 +148,10 @@ async def test_lifespan_starts_the_event_derivation_loop_unconditionally(tmp_pat
     assert event_derivation.calls == 1
 
 
-async def test_lifespan_starts_the_work_item_materialization_loop_unconditionally(tmp_path: Path) -> None:
-    """Materialization is idempotent inside one transaction against one
-    store, so there is nothing a work-source opt-in would protect — the sweep is yielded
-    and started regardless, the same ground ``event_derivation`` stands on."""
-    materialization = _CountingReconciler()
-    services = _FakeServices(work_sources=_FakeWorkSources())
-    services.work_item_materialization = materialization
-    app = _FakeApp(services, HubConfig(root=tmp_path, db_url="sqlite:///:memory:"))
-
-    async with _lifespan(app):  # type: ignore[arg-type]
-        await asyncio.sleep(0.05)  # let the loop run its first sweep and enter the interval wait
-
-    assert materialization.calls == 1
-
-
 async def test_lifespan_starts_the_close_drain_loop_unconditionally(tmp_path: Path) -> None:
     """The enqueue is source-agnostic, so the drain runs whether or not
     any source is close-capable today — the sweep is yielded and started regardless,
-    like its two siblings above."""
+    like its sibling above."""
     close_drain = _CountingReconciler()
     services = _FakeServices(work_sources=_FakeWorkSources())
     services.close_drain = close_drain

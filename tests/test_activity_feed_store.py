@@ -122,7 +122,6 @@ def test_node_completed_reads_off_transitions_authored_by_a_runner(tmp_path: Pat
         runner_id="runner-a",
         at=_at(1),
         artifacts=[],
-        proposals=[],
         admission=EpochAdmission.AT_OR_ABOVE,
     )
     row = _row_for(store, "node-completed")
@@ -144,7 +143,6 @@ def test_hub_advanced_reads_off_transitions_authored_by_the_hub_coordinator(tmp_
         runner_id="hub",
         at=_at(1),
         artifacts=[],
-        proposals=[],
         admission=EpochAdmission.AT_OR_ABOVE,
     )
     row = _row_for(store, "hub-advanced")
@@ -167,7 +165,6 @@ def test_migrated_reads_off_chunk_migrations(tmp_path: Path) -> None:
         epoch=1,
         at=_at(1),
         artifacts=[],
-        proposals=[],
         source=MigrationSource.AUTHORED_EDGE,
         admission=EpochAdmission.AT_OR_ABOVE,
     )
@@ -189,7 +186,6 @@ def test_decision_submitted_reads_off_decisions(tmp_path: Path) -> None:
         choices=[DecisionChoice(name="go", description="go")],
         at=_at(1),
         artifacts=[],
-        proposals=[],
         admission=EpochAdmission.AT_OR_ABOVE,
     )
     row = _row_for(store, "decision-submitted")
@@ -210,7 +206,6 @@ def test_decision_resolved_reads_off_decision_resolutions(tmp_path: Path) -> Non
         choices=[DecisionChoice(name="go", description="go")],
         at=_at(1),
         artifacts=[],
-        proposals=[],
         admission=EpochAdmission.AT_OR_ABOVE,
     )
     store.decisions.record_decision_resolution("dec_1", choice="go", resolved_by="alice", at=_at(2))

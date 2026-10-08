@@ -11,6 +11,7 @@ import re
 from collections.abc import Collection
 from dataclasses import dataclass, field
 
+from blizzard import __version__ as HUB_VERSION
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.artifact.model import is_valid_graph_artifact_name
@@ -205,7 +206,7 @@ class NodeCheck:
         self._check_choice_targets()
         self._check_session_ref()
         self._check_retries()
-        self._check_proposes_work_items()
+        self._check_retired_keys()
 
     def _check_run(self) -> None:
         # `run:` is legal ONLY on a hub command node (#65): a worker node's step is an agent
@@ -346,16 +347,12 @@ class NodeCheck:
                 f"got `{node.retries_exhausted}`"
             )
 
-    def _check_proposes_work_items(self) -> None:
-        """A hub-executed node has no worker to author a proposal, and a human-judged
-        node's completion is the resolving transition, which carries no payload channel at
-        all — so the policy is legal only on a worker-judged runner node."""
-        node = self.node
-        if not node.proposes_work_items:
-            return
-        if node.executor is not Executor.RUNNER or node.judgement is None or node.judgement.by is not JudgedBy.WORKER:
+    def _check_retired_keys(self) -> None:
+        # Refused here, at mint, rather than in parsing, so a stored version that carried the
+        # key stays readable.
+        for key in self.node.retired_keys:
             self.errors.append(
-                f"node `{node.name}`: `proposes_work_items` is only legal on a worker-judged runner node"
+                f"node `{self.node.name}`: retired key `{key}` — this hub (blizzard {HUB_VERSION}) no longer accepts it"
             )
 
 

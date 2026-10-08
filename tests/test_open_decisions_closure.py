@@ -37,7 +37,6 @@ def _store_with_gate(tmp_path: Path, chunk_id: str = "ch_1") -> ChunkStores:
         choices=[DecisionChoice(name="ok", description="d")],
         at=_T0,
         artifacts=[],
-        proposals=[],
         admission=EpochAdmission.AT_OR_ABOVE,
     )
     return store
@@ -54,7 +53,6 @@ def _transition(store: ChunkStores, *, to_node_id: str, decision_id: str | None)
         runner_id="r1",
         at=_T0,
         artifacts=[],
-        proposals=[],
         decision_id=decision_id,
         admission=EpochAdmission.AT_OR_ABOVE,
     )

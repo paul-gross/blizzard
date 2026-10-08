@@ -20,11 +20,8 @@ from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.model import Chunk, PendingCloseIntent, WorkItemAuthor, WorkRef
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
-from blizzard.hub.domain.chunk.proposals import StampedWorkItemProposal
-from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.domain.operations.delete import ChunkHasDependents, ChunkNotDeletable, DeleteService
 from blizzard.hub.domain.runners.route import Route
-from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import record_grouped_row_conn
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from tests.support import (
@@ -118,43 +115,6 @@ def test_a_grouped_chunk_is_excluded_from_pending_close_intents(tmp_path: Path) 
         record_grouped_row_conn(conn, "ch_2", grouped_into="ch_1", at=_at(1))
 
     assert chunks.delivery.pending_close_intents() == []
-
-
-def test_a_deleted_chunk_is_excluded_from_unmaterialized_proposals(tmp_path: Path) -> None:
-    chunks, _, _, engine = _stores(tmp_path)
-    _mint(chunks, "ch_1")
-    chunks.movement.record_transition(
-        transition_id="tr_1",
-        chunk_id="ch_1",
-        from_node_id="nd_1",
-        to_node_id=RESERVED_TERMINAL,
-        choice_name="pass",
-        epoch=1,
-        runner_id="r1",
-        at=_T0,
-        artifacts=[],
-        proposals=[
-            StampedWorkItemProposal(
-                proposal_id="wip_1",
-                chunk_id="ch_1",
-                node_id="nd_1",
-                node_name="build",
-                epoch=1,
-                ordinal=0,
-                kind="create",
-                data="{}",
-                runner_id="r1",
-            )
-        ],
-        admission=EpochAdmission.AT_OR_ABOVE,
-    )
-    assert [r.proposal_id for r in chunks.delivery.unmaterialized_proposals()] == ["wip_1"]
-
-    # A delivered chunk is past `DeleteService`'s reach, so the deleted fact is seeded directly.
-    with engine.begin() as conn:
-        conn.execute(s.chunk_deleted.insert().values(chunk_id="ch_1", deleted_at=_T0, deleted_by="operator"))
-
-    assert chunks.delivery.unmaterialized_proposals() == []
 
 
 # --- refusal at every status outside PRE_CLAIM_STATUSES, success at both members ---

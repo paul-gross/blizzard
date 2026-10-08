@@ -26,10 +26,8 @@ from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository
-from blizzard.hub.domain.chunk.proposals import ItemProposal, StampedWorkItemProposal
 from blizzard.hub.domain.execution.auth.commit_pointer import CommitPointerPolicy
 from blizzard.hub.domain.execution.auth.produces import PRODUCES_WARN
-from blizzard.hub.domain.execution.auth.proposals import ProposalPolicy
 from blizzard.hub.domain.execution.auth.route import ROUTE_TOKEN_WARN, RouteToken
 from blizzard.hub.domain.execution.completion import (
     CompletionPlan,
@@ -45,7 +43,6 @@ from blizzard.hub.domain.execution.completion import (
     refuse_hub_executed,
     refuse_incoherent_attempt,
     replayed_migration,
-    stamped_proposals,
     stored_artifacts,
 )
 from blizzard.hub.domain.execution.envelope import Arrival, Envelope
@@ -223,7 +220,7 @@ class ApplyService:
         enabled graph" — so this holds no graph repo of its own (``bzh:domain-takes-objects``).
 
         Order is behavior: retired → facts → migration replay → route token → from node →
-        transition replay → attempt coherence → proposals → commit pointer → plan → record. Attempt
+        transition replay → attempt coherence → commit pointer → plan → record. Attempt
         coherence is re-derived under the chunk's row lock, ahead of the write itself."""
         targets = targets or MigrationTargets(cross_graph=None, intended=None, follow_latest=None)
         self._retired.refuse_if_retired(submission.runner_id, action="completion")
@@ -271,14 +268,11 @@ class ApplyService:
                     epoch=submission.epoch,
                 ),
             )
-            # Unconditional and ahead of every dispatch fork, so none carries a proposal past a
-            # node that never declared the policy, nor a `git_commit` missing a repo, branch, or hash.
-            for policy_rejection in (
-                ProposalPolicy(from_node, submission.proposals).rejection(),
-                CommitPointerPolicy(submission.artifacts).rejection(),
-            ):
-                if policy_rejection is not None:
-                    raise CompletionRefused(policy_rejection)
+            # Unconditional and ahead of every dispatch fork, so none carries a `git_commit`
+            # missing a repo, branch, or hash.
+            policy_rejection = CommitPointerPolicy(submission.artifacts).rejection()
+            if policy_rejection is not None:
+                raise CompletionRefused(policy_rejection)
             if submission.decision_id is not None:
                 # A gate-resolving transition — a graph gate (human node) or a runner-config gate.
                 decision = self._decisions.get_decision(submission.decision_id)
@@ -293,22 +287,19 @@ class ApplyService:
         except CompletionRefused as refused:
             return ApplyResult.failure(refused.detail)
 
-        # A gate's resolving transition carries no artifacts or proposals: they landed with
+        # A gate's resolving transition carries no artifacts: they landed with
         # the decision, and threading `decision_id` through keeps the gate from staying live.
         resolving = submission.decision_id is not None
         artifacts = () if resolving else submission.artifacts
-        proposals = () if resolving else submission.proposals
         if plan.migrates:
-            return self._migrate_across(
-                chunk, graph, facts, from_node, submission, plan.edge, targets, artifacts, proposals
-            )
+            return self._migrate_across(chunk, graph, facts, from_node, submission, plan.edge, targets, artifacts)
         assert plan.to_node_id is not None
         # The transition-time consult — after every rejection and before `record_transition`,
         # so a firing intent or follow-latest drift writes no transition row of its own.
         landing = Landing.consult(chunk, plan.edge, targets)
         if landing is not None:
-            return self._land_migration(chunk, graph, from_node, submission, landing, submission.artifacts, proposals)
-        return self._transition(chunk, graph, from_node, submission, plan, artifacts, proposals)
+            return self._land_migration(chunk, graph, from_node, submission, landing, submission.artifacts)
+        return self._transition(chunk, graph, from_node, submission, plan, artifacts)
 
     def _transition(
         self,
@@ -318,12 +309,10 @@ class ApplyService:
         submission: Completion,
         plan: CompletionPlan,
         artifacts: Sequence[CompletionArtifact],
-        proposals: Sequence[ItemProposal],
     ) -> ApplyResult:
         assert plan.to_node_id is not None
         fresh_transition_id = Id.mint(IdPrefix.TRANSITION, self._clock).value
         artifact_rows = self._artifact_rows(chunk, from_node, submission.epoch, artifacts)
-        proposal_rows = self._proposal_rows(chunk, from_node, submission, proposals)
         with self._exclusive.locked([chunk.chunk_id]) as handle:
             locked = handle.facts(chunk.chunk_id)
             if locked is None:
@@ -349,7 +338,6 @@ class ApplyService:
                     runner_id=submission.runner_id,
                     at=self._clock.now(),
                     artifacts=artifact_rows,
-                    proposals=proposal_rows,
                     decision_id=submission.decision_id,
                 )
                 if refusal is not None:
@@ -377,7 +365,6 @@ class ApplyService:
         edge: Edge,
         targets: MigrationTargets,
         artifacts: Sequence[CompletionArtifact],
-        proposals: Sequence[ItemProposal],
     ) -> ApplyResult:
         """Take a cross-graph edge — land on its resolved target, or escalate once per epoch. An
         unresolved target answers ``PARKED_AT_GATE``: ``FAILURE`` would requeue and supersede it."""
@@ -385,7 +372,7 @@ class ApplyService:
             return ApplyResult.escalated(edge.target_graph)
         if targets.cross_graph is not None:
             landing = Landing.authored(edge, targets.cross_graph, from_node)
-            return self._land_migration(chunk, graph, from_node, submission, landing, artifacts, proposals)
+            return self._land_migration(chunk, graph, from_node, submission, landing, artifacts)
         draft = UnresolvableTarget.of(edge)
         # Hub-authored: no runner runtime dir to compose a wrapped takeover command from.
         escalated = self._escalations.record_escalation(
@@ -411,12 +398,10 @@ class ApplyService:
         submission: Completion,
         landing: Landing,
         artifacts: Sequence[CompletionArtifact],
-        proposals: Sequence[ItemProposal],
     ) -> ApplyResult:
-        """Record the migration atomically (fact + re-pin + artifacts + proposals + route
+        """Record the migration atomically (fact + re-pin + artifacts + route
         release/retain + intent clear), then govern by the landed node's executor."""
         artifact_rows = self._artifact_rows(chunk, from_node, submission.epoch, artifacts)
-        proposal_rows = self._proposal_rows(chunk, from_node, submission, proposals)
         migration_id = Id.mint(IdPrefix.MIGRATION, self._clock).value
         with self._exclusive.locked([chunk.chunk_id]) as handle:
             locked = handle.facts(chunk.chunk_id)
@@ -445,7 +430,6 @@ class ApplyService:
                     claimant=Claimant(submission.runner_id, submission.lease_id),
                     at=self._clock.now(),
                     artifacts=artifact_rows,
-                    proposals=proposal_rows,
                     release_route=landing.releases_route,
                     clear_intent=landing.clear_intent,
                     migration_id=migration_id,
@@ -549,7 +533,6 @@ class ApplyService:
             choices=decision_choices(gate_node),
             at=self._clock.now(),
             artifacts=[],
-            proposals=[],
             imposed_by_runner_id=None,
         )
 
@@ -570,11 +553,3 @@ class ApplyService:
     ) -> list[StoredArtifact]:
         ids = [Id.mint(IdPrefix.ARTIFACT, self._clock).value for _ in artifacts]
         return stored_artifacts(chunk.chunk_id, node, epoch, artifacts, artifact_ids=ids)
-
-    def _proposal_rows(
-        self, chunk: Chunk, node: Node, submission: Completion, proposals: Sequence[ItemProposal]
-    ) -> list[StampedWorkItemProposal]:
-        ids = [Id.mint(IdPrefix.WORK_ITEM_PROPOSAL, self._clock).value for _ in proposals]
-        return stamped_proposals(
-            chunk.chunk_id, node, submission.epoch, proposals, proposal_ids=ids, runner_id=submission.runner_id
-        )

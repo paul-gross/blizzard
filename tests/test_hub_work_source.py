@@ -889,8 +889,7 @@ def test_deliver_of_a_withdrawn_item_writes_nothing_and_keeps_it_withdrawn(tmp_p
 def test_every_minting_door_refuses_a_blank_title_or_body(
     tmp_path: Path, title: str, body: str, field_name: str
 ) -> None:
-    """The operator create, the fleet materialize-create, and the garden accept-create
-    all hold the item's non-blank text invariant, before any ref is allocated."""
+    """The operator create and the garden accept-create both hold the item's non-blank text invariant, before any ref is allocated."""
     _, items, chunks, _, engine, clock = _source(tmp_path)
     edits = _edits(items, chunks, clock)
     graph = _graph(engine)
@@ -898,12 +897,10 @@ def test_every_minting_door_refuses_a_blank_title_or_body(
 
     with pytest.raises(WorkItemFieldBlank) as created:
         edits.create(source="hub", title=title, body=body, author=author, stated_priority=None, graph=graph)
-    with pytest.raises(WorkItemFieldBlank) as materialized:
-        edits.materialize_create("p_1", title=title, body=body, author=author, stated_priority=None, graph=graph)
     with pytest.raises(WorkItemFieldBlank) as accepted:
         edits.accept_create(
             "gp_1", title=title, body=body, author=author, graph=graph, reason=None, closed_by="operator"
         )
 
-    assert {created.value.field_name, materialized.value.field_name, accepted.value.field_name} == {field_name}
+    assert {created.value.field_name, accepted.value.field_name} == {field_name}
     assert items.list("hub", limit=10) == []

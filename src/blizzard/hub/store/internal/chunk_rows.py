@@ -25,13 +25,11 @@ from blizzard.hub.domain.chunk.model import (
     RouteCreatedFact,
     RouteHistory,
     RouteReleasedFact,
-    WorkItemMaterializationOutcome,
     WorkRef,
     is_landed_revision,
 )
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead, ILockedWorkRefRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, EpochOwner, FenceRefusal, MintAdmission
-from blizzard.hub.domain.chunk.proposals import StampedWorkItemProposal
 from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.domain.work_items.closure import TERMINAL_CLOSE_OUTCOMES
 from blizzard.hub.store import schema as s
@@ -191,38 +189,6 @@ def record_grouped_row_conn(conn: Connection, chunk_id: str, *, grouped_into: st
     result = conn.execute(insert(s.chunk_grouped).values(chunk_id=chunk_id, grouped_into=grouped_into, grouped_at=at))
     key = result.inserted_primary_key
     return int(key[0]) if key is not None else 0
-
-
-def insert_materialization_row(
-    conn: Connection,
-    *,
-    proposal_id: str,
-    outcome: WorkItemMaterializationOutcome,
-    pointer: WorkRef | None,
-    reason: str | None,
-    at: datetime,
-) -> bool:
-    """Insert one ``work_item_materializations`` row on a caller-supplied ``conn`` —
-    mirrors :func:`insert_chunk_rows`/:func:`record_deleted_row`'s shared-connection
-    shape, so the mint/append composites can fold this into their own transaction.
-    Idempotent per ``proposal_id``: returns False and writes nothing when a judgment
-    already exists."""
-    already = conn.execute(
-        select(s.work_item_materializations.c.id).where(s.work_item_materializations.c.proposal_id == proposal_id)
-    ).first()
-    if already is not None:
-        return False
-    conn.execute(
-        insert(s.work_item_materializations).values(
-            proposal_id=proposal_id,
-            outcome=outcome.value,
-            source=pointer.source if pointer is not None else None,
-            ref=pointer.ref if pointer is not None else None,
-            reason=reason,
-            recorded_at=at,
-        )
-    )
-    return True
 
 
 _EPHEMERAL_TABLES = (s.chunk_grouped, s.chunk_deleted)
@@ -521,24 +487,6 @@ def _is_terminal(conn: Connection, chunk_id: str) -> bool:
     return bool(conn.execute(select(chunk_is_terminal(literal(chunk_id)))).scalar())
 
 
-def insert_proposals(conn: Connection, proposals: list[StampedWorkItemProposal], *, at: datetime) -> None:
-    for row in proposals:
-        conn.execute(
-            insert(s.work_item_proposals).values(
-                proposal_id=row.proposal_id,
-                chunk_id=row.chunk_id,
-                node_id=row.node_id,
-                node_name=row.node_name,
-                epoch=row.epoch,
-                ordinal=row.ordinal,
-                kind=row.kind,
-                data=row.data,
-                proposed_at=at,
-                runner_id=row.runner_id,
-            )
-        )
-
-
 def enqueue_close_intents(conn: Connection, chunk_id: str, *, at: datetime) -> None:
     """Enqueue open work refs on the landing/completion write's transaction.
 
@@ -574,20 +522,6 @@ def enqueue_close_intents(conn: Connection, chunk_id: str, *, at: datetime) -> N
                 chunk_id=chunk_id, source=row.source, ref=row.ref, enqueued_at=at, retired_at=None
             )
         )
-
-
-def proposal_row(row) -> StampedWorkItemProposal:  # type: ignore[no-untyped-def]
-    return StampedWorkItemProposal(
-        proposal_id=row.proposal_id,
-        chunk_id=row.chunk_id,
-        node_id=row.node_id,
-        node_name=row.node_name,
-        epoch=row.epoch,
-        ordinal=row.ordinal,
-        kind=row.kind,
-        data=row.data,
-        runner_id=row.runner_id,
-    )
 
 
 def chunk_row(conn, row) -> Chunk:  # type: ignore[no-untyped-def]

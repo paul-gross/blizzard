@@ -6,16 +6,9 @@ from __future__ import annotations
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.node_steps import ApplyOutcome
-from blizzard.hub.domain.chunk.proposals import CreateItemProposal, ItemProposal, UpdateItemProposal
 from blizzard.hub.domain.execution.envelope import Envelope
 from blizzard.hub.domain.execution.submissions import CheckOutcome, Completion, CompletionArtifact, GateSubmission
-from blizzard.wire.completion import (
-    CompletionSubmission,
-    CreateWorkItemProposal,
-    SubmittedArtifact,
-    UpdateWorkItemProposal,
-    WorkItemProposal,
-)
+from blizzard.wire.completion import CompletionSubmission, SubmittedArtifact
 from blizzard.wire.decision import DecisionSubmission
 from blizzard.wire.envelope import (
     ApplyResponse,
@@ -38,7 +31,6 @@ def completion_of(submission: CompletionSubmission, *, runner_id: str) -> Comple
         from_node_id=submission.from_node_id,
         check_results=tuple(CheckOutcome(command=c.command, passed=c.passed) for c in submission.check_results),
         artifacts=_artifacts(submission.artifacts),
-        proposals=_proposals(submission.proposals),
         decision_id=submission.decision_id,
         route_token=submission.route_token,
         lease_id=submission.lease_id,
@@ -53,7 +45,6 @@ def gate_submission_of(submission: DecisionSubmission, *, runner_id: str) -> Gat
         epoch=submission.epoch,
         runner_id=runner_id,
         artifacts=_artifacts(submission.artifacts),
-        proposals=_proposals(submission.proposals),
         route_token=submission.route_token,
         lease_id=submission.lease_id,
     )
@@ -73,16 +64,6 @@ def _artifacts(artifacts: list[SubmittedArtifact]) -> tuple[CompletionArtifact, 
         )
         for a in artifacts
     )
-
-
-def _proposals(proposals: list[WorkItemProposal]) -> tuple[ItemProposal, ...]:
-    return tuple(_proposal(p) for p in proposals)
-
-
-def _proposal(proposal: CreateWorkItemProposal | UpdateWorkItemProposal) -> ItemProposal:
-    if isinstance(proposal, CreateWorkItemProposal):
-        return CreateItemProposal(title=proposal.title, body=proposal.body, stated_priority=proposal.stated_priority)
-    return UpdateItemProposal(source=proposal.source, ref=proposal.ref, evidence=proposal.evidence)
 
 
 def apply_response(outcome: ApplyOutcome, *, detail: str | None, envelope: Envelope | None = None) -> ApplyResponse:
@@ -147,7 +128,6 @@ def _node_config(envelope: Envelope) -> NodeConfig:
         checks_cwd=node.checks_cwd,
         checks_timeout=node.checks_timeout,
         produces=[ProducesEntry(name=p.name, kind=p.kind) for p in node.produces],
-        proposes_work_items=node.proposes_work_items,
         retries_max=node.retries_max,
         choices=[
             EnvelopeChoice(name=c.name, description=c.description, requires_checks=c.requires_checks)

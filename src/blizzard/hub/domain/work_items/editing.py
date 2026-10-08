@@ -180,38 +180,6 @@ class WorkItemEditService:
         )
         return CreatedWorkItem(item=item, chunk_id=chunk.chunk_id)
 
-    def materialize_create(
-        self,
-        proposal_id: str,
-        *,
-        title: str,
-        body: str,
-        author: WorkItemAuthor,
-        stated_priority: str | None,
-        graph: Graph,
-    ) -> bool:
-        """The materialization sweep's own ``create`` path: :meth:`create`'s
-        guard sequence, always into the reserved hub source, landing through
-        :meth:`~blizzard.hub.domain.chunk.model.IWriteWorkItemRepository.materialize_create` so
-        the mint and the outcome fact are one transaction. Raises
-        :class:`~blizzard.hub.domain.chunk.ingest.IngestConflict` exactly as :meth:`create`
-        does, and :class:`~blizzard.hub.domain.work_items.model.WorkItemFieldBlank` for a blank
-        title or body; returns ``False`` when ``proposal_id`` was already judged."""
-        text = WorkItemText.of(title=title, body=body)
-        pointer, chunk, at = prepare_mint(
-            self._items, self._work_refs, self._clock, RESERVED_HUB_SOURCE_NAME, graph=graph
-        )
-        return self._items.materialize_create(
-            proposal_id=proposal_id,
-            pointer=pointer,
-            title=text.title,
-            body=text.body,
-            author=author,
-            stated_priority=stated_priority,
-            at=at,
-            chunk=chunk,
-        )
-
     def accept_create(
         self,
         proposal_id: str,

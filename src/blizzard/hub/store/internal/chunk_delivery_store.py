@@ -14,15 +14,8 @@ from datetime import datetime
 
 from sqlalchemy import func, insert, select, update
 
-from blizzard.hub.domain.chunk.model import (
-    PendingCloseIntent,
-    WorkItemCloseOutcome,
-    WorkItemMaterializationOutcome,
-    WorkRef,
-)
+from blizzard.hub.domain.chunk.model import PendingCloseIntent, WorkItemCloseOutcome, WorkRef
 from blizzard.hub.domain.chunk.ports.delivery import IWriteChunkDeliveryRepository
-from blizzard.hub.domain.chunk.proposals import StampedWorkItemProposal
-from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.domain.work_items.closure import TERMINAL_CLOSE_OUTCOMES
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
@@ -30,16 +23,14 @@ from blizzard.hub.store.internal.chunk_rows import (
     enqueue_close_intents,
     ephemeral_ids_select,
     graph_id_of,
-    insert_materialization_row,
     lock_chunk_row,
     next_route_seq,
-    proposal_row,
     record_hub_lease,
 )
 
 
 class ChunkDeliveryStore:
-    """The chunk's landing, closure, and work-item-materialization facts."""
+    """The chunk's landing and closure facts."""
 
     def __init__(self, store: HubStoreConnections) -> None:
         self._store = store
@@ -105,25 +96,6 @@ class ChunkDeliveryStore:
             conn.execute(
                 insert(s.close_intent_attempts).values(intent_id=intent_id, attempted_at=at, outcome="skipped")
             )
-
-    def unmaterialized_proposals(self) -> list[StampedWorkItemProposal]:
-        """Every not-yet-judged proposal of a delivered, non-ephemeral chunk — all four
-        exclusions (delivered, ephemeral, judged, struck) pushed into SQL as
-        subqueries the engine plans once, rather than re-fetching and re-filtering every
-        proposal ever written, payload included, on every pass. A read transaction: this
-        writes nothing."""
-        delivered = select(s.transitions.c.chunk_id).where(s.transitions.c.to_node_id == RESERVED_TERMINAL)
-        judged = select(s.work_item_materializations.c.proposal_id)
-        struck = select(s.work_item_strikes.c.proposal_id)
-        with self._store.read("unmaterialized_proposals") as conn:
-            rows = conn.execute(
-                select(s.work_item_proposals)
-                .where(s.work_item_proposals.c.chunk_id.in_(delivered))
-                .where(s.work_item_proposals.c.chunk_id.not_in(ephemeral_ids_select()))
-                .where(s.work_item_proposals.c.proposal_id.not_in(judged))
-                .where(s.work_item_proposals.c.proposal_id.not_in(struck))
-            ).all()
-        return [proposal_row(row) for row in rows]
 
     def record_delivery_repo_landed(self, chunk_id: str, *, repo: str, commit_hash: str, at: datetime) -> None:
         with self._store.write("record_delivery_repo_landed") as conn:
@@ -242,20 +214,6 @@ class ChunkDeliveryStore:
                         insert(s.close_intent_attempts).values(intent_id=intent_id, attempted_at=at, outcome="failed")
                     )
             return wrote
-
-    def record_work_item_materialization(
-        self,
-        proposal_id: str,
-        *,
-        outcome: WorkItemMaterializationOutcome,
-        pointer: WorkRef | None,
-        reason: str | None,
-        at: datetime,
-    ) -> bool:
-        with self._store.write("record_work_item_materialization") as conn:
-            return insert_materialization_row(
-                conn, proposal_id=proposal_id, outcome=outcome, pointer=pointer, reason=reason, at=at
-            )
 
 
 def _conforms_delivery(x: ChunkDeliveryStore) -> IWriteChunkDeliveryRepository:

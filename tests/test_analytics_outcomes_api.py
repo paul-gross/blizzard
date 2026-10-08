@@ -297,7 +297,6 @@ def test_a_failed_attempt_after_a_migration_resolves_via_the_migrations_landed_n
         epoch=1,
         at=hub.clock.now(),
         artifacts=[],
-        proposals=[],
         source=MigrationSource.AUTHORED_EDGE,
         admission=EpochAdmission.AT_OR_ABOVE,
     )
@@ -330,7 +329,6 @@ def test_a_null_landed_node_migration_resolves_via_the_target_graphs_entry_node(
         epoch=1,
         at=hub.clock.now(),
         artifacts=[],
-        proposals=[],
         source=MigrationSource.AUTHORED_EDGE,
         admission=EpochAdmission.AT_OR_ABOVE,
     )
@@ -364,7 +362,6 @@ def test_a_pre_migration_no_movement_failure_resolves_via_the_graph_it_ran_in(tm
         epoch=2,
         at=hub.clock.now(),
         artifacts=[],
-        proposals=[],
         source=MigrationSource.AUTHORED_EDGE,
         admission=EpochAdmission.AT_OR_ABOVE,
     )

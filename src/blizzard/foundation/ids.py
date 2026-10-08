@@ -44,7 +44,6 @@ class IdPrefix(StrEnum):
     USER = "usr"  # a hub-local user
     SEGMENT = "seg"  # a transcript segment, the hub's idempotence key
     WORK_ITEM = "wi"  # a hub-owned work item
-    WORK_ITEM_PROPOSAL = "wip"  # a proposed work item riding a node-step's completion
     ROUTINE = "rtn"  # a routine — a scope has no prefix; its slug is its id
     FINDING = "fin"  # a finding — one instance a routine's run observed
     FINDING_SET = "fins"  # the set a delivered finding list mints, one per artifact

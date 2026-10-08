@@ -1483,7 +1483,7 @@
         "type": "object"
       },
       "ChunkDecisionStatusView": {
-        "description": "A live gate decision's identity and resolution \u2014 no ``choices``,\nno ``docket``.",
+        "description": "A live gate decision's identity and resolution \u2014 no ``choices``.",
         "properties": {
           "decision_id": {
             "title": "Decision Id",
@@ -2851,28 +2851,6 @@
             ],
             "title": "Lease Id"
           },
-          "proposals": {
-            "default": [],
-            "items": {
-              "discriminator": {
-                "mapping": {
-                  "create": "#/components/schemas/CreateWorkItemProposal",
-                  "update": "#/components/schemas/UpdateWorkItemProposal"
-                },
-                "propertyName": "kind"
-              },
-              "oneOf": [
-                {
-                  "$ref": "#/components/schemas/CreateWorkItemProposal"
-                },
-                {
-                  "$ref": "#/components/schemas/UpdateWorkItemProposal"
-                }
-              ]
-            },
-            "title": "Proposals",
-            "type": "array"
-          },
           "route_token": {
             "anyOf": [
               {
@@ -3110,36 +3088,6 @@
         "title": "ConfigDocument",
         "type": "object"
       },
-      "CreateWorkItemProposal": {
-        "additionalProperties": false,
-        "description": "A proposed new work item \u2014 a title, a markdown body, and a stated priority.",
-        "properties": {
-          "body": {
-            "title": "Body",
-            "type": "string"
-          },
-          "kind": {
-            "const": "create",
-            "default": "create",
-            "title": "Kind",
-            "type": "string"
-          },
-          "stated_priority": {
-            "$ref": "#/components/schemas/WorkItemPriority",
-            "default": "normal"
-          },
-          "title": {
-            "title": "Title",
-            "type": "string"
-          }
-        },
-        "required": [
-          "title",
-          "body"
-        ],
-        "title": "CreateWorkItemProposal",
-        "type": "object"
-      },
       "DecisionChoiceModel": {
         "description": "One selectable gate outcome.",
         "properties": {
@@ -3191,7 +3139,7 @@
         "type": "object"
       },
       "DecisionResolutionRequest": {
-        "description": "A person's choice for an open decision \u2014 first-write-wins CAS. ``struck`` names\nthe chunk's proposal ids to refuse; omitted, it passes every proposal.",
+        "description": "A person's choice for an open decision \u2014 first-write-wins CAS.",
         "properties": {
           "choice": {
             "title": "Choice",
@@ -3201,14 +3149,6 @@
             "default": "operator",
             "title": "Resolved By",
             "type": "string"
-          },
-          "struck": {
-            "default": [],
-            "items": {
-              "type": "string"
-            },
-            "title": "Struck",
-            "type": "array"
           }
         },
         "required": [
@@ -3278,7 +3218,7 @@
         "type": "object"
       },
       "DecisionSubmission": {
-        "description": "A runner-config gate: submit a decision in place of a transition, carrying the\ngated step's artifacts, proposed work items, and fencing epoch as one atomic write.\n``proposals`` is legal only from a node declaring ``proposes_work_items``.",
+        "description": "A runner-config gate: submit a decision in place of a transition, carrying the\ngated step's artifacts and fencing epoch as one atomic write.",
         "properties": {
           "artifacts": {
             "default": [],
@@ -3307,28 +3247,6 @@
             ],
             "title": "Lease Id"
           },
-          "proposals": {
-            "default": [],
-            "items": {
-              "discriminator": {
-                "mapping": {
-                  "create": "#/components/schemas/CreateWorkItemProposal",
-                  "update": "#/components/schemas/UpdateWorkItemProposal"
-                },
-                "propertyName": "kind"
-              },
-              "oneOf": [
-                {
-                  "$ref": "#/components/schemas/CreateWorkItemProposal"
-                },
-                {
-                  "$ref": "#/components/schemas/UpdateWorkItemProposal"
-                }
-              ]
-            },
-            "title": "Proposals",
-            "type": "array"
-          },
           "route_token": {
             "anyOf": [
               {
@@ -3349,7 +3267,7 @@
         "type": "object"
       },
       "DecisionView": {
-        "description": "A gate decision in full.\n\n``resolved_choice`` is set once a person has decided; ``transitioned`` is true once the\nresolving transition has been recorded. ``docket`` is the *chunk's* pending proposals,\nnot just this decision's own \u2014 every gate on the same chunk shares one strike record.",
+        "description": "A gate decision in full.\n\n``resolved_choice`` is set once a person has decided; ``transitioned`` is true once the\nresolving transition has been recorded.",
         "properties": {
           "choices": {
             "default": [],
@@ -3366,14 +3284,6 @@
           "decision_id": {
             "title": "Decision Id",
             "type": "string"
-          },
-          "docket": {
-            "default": [],
-            "items": {
-              "$ref": "#/components/schemas/DocketEntryView"
-            },
-            "title": "Docket",
-            "type": "array"
           },
           "epoch": {
             "title": "Epoch",
@@ -3566,76 +3476,6 @@
           "gone_count"
         ],
         "title": "DeliveredSetView",
-        "type": "object"
-      },
-      "DocketEntryView": {
-        "description": "One of a chunk's not-yet-materialized proposals, as it stands at a gate \u2014 the\nproposing node, its kind-shaped ``payload``, and whether an operator has struck it.\nUnder ``malformed`` no field but ``proposal_id``, ``node_name``, and ``kind`` may be\nrelied on: a stored proposal this hub version can no longer parse renders bare\nrather than failing the whole gate read. ``struck_by``/``struck_at`` are set only\nwhen ``struck`` is true.",
-        "properties": {
-          "kind": {
-            "title": "Kind",
-            "type": "string"
-          },
-          "malformed": {
-            "default": false,
-            "title": "Malformed",
-            "type": "boolean"
-          },
-          "node_name": {
-            "title": "Node Name",
-            "type": "string"
-          },
-          "payload": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/CreateWorkItemProposal"
-              },
-              {
-                "$ref": "#/components/schemas/UpdateWorkItemProposal"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Payload"
-          },
-          "proposal_id": {
-            "title": "Proposal Id",
-            "type": "string"
-          },
-          "struck": {
-            "default": false,
-            "title": "Struck",
-            "type": "boolean"
-          },
-          "struck_at": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Struck At"
-          },
-          "struck_by": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Struck By"
-          }
-        },
-        "required": [
-          "proposal_id",
-          "node_name",
-          "kind"
-        ],
-        "title": "DocketEntryView",
         "type": "object"
       },
       "EgressBackfillCount": {
@@ -6042,11 +5882,6 @@
             ],
             "title": "Prompt"
           },
-          "proposes_work_items": {
-            "default": false,
-            "title": "Proposes Work Items",
-            "type": "boolean"
-          },
           "retries_exhausted": {
             "anyOf": [
               {
@@ -6504,7 +6339,6 @@
           "usr",
           "seg",
           "wi",
-          "wip",
           "rtn",
           "fin",
           "fins",
@@ -6934,11 +6768,6 @@
             },
             "title": "Produces",
             "type": "array"
-          },
-          "proposes_work_items": {
-            "default": false,
-            "title": "Proposes Work Items",
-            "type": "boolean"
           },
           "retries_max": {
             "anyOf": [
@@ -11507,37 +11336,6 @@
           "truncated"
         ],
         "title": "TurnSegmentView",
-        "type": "object"
-      },
-      "UpdateWorkItemProposal": {
-        "additionalProperties": false,
-        "description": "A proposed update to an existing work item \u2014 its ``{source, ref}`` pointer plus\nevidence to append. Unresolvable at apply time (a closed, withdrawn, or nonexistent\nitem) is recorded, not refused \u2014 resolving the pointer is left to materialization.",
-        "properties": {
-          "evidence": {
-            "title": "Evidence",
-            "type": "string"
-          },
-          "kind": {
-            "const": "update",
-            "default": "update",
-            "title": "Kind",
-            "type": "string"
-          },
-          "ref": {
-            "title": "Ref",
-            "type": "string"
-          },
-          "source": {
-            "title": "Source",
-            "type": "string"
-          }
-        },
-        "required": [
-          "source",
-          "ref",
-          "evidence"
-        ],
-        "title": "UpdateWorkItemProposal",
         "type": "object"
       },
       "UserIdentityView": {

@@ -23,7 +23,6 @@ from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, EpochOwner, FenceRefusal
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
-from blizzard.hub.domain.chunk.proposals import StampedWorkItemProposal
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import (
@@ -32,7 +31,6 @@ from blizzard.hub.store.internal.chunk_rows import (
     enqueue_close_intents,
     fence,
     graph_id_of,
-    insert_proposals,
     is_landing_marker,
     latest_epoch,
     lock_chunk_row,
@@ -83,7 +81,6 @@ class ChunkMovementStore:
         runner_id: str,
         at: datetime,
         artifacts: list[StoredArtifact],
-        proposals: list[StampedWorkItemProposal],
         decision_id: str | None = None,
     ) -> FenceRefusal | None:
         with self._store.write("record_transition") as conn:
@@ -101,7 +98,6 @@ class ChunkMovementStore:
                 runner_id=runner_id,
                 at=at,
                 artifacts=artifacts,
-                proposals=proposals,
                 decision_id=decision_id,
             )
 
@@ -120,7 +116,6 @@ class ChunkMovementStore:
         runner_id: str,
         at: datetime,
         artifacts: list[StoredArtifact],
-        proposals: list[StampedWorkItemProposal],
         decision_id: str | None = None,
     ) -> FenceRefusal | None:
         """:meth:`record_transition` on ``handle``'s already-locked connection
@@ -138,7 +133,6 @@ class ChunkMovementStore:
             runner_id=runner_id,
             at=at,
             artifacts=artifacts,
-            proposals=proposals,
             decision_id=decision_id,
         )
 
@@ -157,7 +151,6 @@ class ChunkMovementStore:
         runner_id: str,
         at: datetime,
         artifacts: list[StoredArtifact],
-        proposals: list[StampedWorkItemProposal],
         decision_id: str | None = None,
     ) -> FenceRefusal | None:
         refusal = fence(conn, chunk_id, epoch=epoch, admission=admission, claimant=claimant)
@@ -194,7 +187,6 @@ class ChunkMovementStore:
                     seq=next_artifact_seq(conn, row.chunk_id),
                 )
             )
-        insert_proposals(conn, proposals, at=at)
         if any(is_landing_marker(row.name, row.data) for row in artifacts):
             enqueue_close_intents(conn, chunk_id, at=at)
         return None
@@ -215,7 +207,6 @@ class ChunkMovementStore:
         claimant: Claimant | None = None,
         at: datetime,
         artifacts: list[StoredArtifact],
-        proposals: list[StampedWorkItemProposal],
         source: MigrationSource,
         release_route: bool = True,
         clear_intent: bool = False,
@@ -224,7 +215,7 @@ class ChunkMovementStore:
         """Record a cross-graph migration **atomically and idempotently** (#90).
 
         One transaction: the fact, the ``chunks.graph_id`` re-pin, the route release
-        (unless ``release_route``, #111), this step's artifacts and proposals, and the
+        (unless ``release_route``, #111), this step's artifacts, and the
         intent clear (``clear_intent``, #124). Keyed ``(chunk_id, from_node_id, epoch)``."""
         with self._store.write("record_migration") as conn:
             lock_chunk_row(conn, chunk_id)
@@ -243,7 +234,6 @@ class ChunkMovementStore:
                 claimant=claimant,
                 at=at,
                 artifacts=artifacts,
-                proposals=proposals,
                 source=source,
                 release_route=release_route,
                 clear_intent=clear_intent,
@@ -267,7 +257,6 @@ class ChunkMovementStore:
         claimant: Claimant | None = None,
         at: datetime,
         artifacts: list[StoredArtifact],
-        proposals: list[StampedWorkItemProposal],
         source: MigrationSource,
         release_route: bool = True,
         clear_intent: bool = False,
@@ -290,7 +279,6 @@ class ChunkMovementStore:
             claimant=claimant,
             at=at,
             artifacts=artifacts,
-            proposals=proposals,
             source=source,
             release_route=release_route,
             clear_intent=clear_intent,
@@ -314,7 +302,6 @@ class ChunkMovementStore:
         claimant: Claimant | None = None,
         at: datetime,
         artifacts: list[StoredArtifact],
-        proposals: list[StampedWorkItemProposal],
         source: MigrationSource,
         release_route: bool = True,
         clear_intent: bool = False,
@@ -373,7 +360,6 @@ class ChunkMovementStore:
                     seq=next_artifact_seq(conn, row.chunk_id),
                 )
             )
-        insert_proposals(conn, proposals, at=at)
         if any(is_landing_marker(row.name, row.data) for row in artifacts):
             enqueue_close_intents(conn, chunk_id, at=at)
         return resolved_migration_id

@@ -23,7 +23,6 @@ from blizzard.hub.domain.chunk.model import (
     IWriteWorkItemRepository,
     WorkItemAuthor,
     WorkItemAuthorKind,
-    WorkItemMaterializationOutcome,
     WorkRef,
 )
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
@@ -35,7 +34,6 @@ from blizzard.hub.store.internal.chunk_dependencies_store import release_outgoin
 from blizzard.hub.store.internal.chunk_rows import (
     conn_of,
     insert_chunk_rows,
-    insert_materialization_row,
     record_deleted_row,
 )
 from blizzard.hub.store.internal.garden_proposal_closure_store import insert_garden_proposal_closure_row
@@ -267,75 +265,6 @@ class WorkItemStore:
                 self._close_conn(conn, pointer.source, pointer.ref, closure=WorkItemClosure.WITHDRAWN, at=at)
         return deleted_id
 
-    def materialize_create(
-        self,
-        *,
-        proposal_id: str,
-        pointer: WorkRef,
-        title: str,
-        body: str,
-        author: WorkItemAuthor,
-        stated_priority: str | None,
-        at: datetime,
-        chunk: Chunk,
-    ) -> bool:
-        """Mint the item, ``chunk``'s own rows, and ``proposal_id``'s ``created`` outcome
-        fact on one ``engine.begin()`` connection — :meth:`create_with_chunk` plus
-        the outcome row, checked first so an already-judged proposal mints nothing."""
-        with self._store.write("materialize_create") as conn:
-            if not insert_materialization_row(
-                conn,
-                proposal_id=proposal_id,
-                outcome=WorkItemMaterializationOutcome.CREATED,
-                pointer=pointer,
-                reason=None,
-                at=at,
-            ):
-                return False
-            self._insert_item(
-                conn,
-                source=pointer.source,
-                ref=pointer.ref,
-                title=title,
-                body=body,
-                author=author,
-                stated_priority=stated_priority,
-                at=at,
-            )
-            insert_chunk_rows(conn, chunk)
-        return True
-
-    def materialize_update(self, *, proposal_id: str, source: str, ref: str, evidence: str, at: datetime) -> bool:
-        """Append ``evidence`` to an open item's body, stamp ``edited_at``, and record
-        ``proposal_id``'s ``updated`` outcome fact on one ``engine.begin()`` connection.
-        Returns ``False`` and writes nothing when already judged, or when the item
-        is no longer open — the append is one SQL-level concatenation so no read-then-write
-        gap can lose a concurrent edit."""
-        with self._store.write("materialize_update") as conn:
-            already = conn.execute(
-                select(s.work_item_materializations.c.id).where(
-                    s.work_item_materializations.c.proposal_id == proposal_id
-                )
-            ).first()
-            if already is not None:
-                return False
-            result = conn.execute(
-                update(s.work_items)
-                .where(s.work_items.c.source == source, s.work_items.c.ref == ref, s.work_items.c.closed_at.is_(None))
-                .values(body=s.work_items.c.body + "\n\n" + evidence, edited_at=at)
-            )
-            if result.rowcount == 0:
-                return False
-            insert_materialization_row(
-                conn,
-                proposal_id=proposal_id,
-                outcome=WorkItemMaterializationOutcome.UPDATED,
-                pointer=WorkRef(source=source, ref=ref),
-                reason=None,
-                at=at,
-            )
-        return True
-
     def accept_create(
         self,
         *,
@@ -351,7 +280,7 @@ class WorkItemStore:
     ) -> HubWorkItem | None:
         """Insert the accepted-and-minted ``garden_proposal_closures`` row, the item, and
         ``chunk``'s own rows on one ``engine.begin()`` connection —
-        :meth:`materialize_create`'s shape, the closure row checked first so an
+        :meth:`create_with_chunk`'s shape plus the closure row, checked first so an
         already-closed proposal mints nothing."""
         with self._store.write("accept_create") as conn:
             if not insert_garden_proposal_closure_row(

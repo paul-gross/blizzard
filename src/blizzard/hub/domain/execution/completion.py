@@ -26,7 +26,6 @@ from blizzard.hub.domain.chunk.model import (
     GateDecision,
     MigrationFact,
 )
-from blizzard.hub.domain.chunk.proposals import ItemProposal, StampedWorkItemProposal
 from blizzard.hub.domain.execution.auth.produces import Produces
 from blizzard.hub.domain.execution.submissions import Completion, CompletionArtifact
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, Edge, FollowLatest, Graph, GraphStanding, Node
@@ -434,28 +433,3 @@ def stored_artifacts(
             )
         )
     return rows
-
-
-def stamped_proposals(
-    chunk_id: str,
-    node: Node,
-    epoch: int,
-    proposals: Sequence[ItemProposal],
-    *,
-    proposal_ids: Sequence[str],
-    runner_id: str,
-) -> list[StampedWorkItemProposal]:
-    """The proposal rows a submission lands, one minted id each, in submitted order."""
-    return [
-        StampedWorkItemProposal.of(
-            p,
-            proposal_id=proposal_id,
-            chunk_id=chunk_id,
-            node_id=node.node_id,
-            node_name=node.name,
-            epoch=epoch,
-            ordinal=ordinal,
-            runner_id=runner_id,
-        )
-        for ordinal, (p, proposal_id) in enumerate(zip(proposals, proposal_ids, strict=True))
-    ]

@@ -1,5 +1,5 @@
 """The close-intent drain sweep: retires pending ``close_intents`` rows, a bounded number per pass,
-unconditionally like the event-derivation and delivery-materialization sweeps. Dependency-free
+unconditionally like the event-derivation sweep. Dependency-free
 (``bzh:domain-core``): every collaborator is an injected Protocol, so :meth:`sweep` is one
 complete, directly-callable step (``bzh:steppable-loop``); ground is
 ``blizzard-context:/architecture/crash-correctness/hub.md``'s own."""

@@ -493,7 +493,6 @@ def test_a_migrated_chunks_post_migration_graph_never_leaks_into_a_pre_migration
         epoch=2,
         at=hub.clock.now(),
         artifacts=[],
-        proposals=[],
         source=MigrationSource.AUTHORED_EDGE,
         admission=EpochAdmission.AT_OR_ABOVE,
     )

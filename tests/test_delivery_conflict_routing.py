@@ -107,7 +107,6 @@ def _seed_at_deliver_with_an_unlanded_commit(
         runner_id="r1",
         at=hub.clock.now(),
         artifacts=commit_artifacts,
-        proposals=[],
         admission=EpochAdmission.AT_OR_ABOVE,
     )
 
