@@ -2,7 +2,7 @@ import { type ActivityView, asyncState, type AsyncStateQuery, compactRef, format
 import { type ActivityRow } from './activity-view';
 import { summarizeChunkChange } from './chunk-change-summary';
 
-const { HubEventType, RunnerChangeKind: Kind } = hubApi;
+const { ActivityChunkChangeCause, HubEventType, RunnerChangeKind: Kind } = hubApi;
 
 /** The verb a `runner-changed` kind reads as, where the kind alone does not already read
  * as one. Only the add, pause and retirement families need an entry: the registration and heartbeat kinds
@@ -92,9 +92,15 @@ export function backfillEvents(rows: readonly ActivityView[] | undefined): reado
   return (rows ?? []).map((row, i) => fromActivity(row, -1 - i));
 }
 
+/** Whether a frame reports its chunk deleted. */
+function isChunkDeletion(event: LoggedEvent): boolean {
+  return event.type === HubEventType.CHUNK_CHANGED && event.data.cause === ActivityChunkChangeCause.DELETED;
+}
+
 /** The backfill and live feeds merged and deduped by `key` — a backfilled row whose `key`
- * also names a live frame is dropped, a keyless row always stays — sorted oldest → newest
- * on `at` and capped to the newest `limit`. */
+ * also names a live frame is dropped, a keyless row always stays — with a deleted chunk's
+ * facts suppressed per `blizzard-context:/domain/operations.md` §The activity feed, sorted
+ * oldest → newest on `at` and capped to the newest `limit`. */
 export function mergeActivityFeeds(
   backfill: readonly LoggedEvent[],
   live: readonly LoggedEvent[],
@@ -109,7 +115,10 @@ export function mergeActivityFeeds(
     const at = event.key ? backfillTimes.get(event.key) : undefined;
     return at === undefined ? event : { ...event, at };
   });
-  const combined = [...backfillOnly, ...liveTimed].sort((a, b) => a.at - b.at);
+  const deleted = new Set([...backfill, ...live].flatMap((event) => (isChunkDeletion(event) && event.data.chunk_id ? [event.data.chunk_id] : [])));
+  const combined = [...backfillOnly, ...liveTimed]
+    .filter((event) => !event.data.chunk_id || !deleted.has(event.data.chunk_id) || isChunkDeletion(event))
+    .sort((a, b) => a.at - b.at);
   return combined.length > limit ? combined.slice(combined.length - limit) : combined;
 }
 

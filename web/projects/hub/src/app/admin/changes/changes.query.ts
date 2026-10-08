@@ -8,8 +8,7 @@ const CHANGES_PAGE = 50;
 /**
  * `GET /api/config/changes` — every change to every config record, newest first, a
  * page at a time: each next page asks for the changes `before` the previous page's
- * `next_before`, and a page with none is the last. No SSE event names a config
- * change, so a write made through another door shows on the next refetch.
+ * `next_before`, and a page with none is the last. Freshness: `hubConfigKey` (`web/projects/fleet/src/lib/core/query-keys.ts`).
  */
 export function injectConfigChangesQuery() {
   return injectInfiniteQuery(() => ({

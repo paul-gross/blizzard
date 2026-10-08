@@ -10,8 +10,7 @@ import { injectHubDecisionsQuery } from './gates.query';
  * a gate opens its chunk, where it is resolved.
  *
  * A container: it owns the fleet-wide decisions query and renders the
- * presentational {@link GatesPanelView}. The live-update service re-reads it on
- * `decision-opened` / `decision-resolved`.
+ * presentational {@link GatesPanelView}. Freshness: `EVENT_INVALIDATION_REGISTRY` (`web/projects/fleet/src/lib/sse/fleet-live.ts`).
  */
 @Component({
   selector: 'app-gates-panel',

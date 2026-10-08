@@ -519,6 +519,45 @@
           "reason": "Public README delivery overview: its reader has no workspace context to resolve the workflow convention, so the behavior is stated inline."
         }
       ]
+    },
+    {
+      "id": "web-live-update-reread-poll-backstop",
+      "statement": "The board's live-update service re-reads a hub query on the SSE events its invalidation-registry row names; the query's poll interval is only a backstop for a dropped frame.",
+      "owner": "web/projects/fleet/src/lib/sse/fleet-live.ts#EVENT_INVALIDATION_REGISTRY",
+      "owner_kind": "module",
+      "owner_assert": {
+        "quote": "The live-update service re-reads a query on the events its row names"
+      },
+      "markers": [
+        "the live update service re reads",
+        "the poll is a backstop"
+      ],
+      "sites": [
+        {
+          "file": "web/projects/fleet/src/lib/sse/fleet-live.ts",
+          "symbol": "EVENT_INVALIDATION_REGISTRY",
+          "role": "owner"
+        }
+      ]
+    },
+    {
+      "id": "web-config-change-no-sse-event",
+      "statement": "No SSE event names a hub config change, so the admin config reads refresh only on a config mutation's invalidation of the shared config root or on their own refetch.",
+      "owner": "web/projects/fleet/src/lib/core/query-keys.ts#hubConfigKey",
+      "owner_kind": "module",
+      "owner_assert": {
+        "quote": "No SSE event names a config change"
+      },
+      "markers": [
+        "no sse event names a config change"
+      ],
+      "sites": [
+        {
+          "file": "web/projects/fleet/src/lib/core/query-keys.ts",
+          "symbol": "hubConfigKey",
+          "role": "owner"
+        }
+      ]
     }
   ]
 }

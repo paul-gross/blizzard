@@ -17,8 +17,8 @@ const OPTIONS: readonly AppearanceOption[] = [
 
 /**
  * The appearance submenu — the viewport override as a real
- * `role="menuitemradio"` group rather than the always-visible chip row the
- * shells used to show inline, so the shell menus read as menus and the choice
+ * `role="menuitemradio"` group rather than an always-visible chip row, so the
+ * shell menus read as menus and the choice
  * is one arrow-key traversal away.
  *
  * This component is the submenu **panel**, not the item that opens it: the item

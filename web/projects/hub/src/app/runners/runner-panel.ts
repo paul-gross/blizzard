@@ -12,12 +12,11 @@ import { pendingRunnerIds, withPendingRunnerPauses } from './runner-pause-overri
  * The runner panel — the fleet registry in the board's right rail: each
  * registered runner with its derived **liveness** (`online` vs the
  * staleness threshold), last-seen time, and **paused** state, plus a pause/resume
- * toggle — the operator's brake, declarative state the runner reads on its
- * outbound pull.
+ * toggle — the operator's brake.
  *
  * A container: it folds the registry + chunks reads via {@link injectRunnerRows},
  * owns the pause mutation, and renders the presentational {@link RunnerPanelView}.
- * The live-update service re-reads on `runner-changed`.
+ * Freshness: `EVENT_INVALIDATION_REGISTRY` (`web/projects/fleet/src/lib/sse/fleet-live.ts`).
  */
 @Component({
   selector: 'app-runner-panel',

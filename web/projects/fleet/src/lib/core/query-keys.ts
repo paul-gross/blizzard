@@ -45,7 +45,8 @@ export const hubUsersKey = ['hub', 'users'] as const;
  * secrets, and the change log. A config write changes more than its own record (a
  * source retire also moves a secret's references and appends to the change log), so
  * every config mutation invalidates this one root rather than guessing which reads
- * it touched. */
+ * it touched. No SSE event names a config change, so a write made through another
+ * door shows only on a config read's next refetch. */
 export const hubConfigKey = ['hub', 'config'] as const;
 /** One config list — `GET /api/work-sources`, `/api/repositories`, or `/api/secrets` —
  * with whether retired records ride along in the key, so the two reads are separate

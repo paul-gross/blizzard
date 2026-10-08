@@ -9,9 +9,8 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
  * (the routed content, typically a `<router-outlet>`), and `[shell-tab-bar]`
  * (the mobile bottom bar). Because both apps compose the same component for
  * this, header-above-nav-above-content is enforced by construction — neither
- * app can independently drift into nav-above-header the way the runner once
- * did (its header used to live *inside* the routed layout, below the
- * `<router-outlet>` anchor, rather than at the app root beside it).
+ * app can independently drift into nav-above-header, as it would if a header
+ * lived *inside* the routed layout, below the `<router-outlet>` anchor.
  *
  * Presentational only, no inputs: it owns just the DOM order and the
  * flex/height/overflow chrome a full-height, non-scrolling app shell needs.

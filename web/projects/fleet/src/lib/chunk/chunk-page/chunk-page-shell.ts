@@ -25,9 +25,7 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
  * `flex: 1; min-height: 0; position: relative`) — the positioned ancestor
  * {@link KitAsyncState}'s absolutely-centered status line resolves against,
  * whether that status is the runner's page-level "FAILED TO LOAD CHUNK" or
- * the hub's own loading/error line, both of which used to carry their own,
- * separately-declared positioned wrapper (`.body` / `.rest`) for exactly
- * this. A slot that owns its own spacing — the back link's `text-decoration`
+ * the hub's own loading/error line. A slot that owns its own spacing — the back link's `text-decoration`
  * reset, an operator notice's border/color, {@link ChunkPageHeader}'s own
  * `margin`/`padding` — keeps that spacing on itself for the same
  * projection-boundary reason `.back-row { text-decoration: none }` still

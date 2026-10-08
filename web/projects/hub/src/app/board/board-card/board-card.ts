@@ -117,9 +117,8 @@ export class BoardCardComponent {
 
   /** The upper-right node slot's label — {@link BoardCard.node} for every status
    * except `stopped`, which shows the status word instead: a stopped chunk's
-   * last-active node name (e.g. "deliver") read as unhelpful noise next to
-   * "stopped" in the lower-left status label it used to sit beside,
-   * so it's replaced rather than shown alongside. */
+   * last-active node name (e.g. "deliver") is unhelpful noise once the chunk
+   * has stopped, so it's replaced rather than shown alongside. */
   protected nodeLabel(card: BoardCard): string {
     return card.status === 'stopped' ? 'stopped' : card.node;
   }

@@ -128,8 +128,8 @@ export class GlanceBoard {
   );
 
   /** Never `'empty'`: the spend endpoint returns a zeroed aggregate rather than
-   * no row, so the "—" placeholder is only ever the pre-resolution rest state
-   * the query-less `@if` used to show — a single-resource read, same reasoning
+   * no row, so the "—" placeholder is only ever the pre-resolution rest
+   * state — a single-resource read, same reasoning
    * as `graph-detail.ts`'s own `state`. */
   protected readonly spendState = computed<KitAsyncStateValue>(() => asyncState(this.spendToday, false));
 

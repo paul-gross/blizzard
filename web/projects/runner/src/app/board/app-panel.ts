@@ -34,11 +34,9 @@ import { injectRunnerDashboardQuery } from '../core/status.query';
  * single source of truth — the panel derives its selection from the query params
  * and every click writes them back, never the reverse.
  *
- * Owns no header state: the shared header's connection cell and
- * live stat cells used to be folded here and threaded down as inputs to
- * {@link LocalPanelLayout}. Both the desktop header and the mobile titlebar
- * moved to the app root (`../../runner/src/app/shell/nav/app-header.ts`,
- * `../../runner/src/app/shell/nav/mobile-titlebar.ts`), so they now inject
+ * Owns no header state: the desktop header and the mobile titlebar mount at
+ * the app root (`../../runner/src/app/shell/nav/app-header.ts`,
+ * `../../runner/src/app/shell/nav/mobile-titlebar.ts`) and inject
  * {@link injectRunnerDashboardQuery} themselves rather than reading it off
  * this container — TanStack dedupes the extra injection, so it costs no
  * extra request.

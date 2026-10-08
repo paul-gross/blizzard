@@ -110,8 +110,8 @@ describe('KitMenuItem', () => {
   });
 
   it('pins the CDK hover-then-click behavior: the pointer opens the submenu, the click shuts it', async () => {
-    // The real mouse gesture, which `element.click()` alone never reproduces —
-    // and which therefore used to be invisible to this tier. Hovering the row
+    // The real mouse gesture, which `element.click()` alone never reproduces,
+    // so this spec dispatches the hover itself. Hovering the row
     // fires the CDK's hover-open; the click that follows toggles it back shut.
     // Documented and pinned, not endorsed: see the class docs on KitMenuItem.
     // Keyboard and touch, the paths the shells actually rely on, are covered by

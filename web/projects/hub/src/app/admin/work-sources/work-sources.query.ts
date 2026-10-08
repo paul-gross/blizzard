@@ -11,8 +11,7 @@ import {
 const NOUN = 'work-sources';
 
 /** `GET /api/work-sources` — every work source, retired ones too while
- * `includeRetired()` holds. No SSE event names a config change, so a write made
- * through another door shows on the next refetch. */
+ * `includeRetired()` holds. Freshness: `hubConfigKey` (`web/projects/fleet/src/lib/core/query-keys.ts`). */
 export function injectWorkSourcesQuery(includeRetired: () => boolean) {
   return injectQuery(() => {
     const retired = includeRetired();

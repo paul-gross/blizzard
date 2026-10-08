@@ -4,9 +4,8 @@ import { KitAvatar, KitMenu, KitMenuItem, KitMenuPanel, ViewportMenu } from 'fle
 
 /**
  * The hub top header's profile menu — the avatar-circle trigger
- * burying `Log out` and the appearance switcher, which used to sit in
- * {@link AppNav}'s tab row as a standalone button plus a quiet `⋮` overflow
- * menu. Projected into the shared {@link BoardHeader}'s `[header-trailing]`
+ * holding `Log out` and the appearance switcher, keeping
+ * {@link AppNav}'s tab row to route tabs only. Projected into the shared {@link BoardHeader}'s `[header-trailing]`
  * slot by `App` (`../app.ts`) rather than nested inside {@link AppNav} — the
  * header and the tab row are siblings there, and content projection only
  * reaches an element placed directly inside `<fleet-board-header>`.
@@ -20,7 +19,7 @@ import { KitAvatar, KitMenu, KitMenuItem, KitMenuPanel, ViewportMenu } from 'fle
  * {@link ViewportMenu}), so the parent menu can reach it by keyboard.
  *
  * Presentational only: `logout` re-emits unchanged for the app root's own
- * mutation to own, the same contract {@link AppNav}'s output used to carry.
+ * mutation to own.
  */
 @Component({
   selector: 'app-nav-menu',

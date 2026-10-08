@@ -19,8 +19,8 @@ export const runnerLogoutInFlight = logoutInFlightSignal.asReadonly();
  * identity a request *would* resolve to), so the query never errors on "not signed
  * in": under a `none`-mode hub it answers `auth_enabled: false` (authless surface —
  * hide the control), under oauth it carries the signed-in hub `username` (or `null`
- * when no session rode along). No `refetchInterval`: the
- * poll this used to carry stood in for a session-loss signal; the runner's own auth
+ * when no session rode along). No `refetchInterval`, so no poll stands in for a
+ * session-loss signal; the runner's own auth
  * dependency (`require_human_api`) resolves once when the stream connects and is
  * never re-checked per frame, so an in-place expiry surfaces through whichever
  * backstop-polled read (leases/status/chunk-detail) next re-authenticates over HTTP
