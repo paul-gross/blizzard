@@ -351,6 +351,7 @@ def test_a_tick_is_a_root_with_one_child_per_step_and_hub_calls_under_their_step
     steps = [s for s in spans if _attr(s, TICK_STEP)]
     names = [s.name for s in sorted(steps, key=lambda s: s.start_time or 0)]
     assert names == [
+        "IdentityCheck",
         "SpendCeiling",
         "Reap",
         "Resume",

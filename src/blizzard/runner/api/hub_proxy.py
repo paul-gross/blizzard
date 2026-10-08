@@ -17,6 +17,8 @@ from blizzard.foundation.clock import IMonotonicClock
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.config import RunnerConfig
+from blizzard.runner.hub.held_token import ICurrentHubToken
+from blizzard.runner.hub.identity import IdentityState, IdentityVerdict
 
 # The per-attempt bound: the timeout on any single outbound request this proxy makes.
 _HUB_TIMEOUT = 15.0
@@ -35,6 +37,17 @@ def _backoff(retries_so_far: int) -> float:
     return _RETRY_BACKOFF_SECONDS[min(retries_so_far, len(_RETRY_BACKOFF_SECONDS) - 1)]
 
 
+def _unverified(verdict: IdentityVerdict) -> str:
+    """Why the proxy forwards nothing: the runner's token is unverified, or names another runner."""
+    if verdict.state is IdentityState.MISMATCHED:
+        return (
+            f"runner_identity_mismatch: this runner's token belongs to runner {verdict.token_runner_id}, but its "
+            f"store belongs to runner {verdict.store_runner_id}; restore the right token, or clear the store with "
+            f"`{verdict.reset_command}`"
+        )
+    return "runner_identity_unverified: this runner has not yet verified its token with the hub"
+
+
 @dataclass(frozen=True)
 class HubProxy:
     """One route's forward channel to the hub, named by ``what`` for its failure log."""
@@ -43,6 +56,8 @@ class HubProxy:
     what: str
     client: httpx.Client
     clock: IMonotonicClock
+    #: The token the forward presents — the runner's held one; ``config``'s own when none is wired.
+    token: ICurrentHubToken | None = None
 
     @classmethod
     def of(cls, request: Request, what: str) -> HubProxy:
@@ -55,7 +70,10 @@ class HubProxy:
                 detail="runner not wired to a hub — start via `blizzard runner host`",
             )
         wiring = RunnerWiring.of(request)
-        return cls(config, what, wiring.hub_proxy_client(), wiring.hub_retry_clock())
+        verdict = wiring.maybe_identity_verdict()
+        if verdict is not None and not verdict.matched():
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_unverified(verdict.verdict()))
+        return cls(config, what, wiring.hub_proxy_client(), wiring.hub_retry_clock(), wiring.maybe_hub_token())
 
     def get(
         self,
@@ -117,7 +135,11 @@ class HubProxy:
             attempt_timeout = max(min(_HUB_TIMEOUT, remaining), 0.001) if retryable else budget
             try:
                 upstream = self.client.request(
-                    method, url, headers=self.config.auth_headers(), timeout=attempt_timeout, params=params
+                    method,
+                    url,
+                    headers=(self.token or self.config).auth_headers(),
+                    timeout=attempt_timeout,
+                    params=params,
                 )
             except httpx.HTTPError as exc:
                 if retryable and self._may_retry(retries, budget, started):

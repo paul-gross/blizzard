@@ -2,14 +2,15 @@
 
 The reference :class:`~blizzard.runner.hub.client.IHubClient` and
 :class:`~blizzard.runner.hub.client.ITokenIdentityReader` binding, and the
-:class:`~blizzard.runner.hub.client.IHubRunnerAdmin` one. All httpx usage is confined here; a
+:class:`~blizzard.runner.hub.client.IHubRunnerAdmin` one, and the auth presenting the runner's held
+token. All httpx usage is confined here; a
 transport failure or unexpected status is wrapped once into
 :class:`~blizzard.runner.hub.client.HubClientError` (``bzh:structlog-logging``).
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Generator, Iterable, Sequence
 
 import httpx
 from pydantic import TypeAdapter
@@ -26,6 +27,7 @@ from blizzard.runner.hub.client import (
     FactPushAck,
     HubClientError,
     HubQuestion,
+    IdentityRouteMissing,
     IHubClient,
     IHubRunnerAdmin,
     IncompatibleDenial,
@@ -47,6 +49,7 @@ from blizzard.runner.hub.client import (
     TranscriptPush,
     TranscriptPushAck,
 )
+from blizzard.runner.hub.held_token import ICurrentHubToken
 from blizzard.runner.hub.node_steps import (
     apply_reply_of,
     completion_submission,
@@ -105,6 +108,18 @@ _ADD_REFUSALS: dict[int, RunnerAddRefusalReason] = {
     httpx.codes.NOT_FOUND: RunnerAddRefusalReason.UNSUPPORTED,
     httpx.codes.METHOD_NOT_ALLOWED: RunnerAddRefusalReason.UNSUPPORTED,
 }
+
+
+class HeldTokenAuth(httpx.Auth):
+    """Authorizes each request with the token ``token`` holds when it is sent, so a client built once
+    presents a token the runner takes up later."""
+
+    def __init__(self, token: ICurrentHubToken) -> None:
+        self._token = token
+
+    def auth_flow(self, request: httpx.Request) -> Generator[httpx.Request, httpx.Response, None]:
+        request.headers.update(self._token.auth_headers())
+        yield request
 
 
 class HttpHubClient:
@@ -264,7 +279,7 @@ class HttpHubClient:
             if refusal is not None:
                 _log.info("hub call refused", operation=operation, status=resp.status_code, reason=refusal.reason)
                 return refusal
-        self._raise_for_status(resp, operation)
+        self._raise_for_status(resp, operation, not_found_as=IdentityRouteMissing)
         try:
             view = RunnerIdentityView.model_validate(resp.json())
         except ValueError as exc:

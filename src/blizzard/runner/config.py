@@ -771,6 +771,11 @@ class RunnerConfig:
             return {}
         return {"Authorization": f"Bearer {self.hub_token}"}
 
+    def token_from_process_env(self) -> bool:
+        """Whether the process environment supplies :attr:`hub_token`, overriding the runtime dir's
+        ``.env`` — so a token corrected in that file takes effect only after a restart."""
+        return bool(os.environ.get(self.token_env))
+
     @classmethod
     def scaffold(cls, root: Path, *, hub_url: str | None = None) -> RunnerConfig:
         """The default config for a fresh runtime root (used by ``init``).

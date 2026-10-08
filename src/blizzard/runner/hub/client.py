@@ -44,6 +44,11 @@ class ChunkEndedError(HubClientError):
         self.detail = detail
 
 
+class IdentityRouteMissing(HubClientError):
+    """The hub answered the identity read 404: it predates ``GET /api/fleet/identity``, so the runner
+    learns which runner its token belongs to from its registration's reply instead."""
+
+
 class RunnerAddRefusalReason(StrEnum):
     """Why the hub refused to add a runner: ``SIGN_IN_REQUIRED``, the hub requires an operator
     session and none was presented, or it was not accepted (401); ``FORBIDDEN``, the operator

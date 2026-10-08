@@ -46,9 +46,11 @@ from blizzard.runner.harness.wiring import (
     configured_tiers,
     declared_telemetry_names,
 )
-from blizzard.runner.hub.identity import ICurrentRunnerIdentity, RunnerIdentityHolder
+from blizzard.runner.hub.held_token import HubTokenHolder
+from blizzard.runner.hub.identity import ICurrentRunnerIdentity, IdentityVerdictHolder, RunnerIdentityHolder
+from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
-from blizzard.runner.runtime import migration_runner
+from blizzard.runner.runtime import migration_runner, reset_command
 from blizzard.runner.store.errors import RunnerStoreConnections, RunnerStoreErrorFactory
 from blizzard.runner.store.internal.ask_store import AskStore
 from blizzard.runner.store.internal.attachment_store import AttachmentStore
@@ -134,6 +136,10 @@ class RunnerProcess:
     log_bounds: ReceiverBounds
     #: Who this runner is at its hub; seeded from the store at boot and refreshed by every registration.
     identity: RunnerIdentityHolder
+    #: Whether this process has verified its token names the store's runner — unchecked from start.
+    identity_verdict: IdentityVerdictHolder
+    #: The token every runner->hub client presents — re-read from ``.env`` while the identity mismatches.
+    hub_token: HubTokenHolder
     #: The worker telemetry receiver over this process's limiters, tallies, export and identity — one per
     #: process, so every reader and writer of those counters shares them.
     telemetry_receiver: TelemetryReceiver
@@ -207,6 +213,13 @@ def build_runner_received_telemetry(
     harness_telemetry`` and platform tracing are both on."""
     env = os.environ if environ is None else environ
     return build_received_telemetry_export(config.tracing, env, resource=resource_attributes(env, __version__))
+
+
+def held_hub_token(config: RunnerConfig) -> HubTokenHolder:
+    """The token the runner started with, re-readable from its ``.env`` unless the process environment
+    supplied it."""
+    file = None if config.token_from_process_env() else HubTokenFile.of(config.root, config.token_env)
+    return HubTokenHolder(config.hub_token, file=file)
 
 
 def build_runner_process(
@@ -332,6 +345,8 @@ def build_runner_process(
             metric_bounds=metric_bounds,
             log_bounds=log_bounds,
             identity=identity,
+            identity_verdict=IdentityVerdictHolder(reset_command(config.root)),
+            hub_token=held_hub_token(config),
             telemetry_receiver=telemetry_receiver,
             platform_tracing=platform_tracing,
             received_telemetry=received_telemetry,

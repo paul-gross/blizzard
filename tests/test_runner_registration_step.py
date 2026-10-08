@@ -13,7 +13,7 @@ from structlog.testing import capture_logs
 from blizzard.foundation.clock import FixedClock, SystemClock
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.registry import HarnessRegistry
-from blizzard.runner.hub.identity import RunnerIdentityHolder
+from blizzard.runner.hub.identity import IdentityState, RunnerIdentityHolder
 from blizzard.runner.leases.activity import HEARTBEAT_STALENESS_THRESHOLD
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.registration import Registration
@@ -175,7 +175,9 @@ def test_the_identity_holds_the_name_the_hub_answers_over_the_one_declared(
     assert ctx.stores.identity.runner_identity() == held
 
 
-def test_only_a_new_or_changed_identity_is_logged_at_info_though_every_tick_registers(tmp_path: Path) -> None:
+def test_only_an_adopted_identity_or_a_new_name_is_logged_at_info_though_every_tick_registers(
+    tmp_path: Path,
+) -> None:
     hub = FakeHub(default_runner_id="rn_minted")
     with capture_logs() as logs:
         Registration(_ctx(tmp_path / "runner.db", hub, name="runner-local")).run()
@@ -186,9 +188,34 @@ def test_only_a_new_or_changed_identity_is_logged_at_info_though_every_tick_regi
 
     info = [(e["event"], e.get("was_runner_name"), e.get("runner_name")) for e in logs if e["log_level"] == "info"]
     assert info == [
-        ("runner identity changed", None, "runner-local"),
-        ("runner identity changed", "runner-local", "r-claude"),
+        ("runner identity recorded", None, "runner-local"),
+        ("runner identity recorded", "runner-local", "r-claude"),
     ]
+
+
+def test_a_reply_naming_another_runner_refuses_and_leaves_the_store_row(tmp_path: Path) -> None:
+    hub = FakeHub(default_runner_id="rn_store")
+    ctx = _ctx(tmp_path / "runner.db", hub)
+    Registration(ctx).run()
+    held = ctx.stores.identity.runner_identity()
+    hub.issued[hub.token] = "rn_other"
+    hub.paused = True
+
+    with capture_logs() as logs:
+        Registration(ctx).run()
+
+    assert ctx.stores.identity.runner_identity() == held
+    assert ctx.identity.current() == held
+    verdict = ctx.identity_verdict.verdict()
+    assert (verdict.state, verdict.store_runner_id, verdict.token_runner_id) == (
+        IdentityState.MISMATCHED,
+        "rn_store",
+        "rn_other",
+    )
+    assert ctx.stores.pause.hub_paused() is False  # the other runner's brake is not mirrored
+    warning = next(e for e in logs if e["log_level"] == "warning")
+    assert (warning["store_runner_id"], warning["token_runner_id"]) == ("rn_store", "rn_other")
+    assert warning["reset_command"] == verdict.reset_command
 
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)

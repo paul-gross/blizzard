@@ -10,7 +10,7 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TypeVar
+from typing import Protocol, TypeVar
 
 import httpx
 
@@ -25,8 +25,9 @@ from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.bundle import BundleSnapshot
 from blizzard.runner.harness.capability_snapshot import HarnessVersionCache, default_harness_id
 from blizzard.runner.hub.chunk_status_cache import ReadThroughChunkViews
-from blizzard.runner.hub.client import IHubClient
-from blizzard.runner.hub.internal.http_hub import HttpHubClient
+from blizzard.runner.hub.client import IHubClient, ITokenIdentityReader
+from blizzard.runner.hub.internal.http_hub import HeldTokenAuth, HttpHubClient
+from blizzard.runner.hub.verified import VerifiedHubClient
 from blizzard.runner.leases.internal.worker_stdout_files import WorkerStdoutFiles
 from blizzard.runner.lifecycle.env_release import EnvironmentRelease
 from blizzard.runner.lifecycle.judgement.internal.elicitation_files import ElicitationFiles
@@ -99,7 +100,7 @@ class LoopWiring:
 
     def context(
         self,
-        hub: IHubClient,
+        hub: IVerifiableHubClient,
         graph: RunnerProcess,
         *,
         sweep_worker_scratch: bool = False,
@@ -178,13 +179,18 @@ class LoopWiring:
         )
         _worker_files = WorkerStdoutFiles(str(worker_stdout_dir), stores.liveness)
         _elicitation_files = ElicitationFiles(str(elicitation_output_dir))
+        # Every hub call but the identity read waits on the process's verdict.
+        verified = VerifiedHubClient(hub, graph.identity_verdict)
         return LoopContext(
             stores=stores,
             clock=clock,
-            hub=hub,
+            hub=verified,
             identity=graph.identity,
+            token_identity=hub,
+            identity_verdict=graph.identity_verdict,
+            hub_token=graph.hub_token,
             # The non-memoizing default — only `tick()` itself upgrades this per call.
-            chunk_views=ReadThroughChunkViews(hub),
+            chunk_views=ReadThroughChunkViews(verified),
             provider=provider,
             subscriptions=resolved_subscriptions,
             usage_http_client=usage_http_client,
@@ -242,7 +248,9 @@ class LoopWiring:
         config = self.config
         graph = process or build_runner_process(config, events=self.events, bundle=self.bundle)
         try:
-            with httpx.Client(base_url=config.hub_url, timeout=_HTTP_TIMEOUT, headers=config.auth_headers()) as client:
+            with httpx.Client(
+                base_url=config.hub_url, timeout=_HTTP_TIMEOUT, auth=HeldTokenAuth(graph.hub_token)
+            ) as client:
                 graph.platform_tracing.instrument_client(client)
                 ctx = self.context(HttpHubClient(client), graph, tracer=graph.platform_tracing.tracer)
                 try:
@@ -269,6 +277,10 @@ class LoopWiring:
     def reship_transcript(self, segment_id: str) -> TranscriptReshipReport:
         """Re-ship one already-imported segment — wired here for the reason above."""
         return self._with_context(lambda ctx: TranscriptBackfill(ctx).reship(segment_id))
+
+
+class IVerifiableHubClient(IHubClient, ITokenIdentityReader, Protocol):
+    """A hub client that also answers the identity read the tick's identity check asks."""
 
 
 @dataclass(frozen=True)
@@ -346,7 +358,9 @@ class PeriodicDriver:
 
     def _run(self) -> None:
         config = self._wiring.config
-        self._client = httpx.Client(base_url=config.hub_url, timeout=_HTTP_TIMEOUT, headers=config.auth_headers())
+        self._client = httpx.Client(
+            base_url=config.hub_url, timeout=_HTTP_TIMEOUT, auth=HeldTokenAuth(self._graph.hub_token)
+        )
         self._graph.platform_tracing.instrument_client(self._client)
         ctx: LoopContext | None = None
         try:

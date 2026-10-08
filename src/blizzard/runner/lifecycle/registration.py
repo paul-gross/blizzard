@@ -2,8 +2,11 @@
 pause brake.
 
 The hub resolves who this runner is from its bearer token; the runner only declares its configured
-name. Every successful registration replaces the store's identity row and the process's holder with
-the reply's id and name; a failed one leaves the row, the holder and the mirrored brake as they stood."""
+name. The store's identity row keeps the id of the runner the store belongs to: a registration adopts
+the reply's id only into a store that names none, and otherwise refreshes the name alone. A reply
+naming another runner — a token rotated since the tick's identity check, or a hub with no identity
+read — turns the verdict to a mismatch and mirrors no brake. A failed registration leaves the row,
+the holder and the mirrored brake as they stood."""
 
 from __future__ import annotations
 
@@ -15,12 +18,16 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.harness.capability_snapshot import HarnessCapability
 from blizzard.runner.hub.client import HubClientError, IHubClient, SubscriptionDeclaration
+from blizzard.runner.hub.held_token import HubTokenHolder
 from blizzard.runner.hub.identity import (
     ICurrentRunnerIdentity,
+    IdentityState,
+    IdentityVerdictHolder,
     IWriteRunnerIdentityRepository,
     RunnerIdentity,
     RunnerIdentityHolder,
 )
+from blizzard.runner.lifecycle.identity_check import log_transition
 from blizzard.runner.throttle.pause import IWritePauseRepository
 
 _log = get_logger("blizzard.runner.loop")
@@ -78,6 +85,10 @@ class RegistrationContext(Protocol):
     @property
     def identity(self) -> RunnerIdentityHolder: ...
     @property
+    def identity_verdict(self) -> IdentityVerdictHolder: ...
+    @property
+    def hub_token(self) -> HubTokenHolder: ...
+    @property
     def config(self) -> RegistrationConfig: ...
     @property
     def subscriptions(self) -> Sequence[DeclaredSubscription]: ...
@@ -108,21 +119,36 @@ class Registration:
             )
         except HubClientError:
             return  # hub unreachable — the last identity and the last-mirrored brake hold
-        identity = RunnerIdentity(
-            runner_id=reply.runner_id, runner_name=reply.runner_name, registered_at=ctx.clock.now()
-        )
-        held = ctx.identity.current()
+        now = ctx.clock.now()
+        stored = ctx.stores.identity.runner_identity()
+        if stored is not None and stored.runner_id != reply.runner_id:
+            was = ctx.identity_verdict.record(
+                IdentityState.MISMATCHED,
+                store_runner_id=stored.runner_id,
+                token_runner_id=reply.runner_id,
+                checked_at=now,
+            )
+            log_transition(ctx.identity_verdict, was, token_fixed=ctx.hub_token.fixed())
+            return  # the reply names another runner: its brake is not this runner's
+        identity = RunnerIdentity(runner_id=reply.runner_id, runner_name=reply.runner_name, registered_at=now)
         # The row first, then the holder: a crash between them leaves the holder to be rebuilt from the row.
         ctx.stores.identity.record_runner_identity(identity)
         ctx.identity.hold(identity)
-        if held is None or (held.runner_id, held.runner_name) != (identity.runner_id, identity.runner_name):
+        if stored is None or stored.runner_name != identity.runner_name:
             _log.info(
-                "runner identity changed",
+                "runner identity recorded",
                 runner_id=identity.runner_id,
                 runner_name=identity.runner_name,
-                was_runner_id=held.runner_id if held is not None else None,
-                was_runner_name=held.runner_name if held is not None else None,
+                was_runner_name=stored.runner_name if stored is not None else None,
             )
+        if not ctx.identity_verdict.matched():
+            was = ctx.identity_verdict.record(
+                IdentityState.MATCHED,
+                store_runner_id=identity.runner_id,
+                token_runner_id=reply.runner_id,
+                checked_at=now,
+            )
+            log_transition(ctx.identity_verdict, was, token_fixed=ctx.hub_token.fixed())
         try:
             paused = ctx.hub.fetch_runner_paused(reply.runner_id)
         except HubClientError:

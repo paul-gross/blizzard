@@ -33,10 +33,12 @@ from tests.runner_fakes import (
     FakeProbe,
     FakeProvider,
     FakeWorktreeGit,
+    fixed_hub_token,
     make_session_resolver,
     make_store,
     make_stores,
     make_usage_recorder,
+    matched_verdict,
     registered_identity,
 )
 from tests.support import HubHarness, RunnerFleetClient, build_hub, hub_scoped, ingest
@@ -124,6 +126,9 @@ class _RealRunner:
             stores=make_stores(self.store),
             clock=hub.clock,
             hub=hub_client,
+            token_identity=hub_client,
+            identity_verdict=matched_verdict(),
+            hub_token=fixed_hub_token(),
             chunk_views=ReadThroughChunkViews(hub_client),
             provider=provider,
             process=FakeProbe(alive={(200, "start-200")}),
