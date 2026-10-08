@@ -3,7 +3,7 @@
 ``subprocess.Popen``, so a child always gets its own group and a parent-death signal
 (``bzh:deterministic-shell``). ``defer_disarm=True`` holds the real binary behind a
 trampoline until ``confirm_durable()`` receives its disarm acknowledgement. The driver is
-``internal/process_launcher.py``."""
+``src/blizzard/runner/harness/internal/process_launcher.py``."""
 
 from __future__ import annotations
 

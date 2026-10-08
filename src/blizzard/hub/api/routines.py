@@ -195,7 +195,7 @@ def routine_trend(
 
 def _proposal_counts_row_view(counts: GardenProposalCounts) -> GardenProposalCountsRowView:
     # `class_`'s alias is the Python keyword `class` — constructed by alias via
-    # `model_validate`, the `garden_runs.py` `_set_delta_view` shape.
+    # `model_validate`, the `src/blizzard/hub/api/garden_runs.py` `_set_delta_view` shape.
     return GardenProposalCountsRowView.model_validate(
         {
             "origin": counts.origin,

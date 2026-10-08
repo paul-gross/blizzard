@@ -2,7 +2,7 @@
 
 Two tiers: the pure precedence tests (no store, no I/O) sit at unit; ``LocalLeaseService
 .list_active()`` — wired against a real tmp sqlite store with the fake process probe
-(``bzh:pluggable-seams``) — sits at component, mirroring ``test_runner_loop.py``.
+(``bzh:pluggable-seams``) — sits at component, mirroring ``tests/test_runner_loop.py``.
 """
 
 from __future__ import annotations

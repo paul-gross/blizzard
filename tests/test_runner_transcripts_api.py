@@ -3,7 +3,7 @@
 Exercised over a real store via ``TestClient``, with fake ``IReadTranscriptRepository``/
 ``IReadArchivedTranscriptRepository`` seams standing in for the filesystem and the hub — this
 file's job is the route's status-code contract, not normalization or transport. The
-full resolution table is pinned at the service tier (``test_runner_transcripts_service.py``)."""
+full resolution table is pinned at the service tier (``tests/test_runner_transcripts_service.py``)."""
 
 from __future__ import annotations
 

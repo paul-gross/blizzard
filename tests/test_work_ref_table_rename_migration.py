@@ -3,7 +3,7 @@
 A pure ``op.rename_table``: the assertion that matters is that rows survive, so these
 seed real work refs at the revision just before the rename and read them back off the
 new table name afterwards. Table literals are pinned by name, not imported from
-head-of-tree ``schema.py``, since a rename test must hold both names still."""
+head-of-tree ``src/blizzard/hub/store/schema.py``, since a rename test must hold both names still."""
 
 from __future__ import annotations
 

@@ -82,7 +82,7 @@ def test_enroll_mints_a_different_token_each_call() -> None:
 
 def test_re_enroll_rotates_the_stored_hash() -> None:
     """Two enrolls for the same runner append two writes; the second is what the store
-    ends up holding (an overwrite, not an append-only fact — see `hub/domain/runners/registration.py`)."""
+    ends up holding (an overwrite, not an append-only fact — see `src/blizzard/hub/domain/runners/registration.py`)."""
     clock = FixedClock(instant=_T0)
     registry = _FakeRegistry()
     service = RunnerEnrollmentService(registry=_as_write_registry(registry), clock=clock)

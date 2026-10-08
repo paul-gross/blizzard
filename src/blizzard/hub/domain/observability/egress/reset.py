@@ -1,6 +1,6 @@
 """Reset: moves one dataset's cursor to an instant the operator names, and records the moved window.
 
-Contract: ``blizzard-product:/plans/fact-egress/steps/spec/export.md`` §Operator surface and §Delivery semantics.
+Contract: ``blizzard-product:/delivered/fact-egress/steps/spec/export.md`` §Operator surface and §Delivery semantics.
 The move is one appended cursor row, written under the export pass lock."""
 
 from __future__ import annotations

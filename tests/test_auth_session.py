@@ -102,7 +102,7 @@ def test_pending_is_refused_ingest(tmp_path: Path) -> None:
 
 def test_guest_reads_chunks_and_events_but_is_refused_ingest(tmp_path: Path) -> None:
     """The SSE stream shares the same ``FLEET_VIEW`` gate as this bounded read (see
-    ``test_route_classification.py``); it isn't called directly here since its handler
+    ``tests/test_route_classification.py``); it isn't called directly here since its handler
     streams indefinitely."""
     hub = build_hub(tmp_path, auth_mode="oauth")
     guest = seed_user(hub, username="reader", role=Role.GUEST)

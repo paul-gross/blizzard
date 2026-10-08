@@ -1,6 +1,6 @@
 """The packaged garden-routine graph mints clean through the real ``/api/graphs`` route
 (component tier), and its ``no-strategy`` choice resolves to a real edge — the machinery
-`test_garden_routine_graph.py`'s unit tier pins over the loaded doc, proven here over
+`tests/test_garden_routine_graph.py`'s unit tier pins over the loaded doc, proven here over
 what a mint actually reifies."""
 
 from __future__ import annotations

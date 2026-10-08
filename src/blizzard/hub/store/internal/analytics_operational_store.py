@@ -229,7 +229,7 @@ def _to_spend_stats(row: Any) -> SpendStats:
 def _judged_distribution_stmt(criteria: OperationalCriteria) -> Select[Any]:
     """One row per ``(node, choice)`` matching ``criteria`` — only rows carrying a
     ``choice_name``, anti-joined against ``chunk_bounces`` on ``(chunk_id, epoch)`` so a
-    kick-back's own same-epoch routing transition is excluded too (``hub_node.py``
+    kick-back's own same-epoch routing transition is excluded too (``src/blizzard/hub/delivery/hub_node.py``
     records both). A migration-completed step is not counted here either — a documented
     gap, see ``docs/deployment/analytics.md``."""
     t, b = s.transitions, s.chunk_bounces

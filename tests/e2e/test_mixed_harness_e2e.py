@@ -97,7 +97,7 @@ _SESSION_EFFORT = "high"
 #: declared no session of its own (`EffectiveSession.of`'s declaration-over-chunk-default
 #: fallback) — distinct from `_SESSION_EFFORT` so the two nodes' resolved efforts differ.
 _CHUNK_DEFAULT_EFFORT = "medium"
-#: Deliberately NOT a `blizzard:`-namespaced tier (`TIER_PREFIX`, `foundation/node_steps.py`): a
+#: Deliberately NOT a `blizzard:`-namespaced tier (`TIER_PREFIX`, `src/blizzard/foundation/node_steps.py`): a
 #: session whose EFFECTIVE model carries one arms `EligibilityCheck._lineage_satisfied`'s
 #: strict per-tier check against EVERY reachable runner-executor node's own capability —
 #: including `opencode-review`'s, reached from `build` (`_reachable_runner_nodes`'s own

@@ -250,7 +250,7 @@ class Judgement:
             # A provider-overloaded elicitation is classified right alongside the usage
             # limit — the two are mutually exclusive exit reasons for the
             # one exit, both read from the same `output`/`lines` pair read once above,
-            # same as the worker's own classification order in steps.py. A streak at its
+            # same as the worker's own classification order in src/blizzard/runner/loop/steps.py. A streak at its
             # limit is not backing off, and falls through to the ordinary path below.
             overload = classify_judge_overload(self.ctx, lease, output, lines)
             if overload is not None:

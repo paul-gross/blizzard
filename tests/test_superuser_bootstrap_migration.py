@@ -1,7 +1,7 @@
 """The superuser-bootstrap migration — ``superuser_bootstrap`` (component tier).
 
 Covers the "existing store, upgraded onward" half plus the downgrade; a fresh
-``base -> head`` store is already covered by ``test_store_migrations.py``."""
+``base -> head`` store is already covered by ``tests/test_store_migrations.py``."""
 
 from __future__ import annotations
 

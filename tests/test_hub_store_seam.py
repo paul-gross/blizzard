@@ -288,7 +288,7 @@ def _schema_missing_engine(tmp_path: Path) -> Engine:
     """A migrated engine whose schema then vanishes from under it — every one of the
     adapters' methods below queries a table that no longer exists, a genuine driver
     fault raised mid-query rather than at connection acquisition (the
-    ``test_scope_store.py`` pilot's own technique, reused here across every adapter)."""
+    ``tests/test_scope_store.py`` pilot's own technique, reused here across every adapter)."""
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
     engine = create_engine_from_url(db_url)

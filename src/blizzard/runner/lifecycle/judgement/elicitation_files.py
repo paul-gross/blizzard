@@ -1,6 +1,6 @@
 """Where a detached judgement elicitation's reply lands — the seams over its output files.
 
-The driver is ``internal/elicitation_files.py``."""
+The driver is ``src/blizzard/runner/lifecycle/judgement/internal/elicitation_files.py``."""
 
 from __future__ import annotations
 

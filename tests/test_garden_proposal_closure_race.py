@@ -35,7 +35,7 @@ _NOW = datetime(2026, 7, 16, tzinfo=UTC)
 class _CapturingConn:
     """A fake ``Connection`` recording every statement instead of running it, so the
     lock statement can be compiled against a dialect that never touches this process
-    (postgres) — the ``test_route_seq_concurrency.py`` shape."""
+    (postgres) — the ``tests/test_route_seq_concurrency.py`` shape."""
 
     def __init__(self) -> None:
         self.statements: list[object] = []

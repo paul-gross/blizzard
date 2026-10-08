@@ -407,8 +407,8 @@ describe('BoardPage', () => {
 
     /**
      * The hub assigns a freshly-promoted chunk a **tail** position
-     * (`promote.py::tail_position` owns it), so the pending override must not predict a
-     * top-of-lane rank: it lands at the *bottom* of READY, behind the real queue order,
+     * (`src/blizzard/hub/domain/operations/promote.py::tail_position` owns it), so the pending
+     * override must not predict a top-of-lane rank: it lands at the *bottom* of READY, behind the real queue order,
      * via `BoardShell`'s "unranked id" fallback.
      */
     it('renders the promoted card at the bottom of READY, behind the real queue order, while its promote is pending', async () => {

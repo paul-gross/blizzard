@@ -291,7 +291,7 @@ def test_chunk_statuses_parses_the_batch_response() -> None:
 def test_chunk_statuses_batches_across_the_query_param_limit(monkeypatch: pytest.MonkeyPatch) -> None:
     """A primed id set larger than the per-request cap becomes more than one GET, each
     within the cap — never one URL whose query string grows with the caller's own id
-    count (`drain.py`'s ``_DRAIN_LIMIT`` precedent, applied to the outbound HTTP edge)."""
+    count (`src/blizzard/runner/lifecycle/drain.py`'s ``_DRAIN_LIMIT`` precedent, applied to the outbound HTTP edge)."""
     monkeypatch.setattr(http_hub_module, "_CHUNK_STATUSES_BATCH_LIMIT", 2)
     seen_batches: list[list[str]] = []
 

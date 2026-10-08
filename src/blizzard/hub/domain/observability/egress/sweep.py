@@ -1,7 +1,7 @@
 """The egress export sweep: writes closed steps, usage, and event derivations and drops, in cursor order, as files.
 
-Contract: ``blizzard-product:/plans/fact-egress/steps/spec/export.md`` §What a pass does, §Late usage and §Delivery
-semantics, and ``blizzard-product:/plans/fact-egress/events/spec/export.md``. Every collaborator is injected, so
+Contract: ``blizzard-product:/delivered/fact-egress/steps/spec/export.md`` §What a pass does, §Late usage and §Delivery
+semantics, and ``blizzard-product:/delivered/fact-egress/events/spec/export.md``. Every collaborator is injected, so
 :meth:`EgressSweep.sweep` is one complete, directly-callable pass (``bzh:steppable-loop``). A dataset's cursor moves
 only after its files and manifest are placed, so a crash before the cursor row re-writes the same rows next pass."""
 

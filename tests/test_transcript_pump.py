@@ -67,7 +67,7 @@ def _cap_share(fraction: float) -> int:
     """A byte count that is ``fraction`` of the live per-record cap. Every split/shrink test
     below sizes content through this, never in literal bytes: the cap has already moved once,
     and a batch written as "~1.5 MB, over cap" is simply under the new one — green, asserting
-    nothing. The magnitude itself is pinned in `test_record_caps.py`, not here."""
+    nothing. The magnitude itself is pinned in `tests/test_record_caps.py`, not here."""
     return max(1, int(TRANSCRIPT_RECORD_MAX_BYTES * fraction))
 
 

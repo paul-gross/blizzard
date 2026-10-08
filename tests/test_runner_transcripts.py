@@ -1,4 +1,4 @@
-"""``transcripts/internal/projected_transcript_repository.py`` — the panel's read model.
+"""``src/blizzard/runner/transcripts/internal/projected_transcript_repository.py`` — the panel's read model.
 
 A domain slice wired with real internal collaborators, hermetic via
 ``bzh:dependency-injection``. The golden claim: a given set of fixture lines produces a
@@ -111,7 +111,7 @@ def test_is_meta_record_is_filtered(tmp_path: Path) -> None:
 def test_is_sidechain_record_is_filtered(tmp_path: Path) -> None:
     """An unresolvable ``isSidechain`` record surfaces as its own top-level ``"sidechain"``
     turn — the unlinked routing itself is pinned in
-    ``test_runner_harness_claude_code_normalizer.py``."""
+    ``tests/test_runner_harness_claude_code_normalizer.py``."""
     _write(tmp_path, [fx.sidechain_record()])
     transcript = _read(tmp_path)
 
@@ -286,7 +286,7 @@ def test_a_tool_inputs_structure_carries_through_untouched_below_the_cap(tmp_pat
 def _tool_use_line(tool_input: object) -> str:
     """A ``tool_use`` record whose ``input`` is not a dict — ``fx.assistant_tool_use``
     only types a dict, so a non-object shape (``ToolInput.of``,
-    ``claude_code/normalizer.py``) is built inline here."""
+    ``src/blizzard/runner/harness/claude_code/normalizer.py``) is built inline here."""
     content = [{"type": "tool_use", "id": "t1", "name": "Weird", "input": tool_input}]
     return json.dumps({"type": "assistant", "message": {"role": "assistant", "content": content}, "uuid": "a1"})
 

@@ -1,6 +1,6 @@
 """``blizzard hub finding list|show`` (unit tier) and the human-driven exit
 verbs — pure clients of the finding routes, driven here with
-``httpx`` stubbed, the ``tests/test_hub_cli_scope.py`` / ``test_hub_cli_garden_proposal.py``
+``httpx`` stubbed, the ``tests/test_hub_cli_scope.py`` / ``tests/test_hub_cli_garden_proposal.py``
 shape."""
 
 from __future__ import annotations

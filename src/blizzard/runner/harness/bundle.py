@@ -1,7 +1,7 @@
 """The operator's harness-config bundle: its models, errors, and the pure rules over them.
 
-Each binding declares its own layout, so nothing here knows a harness by name. Reading,
-validating, and publishing the bundle as an immutable snapshot is ``internal/bundle_publisher.py``."""
+Each binding declares its own layout, so nothing here names a harness. Reading, validating, and
+publishing the bundle as an immutable snapshot is ``src/blizzard/runner/harness/internal/bundle_publisher.py``."""
 
 from __future__ import annotations
 

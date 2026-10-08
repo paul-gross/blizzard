@@ -566,7 +566,7 @@ def route_changed_files(files: Iterable[str]) -> tuple[dict[str, list[str]], lis
 
 @dataclass(frozen=True)
 class ScopeRun:
-    """What one child `mutation.py <scope> --since REV --fresh` run came to."""
+    """What one child `scripts/mutation.py <scope> --since REV --fresh` run came to."""
 
     exit_code: int | None  # None: killed at the wall budget
     output_tail: str

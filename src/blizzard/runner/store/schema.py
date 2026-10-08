@@ -794,7 +794,7 @@ transcript_outbound_buffer = Table(
     # acked final row IS marked here — its continued presence is the exactly-once receipt.
     Column("acked_at", UtcDateTime, nullable=True),
     # A pruned row's rowid must never be reissued as a later `seq`; recorded `bzh:sql-portable`
-    # exemption in blizzard-context:/standards/persistence.md. Pinned in test_pin_runner_store.py.
+    # exemption in blizzard-context:/standards/persistence.md. Pinned in tests/test_pin_runner_store.py.
     sqlite_autoincrement=True,
 )
 

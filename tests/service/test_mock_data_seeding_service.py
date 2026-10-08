@@ -110,7 +110,7 @@ def test_scenario_board_status_composition_agrees_with_the_hub_and_survives_a_co
         # --- 1. seed via the real hub's own runtime dir, live, no restart ------------ #
         board_stdout = _mock_data(bin_dir, "scenario", "board", "--chunks", "9", "--stress", "--dir", str(hub_dir))
         intended = _parse_scenario_chunks(board_stdout)
-        # 9 base chunks + --stress's 2 extra chunks (scenario_seed.py's own module docstring).
+        # 9 base + --stress's 2 extra (blizzard-mock/src/blizzard_mock/mock_data/domain/hub/scenario_seed.py docstring).
         assert len(intended) == 11, board_stdout
         ceiling_runner_id = _parse_ceiling_paused_runner(board_stdout)
 
@@ -169,7 +169,7 @@ def test_scenario_board_status_composition_agrees_with_the_hub_and_survives_a_co
         # --- 3. GET /api/chunks/{id} — cost-partial, multi-question, delivered, refs - #
 
         # Chunk 0 (the first "ready" entry) is the guaranteed cost-partial one
-        # (scenario_seed.py's module docstring).
+        # (blizzard-mock/src/blizzard_mock/mock_data/domain/hub/scenario_seed.py's module docstring).
         cost_partial_chunk_id, cost_partial_status = intended[0]
         assert cost_partial_status == "ready", intended[0]
         cost_partial_detail = _chunk_detail(hub, cost_partial_chunk_id)

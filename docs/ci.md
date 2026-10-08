@@ -12,8 +12,8 @@ every trigger workflow: ruff format+check, pyright, the `blizzard:structural-gat
 (`contracts/ast-grep/`), pytest (unit + component), OpenAPI spec drift, hub↔runner wire compatibility against the PR's
 merge-base (`gate / hub↔runner wire compatibility`, PR-only — see below), the `web/` frontend checks (eslint, vitest,
 structural gate, generated-client drift), and the Vale prose lint (`gate / process-reference and change-history lint`,
-`styles/Blizzard/ProcessReference.yml`, `styles/Blizzard/ChangeHistory.yml` and `styles/Blizzard/VariantHolder.yml`
-against `.vale.ini`). The
+`styles/Blizzard/ProcessReference.yml`, `styles/Blizzard/ChangeHistory.yml`, `styles/Blizzard/VariantHolder.yml` and
+`styles/Blizzard/ShortFormPointer.yml` against `.vale.ini`). The
 `mise run process-ref-lint` command covers Markdown, configured Python and `src/` YAML, and web TypeScript/CSS;
 generated API clients are excluded and `.html` templates are outside Vale's configured extensions. The change-history
 rule flags the change-history phrases its own token list names, which is the one statement of what it catches. Every

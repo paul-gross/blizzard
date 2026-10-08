@@ -1,6 +1,6 @@
 """Work-source item routes — the operator-plane editor surface over a
 work source's browsable items, distinct from the pass-through ``WorkItemEntry``
-(``wire/chunk.py``). Every request model is ``extra="forbid"`` (mirrors ``wire/sse.py``);
+(``src/blizzard/wire/chunk.py``). Every request model is ``extra="forbid"`` (mirrors ``src/blizzard/wire/sse.py``);
 the patch model follows ``ChunkPatchRequest``'s omitted-versus-explicit-null convention
 for the nullable ``stated_priority``, and ``stated_priority``/``closure`` type on the
 domain's own enums, request and response alike (``status: ChunkStatus`` precedent)."""

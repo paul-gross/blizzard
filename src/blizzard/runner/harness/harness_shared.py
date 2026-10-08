@@ -1,9 +1,9 @@
 """Harness-neutral logic shared by every coding-harness binding (``bzh:pluggable-seams``).
 
 Not a base class either adapter must inherit — only what was implemented nearly verbatim
-in both ``claude_code/adapter.py`` and ``opencode/adapter.py`` lives here: the identity
-env, the ``<Choice>`` scan, the stdout-target idiom, and the
-model-resolution skeleton."""
+in both ``src/blizzard/runner/harness/claude_code/adapter.py`` and
+``src/blizzard/runner/harness/opencode/adapter.py`` lives here: the identity env, the
+``<Choice>`` scan, the stdout-target idiom, and the model-resolution skeleton."""
 
 from __future__ import annotations
 

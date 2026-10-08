@@ -1,6 +1,6 @@
 """The seams over the per-(lease, generation) files a spawned worker's stdout and stderr redirect to.
 
-The driver is ``internal/worker_stdout_files.py``."""
+The driver is ``src/blizzard/runner/leases/internal/worker_stdout_files.py``."""
 
 from __future__ import annotations
 

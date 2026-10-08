@@ -1,6 +1,6 @@
 """The operational analytics query adapter's statements: every one it executes compiles
 under both dialects and stays on the portable expression surface (unit tier).
-Mirrors ``test_analytics_event_query_statements.py``'s sweep shape."""
+Mirrors ``tests/test_analytics_event_query_statements.py``'s sweep shape."""
 
 from __future__ import annotations
 

@@ -75,7 +75,7 @@ def _jsonl(events: list[dict[str, Any]]) -> str:
 
 @pytest.fixture(autouse=True)
 def _opencode_resolves_on_path(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Mirrors ``test_runner_harness_adapter.py``'s fixture of the same shape: a unit
+    """Mirrors ``tests/test_runner_harness_adapter.py``'s fixture of the same shape: a unit
     test's fake spawn must not depend on whether ``opencode`` is really installed on this
     machine's ``PATH`` — `_ensure_executable`'s `shutil.which` lookup runs before the
     faked ``subprocess.Popen`` ever sees the call."""
@@ -776,7 +776,7 @@ def test_judge_and_resume_with_message_launch_against_the_recorded_session(
     resumed = adapter.resume_with_message(
         str(workdir), "ses_recorded", "continue", stdout_path=str(workdir / "nudge.out")
     )
-    resumed.confirm_durable()  # real component tests stand in for `lifecycle/dormant.py::_wake`'s own call
+    resumed.confirm_durable()  # component tests stand in for `_wake`'s call (src/blizzard/runner/lifecycle/dormant.py)
     os.waitpid(resumed.pid, 0)
     assert (workdir / "nudge.out").exists()
 

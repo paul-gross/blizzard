@@ -1707,7 +1707,7 @@ def test_kill9_at_crash_point_under_opencode(crash_env: CrashEnv, tmp_path: Path
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
     hub_port, runner_port = free_port(), free_port()
 
-    # Every named point here fires in the RUNNER's loop (lifecycle/spawn.py/judgement.py) — never the hub.
+    # Every named point here fires in the RUNNER's loop (`src/blizzard/runner/lifecycle/`), never the hub.
     hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
     runner_proc = None
     hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
@@ -2615,8 +2615,8 @@ def test_kill9_at_hub_node_pending_crash_point(crash_env: CrashEnv, tmp_path: Pa
 
 # --- Mid-script inter-repo-push crash (#67) — the packaged default graph's own window ---
 
-# A window the per-step `hubnode.*` registry points cannot reach: `land_default.py` loops
-# over repos inside ONE `run:` step, marking each through a mid-run callback instead.
+# A window the per-step `hubnode.*` registry points cannot reach: `src/blizzard/hub/graphs/scripts/land_default.py`
+# loops over repos inside ONE `run:` step, marking each through a mid-run callback instead.
 
 _WEB_REPO_NAME = "toy-web"
 _LAND_STEP_COMMAND = "python3 -m blizzard.hub.graphs.scripts.land_default"
@@ -2657,7 +2657,7 @@ def _two_repo_build_script(landed_file: str) -> str:
 
 def _default_graph_two_repo_yaml(landed_file: str) -> str:
     """A ``build -> deliver`` graph named ``default-delivery`` whose ``deliver`` node runs
-    the REAL packaged ``land_default.py`` script (not the sweep's ``true`` stand-in),
+    the REAL packaged ``src/blizzard/hub/graphs/scripts/land_default.py`` script (not the sweep's ``true`` stand-in),
     mirroring the packaged ``default.yaml``'s ``landed -> done`` / ``conflict -> build``."""
     import yaml
 
@@ -2811,7 +2811,7 @@ _LAND_PR_CI_STEP_COMMAND = "python3 -m blizzard.hub.graphs.scripts.land_pr_ci"
 
 def _pr_ci_graph_two_repo_yaml(landed_file: str) -> str:
     """:func:`_default_graph_two_repo_yaml`'s twin for the PR + CI-watch lane: ``deliver``
-    runs the REAL packaged ``land_pr_ci.py`` script against the rebase-capable mock forge,
+    runs the REAL packaged ``src/blizzard/hub/graphs/scripts/land_pr_ci.py`` against the rebase-capable mock forge,
     with its full outcome set and a poll cadence wired, mirroring the shipped
     ``adv-dwf``/``bas-dwf`` graphs' ``deliver`` node."""
     import yaml

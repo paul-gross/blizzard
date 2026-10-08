@@ -1258,7 +1258,7 @@ class FakeProbe:
         self.killed_groups: list[int] = []
         self.interrupted_groups: list[int] = []
         # Every call, counted — a test proving a caller never re-probes a launcher's
-        # own already-recorded start time (e.g. `lifecycle/dormant.py::_wake`) reads this directly.
+        # own already-recorded start time (e.g. `src/blizzard/runner/lifecycle/dormant.py::_wake`) reads this directly.
         self.start_time_calls: list[int] = []
 
     def start_time(self, pid: int) -> str | None:

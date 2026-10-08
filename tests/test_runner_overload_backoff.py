@@ -3,7 +3,7 @@
 A worker/judge exit an adapter classifies overloaded is not judged, spends no retry, and
 keeps its epoch: short of the streak limit, the lease backs off and wakes the same session
 once ``resume_after`` passes. Real (tmp sqlite) store, fakes at the seams — mirrors
-``test_runner_paused.py``'s usage-limit tests."""
+``tests/test_runner_paused.py``'s usage-limit tests."""
 
 from __future__ import annotations
 

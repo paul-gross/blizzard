@@ -2,7 +2,7 @@
 
 Tests only the wire: 200/404/409, the fact written, the ``pause`` view, and the two
 events published (``queue-changed`` alongside ``chunk-changed``). The refusal itself is
-unit-tested in ``test_pause_service.py``.
+unit-tested in ``tests/test_pause_service.py``.
 """
 
 from __future__ import annotations
@@ -111,7 +111,7 @@ def _stop(tmp_path: Path, chunk_id: str, *, at: datetime) -> None:
     """Write a ``chunk_stopped`` row directly rather than through ``POST
     /chunks/{id}/stop`` — a lighter-weight precondition for a test that
     only needs a stopped chunk to exist, not to exercise the stop route itself (that
-    route's own behavior is proven in ``test_chunk_stop.py``)."""
+    route's own behavior is proven in ``tests/test_chunk_stop.py``)."""
     engine = create_engine_from_url(f"sqlite:///{tmp_path / 'hub.db'}")
     with engine.begin() as conn:
         conn.execute(sa_insert(schema.chunk_stopped).values(chunk_id=chunk_id, stopped_at=at))

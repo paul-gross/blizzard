@@ -1,7 +1,7 @@
 """Adapts the harness registry to the transcript service's per-owner repository seam
 (``bzh:dependency-inversion``) — the internal construction of
 :class:`~blizzard.runner.transcripts.internal.projected_transcript_repository.ProjectedTranscriptRepository`
-belongs here, at the composition root's own wiring, never inside ``transcripts/service.py``."""
+belongs here, at the composition root's own wiring, never inside ``src/blizzard/runner/transcripts/service.py``."""
 
 from __future__ import annotations
 

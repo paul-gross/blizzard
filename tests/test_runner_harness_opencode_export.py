@@ -1,6 +1,6 @@
-"""``harness/opencode/transcript/export.py`` — the ``opencode export`` subprocess seam (unit).
+"""``src/blizzard/runner/harness/opencode/transcript/export.py`` — the ``opencode export`` subprocess seam (unit).
 
-Mirrors ``test_runner_harness_adapter.py``'s own ``observe_version`` coverage: a scripted
+Mirrors ``tests/test_runner_harness_adapter.py``'s own ``observe_version`` coverage: a scripted
 ``subprocess.run``, never a real ``opencode`` binary."""
 
 from __future__ import annotations

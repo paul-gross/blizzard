@@ -1,4 +1,4 @@
-"""``transcripts/internal/segment_projection.py`` — a hub segment's wire turns onto the
+"""``src/blizzard/runner/transcripts/internal/segment_projection.py`` — a hub segment's wire turns onto the
 runner's transcript read model.
 
 Constructs :class:`TurnSegmentView` fixtures directly, so the job here is the mapping — what

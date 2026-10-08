@@ -1,5 +1,5 @@
 """httpx adapter for the archived-transcript seam — a sibling of
-``runner/hub/internal/http_hub.py``, the runner's other outbound hub adapter.
+``src/blizzard/runner/hub/internal/http_hub.py``, the runner's other outbound hub adapter.
 
 All httpx and pydantic-wire usage is confined here: the hub's transcript-segments read is
 fetched, validated, and translated into an :class:`ArchivedTranscript`. Every outcome
@@ -22,7 +22,7 @@ from blizzard.wire.transcript_segment import LeaseTranscriptView
 _log = get_logger("blizzard.runner.transcripts.archived")
 
 #: The prefix every runner->hub call in this adapter goes under, matching the fleet
-#: client's own (``runner/hub/internal/http_hub.py``).
+#: client's own (``src/blizzard/runner/hub/internal/http_hub.py``).
 _FLEET_API = "/api/fleet"
 
 

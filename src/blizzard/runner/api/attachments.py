@@ -1,7 +1,7 @@
 """``blizzard runner artifact create`` — ``POST /api/leases/{lease_id}/attachments``
 plus its read-back counterpart ``GET``.
 
-Token presentation is owned by ``lease_token.py``. ``404`` unknown/closed lease, ``403`` bad
+Token presentation is owned by ``src/blizzard/runner/api/lease_token.py``. ``404`` unknown/closed lease, ``403`` bad
 token, ``409`` an open takeover's closed reference lease, ``422`` empty content."""
 
 from __future__ import annotations

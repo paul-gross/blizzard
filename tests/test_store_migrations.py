@@ -1342,7 +1342,7 @@ def test_transcript_segments_content_digest_resumes_after_an_interrupted_first_p
 
 _SCHEMA_METADATA = {"hub": hub_schema.metadata, "runner": runner_schema.metadata}
 
-# chunks.model carries a migration-only server_default with no schema.py counterpart —
+# chunks.model carries a migration-only server_default with no counterpart in the store schema —
 # pre-existing drift this change does not own (bzh:frozen-revisions plan).
 _SERVER_DEFAULT_EXEMPTIONS: dict[str, set[str]] = {"chunks": {"model"}}
 
@@ -1394,7 +1394,7 @@ _MIGRATIONS_DIRS = {"hub": HUB_MIGRATIONS_DIR, "runner": RUNNER_MIGRATIONS_DIR}
 # the reshaped table, its columns, and ``direction`` — ``"added"`` (default) or ``"removed"``.
 
 _HISTORICAL_RESHAPES: list[tuple[str, str, str, tuple[str, ...]] | tuple[str, str, str, tuple[str, ...], str]] = [
-    # hub tree — the walking skeleton (20260713_1218_walking_skeleton_facts.py)
+    # hub tree — walking skeleton (src/blizzard/hub/store/migrations/versions/20260713_1218_walking_skeleton_facts.py)
     ("hub", "20260713_1218_hub_walking_skeleton", "escalations", ("takeover_command",)),
     ("hub", "20260713_1635_hub_runner_high_water", "graph_nodes", ("produces", "checks")),
     ("hub", "20260718_0930_hub_runner_local_pause_reason", "graph_nodes", ("bounce_cap",)),

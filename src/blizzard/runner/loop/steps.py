@@ -107,7 +107,7 @@ _CP_PULL_BEFORE = crashpoint(
 _CP_PULL_AFTER = crashpoint("pull.after-flush", "PULL done; buffer drained as far as it could")
 
 # The crossing rides `event.recorded`, not a fact kind of its own — both hubs already ingest that
-# lane. `(severity, kind)` as `lifecycle/attempt.py` classifies; the kind is the EVENT's, never a fact's.
+# lane. `(severity, kind)` per `src/blizzard/runner/lifecycle/attempt.py`; the kind is the EVENT's, never a fact's.
 _CONTEXT_WARNED: EventLogKind = "worker-context-warned"
 
 

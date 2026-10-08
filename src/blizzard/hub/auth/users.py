@@ -1,6 +1,6 @@
 """The user repository seam — read/write Protocols (``bzh:repository-split``).
 
-The concrete SQLAlchemy adapter lives at ``internal/user_repository.py``
+The concrete SQLAlchemy adapter lives at ``src/blizzard/hub/auth/internal/user_repository.py``
 (``bzh:dependency-inversion``); this module holds only the Protocol pair, depended on
 by the narrowest variant a job needs (``bzh:controller-read-only``)."""
 

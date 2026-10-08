@@ -1,5 +1,5 @@
 """The finding-exits revision's CHECK-constraint widen and new columns.
-Seeded with literal ``sa.Table`` shapes rather than importing ``schema.py``,
+Seeded with literal ``sa.Table`` shapes rather than importing ``src/blizzard/hub/store/schema.py``,
 which now carries the widened constraint and columns this revision adds — the
 ``tests/test_pr_opened_migration.py`` shape."""
 

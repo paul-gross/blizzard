@@ -1,8 +1,8 @@
 """The GitHub-backed commit resolver — the real forge check
-behind `garden_delivery.CommitResolver`: resolves whether a cited commit exists on a
+behind `ICommitForge` (`src/blizzard/hub/forge/repository_commits.py`): resolves whether a cited commit exists on a
 repo, degrading to ``None`` (well-formedness only) when the forge cannot answer. Confined to ``internal/``
-(``bzh:dependency-inversion``); ``httpx`` is used only here, as `github_work_source.py`
-uses its own client only in its own `internal/`."""
+(``bzh:dependency-inversion``); ``httpx`` is used only here, as
+`src/blizzard/hub/work_sources/internal/github_work_source.py` uses its own client only in its own `internal/`."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from blizzard.hub.domain.garden.delivery.validation import CommitResolution
 
 class GitHubCommitResolver:
     """Resolves a ``(repo, commit)`` pair against a GitHub REST v3 forge — never raises
-    (`garden_delivery.CommitResolver`'s own contract): a transport failure or an unexpected
+    (`RepositoryCommitResolver`'s contract): a transport failure or an unexpected
     status degrades to ``None`` rather than rejecting or crashing a delivery on a resolver
     fault. The forge, owner and token come with each call, from the repository record the
     caller resolved — nothing about a forge is held here."""

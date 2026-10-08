@@ -50,7 +50,7 @@ _TIER_MARKERS = frozenset({"unit", "component", "service", "e2e", "crash_sweep",
 
 #: Every collected item's nodeid missing all six tier markers, populated by
 #: ``pytest_collection_modifyitems`` below. A normal test can't see its siblings'
-#: markers on its own, so ``test_default_suite_markers.py`` reads this back instead.
+#: markers on its own, so ``tests/test_default_suite_markers.py`` reads this back instead.
 UNMARKED_TEST_NODEIDS: list[str] = []
 
 
@@ -95,7 +95,7 @@ def shard_of(nodeid: str, count: int) -> int:
 
 
 # Identity vars a runner injects into worker spawn (``ClaudeCodeAdapter._spawn_env``);
-# kept in sync by ``test_runner_harness_adapter.py``.
+# kept in sync by ``tests/test_runner_harness_adapter.py``.
 _WORKER_IDENTITY_ENV = (
     "BLIZZARD_ENV_IDS",
     "BLIZZARD_ENV_WORKDIRS",

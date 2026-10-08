@@ -2,8 +2,8 @@
 
 Each binding declares its own media types and file extensions; a consumer asks the registry for the binding
 and never compares a media-type or extension literal (``bzh:seam-answers-binding-facts``). No module outside
-``internal/yaml_codec.py`` imports PyYAML (``bzh:config-codec``). A binding decodes and never validates — the
-kind's one validator reports a wrong-typed field, so every format yields the same message."""
+``src/blizzard/hub/documents/internal/yaml_codec.py`` imports PyYAML (``bzh:config-codec``). A binding decodes and
+never validates — the kind's one validator reports a wrong-typed field, so every format yields the same message."""
 
 from __future__ import annotations
 

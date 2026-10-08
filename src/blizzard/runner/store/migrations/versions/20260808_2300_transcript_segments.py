@@ -20,7 +20,7 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 # Frozen at this revision's own shape (`bzh:frozen-revisions`) — NOT imported from live
-# `schema.py`, which may reshape these tables in a later revision.
+# `src/blizzard/runner/store/schema.py`, which may reshape these tables in a later revision.
 _frozen_metadata = sa.MetaData()
 
 transcript_segments = sa.Table(
@@ -54,7 +54,7 @@ transcript_outbound_buffer = sa.Table(
     sa.Column("payload", sa.Text, nullable=False),
     sa.Column("created_at", UtcDateTime, nullable=False),
     sa.Column("acked_at", UtcDateTime, nullable=True),
-    # Frozen copy of live `schema.py`'s own pragma; recorded `bzh:sql-portable` exemption in
+    # Frozen copy of live `src/blizzard/runner/store/schema.py`'s own pragma; recorded `bzh:sql-portable` exemption in
     # blizzard-context:/standards/persistence.md.
     sqlite_autoincrement=True,
 )

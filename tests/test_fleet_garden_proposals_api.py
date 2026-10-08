@@ -1,7 +1,7 @@
 """``GET /api/fleet/chunks/{chunk_id}/garden/proposals`` — the worker-scoped fleet read
 of a routine's garden-proposal docket, filtered by a ``state`` selector (``open`` by
 default, plus ``closed`` and ``all``) (component tier). Derives the routine from the
-chunk's own ``RunContext``, reuses ``garden_proposals.py``'s own ``garden_proposal_view``, and
+chunk's own ``RunContext``, reuses ``src/blizzard/hub/api/garden_proposals.py``'s own ``garden_proposal_view``, and
 refuses — rather than answering an empty bucket — an unknown chunk or one with no run
 context. No scope column exists here, so unlike findings there is no scope case."""
 

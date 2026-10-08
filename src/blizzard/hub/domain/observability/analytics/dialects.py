@@ -31,7 +31,7 @@ _CLAUDE_CODE_JSONL_2: dict[str, DialectEntry] = {
 }
 
 #: OpenCode's recognition parameters — each proven against the live captures under
-#: ``runner/harness/contracts/opencode/`` by the corpus guard, never authored.
+#: ``src/blizzard/runner/harness/contracts/opencode/`` by the corpus guard, never authored.
 _OPENCODE_EXPORT_1: dict[str, DialectEntry] = {
     KIND_FILE_READ: DialectEntry(tool_name="read", argument_key="filePath"),
     KIND_SKILL_INVOCATION: DialectEntry(tool_name="skill", argument_key="name"),

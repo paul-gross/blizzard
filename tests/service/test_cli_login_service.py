@@ -62,7 +62,7 @@ def _oauth_hub(hub_dir: Path, port: int, *, providers: tuple[OAuthProviderConfig
 
 
 def _establish_hub_session(hub: httpx.Client, idp_port: int) -> None:
-    """The #92 provider dance, driven exactly like ``test_auth_login_service.py``'s
+    """The provider dance, driven exactly like ``tests/service/test_auth_login_service.py``'s
     own scenarios — ``hub`` ends carrying a ``bz_session`` cookie."""
     hub.get("/api/auth/oidc-svc/authorize", follow_redirects=True)
     assert "bz_session" in hub.cookies

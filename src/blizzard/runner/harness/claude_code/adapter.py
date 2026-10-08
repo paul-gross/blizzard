@@ -422,7 +422,7 @@ class ClaudeCodeAdapter:
         # the token plaintext is never persisted, so the caller re-mints it.
         env = self.identity_env(preamble, chunk_id, session_id) if preamble is not None else self._worker_env.variables
         # Injected per-lease file (epic #57); unset (``None``) inherits the runner's own.
-        # Deferred like spawn/judge — `lifecycle/dormant.py::_wake` confirms after `record_spawn` lands.
+        # Deferred like spawn/judge — `src/blizzard/runner/lifecycle/dormant.py::_wake` confirms after `record_spawn`.
         with harness_shared.stdout_target(stdout_path) as stdout_file:
             launched = self._launcher.launch(
                 cmd, cwd=session_cwd, env=env, stdout=stdout_file, stderr=None, defer_disarm=True

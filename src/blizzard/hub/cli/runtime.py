@@ -90,7 +90,7 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
     # internal shutdown completes (see uvicorn.Server._capture_signals). Left at the
     # Python default, that re-raise terminates the process outright — skipping every line
     # after `run()`, `dispose()` included. Pre-installing a handler here, mirroring
-    # the runner's `host` (`runner/cli/runtime.py`), makes the re-raise a no-op signal
+    # the runner's `host` (`src/blizzard/runner/cli/runtime.py`), makes the re-raise a no-op signal
     # delivery instead, so `run()` actually returns and disposal below runs.
     def _handle_signal(signum: int, frame: types.FrameType | None) -> None:
         server.handle_exit(signum, frame)

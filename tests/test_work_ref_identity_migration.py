@@ -3,7 +3,7 @@
 Exercises the backfill on a store migrated to the revision just before the reshape: an
 issue-shaped GitHub URL backfills to the repo tail plus issue number, a non-issue-shaped
 row survives verbatim; also exercises ``downgrade()``'s canonicalizing reverse. Seeded
-with literal ``sa.Table`` shapes, never head-of-tree ``schema.py``."""
+with literal ``sa.Table`` shapes, never head-of-tree ``src/blizzard/hub/store/schema.py``."""
 
 from __future__ import annotations
 
@@ -184,7 +184,7 @@ def test_upgrade_is_idempotent_over_an_already_reshaped_store(tmp_path: Path) ->
 
 def test_a_fresh_store_reaches_0013_in_the_pre_reshape_shape(tmp_path: Path) -> None:
     """The walking-skeleton revision must materialize ``{provider, url}``, not
-    head-of-tree ``schema.py``'s shape — else a fresh store would silently disable the
+    head-of-tree ``src/blizzard/hub/store/schema.py``'s shape — else a fresh store would silently disable the
     pointer-identity revision's ``if "url" not in columns: return`` backfill guard."""
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
@@ -205,7 +205,7 @@ def test_a_fresh_store_reaches_0013_in_the_pre_reshape_shape(tmp_path: Path) -> 
 
 def test_a_fresh_store_s_work_ref_table_keeps_the_chunk_id_foreign_key(tmp_path: Path) -> None:
     """The walking-skeleton revision's frozen ``chunk_pm_pointers`` literal must still
-    declare the FK to ``chunks.chunk_id`` that ``schema.py`` declares (``bzh:sql-portable``).
+    declare the FK to ``chunks.chunk_id`` that ``src/blizzard/hub/store/schema.py`` declares (``bzh:sql-portable``).
     Checked via ``Inspector.get_foreign_keys``, so this holds on both backends."""
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))

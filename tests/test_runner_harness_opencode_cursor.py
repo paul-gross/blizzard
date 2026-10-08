@@ -1,4 +1,4 @@
-"""``harness/opencode/transcript/cursor.py::MessagePartCursor.admit`` — unit tier, hermetic:
+"""``src/blizzard/runner/harness/opencode/transcript/cursor.py::MessagePartCursor.admit`` — unit tier, hermetic:
 identity-based admission and its own pruning bound. This acceptance criterion named the
 token bound as unit-tested, but no such test existed until review; this file is that
 test, plus its own pairing proof against the pinned compaction corpus."""

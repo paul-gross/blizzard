@@ -15,7 +15,7 @@ from blizzard.runner.environments.worktree import IWorktreeGit, WorktreeGitError
 _log = get_logger("blizzard.runner.worktree")
 
 # A tick reaches this seam, so it must be bounded — the value is generous
-# (a remote round-trip, not a build) rather than tuned, mirroring `checks.py`'s own default.
+# (a remote round-trip, not a build) rather than tuned, as in src/blizzard/runner/lifecycle/judgement/checks.py.
 WORKTREE_GIT_TIMEOUT = 60
 
 

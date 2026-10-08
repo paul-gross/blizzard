@@ -211,7 +211,7 @@ def test_escalation_from_a_non_holder_is_rejected_under_enforce(tmp_path: Path) 
 
 
 def test_usage_recorded_applies_without_a_token_even_under_enforce(tmp_path: Path) -> None:
-    """The regression guard for the deliberate exclusion (facts.py's own no-fence
+    """The regression guard for the deliberate exclusion (src/blizzard/hub/domain/execution/facts.py's own no-fence
     rationale, epic #57/#60 cost attribution): unlike lease/escalation/question, a
     usage row from a caller presenting no token at all is still applied."""
     hub = build_hub(tmp_path, route_token_mode=ROUTE_TOKEN_ENFORCE)

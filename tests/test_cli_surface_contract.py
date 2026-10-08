@@ -75,7 +75,7 @@ def test_every_root_is_scanned() -> None:
 def test_login_and_logout_keep_session_service_off_the_recorded_surface() -> None:
     """``session_service`` reaches ``login``/``logout`` through ``ctx.params``, never as
     a declared click option — the recorded-surface half of ``SessionServiceCommand``'s
-    decision (``command.py``)."""
+    decision (``src/blizzard/hub/cli/command.py``)."""
     hub_tree = build("hub", dict(ROOTS)["hub"])
     for name in ("login", "logout"):
         param_names = {p["name"] for p in hub_tree["commands"][name]["params"]}

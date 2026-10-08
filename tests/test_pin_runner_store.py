@@ -218,7 +218,7 @@ def test_declaration_environment_id_migration_discards_the_pre_revision_rows(tmp
 
 @pytest.mark.component
 def test_a_migrated_transcript_outbound_seq_is_never_reissued_after_a_prune(tmp_path: Path) -> None:
-    """``sqlite_autoincrement`` is declared twice, and only ``schema.py``'s copy is on the
+    """``sqlite_autoincrement`` is declared twice, and only ``src/blizzard/runner/store/schema.py``'s copy is on the
     path a test store takes. Production migrates (`bzh:gating-tier-pins-production-paths`),
     so the revision's own copy is pinned here: dropping it reissues a pruned seq."""
     config = runner_runtime.init_environment(tmp_path)

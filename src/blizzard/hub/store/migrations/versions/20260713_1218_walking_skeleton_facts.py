@@ -1,5 +1,5 @@
 """walking-skeleton fact tables (hub store tree) — frozen local literals, not
-``schema.py`` imports, so ``base`` recreates this revision's own column shape.
+``src/blizzard/hub/store/schema.py`` imports, so ``base`` recreates this revision's own column shape.
 
 Revision ID: 20260713_1218_hub_walking_skeleton
 Revises: 20260713_1112_hub_initial
@@ -19,7 +19,7 @@ down_revision: str | None = "20260713_1112_hub_initial"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-# This revision's own frozen shape for every table it creates — no live ``schema.py``
+# This revision's own frozen shape for every table it creates — no live ``src/blizzard/hub/store/schema.py``
 # import (``bzh:frozen-revisions``). Declared parents-before-children so FKs resolve.
 _frozen_metadata = sa.MetaData()
 _graphs = sa.Table(
@@ -121,7 +121,7 @@ _lease_facts = sa.Table(
     sa.Column("minted_at", UtcDateTime, nullable=False),
 )
 # This revision's own frozen shape — no ``seq`` column — reshaped by 0014's route-event
-# tiebreak. Not imported from schema.py (see the module docstring).
+# tiebreak. Not imported from src/blizzard/hub/store/schema.py (see the module docstring).
 _route_created = sa.Table(
     "route_created",
     _frozen_metadata,

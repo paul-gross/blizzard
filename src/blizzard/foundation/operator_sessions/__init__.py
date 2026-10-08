@@ -1,5 +1,5 @@
 """The operator's local session-token store — CLI-client state, not daemon state, so
-both CLIs read it. Keying and file mode: ``internal/session_file.py``."""
+both CLIs read it. Keying and file mode: ``src/blizzard/foundation/operator_sessions/internal/session_file.py``."""
 
 from __future__ import annotations
 

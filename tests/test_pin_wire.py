@@ -87,7 +87,7 @@ def test_graph_policy_request_follow_latest_carries_no_default() -> None:
 def test_chunk_detail_carries_no_transcript_field() -> None:
     """Transcript content only ever leaves via the lazy per-segment reads
     — chunk detail's payload size must not grow with a chunk's stored transcript,
-    the anti-pattern named against ``hub/api/chunk_views.py``'s own ``_artifacts``."""
+    the anti-pattern named against ``src/blizzard/hub/api/chunk_views.py``'s own ``_artifacts``."""
     assert "transcript" not in ChunkDetail.model_fields
     assert not [name for name in ChunkDetail.model_fields if "transcript" in name.lower()]
 

@@ -156,7 +156,7 @@ def test_a_fresh_store_reaches_head_with_graph_id_not_null(tmp_path: Path) -> No
 
 def test_the_walking_skeleton_revision_creates_the_pre_graph_id_shape(tmp_path: Path) -> None:
     """The walking-skeleton revision must freeze ``transitions`` at its pre-#90 shape:
-    importing from head-of-tree ``schema.py`` instead would fire the backfill's
+    importing from head-of-tree ``src/blizzard/hub/store/schema.py`` instead would fire the backfill's
     ``if "graph_id" in columns: return`` guard on a fresh store, leaving it dead."""
     runner, db_url = _runner(tmp_path)
     engine = create_engine_from_url(db_url)

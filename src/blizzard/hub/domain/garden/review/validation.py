@@ -1,8 +1,8 @@
 """Review-finding delivery validation — the `record-findings` node's own
 shape check, before anything is written. Pure functions over already-parsed objects
 (`bzh:domain-takes-objects`), no I/O. Materializing a passing result is
-`materialize.py`'s, mirroring the garden delivery split
-(`delivery/validation.py`/`delivery/materialize.py`)."""
+`src/blizzard/hub/domain/garden/review/materialize.py`'s, mirroring the garden delivery split
+(`src/blizzard/hub/domain/garden/delivery/validation.py`/`src/blizzard/hub/domain/garden/delivery/materialize.py`)."""
 
 from __future__ import annotations
 

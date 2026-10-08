@@ -97,7 +97,7 @@ class WithdrawnWorkItem:
 
 class WorkItemHeldByLiveChunk(Exception):
     """A withdrawal targeted a pointer a live (non-terminal) chunk still holds — mirrors
-    ``IngestConflict`` (``hub/domain/chunk/ingest.py``): withdrawing under a running chunk would
+    ``IngestConflict`` (``src/blizzard/hub/domain/chunk/ingest.py``): withdrawing under a running chunk would
     degrade that chunk's work-item read to an unresolvable error."""
 
     def __init__(self, pointer: WorkRef, chunk_id: str) -> None:

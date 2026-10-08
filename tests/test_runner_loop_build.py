@@ -462,7 +462,7 @@ def test_context_health_is_the_graphs_own_cache(tmp_path: Path) -> None:
 @pytest.mark.unit
 def test_hosted_app_threads_the_broker_into_create_apps_seam_list(tmp_path: Path) -> None:
     """The ``host`` verb's broker reaches ``app.state.events`` — the
-    seam the stream route (``runner/api/events.py``) reads off the served app."""
+    seam the stream route (``src/blizzard/runner/api/events.py``) reads off the served app."""
     (tmp_path / CONFIG_FILENAME).write_text(f'db_url = "{RunnerConfig.default_db_url(tmp_path)}"\n')
     broker = EventBroker()
 

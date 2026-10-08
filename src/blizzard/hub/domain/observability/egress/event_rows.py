@@ -1,6 +1,6 @@
 """The ``events`` egress rows, as typed records: a derivation, its events, and a segment's drop.
 
-Contract: ``blizzard-product:/plans/fact-egress/events/spec/rows.md``. Pure: a derivation (or a drop fact) and its
+Contract: ``blizzard-product:/delivered/fact-egress/events/spec/rows.md``. Pure: a derivation (or a drop fact) and its
 chunk's :class:`StepFacts` in, rows out. Step columns come from the chunk's runner step at the segment's epoch, the
 same position :func:`~blizzard.hub.domain.observability.egress.rows.step_row` reports, never from an event's stored
 graph stamp. Values are typed, not formatted: turning times and bools into a file format is the writer's job."""

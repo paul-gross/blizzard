@@ -1,7 +1,7 @@
 """The ``Authorization: Bearer`` header, read in one place (``canon:one-owner``).
 
-What the credential *means* is the caller's: a runner's enrollment token on the fleet
-router (``auth.py``), a session id on the human plane (``auth_session.py``)."""
+What the credential *means* is the caller's: a runner's token on the fleet router (``src/blizzard/hub/api/auth.py``),
+a session id on the human plane (``src/blizzard/hub/api/auth_session.py``)."""
 
 from __future__ import annotations
 

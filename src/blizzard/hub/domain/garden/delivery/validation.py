@@ -2,7 +2,7 @@
 check, before anything is written; the check itself is specified by
 blizzard-product:/delivered/garden/machinery.md §Delivery. Pure functions over already-loaded
 objects (`bzh:domain-takes-objects`), no I/O. Materializing a passing result is
-`materialize.py`'s."""
+`src/blizzard/hub/domain/garden/delivery/materialize.py`'s."""
 
 from __future__ import annotations
 
@@ -132,7 +132,7 @@ def is_finding_id_shaped(value: str) -> bool:
 def single_repo_of(delta: DeliveredDelta) -> str | None:
     """The one repository `delta.revisions` names, or `None` if it names zero or several
     — `introduced` carries no repository of its own, so this is the sole case its commit
-    resolves against. Shared with `materialize` so the
+    resolves against. Shared with `src/blizzard/hub/domain/garden/delivery/materialize.py` so the
     rule is asked once, not reimplemented and left to silently diverge."""
     return next(iter(delta.revisions)) if len(delta.revisions) == 1 else None
 

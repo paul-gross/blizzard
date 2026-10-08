@@ -1,5 +1,5 @@
 """The Protocol seam-size gate (``bzh:seam-size-ceiling``): a ``ClassDef`` counts
-iff ``Protocol`` is one of its own bases (matched by ``test_layering.py``'s
+iff ``Protocol`` is one of its own bases (matched by ``tests/test_layering.py``'s
 ``_protocol_declarations``), and must declare at most ``_SEAM_SIZE_LIMIT`` own methods.
 ``_ACCEPTED_VIOLATIONS`` names today's exceptions; the gate fails on an unregistered violation
 and on a stale entry alike. A composed alias (no method re-declared in its own body) counts

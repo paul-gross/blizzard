@@ -48,7 +48,7 @@ from blizzard.runner.tracing.status import LeaseTraceStatusReader
 from blizzard.runner.transcripts.service import TranscriptService
 
 if TYPE_CHECKING:
-    # `api/federation.py` resolves its own collaborators through this module.
+    # `src/blizzard/runner/api/federation.py` resolves its own collaborators through this module.
     from blizzard.runner.api.federation import FederationSettings, HubAuthModeCache
 
 _STORE = "runner store"

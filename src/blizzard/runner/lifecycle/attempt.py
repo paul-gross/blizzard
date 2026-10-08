@@ -419,8 +419,8 @@ class Attempt:
         )
         self.ctx.stores.resume_intent.record_resume_clear(lease_id=lease.lease_id, cleared_at=now)
         if self.ctx.events is not None:
-            # Same "dormant" cause `park_on_ask` publishes (lifecycle/dormant.py) — this write flips the
-            # same LeaseActivity.state to "parked", just via the operator-pause path.
+            # Same "dormant" cause `park_on_ask` publishes (src/blizzard/runner/lifecycle/dormant.py) —
+            # this write flips the same LeaseActivity.state to "parked", just via the operator-pause path.
             self.ctx.events.publish_lease_changed(
                 lease.lease_id,
                 lease.chunk_id,

@@ -1,6 +1,6 @@
 """``RunService``/``compose_charge`` (unit tier): mint and ingest a
 hub work item from a routine over fake repositories — only the members each
-method actually touches are live (``bzh:domain-core``, the ``test_routine_domain.py``
+method actually touches are live (``bzh:domain-core``, the ``tests/test_routine_domain.py``
 isolation shape)."""
 
 from __future__ import annotations

@@ -1,6 +1,6 @@
 """``GardenRunService`` wired with the real ``GardenRunStore`` (component tier) — a run's
 identity minted through ``routine_run.run`` (not hand-rolled), then delivery/escalation
-facts seeded directly the ``test_routine_run_service.py`` shape. Proves the three
+facts seeded directly the ``tests/test_routine_run_service.py`` shape. Proves the three
 acceptance shapes together: a run that delivered, one that delivered an empty list, and
 one that escalated before delivering anything all appear in the list; a run's delta
 reads back added/observed/gone per delivered set; a delivered set's own
@@ -466,7 +466,7 @@ def test_run_delta_is_none_for_a_chunk_with_no_run_identity(tmp_path: Path) -> N
 
 def test_a_chunk_that_absorbed_another_runs_work_ref_still_reads_its_own_identity(tmp_path: Path) -> None:
     """`GroupService.group` gives the survivor two `chunk_work_refs` rows once both are
-    routine runs (`test_forge_status.py`'s shape) — it must still read back its own
+    routine runs (`tests/test_forge_status.py`'s shape) — it must still read back its own
     run, not the merged one's, without raising `MultipleResultsFound`."""
     hub = build_hub(tmp_path)
     survivor_routine = _routine(hub, name="survivor-routine", scope="blizzard")

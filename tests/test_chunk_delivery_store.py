@@ -1,6 +1,6 @@
 """``ChunkDeliveryStore.count_landed_since`` — the routine-baselines read's own
 landings-since count (component tier). Migrated-to-head
-sqlite-on-disk, the ``test_finding_set_store.py`` shape."""
+sqlite-on-disk, the ``tests/test_finding_set_store.py`` shape."""
 
 from __future__ import annotations
 

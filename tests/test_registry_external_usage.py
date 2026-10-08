@@ -2,7 +2,7 @@
 gate.
 
 Unit tier: the pure domain derivation in isolation, then its rendering through
-``hub/api/runners.py``'s single ``runner_view`` — no store, no HTTP."""
+``src/blizzard/hub/api/runners.py``'s single ``runner_view`` — no store, no HTTP."""
 
 from __future__ import annotations
 

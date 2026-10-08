@@ -1,6 +1,6 @@
 """``Turn`` (the local transcript read model) -> ``TurnSegmentView`` (the wire projection) —
-shared by every runner-plane route that renders a locally-read transcript onto the wire,
-lease-keyed (``transcripts.py``) or segment-keyed (``transcript_segments.py``) alike."""
+shared by every runner-plane route rendering a local transcript onto the wire, lease-keyed
+(``src/blizzard/runner/api/transcripts.py``) or segment-keyed (``src/blizzard/runner/api/transcript_segments.py``)."""
 
 from __future__ import annotations
 

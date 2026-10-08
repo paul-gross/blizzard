@@ -46,7 +46,7 @@ class _CountingFactsStore(ChunkFactsStore):
 
 class _CountingWorkRefsStore(ChunkWorkRefsStore):
     """Counts calls to the pointer-liveness reads (mirrors
-    ``test_list_chunks_bulk_reads.py``'s own counting store)."""
+    ``tests/test_list_chunks_bulk_reads.py``'s own counting store)."""
 
     def __init__(self, store: HubStoreConnections, clock: IClock, *, facts: ChunkFactsStore) -> None:
         super().__init__(store, clock, facts=facts)
@@ -538,7 +538,7 @@ def test_patch_carrying_an_explicit_null_stated_priority_clears_it(tmp_path: Pat
 
 
 # --------------------------------------------------------------------------- #
-# A blank title or body is 422 — the same shape ``api/chunks.py``'s edit refuses
+# A blank title or body is 422 — the same shape ``src/blizzard/hub/api/chunks.py``'s edit refuses
 
 
 def test_create_with_a_blank_title_or_body_is_422(tmp_path: Path) -> None:

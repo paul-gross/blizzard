@@ -53,7 +53,7 @@ class _Wait:
 
 
 def chunk_end(facts: StepFacts) -> ChunkEnd | None:
-    """The chunk's first terminal fact, or ``None``. On an exact tie a completion beats a stop, as in status."""
+    """First terminal fact, or ``None``; a tie favors completion, as in src/blizzard/hub/domain/chunk/model.py."""
     found: list[tuple[datetime, int, ChunkOutcome]] = []
     found += [(t.recorded_at, 0, ChunkOutcome.DONE) for t in facts.transitions if t.to_node_id == RESERVED_TERMINAL]
     found += [(c.recorded_at, 1, ChunkOutcome.DONE) for c in facts.chunk_completed]

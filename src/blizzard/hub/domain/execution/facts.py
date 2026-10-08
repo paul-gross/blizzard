@@ -230,8 +230,8 @@ class FactIngestService:
         runner_name: str | None = None,
     ) -> FactIngestResult:
         """Apply one push of ``runner_id``'s facts. A retired runner is refused with
-        :class:`RunnerRetired` before its high-water mark is read, so nothing in the push lands.
-        ``runner_name`` is the pusher's registered name, carried onto the events the push records."""
+        :class:`~blizzard.hub.domain.runners.registration.RunnerRetired` before its high-water mark is read, so
+        nothing lands. ``runner_name`` is the pusher's registered name, carried onto the events the push records."""
         self._retired.refuse_if_retired(runner_id, action="fact ingest")
         mark = self._route.runner_high_water(runner_id)
         applied: list[int] = []
@@ -362,7 +362,7 @@ class FactIngestService:
             return True, None
         if kind == USAGE_RECORDED:
             # No epoch fence and no route-token gate: trailing-epoch spend is real and attributed to its
-            # own epoch (pinned in tests/test_usage_facts_ingest.py, test_route_token_authz.py).
+            # own epoch (pinned in tests/test_usage_facts_ingest.py, tests/test_route_token_authz.py).
             self._usage.record_usage(
                 fact.require_text("chunk_id"),
                 node_id=fact.require_text("node_id"),
@@ -466,7 +466,7 @@ class FactIngestService:
 
     def _route_token_ok(self, chunk_id: str, runner_id: str, fact: Payload, *, mode: str) -> bool:
         """Route-token authorization for a chunk-scoped, fence-advancing fact — the
-        buffered-push counterpart of ``apply.py``'s own check. A chunk the
+        buffered-push counterpart of ``src/blizzard/hub/domain/execution/apply.py``'s own check. A chunk the
         hub has never minted (``load_facts`` returns ``None``, e.g. a malformed/stale
         payload) falls back to an empty :class:`ChunkFacts`, which
         :class:`RouteToken` already rejects as having no live route."""

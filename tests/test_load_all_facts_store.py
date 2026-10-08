@@ -330,7 +330,7 @@ def test_bulk_read_bucket_counts_match_the_per_chunk_fold(tmp_path: Path) -> Non
 
     via_bulk = FleetSummary.of(facts.status() for facts in store.facts.load_all_facts().values())
     # The pre-#374 shape ``FleetPulse.view()`` used, called out here as the equivalence
-    # baseline rather than imported from ``chunks.py``, since that call site is gone.
+    # baseline rather than imported from ``src/blizzard/hub/api/chunks.py``, since that call site is gone.
     via_per_chunk = FleetSummary.of(
         (store.facts.load_facts(c.chunk_id) or ChunkFacts(minted=True)).status() for c in store.record.list_all()
     )

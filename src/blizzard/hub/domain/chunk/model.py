@@ -225,7 +225,7 @@ def mint_chunk(
 @domain_model
 @dataclass(frozen=True)
 class DependencyEdge:
-    """One ``chunk_dependencies`` row (shape: ``hub/store/schema.py``) — a declared
+    """One ``chunk_dependencies`` row (shape: ``src/blizzard/hub/store/schema.py``) — a declared
     dependent-on-prerequisite edge. Loaded through its own seam
     (:mod:`~blizzard.hub.domain.chunk.ports.dependencies`), never folded into :class:`ChunkFacts`
     — an edge is a relation between two chunks, not an input to either one's own status."""

@@ -157,7 +157,7 @@ class Finding:
     introduced_at: datetime | None
     #: When the garden first saw this finding (the `add` fact's instant), not when the commit landed (`introduced_at`).
     first_observed_at: datetime | None
-    #: schema.py's `findings` table carries no such column.
+    #: src/blizzard/hub/store/schema.py's `findings` table carries no such column.
     live: bool
     #: "live", "gone", "delivered", or one of `EXIT_KINDS` — the newest fact's own kind.
     state: str

@@ -1,4 +1,4 @@
-"""``transcripts/service.py`` — home selection for a lease's transcript.
+"""``src/blizzard/runner/transcripts/service.py`` — home selection for a lease's transcript.
 
 Every branch of the home-selection resolution table, driven against a real store (for
 ``lease``/``active_lease``) with fake local and archived repositories standing in for the

@@ -343,7 +343,7 @@ class _Dataset:
 
 
 #: Mints the ten read rollup routes' own criteria types, mirroring each route's own
-#: declared query params (``api/analytics.py``).
+#: declared query params (``src/blizzard/hub/api/analytics.py``).
 _DATASETS: dict[str, _Dataset] = {
     "counts-files": _Dataset(
         "/api/analytics/counts/files",

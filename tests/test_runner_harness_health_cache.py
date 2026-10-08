@@ -206,8 +206,8 @@ def test_a_version_above_every_committed_corpus_still_resolves_against_the_real_
 
 def test_a_raw_version_outside_the_admitted_range_is_incompatible() -> None:
     """A version genuinely outside the admitted range is `incompatible_version`, reached
-    through the real evaluation path — `HarnessHealthCache.refresh` (health_cache.py)
-    into `evaluate_harness_health` (health.py) — never a synthetic evidence construction.
+    through the real evaluation path — `HarnessHealthCache.refresh` (src/blizzard/runner/harness/health_cache.py)
+    into `evaluate_harness_health` (src/blizzard/runner/harness/health.py) — never a synthetic evidence construction.
     No corpus entry exists for this version at all; the sibling test below pins the harder
     case where one does."""
     clock = FixedClock(_NOW)

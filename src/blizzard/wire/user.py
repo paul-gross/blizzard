@@ -2,7 +2,7 @@
 
 ``GET /api/users`` lists every hub-local account (username, display name, email,
 linked identities, role, created); ``POST /api/users/{id}/role`` assigns a role
-(``hub/api/users.py``).
+(``src/blizzard/hub/api/users.py``).
 """
 
 from __future__ import annotations

@@ -133,7 +133,7 @@ DEFAULT_MODEL = ModelColumn()
 DEFAULT_HARNESSES = ModelColumn()
 QUESTIONS = QuestionQuery()
 
-# The ``merged/<repo>`` marker also appears in domain/chunk/model.py's ``LandedRepos``.
+# The ``merged/<repo>`` marker also appears in src/blizzard/hub/domain/chunk/model.py's ``LandedRepos``.
 MARKER_PREFIX = "merged/"
 
 

@@ -2,7 +2,7 @@
 
 All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). Facts only
 (``bzh:facts-not-status``): every read below folds already-recorded rows; nothing derives
-a status column. Read-only (``blizzard-context/architecture/repository-access.md``):
+a status column. Read-only (``blizzard-context:/architecture/repository-access.md``):
 ``load_facts``/``load_all_facts``/``load_facts_for``/``load_live_statuses`` each project
 the union of every other seam's own writes, so this adapter has no write half.
 """
@@ -201,7 +201,7 @@ class ChunkFactsStore:
         query (:func:`maybe_live`), so the facts read and the per-chunk derivation track the
         live fleet rather than every chunk ever minted. The prefilter is sound, not exact —
         a terminal chunk it keeps is dropped by the derivation below. Status derivation
-        itself stays in ``domain/chunk/model.py``; this only narrows which rows get read."""
+        itself stays in ``src/blizzard/hub/domain/chunk/model.py``; this only narrows which rows get read."""
         with self._store.read("load_live_statuses") as conn:
             statuses = self._maybe_live_statuses(conn)
         return {chunk_id: status for chunk_id, status in statuses.items() if status not in TERMINAL_STATUSES}

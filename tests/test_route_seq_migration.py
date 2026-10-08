@@ -159,7 +159,7 @@ def test_downgrade_drops_the_seq_column(tmp_path: Path) -> None:
 
 def test_a_fresh_store_reaches_0013_in_the_pre_seq_shape(tmp_path: Path) -> None:
     """The walking-skeleton revision must materialize route_created/route_released without ``seq``, not
-    head-of-tree ``schema.py``'s shape — the same freeze the work-ref-source-ref revision established for
+    head-of-tree ``src/blizzard/hub/store/schema.py``'s shape — the same freeze the work-ref-source-ref revision established for
     ``chunk_work_refs`` (see the walking-skeleton and route-seq-tiebreak revisions' module docstrings)."""
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))

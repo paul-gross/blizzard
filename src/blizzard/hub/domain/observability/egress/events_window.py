@@ -1,7 +1,7 @@
 """The ``events`` dataset's window, shared by the live sweep and the backfill: which markers and drops a pass takes,
 and the rows they become.
 
-Contract: ``blizzard-product:/plans/fact-egress/events/spec/export.md`` §What a pass reads. Pure: the store's reads
+Contract: ``blizzard-product:/delivered/fact-egress/events/spec/export.md`` §What a pass reads. Pure: the store's reads
 in, items, positions and rows out. A derivation costs its ``derivation`` row plus one row per event, a drop one row;
 a cut never splits a derivation, so one larger than the limit is taken alone."""
 

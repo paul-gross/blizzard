@@ -44,7 +44,7 @@ class MethodScopedAllowance:
     reason: str
 
 
-# Points at schema.py's own "Deliberately unindexed" comment near `asks` (`bzh:one-prose-home`).
+# Points at the "Deliberately unindexed" comment near `asks` in src/blizzard/runner/store/schema.py (`bzh:one-prose-home`).
 _SCHEMA_520_REASON = (
     "schema.py's own 'Deliberately unindexed (issue #520)' comment beside `asks`: "
     "near-empty by design, so a scan beats an index's upkeep."
@@ -63,14 +63,14 @@ _RARE_OPERATOR_EVENT_REASON = (
     "hub-resolved escalation) — sparse by the event's own nature, not by retention."
 )
 
-# Points at schema.py's own "A singleton row" comments beside `hub_control` and `runner_identity`.
+# Points at src/blizzard/runner/store/schema.py's "A singleton row" comments beside `hub_control`, `runner_identity`.
 _RUNNER_SINGLETON_REASON = (
     "schema.py's own 'A singleton row' comments beside `hub_control` and `runner_identity`: "
     "every write replaces the one row in place, so a scan reads at most one row."
 )
 
 RUNNER_ALLOWED_SCANS: list[TableWideAllowance | MethodScopedAllowance] = [
-    # --- the #520-named six (schema.py, beside `asks`) --------------------------------
+    # --- the named six (src/blizzard/runner/store/schema.py, beside `asks`) --------------------------------
     TableWideAllowance("asks", 50, _SCHEMA_520_REASON),
     TableWideAllowance("park_facts", 50, _SCHEMA_520_REASON),
     TableWideAllowance("park_resumes", 50, _SCHEMA_520_REASON),

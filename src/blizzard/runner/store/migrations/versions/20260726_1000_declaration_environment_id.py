@@ -30,7 +30,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Recreate the pre-revision shape explicitly — `schema.py` now describes the new one,
+    # Recreate the pre-revision shape explicitly — `src/blizzard/runner/store/schema.py` now describes the new one,
     # so the old columns are spelled out here rather than imported.
     bind = op.get_bind()
     git_commit_declarations.drop(bind, checkfirst=True)

@@ -218,7 +218,7 @@ def test_fill_spawns_a_fresh_attempt_after_requeue_and_consumes_the_mark(tmp_pat
 
 def test_fill_requeue_resume_carries_the_failed_leases_own_harness_owner(tmp_path) -> None:  # type: ignore[no-untyped-def]
     """The requeue-resume path (``InterruptedClaims._resume_requeued``) mints its fresh
-    lease under the escalated lease's own recorded owner (``claim.py``'s ``_latest_owner``)
+    lease under the escalated lease's recorded owner (``_latest_owner`` in ``src/blizzard/runner/lifecycle/claim.py``)
     — never the default harness, even though a fresh mint carries no session yet."""
     store = _store(tmp_path)
     _seed_escalated_chunk(store, harness_id="other")

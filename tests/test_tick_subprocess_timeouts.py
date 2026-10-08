@@ -1,5 +1,5 @@
 """No ``subprocess.run`` a tick reaches may lack a ``timeout=`` — the
-`test_daemon_spawn_sink.py` precedent, an AST fence rather than a comment's claim.
+`tests/test_daemon_spawn_sink.py` precedent, an AST fence rather than a comment's claim.
 
 ``PeriodicDriver.stop``'s unbounded join rests on every seam a tick touches being bounded;
 this pins the seams listed below."""

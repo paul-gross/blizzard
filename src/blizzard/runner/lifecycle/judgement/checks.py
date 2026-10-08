@@ -77,7 +77,7 @@ class IWriteCheckRepository(IReadCheckRepository, Protocol):
         Idempotent by its own check-then-insert, not a DB constraint
         (``bzh:sql-portable``), mirroring :meth:`record_usage`. Called *before* the
         resume that delivers the nudge — the ordering rationale lives at the call site
-        in ``runner/loop/steps.py``."""
+        in ``src/blizzard/runner/loop/steps.py``."""
         ...
 
     def record_check_results(

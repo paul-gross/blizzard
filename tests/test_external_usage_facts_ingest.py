@@ -192,7 +192,7 @@ def test_posted_through_the_route_publishes_runner_changed_once_and_a_replay_pub
     tmp_path: Path,
 ) -> None:
     """The actual ``POST /api/fleet/events`` route, not ``_apply`` directly — a
-    domain-level-only assertion would still pass with the ``hub/api/fleet.py`` branch
+    domain-level-only assertion would still pass with the ``src/blizzard/hub/api/fleet.py`` branch
     missing (the fact would land but never broadcast)."""
     hub = build_hub(tmp_path)
     assert hub.client.post("/api/fleet/runners", json={"runner_id": "r1", "workspace_id": "w1"}).status_code == 201

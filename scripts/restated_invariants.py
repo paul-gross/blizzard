@@ -18,7 +18,7 @@ why. A fact's ``owner`` is either a `blizzard-context:/path#anchor` citation (ne
 must appear, normalized, in the resolved owner scope, or ``owner_assert.anchor:
 true`` with a ``reason`` stands in for a quote that would be unwieldy to pin.
 `--write-sites`'s preservation contract is `apply_write_sites`'s own docstring;
-site identity (``file`` + ``symbol``, never a line number) is `prose_spans.py`'s.
+site identity (``file`` + ``symbol``, never a line number) is `scripts/prose_spans.py`'s.
 """
 
 from __future__ import annotations

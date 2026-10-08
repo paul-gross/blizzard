@@ -381,7 +381,7 @@ def test_a_bare_node_still_honors_the_chunks_own_declared_default(tmp_path: Path
 _CLAUDE_SKILL_BUILD_SCRIPT = (
     "import subprocess, pathlib\n"
     f"repo = {REPO_NAME!r}\n"
-    # skill_invocation through Claude Code's own dialect (`dialects.py`'s `_CLAUDE_CODE_JSONL_2`).
+    # skill_invocation via `_CLAUDE_CODE_JSONL_2` in src/blizzard/hub/domain/observability/analytics/dialects.py.
     "tool_call('Skill', {'skill': 'wf-commit'}, output='ran the commit skill')\n"
     '(pathlib.Path(repo) / "LANDED.md").write_text("landed by the mock harness\\n")\n'
     'subprocess.run(["git", "-C", repo, "add", "-A"], check=True)\n'
@@ -406,7 +406,7 @@ _CLAUDE_SKILL_BUILD_SCRIPT = (
 _OPENCODE_TASK_BUILD_SCRIPT = (
     "import subprocess, pathlib\n"
     f"repo = {REPO_NAME!r}\n"
-    # agent_spawn through OpenCode's own dialect (`dialects.py`'s `_OPENCODE_EXPORT_1`).
+    # agent_spawn via `_OPENCODE_EXPORT_1` in src/blizzard/hub/domain/observability/analytics/dialects.py.
     "tool_call('task', {'subagent_type': 'reviewer'}, output='spawned a sub-agent')\n"
     '(pathlib.Path(repo) / "LANDED.md").write_text("landed by the mock harness\\n")\n'
     'subprocess.run(["git", "-C", repo, "add", "-A"], check=True, capture_output=True)\n'

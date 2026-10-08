@@ -72,7 +72,7 @@ pytestmark = [
 ]
 
 # The fixture project repo the loop drives and the owner the forge/hub address it under
-# (the repository record's owner; see `hub/graphs/scripts/land_default.py`).
+# (the repository record's owner; see `src/blizzard/hub/graphs/scripts/land_default.py`).
 OWNER = "blizzard"
 REPO_NAME = "toy-api"
 REPO = f"{OWNER}/{REPO_NAME}"

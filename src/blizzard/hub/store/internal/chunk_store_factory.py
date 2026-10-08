@@ -1,5 +1,5 @@
 """Builds the chunk-seam adapters as one :class:`ChunkStores` bundle (package-private)
-— the one place their construction order is expressed, so ``hub/composition.py`` and a
+— the one place their construction order is expressed, so ``src/blizzard/hub/composition.py`` and a
 component test's own store-level fixture wire the identical shape rather than each
 re-deriving it."""
 

@@ -1,4 +1,4 @@
-"""``harness/opencode/paths.py`` — the one OpenCode auth-path resolver (unit)."""
+"""``src/blizzard/runner/harness/opencode/paths.py`` — the one OpenCode auth-path resolver (unit)."""
 
 from __future__ import annotations
 

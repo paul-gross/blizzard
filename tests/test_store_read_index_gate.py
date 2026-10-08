@@ -3,7 +3,7 @@
 Drives every read method of every runner/hub ``IRead*`` Protocol against a real, migrated-to-head sqlite store and
 fails if any plans a scan or automatic covering index over a table not on ``tests/store_scan_allowlist.py``'s
 allow-lists, coverage enforced by reflection equality against ``tests/store_read_census.py``'s census/exemptions.
-``test_runner_store_indexes.py``/``test_chunk_fact_table_indexes.py`` keep their own narrower purpose."""
+``tests/test_runner_store_indexes.py``/``tests/test_chunk_fact_table_indexes.py`` keep their own narrower purpose."""
 
 from __future__ import annotations
 
@@ -57,7 +57,7 @@ def _reflect_read_protocol_methods(package: ModuleType) -> set[tuple[type, str]]
     keys: set[tuple[type, str]] = set()
     for modinfo in pkgutil.walk_packages(package.__path__, package.__name__ + "."):
         if modinfo.name.endswith(".migrations.env"):
-            continue  # alembic's env.py assumes an active `alembic` CLI context (alembic.context.config)
+            continue  # src/blizzard/*/store/migrations/env.py needs an active `alembic` CLI context
         module = importlib.import_module(modinfo.name)
         for name, obj in inspect.getmembers(module, inspect.isclass):
             if not name.startswith("IRead") or obj.__module__ != module.__name__:

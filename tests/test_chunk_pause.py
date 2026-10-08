@@ -134,7 +134,7 @@ def _make_ctx(store, hub, harness, probe, **kw):  # type: ignore[no-untyped-def]
 def _pause_locally(store, ctx, *, paused: bool):  # type: ignore[no-untyped-def]
     """Set the runner's own brake, the way `PATCH /runner` does — fact + report, one write.
 
-    The twin of `test_runner_paused.py`'s helper, kept local rather than imported across
+    The twin of `tests/test_runner_paused.py`'s helper, kept local rather than imported across
     test modules.
     """
     store.record_local_pause(
@@ -575,7 +575,7 @@ def test_advance_does_not_drive_a_pause_parked_chunk_as_a_held_chunk(tmp_path): 
 def test_pausing_an_unheld_ready_chunk_simply_keeps_it_out_of_the_queue(tmp_path):  # type: ignore[no-untyped-def]
     """A paused chunk nobody holds is a pure hub-side affair: given an empty queue, the
     runner produces no park, no claim, and no error path. The hub-side half is pinned in
-    ``test_queue_shaping.py``."""
+    ``tests/test_queue_shaping.py``."""
     store = _store(tmp_path)
     hub = FakeHub()
     hub.queue = []  # the hub filtered the paused chunk out of the ready queue

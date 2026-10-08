@@ -1,8 +1,8 @@
 """The write fence's vocabulary (``bzh:epoch-fencing``).
 
 Store adapters derive the fence in the writing transaction; domain callers map a
-refusal to their own failure result. The rule lives in ``blizzard-context``'s
-``fencing.md``."""
+refusal to their own failure result. The rule lives in ``blizzard-context:/domain/execution/fencing.md``
+§The stale-attempt rule."""
 
 from __future__ import annotations
 
