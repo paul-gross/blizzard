@@ -1,8 +1,8 @@
 """Where an OTLP/JSON span is posted, read only from OpenTelemetry's own environment variables —
 stdlib only, so a short-lived command resolves it without the SDK.
 
-Only the destination is read: the CLI always sends JSON, so ``OTEL_EXPORTER_OTLP_PROTOCOL`` is not
-consulted (``blizzard-product:/delivered/tracing/platform-spans/spec/instrumentation.md`` §Configuration)."""
+Only the destination is read; ``OTEL_EXPORTER_OTLP_PROTOCOL`` is not consulted
+(``blizzard-product:/delivered/tracing/platform-spans/spec/instrumentation.md`` §Configuration)."""
 
 from __future__ import annotations
 

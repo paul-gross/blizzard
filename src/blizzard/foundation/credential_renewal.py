@@ -1,5 +1,4 @@
-"""The credential-renewal outcome vocabulary — one definition, shared by the runner that
-records a renewal and the wire that reports it."""
+"""The credential-renewal outcome vocabulary — one definition, shared by both daemons."""
 
 from __future__ import annotations
 
@@ -7,10 +6,9 @@ from enum import StrEnum
 
 
 class RenewalFailureReason(StrEnum):
-    """The closed set of reasons a due renewal attempt did not succeed: ``RENEWER_UNAVAILABLE``,
-    the vendor CLI missing or unrunnable; ``TIMED_OUT``, the bounded subprocess overrunning its
-    timeout; ``VENDOR_REFUSED``, a non-zero exit or a response saying it could not refresh;
-    ``PROTOCOL_ERROR``, a response this binding could not make sense of at all."""
+    """The closed set of reasons a due renewal attempt did not succeed: ``renewer_unavailable``,
+    no renewer could be run; ``timed_out``, the attempt overran its bound; ``vendor_refused``,
+    the vendor declined to refresh; ``protocol_error``, the vendor's answer was unintelligible."""
 
     RENEWER_UNAVAILABLE = "renewer_unavailable"
     TIMED_OUT = "timed_out"

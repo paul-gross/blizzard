@@ -5,7 +5,7 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Literal
 
-#: The panel's derived state — one of seven, computed at read time and never stored
+#: A lease's derived state — computed at read time and never stored
 #: (``bzh:facts-not-status``).
 LeaseState = Literal["running", "stale", "parked", "backing-off", "spawning", "exited", "closed"]
 

@@ -1,5 +1,4 @@
-"""The rule a subscription-usage window is admitted by — the runner drops a window it would refuse
-before sending it, and the hub refuses one at intake, so both read it from one home."""
+"""The rule a subscription-usage window is admitted by — one definition, shared by both daemons."""
 
 from __future__ import annotations
 

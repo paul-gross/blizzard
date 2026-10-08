@@ -34,7 +34,6 @@ class UserView(BaseModel):
 
 
 class RoleAssignmentRequest(BaseModel):
-    """``POST /api/users/{id}/role`` body — the target role, by its ``auth_core.Role``
-    value."""
+    """``POST /api/users/{id}/role`` body — the target role, by its wire value."""
 
     role: str

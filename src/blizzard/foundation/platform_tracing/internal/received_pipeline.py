@@ -1,7 +1,7 @@
 """The enabled received-telemetry export: admitted data points and log records rebuilt as SDK values and handed
 to the SDK's own OTLP/HTTP exporters, behind the same URL redaction every platform span leaves through.
 
-Neither export runs on the receiving request's thread, as forwarded spans leave through a batch processor. Log
+Neither export runs on the caller's thread. Log
 records go through the SDK's own batch processor. Metrics go through a bounded queue drained by one thread: the
 SDK has no batch processor for points already aggregated, and its periodic reader would re-aggregate them."""
 

@@ -933,7 +933,7 @@ export const getChunkFindingApiFleetChunksChunkIdFindingsFindingIdGet = <ThrowOn
 /**
  * Get Garden Findings
  *
- * A worker's finding bucket — exactly what its delivery may cite (`FindingBucket`); the
+ * A worker's finding bucket — exactly the findings its delivery may cite; the
  * chunk's own run context derives the routine and scope, no caller flag can name another.
  * 404 for an unknown chunk or one with no run context (not a routine run).
  */
@@ -1058,8 +1058,8 @@ export const peekQueueApiFleetQueuePeekGet = <ThrowOnError extends boolean = fal
  * Peek Matched Queue
  *
  * The matched fleet peek — at most one ready entry the calling principal can both
- * work (declared capabilities against ``EligibilityCheck``) and claim (not
- * dependency-blocked), with ``request.policy`` applied to both.
+ * work (its declared capabilities admit the entry) and claim (not dependency-blocked),
+ * with the request's match policy applied to both.
  */
 export const peekMatchedQueueApiFleetQueuePeekPost = <ThrowOnError extends boolean = false>(options: Options<PeekMatchedQueueApiFleetQueuePeekPostData, ThrowOnError>): RequestResult<PeekMatchedQueueApiFleetQueuePeekPostResponses, PeekMatchedQueueApiFleetQueuePeekPostErrors, ThrowOnError> => (options.client ?? client).post<PeekMatchedQueueApiFleetQueuePeekPostResponses, PeekMatchedQueueApiFleetQueuePeekPostErrors, ThrowOnError>({
     url: '/api/fleet/queue/peek',
@@ -1202,7 +1202,7 @@ export const getGardenProposalApiGardenProposalsProposalIdGet = <ThrowOnError ex
 /**
  * Edit Garden Proposal
  *
- * Replace the given fields of PROPOSAL_ID in place, all-or-nothing
+ * Replace the given fields of `{proposal_id}` in place, all-or-nothing
  * — works on either origin while open. 404 unknown proposal, 409 already closed,
  * 422 a blank title/class/body or an edit naming no field.
  */
@@ -1218,7 +1218,7 @@ export const editGardenProposalApiGardenProposalsProposalIdPatch = <ThrowOnError
 /**
  * Accept Garden Proposal
  *
- * Accept the proposal at PROPOSAL_ID. When `mint_work_item` is true, mints a linked
+ * Accept the proposal at `{proposal_id}`. When `mint_work_item` is true, mints a linked
  * hub work item from `body` (or the proposal's own), wrapped in the "Related findings"
  * template when the proposal names findings and bare when it names none. When it is
  * false, mints nothing and records the decline. Promotes nothing and changes no
@@ -1238,7 +1238,7 @@ export const acceptGardenProposalApiGardenProposalsProposalIdAcceptPost = <Throw
 /**
  * Attach Garden Proposal Findings
  *
- * Link the given finding ids to PROPOSAL_ID — works on either origin
+ * Link the given finding ids to `{proposal_id}` — works on either origin
  * while open. 404 unknown proposal, 409 already closed, 422 no finding id, an unknown,
  * exited, or duplicate finding id, or one already linked to this proposal — the whole
  * call is refused, nothing is linked.
@@ -1255,7 +1255,7 @@ export const attachGardenProposalFindingsApiGardenProposalsProposalIdAttachPost 
 /**
  * Detach Garden Proposal Findings
  *
- * Unlink the given finding ids from PROPOSAL_ID — works on either
+ * Unlink the given finding ids from `{proposal_id}` — works on either
  * origin while open. 404 unknown proposal, 409 already closed, 422 no finding id, an
  * unknown or duplicate id, or one not linked to this proposal.
  */
@@ -1271,7 +1271,7 @@ export const detachGardenProposalFindingsApiGardenProposalsProposalIdDetachPost 
 /**
  * Pass Garden Proposal
  *
- * Pass the proposal at PROPOSAL_ID, recording the given reason. Passing is not a
+ * Pass the proposal at `{proposal_id}`, recording the given reason. Passing is not a
  * dismissal — it is the note that stops a later run raising the same response as
  * though it were new. 404 for an unknown proposal, 409 when the proposal already
  * carries a closure — closure is terminal, so it wins over every other refusal — and
@@ -1584,7 +1584,7 @@ export const routineProposalCountsApiRoutinesProposalCountsGet = <ThrowOnError e
  * `period_days`-wide period, findings created and per-kind exit counts, the outflow/
  * withdrawn roll-ups, and the age cut against `introduced_boundary`. 404 on an
  * unknown routine name; 422 on a malformed instant, a non-positive `period_days`, a
- * non-positive span, or a span/`period_days` pair bucketing past `TrendWindow.MAX_PERIODS`.
+ * non-positive span, or a span/`period_days` pair bucketing past the period cap.
  */
 export const routineTrendApiRoutinesTrendGet = <ThrowOnError extends boolean = false>(options: Options<RoutineTrendApiRoutinesTrendGetData, ThrowOnError>): RequestResult<RoutineTrendApiRoutinesTrendGetResponses, RoutineTrendApiRoutinesTrendGetErrors, ThrowOnError> => (options.client ?? client).get<RoutineTrendApiRoutinesTrendGetResponses, RoutineTrendApiRoutinesTrendGetErrors, ThrowOnError>({ url: '/api/routines/trend', ...options });
 
@@ -1616,8 +1616,7 @@ export const editRoutineApiRoutinesRoutineIdPatch = <ThrowOnError extends boolea
 /**
  * Routine Baselines
  *
- * Every scope `routine_id` has swept — see
- * `IReadFindingSetRepository.newest_by_scope_for_routine` for what absence means.
+ * Every scope `routine_id` has swept; a scope it never swept has no row.
  * 404 on an unknown routine id.
  */
 export const routineBaselinesApiRoutinesRoutineIdBaselinesGet = <ThrowOnError extends boolean = false>(options: Options<RoutineBaselinesApiRoutinesRoutineIdBaselinesGetData, ThrowOnError>): RequestResult<RoutineBaselinesApiRoutinesRoutineIdBaselinesGetResponses, RoutineBaselinesApiRoutinesRoutineIdBaselinesGetErrors, ThrowOnError> => (options.client ?? client).get<RoutineBaselinesApiRoutinesRoutineIdBaselinesGetResponses, RoutineBaselinesApiRoutinesRoutineIdBaselinesGetErrors, ThrowOnError>({ url: '/api/routines/{routine_id}/baselines', ...options });

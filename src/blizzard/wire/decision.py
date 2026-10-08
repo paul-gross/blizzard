@@ -45,10 +45,9 @@ class DecisionSubmission(BaseModel):
     epoch: int  # the step's lease fence, checked against the chunk's latest
     artifacts: list[SubmittedArtifact] = []
     proposals: list[WorkItemProposal] = []
-    # The route capability token stamped at enqueue — see
-    # `wire.completion.CompletionSubmission.route_token`; present-only in this phase.
+    # The route capability token stamped at enqueue.
     route_token: str | None = None
-    # The submitting attempt's lease — see `wire.completion.CompletionSubmission.lease_id`.
+    # The submitting attempt's lease.
     lease_id: str | None = None
 
 

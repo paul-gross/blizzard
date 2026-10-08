@@ -67,10 +67,8 @@ class ChunkRole(StrEnum):
 @domain_model
 @dataclass(frozen=True)
 class StepKey:
-    """The identity of one step: an attempt at a node, or one human decision.
-
-    Neither store has a node-step id; the hub already names an attempt by ``(chunk_id, epoch)``,
-    and a gate additionally by its decision."""
+    """The identity of one step: an attempt at a node, named by ``(chunk_id, epoch)``, or one human
+    decision, named additionally by its ``decision_id``."""
 
     chunk_id: str
     epoch: int

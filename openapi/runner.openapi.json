@@ -3675,7 +3675,7 @@
         "type": "object"
       },
       "RenewalFailureReason": {
-        "description": "The closed set of reasons a due renewal attempt did not succeed: ``RENEWER_UNAVAILABLE``,\nthe vendor CLI missing or unrunnable; ``TIMED_OUT``, the bounded subprocess overrunning its\ntimeout; ``VENDOR_REFUSED``, a non-zero exit or a response saying it could not refresh;\n``PROTOCOL_ERROR``, a response this binding could not make sense of at all.",
+        "description": "The closed set of reasons a due renewal attempt did not succeed: ``renewer_unavailable``,\nno renewer could be run; ``timed_out``, the attempt overran its bound; ``vendor_refused``,\nthe vendor declined to refresh; ``protocol_error``, the vendor's answer was unintelligible.",
         "enum": [
           "renewer_unavailable",
           "timed_out",
@@ -4253,7 +4253,7 @@
         "type": "object"
       },
       "SampleMissReason": {
-        "description": "The closed set of reasons one sampling attempt produced nothing:\n``CREDENTIAL_LAPSED``, a token past its own expiry or a 401; ``CREDENTIAL_UNREADABLE``, a\nmissing, malformed, or incomplete credential file; ``ENDPOINT_UNREACHABLE``, any other\nnon-2xx or a request-level failure; ``RESPONSE_UNPARSEABLE``, a 2xx body without windows.",
+        "description": "The closed set of reasons one sampling attempt produced nothing:\n``credential_lapsed``, a token past its own expiry or a 401; ``credential_unreadable``, a\nmissing, malformed, or incomplete credential file; ``endpoint_unreachable``, any other\nnon-2xx or a request-level failure; ``response_unparseable``, a 2xx body without windows.",
         "enum": [
           "credential_lapsed",
           "credential_unreadable",

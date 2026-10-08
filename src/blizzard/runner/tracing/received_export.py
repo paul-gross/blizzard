@@ -1,7 +1,7 @@
 """The received-telemetry export handle: where admitted metric data points and log records leave the process.
 
-A separate narrow seam beside :mod:`~blizzard.foundation.platform_tracing.handle`: the hub shares that handle
-and never forwards metrics or logs. Each signal exports only when this process's own OpenTelemetry variables give
+A separate narrow seam beside :mod:`~blizzard.foundation.platform_tracing.handle`.
+Each signal exports only when this process's own OpenTelemetry variables give
 it a destination, and the whole handle is off unless ``[tracing] platform`` and ``harness_telemetry`` are both on."""
 
 from __future__ import annotations

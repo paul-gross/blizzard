@@ -20,25 +20,20 @@ def _mark[C: type](cls: C, role: DataRole) -> C:
 
 
 def domain_model[C: type](cls: C) -> C:
-    """A concept of the domain — what a repository reconstitutes and a service takes and returns;
-    it holds no collaborator."""
+    """The ``domain_model`` role — ``bzh:data-roles`` §Roles."""
     return _mark(cls, "domain_model")
 
 
 def dto[C: type](cls: C) -> C:
-    """The app's contract with the outside — a request, a response, a command's output — living
-    only at the app boundary."""
+    """The ``dto`` role — ``bzh:data-roles`` §Roles."""
     return _mark(cls, "dto")
 
 
 def adapter_model[C: type](cls: C) -> C:
-    """An outside system's format — a table row, a subprocess's output — private to the adapter
-    that maps it to domain models; no Protocol names it."""
+    """The ``adapter_model`` role — ``bzh:data-roles`` §Roles."""
     return _mark(cls, "adapter_model")
 
 
 def collaborator[C: type](cls: C) -> C:
-    """A class other code calls to do work rather than data it reads — a port's
-    implementation, a driver over infrastructure, a flow over IO — whose fields show no
-    collaborator for its shape to infer orchestration from."""
+    """The ``collaborator`` role — ``bzh:data-roles`` §Roles."""
     return _mark(cls, "collaborator")

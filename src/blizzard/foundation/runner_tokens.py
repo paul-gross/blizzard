@@ -1,5 +1,4 @@
-"""The runner-token refusal vocabulary — one definition, shared by the hub that judges a
-presented runner bearer token, the wire that reports the verdict, and the runner that reads it."""
+"""The runner-token refusal vocabulary — one definition, shared by both daemons."""
 
 from __future__ import annotations
 

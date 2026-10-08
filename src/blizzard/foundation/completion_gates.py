@@ -1,5 +1,4 @@
-"""The two completion predicates both daemons judge a node-step by — the runner before it
-submits, the hub before it accepts — kept in one home so the two can never drift apart
+"""The two completion predicates a node-step is judged by — one definition, shared by both daemons
 (``tests/test_produces_coverage_agreement.py``, ``tests/test_checks_gate_agreement.py``)."""
 
 from __future__ import annotations

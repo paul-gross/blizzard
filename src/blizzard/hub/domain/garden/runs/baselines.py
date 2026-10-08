@@ -1,8 +1,7 @@
 """Routine baselines — a read-only composition over the finding-set and delivery seams:
 one entry per scope a routine has swept, each carrying the baseline
 finding set's id, its recorded instant (`Id.minted_at`), and per repo how much has
-landed since. See `IReadFindingSetRepository.newest_by_scope_for_routine` for what
-absence means."""
+landed since. A scope the routine never swept has no entry."""
 
 from __future__ import annotations
 

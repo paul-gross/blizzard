@@ -80,7 +80,7 @@ class CompletionSubmission(BaseModel):
     proposals: list[WorkItemProposal] = []
     # Required to transition out of a human-judged gate.
     decision_id: str | None = None
-    # Enqueue-time route token; optional, not hub-enforced.
+    # Enqueue-time route token; optional.
     route_token: str | None = None
     # Optional owning-lease check; absent it, match the runner alone.
     lease_id: str | None = None

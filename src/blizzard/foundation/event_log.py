@@ -36,7 +36,7 @@ EventLogKind = Literal[
 
 
 class EventLogSeverity(StrEnum):
-    """The closed severity vocabulary; every wire severity field is typed with it."""
+    """The closed severity vocabulary."""
 
     CRITICAL = "critical"
     WARNING = "warning"

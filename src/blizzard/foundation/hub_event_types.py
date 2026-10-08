@@ -1,5 +1,5 @@
-"""The hub's SSE frame vocabulary — the frame kinds and the causes a frame names, one definition
-shared by the broker that publishes a frame and the wire that describes it."""
+"""The hub's SSE frame vocabulary, its frame kinds and the causes a frame names —
+one definition, shared by both daemons."""
 
 from __future__ import annotations
 

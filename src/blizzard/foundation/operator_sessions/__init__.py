@@ -1,6 +1,5 @@
 """The operator's local session-token store — CLI-client state, not daemon state, so
-both CLIs read it: session bearers keyed by hub base URL (any trailing ``/`` stripped)
-under the user config dir, owner-only (``0600``; parent dir ``0700``)."""
+both CLIs read it. Keying and file mode: ``internal/session_file.py``."""
 
 from __future__ import annotations
 

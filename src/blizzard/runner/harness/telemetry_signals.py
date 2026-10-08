@@ -1,8 +1,7 @@
 """The three OpenTelemetry signals, and whether this process's own OpenTelemetry variables let it export one.
 
-The per-signal counterpart of :class:`~blizzard.foundation.trace_export.settings.TracingSettings`, which reads
-the traces signal alone: the same switched-off and ``http/protobuf``-only rules, each signal's own variables
-overriding the general ones as the SDK resolves them."""
+The per-signal counterpart of :class:`~blizzard.foundation.trace_export.settings.TracingSettings`: the same
+switched-off and ``http/protobuf``-only rules, each signal's own variables overriding the general ones."""
 
 from __future__ import annotations
 

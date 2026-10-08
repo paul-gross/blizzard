@@ -1,4 +1,4 @@
-"""The fact-egress export's state vocabulary, shared by the hub's status read and the operator wire body."""
+"""The fact-egress export's state vocabulary — one definition, shared by both daemons."""
 
 from __future__ import annotations
 
