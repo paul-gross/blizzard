@@ -1,10 +1,8 @@
 """Secret domain model — a named credential written once, sealed at rest, never returned.
 
-A value enters through ``ConfigAuthoring``, is sealed under the hub key by an
-:class:`ISecretCipher`, and leaves only through :class:`ISecretReader` as a
-:class:`SecretValue` whose ``repr``/``str`` are redacted (``bzh:secret-write-only``).
-Writes go through ``ConfigAuthoring``. Retire/enable is a newest-fact-wins brake,
-a scope's shape (``bzh:facts-not-status``)."""
+A value is sealed under the hub key by an :class:`ISecretCipher`, and leaves only through
+:class:`ISecretReader` as a :class:`SecretValue` whose ``repr``/``str`` are redacted
+(``bzh:secret-write-only``). Retire/enable is a newest-fact-wins brake (``bzh:facts-not-status``)."""
 
 from __future__ import annotations
 
@@ -113,8 +111,7 @@ class SecretValue:
 
     @classmethod
     def entered(cls, raw: str) -> SecretValue:
-        """A value entering through a create or replace — :class:`SecretValueBlank` when blank.
-        A stored value opens through the constructor, so one sealed before the rule still reveals."""
+        """A value entering through a create or replace — :class:`SecretValueBlank` when blank."""
         if not raw.strip():
             raise SecretValueBlank()
         return cls(raw)

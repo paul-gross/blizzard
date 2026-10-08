@@ -247,8 +247,7 @@ class Sweep:
 
 
 def _refuse_retired_runner(_request: Request, exc: Exception) -> JSONResponse:
-    """Map the domain's :class:`RunnerRetired` to a 403 carrying its message — the one
-    refusal every runner-contact route and IdP federation return for a retired runner."""
+    """Map the domain's :class:`RunnerRetired` to a 403 carrying its message."""
     return JSONResponse(status_code=status.HTTP_403_FORBIDDEN, content={"detail": str(exc)})
 
 
@@ -287,7 +286,7 @@ def import_legacy_config(config: HubConfig, environ: Mapping[str, str]) -> Impor
 
 
 async def _validation_error(request: Request, exc: Exception) -> JSONResponse:
-    """The framework's 422, except on the secret routes, which never echo request input."""
+    """The framework's 422, unless :func:`sanitized_validation_response` answers instead."""
     assert isinstance(exc, RequestValidationError)
     return sanitized_validation_response(request, exc) or await request_validation_exception_handler(request, exc)
 
@@ -377,8 +376,7 @@ def create_app(
     app.include_router(egress_router)
     app.include_router(work_sources_router)
     app.include_router(repositories_router)
-    # The identity route is the one `/api/fleet` path outside the fleet router's gate: it is how a
-    # runner learns its token is refused, so it answers the refusal itself — mounted first.
+    # Outside the fleet gate — pinned by `tests/test_fleet_identity.py`'s tokenless-401 case.
     app.include_router(fleet_identity_router)
     # The runner-authenticated fleet router — a fleet verb is authenticated
     # *because of where it is mounted*; see `blizzard.hub.api.fleet`.
@@ -414,8 +412,8 @@ def build_hosted_app(
 ) -> FastAPI:
     """The ``host`` composition root: open the store and wire every fleet seam.
 
-    ``platform_tracing`` defaults to the handle ``[tracing]`` and the OTLP environment decide;
-    tests inject one over an in-memory exporter. ``oauth_http_client`` replaces the OAuth
+    ``platform_tracing`` defaults to the handle ``[tracing]`` and the OTLP environment decide.
+    ``oauth_http_client`` replaces the OAuth
     providers' client. Either way, the engine and every outbound client are instrumented through it."""
     platform_tracing = platform_tracing or build_platform_tracing(
         config.tracing,
@@ -430,8 +428,6 @@ def build_hosted_app(
     expected = migration_runner(config).script_head()
     readiness = ReadinessService(reader=reader, expected_revision=expected)
 
-    # The one process-scoped clock and the stores and leaf services built once over it —
-    # the work-source registry and `build_services` below both take the same core.
     core = build_process_core(engine)
     # Minted here on first start when no key source exists yet.
     secret_keys = hub_key_provider(os.environ, data_dir=config.data_dir)
@@ -501,7 +497,7 @@ def build_hosted_app(
             raise ConfigError(str(refusal)) from refusal
         OrphanedProviders.of(config, services).check()
         KeyCoverage.of(core.secrets, secret_keys).check()
-        # Before the hub serves: a live slot now belongs to a run the previous process died in.
+        # Before the hub serves.
         services.hub_node.release_orphaned_slots()
         Superuser(email=config.auth.superuser, users=services.users, auth=services.auth).ensure()
         _announce_rejected_tracing(tracing, services)

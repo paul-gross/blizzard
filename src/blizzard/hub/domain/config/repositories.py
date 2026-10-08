@@ -1,7 +1,6 @@
 """Repository records: the stored shape, validation, sparse merge, and the seams.
 
-Every field is required, so an edit carrying ``None`` on any field is refused naming it.
-A hub step resolves its chunk's commit pointers against them (:func:`resolve_chunk_repositories`)."""
+Every field is required, so an edit carrying ``None`` on any field is refused naming it."""
 
 from __future__ import annotations
 
@@ -142,8 +141,8 @@ class RepositoryEdit:
 @domain_model
 @dataclass(frozen=True)
 class ResolvedRepository:
-    """The one repository record a chunk's commits resolved to — the forge, owner, base branch
-    and secret every delivery variable is filled from."""
+    """The one repository record a chunk's commits resolved to — its forge, owner, base branch
+    and secret."""
 
     forge_api_url: str
     owner: str

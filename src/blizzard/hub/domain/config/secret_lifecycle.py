@@ -1,7 +1,7 @@
 """A secret's lifecycle decisions: which change row each verb writes, or why it is refused.
 
 Which verbs are legal from which state is :data:`SECRET_TRANSITIONS`. The secret's retired
-state is a plain value here; the caller reads it from the catalog. A retire or enable writes its
+state is a plain value here. A retire or enable writes its
 change row at the secret's unchanged revision: the value is sealed against ``(name, revision)``,
 so moving the revision without resealing would leave the value undecryptable."""
 

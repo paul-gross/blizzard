@@ -38,7 +38,7 @@ _NULLABLE = frozenset({"api_base", "web_base", "secret"})
 
 
 class ConfigFieldError(ValueError):
-    """A write is invalid on one field — names it, so the edge can answer 422 on it."""
+    """A write is invalid on one field, which it names."""
 
     def __init__(self, field: str, message: str) -> None:
         super().__init__(f"{field}: {message}")
