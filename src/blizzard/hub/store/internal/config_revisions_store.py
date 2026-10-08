@@ -4,7 +4,7 @@ All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``)."""
 
 from __future__ import annotations
 
-from sqlalchemy import Table, select
+from sqlalchemy import Table
 
 from blizzard.hub.domain.config.changes import RecordKind
 from blizzard.hub.domain.config.revisions import ConfigRevisions, IReadConfigRevisions
@@ -29,11 +29,12 @@ class ConfigRevisionsStore:
             query = query.where(secrets.c.name == key)
         else:
             table = _REFERRING[kind]
-            query = (
-                select(table.c.revision, table.c.secret_name, secrets.c.revision.label("sr"))
-                .select_from(table.outerjoin(secrets, secrets.c.name == table.c.secret_name))
-                .where(table.c.name == key)
-            )
+            query = self._store.select(
+                self._store.scope_join(table, secrets, secrets.c.name == table.c.secret_name, isouter=True),
+                table.c.revision,
+                table.c.secret_name,
+                secrets.c.revision.label("sr"),
+            ).where(table.c.name == key)
         with self._store.read("revisions") as conn:
             row = conn.execute(query).one_or_none()
         if row is None:

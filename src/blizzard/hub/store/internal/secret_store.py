@@ -101,7 +101,7 @@ class SecretStore:
                 .where(secrets.c.name == name, secrets.c.revision == from_revision)
                 .values(**_sealed_columns(sealed), revision=from_revision + 1, replaced_at=at, replaced_by=by)
             ).rowcount
-            row = conn.execute(select(*_METADATA).where(secrets.c.name == name)).one()
+            row = conn.execute(self._store.select(secrets, *_METADATA).where(secrets.c.name == name)).one()
             if moved == 1:
                 append_change(conn, change)
         if moved != 1:
@@ -110,7 +110,7 @@ class SecretStore:
 
     def get(self, name: str) -> SecretMetadata | None:
         with self._store.read("get") as conn:
-            row = conn.execute(select(*_METADATA).where(secrets.c.name == name)).one_or_none()
+            row = conn.execute(self._store.select(secrets, *_METADATA).where(secrets.c.name == name)).one_or_none()
         return self._of(row) if row is not None else None
 
     def get_many(self, names: list[str]) -> dict[str, SecretMetadata]:
@@ -119,13 +119,13 @@ class SecretStore:
         found: dict[str, SecretMetadata] = {}
         with self._store.read("get_many") as conn:
             for batch in id_batches(names):
-                rows = conn.execute(select(*_METADATA).where(secrets.c.name.in_(batch))).all()
+                rows = conn.execute(self._store.select(secrets, *_METADATA).where(secrets.c.name.in_(batch))).all()
                 found.update({row.name: self._of(row) for row in rows})
         return found
 
     def list_all(self) -> list[SecretMetadata]:
         with self._store.read("list_all") as conn:
-            rows = conn.execute(select(*_METADATA).order_by(secrets.c.name)).all()
+            rows = conn.execute(self._store.select(secrets, *_METADATA).order_by(secrets.c.name)).all()
         return [self._of(row) for row in rows]
 
     def is_retired(self, name: str) -> bool:

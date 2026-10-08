@@ -6,7 +6,7 @@ kind; retired derives from each kind's newest lifecycle fact (``bzh:facts-not-st
 
 from __future__ import annotations
 
-from sqlalchemy import Table, select
+from sqlalchemy import Table
 from sqlalchemy.engine import Connection
 
 from blizzard.hub.domain.config.changes import ISecretReferences, RecordKind, RecordRef
@@ -34,7 +34,7 @@ def active_referrers(conn: Connection, secret_names: list[str]) -> dict[str, lis
     stmts = statements_of(conn)
     for kind, table, facts in _REFERRING:
         rows = conn.execute(
-            select(table.c.secret_name, table.c.name)
+            stmts.select(table, table.c.secret_name, table.c.name)
             .where(
                 table.c.secret_name.in_(secret_names),
                 table.c.name.not_in(newest_retired_select(stmts, facts, facts.c.name)),
