@@ -13,7 +13,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from sqlalchemy import Engine, update
+from sqlalchemy import Engine
 
 from blizzard.foundation.store import batching as batching_module
 from blizzard.foundation.store.engine import create_engine_from_url
@@ -174,7 +174,8 @@ def test_segment_derivation_inputs_drops_a_segment_whose_content_fails_to_decode
     )
     with engine.begin() as conn:
         conn.execute(
-            update(s.transcript_segments)
+            hub_store_connections(engine)
+            .update(s.transcript_segments)
             .where(s.transcript_segments.c.segment_id == "sg_corrupt")
             .values(content=b"not valid zlib content")
         )

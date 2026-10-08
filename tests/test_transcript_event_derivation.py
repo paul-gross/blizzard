@@ -14,7 +14,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from sqlalchemy import delete, select, update
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
@@ -146,11 +145,11 @@ class _Fixture:
         """The breach ``hub:segment-chunk-resolves`` names, injected directly: sqlite
         enforces no foreign key, so a segment can outlive the chunk row it declares."""
         with self.engine.begin() as conn:
-            conn.execute(delete(s.chunks).where(s.chunks.c.chunk_id == chunk_id))
+            conn.execute(hub_store_connections(self.engine).delete(s.chunks).where(s.chunks.c.chunk_id == chunk_id))
 
     def stored_events(self) -> list[Any]:
         with self.engine.connect() as conn:
-            return list(conn.execute(select(s.transcript_events)).all())
+            return list(conn.execute(hub_store_connections(self.engine).select(s.transcript_events)).all())
 
 
 @pytest.fixture
@@ -326,7 +325,7 @@ def test_a_version_bump_re_derives_history_leaving_the_prior_version_intact(fixt
     bumped_reconciler.sweep()
 
     with fixture.engine.connect() as conn:
-        rows = conn.execute(select(s.transcript_events)).all()
+        rows = conn.execute(hub_store_connections(fixture.engine).select(s.transcript_events)).all()
     versions = {row.extractor_version for row in rows}
     assert versions == {EXTRACTOR_VERSION, _NEXT_EXTRACTOR_VERSION}
     assert fixture.events.derivation_marker("sg_1", EXTRACTOR_VERSION) == marker_v1
@@ -358,7 +357,8 @@ def test_the_bump_leaves_a_prior_versions_un_backfilled_rows_untouched(fixture: 
     ).sweep()
     with fixture.engine.begin() as conn:
         conn.execute(
-            update(s.transcript_events)
+            hub_store_connections(fixture.engine)
+            .update(s.transcript_events)
             .where(s.transcript_events.c.extractor_version == _PRIOR_EXTRACTOR_VERSION)
             .values(harness_id=None, harness_version=None, model=None, effort=None)
         )
@@ -394,7 +394,11 @@ def test_a_superseded_segments_rows_are_dropped(fixture: _Fixture) -> None:
 
     assert fixture.events.derivation_marker("sg_old", EXTRACTOR_VERSION) is None
     with fixture.engine.connect() as conn:
-        rows = conn.execute(select(s.transcript_events).where(s.transcript_events.c.segment_id == "sg_old")).all()
+        rows = conn.execute(
+            hub_store_connections(fixture.engine)
+            .select(s.transcript_events)
+            .where(s.transcript_events.c.segment_id == "sg_old")
+        ).all()
     assert rows == []
 
 
@@ -481,7 +485,7 @@ def test_a_dropped_segment_leaves_one_drop_fact_stamped_by_the_clock_with_no_egr
     fixture.reconciler.sweep()
 
     with fixture.engine.connect() as conn:
-        rows = conn.execute(select(s.transcript_event_drops)).all()
+        rows = conn.execute(hub_store_connections(fixture.engine).select(s.transcript_event_drops)).all()
     assert [(r.segment_id, r.chunk_id, r.epoch, r.spawn_generation, r.dropped_at) for r in rows] == [
         ("sg_1", "ch_1", 1, 1, later)
     ]
