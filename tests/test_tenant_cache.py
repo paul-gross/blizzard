@@ -17,7 +17,7 @@ from sqlalchemy import Engine, event
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.composition import HubCore, build_hub_core
+from blizzard.hub.composition import HubCore, TenantCache, TenantStores, build_hub_core, build_tenant_stores
 from blizzard.hub.store import schema
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION, StoreScope, TenantClosed, TenantId, UnknownTenant
 from tests.support import default_tenant, migrate_to
@@ -41,6 +41,16 @@ def _add_tenant(engine: Engine, tenant: TenantId) -> None:
 def _close_tenant(engine: Engine, tenant: TenantId) -> None:
     with engine.begin() as conn:
         conn.execute(sa.insert(schema.tenant_deletions).values(tenant_id=tenant, name=tenant, deleted_by="test"))
+
+
+def _reopen_tenant(engine: Engine, tenant: TenantId) -> None:
+    with engine.begin() as conn:
+        conn.execute(sa.delete(schema.tenant_deletions).where(schema.tenant_deletions.c.tenant_id == tenant))
+
+
+def _finish_deleting(engine: Engine, tenant: TenantId) -> None:
+    with engine.begin() as conn:
+        conn.execute(sa.delete(schema.tenants).where(schema.tenants.c.tenant_id == tenant))
 
 
 def test_a_tenants_stores_are_built_once(tmp_path: Path) -> None:
@@ -81,15 +91,56 @@ def test_an_unknown_tenant_is_refused(tmp_path: Path) -> None:
         core.open(StoreScope(TenantId("ten_NOBODY")))
 
 
-def test_a_closed_tenant_is_refused_even_once_its_stores_are_cached(tmp_path: Path) -> None:
+def test_a_closed_tenant_is_refused_and_its_cached_stores_dropped(tmp_path: Path) -> None:
     core, engine = _core(tmp_path)
     _add_tenant(engine, _SECOND)
-    core.open(StoreScope(_SECOND))
+    cached = core.open(StoreScope(_SECOND))
 
     _close_tenant(engine, _SECOND)
 
     with pytest.raises(TenantClosed):
         core.open(StoreScope(_SECOND))
+    _reopen_tenant(engine, _SECOND)
+    assert core.open(StoreScope(_SECOND)) is not cached
+
+
+def test_a_tenant_whose_deletion_has_finished_is_refused_as_closed(tmp_path: Path) -> None:
+    core, engine = _core(tmp_path)
+    _add_tenant(engine, _SECOND)
+    _close_tenant(engine, _SECOND)
+
+    _finish_deleting(engine, _SECOND)
+
+    with pytest.raises(TenantClosed):
+        core.open(StoreScope(_SECOND))
+
+
+def test_a_tenant_closed_while_its_stores_are_being_opened_is_neither_handed_out_nor_cached(tmp_path: Path) -> None:
+    core, engine = _core(tmp_path)
+    _add_tenant(engine, _SECOND)
+    confirm_open = core.hub_scoped_reads.tenants.confirm_open
+    built: list[TenantStores] = []
+    closes = [_SECOND]
+
+    def build(scope: StoreScope) -> TenantStores:
+        built.append(build_tenant_stores(core.store_connections.scoped(scope), clock=FixedClock(_AT)))
+        return built[-1]
+
+    def confirm_then_close(tenant: TenantId) -> None:
+        # The tenant's deletion commits and evicts once the open's check has passed, before its stores are cached.
+        confirm_open(tenant)
+        if closes:
+            _close_tenant(engine, closes.pop())
+            cache.evict(tenant)
+
+    cache = TenantCache(build=build, confirm_open=confirm_then_close)
+
+    with pytest.raises(TenantClosed):
+        cache.open(StoreScope(_SECOND))
+    _reopen_tenant(engine, _SECOND)
+    reopened = cache.open(StoreScope(_SECOND))
+    assert built[-1] is reopened
+    assert len(built) == 1
 
 
 def test_an_evicted_tenants_next_open_builds_its_stores_afresh(tmp_path: Path) -> None:

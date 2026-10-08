@@ -477,8 +477,10 @@ class TenantCache:
     :class:`UnknownTenant` or :class:`TenantClosed`), so a closed tenant is refused whether
     or not its stores are cached, and a cached entry found closed is dropped. Entries are built
     under one lock, so two racing opens of a tenant never yield two sets of its stores — nor two of
-    its cycle-check locks. ``resident`` is the set a single-tenant hub serves before it knows its
-    tenant's id; the first open of that tenant adopts it rather than building a second set."""
+    its cycle-check locks — and the tenant is confirmed again under it before its entry is cached,
+    so a tenant closed while an open was under way is never cached. ``resident`` is the set a
+    single-tenant hub serves before it knows its tenant's id; the first open of that tenant adopts
+    it rather than building a second set."""
 
     def __init__(
         self,
@@ -504,6 +506,9 @@ class TenantCache:
         with self._lock:
             entry = self._entries.get(scope.tenant)
             if entry is None:
+                # A deletion commits its close before it evicts, and evicting waits on this lock: a close
+                # the check above missed is seen here, or its evict runs after this insert and drops it.
+                self._confirm_open(scope.tenant)
                 entry = self._adopt_resident(scope) or self._build(scope)
                 self._entries[scope.tenant] = entry
             return entry
