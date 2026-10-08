@@ -166,7 +166,7 @@ from blizzard.hub.store.internal.garden_run_store import GardenRunStore
 from blizzard.hub.store.internal.garden_sweeps_store import GardenSweepsStore
 from blizzard.hub.store.internal.garden_trend_store import GardenTrendStore
 from blizzard.hub.store.internal.graph_store import GraphStore
-from blizzard.hub.store.internal.hub_scoped_reads import HubScopedReads, TenantStateReads
+from blizzard.hub.store.internal.hub_scoped_reads import HubScopedReads, build_hub_scoped_reads
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
 from blizzard.hub.store.internal.review_findings_store import ReviewFindingsStore
 from blizzard.hub.store.internal.routine_scope_store import RoutineScopeStore
@@ -473,7 +473,8 @@ class TenantCache:
     """One :class:`TenantStores` per open tenant, built on its first open and kept until
     :meth:`evict` drops it.
 
-    Each open first confirms the tenant exists and is open, so a closed tenant is refused whether
+    Each open first confirms the tenant exists and is open (``confirm_open`` raises
+    :class:`UnknownTenant` or :class:`TenantClosed`), so a closed tenant is refused whether
     or not its stores are cached, and a cached entry found closed is dropped. Entries are built
     under one lock, so two racing opens of a tenant never yield two sets of its stores — nor two of
     its cycle-check locks. ``resident`` is the set a single-tenant hub serves before it knows its
@@ -483,11 +484,11 @@ class TenantCache:
         self,
         *,
         build: Callable[[StoreScope], TenantStores],
-        states: TenantStateReads,
+        confirm_open: Callable[[TenantId], None],
         resident: TenantStores | None = None,
     ) -> None:
         self._build = build
-        self._states = states
+        self._confirm_open = confirm_open
         self._resident = resident
         self._entries: dict[TenantId, TenantStores] = {}
         self._lock = threading.Lock()
@@ -496,7 +497,7 @@ class TenantCache:
         """The stores of ``scope``'s tenant. Raises :class:`UnknownTenant` or
         :class:`TenantClosed` for a tenant there are no stores to open for."""
         try:
-            self._states.confirm_open(scope.tenant)
+            self._confirm_open(scope.tenant)
         except TenantClosed:
             self.evict(scope.tenant)
             raise
@@ -534,7 +535,7 @@ class HubCore:
     :func:`build_hub_core`. A tenant's stores are opened through :meth:`open`."""
 
     store_connections: HubStoreConnections
-    scoped_reads: HubScopedReads
+    hub_scoped_reads: HubScopedReads
     auth_errors: RepoErrorFactory
     users: UserRepository
     tenants: TenantCache
@@ -623,7 +624,7 @@ def build_hub_core(engine: Engine, *, clock: IClock) -> HubCore:
     """Build the :class:`HubCore`."""
     store_errors = HubStoreErrorFactory(get_logger("blizzard.hub.store"))
     store_connections = HubStoreConnections(engine, store_errors)
-    scoped_reads = HubScopedReads(tenants=TenantStateReads(store_connections))
+    hub_scoped_reads = build_hub_scoped_reads(store_connections)
     sole_tenant = build_tenant_stores(SoleTenantConnections(engine, store_errors), clock=clock)
     auth_errors = RepoErrorFactory(get_logger("blizzard.hub.auth"))
 
@@ -632,10 +633,10 @@ def build_hub_core(engine: Engine, *, clock: IClock) -> HubCore:
 
     return HubCore(
         store_connections=store_connections,
-        scoped_reads=scoped_reads,
+        hub_scoped_reads=hub_scoped_reads,
         auth_errors=auth_errors,
         users=UserRepository(store_connections, auth_errors),
-        tenants=TenantCache(build=build, states=scoped_reads.tenants, resident=sole_tenant),
+        tenants=TenantCache(build=build, confirm_open=hub_scoped_reads.tenants.confirm_open, resident=sole_tenant),
         sole_tenant=sole_tenant,
         clock=clock,
     )

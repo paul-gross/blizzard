@@ -136,7 +136,7 @@ def test_hub_scoped_reads_mark_every_statement_they_issue(tmp_path: Path) -> Non
         seen.append(execution_options)
 
     event.listen(engine, "before_execute", record)
-    core.scoped_reads.tenants.confirm_open(tenant)
+    core.hub_scoped_reads.tenants.confirm_open(tenant)
 
     assert seen
     assert all(options.get(HUB_SCOPED_OPTION) for options in seen)

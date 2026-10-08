@@ -6,8 +6,9 @@ these kinds: resolving a credential to its tenant, a sweep's corpus read, tenant
 and the identity reads of memberships and hub administrators. A group reads over the hub-level
 :class:`HubStoreConnections` and never writes; every statement it issues runs on a connection
 :func:`hub_scoped_read` marks with :data:`HUB_SCOPED_OPTION`, which exempts it from the tenant
-statement guard. A group lives in a module of its own beside this one, and the aggregate names
-it once."""
+statement guard. A group lives in a module of its own beside this one, named ``hub_scoped_<kind>``,
+and the aggregate names it once. The composition root takes the seam whole through
+:func:`build_hub_scoped_reads`, so no member group lands in a namespace another module imports."""
 
 from __future__ import annotations
 
@@ -54,3 +55,8 @@ class HubScopedReads:
     """Every read that spans tenants, one member group per kind."""
 
     tenants: TenantStateReads
+
+
+def build_hub_scoped_reads(connections: HubStoreConnections) -> HubScopedReads:
+    """The seam over the hub-level ``connections``, every member group built."""
+    return HubScopedReads(tenants=TenantStateReads(connections))

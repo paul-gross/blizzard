@@ -3,9 +3,14 @@ valid:
   - |
     from blizzard.hub.composition import HubCore, TenantStores
   - |
-    from blizzard.hub.tenancy import HUB_SCOPED_OPTION, StoreScope
+    stores = core.open(scope)
   - |
-    reads: HubScopedReads = core.scoped_reads
+    def read(self) -> None:
+        """Resolves the credential through HubScopedReads before any tenant is known."""
+  - |
+    OPTION = "blizzard_hub_scoped"
+  - |
+    scoped_reads = connections.scoped(scope)
 invalid:
   - |
     from blizzard.hub.store.internal.hub_scoped_reads import HubScopedReads
@@ -20,3 +25,21 @@ invalid:
         Other,
         HubScopedReads as Reads,
     )
+  - |
+    from blizzard.hub.store.internal.hub_scoped_credentials import CredentialReads
+  - |
+    from blizzard.hub.composition import build_hub_scoped_reads
+  - |
+    reads = core.hub_scoped_reads
+  - |
+    def handle(reads: HubScopedReads) -> None: ...
+  - |
+    from blizzard.hub import composition
+    reads = composition.HubScopedReads
+  - |
+    from blizzard.hub.store import internal
+    reads = internal.hub_scoped_reads.HubScopedReads
+  - |
+    reads = importlib.import_module("blizzard.hub.store.internal.hub_scoped_reads")
+  - |
+    reads = getattr(core, "hub_scoped_reads")
