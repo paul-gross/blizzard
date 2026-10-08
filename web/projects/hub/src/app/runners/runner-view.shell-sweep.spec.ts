@@ -633,8 +633,7 @@ describe('runner registry pace bars layout shell sweep (web:shell-sweep, blizzar
       expect(staleColor).not.toBe(bodyColor);
 
       const never = root.querySelector<HTMLElement>('[data-subscription-slug="never"] [data-testid="subscription-pace-group-no-sample"]')!;
-      expect(never.textContent).toContain('NO SAMPLE YET');
-      expect(never.textContent).toContain('this endpoint could not be reached');
+      expect(never.textContent?.trim()).toBe('NO SAMPLE YET — endpoint_unreachable');
       expect(never.getBoundingClientRect().right).toBeLessThanOrEqual(panel.getBoundingClientRect().right + 1);
 
       expect(
