@@ -19,9 +19,8 @@
 name: garden-routine
 entry: survey
 
-# Two pools: `sweep` holds the expensive read-and-judge lineage, `match` is cold-eyes
-# only for reconcile. `sweep` is a rename over the plan artifact's `survey` — see
-# ./README.md's Corrections section for why.
+# `sweep` holds the expensive read-and-judge lineage; `match` is cold-eyes only for
+# reconcile.
 sessions:
   sweep:
     model: ["blizzard:advanced"]

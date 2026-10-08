@@ -120,8 +120,7 @@ class GraphFile:
 
     @property
     def inlined_yaml(self) -> str:
-        """:attr:`body` re-serialized as YAML — what a mint taking raw ``definition_yaml``, which resolves no
-        file references of its own, needs."""
+        """:attr:`body` re-serialized as YAML, every file reference already inlined."""
         return YAML_CODEC.encode(self.body).decode("utf-8")
 
 

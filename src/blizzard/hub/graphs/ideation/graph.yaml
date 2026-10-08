@@ -14,7 +14,7 @@
 name: ideation
 entry: survey
 
-# Same two pools as `garden-routine`, same reasons: `sweep` holds the expensive
+# The same pools as `garden-routine`, for the same reasons: `sweep` holds the expensive
 # read-and-judge lineage, `match` is cold-eyes only for reconcile, and `propose` resumes
 # it so the shortlist stays in context.
 sessions:

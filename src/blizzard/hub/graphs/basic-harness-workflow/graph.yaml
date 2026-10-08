@@ -32,7 +32,7 @@
 name: bas-hwf
 entry: build
 
-# Named session pools. Four lineages, split across two tiers:
+# Named session pools, split across two tiers:
 #
 #   code      the mechanical build lineage, on the frontier tier — the one pass this
 #             lane still spends its strongest model on. BOUNDED: it can accumulate
@@ -137,7 +137,7 @@ nodes:
       # The refutation channel (see prompts/iterate.from-review.md): review findings
       # this node declines rather than fixes, with the argument. A `review` re-visit
       # re-checks every prior finding, so without this it re-raises a deliberately
-      # declined finding forever; it now must accept or reject each refutation explicitly.
+      # declined finding forever; it must accept or reject each refutation explicitly.
       - review-finding-refutes
       - {name: commit, kind: git_commit}  # the pushed branch(es); kind-matched, not name-matched
     judgement:
