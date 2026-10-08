@@ -2,7 +2,7 @@
 
 All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). Facts only
 (``bzh:facts-not-status``): every read below folds already-recorded rows; nothing derives
-a status column. Read-only (``blizzard-context/architecture/repository-access.md``):
+a status column. Read-only (``blizzard-context:/architecture/repository-access.md``):
 ``load_facts``/``load_all_facts``/``load_facts_for``/``load_live_statuses`` each project
 the union of every other seam's own writes, so this adapter has no write half.
 """

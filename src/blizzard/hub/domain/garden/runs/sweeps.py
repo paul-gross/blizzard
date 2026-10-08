@@ -80,7 +80,7 @@ def compute_sweeps(
     the routine's declared set, retired scopes already filtered out by the caller
     — and the windowed measurement series. One pass over `facts`:
     newest-per-scope by `produced_at`, ties broken by `finding_set_id`
-    (ULID-monotonic, `findings/trend.py`'s own tie convention)."""
+    (ULID-monotonic, `IReadFindingSetRepository.newest_for_routine_scope`)."""
     newest: dict[str, SweepFact] = {}
     for fact in facts:
         current = newest.get(fact.scope_slug)

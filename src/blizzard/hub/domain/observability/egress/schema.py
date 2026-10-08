@@ -1,9 +1,9 @@
 """The ``steps``, ``invocations`` and ``events`` dataset schemas, and the encoding of a typed row into an
 :class:`EgressValues`.
 
-Contract: ``blizzard-product:/plans/fact-egress/steps/spec/rows.md`` §Datasets and
-``blizzard-product:/plans/fact-egress/events/spec/rows.md`` §Dataset: ``events``. Pure. A schema's column names are the
-row dataclass's field names, in order, so a row cannot grow a value its schema does not name."""
+Contract: ``blizzard-product:/delivered/fact-egress/steps/spec/rows.md`` §Datasets and
+``blizzard-product:/delivered/fact-egress/events/spec/rows.md`` §Dataset: ``events``. Pure. A schema's column names
+are the row dataclass's field names, in order, so a row cannot grow a value its schema does not name."""
 
 from __future__ import annotations
 
@@ -41,7 +41,7 @@ _S, _I, _B, _T, _M, _L = (
     ColumnType.STRING_LIST,
 )
 
-# name, type, nullable, meaning — rows.md's table, one entry per column in row-field order.
+# name, type, nullable, meaning — the steps and events rows.md tables, one entry per column in row-field order.
 _STEPS: tuple[tuple[str, ColumnType, bool, str], ...] = (
     ("step_key", _S, False, "The row's identity: chunk_id/epoch, or chunk_id/epoch/gate/decision_id for a gate step"),
     ("trace_id", _S, False, "The step's derived trace id, as 32 hex characters, so a row joins to its trace"),

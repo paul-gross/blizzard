@@ -100,7 +100,7 @@ class FleetService:
 
         The runner's reported facts are overwritten on every registration; absent values store as
         null/empty. A declared ``name`` replaces the one held; none, or a blank one, keeps it. A
-        retired runner raises :class:`RunnerRetired` before any write."""
+        retired runner raises :class:`~blizzard.hub.domain.runners.registration.RunnerRetired` before any write."""
         held.refuse_if_retired(action="registration")
         runner_id = held.runner_id
         recorded_name = declared_name(name)
@@ -131,7 +131,8 @@ class FleetService:
 
     def heartbeat(self, runner_id: str) -> bool:
         """Refresh a runner's liveness; returns False if it is unregistered. A retired runner
-        is refused with :class:`RunnerRetired` before its liveness is touched."""
+        is refused with
+        :class:`~blizzard.hub.domain.runners.registration.RunnerRetired` before its liveness is touched."""
         self._retired.refuse_if_retired(runner_id, action="heartbeat")
         return self._registry.touch_last_seen(runner_id, at=self._clock.now())
 
@@ -247,8 +248,9 @@ class FleetService:
         return self._liveness(registration)
 
     def own_liveness(self, registration: RunnerRegistration) -> RunnerLiveness:
-        """The runner's own pull read of its liveness — refused with :class:`RunnerRetired`
-        when it is retired, unlike the operator's :meth:`get_liveness`, which still shows it."""
+        """The runner's own pull read of its liveness — refused with
+        :class:`~blizzard.hub.domain.runners.registration.RunnerRetired` when it is retired,
+        unlike the operator's :meth:`get_liveness`, which still shows it."""
         registration.refuse_if_retired(action="runner read")
         return self._liveness(registration)
 

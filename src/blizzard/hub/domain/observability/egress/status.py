@@ -1,7 +1,7 @@
 """The operator's read of the fact-egress export: on, off or rejected, each dataset's cursor and lag, the last
 pass and file, the last error, and the free space.
 
-Contract: ``blizzard-product:/plans/fact-egress/steps/spec/export.md`` §Operator surface. Everything here is a
+Contract: ``blizzard-product:/delivered/fact-egress/steps/spec/export.md`` §Operator surface. Everything here is a
 fact the sweep left in the store or a setting parsed at start (``bzh:facts-not-status``), so it survives a restart
 and needs no reach into the sweep. The clock and the free-space probe are injected; no write is possible."""
 

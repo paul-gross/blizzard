@@ -1,6 +1,6 @@
 """The one assembly of an egress row, shared by the live sweep and the backfill so the two can never disagree.
 
-Contract: ``blizzard-product:/plans/fact-egress/steps/spec/rows.md``. Pure: facts in, a row and its date partition
+Contract: ``blizzard-product:/delivered/fact-egress/steps/spec/rows.md``. Pure: facts in, a row and its date partition
 out; no store, writer or cursor is touched."""
 
 from __future__ import annotations

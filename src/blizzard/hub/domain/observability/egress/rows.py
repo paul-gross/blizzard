@@ -1,6 +1,6 @@
 """The ``steps`` and ``invocations`` egress rows, as typed records.
 
-Contract: ``blizzard-product:/plans/fact-egress/steps/spec/rows.md`` §Datasets and §Shared conventions. Pure: a
+Contract: ``blizzard-product:/delivered/fact-egress/steps/spec/rows.md`` §Datasets and §Shared conventions. Pure: a
 :class:`StepSummary` (or a usage row and its chunk's :class:`StepFacts`) in, one row out. A row only renames what the
 summary already computed, so it cannot disagree with the step's trace. Values are typed, not formatted: turning times,
 money and lists into a file format is the writer's job."""

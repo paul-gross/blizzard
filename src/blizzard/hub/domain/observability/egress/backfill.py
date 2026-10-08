@@ -1,10 +1,10 @@
 """Backfill: writes the rows of a past window, as the live export would have, without moving a cursor.
 
-Contract: ``blizzard-product:/plans/fact-egress/steps/spec/export.md`` §Operator surface. It holds read seams
+Contract: ``blizzard-product:/delivered/fact-egress/steps/spec/export.md`` §Operator surface. It holds read seams
 alone — never :class:`IWriteEgressCursor` — so it cannot move a cursor by construction. It pages from a local
 position that is never stored and writes through a writer of its own. It reconciles no late usage: it assembles from the
-record as it stands. ``events`` selects by step start, not derivation time (``fact-egress/events/spec/export.md``
-§Backfill)."""
+record as it stands. ``events`` selects by step start, not derivation time
+(``blizzard-product:/delivered/fact-egress/events/spec/export.md`` §Backfill)."""
 
 from __future__ import annotations
 

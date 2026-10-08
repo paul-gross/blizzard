@@ -70,8 +70,9 @@ class IWriteChunkRouteRepository(IReadChunkRouteRepository, Protocol):
         self, chunk_id: str, *, epoch: int, claimant: Claimant, at: datetime
     ) -> FenceRefusal | None:
         """Land a runner's ``lease.minted`` under the chunk's row lock, admitted by
-        :class:`MintAdmission` — ``None`` when it landed (the first mint at an unowned epoch
-        taking it for ``claimant``'s runner), else the refusal, which lands nothing."""
+        :class:`~blizzard.hub.domain.chunk.ports.fence.MintAdmission`
+        — ``None`` when it landed (the first mint at an unowned epoch taking it for
+        ``claimant``'s runner), else the refusal, which lands nothing."""
         ...
 
     def set_runner_high_water(self, runner_id: str, *, seq: int, at: datetime) -> None:

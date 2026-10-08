@@ -110,7 +110,8 @@ class DecisionService:
         produces_mode: str = PRODUCES_WARN,
     ) -> DecisionSubmitResult:
         """Runner-config gate: park the chunk on a decision instead of transitioning. A retired
-        submitting runner is refused with :class:`RunnerRetired` before anything lands.
+        submitting runner is refused with
+        :class:`~blizzard.hub.domain.runners.registration.RunnerRetired` before anything lands.
 
         Order is behavior: retired → node → facts → route token → replay → hub-executed node →
         attempt coherence → proposals → commit pointer → produces → record. Attempt coherence is re-derived under the

@@ -230,8 +230,9 @@ class FactIngestService:
         runner_name: str | None = None,
     ) -> FactIngestResult:
         """Apply one push of ``runner_id``'s facts. A retired runner is refused with
-        :class:`RunnerRetired` before its high-water mark is read, so nothing in the push lands.
-        ``runner_name`` is the pusher's registered name, carried onto the events the push records."""
+        :class:`~blizzard.hub.domain.runners.registration.RunnerRetired`
+        before its high-water mark is read, so nothing in the push lands. ``runner_name`` is the pusher's
+        registered name, carried onto the events the push records."""
         self._retired.refuse_if_retired(runner_id, action="fact ingest")
         mark = self._route.runner_high_water(runner_id)
         applied: list[int] = []
