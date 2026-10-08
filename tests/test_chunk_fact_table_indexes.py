@@ -160,9 +160,9 @@ _HOT_PATH_INDEX_SEARCHES = (
         "ix_chunk_work_refs_chunk_id",
     ),
     (
-        "chunk_work_refs by (source, ref)",
-        "SELECT chunk_id FROM chunk_work_refs WHERE source = 'github' AND ref = '1'",
-        "ix_chunk_work_refs_source_ref",
+        "chunk_work_refs by (tenant_id, source, ref)",
+        "SELECT chunk_id FROM chunk_work_refs WHERE tenant_id = 'ten_index' AND source = 'github' AND ref = '1'",
+        "ix_chunk_work_refs_tenant_source_ref",
     ),
     (
         "close_intents pending",
@@ -217,10 +217,10 @@ def test_spend_by_node_prefers_the_range_index_and_sorts_for_group_by_when_windo
 
 def test_visible_segment_ids_supersedes_subquery_plans_as_an_index_search(tmp_path: Path) -> None:
     """`_visible_segment_ids_stmt`'s correlated `NOT EXISTS` over `supersedes`
-    — the outer `final = TRUE` filter plans through
-    `ix_transcript_segments_final_chunk_id`, and the subquery's own `supersedes IS NOT
-    NULL` scan plans through `ix_transcript_segments_supersedes`. Compiles the real
-    statement rather than a hand-written mirror, so the two can't silently diverge."""
+    — the outer read searches the tenant's segments through an index rather than
+    scanning the table, and the subquery's own `supersedes` probe plans through
+    `ix_transcript_segments_supersedes`. Compiles the real statement rather than a
+    hand-written mirror, so the two can't silently diverge."""
     engine = _engine(tmp_path)
     compiled = str(
         _visible_segment_ids_stmt(ScopedStatements(StoreScope(TenantId("ten_index")))).compile(
@@ -229,7 +229,7 @@ def test_visible_segment_ids_supersedes_subquery_plans_as_an_index_search(tmp_pa
     )
     with engine.connect() as conn:
         plan = conn.execute(sa.text(f"EXPLAIN QUERY PLAN {compiled}")).all()
-    assert _plan_uses_index(plan, "ix_transcript_segments_final_chunk_id"), plan
+    assert any(str(row[3]).startswith("SEARCH transcript_segments USING") for row in plan), plan
     assert _plan_uses_index(plan, "ix_transcript_segments_supersedes"), plan
 
 
@@ -281,14 +281,14 @@ _ACTIVITY_FEED_SOURCES = (
         _questions_activity_stmt,
         s.questions.c.asked_at,
         s.questions.c.question_id,
-        "ix_questions_asked_at_question_id",
+        "ix_questions_tenant_asked_at_question_id",
     ),
     (
         "question_answers",
         _question_answers_activity_stmt,
         s.question_answers.c.answered_at,
         s.question_answers.c.question_id,
-        "ix_question_answers_answered_at_question_id",
+        "ix_question_answers_tenant_answered_at_question_id",
     ),
     (
         "chunk_promoted",

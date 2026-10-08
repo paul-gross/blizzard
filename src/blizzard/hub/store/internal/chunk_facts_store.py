@@ -348,7 +348,10 @@ class ChunkFactsStore:
             # call leaves this unfiltered, building the answered set for every chunk at once.
             answered_stmt = stmts.select(
                 stmts.scope_join(
-                    s.question_answers, s.questions, s.questions.c.question_id == s.question_answers.c.question_id
+                    s.question_answers,
+                    s.questions,
+                    (s.questions.c.tenant_id == s.question_answers.c.tenant_id)
+                    & (s.questions.c.question_id == s.question_answers.c.question_id),
                 ),
                 s.question_answers.c.question_id,
             )

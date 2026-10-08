@@ -85,26 +85,33 @@ class QuestionQuery:
     question, since ``answer_deliveries`` is append-only with no per-question uniqueness."""
 
     def select(self, stmts: ScopedStatements) -> Select:  # type: ignore[type-arg]
-        """The question read within ``stmts``' scope. Question ids are runner-minted, so each
-        outer join carries the tenant in its ``ON`` (an answer row keeps its outer join outer)
-        and the grouped deliveries are scoped before they aggregate."""
+        """The question read within ``stmts``' scope. A question is keyed ``(tenant_id,
+        question_id)`` — its id is runner-minted — so each outer join matches on both in its
+        ``ON`` (an answer row keeps its outer join outer), and the grouped deliveries are scoped
+        before they aggregate per that key."""
         earliest_delivery = (
             stmts.select(
                 s.answer_deliveries,
+                s.answer_deliveries.c.tenant_id.label("tenant_id"),
                 s.answer_deliveries.c.question_id.label("question_id"),
                 func.min(s.answer_deliveries.c.delivered_at).label("delivered_at"),
             )
-            .group_by(s.answer_deliveries.c.question_id)
+            .group_by(s.answer_deliveries.c.tenant_id, s.answer_deliveries.c.question_id)
             .subquery()
         )
         answered = stmts.scope_join(
             s.questions,
             s.question_answers,
-            s.question_answers.c.question_id == s.questions.c.question_id,
+            (s.question_answers.c.tenant_id == s.questions.c.tenant_id)
+            & (s.question_answers.c.question_id == s.questions.c.question_id),
             isouter=True,
         )
         delivered = stmts.scope_join(
-            answered, earliest_delivery, earliest_delivery.c.question_id == s.questions.c.question_id, isouter=True
+            answered,
+            earliest_delivery,
+            (earliest_delivery.c.tenant_id == s.questions.c.tenant_id)
+            & (earliest_delivery.c.question_id == s.questions.c.question_id),
+            isouter=True,
         )
         return stmts.select(
             delivered,
@@ -330,9 +337,11 @@ def lock_chunk_row(conn: Connection, chunk_id: str) -> None:
 
 
 def lock_keys(conn: Connection, namespace: str, keys: Sequence[str]) -> None:
-    """Take the write lock of each ``(namespace, key)`` row of ``keyed_locks``, in sorted key
-    order, as the first statements after the scoped write's own tenant-row lock — for a
-    decision whose race has no existing row to lock (``bzh:store-exclusive-write``). A no-op
+    """Take the write lock of each ``(tenant_id, namespace, key)`` row of ``keyed_locks``, in
+    sorted key order, as the first statements after the scoped write's own tenant-row lock — for
+    a decision whose race has no existing row to lock (``bzh:store-exclusive-write``). The
+    scoped insert stamps the write's tenant into the key, so two tenants locking one graph name
+    or work ref each hold their own row, serialized only within the tenant. A no-op
     ``UPDATE`` on an absent row locks nothing, so each row is first inserted if unseen: in its
     own savepoint, so a concurrent insert of the same key loses with an ``IntegrityError`` that
     rolls back only that insert (the shape of ``review_findings_store._mint_scope_if_unseen``).
@@ -568,7 +577,10 @@ def chunk_row(conn, row) -> Chunk:  # type: ignore[no-untyped-def]
     pointers = [
         WorkRef(source=p.source, ref=p.ref)
         for p in conn.execute(
-            statements_of(conn).select(s.chunk_work_refs).where(s.chunk_work_refs.c.chunk_id == row.chunk_id)
+            statements_of(conn)
+            .select(s.chunk_work_refs)
+            .where(s.chunk_work_refs.c.chunk_id == row.chunk_id)
+            .order_by(s.chunk_work_refs.c.id)
         ).all()
     ]
     return Chunk(

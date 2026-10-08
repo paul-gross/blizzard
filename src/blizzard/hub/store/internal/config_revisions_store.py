@@ -30,7 +30,12 @@ class ConfigRevisionsStore:
         else:
             table = _REFERRING[kind]
             query = self._store.select(
-                self._store.scope_join(table, secrets, secrets.c.name == table.c.secret_name, isouter=True),
+                self._store.scope_join(
+                    table,
+                    secrets,
+                    (secrets.c.tenant_id == table.c.tenant_id) & (secrets.c.name == table.c.secret_name),
+                    isouter=True,
+                ),
                 table.c.revision,
                 table.c.secret_name,
                 secrets.c.revision.label("sr"),

@@ -161,7 +161,10 @@ def _questions_activity_stmt(stmts: ScopedStatements, deleted: Select[Any]) -> S
 
 def _question_answers_activity_stmt(stmts: ScopedStatements, deleted: Select[Any]) -> Select[Any]:
     answered = stmts.scope_join(
-        s.question_answers, s.questions, s.questions.c.question_id == s.question_answers.c.question_id
+        s.question_answers,
+        s.questions,
+        (s.questions.c.tenant_id == s.question_answers.c.tenant_id)
+        & (s.questions.c.question_id == s.question_answers.c.question_id),
     )
     return stmts.select(
         stmts.scope_join(answered, s.chunks, s.chunks.c.chunk_id == s.questions.c.chunk_id),

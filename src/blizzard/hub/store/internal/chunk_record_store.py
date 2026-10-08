@@ -121,7 +121,9 @@ class ChunkRecordStore:
             surviving = [chunk_id for chunk_id in rows if chunk_id not in ephemeral]
             pointers: dict[str, list[WorkRef]] = defaultdict(list)
             for p in conn.execute(
-                self._store.select(s.chunk_work_refs).where(s.chunk_work_refs.c.chunk_id.in_(surviving))
+                self._store.select(s.chunk_work_refs)
+                .where(s.chunk_work_refs.c.chunk_id.in_(surviving))
+                .order_by(s.chunk_work_refs.c.id)
             ).all():
                 pointers[p.chunk_id].append(WorkRef(source=p.source, ref=p.ref))
             for chunk_id in surviving:
@@ -162,7 +164,7 @@ class ChunkRecordStore:
                 if r.chunk_id not in ephemeral  # a grouped-away or deleted chunk is removed from every listing
             ]
             pointers: dict[str, list[WorkRef]] = defaultdict(list)
-            for p in conn.execute(self._store.select(s.chunk_work_refs)).all():
+            for p in conn.execute(self._store.select(s.chunk_work_refs).order_by(s.chunk_work_refs.c.id)).all():
                 pointers[p.chunk_id].append(WorkRef(source=p.source, ref=p.ref))
             return [
                 Chunk(
@@ -202,7 +204,9 @@ class ChunkRecordStore:
             pointers: dict[str, list[WorkRef]] = defaultdict(list)
             for batch in id_batches([r.chunk_id for r in page_rows]):
                 for p in conn.execute(
-                    self._store.select(s.chunk_work_refs).where(s.chunk_work_refs.c.chunk_id.in_(batch))
+                    self._store.select(s.chunk_work_refs)
+                    .where(s.chunk_work_refs.c.chunk_id.in_(batch))
+                    .order_by(s.chunk_work_refs.c.id)
                 ).all():
                     pointers[p.chunk_id].append(WorkRef(source=p.source, ref=p.ref))
         chunks = [

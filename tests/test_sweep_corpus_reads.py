@@ -235,7 +235,6 @@ def test_a_row_naming_no_tenant_is_left_out_whether_or_not_a_tenant_is_closed(tm
     if closed:
         world.close(_CLOSED)
     live = _live(world.carried)
-    world.insert(s.chunk_work_refs, tenant_id=None, chunk_id=live, source="src", ref="untenanted")
     world.insert(
         s.usage_facts,
         tenant_id=None,
@@ -251,7 +250,6 @@ def test_a_row_naming_no_tenant_is_left_out_whether_or_not_a_tenant_is_closed(tm
         cache_create_tokens=0,
         recorded_at=_AT,
     )
-    assert None not in {row.tenant for row in world.corpus.live_work_refs()}
     assert None not in {row.tenant for row in world.corpus.usage_after(UsagePosition(_BEFORE), _AFTER, 50)}
 
 

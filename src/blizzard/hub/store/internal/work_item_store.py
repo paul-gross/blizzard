@@ -338,12 +338,14 @@ class WorkItemStore:
     def allocate_ref(self, source: str) -> str:
         """The next ``ref`` for ``source``, from its ``work_item_sequence`` counter row.
 
-        A source's first-ever allocation has no counter row yet: optimistically insert
-        one naming ``ref=1`` in its own transaction; a losing concurrent first allocation
-        gets ``IntegrityError`` on the shared primary key and falls through to the
-        already-exists path below, which increments the now-present row and returns the
-        new value via ``RETURNING`` — a single portable statement (``bzh:sql-portable``)
-        that lets postgres's row lock serialize concurrent winners on an existing row."""
+        The counter is keyed ``(tenant_id, source)``, so each tenant numbers its own
+        sources from 1. A source's first-ever allocation in the tenant has no counter row
+        yet: optimistically insert one naming ``ref=1`` in its own transaction; a losing
+        concurrent first allocation gets ``IntegrityError`` on that primary key and falls
+        through to the already-exists path below, which increments the now-present row and
+        returns the new value via ``RETURNING`` — a single portable statement
+        (``bzh:sql-portable``) that lets postgres's row lock serialize concurrent winners on
+        an existing row."""
         try:
             with self._store.write("allocate_ref", expect=(IntegrityError,)) as conn:
                 conn.execute(self._store.insert(s.work_item_sequence).values(source=source, next_ref=2))

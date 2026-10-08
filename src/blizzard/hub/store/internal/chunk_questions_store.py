@@ -106,8 +106,8 @@ class ChunkQuestionsStore:
             return None
 
     def answer_question(self, question_id: str, *, answer: str, answered_by: str, at: datetime) -> AnswerOutcome:
-        # First-write-wins CAS: the answer row's PK is the question id, so a racing
-        # second insert raises IntegrityError and the loser reads back the winner.
+        # First-write-wins CAS: the answer row's PK is (tenant_id, question_id), so a racing
+        # second insert in the same tenant raises IntegrityError and the loser reads back the winner.
         try:
             with self._store.write("answer_question", expect=(IntegrityError,)) as conn:
                 conn.execute(
