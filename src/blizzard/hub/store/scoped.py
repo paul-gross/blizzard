@@ -11,8 +11,11 @@ tenant to every tenant-owned table they name:
 - ``scope_join(left, right, onclause, isouter=...)`` puts the right side's predicate in the join's
   ``ON``, so an outer join stays outer; the left side is scoped by the read selecting from it;
 - ``exists(from_, *criteria)`` is a scoped, correlatable ``EXISTS``;
-- ``insert(table)`` stamps ``tenant_id`` into every row's values; ``update``/``delete`` are confined
-  to the tenant's rows.
+- ``insert(table)`` stamps ``tenant_id`` into its values — one row, or each row of an
+  ``executemany``; ``insert_rows(table, rows)`` stamps each row of a multi-row ``VALUES``, and
+  ``insert_from_select(table, names, select)`` stamps each selected row with the tenant as a literal
+  column; a caller never supplies the key itself. ``update``/``delete`` are confined to the
+  tenant's rows.
 
 Everything else composes from these: an alias is scoped like its table, a grouped subquery or a
 ``UNION`` arm is a scoped ``select``, and a FROM-less select wraps scoped subqueries.
@@ -62,12 +65,18 @@ class UnscopedConnection(RuntimeError):
 
 
 class TenantKeySupplied(ValueError):
-    """Raised when a write through a scoped connection passes ``tenant_id`` at execute time —
-    the seam stamps the key, and an execute-time value would override the stamp."""
+    """Raised when a caller supplies ``tenant_id`` for a tenant-owned table — in a builder's rows
+    or column names, or among a scoped write's execute-time parameters. The seam stamps the key,
+    and a caller's value would override the stamp."""
 
     def __init__(self, table: str) -> None:
-        super().__init__(f"tenant_id passed at execute for {table}; the scoped insert stamps it")
+        super().__init__(f"tenant_id supplied for {table}; the scoped insert stamps it")
         self.table = table
+
+
+def _key_name(key: Any) -> str:
+    """A values key's column name: the key itself, or the ``key`` of a column object."""
+    return key if isinstance(key, str) else str(getattr(key, "key", key))
 
 
 def _base_table(from_: FromClause) -> TableClause | None:
@@ -137,6 +146,32 @@ class ScopedStatements:
         """``INSERT INTO table`` with ``tenant_id`` stamped into every row's values."""
         stmt = sa.insert(table)
         return stmt.values({TENANT_COLUMN: self._scope.tenant}) if is_tenant_owned(table) else stmt
+
+    def insert_rows(self, table: TableClause, rows: Sequence[Mapping[Any, Any]]) -> Insert:
+        """``INSERT INTO table VALUES (row), (row), …`` — one statement for all ``rows``, with
+        ``tenant_id`` stamped into each. A row naming ``tenant_id`` itself is refused."""
+        if not rows:
+            raise ValueError(f"no rows to insert into {table.name}")
+        if not is_tenant_owned(table):
+            return sa.insert(table).values(list(rows))
+        if any(_key_name(key) == TENANT_COLUMN for row in rows for key in row):
+            raise TenantKeySupplied(table.name)
+        tenant = self._scope.tenant
+        return sa.insert(table).values(
+            [{**{_key_name(k): v for k, v in row.items()}, TENANT_COLUMN: tenant} for row in rows]
+        )
+
+    def insert_from_select(self, table: TableClause, names: Sequence[str], select: Select[Any]) -> Insert:
+        """``INSERT INTO table (names…, tenant_id) SELECT …, <tenant>`` — ``select``'s columns fill
+        ``names`` in order and the scope's tenant fills ``tenant_id`` as a literal column. The
+        rows read are the caller's to confine: build ``select`` with :meth:`select`. ``names``
+        naming ``tenant_id`` itself is refused."""
+        if not is_tenant_owned(table):
+            return sa.insert(table).from_select(names, select)
+        if TENANT_COLUMN in names:
+            raise TenantKeySupplied(table.name)
+        tenant = sa.literal(self._scope.tenant, type_=table.c[TENANT_COLUMN].type)
+        return sa.insert(table).from_select([*names, TENANT_COLUMN], select.add_columns(tenant))
 
     def update(self, table: TableClause) -> Update:
         """``UPDATE table`` confined to the tenant's rows."""

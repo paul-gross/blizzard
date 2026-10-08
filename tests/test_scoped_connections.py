@@ -300,6 +300,49 @@ def test_insert_stamps_the_tenant_into_every_row(hub: HubStoreConnections, scope
     assert _all_notes(hub)[-3:] == [(TEN_A, "one"), (TEN_A, "two"), (TEN_A, "three")]
 
 
+def test_a_multi_row_insert_stamps_the_tenant_into_each_row(
+    hub: HubStoreConnections, scoped: ScopedConnections
+) -> None:
+    rows = [{"chunk_id": "c9", "body": "one"}, {notes.c.chunk_id: "c9", notes.c.body: "two"}]
+    with scoped.write("test") as conn:
+        conn.execute(scoped.insert_rows(notes, rows))
+    assert _all_notes(hub)[-2:] == [(TEN_A, "one"), (TEN_A, "two")]
+
+
+def test_an_insert_from_select_stamps_the_tenant_into_each_row(
+    hub: HubStoreConnections, scoped: ScopedConnections
+) -> None:
+    # Copies the tenant's open chunks into notes; the other tenant's chunks are not read.
+    source = scoped.select(chunks, chunks.c.chunk_id, chunks.c.state).where(chunks.c.state == "open")
+    with scoped.write("test") as conn:
+        conn.execute(scoped.insert_from_select(notes, ["chunk_id", "body"], source))
+    assert _all_notes(hub)[-2:] == [(TEN_A, "open"), (TEN_A, "open")]
+    with hub.read("test") as conn:
+        copied = conn.execute(sa.select(notes.c.chunk_id).where(notes.c.id > 3).order_by(notes.c.id)).scalars()
+        assert list(copied) == ["c1", "c2"]
+
+
+@pytest.mark.parametrize(
+    "build",
+    [
+        lambda b: b.insert_rows(notes, [{"chunk_id": "c9", "body": "x"}, {"chunk_id": "c9", "tenant_id": TEN_B}]),
+        lambda b: b.insert_rows(notes, [{notes.c.tenant_id: TEN_B, "chunk_id": "c9", "body": "x"}]),
+        lambda b: b.insert_from_select(
+            notes, ["chunk_id", "tenant_id"], sa.select(sa.literal("c9"), sa.literal(TEN_B))
+        ),
+    ],
+    ids=["row-name", "row-column", "select-names"],
+)
+def test_a_tenant_id_supplied_to_a_multi_row_builder_is_refused(scoped: ScopedConnections, build: Any) -> None:
+    with pytest.raises(TenantKeySupplied, match="notes"):
+        build(scoped)
+
+
+def test_a_multi_row_insert_needs_a_row(scoped: ScopedConnections) -> None:
+    with pytest.raises(ValueError, match="no rows"):
+        scoped.insert_rows(notes, [])
+
+
 @pytest.mark.parametrize(
     "params",
     [
@@ -343,6 +386,15 @@ def test_a_global_table_passes_through_every_builder_untouched(
         assert _sql(scoped.insert(table)) == _sql(sa.insert(table))
         assert _sql(scoped.update(table).values(id=1)) == _sql(sa.update(table).values(id=1))
         assert _sql(scoped.delete(table)) == _sql(sa.delete(table))
+        rows = [{"id": 7}, {"id": 8}]
+        assert _sql(scoped.insert_rows(table, rows)) == _sql(sa.insert(table).values(rows))
+        source = sa.select(sa.literal(7))
+        assert _sql(scoped.insert_from_select(table, ["id"], source)) == _sql(
+            sa.insert(table).from_select(["id"], source)
+        )
+    assert _sql(scoped.insert_rows(memberships, [{"tenant_id": TEN_B}])) == _sql(
+        sa.insert(memberships).values([{"tenant_id": TEN_B}])
+    )
     with scoped.write("test") as conn:
         conn.execute(scoped.insert(catalog).values(value="v"))
         conn.execute(scoped.insert(memberships), [{"tenant_id": TEN_B}])
