@@ -18,6 +18,7 @@ import socket
 import tempfile
 import threading
 import time
+import weakref
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -31,6 +32,7 @@ from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, event
 from sqlalchemy import insert as sa_insert
+from sqlalchemy.sql.base import Executable
 
 from blizzard.auth_core import Role
 from blizzard.foundation.clock import FixedClock, IClock
@@ -98,6 +100,7 @@ from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStor
 from blizzard.hub.store.internal.secret_store import SecretStore
 from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
 from blizzard.hub.system_artifacts import PackagedSystemArtifacts
+from blizzard.hub.tenancy import HUB_SCOPED_OPTION, TenantId
 from blizzard.hub.work_sources.annotator import IWorkAnnotator, WorkAnnotateError, WorkStatusMarker
 from blizzard.hub.work_sources.closer import IWorkCloser, WorkCloseError, WorkItemGoneError
 from blizzard.hub.work_sources.editor import IWorkEditor
@@ -113,6 +116,61 @@ def hub_store_connections(engine: Engine) -> HubStoreConnections:
     own migrated engine — one helper so every adapter's test file constructs it
     identically."""
     return HubStoreConnections(engine, HubStoreErrorFactory(get_logger("test")))
+
+
+def hub_level_connections(engine: Engine) -> HubStoreConnections:
+    """The unscoped seam, for the adapters over global tables (identity, exports, cross-tenant reads).
+
+    Today this is what ``hub_store_connections`` returns; once that helper hands out a default-tenant
+    scope, a global-table adapter keeps wiring over this one."""
+    return HubStoreConnections(engine, HubStoreErrorFactory(get_logger("test")))
+
+
+_default_tenants: weakref.WeakKeyDictionary[Engine, TenantId] = weakref.WeakKeyDictionary()
+
+
+def default_tenant(engine: Engine) -> TenantId:
+    """The store's only tenant — the one its first migration carried over — read once per engine.
+
+    Raises when the store holds none or several: a test with a second tenant names the one it means."""
+    cached = _default_tenants.get(engine)
+    if cached is not None:
+        return cached
+    with engine.connect() as conn:
+        ids = list(conn.execute(sa.select(schema.tenants.c.tenant_id)).scalars())
+    if len(ids) != 1:
+        raise AssertionError(f"default_tenant needs a store holding exactly one tenant; this one holds {len(ids)}")
+    tenant = TenantId(ids[0])
+    _default_tenants[engine] = tenant
+    return tenant
+
+
+def _is_tenant_owned(table: sa.Table) -> bool:
+    """Whether ``table`` is tenant-owned: it carries ``tenant_id`` and is not on the global list."""
+    return "tenant_id" in table.c and table.name not in schema.GLOBAL_TABLES
+
+
+def stamp(table: sa.Table, /, **values: Any) -> dict[str, Any]:
+    """``values`` for a raw test insert into ``table``, carrying the store's tenant when the table is
+    tenant-owned and the caller named none — what the scoped insert stamps in production.
+
+    The tenant is a scalar subquery over ``tenants``, so a raw write needs no engine in hand; it names
+    the store's only tenant, the same one ``default_tenant`` reads."""
+    if _is_tenant_owned(table) and "tenant_id" not in values:
+        values["tenant_id"] = sa.select(schema.tenants.c.tenant_id).scalar_subquery()
+    return values
+
+
+def hub_scoped[E: Executable](statement: E) -> E:
+    """``statement`` marked deliberately cross-tenant: a test's raw read or write of the store as a whole,
+    exempt from the tenant statement guard."""
+    return statement.execution_options(**{HUB_SCOPED_OPTION: True})
+
+
+def hub_scoped_engine(engine: Engine) -> Engine:
+    """``engine`` with every statement marked cross-tenant: a migration test's store, seeded and probed at
+    revisions older than the live schema, where no tenant scope applies."""
+    return engine.execution_options(**{HUB_SCOPED_OPTION: True})
 
 
 OP = ChangeContext(actor="op", door=Door.API)
@@ -1189,7 +1247,7 @@ def write_chunk_pause_facts(tmp_path: Path, chunk_id: str, *facts: tuple[bool, d
         for paused, set_at in facts:
             conn.execute(
                 sa_insert(schema.chunk_pause_facts).values(
-                    chunk_id=chunk_id, paused=paused, set_at=set_at, set_by="operator"
+                    stamp(schema.chunk_pause_facts, chunk_id=chunk_id, paused=paused, set_at=set_at, set_by="operator")
                 )
             )
 
@@ -1349,7 +1407,7 @@ def chunk_rows(hub: HubHarness, table: sa.Table, chunk_id: str) -> int:
     """How many rows ``table`` holds for ``chunk_id`` — a refusal's proof that nothing was written."""
     with hub.engine.begin() as conn:
         return conn.execute(
-            sa.select(sa.func.count()).select_from(table).where(table.c.chunk_id == chunk_id)
+            hub_scoped(sa.select(sa.func.count()).select_from(table).where(table.c.chunk_id == chunk_id))
         ).scalar_one()
 
 
@@ -1378,11 +1436,12 @@ _CHUNKS = sa.Table(
 def migrate_to(tmp_path: Path, revision: str) -> tuple[MigrationRunner, Engine]:
     """A hub store migrated to ``revision``, ready for a test's own revision-pinned seed
     rows. The returned runner is the same handle a test upgrades onward from (e.g. to
-    ``"head"``) once its seed is in place."""
+    ``"head"``) once its seed is in place. The engine is hub-scoped: rows seeded at a pinned
+    revision are written to the store as a whole, outside any tenant scope."""
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     runner = Migrations(HubConfig(root=tmp_path, db_url=db_url), MIGRATION_CLOCK).runner
     runner.upgrade(revision)
-    return runner, create_engine_from_url(db_url)
+    return runner, hub_scoped_engine(create_engine_from_url(db_url))
 
 
 def seed_graph(conn: sa.Connection, graph_id: str, *, at: datetime) -> None:
@@ -1429,11 +1488,19 @@ def seed_lease(engine: Engine, chunk_id: str, *, epoch: int, runner_id: str, at:
     chunk's fence at ``epoch``. Head-schema only."""
     with engine.begin() as conn:
         conn.execute(
-            sa.insert(schema.lease_facts).values(chunk_id=chunk_id, epoch=epoch, runner_id=runner_id, minted_at=at)
+            sa.insert(schema.lease_facts).values(
+                stamp(schema.lease_facts, chunk_id=chunk_id, epoch=epoch, runner_id=runner_id, minted_at=at)
+            )
         )
         conn.execute(
             sa.insert(schema.epoch_owners).values(
-                chunk_id=chunk_id, epoch=epoch, runner_id=None if runner_id == "hub" else runner_id, recorded_at=at
+                stamp(
+                    schema.epoch_owners,
+                    chunk_id=chunk_id,
+                    epoch=epoch,
+                    runner_id=None if runner_id == "hub" else runner_id,
+                    recorded_at=at,
+                )
             )
         )
 
