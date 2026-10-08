@@ -214,9 +214,7 @@ class IReadGardenProposalClosureRepository(Protocol):
 
 class IWriteGardenProposalClosureRepository(IReadGardenProposalClosureRepository, Protocol):
     """Read-write garden-proposal-closure access — the pass and accept-declining-to-mint
-    writes. The accept-with-mint write lives on
-    :class:`~blizzard.hub.domain.chunk.model.IWriteWorkItemRepository` instead: only the item's
-    own adapter can enclose the item and chunk inserts in that transaction."""
+    writes."""
 
     def record_pass(self, proposal_id: str, *, reason: str, closed_by: str, at: datetime) -> bool:
         """Insert the passed closure row. Returns ``False`` and writes nothing when

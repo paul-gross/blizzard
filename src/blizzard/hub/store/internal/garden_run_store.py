@@ -185,11 +185,9 @@ class GardenRunStore:
 
     @staticmethod
     def _add_finding_ids_by_set(conn, finding_set_ids: list[str]) -> dict[str, list[str]]:  # type: ignore[no-untyped-def]
-        """Every listed set's own `add` facts' finding ids, in insertion order —
-        one query for every id in
-        `finding_set_ids` (index-backed on `ix_finding_facts_finding_set_id`), the
-        `_fact_counts_by_set` shape, so `delivered_sets` never issues one query per set. A
-        set predating the `finding_facts.finding_set_id` linkage's addition matches none."""
+        """Every listed set's own `add` facts' finding ids, in insertion order, read in one
+        query (index-backed on `ix_finding_facts_finding_set_id`). A set with no linked `add`
+        fact maps to an empty list."""
         grouped: dict[str, list[str]] = {finding_set_id: [] for finding_set_id in finding_set_ids}
         if not finding_set_ids:
             return grouped

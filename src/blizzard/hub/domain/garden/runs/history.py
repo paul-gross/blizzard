@@ -372,8 +372,7 @@ class GardenRunService:
         return run_rows(records, self._chunk_records.get_many(chunk_ids), self._chunk_facts.load_facts_for(chunk_ids))
 
     def run_delta(self, chunk: Chunk) -> RunDelta | None:
-        """`chunk` is already resolved (`bzh:domain-takes-objects`) — the caller 404s on
-        an unknown chunk id before this is ever invoked; `None` here means only that
+        """`chunk` is already resolved (`bzh:domain-takes-objects`); `None` means only that
         `chunk` names no `work_item_runs`-backed run."""
         identity = self._repo.run_identity(chunk.chunk_id)
         if identity is None:
@@ -384,9 +383,7 @@ class GardenRunService:
             (raw, self._formats.finding_delta(raw.finding_set_id, raw.artifact_data))
             for raw in self._repo.delivered_sets(chunk.chunk_id)
         ]
-        # Every observed id the run named, across all its sets, is read in one batched
-        # lookup: the descriptive fields an observed op omits live on the finding row,
-        # and a per-id read would cost one query pair per re-observed finding.
+        # Every observed id the run named, across all its sets, is read in one batched lookup.
         rows = self._findings.get_many([fid for _, delta in parsed for fid in _observed_ids(delta)])
         sets = [_set_delta(raw, delta, rows) for raw, delta in parsed]
         return RunDelta(

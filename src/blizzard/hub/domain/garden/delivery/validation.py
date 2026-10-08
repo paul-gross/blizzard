@@ -99,8 +99,7 @@ class NamedArtifact(Protocol):
 
 def select_delta_artifacts(names: Sequence[str], latest: Mapping[str, NamedArtifact]) -> SelectedArtifacts:
     """The delta artifacts `names` names, out of `latest` (each name's newest artifact).
-    Refuses a delivery naming no delta, or naming one with no artifact — a missing delta
-    would silently drop a scope's measurement."""
+    Refuses a delivery naming no delta, or naming one with no artifact."""
     missing = [name for name in names if name not in latest]
     if not names or missing:
         raise GardenDeliveryRejected(f"delta artifact not found — missing: {', '.join(missing) or '<none named>'}")
@@ -112,8 +111,7 @@ def select_delta_artifacts(names: Sequence[str], latest: Mapping[str, NamedArtif
 
 def select_proposal_artifacts(names: Sequence[str], latest: Mapping[str, NamedArtifact]) -> SelectedArtifacts:
     """The proposals artifacts `names` names, out of `latest`; a named one with no artifact
-    is skipped — a garden graph reaches delivery without drafting proposals when its run
-    has none to make."""
+    is skipped."""
     present = [name for name in names if name in latest]
     return SelectedArtifacts(
         contents={name: latest[name].data for name in present},
@@ -260,8 +258,8 @@ def validate_delivery(
     formats: IGardenFormats,
     resolve_commit: CommitResolver | None = None,
 ) -> ValidatedDelivery:
-    """The delivery node's whole check: `delta_artifacts`/`proposal_artifacts` are
-    artifact-name → raw-JSON-text maps a route handler holds before parsing; `formats` parses each.
+    """The delivery node's whole check: `delta_artifacts`/`proposal_artifacts` map each
+    artifact name to its unparsed raw JSON text; `formats` parses each.
     `bucket` is the run's :class:`FindingBucket`: what it may cite. Raises :class:`GardenDeliveryRejected` on the
     first failure; on success returns a :class:`ValidatedDelivery`, nothing durable."""
     live_findings: LiveFindings = {f.finding_id: f.scope_slug for f in bucket.citable}

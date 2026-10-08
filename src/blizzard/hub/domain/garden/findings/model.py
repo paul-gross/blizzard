@@ -29,8 +29,7 @@ EXIT_KINDS = frozenset(
     }
 )
 
-#: The fact kinds whose being newest makes a finding live — the one home of the liveness mapping,
-#: shared by `derive_liveness` and the store's SQL prefilter.
+#: The fact kinds whose being newest makes a finding live — the one home of the liveness mapping.
 LIVE_KINDS = frozenset({FindingFactKind.ADD, FindingFactKind.OBSERVED, FindingFactKind.REOPENED})
 
 #: The ground itself changed — work landed, or a person confirmed non-reproduction.

@@ -373,8 +373,7 @@ class IWriteRoutineScopeRepository(IReadRoutineScopeRepository, Protocol):
 
 class RoutineAuthoring:
     """Create and edit a routine, minting its default scope on demand and linking it into
-    the routine's own `routine_scopes` set, so the default is always a member of that set.
-    The mint, the routine write, the link, and both change rows commit in one transaction."""
+    the routine's own `routine_scopes` set, so the default is always a member of that set."""
 
     def __init__(
         self,
@@ -418,8 +417,6 @@ class RoutineAuthoring:
             ctx=ctx,
             at=self._clock.now(),
         )
-        # A concurrent create that took the name first surfaces from the port as
-        # RoutineNameTakenError, the same refusal the pre-check above raises.
         return self._routines.create(routine, change=change, scope_mint=scope_mint)
 
     def edit(self, routine: Routine, edit: RoutineEdit, ctx: ChangeContext, *, if_match: int | None = None) -> Routine:

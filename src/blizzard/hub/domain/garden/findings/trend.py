@@ -108,9 +108,8 @@ class TrendWindow:
 
 class IReadGardenTrendRepository(Protocol):
     def facts_for_trend(self, routine_name: str, *, since: datetime, until: datetime) -> list[TrendFact]:
-        """Every `add`/exit-kind fact for `routine_name` recorded in `[since, until)`,
-        each joined to its own finding's `introduced_at`; a `reopened` fact also carries the
-        kind of the finding's newest earlier fact, whether or not it falls in the window."""
+        """Every :data:`TREND_FACT_KINDS` fact for `routine_name` recorded in `[since, until)`,
+        as :class:`TrendFact` rows."""
         ...
 
 

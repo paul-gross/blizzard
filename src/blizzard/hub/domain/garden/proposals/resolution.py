@@ -26,8 +26,7 @@ def resolve_proposal_findings(
 ) -> list[Finding]:
     """`finding_ids` resolved to their loaded `Finding` rows, in `finding_ids`' own
     order, silently dropping an id that no longer resolves; `live_only` additionally
-    drops one a delivery cannot close. The one walk every proposal→findings
-    read shares, so none can drift on order, missing-id handling, or liveness."""
+    drops one a delivery cannot close."""
     return ordered_findings(finding_ids, findings.get_many(finding_ids), live_only=live_only)
 
 
@@ -35,8 +34,8 @@ def ordered_findings(
     finding_ids: Sequence[str], by_id: Mapping[str, Finding], *, live_only: bool = False
 ) -> list[Finding]:
     """The findings of `by_id` that `finding_ids` names, in `finding_ids`' order, dropping
-    an id `by_id` lacks; `live_only` additionally drops one a delivery cannot close
-    (:meth:`Finding.allows` refuses `delivered` from any state but `live`)."""
+    an id `by_id` lacks; `live_only` additionally drops one :meth:`Finding.allows` refuses
+    `delivered`."""
     rows = (by_id.get(fid) for fid in finding_ids)
     return [f for f in rows if f is not None and (not live_only or f.allows("delivered"))]
 
@@ -142,10 +141,8 @@ class AnsweredFindingsReader:
         """The findings `chunk`'s own proposal answers, in the proposal's own order —
         `None` when `chunk` carries no work ref, its item names no closure, that closure
         is a pass or a declined accept, or the closure names a proposal that no longer
-        resolves. Reads only :meth:`Chunk.originating_ref`, the same single-ref lookup
-        `IReadRunContextRepository.for_chunk` already makes (`run_context.py`) — a chunk
-        that absorbed a garden-minted item's ref via a later fold resolves `None` here
-        too, rather than the folded-in proposal."""
+        resolves. Reads only :meth:`Chunk.originating_ref`, so a chunk that absorbed a
+        garden-minted item's ref via a later fold resolves `None`, not the folded-in proposal."""
         pointer = chunk.originating_ref()
         if pointer is None:
             return None

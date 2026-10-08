@@ -1,8 +1,8 @@
 """Scope and routine entries of a configuration document (``bzh:config-apply``).
 
-The apply planner reconciles these through the record Protocol ``config`` owns; each entry carries the
-garden rules a document write is held to, with one departure from the verbs: an apply never mints a scope
-implicitly, so a routine entry may only name a scope that is stored or declared in the same document."""
+Each entry carries the garden rules a document write is held to, with one departure from the verbs: an
+apply never mints a scope implicitly, so a routine entry may only name a scope that is stored or declared
+in the same document."""
 
 from __future__ import annotations
 

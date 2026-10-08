@@ -71,7 +71,7 @@ def recorded_at_of(finding_set: FindingSet) -> datetime:
 
 
 def newest_swept_first(baselines: Sequence[RoutineBaseline]) -> list[RoutineBaseline]:
-    """Newest-swept first — ``finding_set_id`` descending, the picker's ordering cue."""
+    """Newest-swept first — ``finding_set_id`` descending."""
     return sorted(baselines, key=lambda b: b.finding_set_id, reverse=True)
 
 

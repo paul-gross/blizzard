@@ -1,7 +1,6 @@
-"""The garden formats a worker writes into an artifact — a run's finding delta, its proposal
-candidates, and a review round's finding delta — as the garden domain reads them, and the port
-that parses one from the artifact's raw JSON. The parsing adapter sits at the app boundary, which
-owns the published shapes (``bzh:data-roles``); a parse failure raises the domain's own rejection."""
+"""The garden formats — a run's finding delta, its proposal candidates, and a review round's
+finding delta — as the garden domain reads them, and the port that parses one from raw JSON;
+a parse failure raises the domain's own rejection."""
 
 from __future__ import annotations
 
