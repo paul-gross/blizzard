@@ -201,7 +201,7 @@ def transcript_truncated_event(*, segment_id: str, reason: str) -> OutboundEvent
 
 
 class IReadOutboundRepository(Protocol):
-    """Read-only outbound-buffer queries (held by read-path edges)."""
+    """Read-only outbound-buffer queries."""
 
     def pending_submission_lease_ids(self) -> set[str]:
         """Lease ids with an unacked ``completion.submitted`` or ``decision.submitted``

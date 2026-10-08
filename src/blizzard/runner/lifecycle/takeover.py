@@ -188,7 +188,7 @@ class TakeoverCloseScope:
 
 
 class IReadTakeoverRepository(Protocol):
-    """Read-only takeover queries (held by read-path edges)."""
+    """Read-only takeover queries."""
 
     def lease_for_open_takeover(self, lease_id: str) -> Lease | None:
         """The lease by id iff an open takeover names it, regardless of the

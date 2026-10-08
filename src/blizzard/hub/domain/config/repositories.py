@@ -300,7 +300,7 @@ def diff(old: RepositoryFields | None, new: RepositoryFields) -> tuple[FieldChan
 
 
 class IReadRepositoryRecordRepository(Protocol):
-    """Repository-record reads. Controllers depend on this variant."""
+    """Read-only repository-record operations."""
 
     def get(self, name: str) -> ConfiguredRepository | None: ...
 
@@ -314,8 +314,8 @@ class IReadRepositoryRecordRepository(Protocol):
 
 
 class IWriteRepositoryRecordRepository(IReadRepositoryRecordRepository, Protocol):
-    """Repository-record writes. Only :class:`ConfigAuthoring` depends on this variant; each
-    method commits ``change`` in the same transaction as the record write."""
+    """Adds the repository-record writes; each method commits ``change`` in the same
+    transaction as the record write."""
 
     def create(self, record: ConfiguredRepository, *, change: ConfigChange) -> ConfiguredRepository:
         """Insert. :class:`RepositoryNameTaken` / :class:`RepositoryCoordinateTaken` on a

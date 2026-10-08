@@ -164,8 +164,7 @@ class SegmentRecordContent:
 
 
 class IReadTranscriptSegments(Protocol):
-    """Read-only operations. The operator-plane index/content routes depend on this
-    variant (``bzh:controller-read-only``)."""
+    """Read-only operations."""
 
     def segments_for_chunk(self, chunk_id: str) -> list[SegmentSummary]: ...
 
@@ -183,7 +182,7 @@ class IReadTranscriptSegments(Protocol):
 
 
 class IWriteTranscriptSegments(IReadTranscriptSegments, Protocol):
-    """Read-write variant. Only :class:`TranscriptIngestService` depends on this."""
+    """Adds the writes."""
 
     def high_water(self, runner_id: str) -> int: ...
 

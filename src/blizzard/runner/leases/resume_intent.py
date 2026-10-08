@@ -8,7 +8,7 @@ from typing import Protocol
 
 
 class IReadLeaseResumeIntentRepository(Protocol):
-    """Read-only restart resume-intent queries (held by read-path edges)."""
+    """Read-only restart resume-intent queries."""
 
     def resume_intent_lease_ids(self) -> set[str]:
         """Leases carrying an **open** restart resume-intent.

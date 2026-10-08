@@ -32,7 +32,7 @@ class IReadIdentityRepository(Protocol):
 
 
 class IWriteIdentityRepository(IReadIdentityRepository, Protocol):
-    """Read-write identity-link access — only the domain layer depends on this variant."""
+    """Adds the identity-link writes."""
 
     def link(self, identity: Identity) -> None: ...
 

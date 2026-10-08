@@ -22,7 +22,7 @@ class RunContext:
 
 
 class IReadRunContextRepository(Protocol):
-    """Read-only run-context access. Controllers at the edges depend on this variant."""
+    """Read-only run-context access."""
 
     def for_chunk(self, chunk: Chunk) -> RunContext | None:
         """Resolve ``chunk``'s run context through its first work ref
@@ -34,7 +34,7 @@ class IReadRunContextRepository(Protocol):
 
 
 class IWriteRunContextRepository(IReadRunContextRepository, Protocol):
-    """Read-write run-context access. Only the domain layer depends on this variant."""
+    """Adds the run-context writes."""
 
     def record(self, work_item_id: str, context: RunContext) -> None:
         """Record ``context`` as ``work_item_id``'s run identity."""

@@ -10,8 +10,7 @@ from blizzard.runner.leases.model import ClosedLease, Lease, NewLease
 
 
 class IReadLeaseRecordRepository(Protocol):
-    """Read-only lease-identity queries — mint, closure, and lookups by lease or chunk
-    (held by read-path edges)."""
+    """Read-only lease-identity queries — mint, closure, and lookups by lease or chunk."""
 
     def list_active_leases(self) -> list[Lease]:
         """Leases with no closure fact — the attempts currently in flight."""

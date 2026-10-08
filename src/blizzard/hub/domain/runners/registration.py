@@ -519,7 +519,7 @@ class PerSubscriptionUsageView:
 
 
 class IReadRunnerRegistry(Protocol):
-    """Read-only registry access — the ``GET /runners`` surface."""
+    """Read-only registry access."""
 
     def get_runner(self, runner_id: str) -> RunnerRegistration | None: ...
     def list_runners(self, *, include_retired: bool = False) -> list[RunnerRegistration]:
@@ -557,7 +557,7 @@ class IReadRunnerRegistry(Protocol):
 
 
 class IWriteRunnerRegistry(IReadRunnerRegistry, Protocol):
-    """Read-write registry access — only the domain layer depends on this variant."""
+    """Adds the registry writes."""
 
     def add(self, addition: RunnerAddition) -> None:
         """Insert ``addition`` as a never-connected registration — its id, name, and token hash, with

@@ -1,0 +1,9 @@
+extends: existence
+message: "'%s' names who holds a repository variant — state what the variant offers instead."
+level: error
+scope: text
+nonword: true
+tokens:
+  - '\b[Dd]epends?\s+on\s+this\s+(?:variant|Protocol)\b'
+  - '\b[Dd]epends\s+on\s+this\s*\.'
+  - '\b[Hh]eld\s+by\s+(?:read-path\s+edges|the\s+rotation\s+verb|the\s+reader)\b'

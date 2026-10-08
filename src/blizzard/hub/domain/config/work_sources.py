@@ -229,7 +229,7 @@ def diff(old: WorkSourceFields | None, new: WorkSourceFields) -> tuple[FieldChan
 
 
 class IReadWorkSourceRepository(Protocol):
-    """Work-source reads. Controllers depend on this variant."""
+    """Read-only work-source operations."""
 
     def get(self, name: str) -> ConfiguredWorkSource | None: ...
 
@@ -243,8 +243,8 @@ class IReadWorkSourceRepository(Protocol):
 
 
 class IWriteWorkSourceRepository(IReadWorkSourceRepository, Protocol):
-    """Work-source writes. Only :class:`ConfigAuthoring` depends on this variant; each
-    method commits ``change`` in the same transaction as the record write."""
+    """Adds the work-source writes; each method commits ``change`` in the same transaction as
+    the record write."""
 
     def create(self, record: ConfiguredWorkSource, *, change: ConfigChange) -> ConfiguredWorkSource:
         """Insert. :class:`WorkSourceNameTaken` / :class:`WorkSourceLocatorTaken` on a

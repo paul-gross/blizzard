@@ -339,7 +339,7 @@ class FindingPage:
 
 
 class IReadFindingRepository(Protocol):
-    """Read-only finding access. Controllers at the edges depend on this variant.
+    """Read-only finding access.
 
     An unsettled `delivered` finding carries no staleness bound of its own — outside
     `include_gone=False` and every trend count until its owning routine revives or settles it."""
@@ -413,7 +413,7 @@ class IReadFindingRepository(Protocol):
 
 
 class IWriteFindingRepository(IReadFindingRepository, Protocol):
-    """Read-write finding access. Only the domain layer depends on this variant."""
+    """Adds the finding writes."""
 
     def add(
         self,
@@ -618,7 +618,7 @@ class FindingSet:
 
 
 class IReadFindingSetRepository(Protocol):
-    """Read-only finding-set access. Controllers at the edges depend on this variant."""
+    """Read-only finding-set access."""
 
     def get(self, finding_set_id: str) -> FindingSet | None: ...
 
@@ -641,7 +641,7 @@ class IReadFindingSetRepository(Protocol):
 
 
 class IWriteFindingSetRepository(IReadFindingSetRepository, Protocol):
-    """Read-write finding-set access. Only the domain layer depends on this variant."""
+    """Adds the finding-set writes."""
 
     def create(
         self,

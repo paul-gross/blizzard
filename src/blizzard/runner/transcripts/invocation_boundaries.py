@@ -109,7 +109,7 @@ class InvocationBoundaryStart:
 
 
 class IReadInvocationBoundaryRepository(Protocol):
-    """Read-only invocation-boundary queries (held by read-path edges)."""
+    """Read-only invocation-boundary queries."""
 
     def boundary(self, lease_id: str, generation: int, kind: InvocationBoundaryKind) -> InvocationBoundary | None:
         """This exact invocation's marker — its true start, never rewritten — or ``None``

@@ -166,7 +166,7 @@ class GitCommitDeclaration:
 
 
 class IReadGitCommitDeclarationRepository(Protocol):
-    """Read-only git-commit declaration queries (held by read-path edges)."""
+    """Read-only git-commit declaration queries."""
 
     def git_commit_declarations_for_lease(self, lease_id: str) -> dict[tuple[str, str], GitCommitDeclaration]:
         """The lease's explicit git-commit declarations, newest per ``(environment_id,

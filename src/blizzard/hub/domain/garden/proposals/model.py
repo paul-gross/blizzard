@@ -337,7 +337,7 @@ class GardenProposalPage:
 
 
 class IReadGardenProposalRepository(Protocol):
-    """Read-only garden-proposal access. Controllers at the edges depend on this variant."""
+    """Read-only garden-proposal access."""
 
     def get(self, proposal_id: str) -> GardenProposal | None: ...
 
@@ -381,7 +381,7 @@ class IReadGardenProposalRepository(Protocol):
 
 
 class IWriteGardenProposalRepository(IReadGardenProposalRepository, Protocol):
-    """Read-write garden-proposal access. Only the domain layer depends on this variant."""
+    """Adds the garden-proposal writes."""
 
     def create(
         self,

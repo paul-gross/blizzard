@@ -15,7 +15,7 @@ __all__ = ["IReadLeaseSessionRepository", "IWriteLeaseSessionRepository", "Lease
 
 
 class IReadLeaseSessionRepository(Protocol):
-    """Read-only session-pool and session-identity queries (held by read-path edges)."""
+    """Read-only session-pool and session-identity queries."""
 
     def latest_session(self, chunk_id: str, node_name: str | None) -> SessionReference | None:
         """The chunk's most-recent session-bearing lease's ``session_id``, or ``None``.

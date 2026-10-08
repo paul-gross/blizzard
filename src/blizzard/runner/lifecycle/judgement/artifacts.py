@@ -148,7 +148,7 @@ class PinnedGraphArtifact:
 
 
 class IReadGraphArtifactRepository(Protocol):
-    """Read-only graph-artifact queries (held by read-path edges)."""
+    """Read-only graph-artifact queries."""
 
     def graph_artifacts_for_graph(self, graph_id: str) -> list[PinnedGraphArtifact]:
         """This mint's pinned graph-scoped declarations, in authored order. Keyed on

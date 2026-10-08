@@ -13,7 +13,7 @@ __all__ = ["IReadTokenRepository", "IWriteTokenRepository"]
 
 
 class IReadTokenRepository(Protocol):
-    """Read-only token queries (held by read-path edges)."""
+    """Read-only token queries."""
 
     def route_token(self, chunk_id: str) -> str | None:
         """The chunk's stashed route capability token, or ``None`` if never claimed here.

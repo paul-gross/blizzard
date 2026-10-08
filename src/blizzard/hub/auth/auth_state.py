@@ -18,7 +18,7 @@ class IReadAuthStateRepository(Protocol):
 
 
 class IWriteAuthStateRepository(IReadAuthStateRepository, Protocol):
-    """Read-write ``state`` access — only the domain layer depends on this variant."""
+    """Adds the ``state`` writes."""
 
     def create(self, entry: AuthStateEntry) -> None: ...
 

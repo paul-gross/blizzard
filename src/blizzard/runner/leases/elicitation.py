@@ -137,7 +137,7 @@ class PendingElicitation:
 
 
 class IReadElicitationRepository(Protocol):
-    """Read-only in-flight-elicitation queries (held by read-path edges)."""
+    """Read-only in-flight-elicitation queries."""
 
     def in_flight_elicitation(self, lease_id: str, epoch: int) -> PendingElicitation | None:
         """This lease's in-flight elicitation for ``epoch``, or ``None`` once collected,

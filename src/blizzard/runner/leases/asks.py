@@ -148,7 +148,7 @@ def newest_unforwarded(asks_newest_first: Iterable[OpenAsk], *, forwarded: Itera
 
 
 class IReadAskRepository(Protocol):
-    """Read-only ask/park queries (held by read-path edges)."""
+    """Read-only ask/park queries."""
 
     def unforwarded_ask(self, lease_id: str) -> OpenAsk | None:
         """The lease's newest ask while no park fact names it (:func:`newest_unforwarded`).

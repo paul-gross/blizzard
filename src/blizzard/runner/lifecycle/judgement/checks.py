@@ -48,7 +48,7 @@ class ExecutedCheck:
 
 
 class IReadCheckRepository(Protocol):
-    """Read-only check/nudge queries (held by read-path edges)."""
+    """Read-only check/nudge queries."""
 
     def nudge_fired(self, lease_id: str, epoch: int) -> bool:
         """``True`` iff this attempt's `produces`-unmet nudge is already spent. Written by

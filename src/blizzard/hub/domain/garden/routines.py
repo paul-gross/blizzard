@@ -284,7 +284,7 @@ class Routine:
 
 
 class IReadRoutineRepository(Protocol):
-    """Read-only routine access. Controllers at the edges depend on this variant."""
+    """Read-only routine access."""
 
     def get(self, routine_id: str) -> Routine | None: ...
 
@@ -312,8 +312,8 @@ class IReadRoutineRepository(Protocol):
 
 
 class IWriteRoutineRepository(IReadRoutineRepository, Protocol):
-    """Read-write routine access. Only the domain layer depends on this variant; each write
-    commits its ``change`` — and a ``scope_mint``'s own change — in the same transaction."""
+    """Adds the routine writes; each write commits its ``change`` — and a ``scope_mint``'s own change
+    — in the same transaction."""
 
     def create(self, routine: Routine, *, change: ConfigChange, scope_mint: ScopeMint | None) -> Routine:
         """Insert the routine row, mint its default scope when ``scope_mint`` is given, and
@@ -341,8 +341,7 @@ class IWriteRoutineRepository(IReadRoutineRepository, Protocol):
 
 
 class IReadRoutineScopeRepository(Protocol):
-    """Read-only access to a routine's linked scopes. Controllers at the edges depend
-    on this variant."""
+    """Read-only access to a routine's linked scopes."""
 
     def list_scopes(self, routine_id: str) -> list[str]:
         """Every scope slug linked to ``routine_id``, sorted."""
@@ -360,8 +359,8 @@ class IReadRoutineScopeRepository(Protocol):
 
 
 class IWriteRoutineScopeRepository(IReadRoutineScopeRepository, Protocol):
-    """Read-write access to the ``routine_scopes`` join. Only the domain layer depends
-    on this variant; each write moves the routine's revision and commits ``change`` with it."""
+    """Adds the ``routine_scopes`` join writes; each write moves the routine's revision and
+    commits ``change`` with it."""
 
     def link(self, routine: Routine, scope_slug: str, *, from_revision: int, change: ConfigChange) -> Routine:
         """Link ``scope_slug`` into ``routine``'s set as one compare-and-set on ``from_revision``."""
