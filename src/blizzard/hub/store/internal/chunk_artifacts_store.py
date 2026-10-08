@@ -46,7 +46,7 @@ class ChunkArtifactsStore:
         with self._store.read("delivery_sources_for") as conn:
             for batch in id_batches(chunk_ids):
                 for a in conn.execute(
-                    select(s.artifacts)
+                    self._store.select(s.artifacts)
                     .where(
                         s.artifacts.c.chunk_id.in_(batch),
                         s.artifacts.c.kind == ArtifactKind.ASSET.value,
@@ -75,7 +75,7 @@ class ChunkArtifactsStore:
                         )
                     )
                 for row in conn.execute(
-                    select(s.delivery_repo_landed)
+                    self._store.select(s.delivery_repo_landed)
                     .where(s.delivery_repo_landed.c.chunk_id.in_(batch))
                     .order_by(s.delivery_repo_landed.c.id)
                 ):
@@ -98,7 +98,7 @@ class ChunkArtifactsStore:
                     epoch=a.epoch,
                 )
                 for a in conn.execute(
-                    select(s.artifacts)
+                    self._store.select(s.artifacts)
                     .where(s.artifacts.c.chunk_id == chunk_id)
                     .order_by(s.artifacts.c.seq, s.artifacts.c.artifact_id)
                 ).all()
@@ -109,7 +109,7 @@ class ChunkArtifactsStore:
             # `artifact_id` is the always-distinct third term (`bzh:sql-portable`): it
             # settles exact (epoch, produced_at) ties off backend-dependent row order.
             a = conn.execute(
-                select(s.artifacts)
+                self._store.select(s.artifacts)
                 .where((s.artifacts.c.chunk_id == chunk_id) & (s.artifacts.c.name == name))
                 .order_by(
                     s.artifacts.c.epoch.desc(), s.artifacts.c.produced_at.desc(), s.artifacts.c.artifact_id.desc()
@@ -172,7 +172,7 @@ class ChunkArtifactsStore:
         with self._store.read("has_hub_artifact") as conn:
             return (
                 conn.execute(
-                    select(s.artifacts.c.artifact_id).where(
+                    self._store.select(s.artifacts, s.artifacts.c.artifact_id).where(
                         (s.artifacts.c.chunk_id == chunk_id)
                         & (s.artifacts.c.node_id == node_id)
                         & (s.artifacts.c.epoch == epoch)
@@ -202,7 +202,7 @@ class ChunkArtifactsStore:
         with self._store.write("record_hub_artifact") as conn:
             lock_chunk_row(conn, chunk_id)
             already = conn.execute(
-                select(s.artifacts.c.artifact_id).where(
+                self._store.select(s.artifacts, s.artifacts.c.artifact_id).where(
                     (s.artifacts.c.chunk_id == chunk_id)
                     & (s.artifacts.c.node_id == node_id)
                     & (s.artifacts.c.epoch == epoch)
@@ -214,7 +214,7 @@ class ChunkArtifactsStore:
             if fence(conn, chunk_id, epoch=epoch, admission=admission) is not None:
                 return False
             conn.execute(
-                s.artifacts.insert().values(
+                self._store.insert(s.artifacts).values(
                     artifact_id=Id.mint(IdPrefix.ARTIFACT, self._clock).value,
                     chunk_id=chunk_id,
                     node_id=node_id,

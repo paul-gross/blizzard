@@ -122,9 +122,9 @@ class ChunkWorkRefsStore:
         for source, refs in refs_by_source.items():
             for batch in id_batches(refs):
                 rows = conn.execute(
-                    select(s.chunk_work_refs.c.chunk_id, s.chunk_work_refs.c.ref).where(
-                        (s.chunk_work_refs.c.source == source) & (s.chunk_work_refs.c.ref.in_(batch))
-                    )
+                    statements_of(conn)
+                    .select(s.chunk_work_refs, s.chunk_work_refs.c.chunk_id, s.chunk_work_refs.c.ref)
+                    .where((s.chunk_work_refs.c.source == source) & (s.chunk_work_refs.c.ref.in_(batch)))
                 ).all()
                 pairs.extend((WorkRef(source=source, ref=row.ref), row.chunk_id) for row in rows)
         held_ids = sorted({chunk_id for _, chunk_id in pairs})
@@ -159,7 +159,7 @@ class ChunkWorkRefsStore:
         existing = {
             (p.source, p.ref)
             for p in conn.execute(
-                select(s.chunk_work_refs.c.source, s.chunk_work_refs.c.ref).where(
+                self._store.select(s.chunk_work_refs, s.chunk_work_refs.c.source, s.chunk_work_refs.c.ref).where(
                     s.chunk_work_refs.c.chunk_id == chunk_id
                 )
             ).all()
@@ -167,7 +167,9 @@ class ChunkWorkRefsStore:
         for pointer in pointers:
             if (pointer.source, pointer.ref) in existing:
                 continue
-            conn.execute(s.chunk_work_refs.insert().values(chunk_id=chunk_id, source=pointer.source, ref=pointer.ref))
+            conn.execute(
+                self._store.insert(s.chunk_work_refs).values(chunk_id=chunk_id, source=pointer.source, ref=pointer.ref)
+            )
             existing.add((pointer.source, pointer.ref))
 
 

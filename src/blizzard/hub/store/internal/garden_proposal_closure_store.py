@@ -71,7 +71,9 @@ class GardenProposalClosureStore:
     def get(self, proposal_id: str) -> GardenProposalClosure | None:
         with self._store.read("get") as conn:
             row = conn.execute(
-                select(garden_proposal_closures).where(garden_proposal_closures.c.proposal_id == proposal_id)
+                self._store.select(garden_proposal_closures).where(
+                    garden_proposal_closures.c.proposal_id == proposal_id
+                )
             ).one_or_none()
         return self._of(row) if row is not None else None
 
@@ -84,7 +86,9 @@ class GardenProposalClosureStore:
         with self._store.read("get_many") as conn:
             for batch in id_batches(proposal_ids):
                 rows = conn.execute(
-                    select(garden_proposal_closures).where(garden_proposal_closures.c.proposal_id.in_(batch))
+                    self._store.select(garden_proposal_closures).where(
+                        garden_proposal_closures.c.proposal_id.in_(batch)
+                    )
                 ).all()
                 result.update({row.proposal_id: self._of(row) for row in rows})
         return result
@@ -95,7 +99,7 @@ class GardenProposalClosureStore:
         regardless of what a caller passes."""
         with self._store.read("find_by_item") as conn:
             row = conn.execute(
-                select(garden_proposal_closures).where(
+                self._store.select(garden_proposal_closures).where(
                     garden_proposal_closures.c.source == source, garden_proposal_closures.c.ref == ref
                 )
             ).one_or_none()

@@ -29,7 +29,7 @@ from blizzard.hub.store.internal.chunk_rows import (
     next_artifact_seq,
 )
 from blizzard.hub.store.internal.chunk_terminal_predicates import chunk_is_terminal
-from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.store.scoped import ScopedConnections, statements_of
 
 #: Every fact table whose ``decision_id`` column closes a decision — the resolving
 #: transition, the migration (#90), the unresolvable-target escalation (#110), or the
@@ -48,13 +48,15 @@ class ChunkDecisionsStore:
 
     def get_decision(self, decision_id: str) -> GateDecision | None:
         with self._store.read("get_decision") as conn:
-            row = conn.execute(select(s.decisions).where(s.decisions.c.decision_id == decision_id)).one_or_none()
+            row = conn.execute(
+                self._store.select(s.decisions).where(s.decisions.c.decision_id == decision_id)
+            ).one_or_none()
             return self._decision_row(conn, row) if row is not None else None
 
     def find_decision(self, chunk_id: str, *, node_id: str, epoch: int) -> GateDecision | None:
         with self._store.read("find_decision") as conn:
             row = conn.execute(
-                select(s.decisions).where(
+                self._store.select(s.decisions).where(
                     (s.decisions.c.chunk_id == chunk_id)
                     & (s.decisions.c.node_id == node_id)
                     & (s.decisions.c.epoch == epoch)
@@ -102,7 +104,9 @@ class ChunkDecisionsStore:
 
     def _live_decisions_batch(self, conn: Connection, chunk_ids: Sequence[str]) -> dict[str, LiveDecisionStatus]:
         rows = conn.execute(
-            select(s.decisions).where(s.decisions.c.chunk_id.in_(chunk_ids)).order_by(s.decisions.c.submitted_at.desc())
+            self._store.select(s.decisions)
+            .where(s.decisions.c.chunk_id.in_(chunk_ids))
+            .order_by(s.decisions.c.submitted_at.desc())
         ).all()
         if not rows:
             return {}
@@ -113,9 +117,11 @@ class ChunkDecisionsStore:
                 {
                     r.decision_id: r.choice
                     for r in conn.execute(
-                        select(s.decision_resolutions.c.decision_id, s.decision_resolutions.c.choice).where(
-                            s.decision_resolutions.c.decision_id.in_(id_batch)
-                        )
+                        self._store.select(
+                            s.decision_resolutions,
+                            s.decision_resolutions.c.decision_id,
+                            s.decision_resolutions.c.choice,
+                        ).where(s.decision_resolutions.c.decision_id.in_(id_batch))
                     ).all()
                 }
             )
@@ -242,7 +248,7 @@ class ChunkDecisionsStore:
         if refusal is not None:
             return refusal
         conn.execute(
-            s.decisions.insert().values(
+            self._store.insert(s.decisions).values(
                 decision_id=decision_id,
                 chunk_id=chunk_id,
                 node_id=node_id,
@@ -255,7 +261,7 @@ class ChunkDecisionsStore:
         )
         for row in artifacts:
             conn.execute(
-                s.artifacts.insert().values(
+                self._store.insert(s.artifacts).values(
                     artifact_id=row.artifact_id,
                     chunk_id=row.chunk_id,
                     node_id=row.node_id,
@@ -278,7 +284,9 @@ class ChunkDecisionsStore:
     def _decision_exists(conn: Connection, chunk_id: str, *, node_id: str, epoch: int) -> bool:
         return (
             conn.execute(
-                select(s.decisions.c.decision_id).where(
+                statements_of(conn)
+                .select(s.decisions, s.decisions.c.decision_id)
+                .where(
                     (s.decisions.c.chunk_id == chunk_id)
                     & (s.decisions.c.node_id == node_id)
                     & (s.decisions.c.epoch == epoch)
@@ -290,12 +298,14 @@ class ChunkDecisionsStore:
     def record_decision_resolution(self, decision_id: str, *, choice: str, resolved_by: str, at: datetime) -> bool:
         with self._store.write("record_decision_resolution") as conn:
             existing = conn.execute(
-                select(s.decision_resolutions.c.decision_id).where(s.decision_resolutions.c.decision_id == decision_id)
+                self._store.select(s.decision_resolutions, s.decision_resolutions.c.decision_id).where(
+                    s.decision_resolutions.c.decision_id == decision_id
+                )
             ).one_or_none()
             if existing is not None:
                 return False  # first-write-wins: the loser is told who won
             conn.execute(
-                s.decision_resolutions.insert().values(
+                self._store.insert(s.decision_resolutions).values(
                     decision_id=decision_id, choice=choice, resolved_by=resolved_by, resolved_at=at
                 )
             )
@@ -303,7 +313,7 @@ class ChunkDecisionsStore:
 
     def _decision_row(self, conn: Connection, row) -> GateDecision:  # type: ignore[no-untyped-def]
         resolution = conn.execute(
-            select(s.decision_resolutions).where(s.decision_resolutions.c.decision_id == row.decision_id)
+            self._store.select(s.decision_resolutions).where(s.decision_resolutions.c.decision_id == row.decision_id)
         ).one_or_none()
         transitioned = row.decision_id in decision_closure_ids(conn, [row.decision_id])
         return self._build_row(row, resolution, transitioned)
@@ -322,7 +332,9 @@ class ChunkDecisionsStore:
                 {
                     r.decision_id: r
                     for r in conn.execute(
-                        select(s.decision_resolutions).where(s.decision_resolutions.c.decision_id.in_(batch))
+                        self._store.select(s.decision_resolutions).where(
+                            s.decision_resolutions.c.decision_id.in_(batch)
+                        )
                     ).all()
                 }
             )
@@ -367,9 +379,9 @@ def decision_closure_ids(conn: Connection, decision_ids: Sequence[str]) -> set[s
     closed: set[str] = set()
     for batch in id_batches(decision_ids):
         rows = conn.execute(
-            select(s.decisions.c.decision_id).where(
-                s.decisions.c.decision_id.in_(batch), ~ChunkDecisionsStore._not_closed_clause()
-            )
+            statements_of(conn)
+            .select(s.decisions, s.decisions.c.decision_id)
+            .where(s.decisions.c.decision_id.in_(batch), ~ChunkDecisionsStore._not_closed_clause())
         ).all()
         closed |= {r.decision_id for r in rows}
     return closed

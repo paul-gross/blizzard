@@ -12,7 +12,6 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import delete, insert, select, update
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 
@@ -62,25 +61,26 @@ def link_scope(conn: Connection, routine_id: str, scope_slug: str) -> None:
     """Link ``scope_slug`` into ``routine_id``'s set inside the caller's transaction; a
     no-op when already linked."""
     linked = conn.execute(
-        select(routine_scopes.c.scope_slug).where(
-            routine_scopes.c.routine_id == routine_id, routine_scopes.c.scope_slug == scope_slug
-        )
+        statements_of(conn)
+        .select(routine_scopes, routine_scopes.c.scope_slug)
+        .where(routine_scopes.c.routine_id == routine_id, routine_scopes.c.scope_slug == scope_slug)
     ).first()
     if linked is None:
-        conn.execute(insert(routine_scopes).values(routine_id=routine_id, scope_slug=scope_slug))
+        conn.execute(statements_of(conn).insert(routine_scopes).values(routine_id=routine_id, scope_slug=scope_slug))
 
 
 def move_revision(conn: Connection, routine: Routine, from_revision: int, **values: object) -> None:
     """Compare-and-set the routine's revision from ``from_revision`` to ``routine.revision``,
     writing ``values`` beside it; :class:`ConfigRevisionConflict` when the stored revision has moved."""
     moved = conn.execute(
-        update(routines)
+        statements_of(conn)
+        .update(routines)
         .where(routines.c.routine_id == routine.routine_id, routines.c.revision == from_revision)
         .values(revision=routine.revision, **values)
     ).rowcount
     if moved != 1:
         current = conn.execute(
-            select(routines.c.revision).where(routines.c.routine_id == routine.routine_id)
+            statements_of(conn).select(routines, routines.c.revision).where(routines.c.routine_id == routine.routine_id)
         ).scalar_one()
         raise ConfigRevisionConflict("routine", routine.name, current=current)
 
@@ -88,7 +88,9 @@ def move_revision(conn: Connection, routine: Routine, from_revision: int, **valu
 def insert_routine(conn: Connection, routine: Routine, change: ConfigChange) -> None:
     """The create body, inside the caller's transaction: the row, its default-scope link, and the change."""
     conn.execute(
-        insert(routines).values(
+        statements_of(conn)
+        .insert(routines)
+        .values(
             routine_id=routine.routine_id,
             name=routine.name,
             **_columns(routine),
@@ -120,7 +122,9 @@ def record_routine_lifecycle(
     """The lifecycle body, inside the caller's transaction: the compare-and-set, the fact, the change."""
     move_revision(conn, routine, from_revision)
     conn.execute(
-        insert(routine_lifecycle_facts).values(routine_id=routine.routine_id, retired=retired, set_at=at, set_by=by)
+        statements_of(conn)
+        .insert(routine_lifecycle_facts)
+        .values(routine_id=routine.routine_id, retired=retired, set_at=at, set_by=by)
     )
     append_change(conn, change)
 
@@ -131,9 +135,9 @@ def set_linked_scopes(
     """Move ``routine``'s linked set to exactly ``scopes`` with the compare-and-set and the change."""
     move_revision(conn, routine, from_revision)
     conn.execute(
-        delete(routine_scopes).where(
-            routine_scopes.c.routine_id == routine.routine_id, routine_scopes.c.scope_slug.not_in(list(scopes))
-        )
+        statements_of(conn)
+        .delete(routine_scopes)
+        .where(routine_scopes.c.routine_id == routine.routine_id, routine_scopes.c.scope_slug.not_in(list(scopes)))
     )
     for slug in scopes:
         link_scope(conn, routine.routine_id, slug)
@@ -192,21 +196,21 @@ class RoutineStore:
             return found
         with self._store.read("get_many_by_name") as conn:
             for batch in id_batches(names):
-                rows = conn.execute(select(routines).where(routines.c.name.in_(batch))).all()
+                rows = conn.execute(self._store.select(routines).where(routines.c.name.in_(batch))).all()
                 retired = _retired_ids(conn, [row.routine_id for row in rows])
                 found.update({row.name: self._of(row, retired=row.routine_id in retired) for row in rows})
         return found
 
     def _one(self, where, operation: str) -> Routine | None:  # type: ignore[no-untyped-def]
         with self._store.read(operation) as conn:
-            row = conn.execute(select(routines).where(where)).one_or_none()
+            row = conn.execute(self._store.select(routines).where(where)).one_or_none()
             if row is None:
                 return None
             return self._of(row, retired=_is_retired(conn, row.routine_id))
 
     def list_all(self) -> list[Routine]:
         with self._store.read("list_all") as conn:
-            rows = conn.execute(select(routines).order_by(routines.c.created_at.desc())).all()
+            rows = conn.execute(self._store.select(routines).order_by(routines.c.created_at.desc())).all()
             retired = _retired_ids(conn)
         return [self._of(row, retired=row.routine_id in retired) for row in rows]
 
@@ -240,7 +244,8 @@ def _is_retired(conn: Connection, routine_id: str) -> bool:
     """Newest ``routine_lifecycle_facts`` row for ``routine_id`` wins; no row reads
     not-retired (a freshly minted routine starts enabled)."""
     row = conn.execute(
-        select(routine_lifecycle_facts.c.retired)
+        statements_of(conn)
+        .select(routine_lifecycle_facts, routine_lifecycle_facts.c.retired)
         .where(routine_lifecycle_facts.c.routine_id == routine_id)
         .order_by(routine_lifecycle_facts.c.id.desc())
         .limit(1)

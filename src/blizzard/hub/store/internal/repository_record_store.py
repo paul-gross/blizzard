@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import insert, select, update
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 
@@ -49,7 +48,9 @@ def _check_secret(conn: Connection, secret: str) -> None:
 def _coordinate_holder(conn: Connection, record: ConfiguredRepository) -> str | None:
     f = record.fields
     row = conn.execute(
-        select(repositories.c.name).where(
+        statements_of(conn)
+        .select(repositories, repositories.c.name)
+        .where(
             repositories.c.forge_api_url == f.forge_api_url,
             repositories.c.owner == f.owner,
             repositories.c.repo == f.repo,
@@ -79,13 +80,17 @@ def insert_record(conn: Connection, record: ConfiguredRepository, change: Config
     """The create body, inside the caller's transaction. :class:`RepositorySecretUnavailable`,
     :class:`RepositoryNameTaken` or :class:`RepositoryCoordinateTaken` when refused."""
     _check_secret(conn, record.fields.secret_name)
-    if conn.execute(select(repositories.c.name).where(repositories.c.name == record.name)).first():
+    if conn.execute(
+        statements_of(conn).select(repositories, repositories.c.name).where(repositories.c.name == record.name)
+    ).first():
         raise RepositoryNameTaken(record.name)
     holder = _coordinate_holder(conn, record)
     if holder is not None:
         raise _coordinate_taken(record, holder)
     conn.execute(
-        insert(repositories).values(
+        statements_of(conn)
+        .insert(repositories)
+        .values(
             name=record.name,
             **_columns(record),
             revision=record.revision,
@@ -103,7 +108,8 @@ def update_record(conn: Connection, record: ConfiguredRepository, from_revision:
     if holder is not None:
         raise _coordinate_taken(record, holder)
     moved = conn.execute(
-        update(repositories)
+        statements_of(conn)
+        .update(repositories)
         .where(repositories.c.name == record.name, repositories.c.revision == from_revision)
         .values(**_columns(record), revision=record.revision)
     ).rowcount
@@ -126,18 +132,25 @@ def record_lifecycle_fact(
     if not retired:
         _check_secret(conn, record.fields.secret_name)
     moved = conn.execute(
-        update(repositories)
+        statements_of(conn)
+        .update(repositories)
         .where(repositories.c.name == record.name, repositories.c.revision == from_revision)
         .values(revision=record.revision)
     ).rowcount
     if moved != 1:
         raise ConfigRevisionConflict("repository", record.name, current=_revision(conn, record.name))
-    conn.execute(insert(repository_lifecycle_facts).values(name=record.name, retired=retired, set_at=at, set_by=by))
+    conn.execute(
+        statements_of(conn)
+        .insert(repository_lifecycle_facts)
+        .values(name=record.name, retired=retired, set_at=at, set_by=by)
+    )
     append_change(conn, change)
 
 
 def _revision(conn: Connection, name: str) -> int:
-    return conn.execute(select(repositories.c.revision).where(repositories.c.name == name)).scalar_one()
+    return conn.execute(
+        statements_of(conn).select(repositories, repositories.c.revision).where(repositories.c.name == name)
+    ).scalar_one()
 
 
 class RepositoryRecordStore:
@@ -191,13 +204,13 @@ class RepositoryRecordStore:
         with self._store.read("get_many") as conn:
             retired = _retirements(conn, names)
             for batch in id_batches(names):
-                rows = conn.execute(select(repositories).where(repositories.c.name.in_(batch))).all()
+                rows = conn.execute(self._store.select(repositories).where(repositories.c.name.in_(batch))).all()
                 found.update({row.name: self._of(row, retired_at=retired.get(row.name)) for row in rows})
         return found
 
     def list_all(self, *, include_retired: bool) -> list[ConfiguredRepository]:
         with self._store.read("list_all") as conn:
-            rows = conn.execute(select(repositories).order_by(repositories.c.name)).all()
+            rows = conn.execute(self._store.select(repositories).order_by(repositories.c.name)).all()
             retired = _retirements(conn)
         return [
             self._of(row, retired_at=retired.get(row.name))

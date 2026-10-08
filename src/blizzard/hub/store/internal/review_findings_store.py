@@ -19,7 +19,7 @@ from blizzard.hub.domain.garden.review.materialize import (
 )
 from blizzard.hub.store.internal.chunk_rows import fence, lock_chunk_row, next_artifact_seq
 from blizzard.hub.store.schema import artifacts, finding_facts, findings, scopes
-from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.store.scoped import ScopedConnections, statements_of
 
 #: Keyed on `chunk_id` alone: a chunk owes at most one review-findings delivery.
 _DELIVERED_MARKER_NAME = "review-findings-delivered"
@@ -40,9 +40,9 @@ class ReviewFindingsStore:
     @staticmethod
     def _marker(conn, *, chunk_id: str):  # type: ignore[no-untyped-def]
         return conn.execute(
-            select(artifacts.c.artifact_id).where(
-                (artifacts.c.chunk_id == chunk_id) & (artifacts.c.name == _DELIVERED_MARKER_NAME)
-            )
+            statements_of(conn)
+            .select(artifacts, artifacts.c.artifact_id)
+            .where((artifacts.c.chunk_id == chunk_id) & (artifacts.c.name == _DELIVERED_MARKER_NAME))
         ).first()
 
     @staticmethod
@@ -74,7 +74,7 @@ class ReviewFindingsStore:
 
             if plan.new_findings:
                 conn.execute(
-                    insert(findings),
+                    self._store.insert(findings),
                     [
                         {
                             "finding_id": f.finding_id,
@@ -94,7 +94,7 @@ class ReviewFindingsStore:
                 )
             if plan.facts:
                 conn.execute(
-                    insert(finding_facts),
+                    self._store.insert(finding_facts),
                     [
                         {
                             "finding_id": fact.finding_id,
@@ -109,7 +109,7 @@ class ReviewFindingsStore:
                 )
 
             conn.execute(
-                insert(artifacts).values(
+                self._store.insert(artifacts).values(
                     artifact_id=Id.mint_at(IdPrefix.ARTIFACT, plan.at).value,
                     chunk_id=plan.chunk_id,
                     node_id=plan.node_id,

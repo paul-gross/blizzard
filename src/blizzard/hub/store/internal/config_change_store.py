@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 
-from sqlalchemy import insert, select
 from sqlalchemy.engine import Connection
 
 from blizzard.hub.domain.config.changes import (
@@ -20,12 +19,14 @@ from blizzard.hub.domain.config.changes import (
     RecordKind,
 )
 from blizzard.hub.store.schema import config_changes
-from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.store.scoped import ScopedConnections, statements_of
 
 
 def append_change(conn: Connection, change: ConfigChange) -> None:
     conn.execute(
-        insert(config_changes).values(
+        statements_of(conn)
+        .insert(config_changes)
+        .values(
             recorded_at=change.recorded_at,
             actor=change.actor,
             door=change.door.value,
@@ -48,7 +49,7 @@ class ConfigChangeStore:
     def page(
         self, *, before: int | None, limit: int, record_kind: RecordKind | None, record_key: str | None
     ) -> list[ConfigChange]:
-        query = select(config_changes).order_by(config_changes.c.id.desc()).limit(limit)
+        query = self._store.select(config_changes).order_by(config_changes.c.id.desc()).limit(limit)
         if before is not None:
             query = query.where(config_changes.c.id < before)
         if record_kind is not None:

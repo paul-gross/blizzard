@@ -10,7 +10,7 @@ from collections import defaultdict
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import Connection, desc, insert, select, update
+from sqlalchemy import Connection, desc
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.garden_proposals import GardenProposalClosureKind, GardenProposalItemOutcome
@@ -37,7 +37,7 @@ from blizzard.hub.store.internal.chunk_rows import (
 )
 from blizzard.hub.store.internal.garden_proposal_closure_store import insert_garden_proposal_closure_row
 from blizzard.hub.store.internal.run_context_store import insert_run_context_row
-from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.store.scoped import ScopedConnections, statements_of
 
 
 class WorkItemStore:
@@ -51,14 +51,14 @@ class WorkItemStore:
     def get(self, source: str, ref: str) -> HubWorkItem | None:
         with self._store.read("get") as conn:
             row = conn.execute(
-                select(s.work_items).where(s.work_items.c.source == source, s.work_items.c.ref == ref)
+                self._store.select(s.work_items).where(s.work_items.c.source == source, s.work_items.c.ref == ref)
             ).one_or_none()
         return self._record(row) if row is not None else None
 
     def list(self, source: str, *, limit: int = 200) -> list[HubWorkItem]:
         with self._store.read("list") as conn:
             rows = conn.execute(
-                select(s.work_items)
+                self._store.select(s.work_items)
                 .where(s.work_items.c.source == source)
                 # created_at is not unique; the ULID work_item_id breaks the tie lexically by creation, as
                 # src/blizzard/hub/store/internal/graph_store.py's get_enabled_by_name does (bzh:sql-portable).
@@ -82,7 +82,9 @@ class WorkItemStore:
             for source, refs in refs_by_source.items():
                 for batch in id_batches(refs):
                     rows = conn.execute(
-                        select(s.work_items).where(s.work_items.c.source == source, s.work_items.c.ref.in_(batch))
+                        self._store.select(s.work_items).where(
+                            s.work_items.c.source == source, s.work_items.c.ref.in_(batch)
+                        )
                     ).all()
                     for row in rows:
                         result[WorkRef(source=row.source, ref=row.ref)] = self._record(row)
@@ -203,7 +205,9 @@ class WorkItemStore:
             else {"runner_id": author.runner_id, "chunk_id": author.chunk_id, "node_name": author.node_name}
         )
         conn.execute(
-            insert(s.work_items).values(
+            statements_of(conn)
+            .insert(s.work_items)
+            .values(
                 work_item_id=work_item_id,
                 source=source,
                 ref=ref,
@@ -228,14 +232,14 @@ class WorkItemStore:
     ) -> HubWorkItem | None:
         with self._store.write("edit") as conn:
             result = conn.execute(
-                update(s.work_items)
+                self._store.update(s.work_items)
                 .where(s.work_items.c.source == source, s.work_items.c.ref == ref, s.work_items.c.closed_at.is_(None))
                 .values(title=title, body=body, stated_priority=stated_priority, edited_at=at)
             )
             if result.rowcount == 0:
                 return None
             row = conn.execute(
-                select(s.work_items).where(s.work_items.c.source == source, s.work_items.c.ref == ref)
+                self._store.select(s.work_items).where(s.work_items.c.source == source, s.work_items.c.ref == ref)
             ).one()
         return self._record(row)
 
@@ -243,7 +247,7 @@ class WorkItemStore:
         with self._store.write("close") as conn:
             self._close_conn(conn, source, ref, closure=closure, at=at)
             row = conn.execute(
-                select(s.work_items).where(s.work_items.c.source == source, s.work_items.c.ref == ref)
+                self._store.select(s.work_items).where(s.work_items.c.source == source, s.work_items.c.ref == ref)
             ).one()
         return self._record(row)
 
@@ -325,7 +329,8 @@ class WorkItemStore:
         or one that never existed, is a silent no-op here, exactly as :meth:`close` was
         before this extraction."""
         conn.execute(
-            update(s.work_items)
+            statements_of(conn)
+            .update(s.work_items)
             .where(s.work_items.c.source == source, s.work_items.c.ref == ref, s.work_items.c.closed_at.is_(None))
             .values(closed_at=at, closure=closure.value)
         )
@@ -341,13 +346,13 @@ class WorkItemStore:
         that lets postgres's row lock serialize concurrent winners on an existing row."""
         try:
             with self._store.write("allocate_ref", expect=(IntegrityError,)) as conn:
-                conn.execute(insert(s.work_item_sequence).values(source=source, next_ref=2))
+                conn.execute(self._store.insert(s.work_item_sequence).values(source=source, next_ref=2))
             return "1"
         except IntegrityError:
             pass
         with self._store.write("allocate_ref") as conn:
             row = conn.execute(
-                update(s.work_item_sequence)
+                self._store.update(s.work_item_sequence)
                 .where(s.work_item_sequence.c.source == source)
                 .values(next_ref=s.work_item_sequence.c.next_ref + 1)
                 .returning(s.work_item_sequence.c.next_ref)

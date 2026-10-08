@@ -9,7 +9,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Select, and_, delete, func, insert, or_, select, update
+from sqlalchemy import Select, and_, func, or_, select
 
 from blizzard.foundation.garden_proposals import (
     GardenProposalClosureKind,
@@ -32,7 +32,7 @@ from blizzard.hub.domain.garden.proposals.model import (
 from blizzard.hub.domain.kernel.pagination import MalformedCursor, decode_cursor, encode_cursor
 from blizzard.hub.domain.kernel.unset import UnsetType
 from blizzard.hub.store.schema import garden_proposal_closures, garden_proposal_findings, garden_proposals
-from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.store.scoped import ScopedConnections, statements_of
 
 #: `list_page`'s cursor, already total: `(created_at, proposal_id)`.
 _CURSOR_ARITY = 2
@@ -89,7 +89,7 @@ class GardenProposalStore:
     ) -> GardenProposal:
         with self._store.write("create") as conn:
             conn.execute(
-                insert(garden_proposals).values(
+                self._store.insert(garden_proposals).values(
                     proposal_id=proposal_id,
                     origin=origin.value,
                     routine_name=routine_name,
@@ -102,7 +102,7 @@ class GardenProposalStore:
             )
             if findings:
                 conn.execute(
-                    insert(garden_proposal_findings),
+                    self._store.insert(garden_proposal_findings),
                     [{"proposal_id": proposal_id, "finding_id": finding_id} for finding_id in findings],
                 )
         return GardenProposal(
@@ -148,9 +148,13 @@ class GardenProposalStore:
                 return None
             if given:
                 conn.execute(
-                    update(garden_proposals).where(garden_proposals.c.proposal_id == proposal_id).values(given)
+                    self._store.update(garden_proposals)
+                    .where(garden_proposals.c.proposal_id == proposal_id)
+                    .values(given)
                 )
-            row = conn.execute(select(garden_proposals).where(garden_proposals.c.proposal_id == proposal_id)).one()
+            row = conn.execute(
+                self._store.select(garden_proposals).where(garden_proposals.c.proposal_id == proposal_id)
+            ).one()
             findings = self._findings(conn, proposal_id)
         return self._of(row, findings)
 
@@ -164,10 +168,12 @@ class GardenProposalStore:
                     raise GardenProposalFindingAlreadyLinkedError(proposal_id, finding_id)
             if finding_ids:
                 conn.execute(
-                    insert(garden_proposal_findings),
+                    self._store.insert(garden_proposal_findings),
                     [{"proposal_id": proposal_id, "finding_id": finding_id} for finding_id in finding_ids],
                 )
-            row = conn.execute(select(garden_proposals).where(garden_proposals.c.proposal_id == proposal_id)).one()
+            row = conn.execute(
+                self._store.select(garden_proposals).where(garden_proposals.c.proposal_id == proposal_id)
+            ).one()
             findings = self._findings(conn, proposal_id)
         return self._of(row, findings)
 
@@ -177,19 +183,21 @@ class GardenProposalStore:
                 return None
             if finding_ids:
                 conn.execute(
-                    delete(garden_proposal_findings).where(
+                    self._store.delete(garden_proposal_findings).where(
                         garden_proposal_findings.c.proposal_id == proposal_id,
                         garden_proposal_findings.c.finding_id.in_(finding_ids),
                     )
                 )
-            row = conn.execute(select(garden_proposals).where(garden_proposals.c.proposal_id == proposal_id)).one()
+            row = conn.execute(
+                self._store.select(garden_proposals).where(garden_proposals.c.proposal_id == proposal_id)
+            ).one()
             findings = self._findings(conn, proposal_id)
         return self._of(row, findings)
 
     def get(self, proposal_id: str) -> GardenProposal | None:
         with self._store.read("get") as conn:
             row = conn.execute(
-                select(garden_proposals).where(garden_proposals.c.proposal_id == proposal_id)
+                self._store.select(garden_proposals).where(garden_proposals.c.proposal_id == proposal_id)
             ).one_or_none()
             if row is None:
                 return None
@@ -200,7 +208,7 @@ class GardenProposalStore:
         one-instant batch delivery leaves in `created_at` alone."""
         with self._store.read("list_all") as conn:
             rows = conn.execute(
-                select(garden_proposals).order_by(
+                self._store.select(garden_proposals).order_by(
                     garden_proposals.c.created_at.desc(), garden_proposals.c.proposal_id.desc()
                 )
             ).all()
@@ -230,7 +238,7 @@ class GardenProposalStore:
     ) -> list[GardenProposal]:
         """`list_all`'s routine-narrowed sibling — newest first, the same
         `created_at`/`proposal_id` tie-break."""
-        stmt = select(garden_proposals).where(garden_proposals.c.routine_name == routine_name)
+        stmt = self._store.select(garden_proposals).where(garden_proposals.c.routine_name == routine_name)
         closure_exists = (
             select(garden_proposal_closures.c.id)
             .where(garden_proposal_closures.c.proposal_id == garden_proposals.c.proposal_id)
@@ -307,7 +315,7 @@ class GardenProposalStore:
 
     def _findings(self, conn, proposal_id: str) -> list[str]:  # type: ignore[no-untyped-def]
         rows = conn.execute(
-            select(garden_proposal_findings.c.finding_id)
+            self._store.select(garden_proposal_findings, garden_proposal_findings.c.finding_id)
             .where(garden_proposal_findings.c.proposal_id == proposal_id)
             .order_by(garden_proposal_findings.c.finding_id)
         ).all()
@@ -321,7 +329,12 @@ class GardenProposalStore:
         result: dict[str, list[str]] = {proposal_id: [] for proposal_id in proposal_ids}
         for batch in id_batches(proposal_ids):
             rows = conn.execute(
-                select(garden_proposal_findings.c.proposal_id, garden_proposal_findings.c.finding_id)
+                statements_of(conn)
+                .select(
+                    garden_proposal_findings,
+                    garden_proposal_findings.c.proposal_id,
+                    garden_proposal_findings.c.finding_id,
+                )
                 .where(garden_proposal_findings.c.proposal_id.in_(batch))
                 .order_by(garden_proposal_findings.c.finding_id)
             ).all()

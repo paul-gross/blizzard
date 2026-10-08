@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, cast
 
-from sqlalchemy import Connection, insert, select
+from sqlalchemy import Connection
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
@@ -309,7 +309,7 @@ class GraphStore:
 
     def _mint_conn(self, conn: Connection, graph: Graph, *, definition_yaml: str, at: datetime) -> None:
         conn.execute(
-            insert(graphs).values(
+            self._store.insert(graphs).values(
                 graph_id=graph.graph_id,
                 name=graph.name,
                 entry_node_id=graph.entry_node_id,
@@ -319,19 +319,21 @@ class GraphStore:
         )
         for ordinal, decl in enumerate(graph.sessions):
             values = SESSIONS.values(decl, graph_id=graph.graph_id, ordinal=ordinal)
-            conn.execute(insert(graph_sessions).values(values))
+            conn.execute(self._store.insert(graph_sessions).values(values))
         for artifact in graph.artifacts:
-            conn.execute(insert(graph_artifacts).values(GRAPH_ARTIFACTS.values(artifact, graph_id=graph.graph_id)))
+            conn.execute(
+                self._store.insert(graph_artifacts).values(GRAPH_ARTIFACTS.values(artifact, graph_id=graph.graph_id))
+            )
         for node in graph.nodes:
-            conn.execute(insert(graph_nodes).values(NODES.values(node, graph_id=graph.graph_id)))
+            conn.execute(self._store.insert(graph_nodes).values(NODES.values(node, graph_id=graph.graph_id)))
             for choice in node.choices:
-                conn.execute(insert(graph_choices).values(CHOICES.values(choice, node_id=node.node_id)))
+                conn.execute(self._store.insert(graph_choices).values(CHOICES.values(choice, node_id=node.node_id)))
         for edge in graph.edges:
-            conn.execute(insert(graph_edges).values(EDGES.values(edge)))
+            conn.execute(self._store.insert(graph_edges).values(EDGES.values(edge)))
 
     def get(self, graph_id: str) -> Graph | None:
         with self._store.read("get") as conn:
-            row = conn.execute(select(graphs).where(graphs.c.graph_id == graph_id)).one_or_none()
+            row = conn.execute(self._store.select(graphs).where(graphs.c.graph_id == graph_id)).one_or_none()
             if row is None:
                 return None
             return self._reify(conn, row)
@@ -345,7 +347,9 @@ class GraphStore:
         # Tie-break on graph_id descending — ULIDs sort lexically by creation —
         # then walked newest-first, skipping every retired graph_id.
         rows = conn.execute(
-            select(graphs).where(graphs.c.name == name).order_by(graphs.c.created_at.desc(), graphs.c.graph_id.desc())
+            self._store.select(graphs)
+            .where(graphs.c.name == name)
+            .order_by(graphs.c.created_at.desc(), graphs.c.graph_id.desc())
         ).all()
         retired = self._retired_among(conn, [row.graph_id for row in rows])
         for row in rows:
@@ -358,7 +362,7 @@ class GraphStore:
         retired-skip, selecting only ``graph_id`` and never reifying a row."""
         with self._store.read("graph_id_of_enabled_name") as conn:
             rows = conn.execute(
-                select(graphs.c.graph_id)
+                self._store.select(graphs, graphs.c.graph_id)
                 .where(graphs.c.name == name)
                 .order_by(graphs.c.created_at.desc(), graphs.c.graph_id.desc())
             ).all()
@@ -394,32 +398,36 @@ class GraphStore:
         return result
 
     def _reify_many(self, conn, graph_ids: Sequence[str]) -> dict[str, Graph]:  # type: ignore[no-untyped-def]
-        graph_rows = conn.execute(select(graphs).where(graphs.c.graph_id.in_(graph_ids))).all()
+        graph_rows = conn.execute(self._store.select(graphs).where(graphs.c.graph_id.in_(graph_ids))).all()
         if not graph_rows:
             return {}
         batch_ids = [row.graph_id for row in graph_rows]
-        node_rows = conn.execute(select(graph_nodes).where(graph_nodes.c.graph_id.in_(batch_ids))).all()
+        node_rows = conn.execute(self._store.select(graph_nodes).where(graph_nodes.c.graph_id.in_(batch_ids))).all()
         node_ids = {nr.node_id for nr in node_rows}
         node_graph_of = {nr.node_id: nr.graph_id for nr in node_rows}
-        choice_rows = conn.execute(select(graph_choices).where(graph_choices.c.node_id.in_(node_ids))).all()
+        choice_rows = conn.execute(self._store.select(graph_choices).where(graph_choices.c.node_id.in_(node_ids))).all()
         choices_by_node: dict[str, list[Choice]] = defaultdict(list)
         for cr in choice_rows:
             choices_by_node[cr.node_id].append(CHOICES.of(cr))
         nodes_by_graph: dict[str, list[Node]] = defaultdict(list)
         for nr in node_rows:
             nodes_by_graph[nr.graph_id].append(NODES.of(nr, choices=choices_by_node[nr.node_id]))
-        edge_rows = conn.execute(select(graph_edges).where(graph_edges.c.from_node_id.in_(node_ids))).all()
+        edge_rows = conn.execute(self._store.select(graph_edges).where(graph_edges.c.from_node_id.in_(node_ids))).all()
         edges_by_graph: dict[str, list[Edge]] = defaultdict(list)
         for er in edge_rows:
             edges_by_graph[node_graph_of[er.from_node_id]].append(EDGES.of(er))
         session_rows = conn.execute(
-            select(graph_sessions).where(graph_sessions.c.graph_id.in_(batch_ids)).order_by(graph_sessions.c.ordinal)
+            self._store.select(graph_sessions)
+            .where(graph_sessions.c.graph_id.in_(batch_ids))
+            .order_by(graph_sessions.c.ordinal)
         ).all()
         sessions_by_graph: dict[str, list[SessionDecl]] = defaultdict(list)
         for sr in session_rows:
             sessions_by_graph[sr.graph_id].append(SESSIONS.of(sr))
         artifact_rows = conn.execute(
-            select(graph_artifacts).where(graph_artifacts.c.graph_id.in_(batch_ids)).order_by(graph_artifacts.c.ordinal)
+            self._store.select(graph_artifacts)
+            .where(graph_artifacts.c.graph_id.in_(batch_ids))
+            .order_by(graph_artifacts.c.ordinal)
         ).all()
         artifacts_by_graph: dict[str, list[GraphArtifact]] = defaultdict(list)
         for ar in artifact_rows:
@@ -448,9 +456,9 @@ class GraphStore:
         with self._store.read("load_graph_summaries") as conn:
             for batch in id_batches(graph_ids):
                 rows = conn.execute(
-                    select(graphs.c.graph_id, graphs.c.name, graphs.c.entry_node_id, graphs.c.created_at).where(
-                        graphs.c.graph_id.in_(batch)
-                    )
+                    self._store.select(
+                        graphs, graphs.c.graph_id, graphs.c.name, graphs.c.entry_node_id, graphs.c.created_at
+                    ).where(graphs.c.graph_id.in_(batch))
                 ).all()
                 result.update(
                     {
@@ -476,9 +484,9 @@ class GraphStore:
         with self._store.read("load_node_names") as conn:
             for batch in id_batches(graph_ids):
                 rows = conn.execute(
-                    select(graph_nodes.c.graph_id, graph_nodes.c.node_id, graph_nodes.c.name).where(
-                        graph_nodes.c.graph_id.in_(batch)
-                    )
+                    self._store.select(
+                        graph_nodes, graph_nodes.c.graph_id, graph_nodes.c.node_id, graph_nodes.c.name
+                    ).where(graph_nodes.c.graph_id.in_(batch))
                 ).all()
                 for row in rows:
                     result.setdefault(row.graph_id, {})[row.node_id] = row.name
@@ -489,7 +497,7 @@ class GraphStore:
         # protocol docstring for why reconciliation compares against the newest *minted*.
         with self._store.read("newest_definition_yaml") as conn:
             row = conn.execute(
-                select(graphs.c.definition_yaml)
+                self._store.select(graphs, graphs.c.definition_yaml)
                 .where(graphs.c.name == name)
                 .order_by(graphs.c.created_at.desc(), graphs.c.graph_id.desc())
                 .limit(1)
@@ -501,9 +509,9 @@ class GraphStore:
         fan-out into nodes/edges/sessions/artifacts."""
         with self._store.read("list_summaries") as conn:
             rows = conn.execute(
-                select(graphs.c.graph_id, graphs.c.name, graphs.c.entry_node_id, graphs.c.created_at).order_by(
-                    graphs.c.created_at.desc()
-                )
+                self._store.select(
+                    graphs, graphs.c.graph_id, graphs.c.name, graphs.c.entry_node_id, graphs.c.created_at
+                ).order_by(graphs.c.created_at.desc())
             ).all()
             return [
                 GraphSummary(
@@ -518,7 +526,10 @@ class GraphStore:
 
     def any_minted_conn(self, conn: Connection, name: str) -> bool:
         """`any_minted`, resolved on the caller's connection."""
-        return conn.execute(select(graphs.c.graph_id).where(graphs.c.name == name).limit(1)).first() is not None
+        return (
+            conn.execute(self._store.select(graphs, graphs.c.graph_id).where(graphs.c.name == name).limit(1)).first()
+            is not None
+        )
 
     def is_retired(self, graph_id: str) -> bool:
         with self._store.read("is_retired") as conn:
@@ -528,7 +539,7 @@ class GraphStore:
         """Newest ``graph_lifecycle_facts`` row for ``graph_id`` wins; no row reads
         not-retired (a freshly minted graph starts enabled)."""
         row = conn.execute(
-            select(graph_lifecycle_facts.c.retired)
+            self._store.select(graph_lifecycle_facts, graph_lifecycle_facts.c.retired)
             .where(graph_lifecycle_facts.c.graph_id == graph_id)
             .order_by(graph_lifecycle_facts.c.id.desc())
             .limit(1)
@@ -547,7 +558,11 @@ class GraphStore:
     def record_lifecycle(self, graph_id: str, *, retired: bool, at: datetime, by: str) -> None:
         """Append a ``graph.retired``/``graph.enabled`` fact — newest-fact-wins."""
         with self._store.write("record_lifecycle") as conn:
-            conn.execute(insert(graph_lifecycle_facts).values(graph_id=graph_id, retired=retired, set_at=at, set_by=by))
+            conn.execute(
+                self._store.insert(graph_lifecycle_facts).values(
+                    graph_id=graph_id, retired=retired, set_at=at, set_by=by
+                )
+            )
 
     def follow_latest(self, graph_id: str) -> bool | None:
         """Newest ``graph_policy_facts`` row for ``graph_id`` wins; no row reads ``None``
@@ -557,7 +572,7 @@ class GraphStore:
         resolve newest-write-wins. A present ``None`` is a deliberate revert-to-inherit."""
         with self._store.read("follow_latest") as conn:
             row = conn.execute(
-                select(graph_policy_facts.c.follow_latest)
+                self._store.select(graph_policy_facts, graph_policy_facts.c.follow_latest)
                 .where(graph_policy_facts.c.graph_id == graph_id)
                 .order_by(graph_policy_facts.c.id.desc())
                 .limit(1)
@@ -570,28 +585,32 @@ class GraphStore:
         """Append a follow-latest policy fact — newest-fact-wins."""
         with self._store.write("record_policy") as conn:
             conn.execute(
-                insert(graph_policy_facts).values(graph_id=graph_id, follow_latest=follow_latest, set_at=at, set_by=by)
+                self._store.insert(graph_policy_facts).values(
+                    graph_id=graph_id, follow_latest=follow_latest, set_at=at, set_by=by
+                )
             )
 
     def _reify(self, conn, graph_row) -> Graph:  # type: ignore[no-untyped-def]
-        node_rows = conn.execute(select(graph_nodes).where(graph_nodes.c.graph_id == graph_row.graph_id)).all()
+        node_rows = conn.execute(
+            self._store.select(graph_nodes).where(graph_nodes.c.graph_id == graph_row.graph_id)
+        ).all()
         node_ids = {nr.node_id for nr in node_rows}
         # One `graph_choices` select over every node id, grouped in Python — matching
         # the `graph_edges` read just below's own shape.
-        choice_rows = conn.execute(select(graph_choices).where(graph_choices.c.node_id.in_(node_ids))).all()
+        choice_rows = conn.execute(self._store.select(graph_choices).where(graph_choices.c.node_id.in_(node_ids))).all()
         choices_by_node: dict[str, list[Choice]] = defaultdict(list)
         for cr in choice_rows:
             choices_by_node[cr.node_id].append(CHOICES.of(cr))
         nodes = [NODES.of(nr, choices=choices_by_node[nr.node_id]) for nr in node_rows]
-        edge_rows = conn.execute(select(graph_edges).where(graph_edges.c.from_node_id.in_(node_ids))).all()
+        edge_rows = conn.execute(self._store.select(graph_edges).where(graph_edges.c.from_node_id.in_(node_ids))).all()
         edges = [EDGES.of(er) for er in edge_rows]
         session_rows = conn.execute(
-            select(graph_sessions)
+            self._store.select(graph_sessions)
             .where(graph_sessions.c.graph_id == graph_row.graph_id)
             .order_by(graph_sessions.c.ordinal)
         ).all()
         artifact_rows = conn.execute(
-            select(graph_artifacts)
+            self._store.select(graph_artifacts)
             .where(graph_artifacts.c.graph_id == graph_row.graph_id)
             .order_by(graph_artifacts.c.ordinal)
         ).all()

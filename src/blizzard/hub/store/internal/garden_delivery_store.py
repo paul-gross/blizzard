@@ -8,8 +8,6 @@ from __future__ import annotations
 
 import json
 
-from sqlalchemy import insert, select
-
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.store.batching import id_batches
@@ -29,7 +27,7 @@ from blizzard.hub.store.schema import (
     garden_proposal_findings,
     garden_proposals,
 )
-from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.store.scoped import ScopedConnections, statements_of
 
 _DELIVERED_MARKER_NAME = "garden-delivered"
 
@@ -49,7 +47,9 @@ class GardenDeliveryStore:
     @staticmethod
     def _marker(conn, *, chunk_id: str, node_id: str, epoch: int):  # type: ignore[no-untyped-def]
         return conn.execute(
-            select(artifacts.c.artifact_id).where(
+            statements_of(conn)
+            .select(artifacts, artifacts.c.artifact_id)
+            .where(
                 (artifacts.c.chunk_id == chunk_id)
                 & (artifacts.c.node_id == node_id)
                 & (artifacts.c.epoch == epoch)
@@ -82,9 +82,9 @@ class GardenDeliveryStore:
                 already_materialized = {
                     row.artifact_id: row.finding_set_id
                     for row in conn.execute(
-                        select(finding_sets.c.artifact_id, finding_sets.c.finding_set_id).where(
-                            finding_sets.c.artifact_id.in_([d.finding_set.artifact_id for d in plan.deltas])
-                        )
+                        self._store.select(
+                            finding_sets, finding_sets.c.artifact_id, finding_sets.c.finding_set_id
+                        ).where(finding_sets.c.artifact_id.in_([d.finding_set.artifact_id for d in plan.deltas]))
                     )
                 }
                 surviving_deltas = [d for d in plan.deltas if d.finding_set.artifact_id not in already_materialized]
@@ -107,8 +107,11 @@ class GardenDeliveryStore:
                     already_recorded_by_ref = {
                         (row.finding_set_id, row.ref): row.finding_id
                         for row in conn.execute(
-                            select(
-                                finding_facts.c.finding_set_id, finding_facts.c.ref, finding_facts.c.finding_id
+                            self._store.select(
+                                finding_facts,
+                                finding_facts.c.finding_set_id,
+                                finding_facts.c.ref,
+                                finding_facts.c.finding_id,
                             ).where(
                                 finding_facts.c.finding_set_id.in_({fsid for fsid, _ in dropped_refs})
                                 & (finding_facts.c.kind == "add")
@@ -131,7 +134,9 @@ class GardenDeliveryStore:
                 already_delivered = {
                     (row.source_artifact_id, row.ref)
                     for row in conn.execute(
-                        select(garden_proposals.c.source_artifact_id, garden_proposals.c.ref).where(
+                        self._store.select(
+                            garden_proposals, garden_proposals.c.source_artifact_id, garden_proposals.c.ref
+                        ).where(
                             garden_proposals.c.source_artifact_id.in_({p.source_artifact_id for p in plan.proposals})
                         )
                     )
@@ -151,7 +156,7 @@ class GardenDeliveryStore:
 
             if new_findings:
                 conn.execute(
-                    insert(findings),
+                    self._store.insert(findings),
                     [
                         {
                             "finding_id": f.finding_id,
@@ -169,7 +174,7 @@ class GardenDeliveryStore:
                 )
             if finding_set_rows:
                 conn.execute(
-                    insert(finding_sets),
+                    self._store.insert(finding_sets),
                     [
                         {
                             "finding_set_id": fs.finding_set_id,
@@ -185,7 +190,7 @@ class GardenDeliveryStore:
                 )
             if facts:
                 conn.execute(
-                    insert(finding_facts),
+                    self._store.insert(finding_facts),
                     [
                         {
                             "finding_id": fact.finding_id,
@@ -201,7 +206,7 @@ class GardenDeliveryStore:
                 )
             if surviving_proposals:
                 conn.execute(
-                    insert(garden_proposals),
+                    self._store.insert(garden_proposals),
                     [
                         {
                             "proposal_id": p.proposal_id,
@@ -227,12 +232,12 @@ class GardenDeliveryStore:
                     if finding_id in ref_substitutions or finding_id not in uninserted_finding_ids
                 ]
                 if links:
-                    conn.execute(insert(garden_proposal_findings), links)
+                    conn.execute(self._store.insert(garden_proposal_findings), links)
 
             # Always written, even when every delta was already materialized: this visit
             # is a genuinely new (chunk_id, node_id, epoch) and owes its idempotence key.
             conn.execute(
-                insert(artifacts).values(
+                self._store.insert(artifacts).values(
                     artifact_id=Id.mint_at(IdPrefix.ARTIFACT, plan.at).value,
                     chunk_id=plan.chunk_id,
                     node_id=plan.node_id,

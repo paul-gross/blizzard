@@ -44,7 +44,7 @@ from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_decisions_store import decision_closure_ids
 from blizzard.hub.store.internal.chunk_rows import ephemeral_ids_select, graph_id_of_batch
 from blizzard.hub.store.internal.chunk_terminal_predicates import maybe_live, settled_done, settled_stopped
-from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.store.scoped import ScopedConnections, statements_of
 
 #: Every fact family `ChunkFacts` carries — the default selection for `load_facts` and kin.
 _ALL_FAMILIES: frozenset[str] = frozenset(
@@ -276,9 +276,9 @@ class ChunkFactsStore:
             executors = {
                 (r.graph_id, r.node_id): Executor(r.executor)
                 for r in conn.execute(
-                    select(s.graph_nodes.c.graph_id, s.graph_nodes.c.node_id, s.graph_nodes.c.executor).where(
-                        s.graph_nodes.c.graph_id.in_(graph_ids)
-                    )
+                    self._store.select(
+                        s.graph_nodes, s.graph_nodes.c.graph_id, s.graph_nodes.c.node_id, s.graph_nodes.c.executor
+                    ).where(s.graph_nodes.c.graph_id.in_(graph_ids))
                 ).all()
             }
 
@@ -364,7 +364,10 @@ class ChunkFactsStore:
             # when `restarts` is itself among the requested families, true of every current caller.
             if batch is None:
                 resolved_ids = {
-                    r.decision_id for r in conn.execute(select(s.decision_resolutions.c.decision_id)).all()
+                    r.decision_id
+                    for r in conn.execute(
+                        self._store.select(s.decision_resolutions, s.decision_resolutions.c.decision_id)
+                    ).all()
                 } | {r.decision_id for r in restart_rows if r.decision_id is not None}
             else:
                 decision_ids = [d.decision_id for d in decision_rows]
@@ -424,7 +427,7 @@ class ChunkFactsStore:
 
         pauses: dict[str, list[PauseFact]] = defaultdict(list)
         if "pauses" in families:
-            stmt = select(s.chunk_pause_facts).order_by(s.chunk_pause_facts.c.id)
+            stmt = self._store.select(s.chunk_pause_facts).order_by(s.chunk_pause_facts.c.id)
             if batch is not None:
                 stmt = stmt.where(s.chunk_pause_facts.c.chunk_id.in_(batch))
             for p in conn.execute(stmt).all():
@@ -533,14 +536,18 @@ class ChunkFactsStore:
             resolved |= {
                 r.decision_id
                 for r in conn.execute(
-                    select(s.decision_resolutions.c.decision_id).where(s.decision_resolutions.c.decision_id.in_(batch))
+                    statements_of(conn)
+                    .select(s.decision_resolutions, s.decision_resolutions.c.decision_id)
+                    .where(s.decision_resolutions.c.decision_id.in_(batch))
                 ).all()
             }
         for batch in id_batches(decision_ids):
             resolved |= {
                 r.decision_id
                 for r in conn.execute(
-                    select(s.chunk_restarts.c.decision_id).where(s.chunk_restarts.c.decision_id.in_(batch))
+                    statements_of(conn)
+                    .select(s.chunk_restarts, s.chunk_restarts.c.decision_id)
+                    .where(s.chunk_restarts.c.decision_id.in_(batch))
                 ).all()
             }
         return resolved

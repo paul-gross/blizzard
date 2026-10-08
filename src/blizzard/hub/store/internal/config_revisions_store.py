@@ -23,7 +23,9 @@ class ConfigRevisionsStore:
 
     def revisions(self, kind: RecordKind, key: str) -> ConfigRevisions | None:
         if kind is RecordKind.SECRET:
-            query = select(secrets.c.revision, secrets.c.name.label("secret_name"), secrets.c.revision.label("sr"))
+            query = self._store.select(
+                secrets, secrets.c.revision, secrets.c.name.label("secret_name"), secrets.c.revision.label("sr")
+            )
             query = query.where(secrets.c.name == key)
         else:
             table = _REFERRING[kind]

@@ -77,7 +77,9 @@ class ChunkQuestionsStore:
         with self._store.write("record_question") as conn:
             lock_chunk_row(conn, chunk_id)
             exists = conn.execute(
-                select(s.questions.c.question_id).where(s.questions.c.question_id == question_id)
+                self._store.select(s.questions, s.questions.c.question_id).where(
+                    s.questions.c.question_id == question_id
+                )
             ).first()
             if exists is not None:
                 return None
@@ -85,7 +87,7 @@ class ChunkQuestionsStore:
             if refusal is not None:
                 return refusal
             conn.execute(
-                s.questions.insert().values(
+                self._store.insert(s.questions).values(
                     question_id=question_id,
                     chunk_id=chunk_id,
                     node_id=node_id,
@@ -106,7 +108,7 @@ class ChunkQuestionsStore:
         try:
             with self._store.write("answer_question", expect=(IntegrityError,)) as conn:
                 conn.execute(
-                    s.question_answers.insert().values(
+                    self._store.insert(s.question_answers).values(
                         question_id=question_id, answer=answer, answered_by=answered_by, answered_at=at
                     )
                 )
@@ -116,7 +118,7 @@ class ChunkQuestionsStore:
         except IntegrityError:
             with self._store.read("answer_question_conflict_lookup") as conn:
                 winner = conn.execute(
-                    select(s.question_answers).where(s.question_answers.c.question_id == question_id)
+                    self._store.select(s.question_answers).where(s.question_answers.c.question_id == question_id)
                 ).one()
             return AnswerOutcome(
                 won=False,
@@ -129,7 +131,9 @@ class ChunkQuestionsStore:
     def record_answer_delivered(self, *, question_id: str, chunk_id: str, at: datetime) -> None:
         with self._store.write("record_answer_delivered") as conn:
             conn.execute(
-                s.answer_deliveries.insert().values(question_id=question_id, chunk_id=chunk_id, delivered_at=at)
+                self._store.insert(s.answer_deliveries).values(
+                    question_id=question_id, chunk_id=chunk_id, delivered_at=at
+                )
             )
 
 

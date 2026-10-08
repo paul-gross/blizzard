@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import Connection, select, update
+from sqlalchemy import Connection
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id, IdPrefix
@@ -20,7 +20,7 @@ from blizzard.hub.domain.chunk.ports.dependencies import FoldTarget, IWriteChunk
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import conn_of, record_grouped_row_conn
-from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.store.scoped import ScopedConnections, statements_of
 
 
 class ChunkDependenciesStore:
@@ -39,7 +39,7 @@ class ChunkDependenciesStore:
         locked-transaction seam's own read (``bzh:store-exclusive-write``), resolved on
         the caller's connection rather than a fresh one."""
         rows = conn.execute(
-            select(s.chunk_dependencies)
+            self._store.select(s.chunk_dependencies)
             .where(s.chunk_dependencies.c.released_at.is_(None))
             # (declared_at, dependency_id) — an explicit total order (`bzh:sql-portable`).
             .order_by(s.chunk_dependencies.c.declared_at, s.chunk_dependencies.c.dependency_id)
@@ -51,7 +51,7 @@ class ChunkDependenciesStore:
         with self._store.read("standing_edges_for_dependents") as conn:
             for batch in id_batches(dependent_chunk_ids):
                 rows = conn.execute(
-                    select(s.chunk_dependencies).where(
+                    self._store.select(s.chunk_dependencies).where(
                         s.chunk_dependencies.c.released_at.is_(None)
                         & s.chunk_dependencies.c.dependent_chunk_id.in_(batch)
                     )
@@ -68,7 +68,7 @@ class ChunkDependenciesStore:
     def standing_edges_for(self, chunk_id: str) -> list[DependencyEdge]:
         with self._store.read("standing_edges_for") as conn:
             rows = conn.execute(
-                select(s.chunk_dependencies)
+                self._store.select(s.chunk_dependencies)
                 .where(
                     s.chunk_dependencies.c.released_at.is_(None)
                     & (
@@ -93,7 +93,7 @@ class ChunkDependenciesStore:
     ) -> DependencyEdge:
         dependency_id = Id.mint_at(IdPrefix.DEPENDENCY_EDGE, at).value
         conn.execute(
-            s.chunk_dependencies.insert().values(
+            self._store.insert(s.chunk_dependencies).values(
                 dependency_id=dependency_id,
                 dependent_chunk_id=dependent_chunk_id,
                 prerequisite_chunk_id=prerequisite_chunk_id,
@@ -122,7 +122,7 @@ class ChunkDependenciesStore:
             if row is None:
                 return None
             conn.execute(
-                update(s.chunk_dependencies)
+                self._store.update(s.chunk_dependencies)
                 .where(s.chunk_dependencies.c.dependency_id == row.dependency_id)
                 .values(released_at=at, released_by=by)
             )
@@ -153,14 +153,14 @@ class ChunkDependenciesStore:
             )
             if target.release:
                 conn.execute(
-                    update(s.chunk_dependencies)
+                    self._store.update(s.chunk_dependencies)
                     .where(s.chunk_dependencies.c.dependency_id.in_(target.release))
                     .values(released_at=at, released_by=by)
                 )
             for dependent_chunk_id, prerequisite_chunk_id, declared_at in target.mint:
                 dependency_id = Id.mint_at(IdPrefix.DEPENDENCY_EDGE, at).value
                 conn.execute(
-                    s.chunk_dependencies.insert().values(
+                    self._store.insert(s.chunk_dependencies).values(
                         dependency_id=dependency_id,
                         dependent_chunk_id=dependent_chunk_id,
                         prerequisite_chunk_id=prerequisite_chunk_id,
@@ -175,7 +175,8 @@ class ChunkDependenciesStore:
 
 def _standing_row(conn: Connection, dependent_chunk_id: str, prerequisite_chunk_id: str):  # type: ignore[no-untyped-def]
     return conn.execute(
-        select(s.chunk_dependencies)
+        statements_of(conn)
+        .select(s.chunk_dependencies)
         .where(
             (s.chunk_dependencies.c.dependent_chunk_id == dependent_chunk_id)
             & (s.chunk_dependencies.c.prerequisite_chunk_id == prerequisite_chunk_id)
@@ -205,7 +206,8 @@ def release_outgoing_edges_conn(conn: Connection, chunk_id: str, *, by: str, at:
     :func:`~blizzard.hub.store.internal.chunk_rows.record_deleted_row`'s shared-connection
     shape."""
     conn.execute(
-        update(s.chunk_dependencies)
+        statements_of(conn)
+        .update(s.chunk_dependencies)
         .where((s.chunk_dependencies.c.dependent_chunk_id == chunk_id) & (s.chunk_dependencies.c.released_at.is_(None)))
         .values(released_at=at, released_by=by)
     )

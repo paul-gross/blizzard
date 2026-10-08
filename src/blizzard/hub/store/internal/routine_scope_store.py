@@ -7,8 +7,6 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from sqlalchemy import delete, select
-
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.config.changes import ConfigChange
 from blizzard.hub.domain.config.work_sources import ConfigRevisionConflict
@@ -28,7 +26,7 @@ class RoutineScopeStore:
     def list_scopes(self, routine_id: str) -> list[str]:
         with self._store.read("list_scopes") as conn:
             rows = conn.execute(
-                select(routine_scopes.c.scope_slug)
+                self._store.select(routine_scopes, routine_scopes.c.scope_slug)
                 .where(routine_scopes.c.routine_id == routine_id)
                 .order_by(routine_scopes.c.scope_slug)
             ).all()
@@ -41,7 +39,7 @@ class RoutineScopeStore:
         with self._store.read("list_scopes_for") as conn:
             for batch in id_batches(routine_ids):
                 rows = conn.execute(
-                    select(routine_scopes.c.routine_id, routine_scopes.c.scope_slug)
+                    self._store.select(routine_scopes, routine_scopes.c.routine_id, routine_scopes.c.scope_slug)
                     .where(routine_scopes.c.routine_id.in_(batch))
                     .order_by(routine_scopes.c.routine_id, routine_scopes.c.scope_slug)
                 ).all()
@@ -52,7 +50,7 @@ class RoutineScopeStore:
     def list_routines(self, scope_slug: str) -> list[str]:
         with self._store.read("list_routines") as conn:
             rows = conn.execute(
-                select(routine_scopes.c.routine_id)
+                self._store.select(routine_scopes, routine_scopes.c.routine_id)
                 .where(routine_scopes.c.scope_slug == scope_slug)
                 .order_by(routine_scopes.c.routine_id)
             ).all()
@@ -69,7 +67,7 @@ class RoutineScopeStore:
         with self._store.write("unlink", expect=(ConfigRevisionConflict,)) as conn:
             move_revision(conn, routine, from_revision)
             conn.execute(
-                delete(routine_scopes).where(
+                self._store.delete(routine_scopes).where(
                     routine_scopes.c.routine_id == routine.routine_id, routine_scopes.c.scope_slug == scope_slug
                 )
             )

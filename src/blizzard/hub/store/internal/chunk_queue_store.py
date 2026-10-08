@@ -9,8 +9,6 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import select
-
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
@@ -53,9 +51,9 @@ class ChunkQueueStore:
         with self._store.read("promoted_ats") as conn:
             for batch in id_batches(chunk_ids):
                 rows = conn.execute(
-                    select(s.chunk_promoted.c.chunk_id, s.chunk_promoted.c.promoted_at).where(
-                        s.chunk_promoted.c.chunk_id.in_(batch)
-                    )
+                    self._store.select(
+                        s.chunk_promoted, s.chunk_promoted.c.chunk_id, s.chunk_promoted.c.promoted_at
+                    ).where(s.chunk_promoted.c.chunk_id.in_(batch))
                 ).all()
                 result.update((r.chunk_id, r.promoted_at) for r in rows)
         return result
@@ -66,7 +64,7 @@ class ChunkQueueStore:
         with self._store.write("record_promote") as conn:
             if row_exists(conn, s.chunk_promoted, chunk_id):
                 return None
-            result = conn.execute(s.chunk_promoted.insert().values(chunk_id=chunk_id, promoted_at=at))
+            result = conn.execute(self._store.insert(s.chunk_promoted).values(chunk_id=chunk_id, promoted_at=at))
             key = result.inserted_primary_key
             return int(key[0]) if key is not None else None
 
@@ -84,7 +82,7 @@ class ChunkQueueStore:
             return
         with self._store.write("record_queue_positions") as conn:
             conn.execute(
-                s.queue_positions.insert(),
+                self._store.insert(s.queue_positions),
                 [{"chunk_id": chunk_id, "position": position, "set_at": at} for chunk_id, position in positions],
             )
 
@@ -99,7 +97,9 @@ class ChunkQueueStore:
                 promoted |= {
                     r.chunk_id
                     for r in conn.execute(
-                        select(s.chunk_promoted.c.chunk_id).where(s.chunk_promoted.c.chunk_id.in_(batch))
+                        self._store.select(s.chunk_promoted, s.chunk_promoted.c.chunk_id).where(
+                            s.chunk_promoted.c.chunk_id.in_(batch)
+                        )
                     ).all()
                 }
             rows = [
@@ -109,7 +109,7 @@ class ChunkQueueStore:
                 if chunk_id not in promoted
             ]
             if rows:
-                conn.execute(s.queue_positions.insert(), rows)
+                conn.execute(self._store.insert(s.queue_positions), rows)
 
 
 def _conforms_queue(x: ChunkQueueStore) -> IWriteChunkQueueRepository:

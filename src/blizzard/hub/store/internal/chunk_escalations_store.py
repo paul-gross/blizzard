@@ -71,7 +71,7 @@ class ChunkEscalationsStore:
             if refusal is not None:
                 return refusal
             result = conn.execute(
-                s.escalations.insert().values(
+                self._store.insert(s.escalations).values(
                     chunk_id=chunk_id,
                     epoch=epoch,
                     takeover_command=takeover_command,
@@ -94,14 +94,14 @@ class ChunkEscalationsStore:
         Returns True iff it wrote."""
         with self._store.write("record_bounce") as conn:
             already = conn.execute(
-                select(s.chunk_bounces.c.id).where(
+                self._store.select(s.chunk_bounces, s.chunk_bounces.c.id).where(
                     (s.chunk_bounces.c.chunk_id == chunk_id) & (s.chunk_bounces.c.epoch == epoch)
                 )
             ).first()
             if already is not None:
                 return False
             conn.execute(
-                s.chunk_bounces.insert().values(
+                self._store.insert(s.chunk_bounces).values(
                     chunk_id=chunk_id, epoch=epoch, cause=cause, envelope=envelope, recorded_at=at
                 )
             )
@@ -127,7 +127,7 @@ class ChunkEscalationsStore:
         with self._store.write("record_bounce_escalation") as conn:
             lock_chunk_row(conn, chunk_id)
             already = conn.execute(
-                select(s.escalations.c.id).where(
+                self._store.select(s.escalations, s.escalations.c.id).where(
                     (s.escalations.c.chunk_id == chunk_id) & (s.escalations.c.epoch == epoch)
                 )
             ).first()
@@ -137,7 +137,7 @@ class ChunkEscalationsStore:
                 return False
             record_hub_lease(conn, chunk_id, epoch=epoch, runner_id=runner_id, at=at)
             conn.execute(
-                s.escalations.insert().values(
+                self._store.insert(s.escalations).values(
                     chunk_id=chunk_id,
                     epoch=epoch,
                     takeover_command=takeover_command,
@@ -182,8 +182,12 @@ class ChunkEscalationsStore:
             return []
         chunk_ids = list(newest_by_chunk)
         with self._store.read("_escalation_candidates") as conn:
-            lease_rows = conn.execute(select(s.lease_facts).where(s.lease_facts.c.chunk_id.in_(chunk_ids))).all()
-            requeue_rows = conn.execute(select(s.requeues).where(s.requeues.c.chunk_id.in_(chunk_ids))).all()
+            lease_rows = conn.execute(
+                self._store.select(s.lease_facts).where(s.lease_facts.c.chunk_id.in_(chunk_ids))
+            ).all()
+            requeue_rows = conn.execute(
+                self._store.select(s.requeues).where(s.requeues.c.chunk_id.in_(chunk_ids))
+            ).all()
         superseding: dict[str, list[datetime]] = {}
         for lease in lease_rows:
             superseding.setdefault(lease.chunk_id, []).append(lease.minted_at)

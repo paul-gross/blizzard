@@ -31,7 +31,7 @@ from blizzard.hub.store.schema import (
     work_item_runs,
     work_items,
 )
-from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.store.scoped import ScopedConnections, statements_of
 
 # The chunk -> chunk_work_refs -> work_items -> work_item_runs join every read here
 # starts from — a run's own identity, minted once at `RunService.run`'s own act.
@@ -135,7 +135,8 @@ class GardenRunStore:
         if not chunk_ids:
             return {}
         rows = conn.execute(
-            select(
+            self._store.select(
+                finding_sets,
                 finding_sets.c.chunk_id,
                 finding_sets.c.finding_set_id,
                 finding_sets.c.revisions,
@@ -175,7 +176,8 @@ class GardenRunStore:
         if not finding_set_ids:
             return counts
         rows = conn.execute(
-            select(finding_facts.c.finding_set_id, finding_facts.c.kind, func.count().label("n"))
+            statements_of(conn)
+            .select(finding_facts, finding_facts.c.finding_set_id, finding_facts.c.kind, func.count().label("n"))
             .where(finding_facts.c.finding_set_id.in_(finding_set_ids), finding_facts.c.kind.in_(_SET_COUNT_KINDS))
             .group_by(finding_facts.c.finding_set_id, finding_facts.c.kind)
         ).all()
@@ -192,7 +194,8 @@ class GardenRunStore:
         if not finding_set_ids:
             return grouped
         rows = conn.execute(
-            select(finding_facts.c.finding_set_id, finding_facts.c.finding_id)
+            statements_of(conn)
+            .select(finding_facts, finding_facts.c.finding_set_id, finding_facts.c.finding_id)
             .where(finding_facts.c.finding_set_id.in_(finding_set_ids), finding_facts.c.kind == "add")
             .order_by(finding_facts.c.finding_set_id, finding_facts.c.id.asc())
         ).all()

@@ -11,7 +11,7 @@ import json
 from collections.abc import Iterable, Sequence
 from datetime import datetime
 
-from sqlalchemy import Connection, insert, select
+from sqlalchemy import Connection, select
 
 from blizzard.foundation.store.batching import id_batches
 from blizzard.foundation.store.utc import as_utc
@@ -62,7 +62,7 @@ class RunnerRegistryStore:
         own read (``bzh:store-exclusive-write``), resolved on the caller's connection
         rather than a fresh one."""
         row = conn.execute(
-            select(s.runner_registrations).where(s.runner_registrations.c.runner_id == runner_id)
+            self._store.select(s.runner_registrations).where(s.runner_registrations.c.runner_id == runner_id)
         ).one_or_none()
         if row is None:
             return None
@@ -78,7 +78,7 @@ class RunnerRegistryStore:
     def list_runners(self, *, include_retired: bool = False) -> list[RunnerRegistration]:
         with self._store.read("list_runners") as conn:
             rows = conn.execute(
-                select(s.runner_registrations).order_by(
+                self._store.select(s.runner_registrations).order_by(
                     s.runner_registrations.c.added_at, s.runner_registrations.c.runner_id
                 )
             ).all()
@@ -140,13 +140,13 @@ class RunnerRegistryStore:
     def list_pause_facts_since(self, since: datetime, *, limit: int) -> list[RecordedPause]:
         with self._store.read("list_pause_facts_since") as conn:
             fleet_rows = conn.execute(
-                select(s.runner_pause_facts)
+                self._store.select(s.runner_pause_facts)
                 .where(s.runner_pause_facts.c.set_at >= since)
                 .order_by(s.runner_pause_facts.c.set_at.desc(), s.runner_pause_facts.c.id.desc())
                 .limit(limit)
             ).all()
             local_rows = conn.execute(
-                select(s.runner_local_pause_facts)
+                self._store.select(s.runner_local_pause_facts)
                 .where(s.runner_local_pause_facts.c.set_at >= since)
                 .order_by(s.runner_local_pause_facts.c.set_at.desc(), s.runner_local_pause_facts.c.id.desc())
                 .limit(limit)
@@ -186,9 +186,9 @@ class RunnerRegistryStore:
         with self._store.read("names_for") as conn:
             for batch in id_batches(ids):
                 rows = conn.execute(
-                    select(s.runner_registrations.c.runner_id, s.runner_registrations.c.name).where(
-                        s.runner_registrations.c.runner_id.in_(batch)
-                    )
+                    self._store.select(
+                        s.runner_registrations, s.runner_registrations.c.runner_id, s.runner_registrations.c.name
+                    ).where(s.runner_registrations.c.runner_id.in_(batch))
                 ).all()
                 names.update({row.runner_id: row.name for row in rows})
         return names
@@ -198,7 +198,7 @@ class RunnerRegistryStore:
     def add(self, addition: RunnerAddition) -> None:
         with self._store.write("add") as conn:
             conn.execute(
-                insert(s.runner_registrations).values(
+                self._store.insert(s.runner_registrations).values(
                     runner_id=addition.runner_id,
                     name=addition.name,
                     token_hash=addition.token_hash,
@@ -262,11 +262,13 @@ class RunnerRegistryStore:
             refreshed["name"] = name
         registration = s.runner_registrations.c.runner_id == runner_id
         with self._store.write("record_registration") as conn:
-            if not conn.execute(s.runner_registrations.update().where(registration).values(refreshed)).rowcount:
+            if not conn.execute(
+                self._store.update(s.runner_registrations).where(registration).values(refreshed)
+            ).rowcount:
                 raise LookupError(f"runner {runner_id!r} was never added")
             # Stamped only while unset, so of two racing first registrations exactly one reads as first.
             first = conn.execute(
-                s.runner_registrations.update()
+                self._store.update(s.runner_registrations)
                 .where(registration, s.runner_registrations.c.registered_at.is_(None))
                 .values(registered_at=at)
             )
@@ -275,7 +277,7 @@ class RunnerRegistryStore:
     def touch_last_seen(self, runner_id: str, *, at: datetime) -> bool:
         with self._store.write("touch_last_seen") as conn:
             result = conn.execute(
-                s.runner_registrations.update()
+                self._store.update(s.runner_registrations)
                 .where(
                     s.runner_registrations.c.runner_id == runner_id,
                     s.runner_registrations.c.registered_at.is_not(None),
@@ -287,7 +289,9 @@ class RunnerRegistryStore:
     def record_pause(self, runner_id: str, *, paused: bool, at: datetime, by: str) -> int:
         with self._store.write("record_pause") as conn:
             result = conn.execute(
-                insert(s.runner_pause_facts).values(runner_id=runner_id, paused=paused, set_at=at, set_by=by)
+                self._store.insert(s.runner_pause_facts).values(
+                    runner_id=runner_id, paused=paused, set_at=at, set_by=by
+                )
             )
             key = result.inserted_primary_key
             return int(key[0]) if key is not None else 0
@@ -297,7 +301,7 @@ class RunnerRegistryStore:
     ) -> int:
         with self._store.write("record_local_pause") as conn:
             result = conn.execute(
-                insert(s.runner_local_pause_facts).values(
+                self._store.insert(s.runner_local_pause_facts).values(
                     runner_id=runner_id, paused=paused, set_at=at, set_by=by, reason=reason
                 )
             )
@@ -313,13 +317,13 @@ class RunnerRegistryStore:
         # so a sibling slug's row is untouched by this one's write.
         with self._store.write("record_external_usage") as conn:
             existing = conn.execute(
-                select(s.runner_external_usage.c.runner_id).where(
+                self._store.select(s.runner_external_usage, s.runner_external_usage.c.runner_id).where(
                     s.runner_external_usage.c.runner_id == runner_id, s.runner_external_usage.c.slug == slug
                 )
             ).one_or_none()
             if existing is None:
                 conn.execute(
-                    insert(s.runner_external_usage).values(
+                    self._store.insert(s.runner_external_usage).values(
                         runner_id=runner_id,
                         slug=slug,
                         name=name,
@@ -330,7 +334,7 @@ class RunnerRegistryStore:
                 )
                 return
             conn.execute(
-                s.runner_external_usage.update()
+                self._store.update(s.runner_external_usage)
                 .where(s.runner_external_usage.c.runner_id == runner_id, s.runner_external_usage.c.slug == slug)
                 .values(name=name, sampled_at=sampled_at, windows=windows_json, updated_at=at)
             )
@@ -342,14 +346,14 @@ class RunnerRegistryStore:
         # (runner_id, slug) — its own table, never overwriting the sample row it joins at read.
         with self._store.write("record_external_usage_miss") as conn:
             existing = conn.execute(
-                select(s.runner_external_usage_misses.c.runner_id).where(
+                self._store.select(s.runner_external_usage_misses, s.runner_external_usage_misses.c.runner_id).where(
                     s.runner_external_usage_misses.c.runner_id == runner_id,
                     s.runner_external_usage_misses.c.slug == slug,
                 )
             ).one_or_none()
             if existing is None:
                 conn.execute(
-                    insert(s.runner_external_usage_misses).values(
+                    self._store.insert(s.runner_external_usage_misses).values(
                         runner_id=runner_id,
                         slug=slug,
                         name=name,
@@ -360,7 +364,7 @@ class RunnerRegistryStore:
                 )
                 return
             conn.execute(
-                s.runner_external_usage_misses.update()
+                self._store.update(s.runner_external_usage_misses)
                 .where(
                     s.runner_external_usage_misses.c.runner_id == runner_id,
                     s.runner_external_usage_misses.c.slug == slug,
@@ -371,7 +375,9 @@ class RunnerRegistryStore:
     def record_lifecycle(self, runner_id: str, *, retired: bool, at: datetime, by: str) -> int:
         with self._store.write("record_lifecycle") as conn:
             result = conn.execute(
-                insert(s.runner_lifecycle_facts).values(runner_id=runner_id, retired=retired, set_at=at, set_by=by)
+                self._store.insert(s.runner_lifecycle_facts).values(
+                    runner_id=runner_id, retired=retired, set_at=at, set_by=by
+                )
             )
             key = result.inserted_primary_key
             return int(key[0]) if key is not None else 0
@@ -384,12 +390,12 @@ class RunnerRegistryStore:
             if token_hash is None:
                 return None
             result = conn.execute(
-                insert(s.runner_token_revocations).values(
+                self._store.insert(s.runner_token_revocations).values(
                     runner_id=runner_id, token_hash=token_hash, revoked_at=at, revoked_by=by
                 )
             )
             conn.execute(
-                s.runner_registrations.update()
+                self._store.update(s.runner_registrations)
                 .where(s.runner_registrations.c.runner_id == runner_id)
                 .values(token_hash=None)
             )
@@ -404,7 +410,7 @@ class RunnerRegistryStore:
             revocation_id: int | None = None
             if replaced is not None:
                 result = conn.execute(
-                    insert(s.runner_token_revocations).values(
+                    self._store.insert(s.runner_token_revocations).values(
                         runner_id=rotation.runner_id,
                         token_hash=replaced,
                         revoked_at=rotation.at,
@@ -414,7 +420,7 @@ class RunnerRegistryStore:
                 key = result.inserted_primary_key
                 revocation_id = int(key[0]) if key is not None else 0
             conn.execute(
-                s.runner_registrations.update()
+                self._store.update(s.runner_registrations)
                 .where(s.runner_registrations.c.runner_id == rotation.runner_id)
                 .values(token_hash=rotation.token_hash)
             )
@@ -541,7 +547,9 @@ class RunnerRegistryStore:
             return grouped
         for batch in id_batches(runner_ids):
             rows = conn.execute(
-                select(
+                statements_of(conn)
+                .select(
+                    s.runner_external_usage,
                     s.runner_external_usage.c.runner_id,
                     s.runner_external_usage.c.slug,
                     s.runner_external_usage.c.name,
@@ -574,7 +582,9 @@ class RunnerRegistryStore:
             return grouped
         for batch in id_batches(runner_ids):
             rows = conn.execute(
-                select(
+                statements_of(conn)
+                .select(
+                    s.runner_external_usage_misses,
                     s.runner_external_usage_misses.c.runner_id,
                     s.runner_external_usage_misses.c.slug,
                     s.runner_external_usage_misses.c.name,

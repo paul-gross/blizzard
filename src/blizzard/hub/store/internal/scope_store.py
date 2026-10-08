@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import insert, select, update
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 
@@ -26,10 +25,15 @@ def ensure_scope(conn: Connection, mint: ScopeMint) -> bool:
     """The mint body, inside the caller's transaction: insert the scope and its ``create``
     change unless the slug is already stored. ``True`` when it inserted."""
     record, change = mint
-    if conn.execute(select(scopes.c.slug).where(scopes.c.slug == record.slug)).first() is not None:
+    if (
+        conn.execute(statements_of(conn).select(scopes, scopes.c.slug).where(scopes.c.slug == record.slug)).first()
+        is not None
+    ):
         return False
     conn.execute(
-        insert(scopes).values(
+        statements_of(conn)
+        .insert(scopes)
+        .values(
             slug=record.slug, description=record.description, created_at=record.created_at, revision=record.revision
         )
     )
@@ -38,12 +42,13 @@ def ensure_scope(conn: Connection, mint: ScopeMint) -> bool:
 
 
 def _revision(conn: Connection, slug: str) -> int:
-    return conn.execute(select(scopes.c.revision).where(scopes.c.slug == slug)).scalar_one()
+    return conn.execute(statements_of(conn).select(scopes, scopes.c.revision).where(scopes.c.slug == slug)).scalar_one()
 
 
 def _move_revision(conn: Connection, record: Scope, from_revision: int, **values: object) -> None:
     moved = conn.execute(
-        update(scopes)
+        statements_of(conn)
+        .update(scopes)
         .where(scopes.c.slug == record.slug, scopes.c.revision == from_revision)
         .values(revision=record.revision, **values)
     ).rowcount
@@ -55,7 +60,8 @@ def _is_retired(conn: Connection, slug: str) -> bool:
     """Newest ``scope_lifecycle_facts`` row for ``slug`` wins; no row reads
     not-retired (a freshly minted scope starts enabled)."""
     row = conn.execute(
-        select(scope_lifecycle_facts.c.retired)
+        statements_of(conn)
+        .select(scope_lifecycle_facts, scope_lifecycle_facts.c.retired)
         .where(scope_lifecycle_facts.c.slug == slug)
         .order_by(scope_lifecycle_facts.c.id.desc())
         .limit(1)
@@ -82,7 +88,11 @@ def record_scope_lifecycle(
 ) -> None:
     """The lifecycle body, inside the caller's transaction: the compare-and-set, the fact, the change."""
     _move_revision(conn, record, from_revision)
-    conn.execute(insert(scope_lifecycle_facts).values(slug=record.slug, retired=retired, set_at=at, set_by=by))
+    conn.execute(
+        statements_of(conn)
+        .insert(scope_lifecycle_facts)
+        .values(slug=record.slug, retired=retired, set_at=at, set_by=by)
+    )
     append_change(conn, change)
 
 
@@ -104,7 +114,7 @@ class ScopeStore:
         except IntegrityError:
             pass
         with self._store.read("ensure_conflict_lookup") as conn:
-            row = conn.execute(select(scopes).where(scopes.c.slug == record.slug)).one()
+            row = conn.execute(self._store.select(scopes).where(scopes.c.slug == record.slug)).one()
             return self._of(row, retired=_is_retired(conn, record.slug))
 
     def update(self, record: Scope, *, from_revision: int, change: ConfigChange) -> Scope:
@@ -125,14 +135,14 @@ class ScopeStore:
 
     def get(self, slug: str) -> Scope | None:
         with self._store.read("get") as conn:
-            row = conn.execute(select(scopes).where(scopes.c.slug == slug)).one_or_none()
+            row = conn.execute(self._store.select(scopes).where(scopes.c.slug == slug)).one_or_none()
             if row is None:
                 return None
             return self._of(row, retired=_is_retired(conn, slug))
 
     def list_all(self) -> list[Scope]:
         with self._store.read("list_all") as conn:
-            rows = conn.execute(select(scopes).order_by(scopes.c.created_at.desc())).all()
+            rows = conn.execute(self._store.select(scopes).order_by(scopes.c.created_at.desc())).all()
             retired = _retired_slugs(conn)
         return [self._of(row, retired=row.slug in retired) for row in rows]
 

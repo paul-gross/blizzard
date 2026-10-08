@@ -8,7 +8,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import func, insert, select
+from sqlalchemy import func, select
 
 from blizzard.hub.domain.observability.forge_status import IWriteAnnotatedSources
 from blizzard.hub.store.schema import forge_annotation_facts
@@ -34,7 +34,7 @@ class ForgeAnnotationStore:
         if not rows:
             return
         with self._store.write("record_annotated_sources") as conn:
-            conn.execute(insert(forge_annotation_facts), rows)
+            conn.execute(self._store.insert(forge_annotation_facts), rows)
 
 
 def _conforms_forge_annotation_store(x: ForgeAnnotationStore) -> IWriteAnnotatedSources:

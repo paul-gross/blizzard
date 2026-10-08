@@ -58,18 +58,22 @@ class ChunkHubExecStore:
         with self._store.write("acquire_hub_exec_slot") as conn:
             # Force sqlite's single-writer lock BEFORE the read-then-insert below,
             # closing the race a bare SELECT leaves open (see ``next_route_seq``).
-            conn.execute(update(s.hub_exec_slot).values(node_id=s.hub_exec_slot.c.node_id))
-            live_rows = conn.execute(select(s.hub_exec_slot).where(s.hub_exec_slot.c.released_at.is_(None))).all()
+            conn.execute(self._store.update(s.hub_exec_slot).values(node_id=s.hub_exec_slot.c.node_id))
+            live_rows = conn.execute(
+                self._store.select(s.hub_exec_slot).where(s.hub_exec_slot.c.released_at.is_(None))
+            ).all()
             for row in live_rows:
                 if at - row.acquired_at < stale_after:
                     return None  # held, by this chunk's own run or another's — defer
                 # Stale — a prior holder's run never released it (a kill -9); reclaim.
                 conn.execute(
-                    update(s.hub_exec_slot).where(s.hub_exec_slot.c.slot_id == row.slot_id).values(released_at=at)
+                    self._store.update(s.hub_exec_slot)
+                    .where(s.hub_exec_slot.c.slot_id == row.slot_id)
+                    .values(released_at=at)
                 )
             slot_id = Id.mint(IdPrefix.HUB_EXEC_SLOT, self._clock).value
             conn.execute(
-                s.hub_exec_slot.insert().values(
+                self._store.insert(s.hub_exec_slot).values(
                     slot_id=slot_id, holder_chunk_id=chunk_id, node_id=node_id, acquired_at=at, released_at=None
                 )
             )
@@ -78,7 +82,7 @@ class ChunkHubExecStore:
     def release_hub_exec_slot(self, slot_id: str, *, at: datetime) -> None:
         with self._store.write("release_hub_exec_slot") as conn:
             conn.execute(
-                update(s.hub_exec_slot)
+                self._store.update(s.hub_exec_slot)
                 .where((s.hub_exec_slot.c.slot_id == slot_id) & (s.hub_exec_slot.c.released_at.is_(None)))
                 .values(released_at=at)
             )
@@ -112,7 +116,7 @@ class ChunkHubExecStore:
         with self._store.write("record_hub_step_transition") as conn:
             lock_chunk_row(conn, chunk_id)
             already = conn.execute(
-                select(s.transitions.c.transition_id).where(
+                self._store.select(s.transitions, s.transitions.c.transition_id).where(
                     (s.transitions.c.chunk_id == chunk_id)
                     & (s.transitions.c.from_node_id == from_node_id)
                     & (s.transitions.c.epoch == epoch)
@@ -124,7 +128,7 @@ class ChunkHubExecStore:
                 return False
             record_hub_lease(conn, chunk_id, epoch=epoch, runner_id=runner_id, at=at)
             conn.execute(
-                s.transitions.insert().values(
+                self._store.insert(s.transitions).values(
                     transition_id=transition_id,
                     chunk_id=chunk_id,
                     graph_id=graph_id_of(conn, chunk_id),
@@ -139,7 +143,7 @@ class ChunkHubExecStore:
             )
             for row in artifacts:
                 conn.execute(
-                    s.artifacts.insert().values(
+                    self._store.insert(s.artifacts).values(
                         artifact_id=row.artifact_id,
                         chunk_id=row.chunk_id,
                         node_id=row.node_id,
@@ -156,7 +160,7 @@ class ChunkHubExecStore:
                 )
             if release_route:
                 conn.execute(
-                    s.route_released.insert().values(
+                    self._store.insert(s.route_released).values(
                         chunk_id=chunk_id, released_at=at, seq=next_route_seq(conn, chunk_id)
                     )
                 )
@@ -168,7 +172,11 @@ class ChunkHubExecStore:
         """Append one pending-poll-attempt fact (#66) — never a transition, no
         idempotency guard (an at-least-once poll attempt is harmless recorded twice)."""
         with self._store.write("record_hub_node_poll") as conn:
-            conn.execute(s.hub_node_poll.insert().values(chunk_id=chunk_id, node_id=node_id, epoch=epoch, polled_at=at))
+            conn.execute(
+                self._store.insert(s.hub_node_poll).values(
+                    chunk_id=chunk_id, node_id=node_id, epoch=epoch, polled_at=at
+                )
+            )
 
 
 def _conforms_hub_exec(x: ChunkHubExecStore) -> IWriteChunkHubExecRepository:

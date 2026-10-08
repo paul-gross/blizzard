@@ -76,7 +76,9 @@ class ChunkRouteStore:
             chunk_ids = [
                 row.chunk_id
                 for row in conn.execute(
-                    select(s.route_created.c.chunk_id).where(s.route_created.c.runner_id == runner_id).distinct()
+                    self._store.select(s.route_created, s.route_created.c.chunk_id)
+                    .where(s.route_created.c.runner_id == runner_id)
+                    .distinct()
                 ).all()
             ]
             if not chunk_ids:
@@ -137,9 +139,9 @@ class ChunkRouteStore:
         route_ids = {route_id_of[chunk_id] for chunk_id in live_chunk_ids}
         env_ids: dict[str, list[str]] = defaultdict(list)
         for e in conn.execute(
-            select(s.route_environments.c.route_id, s.route_environments.c.environment_id).where(
-                s.route_environments.c.route_id.in_(route_ids)
-            )
+            self._store.select(
+                s.route_environments, s.route_environments.c.route_id, s.route_environments.c.environment_id
+            ).where(s.route_environments.c.route_id.in_(route_ids))
         ).all():
             env_ids[e.route_id].append(e.environment_id)
 
@@ -158,7 +160,9 @@ class ChunkRouteStore:
     def runner_high_water(self, runner_id: str) -> int:
         with self._store.read("runner_high_water") as conn:
             row = conn.execute(
-                select(s.runner_high_water.c.seq).where(s.runner_high_water.c.runner_id == runner_id)
+                self._store.select(s.runner_high_water, s.runner_high_water.c.seq).where(
+                    s.runner_high_water.c.runner_id == runner_id
+                )
             ).one_or_none()
             return int(row.seq) if row is not None else 0
 
@@ -173,7 +177,7 @@ class ChunkRouteStore:
     def _record_route_conn(self, conn, route: Route, *, token_hash: str, at: datetime) -> str:  # type: ignore[no-untyped-def]
         route_id = Id.mint(_ROUTE_PREFIX, self._clock).value
         conn.execute(
-            s.route_created.insert().values(
+            self._store.insert(s.route_created).values(
                 route_id=route_id,
                 chunk_id=route.chunk_id,
                 runner_id=route.runner_id,
@@ -183,9 +187,9 @@ class ChunkRouteStore:
             )
         )
         for env_id in route.environment_ids:
-            conn.execute(s.route_environments.insert().values(route_id=route_id, environment_id=env_id))
+            conn.execute(self._store.insert(s.route_environments).values(route_id=route_id, environment_id=env_id))
         conn.execute(
-            s.route_token_minted.insert().values(
+            self._store.insert(s.route_token_minted).values(
                 chunk_id=route.chunk_id,
                 token_hash=token_hash,
                 seq=next_route_seq(conn, route.chunk_id),
@@ -201,7 +205,9 @@ class ChunkRouteStore:
 
     def _record_route_released_conn(self, conn: Connection, chunk_id: str, *, at: datetime) -> int:
         result = conn.execute(
-            s.route_released.insert().values(chunk_id=chunk_id, released_at=at, seq=next_route_seq(conn, chunk_id))
+            self._store.insert(s.route_released).values(
+                chunk_id=chunk_id, released_at=at, seq=next_route_seq(conn, chunk_id)
+            )
         )
         key = result.inserted_primary_key
         return int(key[0]) if key is not None else 0
@@ -213,7 +219,7 @@ class ChunkRouteStore:
         create/release/re-key on this chunk."""
         with self._store.write("record_route_token") as conn:
             conn.execute(
-                s.route_token_minted.insert().values(
+                self._store.insert(s.route_token_minted).values(
                     chunk_id=chunk_id,
                     token_hash=token_hash,
                     seq=next_route_seq(conn, chunk_id),
@@ -233,7 +239,7 @@ class ChunkRouteStore:
             if admission.takes_ownership():
                 record_epoch_owner(conn, chunk_id, epoch, EpochOwner.runner(claimant.runner_id), at=at)
             conn.execute(
-                s.lease_facts.insert().values(
+                self._store.insert(s.lease_facts).values(
                     chunk_id=chunk_id,
                     epoch=epoch,
                     runner_id=claimant.runner_id,
@@ -246,13 +252,17 @@ class ChunkRouteStore:
     def set_runner_high_water(self, runner_id: str, *, seq: int, at: datetime) -> None:
         with self._store.write("set_runner_high_water") as conn:
             existing = conn.execute(
-                select(s.runner_high_water.c.runner_id).where(s.runner_high_water.c.runner_id == runner_id)
+                self._store.select(s.runner_high_water, s.runner_high_water.c.runner_id).where(
+                    s.runner_high_water.c.runner_id == runner_id
+                )
             ).one_or_none()
             if existing is None:
-                conn.execute(s.runner_high_water.insert().values(runner_id=runner_id, seq=seq, updated_at=at))
+                conn.execute(
+                    self._store.insert(s.runner_high_water).values(runner_id=runner_id, seq=seq, updated_at=at)
+                )
             else:
                 conn.execute(
-                    s.runner_high_water.update()
+                    self._store.update(s.runner_high_water)
                     .where(s.runner_high_water.c.runner_id == runner_id)
                     .values(seq=seq, updated_at=at)
                 )

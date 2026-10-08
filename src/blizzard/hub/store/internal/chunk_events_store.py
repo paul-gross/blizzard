@@ -257,7 +257,7 @@ class ChunkEventsStore:
         limit: int = DEFAULT_EVENT_LIST_LIMIT,
     ) -> list[OperationalEvent]:
         with self._store.read("list_events") as conn:
-            stmt = select(s.event_log)
+            stmt = self._store.select(s.event_log)
             if severity is not None:
                 stmt = stmt.where(s.event_log.c.severity == severity)
             if runner_id is not None:

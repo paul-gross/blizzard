@@ -75,7 +75,7 @@ class ChunkUsageStore:
         # high-water mark already guarantees at most one call per landed fact.
         with self._store.write("record_usage") as conn:
             conn.execute(
-                s.usage_facts.insert().values(
+                self._store.insert(s.usage_facts).values(
                     chunk_id=chunk_id,
                     node_id=node_id,
                     epoch=epoch,

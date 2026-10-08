@@ -9,7 +9,7 @@ import json
 from collections.abc import Mapping, Sequence
 from datetime import datetime
 
-from sqlalchemy import ColumnElement, Connection, and_, desc, exists, func, insert, or_, select
+from sqlalchemy import ColumnElement, Connection, and_, desc, exists, func, or_, select
 
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.garden.findings.model import (
@@ -27,7 +27,7 @@ from blizzard.hub.domain.garden.findings.model import (
 )
 from blizzard.hub.domain.kernel.pagination import MalformedCursor, decode_cursor, encode_cursor
 from blizzard.hub.store.schema import finding_facts, finding_sets, findings
-from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.store.scoped import ScopedConnections, statements_of
 
 #: `list_page`'s cursor: a plain `finding_id`, already total unlike chunks' `minted_at`.
 _CURSOR_ARITY = 1
@@ -92,7 +92,8 @@ def facts_by_finding(conn: Connection, finding_ids: list[str]) -> dict[str, list
     grouped: dict[str, list[FindingFact]] = {finding_id: [] for finding_id in finding_ids}
     for batch in id_batches(finding_ids):
         rows = conn.execute(
-            select(finding_facts)
+            statements_of(conn)
+            .select(finding_facts)
             .where(finding_facts.c.finding_id.in_(batch))
             .order_by(finding_facts.c.finding_id, finding_facts.c.id.asc())
         ).all()
@@ -121,7 +122,7 @@ class FindingStore:
     ) -> Finding:
         with self._store.write("add") as conn:
             conn.execute(
-                insert(findings).values(
+                self._store.insert(findings).values(
                     finding_id=finding_id,
                     routine_name=routine_name,
                     scope_slug=scope_slug,
@@ -132,7 +133,9 @@ class FindingStore:
                     source="routine",
                 )
             )
-            conn.execute(insert(finding_facts).values(finding_id=finding_id, kind="add", recorded_at=at, note=None))
+            conn.execute(
+                self._store.insert(finding_facts).values(finding_id=finding_id, kind="add", recorded_at=at, note=None)
+            )
         return Finding(
             finding_id=finding_id,
             routine_name=routine_name,
@@ -192,7 +195,7 @@ class FindingStore:
                 if moved:
                     return moved
             conn.execute(
-                insert(finding_facts),
+                self._store.insert(finding_facts),
                 [
                     {
                         "finding_id": entry.finding_id,
@@ -210,7 +213,7 @@ class FindingStore:
 
     def get(self, finding_id: str) -> Finding | None:
         with self._store.read("get") as conn:
-            row = conn.execute(select(findings).where(findings.c.finding_id == finding_id)).one_or_none()
+            row = conn.execute(self._store.select(findings).where(findings.c.finding_id == finding_id)).one_or_none()
             if row is None:
                 return None
             facts = self._facts(conn, finding_id)
@@ -225,14 +228,14 @@ class FindingStore:
         result: dict[str, Finding] = {}
         with self._store.read("get_many") as conn:
             for batch in id_batches(finding_ids):
-                rows = conn.execute(select(findings).where(findings.c.finding_id.in_(batch))).all()
+                rows = conn.execute(self._store.select(findings).where(findings.c.finding_id.in_(batch))).all()
                 facts_by_id = self._facts_for_many(conn, [row.finding_id for row in rows])
                 result.update({row.finding_id: self._of(row, facts_by_id[row.finding_id]) for row in rows})
         return result
 
     def get_with_facts(self, finding_id: str) -> tuple[Finding, list[FindingFact]] | None:
         with self._store.read("get_with_facts") as conn:
-            row = conn.execute(select(findings).where(findings.c.finding_id == finding_id)).one_or_none()
+            row = conn.execute(self._store.select(findings).where(findings.c.finding_id == finding_id)).one_or_none()
             if row is None:
                 return None
             facts = self._facts(conn, finding_id)
@@ -244,7 +247,7 @@ class FindingStore:
         ordered by `finding_id` so every backend returns the same rows."""
         with self._store.read("list_for") as conn:
             rows = conn.execute(
-                select(findings)
+                self._store.select(findings)
                 .where(findings.c.routine_name == routine_name, findings.c.scope_slug == scope_slug)
                 .order_by(findings.c.finding_id)
             ).all()
@@ -257,7 +260,9 @@ class FindingStore:
         — `list_for`'s scope-narrowed sibling, minus the `scope_slug` filter."""
         with self._store.read("list_for_routine") as conn:
             rows = conn.execute(
-                select(findings).where(findings.c.routine_name == routine_name).order_by(findings.c.finding_id)
+                self._store.select(findings)
+                .where(findings.c.routine_name == routine_name)
+                .order_by(findings.c.finding_id)
             ).all()
             facts_by_id = self._facts_for_many(conn, [row.finding_id for row in rows])
             result = [self._of(row, facts_by_id[row.finding_id]) for row in rows]
@@ -265,7 +270,7 @@ class FindingStore:
 
     def list_across_routines(self, scope_slug: str | None = None, *, include_gone: bool = False) -> list[Finding]:
         with self._store.read("list_across_routines") as conn:
-            stmt = select(findings).order_by(findings.c.finding_id)
+            stmt = self._store.select(findings).order_by(findings.c.finding_id)
             if scope_slug is not None:
                 stmt = stmt.where(findings.c.scope_slug == scope_slug)
             rows = conn.execute(stmt).all()
@@ -277,7 +282,7 @@ class FindingStore:
         """Filtered on `ix_findings_scope_source`."""
         with self._store.read("list_by_source") as conn:
             rows = conn.execute(
-                select(findings)
+                self._store.select(findings)
                 .where(findings.c.scope_slug == scope_slug, findings.c.source == source)
                 .order_by(findings.c.finding_id)
             ).all()
@@ -302,7 +307,7 @@ class FindingStore:
         is the indexed newest-fact probe."""
         if limit < 1:
             raise ValueError(f"limit must be at least 1, got {limit}")
-        stmt = select(findings).order_by(findings.c.finding_id).limit(limit + 1)
+        stmt = self._store.select(findings).order_by(findings.c.finding_id).limit(limit + 1)
         if routine_name is not None:
             stmt = stmt.where(findings.c.routine_name == routine_name)
         if scope_slug is not None:
@@ -333,13 +338,17 @@ class FindingStore:
     def has_delivery_for_proposal(self, proposal_id: str) -> bool:
         with self._store.read("has_delivery_for_proposal") as conn:
             row = conn.execute(
-                select(finding_facts.c.id).where(finding_facts.c.proposal_id == proposal_id).limit(1)
+                self._store.select(finding_facts, finding_facts.c.id)
+                .where(finding_facts.c.proposal_id == proposal_id)
+                .limit(1)
             ).first()
         return row is not None
 
     def _facts(self, conn, finding_id: str) -> list[FindingFact]:  # type: ignore[no-untyped-def]
         rows = conn.execute(
-            select(finding_facts).where(finding_facts.c.finding_id == finding_id).order_by(finding_facts.c.id.asc())
+            self._store.select(finding_facts)
+            .where(finding_facts.c.finding_id == finding_id)
+            .order_by(finding_facts.c.id.asc())
         ).all()
         return [self._fact_of(r) for r in rows]
 
@@ -406,7 +415,7 @@ class FindingSetStore:
     ) -> FindingSet:
         with self._store.write("create") as conn:
             conn.execute(
-                insert(finding_sets).values(
+                self._store.insert(finding_sets).values(
                     finding_set_id=finding_set_id,
                     artifact_id=artifact_id,
                     chunk_id=chunk_id,
@@ -429,14 +438,14 @@ class FindingSetStore:
     def get(self, finding_set_id: str) -> FindingSet | None:
         with self._store.read("get") as conn:
             row = conn.execute(
-                select(finding_sets).where(finding_sets.c.finding_set_id == finding_set_id)
+                self._store.select(finding_sets).where(finding_sets.c.finding_set_id == finding_set_id)
             ).one_or_none()
         return self._of(row) if row is not None else None
 
     def list_for_chunk(self, chunk_id: str) -> list[FindingSet]:
         """A run's own delivered sets — filtered on `ix_finding_sets_chunk_id`."""
         with self._store.read("list_for_chunk") as conn:
-            rows = conn.execute(select(finding_sets).where(finding_sets.c.chunk_id == chunk_id)).all()
+            rows = conn.execute(self._store.select(finding_sets).where(finding_sets.c.chunk_id == chunk_id)).all()
         return [self._of(row) for row in rows]
 
     def newest_for_routine_scope(self, routine_name: str, scope_slug: str) -> FindingSet | None:
@@ -444,7 +453,7 @@ class FindingSetStore:
         monotonic-in-mint-instant ULID, so every backend returns the same row."""
         with self._store.read("newest_for_routine_scope") as conn:
             row = conn.execute(
-                select(finding_sets)
+                self._store.select(finding_sets)
                 .where(finding_sets.c.routine_name == routine_name, finding_sets.c.scope_slug == scope_slug)
                 .order_by(desc(finding_sets.c.finding_set_id))
                 .limit(1)

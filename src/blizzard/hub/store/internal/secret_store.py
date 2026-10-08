@@ -10,7 +10,7 @@ from __future__ import annotations
 import base64
 from datetime import datetime
 
-from sqlalchemy import insert, select, update
+from sqlalchemy import select, update
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 
@@ -33,7 +33,7 @@ from blizzard.hub.store.internal.config_change_store import append_change
 from blizzard.hub.store.internal.newest_fact import newest_retired_select
 from blizzard.hub.store.internal.secret_referrers import active_referrers
 from blizzard.hub.store.schema import secret_lifecycle_facts, secrets
-from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.store.scoped import ScopedConnections, statements_of
 
 _METADATA = (
     secrets.c.name,
@@ -47,10 +47,11 @@ _METADATA = (
 def secret_unavailable(conn: Connection, name: str) -> bool | None:
     """Why a configured record may not reference ``name``: ``False`` when no such secret
     exists, ``True`` when it is retired, ``None`` when it is usable."""
-    if conn.execute(select(secrets.c.name).where(secrets.c.name == name)).first() is None:
+    if conn.execute(statements_of(conn).select(secrets, secrets.c.name).where(secrets.c.name == name)).first() is None:
         return False
     newest = conn.execute(
-        select(secret_lifecycle_facts.c.retired)
+        statements_of(conn)
+        .select(secret_lifecycle_facts, secret_lifecycle_facts.c.retired)
         .where(secret_lifecycle_facts.c.name == name)
         .order_by(secret_lifecycle_facts.c.id.desc())
         .limit(1)
@@ -63,7 +64,9 @@ def insert_secret(
 ) -> None:
     """The create body at revision 1, inside the caller's transaction; a taken name raises :class:`IntegrityError`."""
     conn.execute(
-        insert(secrets).values(
+        statements_of(conn)
+        .insert(secrets)
+        .values(
             name=name,
             **_sealed_columns(sealed),
             revision=1,
@@ -94,7 +97,7 @@ class SecretStore:
     ) -> SecretMetadata:
         with self._store.write("replace") as conn:
             moved = conn.execute(
-                update(secrets)
+                self._store.update(secrets)
                 .where(secrets.c.name == name, secrets.c.revision == from_revision)
                 .values(**_sealed_columns(sealed), revision=from_revision + 1, replaced_at=at, replaced_by=by)
             ).rowcount
@@ -128,7 +131,7 @@ class SecretStore:
     def is_retired(self, name: str) -> bool:
         with self._store.read("is_retired") as conn:
             row = conn.execute(
-                select(secret_lifecycle_facts.c.retired)
+                self._store.select(secret_lifecycle_facts, secret_lifecycle_facts.c.retired)
                 .where(secret_lifecycle_facts.c.name == name)
                 .order_by(secret_lifecycle_facts.c.id.desc())
                 .limit(1)
@@ -150,8 +153,8 @@ class SecretStore:
     def get_sealed(self, name: str) -> SealedSecret | None:
         with self._store.read("get_sealed") as conn:
             row = conn.execute(
-                select(
-                    secrets.c.name, secrets.c.revision, secrets.c.key_id, secrets.c.ciphertext, secrets.c.nonce
+                self._store.select(
+                    secrets, secrets.c.name, secrets.c.revision, secrets.c.key_id, secrets.c.ciphertext, secrets.c.nonce
                 ).where(secrets.c.name == name)
             ).one_or_none()
         return self._sealed_of(row) if row is not None else None
@@ -196,7 +199,9 @@ class SecretStore:
         with self._store.write("record_lifecycle") as conn:
             if retired:
                 require_unreferenced(name, active_referrers(conn, [name])[name])
-            conn.execute(insert(secret_lifecycle_facts).values(name=name, retired=retired, set_at=at, set_by=by))
+            conn.execute(
+                self._store.insert(secret_lifecycle_facts).values(name=name, retired=retired, set_at=at, set_by=by)
+            )
             append_change(conn, change)
 
     @staticmethod
