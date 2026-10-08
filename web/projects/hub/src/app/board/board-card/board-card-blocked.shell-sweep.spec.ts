@@ -6,21 +6,9 @@ import type { BoardCard } from './board-card';
 import { BoardCardComponent } from './board-card';
 
 /**
- * The blocked marking's adjacency to the card's status — a real layout
- * claim jsdom cannot make: it never actually lays out `board-card.css`'s flex row, so
- * `web:unit-test` cannot see the marking overlap the status, wrap away from it, or push
- * past the card's own edge. The marking renders inside the status row, immediately after
- * the status it qualifies — this sweeps that it lands there without moving the status
- * itself or overflowing the card, at a wide width (800px — wider than any real board
- * column, a generous upper bound) and at 390px/320px (`bzh:narrow-viewport-tier-rule`).
- *
- * Shaped as a plain `for` loop over {@link WIDTHS}, one `it` per width, the way every
- * other sweep in the roster is, rather than a parameterized-test helper this codebase
- * does not otherwise use.
- *
- * Excluded from the default `ng test` run the same way every other
- * `*.shell-sweep.spec.ts` is — run it via `npm run shell-sweep`
- * (`web/scripts/shell-sweep.js`).
+ * The blocked marking lands in the status row immediately after the status, without moving
+ * the status or overflowing the card, at 800px and at 390px/320px
+ * (`bzh:narrow-viewport-tier-rule`). Under a real browser — see `blizzard-context:/verification/blizzard/commands/web/shell-sweep.md` §web:shell-sweep.
  */
 const BASE: BoardCard = {
   chunkId: 'ch_01blockedcard0000000000000',

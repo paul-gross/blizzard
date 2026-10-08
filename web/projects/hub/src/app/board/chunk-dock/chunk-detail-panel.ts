@@ -10,26 +10,17 @@ export type { AnswerQuestionEvent, ResolveDecisionEvent } from 'fleet';
 export type { EditGraphEvent } from 'fleet';
 
 /**
- * The chunk detail dock — everything known about the
- * selected chunk, filling the centre column under the board without reflowing it.
+ * The chunk detail dock — a thin **composition** of presentational regions: the
+ * {@link ChunkDetailHeader}, the work-item column ({@link ChunkFacts} +
+ * {@link ChunkTokenBreakdown} + {@link ChunkAwaitingHuman} + {@link ChunkIssuePane}),
+ * the node-history {@link ChunkTimeline}, and the artifacts column
+ * ({@link ChunkArtifacts}). It forwards its inputs down to the regions that need them
+ * and re-emits their outputs unchanged.
  *
- * A thin **composition** of seven sibling presentational
- * components under `lib/chunk/chunk-detail/`, each owning one region: the
- * {@link ChunkDetailHeader} (identity, pause/detach/resume, close), the
- * work-item column ({@link ChunkFacts} + {@link ChunkTokenBreakdown} +
- * {@link ChunkAwaitingHuman} + {@link ChunkIssuePane}), the node-history
- * {@link ChunkTimeline}, and the artifacts column ({@link ChunkArtifacts}).
- * This panel forwards `detail`/`workItems`/`actionError` down to whichever
- * siblings need them and re-emits their outputs up unchanged.
+ * `ChunkTokenBreakdown` is content-projected into `ChunkFacts`'s `[token-breakdown]`
+ * slot so the cost/token rows land between Attempts and Graph in one `<dl class="kv">`.
  *
- * `ChunkTokenBreakdown` is content-projected into `ChunkFacts`'s
- * `[token-breakdown]` slot so the cost/token rows land between Attempts and
- * Graph in one continuous `<dl class="kv">`.
- *
- * Presentational only: every server call (the mutations these events drive,
- * and the error any of them surfaces back down as `actionError`) lives in
- * the container. All color comes from the design-token layer, never
- * hard-coded, and every text size from that layer's type scale.
+ * Presentational only (`bzh:frontend-container-presentational`).
  */
 @Component({
   selector: 'app-chunk-detail-panel',
@@ -52,17 +43,15 @@ export class ChunkDetailPanel {
   readonly detail = input.required<ChunkDetail>();
 
   /** The chunk's related work items + fetch state, rendered by the Issue tab.
-   * Defaults to `loading` so the panel constructs without the container wiring it. */
+   * Defaults to `loading`. */
   readonly workItems = input<WorkItemsState>({ status: 'loading', items: [] });
 
-  /** The container's last **operator-action** failure for this chunk (the 409/404
-   * surfaced, not swallowed), or `null` when there is nothing to report.
-   * One notice for every action in this dock (detach, pause, resume, complete). */
+  /** The last operator-action failure for this chunk, or `null` when there is nothing
+   * to report. */
   readonly actionError = input<string | null>(null);
 
-  /** The container's last operator-action **outcome** for this chunk — a non-failure
-   * result that still needs saying, today the winning answer a lost
-   * first-write-wins race returns. Rendered as news, not as a failure. */
+  /** The last operator-action **outcome** for this chunk — a non-failure result that
+   * still needs saying. Rendered as news, not as a failure. */
   readonly actionOutcome = input<string | null>(null);
 
   /** Whether the current identity may pause/resume/detach or set the chunk's graph
@@ -71,10 +60,7 @@ export class ChunkDetailPanel {
   readonly canControl = input(false);
 
   /** The graphs view's own path segments, forwarded to {@link ChunkFacts} and
-   * {@link ChunkTimeline} — `null` (the default) withholds the Graph fact's and every
-   * timeline row's link, since this panel is exported from `fleet` too (`ChunkDetail`'s own public API) and
-   * must not hardcode the hub-only `/graphs` route a runner-mounted instance has
-   * nowhere to send. */
+   * {@link ChunkTimeline}; `null` withholds the Graph fact's and every timeline row's link. */
   readonly graphLinkBase = input<readonly string[] | null>(null);
 
   /** Whether the current identity may answer an open question (`question:answer`),

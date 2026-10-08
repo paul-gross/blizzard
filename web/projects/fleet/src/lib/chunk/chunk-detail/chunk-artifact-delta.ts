@@ -9,26 +9,12 @@ import { ChunkFindingEntry } from './chunk-finding-entry';
 import { shortSha } from './short-sha';
 
 /**
- * A `FindingDelta`-shaped asset artifact, laid out — the structured rendering of a
- * content {@link parseFindingDelta} matched. Presentational
- * only: `delta` is already-parsed, plain data (`bzh:frontend-container-presentational`
- * — no query, no parsing here).
+ * A parsed `FindingDelta` asset artifact, laid out. Presentational only
+ * (`bzh:frontend-container-presentational`).
  *
- * Grouped by op into three distinct groups (shape shared with `run-delta.ts`), a
- * group with no entries hidden rather than rendered empty. An artifact's raw ops
- * carry no live finding row to join against, so an `observed`/`gone` entry here is its bare id, never a
- * class/locus/summary read back from a table this component has no query for.
- * `add`'s payload is the candidate itself, so it renders in full.
- *
- * The three ops' own semantics shape what each group shows: `observed` carries no payload beyond its id — "it was true
- * when recorded and is true now" — so its entry is the id alone; `gone` ordinarily does
- * not close the finding, it flags it for a person (except against a `delivered`
- * finding, which it settles outright — invisible to this raw-ops
- * render either way), which is why it renders beside `added` rather than looking like a
- * resolution.
- *
- * An `add` op's own body is {@link ChunkFindingEntry}. The raw JSON `content` stays
- * one click away inside {@link ChunkArtifactRawDisclosure}.
+ * Ops render in three groups, each hidden when empty. An `observed` or `gone`
+ * entry is its bare id, since the raw ops carry no finding row to show; an `add`
+ * entry is its candidate in full. The raw JSON stays one click away.
  */
 @Component({
   selector: 'fleet-chunk-artifact-delta',

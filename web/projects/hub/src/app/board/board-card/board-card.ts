@@ -11,9 +11,7 @@ export interface BoardCard {
   readonly node: string;
   /** The raw `nd_` ULID, kept reachable as the node label's tooltip. */
   readonly nodeId: string;
-  /** The chunk's work items — each entry the server-derived `{source}#{ref}`
-   * label for one pointer, empty when no pointer names a configured source.
-   * Rendered one per line, not joined. */
+  /** The chunk's work-item labels, each a `{source}#{ref}`; rendered one per line. */
   readonly pointerLabels: readonly string[];
   /** The chunk's derived spend total, from `ChunkSummary.cost`. */
   readonly costUsd: number;
@@ -34,10 +32,8 @@ export interface BoardCard {
    * {@link blockedOn} is null. The count-vs-list choice above 1 is pinned by
    * `board-card.spec.ts`'s "counts the prerequisites instead of naming the first…" case. */
   readonly blockedCount: number;
-  /** The blocking chunk's own derived status, when exactly one chunk blocks this one —
-   * null otherwise (nothing blocking, several blocking, or the blocker absent from the
-   * board's own chunk list). Derived from the board's own chunk list rather than carried
-   * on the wire directly. */
+  /** The blocking chunk's own derived status, when exactly one known chunk blocks this
+   * one — null otherwise. */
   readonly blockedOnStatus: ChunkStatus | null;
   readonly openPrs?: readonly PrView[];
   readonly landedRepos?: readonly LandedRepoView[];
@@ -50,18 +46,11 @@ export interface BoardCard {
  * since same-instant chunk ids share a 12-char prefix. Nothing else in the
  * board repeats that attribute, so it stays one node per chunk.
  *
- * Presentational only: {@link card} and {@link selected} are plain inputs; every
- * output forwards the chunk id to whatever container composes this — no query or
- * mutation injected here (`bzh:frontend-container-presentational`). Delete is not
- * among them: it lives on `ChunkDetailHeader` now, not here — a card this small
- * has no room for a control that invasive, and the dock already owns every other
- * route-releasing/terminal verb.
+ * Presentational only (`bzh:frontend-container-presentational`): every output
+ * carries the chunk id.
  *
- * Named `BoardCardComponent` rather than this directory's usual bare-name
- * convention (`BoardShell`, `BoardHeader`, …): {@link BoardCard} — the
- * per-card view type `BoardShell` derives and this file now owns — already
- * carries the plain name, so the component takes the suffix instead of
- * colliding with it.
+ * Suffixed `Component` because {@link BoardCard}, the view type, already carries
+ * the plain name.
  */
 @Component({
   selector: 'app-board-card',
@@ -77,8 +66,7 @@ export class BoardCardComponent {
   /** The card's derived-status view of one chunk. */
   readonly card = input.required<BoardCard>();
 
-  /** Whether the container considers this card the current selection — its
-   * card carries the selection highlight so the board says which one is open. */
+  /** Whether this card is the current selection; it then carries the selection highlight. */
   readonly selected = input(false);
 
   /** Whether the chunk has an open decision awaiting a person — the card then
@@ -90,7 +78,7 @@ export class BoardCardComponent {
    * to `false` (hidden until confirmed). */
   readonly canControl = input(false);
 
-  /** Emitted with the chunk id when the card is activated — fills the detail dock. */
+  /** Emitted with the chunk id when the card is activated. */
   readonly selectChunk = output<string>();
 
   /** Emitted with the chunk id when a not-ready card's Promote is clicked. */

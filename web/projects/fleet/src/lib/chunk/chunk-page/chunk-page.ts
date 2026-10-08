@@ -120,9 +120,7 @@ export class ChunkPage {
    * seeded from the snapshot so the first render already keys the reads. */
   private readonly params = toSignal(this.route.paramMap, { initialValue: this.route.snapshot.paramMap });
 
-  /** Off the route's own `:chunkId` segment — the `?chunk` param the back link
-   * writes is a different, board-owned selection (`injectChunkUrlSelection`, in
-   * board-page.ts), never read from here. */
+  /** Off the route's own `:chunkId` segment, never the `?chunk` query param. */
   protected readonly chunkId = computed<string | null>(() => this.params().get('chunkId'));
 
   protected readonly selection = injectChunkDetailSelection();
@@ -225,9 +223,8 @@ export class ChunkPage {
    * no link. */
   protected readonly eventsLinkBase = this.actions?.eventsLinkBase ?? null;
 
-  /** Whether the Transcripts tab's option shows in the strip. With a port, the port's
-   * permission decides — a display filter only, not the access gate. With none, always — a daemon without a
-   * permission model serves its own transcripts to whoever reaches its panel. */
+  /** Whether the Transcripts tab's option shows in the strip — the port's permission, or
+   * always when there is no port. A display filter only, not the access gate. */
   protected readonly canReadTranscripts = computed(() => this.actions?.canReadTranscripts() ?? true);
 
   protected readonly tabOptions = computed<readonly KitTabOption[]>(() => chunkTabOptions(this.canReadTranscripts()));

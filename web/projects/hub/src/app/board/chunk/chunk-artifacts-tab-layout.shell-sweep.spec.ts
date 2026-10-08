@@ -9,24 +9,11 @@ import { page } from 'vitest/browser';
 
 import { HUB_CHUNK_PAGE_PROVIDERS } from './hub-chunk-actions';
 
-/**
- * The Artifacts tab's real composed chain — `ChunkPage` → `ChunkArtifactsPanel` — under
- * a real browser. `ChunkArtifactsPanel`'s
- * host is a `flex: 1; min-height: 0` flex item whose kit split fills it, a claim jsdom parses but never lays out —
- * `web:unit-test` cannot see whether that flex chain actually resolves against a definite
- * containing block, only that the rule exists. Driven through a real router the way
- * `chunk-page-layout.shell-sweep.spec.ts`'s own composed-chain cases drive `ChunkPage`, so
- * the panel's real host is genuinely in the chain, not stood in for.
- *
- * Excluded from the default `ng test hub` run (`angular.json`'s `test.exclude`) because it
- * needs `--browsers=ChromiumHeadless`, not jsdom — run it via `npm run shell-sweep`
- * (`web/scripts/shell-sweep.js`).
- */
+/** The Artifacts tab's composed chain — `ChunkPage` → `ChunkArtifactsPanel` — under a real browser; see `blizzard-context:/verification/blizzard/commands/web/shell-sweep.md` §web:shell-sweep. */
 
-/** Pump change detection until `ready()` holds, without `settle()`'s `whenStable()` —
- * `chunk-page-layout.shell-sweep.spec.ts`'s own `pumpUntil`: a query
- * enabled only once an earlier one resolves registers a pending task Angular's zoneless
- * stability never retires, so `whenStable()` waits forever even once the DOM is settled. */
+/** Pump change detection until `ready()` holds, without `settle()`'s `whenStable()`: a query
+ * enabled only once an earlier one resolves registers a pending task zoneless stability
+ * never retires, so `whenStable()` would wait forever. */
 async function pumpUntil(fixture: { detectChanges(): void }, ready: () => boolean, tries = 60): Promise<void> {
   for (let i = 0; i < tries; i += 1) {
     fixture.detectChanges();

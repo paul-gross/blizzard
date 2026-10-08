@@ -15,16 +15,11 @@ const EVENTS_LINK_BASE: readonly string[] = ['/events'];
 
 /**
  * The hub's operator-action port for the shared chunk page — its `/api/me` permissions
- * and the three human-loop mutations (answer, resolve, set graph) the desktop dock writes
- * through. Called from the page's own injection context, so every visit gets fresh
- * notice channels.
- *
- * The two report channels stay separate for the dock's reason ("report, don't swallow"):
- * a 404/409/422 must read as a failure rather than a tap that appears to do nothing, and a
- * lost first-write-wins answer race — the phone being the surface most likely to lose one
- * — reads as an outcome naming the winner, not a failure, and so does a lost resolve race;
- * `readAnswerFailure` and `readDecisionFailure` own those folds so this page and the dock cannot drift. Both clear at the start of every action, so
- * a stale outcome never sits beside an unrelated failure.
+ * and the three human-loop mutations (answer, resolve, set graph). Called from the page's
+ * own injection context, so every visit gets fresh notice channels. Failures and
+ * outcomes are folded by `readAnswerFailure` and `readDecisionFailure`; both channels
+ * clear at the start of every action, so a stale outcome never sits beside an unrelated
+ * failure.
  */
 export function injectHubChunkActions(): ChunkPageActions {
   const meQuery = injectMeQuery();

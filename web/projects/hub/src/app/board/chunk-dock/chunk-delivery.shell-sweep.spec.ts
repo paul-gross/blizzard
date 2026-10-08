@@ -7,6 +7,7 @@ import { type ChunkDetail, type ChunkSummary, ChunkGeneralTab } from 'fleet';
 import { BoardShell } from '../board-shell/board-shell';
 import { ChunkDetailPanel } from './chunk-detail-panel';
 
+/** The chunk's delivery block layout under a real browser — see `blizzard-context:/verification/blizzard/commands/web/shell-sweep.md` §web:shell-sweep. */
 const pr = { repo: 'very-long-repository-name', number: 42, url: 'https://forge.example/repository/pull/42' };
 const landed = { repo: 'other-repository', commit_hash: 'a'.repeat(40), url: 'https://forge.example/other/commit/' + 'a'.repeat(40) };
 const detail: ChunkDetail = {

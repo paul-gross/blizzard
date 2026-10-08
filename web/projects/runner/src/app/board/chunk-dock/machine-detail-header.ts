@@ -13,21 +13,13 @@ import {
 } from 'fleet';
 
 /**
- * The machine detail dock's header — the full chunk id, its work
- * items as links, the derived state, a working Pause/Resume on the same
- * `bzh:claim-vocabulary` copy and tooltip, and a close button.
+ * The machine detail dock's header — the full chunk id linked to the chunk detail
+ * route, its work items as links, the derived state, a Pause/Resume on the
+ * `bzh:claim-vocabulary` copy and tooltip, and a close button. The chunk link
+ * carries the chunk in the route's path and no query params.
  *
- * The chunk id itself links to the runner-local chunk detail route — the
- * operator's way into the shared `fleet` sections and the transcript.
- * The link carries the chunk in the route's own path and no query params at
- * all: `?chunk=` is the board's selection (the shared
- * `injectChunkUrlSelection`) and means nothing on the detail route, and `?attempt=` is that route's own, written
- * there once an attempt is picked.
- *
- * Presentational (`bzh:frontend-container-presentational`): {@link MachineDetail}
- * owns the severable `ChunkDetail` read and the pause mutation, and forwards
- * their data down as plain inputs; this component only renders and asks for confirmation before
- * emitting {@link pauseChunk}/{@link resumeChunk} upward.
+ * Presentational (`bzh:frontend-container-presentational`): it renders its inputs
+ * and asks for confirmation before emitting {@link pauseChunk}/{@link resumeChunk}.
  */
 @Component({
   selector: 'app-machine-detail-header',
@@ -41,21 +33,17 @@ export class MachineDetailHeader {
   readonly chunkId = input.required<string>();
 
   /** This runner's own id, for {@link pauseCopy}/{@link resumeCopy}'s `<runner>`
-   * slot — container-fed off the dashboard read (`bzh:claim-vocabulary`); `null`
-   * before that read resolves degrades to the copy table's unclaimed phrasing. */
+   * slot (`bzh:claim-vocabulary`); `null` degrades to the copy table's unclaimed phrasing. */
   readonly runnerName = input<string | null>(null);
 
-  /** The chunk detail route's own path segments, before the chunk id — mirrors
-   * `fleet`'s `ChunkArtifacts`/`ChunkDetailHeader` `linkBase` (`bzh:frontend-kit-floor`)
-   * so this component doesn't independently hardcode the route it links to. */
+  /** The chunk detail route's path segments, before the chunk id (`bzh:frontend-kit-floor`). */
   readonly linkBase = input<readonly string[]>(['/board', 'chunk']);
 
-  /** The chunk's work refs — each linked out to its source's web address when the
-   * configured binding rendered one (a null `web_url` degrades to plain text, no
-   * broken link). The header's own severable enrichment, container-fed. */
+  /** The chunk's work refs — each linked to its source's web address, or plain text
+   * when `web_url` is null. */
   readonly workRefs = input<readonly runnerApi.WorkRefView[]>([]);
 
-  /** The derived machine-side status label/tone (container-folded). */
+  /** The derived machine-side status label and tone. */
   readonly statusLabel = input<string | null>(null);
   readonly statusTone = input<Tone | undefined>(undefined);
 
@@ -63,26 +51,21 @@ export class MachineDetailHeader {
   readonly nodeName = input<string>('');
   readonly epoch = input<number>(0);
 
-  /** The chunk's open operator pause, if any — non-null renders Resume, null
-   * renders Pause (subject to {@link pausable}). Container-fed off the fresh
-   * `ChunkDetail.pause`, never the machine-derived status. */
+  /** The chunk's open operator pause, if any — non-null renders Resume, null renders
+   * Pause (subject to {@link pausable}). */
   readonly pause = input<runnerApi.PauseView | null>(null);
 
-  /** Whether an **unpaused** chunk may be paused — container-folded off the
-   * fresh `ChunkDetail.status` (mirrors the hub `PauseService`'s refusal). */
+  /** Whether an **unpaused** chunk may be paused. */
   readonly pausable = input<boolean>(false);
 
-  /** Whether the container's Pause/Resume mutation is in flight — disables
-   * both buttons for the duration so a double click can't fire the request
-   * twice while the first still settles (`bzh:frontend-pending-override`,
-   * mirrors the hub's `board/chunk-dock/chunk-detail-header.ts`'s own `pausePending`). */
+  /** Whether a Pause/Resume is in flight — disables both buttons so a double click
+   * can't fire the request twice (`bzh:frontend-pending-override`). */
   readonly pending = input<boolean>(false);
 
   /** Emitted when the operator dismisses the dock via its close button. */
   readonly dismiss = output<void>();
 
-  /** Emitted with the chunk id once the operator confirms Pause — the container's
-   * mutation fires off this. */
+  /** Emitted with the chunk id once the operator confirms Pause. */
   readonly pauseChunk = output<string>();
 
   /** Emitted with the chunk id once the operator confirms Resume. */
@@ -95,8 +78,7 @@ export class MachineDetailHeader {
   protected readonly pauseCopy = pauseCopy;
   protected readonly resumeCopy = resumeCopy;
 
-  /** Open a confirmation before emitting {@link pauseChunk} — mirrors the hub
-   * header's own `onPause`. The confirm copy is `pauseCopy`'s own `text`. */
+  /** Open a confirmation, with `pauseCopy`'s `text`, and emit {@link pauseChunk} once confirmed. */
   protected onPause(): void {
     if (this.pause() || !this.pausable()) return;
     const chunkId = this.chunkId();
@@ -109,8 +91,7 @@ export class MachineDetailHeader {
     });
   }
 
-  /** Open a confirmation before emitting {@link resumeChunk} — mirrors the hub
-   * header's own `onResume`. The confirm copy is `resumeCopy`'s own `text`. */
+  /** Open a confirmation, with `resumeCopy`'s `text`, and emit {@link resumeChunk} once confirmed. */
   protected onResume(): void {
     if (!this.pause()) return;
     const chunkId = this.chunkId();

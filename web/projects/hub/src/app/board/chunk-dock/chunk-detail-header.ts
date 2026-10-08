@@ -4,30 +4,13 @@ import { RouterLink } from '@angular/router';
 import { type ChunkDetail, type ChunkStatus, type PauseView, type WorkRefView, type RouteView, compactRef, runnerDisplayName, runnerTitle, KitButton, KitConfirmDialog, type KitConfirmDialogPrompt, KitMenu, KitMenuPanel, KitMenuItem, KitMenuItemSubtitle, KitTooltip, completeCopy, deleteCopy, detachCopy, pauseCopy, resumeCopy } from 'fleet';
 
 /**
- * The chunk detail dock's header — the chunk's identity in the
- * board's own vocabulary (the short name, its work item, its state, and the
- * node it sits at), plus the operator actions that hang off it: the **route +
- * Detach** control, **Pause/Resume**, **Complete**, **Delete**, and dismiss.
+ * The chunk detail dock's header — the chunk's identity (short name, work item, state,
+ * and current node) plus its operator actions: Detach, Pause/Resume, Complete, Delete,
+ * and dismiss.
  *
- * Detach is deliberately **not** requeue — it supersedes no escalation and
- * bumps no epoch, so a `needs_human` chunk detached this way still derives
- * `needs_human` afterward; this header
- * never claims otherwise. Pause/Resume switches on the pause **fact**
- * (`ChunkDetail.pause`), never on `status` — a chunk both paused and parked
- * on a question derives `waiting_on_human`, so a status-keyed switch would
- * never offer Resume. **Complete** is the operator's manual
- * counterpart to landing: reachable from any non-`done` status, including
- * `stopped` — unlike Stop, there is no un-complete verb, so the dock offers
- * no way back once clicked. **Delete** withdraws the
- * chunk's hub item(s) outright, reachable only from `not_ready`/`ready`
- * (`ChunkDetail.deletable`) — a chunk with an acquiring runner has no
- * live route to release, the same reasoning Detach's own route guard
- * follows. The dock provides room for the confirmation control.
- *
- * Presentational only: it holds the detail input and emits `dismiss`,
- * `detach`, `pauseChunk`, `resumeChunk`, `complete`, and `delete`. The status chip
- * renders {@link renderedStatus} rather than `detail().status` directly
- * (`bzh:frontend-pending-override`).
+ * Presentational only: it holds the detail input and emits `dismiss`, `detach`,
+ * `pauseChunk`, `resumeChunk`, `complete`, and `delete`. The status chip renders
+ * {@link renderedStatus} rather than `detail().status` (`bzh:frontend-pending-override`).
  */
 @Component({
   selector: 'app-chunk-detail-header',
@@ -40,22 +23,18 @@ export class ChunkDetailHeader {
   /** The chunk aggregate to render (identity, status, current node, pause, route). */
   readonly detail = input.required<ChunkDetail>();
 
-  /** The chunk's status as the header's status chip renders it, handed in by the
-   * caller (`bzh:frontend-pending-override`). Never consulted by
+  /** The chunk's status as the status chip renders it (`bzh:frontend-pending-override`).
+   * Never consulted by
    * {@link pausable}/{@link completable}/{@link deletable}: those gate what the *next*
    * click is admissible to fire against the server-read status, which an in-flight
    * mutation's own predicted outcome must not perturb. */
   readonly renderedStatus = input.required<ChunkStatus>();
 
-  /** Whether the current identity may operate Pause/Resume/Detach (`chunk:control`).
-   * Withholds every one of those controls when `false` so a `guest`
-   * never sees a write it cannot make; `null`/pending resolves to `false` (hidden
-   * until confirmed). */
+  /** Whether the current identity may operate Pause/Resume/Detach (`chunk:control`);
+   * withholds those controls when `false`. */
   readonly canControl = input(false);
 
-  /** The chunk detail route's own path segments, before the chunk id — lets a
-   * consumer outside the desktop board point the longname link elsewhere without
-   * `fleet` hardcoding a hub route. */
+  /** The chunk detail route's path segments, before the chunk id — the longname link's target. */
   readonly linkBase = input<readonly string[]>(['/board', 'chunk']);
 
   /** Whether the pause/resume mutation is in flight — disables whichever of
@@ -115,11 +94,7 @@ export class ChunkDetailHeader {
    * Pause (subject to {@link pausable}). `status` must never gate Resume. */
   protected readonly pause = computed<PauseView | null>(() => this.detail().pause ?? null);
 
-  /** Whether an **unpaused** chunk may be paused — the wire-carried
-   * `ChunkDetail.pausable`, the hub's own admissibility for its pause refusal, so the
-   * dock never offers a control the server would answer with a 409, exactly as Detach
-   * shows only with a live route to release. `waiting_on_human`/`needs_human` are
-   * deliberately pausable. */
+  /** Whether an **unpaused** chunk may be paused — `ChunkDetail.pausable`. */
   protected readonly pausable = computed<boolean>(() => this.detail().pausable ?? false);
 
   /** The chunk's live route, if any — Detach shows only while this is non-null:
@@ -146,17 +121,10 @@ export class ChunkDetailHeader {
     () => this.detail().current_node_name ?? this.detail().current_node_id ?? '—',
   );
 
-  /** Whether Complete has anything left to do — the wire-carried
-   * `ChunkDetail.completable`, false only on an already-`done` chunk, so the dock
-   * withholds a click that would write nothing. Independent of `pausable`/`route`:
-   * Complete does not hang off a live route the way Detach does, and `stopped` stays
-   * completable. */
+  /** Whether Complete is offered — `ChunkDetail.completable`. */
   protected readonly completable = computed<boolean>(() => this.detail().completable ?? false);
 
-  /** Whether Delete reaches this chunk — the wire-carried `ChunkDetail.deletable`,
-   * true only while no runner has acquired it (`not_ready`/`ready`): a chunk with an
-   * acquiring runner has no live route to release, so Delete never offers a click the
-   * hub would refuse. */
+  /** Whether Delete is offered — `ChunkDetail.deletable`. */
   protected readonly deletable = computed<boolean>(() => this.detail().deletable ?? false);
 
   /** Every prerequisite this chunk still waits on — `neighborhood.prerequisites` minus
@@ -195,8 +163,7 @@ export class ChunkDetailHeader {
     return compactRef(chunkId);
   }
 
-  /** Open a confirmation before emitting `detach` for the container's mutation to fire.
-   * The confirm copy is `detachCopy`'s own `text` (`bzh:claim-vocabulary`). */
+  /** Open a confirmation, emitting `detach` once confirmed. */
   protected onDetach(): void {
     const route = this.route();
     if (!route) return;
@@ -210,8 +177,7 @@ export class ChunkDetailHeader {
     });
   }
 
-  /** Open a confirmation before emitting `pauseChunk` for the container's mutation to
-   * fire. The confirm copy is `pauseCopy`'s own `text` (`bzh:claim-vocabulary`). */
+  /** Open a confirmation, emitting `pauseChunk` once confirmed. */
   protected onPause(): void {
     if (this.pause() || !this.pausable()) return;
     const chunkId = this.detail().chunk_id;
@@ -224,9 +190,8 @@ export class ChunkDetailHeader {
     });
   }
 
-  /** Open a confirmation before emitting `resumeChunk` for the container's mutation to
-   * fire. Guarded on the pause **fact**, never on `status`. The confirm
-   * copy is `resumeCopy`'s own `text` (`bzh:claim-vocabulary`). */
+  /** Open a confirmation, emitting `resumeChunk` once confirmed. Guarded on the pause
+   * **fact**, never on `status`. */
   protected onResume(): void {
     if (!this.pause()) return;
     const chunkId = this.detail().chunk_id;
@@ -239,9 +204,7 @@ export class ChunkDetailHeader {
     });
   }
 
-  /** Open a confirmation before emitting `complete` for the container's mutation to fire.
-   * Unlike Detach/Pause/Resume, this is a one-way door — `completeCopy`'s
-   * own `text` (`bzh:claim-vocabulary`) says so. */
+  /** Open a confirmation, emitting `complete` once confirmed. */
   protected onComplete(): void {
     if (!this.completable()) return;
     const chunkId = this.detail().chunk_id;
@@ -254,9 +217,7 @@ export class ChunkDetailHeader {
     });
   }
 
-  /** Open a confirmation before emitting `delete` for the container's mutation to fire.
-   * `deleteCopy`'s own `text` (`bzh:claim-vocabulary`) says there is
-   * no undo. */
+  /** Open a confirmation, emitting `delete` once confirmed. */
   protected onDelete(): void {
     if (this.deleteDisabled()) return;
     const chunkId = this.detail().chunk_id;

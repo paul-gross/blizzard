@@ -2,35 +2,18 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 import { RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS, ageMs, formatAge, injectNowSignal } from 'fleet';
 
 /**
- * Heartbeat freshness as a draining bar — 100% for any age at or under
- * {@link RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS}, 0% at the reap threshold
- * ({@link staleAfterSeconds}, the lease's wire-carried `stale_after_seconds`).
- * The bar's zero point: an empty bar means "reap-pending old", exactly the
- * boundary the server-derived `stale` state flips on — the *decision* still
- * belongs to the server's `state`; this bar only ever decorates it.
+ * Heartbeat freshness as a draining bar: 100% for any age at or under
+ * {@link RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS}, 0% at {@link staleAfterSeconds}.
+ * The bar only decorates the server-derived `stale` state; it decides nothing.
  *
- * Heartbeats ride tool calls (`POST /api/heartbeat` fires from the worker's
- * PostToolUse hook), so healthy gaps run seconds to minutes while the reap
- * threshold is an hour: a *linear* drain would pin every healthy lease at ~99%
- * and give the operator nothing. The drain past that anchor is logarithmic —
- * `1 - log(1+age)/log(1+threshold)` — so the minutes-band where a lease
- * actually lives is where the bar visibly moves, and the long tail to reap
- * drains out the rest.
+ * Healthy heartbeat gaps run seconds to minutes against a reap threshold of about
+ * an hour, so a linear drain would pin every healthy lease near 100%. Past the
+ * anchor the drain is logarithmic — `1 - log(1+age)/log(1+threshold)` — so the bar
+ * moves in the band where a lease actually lives. The anchor is the interval this
+ * row's heartbeat is sampled at, the finest age the bar can back.
  *
- * No SSE event announces a heartbeat, so
- * on a healthy, actively-beating lease this bar's anchor only advances on
- * {@link RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS} (`polling.ts`) or an unrelated
- * lease-changed frame — real cadence is tighter, but the bar cannot resolve an
- * age finer than that interval. Rather than render a
- * partial drain it cannot back, an age at or under the backstop interval reads
- * 100%; the curve only starts draining past it, anchored at the interval
- * itself rather than at zero age, so it tracks the poll floor if that value
- * ever moves again.
- *
- * Renders nothing bar-shaped for a lease with no heartbeat fact yet
- * (`spawning` — `last_heartbeat_at` null) or one whose timestamp reads ahead of
- * the browser clock beyond the skew tolerance: an empty track plus `—`,
- * claiming no freshness fact that doesn't exist (`bzh:utc-instants`).
+ * With no heartbeat yet, or a timestamp ahead of the browser clock beyond the skew
+ * tolerance, it renders an empty track plus `—` (`bzh:utc-instants`).
  */
 @Component({
   selector: 'app-heartbeat-freshness',
@@ -42,15 +25,13 @@ export class HeartbeatFreshness {
   /** The lease's `last_heartbeat_at` ISO instant, or null before the first beat. */
   readonly lastHeartbeatAt = input.required<string | null>();
 
-  /** The lease's `stale_after_seconds` — how old a heartbeat may read before REAP calls it dead. */
+  /** The lease's `stale_after_seconds` — how old a heartbeat may read before the lease is stale. */
   readonly staleAfterSeconds = input.required<number>();
 
   /** Whether the server already derived this lease `stale` — colors the bar red. */
   readonly stale = input(false);
 
-  /** Ticks once a second so the bar drains between polls, not just when
-   * `leases.query.ts`'s backstop hands this row a fresh `lastHeartbeatAt` — see
-   * `RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS` (`polling.ts`) for that anchor's own bound. */
+  /** Ticks once a second so the bar drains between fresh `lastHeartbeatAt` values. */
   private readonly now = injectNowSignal(1000);
 
   protected readonly freshAgeMs = computed(() => ageMs(this.lastHeartbeatAt(), this.now()));

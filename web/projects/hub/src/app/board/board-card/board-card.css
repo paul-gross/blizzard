@@ -40,11 +40,8 @@
 .card.selected:hover {
   background: var(--surface-selected);
 }
-/* The DONE column's cards (done and stopped, the two
-   statuses STATUS_LANE folds onto it) keep their green accent, and an
-   escalated card (needs_human) reads in the alarm color — both were
-   column-scoped rules reaching down from BoardShell's own styles before
-   this component owned its own status coloring. */
+/* Done and stopped cards keep a green accent; an escalated card
+   (needs_human) reads in the alarm color. */
 .card[data-status='done'],
 .card[data-status='stopped'] {
   border-left-color: var(--green);

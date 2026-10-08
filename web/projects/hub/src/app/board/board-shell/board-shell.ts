@@ -8,19 +8,14 @@ export type { BoardCard, BoardReposition };
 
 /**
  * The mission-control chunk board — the six status columns and their
- * cards, filling the centre column above the chunk detail. The titlebar is not
- * here: it spans the whole window, so {@link BoardHeader} owns it.
+ * cards.
  *
  * READY and BACKLOG are two of those columns: both are hub-ranked
  * lists (`bzh:ranking-is-per-list`), so each renders top-to-bottom in its own
  * hub order ({@link readyOrder}/{@link backlogOrder}) and is reshaped in place:
- * card drags leave as {@link reposition}, lane-tagged so a container with both
- * armed can route to the matching mutation.
+ * card drags leave as {@link reposition}, lane-tagged.
  *
- * This is the shared fleet view the hub app renders; it lives once here so the
- * runner app can compose it too. Presentational only: it holds no data client.
- * All color comes from the design-token layer (design/tokens.css), never
- * hard-coded hex, and every text size from that layer's type scale.
+ * Presentational only: it holds no data client.
  */
 @Component({
   selector: 'app-board-shell',
@@ -38,10 +33,8 @@ export class BoardShell {
   readonly counts = input<ChunkCountsView | null>(null);
 
   /**
-   * The ready chunk ids in hub dispatch order — the top of the list is what the
-   * next acquire takes. The READY lane renders in exactly this order; a ready
-   * chunk the order does not name (a promote the queue read has not caught up
-   * with yet) sorts after the ones it does, keeping its relative order, rather
+   * The ready chunk ids in hub dispatch order. The READY lane renders in exactly this order; a ready
+   * chunk the order does not name sorts after the ones it does, keeping its relative order, rather
    * than jumping the queue or vanishing.
    */
   readonly readyOrder = input<readonly string[]>([]);
@@ -49,27 +42,22 @@ export class BoardShell {
   /**
    * The `not_ready` chunk ids in the hub's own backlog order — the BACKLOG
    * lane's ranking, independent of {@link readyOrder} (`bzh:ranking-is-per-list`).
-   * Renders and sorts exactly like {@link readyOrder}: an unranked id (a demote
-   * the backlog read has not caught up with yet) sorts after the ones the order
+   * Renders and sorts exactly like {@link readyOrder}: an unranked id sorts after the ones the order
    * does name, keeping its relative order, rather than jumping the list or
    * vanishing.
    */
   readonly backlogOrder = input<readonly string[]>([]);
 
-  /** The chunks read's async state, derived by the container from its query
-   * (`asyncState(chunksQuery, chunks().length === 0)`) — the queue read supplies
-   * only the READY lane's order, so it never gates the board's emptiness. */
+  /** The chunk list's async state. */
   readonly state = input.required<KitAsyncStateValue>();
 
-  /** Emitted with a chunk id when its card is activated — fills the detail dock. */
+  /** Emitted with a chunk id when its card is activated. */
   readonly selectChunk = output<string>();
 
-  /** The chunk whose detail currently fills the dock, or null — its card carries
-   * the selection highlight so the board says which one is open. */
+  /** The selected chunk, or null — its card carries the selection highlight. */
   readonly selectedChunkId = input<string | null>(null);
 
-  /** Every chunk id with an open decision — the container's join over the
-   * fleet-wide decisions read, forwarded to every {@link BoardColumn}. */
+  /** Every chunk id with an open decision, forwarded to every {@link BoardColumn}. */
   readonly gatedChunkIds = input<ReadonlySet<string>>(new Set());
 
   /** Emitted with a chunk id when a backlog card's Promote is clicked. */

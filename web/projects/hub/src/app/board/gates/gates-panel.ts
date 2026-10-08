@@ -5,9 +5,7 @@ import { GatesPanelView } from './gates-view';
 import { injectHubDecisionsQuery } from './gates.query';
 
 /**
- * The open-gates panel — every decision awaiting a person across the fleet, in
- * the right rail, so an operator finds each gate without opening cards. Clicking
- * a gate opens its chunk, where it is resolved.
+ * The open-gates panel — every decision awaiting a person across the fleet.
  *
  * A container: it owns the fleet-wide decisions query and renders the
  * presentational {@link GatesPanelView}. Freshness: `EVENT_INVALIDATION_REGISTRY` (`web/projects/fleet/src/lib/sse/fleet-live.ts`).
@@ -21,7 +19,7 @@ import { injectHubDecisionsQuery } from './gates.query';
 export class GatesPanel {
   private readonly query = injectHubDecisionsQuery();
 
-  /** Emitted with a chunk id when a gate is activated — opens it in the detail panel. */
+  /** Emitted with the gate's chunk id when a gate is activated. */
   readonly selectChunk = output<string>();
 
   /** Every open gate across the fleet; empty until the first read resolves. */

@@ -122,10 +122,8 @@ export function hubWorkItemKey(source: string | null, ref: string | null): reado
   return ['hub', 'work-item', source, ref];
 }
 
-/** The findings triage bucket's linked-work-items fan-out read — every `[source,
- * ref]` pointer in `pointers`, keyed by the whole list so a different selected
- * routine/scope (and thus a different pointer set) is its own cache entry,
- * {@link hubFindingsKey}'s own "the whole id list rides the key" shape. */
+/** A linked-work-items fan-out read — every `[source, ref]` pointer in `pointers`,
+ * keyed by the whole list so a different pointer set is its own cache entry. */
 export function hubWorkItemsKey(pointers: readonly (readonly [string, string])[]): readonly unknown[] {
   return ['hub', 'work-items', ...pointers.flatMap(([source, ref]) => [source, ref])];
 }
@@ -156,13 +154,9 @@ export function hubRoutineSweepsKey(routineId: string | null, since: string, unt
 }
 
 /** One routine's garden-proposal counts read's key prefix — `GET
- * /api/routines/proposal-counts`, appended with the selected routine
- * and window so a different one is its own cache entry, {@link hubRoutineTrendKey}'s
- * own window-in-key shape. A pass/accept garden-proposal mutation doesn't know which
- * routine or window is currently cached, so it invalidates this bare prefix instead
- * (TanStack's default prefix match on `invalidateQueries`) — every cached
- * routine/window combination closes at once, {@link hubFindingPrefixKey}'s own
- * shape. */
+ * /api/routines/proposal-counts`. The full key appends the routine and window, so
+ * invalidating this bare prefix closes every cached routine/window combination at
+ * once (TanStack's default prefix match). */
 export const hubRoutineProposalCountsPrefixKey = ['hub', 'routine-proposal-counts'] as const;
 
 /** @see hubRoutineProposalCountsPrefixKey — `routineName` is nullable,
@@ -196,9 +190,8 @@ export function hubScopeRoutinesKey(scopeSlug: string | null): readonly unknown[
   return ['hub', 'scope', scopeSlug, 'routines'];
 }
 
-/** The garden run list's key prefix — `GET /api/runs`, windowed by `since` alone;
- * `until` rides no key or request param (`garden-runs.query.ts`'s own doc), so a new
- * `since` is its own cache entry, `hubRoutineTrendKey`'s own window-in-key shape. */
+/** The garden run list's key — `GET /api/runs`, windowed by `since` alone, so a new
+ * `since` is its own cache entry. */
 export function hubRunsKey(since: string): readonly unknown[] {
   return ['hub', 'runs', since];
 }

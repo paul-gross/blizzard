@@ -25,7 +25,7 @@ export class GatesPanelView {
   /** The decisions query's async state. */
   readonly state = input.required<KitAsyncStateValue>();
 
-  /** Emitted with a chunk id when a gate is activated — opens it in the detail panel. */
+  /** Emitted with the gate's chunk id when a gate is activated. */
   readonly selectChunk = output<string>();
 
   protected shortId(chunkId: string): string {

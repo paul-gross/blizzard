@@ -121,9 +121,7 @@ const NOT_READY_DETAIL: ChunkDetailModel = {
   artifacts: [],
 };
 
-// An unacquired chunk Delete reaches — distinct from
-// NOT_READY_DETAIL so the graph-edit and delete specs don't share a fixture
-// (and so a test can tell their client calls apart by chunk id).
+// An unacquired chunk Delete reaches, distinct from NOT_READY_DETAIL so the two verbs' calls differ by id.
 const DELETABLE_DETAIL: ChunkDetailModel = { ...NOT_READY_DETAIL, chunk_id: 'ch_deletable' };
 
 async function confirmAction(fixture: ReturnType<typeof TestBed.createComponent<ChunkDetail>>): Promise<void> {
@@ -132,12 +130,8 @@ async function confirmAction(fixture: ReturnType<typeof TestBed.createComponent<
   await fixture.whenStable();
 }
 
-/** Detach, Complete, and Delete live in the header's `⋯` overflow menu, whose panel
- * the CDK renders into an overlay attached to `document.body`, not the fixture's own
- * element (`kit-menu.spec.ts`'s own convention) — opens the trigger first, then clicks
- * the named item there. The confirm dialog that follows stays in the header's own
- * template (outside the menu's `<ng-template>`), so {@link confirmAction} still queries
- * the fixture. */
+/** Open the header's `⋯` menu and click the named item; the menu panel renders under
+ * `document.body`, while the confirm dialog that follows stays in the fixture. */
 async function clickMenuAction(fixture: ReturnType<typeof TestBed.createComponent<ChunkDetail>>, testid: string): Promise<void> {
   const el = fixture.nativeElement as HTMLElement;
   el.querySelector<HTMLButtonElement>('[data-testid="chunk-actions-menu"]')?.click();
@@ -148,25 +142,20 @@ async function clickMenuAction(fixture: ReturnType<typeof TestBed.createComponen
 
 describe('ChunkDetail container', () => {
   let stub: RequestClientStub;
-  // Mutated per-test to drive the detach mutation's response (200/404/409); the stub
-  // closure below reads it live, so a test can set it after the fixture is mounted.
+  // Each verb's response, mutated per-test; the stub closure below reads them live, so a
+  // test can set one after the fixture is mounted. A null resolve falls back to a canned success.
   let detachResponse: unknown = {};
-  // The same, for the pause/resume verbs.
   let pauseResponse: unknown = {};
-  // The same, for the complete verb.
   let completeResponse: unknown = {};
-  // The same, for the delete verb.
   let deleteResponse: unknown = {};
-  // The same, for the graph edit — it collapses onto the one
-  // `PATCH /api/chunks/{id}` call, so one variable drives it.
   let editPatchResponse: unknown = {};
-  // The same, for the answer verb — 201 winner vs. 409 loser.
   let answerResponse: unknown = {};
-  // The same, for the resolve-decision verb — defaults to a canned success body below.
   let resolveResponse: unknown | null = null;
   // Whether the chunk read for `ch_ask` has been answered yet, so a test can make the
   // post-answer re-read return the settled row the way the live hub would.
   let askAnswered = false;
+  // Whether `ch_deletable` has been deleted, so its detail read 404s the way the live hub's would.
+  let chunkDeleted = false;
 
   beforeEach(async () => {
     detachResponse = {};
@@ -177,6 +166,7 @@ describe('ChunkDetail container', () => {
     answerResponse = {};
     resolveResponse = null;
     askAnswered = false;
+    chunkDeleted = false;
     // The generated client's transport is stubbed so we can assert the exact call the button fires.
     stub = stubRequestClient(hubClient, (method, path) => {
       if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
@@ -184,7 +174,9 @@ describe('ChunkDetail container', () => {
       if (method === 'GET' && path === '/api/chunks/ch_routed') return ROUTED_DETAIL;
       if (method === 'GET' && path === '/api/chunks/ch_paused') return PAUSED_ASKING_DETAIL;
       if (method === 'GET' && path === '/api/chunks/ch_ready') return NOT_READY_DETAIL;
-      if (method === 'GET' && path === '/api/chunks/ch_deletable') return DELETABLE_DETAIL;
+      if (method === 'GET' && path === '/api/chunks/ch_deletable') {
+        return chunkDeleted ? stubError(404, { detail: 'unknown chunk' }) : DELETABLE_DETAIL;
+      }
       if (method === 'GET' && path === '/api/chunks/ch_ask') return askAnswered ? ASK_ANSWERED_DETAIL : ASK_DETAIL;
       if (method === 'GET' && path === '/api/chunks/ch_missing') return stubError(404, { detail: 'unknown chunk' });
       if (method === 'POST' && path === '/api/questions/qn_77/answers') return answerResponse;
@@ -215,7 +207,10 @@ describe('ChunkDetail container', () => {
       }
       if (method === 'POST' && path === '/api/chunks/ch_routed/detach') return detachResponse;
       if (method === 'POST' && path === '/api/chunks/ch_routed/complete') return completeResponse;
-      if (method === 'DELETE' && path === '/api/chunks/ch_deletable') return deleteResponse;
+      if (method === 'DELETE' && path === '/api/chunks/ch_deletable') {
+        chunkDeleted = !(typeof deleteResponse === 'object' && deleteResponse !== null && 'status' in deleteResponse);
+        return deleteResponse;
+      }
       return {};
     });
     await TestBed.configureTestingModule({
@@ -425,8 +420,15 @@ describe('ChunkDetail container', () => {
   it('dismisses the dock on a successful delete, rather than sitting on the now-gone chunk', async () => {
     const fixture = TestBed.createComponent(ChunkDetail);
     fixture.componentRef.setInput('chunkId', 'ch_deletable');
+    const el = fixture.nativeElement as HTMLElement;
     let dismissed = false;
-    fixture.componentInstance.dismiss.subscribe(() => (dismissed = true));
+    let errorRenderedBeforeDismiss = false;
+    // Stands in for the host: dismissing clears the selection.
+    fixture.componentInstance.dismiss.subscribe(() => {
+      dismissed = true;
+      errorRenderedBeforeDismiss = el.querySelector('[data-testid="chunk-detail-error"]') !== null;
+      fixture.componentRef.setInput('chunkId', null);
+    });
     await settle(fixture);
 
     await clickMenuAction(fixture, 'delete-chunk');
@@ -435,6 +437,9 @@ describe('ChunkDetail container', () => {
 
     expect(stub.forRoute('/api/chunks/ch_deletable', 'DELETE')).toHaveLength(1);
     expect(dismissed).toBe(true);
+    // The dismissal lands before the delete's invalidation re-read of the gone chunk can render its 404.
+    expect(errorRenderedBeforeDismiss).toBe(false);
+    expect(el.querySelector('[data-testid="chunk-detail-error"]')).toBeNull();
   });
 
   it('surfaces a delete failure rather than swallowing it, and does not dismiss', async () => {
@@ -470,9 +475,7 @@ describe('ChunkDetail container', () => {
   }
 
   it('renders the winner’s name and answer as an outcome when the answer race is lost', async () => {
-    // The hub's first-write-wins 409 body is the *winning row*, not a `{detail}` error —
-    // folding it through errorMessage() showed the loser a generic failure instead of the
-    // one thing worth saying: who answered, and what they said.
+    // A lost first-write-wins race's 409 body is the winning row, not a `{detail}` error.
     answerResponse = stubError(409, {
       won: false,
       question_id: 'qn_77',
@@ -737,11 +740,8 @@ describe('ChunkDetail container', () => {
 
     // No rendered status change while detach is pending…
     expect(el.querySelector('[data-testid="detail-status"]')?.textContent?.trim()).toBe('running');
-    // …only the item's disabled state, reopening the menu the CDK closed on
-    // trigger to read it back off the item itself. A bare
-    // macrotask tick + `detectChanges()` stands in for `whenStable()` here, the same
-    // idiom the pending window above already leans on — the held `invalidateQueries`
-    // promise leaves the fixture never truly stable.
+    // …only the item's disabled state, read off the reopened menu. A bare macrotask tick +
+    // `detectChanges()` stands in for `whenStable()`, as in the pending window above.
     el.querySelector<HTMLButtonElement>('[data-testid="chunk-actions-menu"]')?.click();
     await new Promise((resolve) => setTimeout(resolve, 0));
     fixture.detectChanges();
@@ -751,8 +751,7 @@ describe('ChunkDetail container', () => {
     await settle(fixture);
   });
 
-  // --- Graph edit
-  // -------------------------------------------------------------
+  // --- Graph edit -------------------------------------------------
 
   it('fires the graph edit client call for a not_ready chunk', async () => {
     const fixture = TestBed.createComponent(ChunkDetail);

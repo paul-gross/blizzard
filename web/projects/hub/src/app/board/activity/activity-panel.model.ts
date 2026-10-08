@@ -5,9 +5,7 @@ import { summarizeChunkChange } from './chunk-change-summary';
 const { ActivityChunkChangeCause, HubEventType, RunnerChangeKind: Kind } = hubApi;
 
 /** The verb a `runner-changed` kind reads as, where the kind alone does not already read
- * as one. Only the add, pause and retirement families need an entry: the registration and heartbeat kinds
- * never reach the feed (`FleetLiveUpdates` mutes them), and the fallback below
- * renders any kind absent here — including one from a newer hub — as itself. */
+ * as one; {@link summarizeRunnerChange} renders any kind absent here as itself. */
 const RUNNER_CHANGE_VERB: ReadonlyMap<string, string> = new Map<RunnerChangeKind, string>([
   [Kind.ADDED, 'added to the fleet'],
   [Kind.PAUSED, 'paused'],
@@ -42,9 +40,9 @@ interface RowSummary {
 }
 
 /**
- * A human-readable summary of a hub event ("a legible summary"; widened to a two-line
- * block for `chunk-changed`). Maps the generated `HubEventType` vocabulary onto plain
- * phrasing; an unknown type degrades to its raw name rather than dropping the row.
+ * A human-readable summary of a hub event, two lines for `chunk-changed`. Maps the
+ * generated `HubEventType` vocabulary onto plain phrasing; an unknown type degrades to
+ * its raw name rather than dropping the row.
  */
 function summarize(event: LoggedEvent): RowSummary {
   const chunk = event.data.chunk_id ? compactRef(event.data.chunk_id) : '';
@@ -74,13 +72,9 @@ function summarize(event: LoggedEvent): RowSummary {
   }
 }
 
-/** Shape one `GET /api/activity` row into the same {@link LoggedEvent} shape the live
- * SSE tee produces, so {@link summarize} (and {@link summarizeChunkChange}) run
- * unchanged over either source. `seq` is caller-assigned (negative, so it can never
- * collide with the live spine's own positive, monotonic counter) — it exists only so
- * the view has a stable `track` key, not for ordering (that's `at`). `at` is parsed
- * from the wire's ISO instant into the ms epoch {@link LoggedEvent.at} expects. The
- * row less its envelope is already {@link LoggedEvent.data}'s shape. */
+/** Shape one activity row into a {@link LoggedEvent}, so {@link summarize} runs unchanged
+ * over backfilled and live frames. `seq` is caller-assigned and serves only as a stable
+ * `track` key, never for ordering (that's `at`). */
 function fromActivity(row: ActivityView, seq: number): LoggedEvent {
   const { at, type, ...data } = row;
   return { seq, type, data, at: Date.parse(at), key: row.key };

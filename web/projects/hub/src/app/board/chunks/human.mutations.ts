@@ -4,7 +4,7 @@ import { QueryClient, injectMutation } from '@tanstack/angular-query-experimenta
 import { type AnswerResult, type DecisionResolutionResponse, answerQuestionApiQuestionsQuestionIdAnswersPost, resolveDecisionApiDecisionsDecisionIdResolutionsPost, errorMessage, formatWhen, hubChunkKey, hubChunksKey, hubDecisionsKey } from 'fleet';
 import { answerQuestionMutationKey, resolveDecisionMutationKey } from '../../core/mutation-keys';
 
-/** Answer a chunk's open question — the board's counterpart of `blizzard hub answer`. */
+/** Answer a chunk's open question. */
 export interface AnswerVars {
   readonly questionId: string;
   readonly answer: string;
@@ -127,11 +127,10 @@ export interface ResolveVars {
 }
 
 /**
- * `POST /api/decisions/{id}/resolutions` — a person picks one choice, first-write-wins
- * CAS, through the generated client (bzh:generated-client). The holding runner records the resolving transition over its pull; here we
- * re-read the chunk, the list, and the fleet-wide open gates — on `onSettled`, so a lost
- * race re-reads too, and the mutation settles only once the refreshed detail carries the
- * resolution the gate panel renders.
+ * `POST /api/decisions/{id}/resolutions`, through the generated client
+ * (bzh:generated-client). It re-reads the chunk, the list, and the fleet-wide open gates
+ * on settle, so a lost race re-reads too and the mutation settles only once the refreshed
+ * detail carries the resolution.
  */
 export function injectResolveDecisionMutation() {
   const queryClient = inject(QueryClient);

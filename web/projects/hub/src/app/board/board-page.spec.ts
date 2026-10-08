@@ -339,14 +339,7 @@ describe('BoardPage', () => {
     });
   });
 
-  /*
-   * One `promoteChunk` mutation instance fires once per promoted card, so a pending
-   * mutation's effect must scope to the card whose own mutation is in flight — a sibling
-   * card's Promote button must stay clickable.
-   *
-   * The READY-lane override (`bzh:frontend-pending-override`, below) moves the clicked
-   * card into READY while its promote is pending, where it carries no Promote button.
-   */
+  /* A pending promote scopes to the clicked card; a sibling card's Promote stays clickable. */
   describe('Promote per-card pending scope', () => {
     /** The Promote button on a backlog card, or `undefined` if the card carries none. */
     const promoteButton = (el: HTMLElement, chunkId: string): HTMLButtonElement | null | undefined =>
@@ -369,8 +362,7 @@ describe('BoardPage', () => {
 
       // The clicked card moved into READY — it carries no Promote button there…
       expect(card(el, BACKLOG).closest('[data-col]')?.getAttribute('data-col')).toBe('ready');
-      // …but the sibling backlog card stays put, its own Promote still clickable — the two
-      // fire the same `promoteChunk` mutation instance with different variables.
+      // …but the sibling backlog card stays put, its own Promote still clickable.
       expect(card(el, BACKLOG_NEXT).closest('[data-col]')?.getAttribute('data-col')).toBe('notready');
       expect(promoteButton(el, BACKLOG_NEXT)?.disabled).toBe(false);
 

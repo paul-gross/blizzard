@@ -5,24 +5,15 @@ import { KitBadge, KitButton, KitConfirmDialog } from 'fleet';
 import { lifecycleTone } from '../core/lifecycle-tone';
 
 /**
- * The graph detail panel's own header content — the lifecycle text, graph id,
- * and (when `canEdit`) the retire/re-enable control, supplementing
- * `fleet-kit-panel`'s `label` (bound to the graph's name directly in
- * `graph-detail.html`) in its header bar. Projected into `KitPanel`'s
- * `fleetKitPanelHeader` slot in supplement mode: `:host`'s `display: contents`
- * (mirroring `MachineDetailHeader`'s own convention) puts every span/button
- * directly alongside the panel's own `.lbl` as flex items of its `.p-hdr`,
- * painting no chrome of its own beyond that content (`bzh:frontend-kit-floor`).
+ * The graph detail panel's header content — the lifecycle text, graph id, and
+ * (when `canEdit`) the retire/re-enable control — projected into `KitPanel`'s
+ * `fleetKitPanelHeader` slot in supplement mode. `:host`'s `display: contents` puts
+ * every span and button directly into the header row as flex items, painting no
+ * chrome of its own (`bzh:frontend-kit-floor`).
  *
- * The retire/re-enable control lives here — not in `GraphDetailLifecycle` —
- * so it sits on the same row as the lifecycle text and can right-align
- * against it (`graph-detail-header.css`'s `margin-left: auto`), rather than
- * stranded in the panel body below the diagram. It owns the confirm-then-emit
- * pattern itself, mirroring `chunk-detail-header.ts`'s pause/detach/complete
- * controls — the mutation stays in `GraphDetail` (`bzh:frontend-container-
- * presentational`). The action-error line and the entry-node line stay
- * `GraphDetailLifecycle`'s, rendered as ordinary body content below the
- * header bar.
+ * The retire/re-enable control sits here so it shares the lifecycle text's row and
+ * right-aligns against it. It confirms, then emits; it fires no mutation
+ * (`bzh:frontend-container-presentational`).
  */
 @Component({
   selector: 'app-graph-detail-header',
@@ -68,7 +59,7 @@ export class GraphDetailHeader {
     readonly run: () => void;
   } | null>(null);
 
-  /** Open a confirmation before emitting `retire` for the container's mutation to fire. */
+  /** Open a confirmation, and emit `retire` once the operator confirms. */
   protected onRetire(): void {
     const graphId = this.graphId();
     this.pendingConfirm.set({
@@ -81,7 +72,7 @@ export class GraphDetailHeader {
     });
   }
 
-  /** Open a confirmation before emitting `enable` for the container's mutation to fire. */
+  /** Open a confirmation, and emit `enable` once the operator confirms. */
   protected onEnable(): void {
     const graphId = this.graphId();
     this.pendingConfirm.set({

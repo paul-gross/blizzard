@@ -7,27 +7,17 @@ import { type ChunkDetail, RUNNER_NAME_SEPARATOR, compactRef } from 'fleet';
 import { ChunkDetailHeader } from './chunk-detail-header';
 
 /**
- * The dock header's action row at narrow widths — a real
- * layout claim jsdom cannot make: it never actually lays out `.d-meta`/`.d-actions`'s
- * flex row, so `web:unit-test` cannot see a control pushed past the dock's own edge.
- * This mounts the header with every in-flow control live at once — a routed,
- * pausable chunk with a long runner identity — the worst case the row can carry
- * (Pause and the `⋯` overflow trigger, plus the close button; Detach, Complete, and
- * Delete live in the trigger's own menu panel), and sweeps that nothing overflows
- * the dock's own right edge, at 800px (wider than any real dock share) and at
- * 390/320px (`bzh:narrow-viewport-tier-rule`). A second case opens the menu and
- * sweeps its own panel items at the same widths — a real CDK overlay, not the
- * `.d-actions` flex row, so it needs its own layout claim. A third keeps the claim
- * line's compact runner id — what tells two runners sharing a name apart — inside the
- * chip's visible box however much of the name it clips.
+ * The dock header at narrow widths, under a real browser — see `blizzard-context:/verification/blizzard/commands/web/shell-sweep.md` §web:shell-sweep.
  *
- * The selector list below is asserted against an exact count, not merely non-empty:
- * a hard-coded list that silently misses a newly added control is a sweep that stays
- * green over the very control it exists to measure.
+ * Mounts the header with every in-flow control live at once (a routed, pausable chunk with
+ * a long runner identity) and sweeps that nothing overflows the dock's right edge, at 800px
+ * and at 390/320px (`bzh:narrow-viewport-tier-rule`); a second case does the same for the
+ * open `⋯` menu's items; a third keeps the claim line's compact runner id inside the chip's
+ * visible box however much of the name it clips.
  *
- * Excluded from the default `ng test` run the same way every other
- * `*.shell-sweep.spec.ts` is — run it via `npm run shell-sweep`
- * (`web/scripts/shell-sweep.js`).
+ * The selector list below is asserted against an exact count, not merely non-empty: a
+ * hard-coded list that silently misses a newly added control is a sweep that stays green
+ * over the very control it exists to measure.
  */
 const DETAIL: ChunkDetail = {
   chunk_id: 'ch_01dockwidth0000000000000000',

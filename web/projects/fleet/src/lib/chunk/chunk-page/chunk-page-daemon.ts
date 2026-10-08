@@ -23,8 +23,7 @@ export interface ChunkPageActions {
   readonly canAnswer: Signal<boolean>;
   /** Whether the identity may resolve an open gate decision (`gate:resolve`). */
   readonly canResolve: Signal<boolean>;
-  /** Whether the Transcripts tab's option shows in the strip (`transcript:read`). A deep
-   * link still reaches the tab, which renders the backend's 403 as its own state. */
+  /** Whether the identity may read the chunk's transcripts (`transcript:read`). */
   readonly canReadTranscripts: Signal<boolean>;
   /** Whether a resolve is in flight, so a double tap cannot resolve the gate twice. */
   readonly resolvePending: Signal<boolean>;
