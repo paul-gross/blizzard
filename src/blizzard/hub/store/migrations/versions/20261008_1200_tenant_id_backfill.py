@@ -2,8 +2,8 @@
 
 Each table in :data:`_KEYED` gains ``tenant_id``, nullable and appended last, in a batch of its own under
 ``recreate="auto"``: SQLite and Postgres both add the column in place. Every row is then stamped with the one tenant
-``20261008_1100_tenants`` inserted, in bounded batches chosen by primary key. ``NOT NULL``, the foreign key to
-``tenants``, and the rebuilt keys and indexes come in a later revision. A table created already keyed (the invitation
+``20261008_1100_tenants`` inserted, in one pass along the primary key in bounded batches. ``NOT NULL``, the foreign key
+to ``tenants``, and the rebuilt keys and indexes come in a later revision. A table created already keyed (the invitation
 tables) has the column and no null row, so both steps pass over it.
 
 The upgrade refuses, before touching any table, unless the store holds exactly one tenant. Re-running it skips a table
@@ -156,13 +156,22 @@ def _add_column(bind: sa.Connection, table: str) -> None:
 
 
 def _backfill(bind: sa.Connection, table: str, primary_key: tuple[str, ...], tenant_id: str) -> None:
-    """Stamp the rows still null, at most ``_BATCH_ROWS`` per statement."""
+    """Stamp the rows still null in one pass along the primary key, at most ``_BATCH_ROWS`` per statement.
+
+    Each page seeks past the last key the page before it stamped instead of scanning from the start, so the work grows
+    with the row count, not its square. A composite key pages by row-value comparison, which orders the key's columns
+    as its ``ORDER BY`` does.
+    """
     stub = _stub(table, primary_key)
     columns = [stub.c[name] for name in primary_key]
     key = sa.tuple_(*columns) if len(columns) > 1 else columns[0]
-    page = sa.select(*columns).where(stub.c[_TENANT_COLUMN].is_(None)).limit(_BATCH_ROWS)
-    while rows := [tuple(row) if len(columns) > 1 else row[0] for row in bind.execute(page)]:
-        bind.execute(sa.update(stub).where(key.in_(rows)).values({_TENANT_COLUMN: tenant_id}))
+    unstamped = stub.c[_TENANT_COLUMN].is_(None)
+    page = sa.select(*columns).where(unstamped).order_by(*columns).limit(_BATCH_ROWS)
+    after: sa.ColumnElement[bool] = sa.true()
+    while rows := bind.execute(page.where(after)).all():
+        last = tuple(rows[-1]) if len(columns) > 1 else rows[-1][0]
+        bind.execute(sa.update(stub).where(unstamped, after, key <= last).values({_TENANT_COLUMN: tenant_id}))
+        after = key > last
 
 
 def upgrade() -> None:
