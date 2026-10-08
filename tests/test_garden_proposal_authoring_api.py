@@ -81,7 +81,7 @@ def _seed_proposal(
         at=_NOW,
     )
     if closed:
-        with hub.engine.begin() as conn:
+        with hub_store_connections(hub.engine).write("seed_pass") as conn:
             insert_garden_proposal_closure_row(
                 conn,
                 proposal_id=proposal_id,

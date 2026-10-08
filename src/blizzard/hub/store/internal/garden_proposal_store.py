@@ -9,7 +9,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Select, and_, func, or_, select
+from sqlalchemy import Select, and_, func, or_
 
 from blizzard.foundation.garden_proposals import (
     GardenProposalClosureKind,
@@ -32,7 +32,7 @@ from blizzard.hub.domain.garden.proposals.model import (
 from blizzard.hub.domain.kernel.pagination import MalformedCursor, decode_cursor, encode_cursor
 from blizzard.hub.domain.kernel.unset import UnsetType
 from blizzard.hub.store.schema import garden_proposal_closures, garden_proposal_findings, garden_proposals
-from blizzard.hub.store.scoped import ScopedConnections, statements_of
+from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements, statements_of
 
 #: `list_page`'s cursor, already total: `(created_at, proposal_id)`.
 _CURSOR_ARITY = 2
@@ -54,9 +54,9 @@ def _decode_proposal_cursor(cursor: str) -> tuple[datetime, str]:
 
 
 def _proposal_page_stmt(
-    after: tuple[datetime, str] | None, limit: int, *, origin: GardenProposalOrigin | None
+    stmts: ScopedStatements, after: tuple[datetime, str] | None, limit: int, *, origin: GardenProposalOrigin | None
 ) -> Select[Any]:
-    stmt = select(garden_proposals)
+    stmt = stmts.select(garden_proposals)
     c = garden_proposals.c
     if origin is not None:
         stmt = stmt.where(c.origin == origin.value)
@@ -125,13 +125,16 @@ class GardenProposalStore:
         the same shape of hazard: whichever of a close or this write starts first holds
         the row until it commits, and the other blocks and then re-reads fresh
         (`tests/test_garden_proposal_closure_race.py`)."""
+        stmts = statements_of(conn)
         conn.execute(
-            garden_proposals.update()
+            stmts.update(garden_proposals)
             .where(garden_proposals.c.proposal_id == proposal_id)
             .values(proposal_id=proposal_id)
         )
         already = conn.execute(
-            select(garden_proposal_closures.c.id).where(garden_proposal_closures.c.proposal_id == proposal_id)
+            stmts.select(garden_proposal_closures, garden_proposal_closures.c.id).where(
+                garden_proposal_closures.c.proposal_id == proposal_id
+            )
         ).first()
         return already is not None
 
@@ -226,7 +229,7 @@ class GardenProposalStore:
             raise ValueError(f"limit must be at least 1, got {limit}")
         after = _decode_proposal_cursor(cursor) if cursor is not None else None
         with self._store.read("list_page") as conn:
-            rows = conn.execute(_proposal_page_stmt(after, limit + 1, origin=origin)).all()
+            rows = conn.execute(_proposal_page_stmt(self._store, after, limit + 1, origin=origin)).all()
             page_rows = rows[:limit]
             findings = self._findings_for(conn, [row.proposal_id for row in page_rows])
         proposals = [self._of(row, findings[row.proposal_id]) for row in page_rows]
@@ -239,10 +242,8 @@ class GardenProposalStore:
         """`list_all`'s routine-narrowed sibling — newest first, the same
         `created_at`/`proposal_id` tie-break."""
         stmt = self._store.select(garden_proposals).where(garden_proposals.c.routine_name == routine_name)
-        closure_exists = (
-            select(garden_proposal_closures.c.id)
-            .where(garden_proposal_closures.c.proposal_id == garden_proposals.c.proposal_id)
-            .exists()
+        closure_exists = self._store.exists(
+            garden_proposal_closures, garden_proposal_closures.c.proposal_id == garden_proposals.c.proposal_id
         )
         if state is RoutineProposalState.OPEN:
             stmt = stmt.where(~closure_exists)
@@ -270,18 +271,17 @@ class GardenProposalStore:
         routine named by both origins returns one row per origin."""
         c = garden_proposals.c
         closures_c = garden_proposal_closures.c
-        stmt = (
-            select(
-                c.origin,
-                c.routine_name,
-                c.class_,
-                closures_c.closure,
-                closures_c.item_outcome,
-                func.count().label("n"),
-            )
-            .select_from(garden_proposals.outerjoin(garden_proposal_closures, closures_c.proposal_id == c.proposal_id))
-            .where(c.created_at >= since, c.created_at < until)
-        )
+        stmt = self._store.select(
+            self._store.scope_join(
+                garden_proposals, garden_proposal_closures, closures_c.proposal_id == c.proposal_id, isouter=True
+            ),
+            c.origin,
+            c.routine_name,
+            c.class_,
+            closures_c.closure,
+            closures_c.item_outcome,
+            func.count().label("n"),
+        ).where(c.created_at >= since, c.created_at < until)
         if routine_name is not None:
             stmt = stmt.where(c.routine_name == routine_name)
         if origin is not None:

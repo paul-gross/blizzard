@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 import sqlalchemy as sa
@@ -23,6 +24,7 @@ from blizzard.hub.domain.garden.review.materialize import (
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.internal.review_findings_store import ReviewFindingsStore
 from blizzard.hub.store.schema import artifacts, finding_facts, findings, scopes
+from blizzard.hub.store.scoped import ScopedStatements
 from tests.support import hub_scoped, hub_store_connections, seed_chunk, seed_graph, stamp
 
 pytestmark = pytest.mark.component
@@ -184,13 +186,22 @@ def test_deliver_survives_a_racing_mint_of_the_same_unseen_scope(
 
     import blizzard.hub.store.internal.review_findings_store as module
 
-    real_select = module.select
+    real_statements_of = module.statements_of
 
-    def spoofed_select(*columns):  # type: ignore[no-untyped-def]
-        stmt = real_select(*columns)
-        return stmt.where(sa.literal(False)) if columns == (scopes.c.slug,) else stmt
+    class _BlindToScopes:
+        """The connection's own builders, except a read of ``scopes`` finds nothing."""
 
-    monkeypatch.setattr(module, "select", spoofed_select)
+        def __init__(self, stmts: ScopedStatements) -> None:
+            self._stmts = stmts
+
+        def __getattr__(self, name: str) -> Any:
+            return getattr(self._stmts, name)
+
+        def select(self, from_, *cols):  # type: ignore[no-untyped-def]
+            stmt = self._stmts.select(from_, *cols)
+            return stmt.where(sa.literal(False)) if from_ is scopes else stmt
+
+    monkeypatch.setattr(module, "statements_of", lambda conn: _BlindToScopes(real_statements_of(conn)))
 
     plan = ReviewFindingsPlan(
         chunk_id="ch_1",

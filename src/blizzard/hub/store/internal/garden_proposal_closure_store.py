@@ -9,7 +9,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import Connection, insert, select
+from sqlalchemy import Connection
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.garden_proposals import GardenProposalClosureKind, GardenProposalItemOutcome
@@ -17,7 +17,7 @@ from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.garden.proposals.closure import GardenProposalClosure, IWriteGardenProposalClosureRepository
 from blizzard.hub.store.schema import garden_proposal_closures, garden_proposals
-from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.store.scoped import ScopedConnections, statements_of
 
 
 def insert_garden_proposal_closure_row(
@@ -38,16 +38,21 @@ def insert_garden_proposal_closure_row(
     Locks the proposal's own row first with the same no-op ``UPDATE``
     ``GardenProposalStore._is_closed`` uses, so this closing write and a concurrent
     edit/attach/detach contend on the same row instead of racing across two tables."""
+    stmts = statements_of(conn)
     conn.execute(
-        garden_proposals.update().where(garden_proposals.c.proposal_id == proposal_id).values(proposal_id=proposal_id)
+        stmts.update(garden_proposals)
+        .where(garden_proposals.c.proposal_id == proposal_id)
+        .values(proposal_id=proposal_id)
     )
     already = conn.execute(
-        select(garden_proposal_closures.c.id).where(garden_proposal_closures.c.proposal_id == proposal_id)
+        stmts.select(garden_proposal_closures, garden_proposal_closures.c.id).where(
+            garden_proposal_closures.c.proposal_id == proposal_id
+        )
     ).first()
     if already is not None:
         return False
     conn.execute(
-        insert(garden_proposal_closures).values(
+        stmts.insert(garden_proposal_closures).values(
             proposal_id=proposal_id,
             closure=closure.value,
             reason=reason,

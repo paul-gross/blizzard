@@ -12,7 +12,7 @@ import json
 from collections import defaultdict
 from datetime import datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import ColumnElement, Join, func
 
 from blizzard.foundation.run_mode import RunMode
 from blizzard.hub.domain.garden.runs.history import (
@@ -31,18 +31,21 @@ from blizzard.hub.store.schema import (
     work_item_runs,
     work_items,
 )
-from blizzard.hub.store.scoped import ScopedConnections, statements_of
+from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements, statements_of
 
-# The chunk -> chunk_work_refs -> work_items -> work_item_runs join every read here
-# starts from — a run's own identity, minted once at `RunService.run`'s own act.
-_RUN_IDENTITY_JOIN = (
-    chunks.join(chunk_work_refs, chunk_work_refs.c.chunk_id == chunks.c.chunk_id)
-    .join(
+
+def _run_identity_join(stmts: ScopedStatements) -> Join:
+    """The chunk -> chunk_work_refs -> work_items -> work_item_runs join every read here
+    starts from — a run's own identity, minted once at `RunService.run`'s own act. Each
+    joined side is confined to the tenant in its own ``ON``."""
+    with_refs = stmts.scope_join(chunks, chunk_work_refs, chunk_work_refs.c.chunk_id == chunks.c.chunk_id)
+    with_items = stmts.scope_join(
+        with_refs,
         work_items,
         (work_items.c.source == chunk_work_refs.c.source) & (work_items.c.ref == chunk_work_refs.c.ref),
     )
-    .join(work_item_runs, work_item_runs.c.work_item_id == work_items.c.work_item_id)
-)
+    return stmts.scope_join(with_items, work_item_runs, work_item_runs.c.work_item_id == work_items.c.work_item_id)
+
 
 _IDENTITY_COLUMNS = (
     chunks.c.chunk_id,
@@ -57,14 +60,16 @@ _IDENTITY_COLUMNS = (
 # delivery path; a person's own exit verb or `reopened` carries no `finding_set_id`.
 _SET_COUNT_KINDS = ("add", "observed", "gone")
 
-# A chunk that absorbed another's work refs (`GroupService.group`) carries more than one
-# `chunk_work_refs` row — a run's own identity is always the lowest-id one, its mint-time row.
-_CANONICAL_WORK_REF = chunk_work_refs.c.id == (
-    select(func.min(chunk_work_refs.c.id))
-    .where(chunk_work_refs.c.chunk_id == chunks.c.chunk_id)
-    .correlate(chunks)
-    .scalar_subquery()
-)
+
+def _canonical_work_ref(stmts: ScopedStatements) -> ColumnElement[bool]:
+    """A chunk that absorbed another's work refs (`GroupService.group`) carries more than one
+    `chunk_work_refs` row — a run's own identity is always the lowest-id one, its mint-time row."""
+    return chunk_work_refs.c.id == (
+        stmts.select(chunk_work_refs, func.min(chunk_work_refs.c.id))
+        .where(chunk_work_refs.c.chunk_id == chunks.c.chunk_id)
+        .correlate(chunks)
+        .scalar_subquery()
+    )
 
 
 def _identity_of(row: object) -> RunIdentity:
@@ -86,9 +91,8 @@ class GardenRunStore:
     def runs_in_window(self, *, since: datetime, until: datetime) -> list[RunDeliveries]:
         with self._store.read("runs_in_window") as conn:
             rows = conn.execute(
-                select(*_IDENTITY_COLUMNS)
-                .select_from(_RUN_IDENTITY_JOIN)
-                .where(chunks.c.minted_at >= since, chunks.c.minted_at < until, _CANONICAL_WORK_REF)
+                self._store.select(_run_identity_join(self._store), *_IDENTITY_COLUMNS)
+                .where(chunks.c.minted_at >= since, chunks.c.minted_at < until, _canonical_work_ref(self._store))
                 .order_by(chunks.c.minted_at.desc(), chunks.c.chunk_id.desc())
             ).all()
             delivered_by_chunk = self._delivered_sets_by_chunk(conn, [row.chunk_id for row in rows])
@@ -100,22 +104,24 @@ class GardenRunStore:
     def run_identity(self, chunk_id: str) -> RunIdentity | None:
         with self._store.read("run_identity") as conn:
             row = conn.execute(
-                select(*_IDENTITY_COLUMNS)
-                .select_from(_RUN_IDENTITY_JOIN)
-                .where(chunks.c.chunk_id == chunk_id, _CANONICAL_WORK_REF)
+                self._store.select(_run_identity_join(self._store), *_IDENTITY_COLUMNS).where(
+                    chunks.c.chunk_id == chunk_id, _canonical_work_ref(self._store)
+                )
             ).one_or_none()
         return _identity_of(row) if row is not None else None
 
     def delivered_sets(self, chunk_id: str) -> list[DeliveredSetRaw]:
         with self._store.read("delivered_sets") as conn:
             rows = conn.execute(
-                select(
+                self._store.select(
+                    self._store.scope_join(
+                        finding_sets, artifacts, finding_sets.c.artifact_id == artifacts.c.artifact_id
+                    ),
                     finding_sets.c.finding_set_id,
                     finding_sets.c.revisions,
                     finding_sets.c.measurement,
                     artifacts.c.data,
                 )
-                .select_from(finding_sets.join(artifacts, finding_sets.c.artifact_id == artifacts.c.artifact_id))
                 .where(finding_sets.c.chunk_id == chunk_id)
                 .order_by(finding_sets.c.finding_set_id)
             ).all()

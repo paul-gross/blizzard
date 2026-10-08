@@ -9,7 +9,7 @@ import json
 from collections.abc import Mapping, Sequence
 from datetime import datetime
 
-from sqlalchemy import ColumnElement, Connection, and_, desc, exists, func, or_, select
+from sqlalchemy import ColumnElement, Connection, and_, desc, func, or_
 
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.garden.findings.model import (
@@ -27,26 +27,29 @@ from blizzard.hub.domain.garden.findings.model import (
 )
 from blizzard.hub.domain.kernel.pagination import MalformedCursor, decode_cursor, encode_cursor
 from blizzard.hub.store.schema import finding_facts, finding_sets, findings
-from blizzard.hub.store.scoped import ScopedConnections, statements_of
+from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements, statements_of
 
 #: `list_page`'s cursor: a plain `finding_id`, already total unlike chunks' `minted_at`.
 _CURSOR_ARITY = 1
 
 
-def _newest_fact_is_live() -> ColumnElement[bool]:
+def _newest_fact_is_live(stmts: ScopedStatements) -> ColumnElement[bool]:
     """True exactly when no fact of the finding is both outside `LIVE_KINDS` and its newest —
     `derive_liveness`'s answer, so a finding with no facts reads live. Newest is
-    `(recorded_at, id)` descending, correlated to `findings.finding_id`."""
+    `(recorded_at, id)` descending, correlated to `findings.finding_id`. Each `EXISTS` is
+    confined to the tenant on its own alias."""
     fact = finding_facts.alias("fact")
     newer = finding_facts.alias("newer")
-    has_newer = exists().where(
+    has_newer = stmts.exists(
+        newer,
         newer.c.finding_id == fact.c.finding_id,
         or_(
             newer.c.recorded_at > fact.c.recorded_at,
             and_(newer.c.recorded_at == fact.c.recorded_at, newer.c.id > fact.c.id),
         ),
     )
-    return ~exists().where(
+    return ~stmts.exists(
+        fact,
         fact.c.finding_id == findings.c.finding_id,
         fact.c.kind.not_in(sorted(LIVE_KINDS)),
         ~has_newer,
@@ -69,7 +72,10 @@ def lock_findings(conn: Connection, finding_ids: Sequence[str]) -> None:
     transaction's first statement, or follow only the chunk-row lock where one is taken
     (``bzh:store-exclusive-write``; ``FOR UPDATE`` renders nothing on SQLite)."""
     conn.execute(
-        findings.update().where(findings.c.finding_id.in_(finding_ids)).values(finding_id=findings.c.finding_id)
+        statements_of(conn)
+        .update(findings)
+        .where(findings.c.finding_id.in_(finding_ids))
+        .values(finding_id=findings.c.finding_id)
     )
 
 
@@ -317,7 +323,7 @@ class FindingStore:
         if cursor is not None:
             stmt = stmt.where(findings.c.finding_id > _decode_finding_cursor(cursor))
         if not include_gone:
-            stmt = stmt.where(_newest_fact_is_live())
+            stmt = stmt.where(_newest_fact_is_live(self._store))
         with self._store.read("list_page") as conn:
             rows = conn.execute(stmt).all()
             facts_by_id = self._facts_for_many(conn, [row.finding_id for row in rows[:limit]])
@@ -330,9 +336,9 @@ class FindingStore:
         `ix_findings_routine_class`."""
         with self._store.read("count_by_class") as conn:
             return conn.execute(
-                select(func.count())
-                .select_from(findings)
-                .where(findings.c.routine_name == routine_name, findings.c.class_ == class_)
+                self._store.select(findings, func.count()).where(
+                    findings.c.routine_name == routine_name, findings.c.class_ == class_
+                )
             ).scalar_one()
 
     def has_delivery_for_proposal(self, proposal_id: str) -> bool:
@@ -464,14 +470,16 @@ class FindingSetStore:
         """One row per scope, the newest by `finding_set_id` — a group-by-max join,
         portable across backends (`bzh:sql-portable`)."""
         newest_per_scope = (
-            select(finding_sets.c.scope_slug, func.max(finding_sets.c.finding_set_id).label("finding_set_id"))
+            self._store.select(
+                finding_sets, finding_sets.c.scope_slug, func.max(finding_sets.c.finding_set_id).label("finding_set_id")
+            )
             .where(finding_sets.c.routine_name == routine_name)
             .group_by(finding_sets.c.scope_slug)
             .subquery()
         )
         with self._store.read("newest_by_scope_for_routine") as conn:
             rows = conn.execute(
-                select(finding_sets).join(
+                self._store.select(finding_sets).join(
                     newest_per_scope, finding_sets.c.finding_set_id == newest_per_scope.c.finding_set_id
                 )
             ).all()

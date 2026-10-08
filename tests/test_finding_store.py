@@ -430,7 +430,8 @@ def test_a_guarded_finding_write_holds_the_writer_lock_until_its_transaction_end
     store, engine = _store_and_engine(tmp_path)
     _add(store)
 
-    with engine.connect() as winner, engine.connect() as loser:
+    connections = hub_store_connections(engine)
+    with connections.read("winner") as winner, connections.read("loser") as loser:
         lock_findings(winner, ["fin_1"])
         loser.exec_driver_sql("PRAGMA busy_timeout=0")
         with pytest.raises(OperationalError, match="locked"):

@@ -6,7 +6,6 @@ own idempotence marker, land together or not at all."""
 
 from __future__ import annotations
 
-from sqlalchemy import insert, select
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.artifacts import ArtifactKind
@@ -52,12 +51,13 @@ class ReviewFindingsStore:
         slug loses the race with an `IntegrityError` that rolls back only this nested
         write — the rest of the delivery still commits, first-write-wins like
         `ScopeStore.ensure`. Invisible on sqlite, which serializes writers."""
-        existing = conn.execute(select(scopes.c.slug).where(scopes.c.slug == slug)).first()
+        stmts = statements_of(conn)
+        existing = conn.execute(stmts.select(scopes, scopes.c.slug).where(scopes.c.slug == slug)).first()
         if existing is not None:
             return
         try:
             with conn.begin_nested():
-                conn.execute(insert(scopes).values(slug=slug, description=description, created_at=at))
+                conn.execute(stmts.insert(scopes).values(slug=slug, description=description, created_at=at))
         except IntegrityError:
             pass
 

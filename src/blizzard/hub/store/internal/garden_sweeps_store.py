@@ -8,8 +8,6 @@ from __future__ import annotations
 
 import json
 
-from sqlalchemy import select
-
 from blizzard.hub.domain.garden.runs.sweeps import IReadGardenSweepsRepository, SweepFact
 from blizzard.hub.store.schema import artifacts, finding_sets
 from blizzard.hub.store.scoped import ScopedConnections
@@ -24,15 +22,16 @@ class GardenSweepsStore:
     def sweeps_for_routine(self, routine_name: str) -> list[SweepFact]:
         with self._store.read("sweeps_for_routine") as conn:
             rows = conn.execute(
-                select(
+                self._store.select(
+                    self._store.scope_join(
+                        finding_sets, artifacts, finding_sets.c.artifact_id == artifacts.c.artifact_id
+                    ),
                     finding_sets.c.finding_set_id,
                     finding_sets.c.scope_slug,
                     finding_sets.c.revisions,
                     finding_sets.c.measurement,
                     artifacts.c.produced_at,
-                )
-                .select_from(finding_sets.join(artifacts, finding_sets.c.artifact_id == artifacts.c.artifact_id))
-                .where(finding_sets.c.routine_name == routine_name)
+                ).where(finding_sets.c.routine_name == routine_name)
             ).all()
         return [
             SweepFact(
