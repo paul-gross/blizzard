@@ -114,7 +114,7 @@ def test_forwarded_question_parks_chunk_and_surfaces(tmp_path: Path) -> None:
 
 
 def test_ask_and_answer_carry_distinct_causes(tmp_path: Path) -> None:
-    """The two routes share one call site (``questions.py``'s ``_publish``) —
+    """The two routes share one call site (``src/blizzard/hub/api/questions.py``) —
     asserted separately so a hardcoded or defaulted cause on either route shows up here."""
     hub = build_hub(tmp_path)
     chunk_id = _claim(hub)

@@ -1,7 +1,7 @@
 """The garden delivery node-step's use case — read the named artifacts, short-circuit a
 replay, validate, and materialize (blizzard-product:/delivered/garden/machinery.md
-§Delivery). Every decision is `validation.py`'s or `materialize.py`'s; this module only
-orders the reads and the write."""
+§Delivery). Every decision is `src/blizzard/hub/domain/garden/delivery/validation.py`'s or
+`src/blizzard/hub/domain/garden/delivery/materialize.py`'s; this module only orders the reads and the write."""
 
 from __future__ import annotations
 

@@ -1,7 +1,7 @@
 """SQLAlchemy adapter for the finding repository seam (package-private).
 
 All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``); the
-no-stored-column contract this reads over is `schema.py`'s own."""
+no-stored-column contract this reads over is `src/blizzard/hub/store/schema.py`'s own."""
 
 from __future__ import annotations
 

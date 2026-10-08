@@ -25,7 +25,7 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.internal.git import SubprocessEnvGit
 from tests.worker_http import bind_stubs
 
-# --- runner/auth/session.py: the stateless, per-process-secret session ---------------
+# --- src/blizzard/runner/auth/session.py: the stateless, per-process-secret session ---------------
 
 
 @pytest.mark.unit
@@ -64,7 +64,7 @@ def test_a_configured_session_secret_survives_a_restart_and_the_fallback_does_no
     assert SessionCookie(secret_of(unset)).read(cookie, now=now) is None
 
 
-# --- runner/environments/internal/git.py: the reset-on-acquire clean and origin read --
+# --- src/blizzard/runner/environments/internal/git.py: the reset-on-acquire clean and origin read --
 
 
 def _git(cwd: Path, *args: str) -> str:
@@ -121,7 +121,7 @@ def test_origin_url_reads_the_named_worktree_not_the_process_cwd(
     assert SubprocessEnvGit().origin_url(target) == "file:///origins/toy-a.git"
 
 
-# --- runner/app.py: the hermetic default hub client ----------------------------------
+# --- src/blizzard/runner/app.py: the hermetic default hub client ----------------------------------
 
 
 class _CountingHubHandler(BaseHTTPRequestHandler):
@@ -172,7 +172,7 @@ def test_the_default_hub_client_never_reaches_the_configured_hub_url(tmp_path: P
     assert server.seen == []  # type: ignore[attr-defined]
 
 
-# --- runner/api/hub_proxy.py: the retry ceiling stays inside the worker's read timeout -----
+# --- src/blizzard/runner/api/hub_proxy.py: the retry ceiling stays inside the worker's read timeout -----
 
 
 @pytest.mark.unit
@@ -186,7 +186,7 @@ def test_the_hub_retry_ceiling_leaves_the_worker_read_timeout_room() -> None:
     assert _HUB_RETRY_CEILING < READ_TIMEOUT
 
 
-# --- runner/cli.py: the deprecated `pm-items` alias ----------------------------------
+# --- src/blizzard/runner/cli.py: the deprecated `pm-items` alias ----------------------------------
 
 
 class _FakeLocalResponse:

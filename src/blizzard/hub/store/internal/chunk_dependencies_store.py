@@ -1,7 +1,7 @@
 """SQLAlchemy adapter for the chunk-dependencies seam (package-private).
 
 All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). One row per
-edge, shape owned by ``hub/store/schema.py``: declaring after a release mints a fresh
+edge, shape owned by ``src/blizzard/hub/store/schema.py``: declaring after a release mints a fresh
 row rather than reviving the old one. Timestamps arrive already stamped
 (``bzh:injected-clock``)."""
 

@@ -1,7 +1,7 @@
 """PKCE S256 challenge/verifier — ``blizzard.hub.auth.pkce`` (unit tier).
 
-Both the CLI (minting the challenge, ``hub/cli_login.py``) and the hub (verifying it
-at ``POST /api/auth/cli/token``, ``hub/auth/service.py``) call this exact class — this
+Both the CLI (minting the challenge, ``src/blizzard/hub/cli_login.py``) and the hub (verifying it
+at ``POST /api/auth/cli/token``, ``src/blizzard/hub/auth/service.py``) call this exact class — this
 pins the encoding itself, independent of either caller.
 """
 

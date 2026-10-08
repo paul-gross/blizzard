@@ -1,4 +1,4 @@
-"""``harness/claude_code/normalizer.py``.
+"""``src/blizzard/runner/harness/claude_code/normalizer.py``.
 
 Unit tier: :meth:`NormalizedFile.of_lines` / ``.join_sidecars`` need no filesystem —
 thinking turns, structured tool input, sidechain assembly and its record-level link

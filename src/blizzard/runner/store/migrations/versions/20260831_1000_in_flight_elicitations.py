@@ -19,7 +19,7 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 # Frozen at this revision's own shape (`bzh:frozen-revisions`) — NOT imported from live
-# `schema.py`, which may reshape this table in a later revision.
+# `src/blizzard/runner/store/schema.py`, which may reshape this table in a later revision.
 _frozen_metadata = sa.MetaData()
 
 in_flight_elicitations = sa.Table(

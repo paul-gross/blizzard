@@ -2,7 +2,7 @@
 Distinct from :class:`~blizzard.runner.harness.compatibility.CompatibilityDiagnostic`, which
 runs a live probe: this classifies an already-observed version from its committed
 ``contracts/<harness_id>/<version>/manifest.json``, read through the :class:`ICompatibilityCorpus`
-port (driver: ``internal/committed_corpus.py``). An observed version resolves to the newest
+port (driver: ``src/blizzard/runner/harness/internal/committed_corpus.py``). An observed version resolves to the newest
 committed corpus at or below it, inside the admitted range."""
 
 from __future__ import annotations

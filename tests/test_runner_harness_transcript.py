@@ -2,7 +2,7 @@
 
 Covers :class:`TranscriptPosition`'s opaque round-trip, :class:`NullTranscriptSource`'s
 absent-but-healthy shape, and that :class:`ClaudeCodeAdapter` binds it by default —
-pinned separately in ``test_runner_harness_claude_code_transcript.py``.
+pinned separately in ``tests/test_runner_harness_claude_code_transcript.py``.
 """
 
 from __future__ import annotations

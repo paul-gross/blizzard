@@ -134,7 +134,7 @@ def config_authoring(engine: Engine, *, keys: IHubKeyProvider, clock: IClock) ->
 
 def chunk_stores(engine: Engine, clock: IClock) -> ChunkStores:
     """All chunk-seam adapters over one engine/clock, bundled the same shape
-    ``hub/composition.py`` wires in production (:func:`build_chunk_stores`) — the
+    ``src/blizzard/hub/composition.py`` wires in production (:func:`build_chunk_stores`) — the
     store-level test's own single-object fixture-setup convenience a per-seam physical
     split would otherwise take from it. A test calls ``stores.<seam>.<method>(...)`` in
     place of the old single ``ChunkStore``'s bare method call."""
@@ -920,7 +920,7 @@ def build_hub(
         public_url=public_url,
         oauth_registry=OAuthProviderRegistry(oauth_providers) if oauth_providers is not None else None,
         # The IdP signing-key lifecycle — wired only under `oauth`, mirroring
-        # `hub/app.py`'s own `build_hosted_app` gating exactly.
+        # `src/blizzard/hub/app.py`'s own `build_hosted_app` gating exactly.
         signing_keys_dir=(tmp_path / "auth" / "signing-keys") if auth_mode == AUTH_MODE_OAUTH else None,
         secret_keys=secret_keys,
         trusted_proxies=TrustedProxies.parse(config.trusted_proxies),

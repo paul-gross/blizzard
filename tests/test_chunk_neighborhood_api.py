@@ -120,7 +120,7 @@ def test_a_neighbor_whose_facts_do_not_resolve_is_present_and_unsatisfied(tmp_pa
 
 
 class _CountingFactsStore(ChunkFactsStore):
-    """Counts calls to the bulk and per-chunk facts reads, the ``test_blocked_marking_api.py``
+    """Counts calls to the bulk and per-chunk facts reads, the ``tests/test_blocked_marking_api.py``
     shape, so a test can pin exactly how many facts reads one route call costs."""
 
     def __init__(self, store: HubStoreConnections, clock: IClock) -> None:

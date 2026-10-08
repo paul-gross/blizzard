@@ -53,7 +53,7 @@ _IDENTITY_COLUMNS = (
 )
 
 # The three fact kinds `DeliveredSet.added_count`/`observed_count`/`gone_count` fold
-# over — `finding_facts.finding_set_id` (schema.py) is written only for these on the
+# over — `finding_facts.finding_set_id` (src/blizzard/hub/store/schema.py) is written only for these on the
 # delivery path; a person's own exit verb or `reopened` carries no `finding_set_id`.
 _SET_COUNT_KINDS = ("add", "observed", "gone")
 
@@ -167,7 +167,7 @@ class GardenRunStore:
         (index-backed on `ix_finding_facts_finding_set_id`), the `FindingStore._facts_for_many`
         shape, so the list read never issues one count query per row. `add`/`observed`/`gone`
         are named explicitly rather than left to whatever `finding_set_id` happens to
-        carry, so an exit or `reopened` fact — which schema.py records with no
+        carry, so an exit or `reopened` fact — which src/blizzard/hub/store/schema.py records with no
         `finding_set_id` at all — could never be miscounted here even if that changed."""
         counts: dict[str, dict[str, int]] = {
             finding_set_id: dict.fromkeys(_SET_COUNT_KINDS, 0) for finding_set_id in finding_set_ids

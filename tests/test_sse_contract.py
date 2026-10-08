@@ -29,7 +29,7 @@ pytestmark = pytest.mark.component
 _REPO_ROOT = repo_root()
 _CONTRACTS_DIR = _REPO_ROOT / "contracts" / "sse"
 
-#: Mirrors the shared core's own keepalive comment literal (``foundation/events/stream.py``)
+#: Mirrors the shared core's own keepalive comment literal (``src/blizzard/foundation/events/stream.py``)
 #: — daemon-agnostic, so both scopes' manifests pin the same value.
 _KEEPALIVE_COMMENT = ": keepalive\n\n"
 

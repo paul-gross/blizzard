@@ -2,8 +2,8 @@
 
 ``runner init`` writes the token the hub issues there; every runner verb reads it back when the
 environment carries none. The file keeps systemd ``EnvironmentFile`` syntax (``NAME=value`` lines,
-``#``/``;`` comments, optional quotes, last assignment wins) because an installed runner's unit
-loads the same file. These are the pure rules over its text; the driver is ``internal/token_file.py``."""
+``#``/``;`` comments, optional quotes, last assignment wins) as an installed runner's unit loads it
+too. Pure rules over its text; driver: ``src/blizzard/runner/hub/internal/token_file.py``."""
 
 from __future__ import annotations
 

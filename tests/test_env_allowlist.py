@@ -1,4 +1,4 @@
-"""``harness/env_allowlist.py`` — the one runner-spawned-child env builder (unit).
+"""``src/blizzard/runner/harness/env_allowlist.py`` — the one runner-spawned-child env builder (unit).
 
 ``bzh:worker-env-allowlist``: never a full ``os.environ`` copy, and the ``PATH``
 composition ``[worker] path_prepend`` adds."""

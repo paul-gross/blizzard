@@ -249,7 +249,7 @@ class TakeoverCommand:
     """The ``blizzard runner takeover`` CLI invocation an escalation composes when it can —
     composed here so the form lives beside the concept it names rather than inline at each
     call site. Both operands are shell-quoted: a hub-minted chunk id never needs it
-    (``foundation/ids.py`` grammar), but the composed string is pasted into a shell."""
+    (``src/blizzard/foundation/ids.py`` grammar), but the composed string is pasted into a shell."""
 
     chunk_id: str
     runner_dir: str

@@ -2,7 +2,7 @@
 check, before anything is written; the check itself is specified by
 blizzard-product:/delivered/garden/machinery.md §Delivery. Pure functions over already-loaded
 objects (`bzh:domain-takes-objects`), no I/O. Materializing a passing result is
-`materialize.py`'s."""
+`src/blizzard/hub/domain/garden/delivery/materialize.py`'s."""
 
 from __future__ import annotations
 

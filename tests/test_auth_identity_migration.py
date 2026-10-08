@@ -29,7 +29,7 @@ _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 def _upgrade_existing_store_to_head(tmp_path: Path):  # type: ignore[no-untyped-def]
     """A store already migrated to the revision *before* this one, then upgraded to
     head — the "existing store" half of the AC (a fresh ``base -> head`` store is
-    covered by ``test_store_migrations.py``)."""
+    covered by ``tests/test_store_migrations.py``)."""
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     runner.upgrade(_BEFORE)

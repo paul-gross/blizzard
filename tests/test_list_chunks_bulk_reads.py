@@ -231,7 +231,7 @@ def test_list_chunks_query_count_is_independent_of_distinct_graph_pin_count(tmp_
 
 def _delete_chunk(hub, chunk_id: str) -> None:  # type: ignore[no-untyped-def]
     """``DELETE /api/chunks/{id}`` — ``httpx``'s own ``delete()`` refuses ``json``, so
-    this goes through ``request`` instead (mirrors ``test_chunk_delete_route.py``'s own)."""
+    this goes through ``request`` instead (mirrors ``tests/test_chunk_delete_route.py``'s own)."""
     resp = hub.client.request("DELETE", f"/api/chunks/{chunk_id}", json={})
     assert resp.status_code == 202, resp.text
 
@@ -342,7 +342,7 @@ def test_live_holder_and_blocked_markings_survive_a_page_boundary(tmp_path: Path
     live_holder_id = hub.client.post("/api/chunks", json={"tokens": ["hub:1"]}).json()["chunk_id"]
     make_ready(hub, live_holder_id)
 
-    # (b) a separate dependent/prerequisite pair (the `test_blocked_marking_api.py` shape).
+    # (b) a separate dependent/prerequisite pair (the `tests/test_blocked_marking_api.py` shape).
     hub.clock.advance(timedelta(seconds=1))
     prerequisite_id = ingest(hub, [{"source": "default", "ref": "prereq"}])
     hub.clock.advance(timedelta(seconds=1))

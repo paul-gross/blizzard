@@ -81,7 +81,7 @@ def test_a_revisions_table_shape_is_frozen_at_its_own_revision(
     tmp_path: Path, revision: str, table: str, expected: set[str]
 ) -> None:
     """A ``base -> <revision>`` build lands the shape that revision shipped with, not
-    head-of-tree ``schema.py``'s — the frozen local ``sa.Table`` literal decision. Also
+    head-of-tree ``src/blizzard/hub/store/schema.py``'s — the frozen local ``sa.Table`` literal decision. Also
     pins that pre-rename revisions still speak the old table name (``canon:no-retro``)."""
     _runner, url = _store(tmp_path, revision)
 
@@ -90,7 +90,7 @@ def test_a_revisions_table_shape_is_frozen_at_its_own_revision(
 
 def test_delivery_pr_opened_gains_its_uniqueness_only_at_the_revision_that_adds_it(tmp_path: Path) -> None:
     """``0014`` is the one revision that constrains (chunk_id, repo); the revision that
-    *creates* the table must not already carry the constraint off ``schema.py``."""
+    *creates* the table must not already carry the constraint off ``src/blizzard/hub/store/schema.py``."""
     _runner, url = _store(tmp_path, _DELIVERY_PR_FACTS)
     assert _unique_constraint_names(url, "delivery_pr_opened") == set()
 

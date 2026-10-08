@@ -2,7 +2,7 @@
 
 A pure value over :class:`ChunkFacts` plus the live route's runner_id
 (``bzh:domain-takes-objects``): no store, no HTTP, no clock — the same shape
-``test_chunk_status_derivation.py`` holds its derivations to.
+``tests/test_chunk_status_derivation.py`` holds its derivations to.
 """
 
 from __future__ import annotations

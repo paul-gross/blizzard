@@ -1,7 +1,7 @@
 """The chunk-usage store's own statement, ``_usage_total_stmt`` (unit
 tier): it compiles under both dialects, stays on the portable expression surface, and
 selects only ungrouped aggregates — so it returns one row by construction, never a
-per-fact object. Mirrors ``test_analytics_operational_statements.py``'s sweep shape.
+per-fact object. Mirrors ``tests/test_analytics_operational_statements.py``'s sweep shape.
 One case migrates a real store and reads the planner (component tier)."""
 
 from __future__ import annotations

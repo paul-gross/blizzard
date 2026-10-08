@@ -1,6 +1,6 @@
 """Graphs router ``reject_runner_principal`` guard (S5), component tier.
 
-``graphs.py`` was the one operator router still missing
+``src/blizzard/hub/api/graphs.py`` was the one operator router still missing
 ``dependencies=[Depends(reject_runner_principal)]``. This closes that gap: a runner's
 bearer token is rejected the same way it is on every other operator verb, while an
 anonymous call still succeeds."""

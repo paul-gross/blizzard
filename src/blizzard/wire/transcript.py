@@ -2,7 +2,7 @@
 
 A turn's ``timestamp`` is an ISO-8601 string with an explicit UTC offset, never naive
 (``bzh:utc-instants``). ``available=False`` carries ``reason`` and an empty ``turns``.
-``TurnView`` is retired for ``transcript_segment.py``'s ``TurnSegmentView``,
+``TurnView`` is retired for ``src/blizzard/wire/transcript_segment.py``'s ``TurnSegmentView``,
 the same shape reused across every transcript read path."""
 
 from __future__ import annotations

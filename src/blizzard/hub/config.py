@@ -54,7 +54,7 @@ _KNOWN_PRODUCES_MODES = {PRODUCES_WARN, PRODUCES_ENFORCE}
 _REQUIRED_WORK_SOURCE_KEYS = ("name", "provider", "repo", "token_env")
 
 # `[[work_source]]`'s pre-rename name — deliberately *not* aliased; pinned by
-# `test_config.py::test_a_leftover_pm_source_block_fails_the_load_naming_the_new_key`.
+# `tests/test_config.py::test_a_leftover_pm_source_block_fails_the_load_naming_the_new_key`.
 RENAMED_WORK_SOURCE_KEY = "pm_source"
 
 # The human-auth rollout knob — `none` (the default) resolves every request

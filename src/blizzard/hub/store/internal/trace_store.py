@@ -56,8 +56,7 @@ from blizzard.hub.store.errors import HubStoreConnections
 _FAILED: EventLogKind = "trace-export-failed"
 _LATCH_KINDS: tuple[EventLogKind, ...] = (_FAILED, "trace-export-recovered")
 
-#: Every closing-fact table with its ``(time, id)``-indexed columns
-#: (blizzard-product:/delivered/tracing/fleet-spans/spec/spans.md §Closing a step).
+#: Closing-fact tables, (time, id)-indexed (blizzard-product:/delivered/tracing/fleet-spans/spec/spans.md §Closing).
 _CLOSING_TABLES: tuple[tuple[Table, Column, Column], ...] = (
     (s.transitions, s.transitions.c.recorded_at, s.transitions.c.transition_id),
     (s.decisions, s.decisions.c.submitted_at, s.decisions.c.decision_id),

@@ -3,8 +3,7 @@
 The directory layout, staging, placement, manifests and schemas follow
 ``blizzard-product:/delivered/fact-egress/steps/spec/export.md`` §The directory and §Formats; value encodings follow
 ``blizzard-product:/delivered/fact-egress/steps/spec/rows.md`` §Shared conventions. This module holds the seam, its
-value types, and the row validation every binding shares (``bzh:pluggable-seams``); it names no filesystem and no
-format library."""
+value types, and the shared row validation (``bzh:pluggable-seams``); it names no filesystem or format library."""
 
 from __future__ import annotations
 

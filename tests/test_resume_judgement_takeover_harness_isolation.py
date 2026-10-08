@@ -100,7 +100,7 @@ def _swap_registry(ctx, registry: HarnessRegistry):  # type: ignore[no-untyped-d
 
 
 # --------------------------------------------------------------------------- #
-# RESUME (lifecycle/dormant.py) — the restart-resume re-attach.
+# RESUME (src/blizzard/runner/lifecycle/dormant.py) — the restart-resume re-attach.
 
 
 def test_restart_resume_dispatches_each_lease_to_its_own_harness_never_the_siblings(tmp_path) -> None:  # type: ignore[no-untyped-def]
@@ -190,7 +190,7 @@ def test_restart_resume_owner_failure_escalates_only_the_affected_lease(tmp_path
 
 
 # --------------------------------------------------------------------------- #
-# JUDGEMENT (lifecycle/judgement/judgement.py:484 `_resolve_harness`) — launch (`_elicit`) then collect.
+# JUDGEMENT (src/blizzard/runner/lifecycle/judgement/judgement.py `_resolve_harness`) — launch (`_elicit`) then collect.
 
 
 def _judgement_ctx(store, *, harness_a: FakeHarness, harness_b: FakeHarness, probe: FakeProbe):  # type: ignore[no-untyped-def]
@@ -294,7 +294,7 @@ def test_judgement_owner_failure_on_one_lease_never_blocks_the_others_collect(tm
 
 
 # --------------------------------------------------------------------------- #
-# TAKEOVER (takeover.py:370 `_resolved_harness`).
+# TAKEOVER (src/blizzard/runner/lifecycle/takeover.py `_resolved_harness`).
 
 
 def _takeover_service(store, *, harness_a: FakeHarness, harness_b: FakeHarness) -> TakeoverService:  # type: ignore[no-untyped-def]

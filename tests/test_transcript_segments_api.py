@@ -66,7 +66,7 @@ def _bearer(token: str) -> dict[str, str]:
 
 def _seed_enrolled(hub, runner_id: str = "runner-a", workspace_id: str = "ws-a") -> str:  # type: ignore[no-untyped-def]
     """Register + enroll ``runner_id`` on ``hub`` and return its token — same shape as
-    ``test_fleet_auth.py``'s helper of the same name, minus the throwaway-hub indirection
+    ``tests/test_fleet_auth.py``'s helper of the same name, minus the throwaway-hub indirection
     since registration here needs no separate auth mode."""
     _register(hub, runner_id=runner_id, workspace_id=workspace_id)
     return _enroll(hub, runner_id)
@@ -200,7 +200,7 @@ def test_get_segment_is_403_below_transcript_read(tmp_path: Path) -> None:
 
 def _enrolled_runner_token(tmp_path: Path) -> str:
     """A runner token enrolled through its own throwaway hub over ``tmp_path``, for the caller's
-    oauth hub to read — the same two-hub-instances-over-one-store shape ``test_fleet_auth.py``'s
+    oauth hub to read — the same two-hub-instances-over-one-store shape ``tests/test_fleet_auth.py``'s
     own ``_seed_enrolled`` uses."""
     seed_hub = build_hub(tmp_path)
     _register(seed_hub, runner_id="runner-a", workspace_id="ws-a")

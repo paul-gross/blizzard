@@ -307,7 +307,7 @@ def _record_event_call_sites(root: Path) -> list[str]:
 
 def test_record_event_is_called_only_through_event_log_service() -> None:
     """Recording an event is what publishes it (``bzh:operational-event-log``):
-    ``EventLogService.record`` (``event_log.py``) is the only caller of the write
+    ``EventLogService.record`` (``src/blizzard/hub/domain/chunk/event_log.py``) is the only caller of the write
     repository's ``record_event`` — every event-authoring call site takes the service
     instead, so a new one can never land a row that stays unbroadcast."""
     violations = _record_event_call_sites(_SRC_DIR)
@@ -366,8 +366,8 @@ _RUNNER_APP_FILE = _RUNNER_DIR / "app.py"
 # store surface this criterion polices. ``None`` allows every name from that import;
 # a tuple narrows to only those names.
 _SQLALCHEMY_EXCEPTIONS: dict[Path, tuple[str, ...] | None] = {
-    # Engine only, for DI typing — shared with hub/composition.py, permanently out of
-    # scope (plan's "Out of scope": "Engine in a composition root"). ``app.py`` holds the
+    # Engine only, for DI typing — shared with src/blizzard/hub/composition.py, permanently out of
+    # scope (plan's "Out of scope": "Engine in a composition root"). ``src/blizzard/hub/app.py`` holds the
     # graph's engine only as the handle it hands its own callers to dispose.
     _RUNNER_COMPOSITION_FILE: ("Engine",),
     _RUNNER_APP_FILE: ("Engine",),
@@ -430,7 +430,7 @@ def _runner_store_adapter_names() -> set[str]:
 
 def test_composition_is_the_only_module_naming_a_concrete_runner_store_adapter() -> None:
     """AC4: every concrete ``store/internal/`` adapter is named by
-    ``runner/composition.py`` and nowhere else under ``src/`` — every other collaborator
+    ``src/blizzard/runner/composition.py`` and nowhere else under ``src/`` — every other collaborator
     takes a Protocol seam or the ``RunnerStores`` bundle it builds."""
     adapters = _runner_store_adapter_names()
     violations: list[str] = []
@@ -462,7 +462,7 @@ def _called_names(tree: ast.AST) -> list[tuple[str, int]]:
 
 
 def test_composition_is_the_only_module_constructing_the_runner_process_graph_collaborators() -> None:
-    """I: the process-graph constructors are called from ``runner/composition.py`` and nowhere
+    """I: the process-graph constructors are called from ``src/blizzard/runner/composition.py`` and nowhere
     else under ``src/`` — every other root takes the one ``RunnerProcess`` graph."""
     violations: list[str] = []
     for path in sorted(_SRC_DIR.rglob("*.py")):
@@ -748,7 +748,7 @@ def _adapter_breach(module: str, *, harness: str, in_harness: bool, own: str | N
 def _adapter_isolation_violations(src_root: Path, *, exempt: frozenset[Path]) -> list[str]:
     """Every import statement breaching the harness adapter boundary under ``src_root``: the
     harness core or any other module naming an adapter package, an adapter naming the other, and
-    any harness module importing ``runner/loop`` or its composition root. ``harness/wiring.py`` and
+    any harness module importing ``runner/loop`` or its composition root. ``src/blizzard/runner/harness/wiring.py`` and
     ``exempt`` may name an adapter; since wiring names both, any other harness module importing it
     reaches every adapter through it."""
     harness = f"{src_root.name}.runner.harness"
@@ -772,7 +772,7 @@ def _adapter_isolation_violations(src_root: Path, *, exempt: frozenset[Path]) ->
 
 def test_adapters_are_named_only_by_the_harness_wiring_and_the_composition_roots() -> None:
     """The harness core names no adapter, an adapter never names the other, and only
-    ``harness/wiring.py`` and the composition roots import an adapter package
+    ``src/blizzard/runner/harness/wiring.py`` and the composition roots import an adapter package
     (``bzh:pluggable-seams``); nothing under ``harness/`` imports ``runner/loop``."""
     violations = _adapter_isolation_violations(_SRC_DIR, exempt=_COMPOSITION_ROOTS)
     assert not violations, f"S — adapter isolation: {violations}"
@@ -1449,8 +1449,8 @@ def test_each_hub_domain_name_has_one_import_path() -> None:
 
 
 def _plant_second_spelling(tmp_path: Path, rel: str, text: str) -> list[str]:
-    """A two-package hub domain — ``operations/queue.py`` imports ``ChunkNotFound`` from
-    ``chunk/errors.py``, which defines it — with ``text`` written at ``rel`` under ``tmp_path``."""
+    """A two-package hub domain — ``src/blizzard/hub/domain/operations/queue.py`` imports ``ChunkNotFound`` from
+    ``src/blizzard/hub/domain/chunk/errors.py``, which defines it — with ``text`` written at ``rel`` under ``tmp_path``."""
     src = tmp_path / "src"
     domain = src / "blizzard" / "hub" / "domain"
     for path, body in {
@@ -2113,7 +2113,7 @@ def _adapter_modules_beyond_sections(loaded: set[str]) -> list[str]:
 )
 def test_a_worker_hook_loads_no_harness_adapter_beyond_its_section(load: Callable[[], set[str]]) -> None:
     """The per-tool-call ``heartbeat`` and ``session-end`` hooks load no adapter's declaration graph, whatever
-    they reach of ``harness/wiring.py`` (``bzh:pluggable-seams``)."""
+    they reach of ``src/blizzard/runner/harness/wiring.py`` (``bzh:pluggable-seams``)."""
     loaded = load()
     adapters = _adapter_modules_beyond_sections(loaded)
     assert not adapters, (
@@ -2226,7 +2226,7 @@ def test_the_egress_sweep_imports_no_store_filesystem_or_format_library() -> Non
         f"{path.relative_to(_REPO_ROOT)} imports {module}"
         for path in sorted(domain.glob("*.py"))
         for module in sorted(_imported_modules(path))
-        # `config.py` only declares the export's directory as a `Path` value; it never touches the filesystem.
+        # `src/blizzard/foundation/trace_export/config.py` only declares the export's directory as a `Path` value; it never touches the filesystem.
         if module.split(".")[0] in ("opentelemetry", "sqlalchemy", "pyarrow", "gzip", "os", "shutil")
         or (module == "pathlib" and path.name != "config.py")
         or module.startswith(("blizzard.hub.store", "blizzard.hub.egress.internal", "blizzard.hub.egress.factory"))

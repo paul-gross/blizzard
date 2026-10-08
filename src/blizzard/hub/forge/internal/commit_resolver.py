@@ -1,8 +1,8 @@
 """The GitHub-backed commit resolver — the real forge check
 behind `ICommitForge` (`src/blizzard/hub/forge/repository_commits.py`): resolves whether a cited commit exists on a
 repo, degrading to ``None`` (well-formedness only) when the forge cannot answer. Confined to ``internal/``
-(``bzh:dependency-inversion``); ``httpx`` is used only here, as `github_work_source.py`
-uses its own client only in its own `internal/`."""
+(``bzh:dependency-inversion``); ``httpx`` is used only here, as
+`src/blizzard/hub/work_sources/internal/github_work_source.py` uses its own client only in its own `internal/`."""
 
 from __future__ import annotations
 

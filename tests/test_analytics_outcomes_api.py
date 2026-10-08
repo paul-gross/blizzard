@@ -220,7 +220,7 @@ def test_a_bounce_counts_as_neither(tmp_path: Path) -> None:
 
 def test_a_bounced_transitions_own_routing_edge_counts_as_neither(tmp_path: Path) -> None:
     """A kick-back's own routing transition shares its epoch with the bounce fact by
-    construction (`hub_node.py` records both). Driven through the REAL hub-node delivery
+    construction (`src/blizzard/hub/delivery/hub_node.py` records both). Driven through the REAL hub-node delivery
     path, not a bare bounce write, so the excluded transition actually exists."""
     runner = FakeHubCommandRunner()
     runner.arm(_LAND_COMMAND, CommandResult(exit_code=0, stdout=f"doing stuff\n{land_pr_ci._CONFLICT}\n", stderr=""))

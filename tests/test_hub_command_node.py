@@ -626,7 +626,7 @@ def _to_merge_node(hub, pointer=_POINTER, graph_yaml: str = _HUB_CMD_GRAPH_YAML,
     """Ingest, promote, claim, and complete ``build`` -> ``merge`` for one chunk.
 
     Returns ``(chunk_id, build_node_id, graph)``. The completion's own apply already
-    runs the hub node executor synchronously (``apply.py``'s hub-node branch) — most
+    runs the hub node executor synchronously (``src/blizzard/hub/domain/execution/apply.py``'s hub-node branch) — most
     tests below want that; the barrier test bypasses it (see its own helper)."""
     assert hub.client.post("/api/graphs", json={"definition_yaml": graph_yaml}).status_code == 201
     resp = hub.client.post("/api/chunks", json={"tokens": tokens or [pointer_token(pointer)]})
@@ -992,7 +992,7 @@ def test_an_unroutable_outcome_is_announced_once_per_epoch(tmp_path: Path, monke
     artifacts, events = _announcements()
     assert len(artifacts) == 1, "the gap must surface in chunk detail"
     assert len(events) == 1, "and once in the operational event feed"
-    # In-vocabulary, so the severity filter reaches it (test_event_log.py::…_sinks_below_info).
+    # In-vocabulary, so the severity filter reaches it (tests/test_event_log.py::…_sinks_below_info).
     assert events[0].severity == "critical"
     assert [
         e.kind for e in hub.services.chunks.events.list_events(chunk_id=chunk_id, severity=EventLogSeverity.CRITICAL)

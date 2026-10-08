@@ -1,6 +1,6 @@
-"""``harness/opencode/usage/price_cache.py`` — the OpenCode price-cache seam (unit).
+"""``src/blizzard/runner/harness/opencode/usage/price_cache.py`` — the OpenCode price-cache seam (unit).
 
-Mirrors ``test_runner_harness_opencode_export.py``'s own shape: the value object and its tier
+Mirrors ``tests/test_runner_harness_opencode_export.py``'s own shape: the value object and its tier
 rule are tested directly (no file I/O), and the file-backed catalog is tested against
 ``tmp_path`` fixtures shaped like a real ``models.json``, never a real OpenCode cache."""
 

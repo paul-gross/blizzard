@@ -1,5 +1,5 @@
 """runner external subscription usage (hub store tree) — one refresh-in-place row per runner
-holding its newest windows; frozen local literal, not a ``schema.py`` import (``bzh:frozen-revisions``).
+holding its newest windows; frozen local literal, no ``src/blizzard/hub/store/schema.py`` import (``bzh:frozen-revisions``).
 
 Revision ID: 20260801_1600_hub_runner_external_usage
 Revises: 20260801_1400_hub_work_item_closures

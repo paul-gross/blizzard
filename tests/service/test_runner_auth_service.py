@@ -78,7 +78,7 @@ def test_runner_presents_the_bearer_token_on_every_hub_call(tmp_path: Path) -> N
         assert f"/api/fleet/chunks/{chunk_id}/completions" in paths
 
         # The work-items proxy path — a separately-constructed httpx call in
-        # `runner/api/work_items.py` — carries the same credential, not a patched one.
+        # `src/blizzard/runner/api/work_items.py` — carries the same credential, not a patched one.
         api_config = dataclasses.replace(config, host="127.0.0.1", port=_free_port())
         with _runner_api(api_config):
             runner_client = httpx.Client(base_url=f"http://{api_config.host}:{api_config.port}", timeout=10.0)

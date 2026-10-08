@@ -1,6 +1,6 @@
 """The packaged ``ideation`` graph end to end — the `test_ideation_e2e` scenario of the
-standing e2e smoke: ``test_garden_routine_e2e.py``'s shape for the survey -> reconcile ->
-propose -> deliver loop, ``test_ask_answer_e2e.py``'s for the ask-parks-then-answer
+standing e2e smoke: ``tests/e2e/test_garden_routine_e2e.py``'s shape for the survey -> reconcile ->
+propose -> deliver loop, ``tests/e2e/test_ask_answer_e2e.py``'s for the ask-parks-then-answer
 mechanics the undeclared-axis path and the delivery-bounce escalation depend on. The real
 packaged YAML is minted with its prompts swapped for scripts and its deliver command wrapped
 in a crash-once shim; every delta carries ``findings: []``, and an undeclared axis ends in `ask`."""
@@ -135,7 +135,7 @@ _SURVEY_JUDGEMENT = (
 def _answer_axis_script(marker_value: str, measurement_tail: str) -> str:
     """The answer text delivered via `blizzard hub question answer` for the undeclared-
     axis ask — a self-contained script, never a continuation of survey's own base prompt
-    (`test_ask_answer_e2e.py`'s `_ANSWER_SCRIPT` shape): it decides from the "human"'s
+    (`tests/e2e/test_ask_answer_e2e.py`'s `_ANSWER_SCRIPT` shape): it decides from the "human"'s
     word whether the axis is now declared, publishes the always-empty survey/delta either
     way, and leaves a marker survey's own judgement script reads to pick its edge."""
     return (
@@ -394,7 +394,7 @@ def test_ideation_runs_end_to_end_on_all_authored_paths(tmp_path: Path) -> None:
             path: str, scope: str, answer_script: str, *, question_substr: str, timeout: float = 180.0
         ) -> str:
             """Mint a run expected to park on an `ask`, answer it, and drive to done — the
-            `test_ask_answer_e2e.py` phases, reused for both survey's undeclared-axis ask
+            `tests/e2e/test_ask_answer_e2e.py` phases, reused for both survey's undeclared-axis ask
             and propose's delivery-escalation ask (never `_drive_until_done`, which opens
             its own `_runner_api` and cannot pause mid-drive to answer)."""
             minted_run = hub.post(

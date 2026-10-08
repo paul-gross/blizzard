@@ -124,7 +124,7 @@ def test_duplicate_oauth_provider_name_rejected(tmp_path: Path) -> None:
 
 def test_to_toml_round_trips_through_load(tmp_path: Path) -> None:
     """``to_toml`` → ``load`` is a fixed point for a fully-populated ``[auth]`` block —
-    the same round-trip guarantee ``test_config.py`` pins for the rest of ``HubConfig``."""
+    the same round-trip guarantee ``tests/test_config.py`` pins for the rest of ``HubConfig``."""
     from dataclasses import replace
 
     from blizzard.hub.config import AuthConfig, OAuthProviderConfig

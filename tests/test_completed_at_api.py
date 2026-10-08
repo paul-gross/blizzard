@@ -1,6 +1,6 @@
 """``completed_at`` on ``GET /api/chunks`` — the wire half of
 :meth:`ChunkFacts.completed_at`. The derivation itself is unit-tested (pure over
-``ChunkFacts``) in ``test_chunk_status_derivation.py``; this proves the hub
+``ChunkFacts``) in ``tests/test_chunk_status_derivation.py``; this proves the hub
 serializes it correctly for a terminal chunk over the real HTTP surface, and
 withholds it for a non-terminal one.
 """
@@ -21,7 +21,7 @@ pytestmark = pytest.mark.component
 
 _POINTER = {"source": "default", "ref": "12"}
 
-# Mirrors test_chunks_api.py's own merge graph: the deliver hub node's `run: true`
+# Mirrors tests/test_chunks_api.py's own merge graph: the deliver hub node's `run: true`
 # completes synchronously, so one build completion carries the chunk straight to `done`.
 _MERGE_YAML = """
 name: default-delivery

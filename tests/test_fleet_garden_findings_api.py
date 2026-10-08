@@ -1,7 +1,7 @@
 """``GET /api/fleet/chunks/{chunk_id}/garden/findings`` — the worker-scoped fleet read
 of a run's finding bucket (component tier): the routine's non-exited findings in
 every scope, plus review findings on the run's scope. Derives the routine and scope from the chunk's own ``RunContext`` rather than a
-caller-supplied flag, reuses ``findings.py``'s own ``finding_view`` projection, and
+caller-supplied flag, reuses ``src/blizzard/hub/api/findings.py``'s own ``finding_view`` projection, and
 refuses — rather than answering an empty bucket for — an unknown chunk or one with no
 run context at all."""
 

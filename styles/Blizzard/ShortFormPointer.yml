@@ -1,0 +1,12 @@
+extends: existence
+message: "'%s' is a short-form pointer — name the file by its repo-root path (bzh:one-prose-home §Pointer forms)."
+level: error
+scope: text
+nonword: true
+exceptions:
+  - '__init__\.py'
+  - '__main__\.py'
+  - 'conftest\.py'
+  - 'setup\.py'
+tokens:
+  - '(?<![\w./~:@$*…-])(?!(?:src|tests|scripts|docs|web|contracts|openapi|packaging|mutants|dist|styles|blizzard|blizzard-mock|blizzard-context|blizzard-infra)/)(?:\.\./|\./)*[\w.-]+(?:/[\w.-]+)*\.py\b'

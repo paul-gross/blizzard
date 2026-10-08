@@ -1,4 +1,4 @@
-"""``harness/opencode/transcript/transcript_source.py`` — unit tier, hermetic: a scripted
+"""``src/blizzard/runner/harness/opencode/transcript/transcript_source.py`` — unit tier, hermetic: a scripted
 :class:`IOpenCodeExporter`, never a real ``opencode`` binary. Covers cold/forward identity
 reads, the malformed-cursor/export-failure ``unreadable`` paths, child-session sidechain
 linking, and ``read_raw_lines``'s round trip through ``OpenCodeAdapter.sum_transcript_usage``."""

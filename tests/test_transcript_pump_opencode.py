@@ -1,8 +1,8 @@
 """``TranscriptPump`` driven against the real ``OpenCodeTranscriptSource`` (blocking)
-— component tier. The unit-tier tests in ``test_runner_harness_opencode_transcript.py`` prove
+— component tier. The unit-tier tests in ``tests/test_runner_harness_opencode_transcript.py`` prove
 the source itself ships a ``LateToolOutput`` patch, not a duplicate turn, on a pending tool
 call's completion; this file proves the SAME scenario end to end through the pump, mirroring
-``test_transcript_pump.py::test_a_result_whose_call_shipped_last_window_rides_as_an_output_patch``
+``tests/test_transcript_pump.py::test_a_result_whose_call_shipped_last_window_rides_as_an_output_patch``
 for Claude Code's own late-output case."""
 
 from __future__ import annotations

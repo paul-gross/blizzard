@@ -201,7 +201,7 @@ class ChunkFactsStore:
         query (:func:`maybe_live`), so the facts read and the per-chunk derivation track the
         live fleet rather than every chunk ever minted. The prefilter is sound, not exact —
         a terminal chunk it keeps is dropped by the derivation below. Status derivation
-        itself stays in ``domain/chunk/model.py``; this only narrows which rows get read."""
+        itself stays in ``src/blizzard/hub/domain/chunk/model.py``; this only narrows which rows get read."""
         with self._store.read("load_live_statuses") as conn:
             statuses = self._maybe_live_statuses(conn)
         return {chunk_id: status for chunk_id, status in statuses.items() if status not in TERMINAL_STATUSES}

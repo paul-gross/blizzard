@@ -18,8 +18,8 @@ from blizzard.runner.lifecycle.judgement.elicitation_files import IElicitationFi
 @dataclass(frozen=True)
 class ElicitationFiles:
     """One runner's elicitation-output file layout, rooted at ``root`` — created once at
-    wiring time (``build.py``), same as the sibling ``WorkerStdoutFiles``
-    (``leases/internal/worker_stdout_files.py``), so a path-computing
+    wiring time (``src/blizzard/runner/loop_wiring.py``), same as the sibling ``WorkerStdoutFiles``
+    (``src/blizzard/runner/leases/internal/worker_stdout_files.py``), so a path-computing
     accessor stays pure rather than touching the filesystem on every call."""
 
     root: str

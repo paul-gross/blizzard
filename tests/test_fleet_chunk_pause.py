@@ -1,7 +1,7 @@
 """``POST /api/fleet/chunks/{id}/pause`` and ``.../resume``.
 
 Delegates onto the same ``pause_chunk``/``resume_chunk`` the board's own route calls
-(``canon:one-owner``). The domain refusal is exercised by ``test_chunks_api.py``; this
+(``canon:one-owner``). The domain refusal is exercised by ``tests/test_chunks_api.py``; this
 proves only that the fleet route reaches it, ``by`` defaulting to ``operator``.
 """
 

@@ -1,5 +1,5 @@
 """The seam over the per-lease scratch directory a worker session stages drafts, notes, and
-pulled assets in — `BLIZZARD_TMPDIR`. The driver is ``internal/worker_scratch_dirs.py``."""
+pulled assets in — `BLIZZARD_TMPDIR`. Driver: ``src/blizzard/runner/process/internal/worker_scratch_dirs.py``."""
 
 from __future__ import annotations
 

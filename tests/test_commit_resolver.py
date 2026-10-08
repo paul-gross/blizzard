@@ -1,6 +1,6 @@
 """``GitHubCommitResolver`` — the real forge check behind `garden_delivery.CommitResolver`, and
 ``RepositoryCommitResolver`` — its binding to the repository records (unit tier). Stubs the ``httpx`` transport
-(``test_auth_oauth_factory.py``'s own ``httpx.MockTransport`` shape) — never a real
+(``tests/test_auth_oauth_factory.py``'s own ``httpx.MockTransport`` shape) — never a real
 network call, and never a raise, whatever the transport does."""
 
 from __future__ import annotations

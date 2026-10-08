@@ -1,5 +1,5 @@
 """``WorkItemStore.create_run_with_chunk`` — a routine run's own one-act mint
-(component tier). Mirrors ``test_work_item_store.py``'s shape; the chunk lands
+(component tier). Mirrors ``tests/test_work_item_store.py``'s shape; the chunk lands
 ``not_ready``, with no promote fact and no queue position."""
 
 from __future__ import annotations

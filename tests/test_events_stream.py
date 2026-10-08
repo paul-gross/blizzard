@@ -2,7 +2,7 @@
 
 The stream is an infinite live fan-out, so it cannot be read through Starlette's
 ``TestClient`` (``ASGITransport`` buffers the whole body and would hang) — these tests
-call the route handler directly. Replay/live semantics are covered in ``test_events.py``.
+call the route handler directly. Replay/live semantics are covered in ``tests/test_events.py``.
 """
 
 from __future__ import annotations

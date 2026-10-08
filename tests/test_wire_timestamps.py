@@ -1,7 +1,7 @@
 """The UTC-instants fitness test (``bzh:utc-instants``).
 
 1. **Structural guard** — AST-walks every module under ``src/blizzard/`` for a call to
-   ``.isoformat()`` (``foundation/store/utc.py`` excluded, ``iso_utc``'s own impl).
+   ``.isoformat()`` (``src/blizzard/foundation/store/utc.py`` excluded, ``iso_utc``'s own impl).
 2. **Schema guard** — every ``DateTime``-family column in both stores is
    ``UtcDateTime``-typed."""
 

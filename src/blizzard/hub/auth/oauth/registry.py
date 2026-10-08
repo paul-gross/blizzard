@@ -1,7 +1,7 @@
 """The provider registry — configured providers keyed by name.
 
-Built once at the composition root (``hub/auth/oauth/internal/factory.py``) from
-``[[auth.oauth.provider]]``; ``hub/api/auth_login.py`` depends only on
+Built once at the composition root (``src/blizzard/hub/auth/oauth/internal/factory.py``) from
+``[[auth.oauth.provider]]``; ``src/blizzard/hub/api/auth_login.py`` depends only on
 :class:`IOAuthProviderRegistry`, never the concrete conformers.
 """
 

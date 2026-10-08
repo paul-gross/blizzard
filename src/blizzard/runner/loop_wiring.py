@@ -190,7 +190,7 @@ class LoopWiring:
             usage_http_client=usage_http_client,
             process=graph.process,
             worktree_git=SubprocessWorktreeGit(),
-            # The check-runner seam — see `runner/lifecycle/judgement/check_runner.py`.
+            # The check-runner seam — see `src/blizzard/runner/lifecycle/judgement/check_runner.py`.
             check_runner=SubprocessCheckRunner(worker_env=config.worker_env),
             config=loop_config,
             worker_files=_worker_files,

@@ -143,7 +143,7 @@ class DormantSession:
         )
         if self.ctx.events is not None:
             # LeaseActivity.state flips to "parked" — see LeaseChangeCause's own doc
-            # (wire/sse_runner.py) for why this cause isn't record_closure's "parked".
+            # (src/blizzard/wire/sse_runner.py) for why this cause isn't record_closure's "parked".
             self.ctx.events.publish_lease_changed(
                 lease.lease_id,
                 lease.chunk_id,
@@ -586,7 +586,7 @@ class DormantSession:
                 opened_at=at if at is not None else self.ctx.clock.now(),
             )
             _CP_WAKE_AFTER_BOUNDARY.reached()
-        # Observed BEFORE the resume, the same as a fresh spawn (lifecycle/spawn.py): a hung or
+        # Observed BEFORE the resume, the same as a fresh spawn (src/blizzard/runner/lifecycle/spawn.py): a hung or
         # failing probe must never run after the worker is already live and unrecorded.
         version = harness.observe_version()
         spawn_cwd = SpawnCwd.of_session(self.ctx.config.workspace_root, bindings[0].workdir)
@@ -631,7 +631,7 @@ class DormantSession:
         # re-adopt this exact process past here.
         resumed.confirm_durable()
         if self.ctx.events is not None:
-            # Same 'spawned' cause the fresh-spawn path publishes (lifecycle/spawn.py) — a resumed
+            # Same 'spawned' cause the fresh-spawn path publishes (src/blizzard/runner/lifecycle/spawn.py) — a resumed
             # session's own flip back to a live pid is exactly as un-announced otherwise.
             self.ctx.events.publish_lease_changed(
                 lease.lease_id,

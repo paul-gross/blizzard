@@ -1,6 +1,6 @@
 """``ChunkDependenciesStore`` — the declared dependency edge's round-trip and release
 (component tier). Migrated-to-head sqlite-on-disk, the
-``test_chunk_delivery_store.py`` shape."""
+``tests/test_chunk_delivery_store.py`` shape."""
 
 from __future__ import annotations
 

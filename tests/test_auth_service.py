@@ -402,7 +402,7 @@ def test_revoke_deletes_the_session_row() -> None:
 
     service.revoke(session)
 
-    # Mirrors the edge's own read-then-resolve shape (hub/api/auth_session.py).
+    # Mirrors the edge's own read-then-resolve shape (src/blizzard/hub/api/auth_session.py).
     assert sessions.get_by_hash(session.id_hash) is None
 
 

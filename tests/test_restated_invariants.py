@@ -380,7 +380,7 @@ def test_case14_write_sites_preservation_contract(tmp_path: Path) -> None:
     owner_site.write_text('"""Nothing matching."""\n')
     newly_observed = tmp_path / "new.py"
     newly_observed.write_text('"""A marker phrase, newly restated."""\n')
-    # "gone.py" — declared allowed but no longer observed — is deliberately absent.
+    # The "gone" file — declared allowed but no longer observed — is deliberately absent.
 
     fact = _fact(
         markers=["a marker phrase"],

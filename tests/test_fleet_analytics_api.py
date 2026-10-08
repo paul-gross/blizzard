@@ -4,8 +4,8 @@ Component tier: each route renders the identical rows the matching operator rout
 renders for the same window, reusing its own query criteria and response-shaping
 helpers rather than a second aggregation; ``since`` is required (422 unset); a chunk
 with no run context, and an unknown chunk, both 404; and the operator counts/spend
-routes still refuse a runner principal (the existing sweep in ``test_analytics_events_api.py``
-/ ``test_analytics_spend_api.py`` stands unchanged)."""
+routes still refuse a runner principal (the existing sweep in ``tests/test_analytics_events_api.py``
+/ ``tests/test_analytics_spend_api.py`` stands unchanged)."""
 
 from __future__ import annotations
 
@@ -111,7 +111,7 @@ def _tool_turn(index: int, name: str, input: dict[str, object], *, timestamp: st
 def _push_transcript(hub: HubHarness, *, chunk_id: str, node_id: str, segment_id: str = "sg_1", seq: int = 1) -> None:
     spawn = _tool_turn(2, "Agent", {"subagent_type": "explorer"}, timestamp="2026-08-12T11:00:00Z")
     # A sidechain under the spawn (the agent-types row): a main-lane
-    # spawn's own `agent_type` column is unset (test_analytics_events_api.py's own
+    # spawn's own `agent_type` column is unset (tests/test_analytics_events_api.py's own
     # `test_counts_by_agent_type_is_empty_at_the_main_lane`); the count groups on the
     # enclosing sidechain's column instead.
     spawn["sidechain"] = {

@@ -20,7 +20,7 @@ _RUNNER_DIR = _SRC_DIR / "runner"
 _CLOCK_IMPLEMENTATION_FILE = _FOUNDATION_DIR / "clock.py"
 
 # AST-based (plan blizzard-context#clean-architecture): a literal-token grep would
-# misfire on `foundation/clock.py`'s and `hub/auth/signing.py`'s docstring mentions of
+# misfire on `src/blizzard/foundation/clock.py`'s and `src/blizzard/hub/auth/signing.py`'s docstring mentions of
 # `datetime.now()`, and on `time.monotonic()` — a legitimate non-wall-clock read one token
 # away from `time.time()`.
 _WALL_CLOCK_CALLS: frozenset[tuple[str, str]] = frozenset(

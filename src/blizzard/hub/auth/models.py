@@ -103,7 +103,7 @@ class AuthFact:
 @dataclass(frozen=True)
 class SuperuserBootstrap:
     """The singleton row tracking the currently configured ``auth.superuser`` bootstrap
-    target (see ``hub/auth/bootstrap.py``). ``claimed_user_id`` is ``None``
+    target (see ``src/blizzard/hub/auth/bootstrap.py``). ``claimed_user_id`` is ``None``
     while no verified user has matched ``email`` yet."""
 
     email: str
@@ -114,7 +114,7 @@ class SuperuserBootstrap:
 @domain_model
 @dataclass(frozen=True)
 class ResolvedIdentity:
-    """The request principal a human-plane edge resolves to — ``hub/api/auth_session.py``'s
+    """The request principal a human-plane edge resolves to — ``src/blizzard/hub/api/auth_session.py``'s
     ``resolve_identity``/``require()`` return this, never a bare ``User``. It carries the
     expanded permission set (computed once, by :func:`blizzard.auth_core.expand`) and
     ``display_name`` so no call site re-expands the role or re-reads the user row."""

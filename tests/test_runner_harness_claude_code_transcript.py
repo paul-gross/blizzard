@@ -1,9 +1,9 @@
-"""``harness/claude_code/transcript.py`` — the transcript filesystem adapter.
+"""``src/blizzard/runner/harness/claude_code/transcript.py`` — the transcript filesystem adapter.
 Unit tier, hermetic under ``tmp_path`` as ``projects_root``.
 
 Covers forward incremental reads from a minted position, the shared batch-budget cap,
 and sidecar discovery/read I/O — the agent-id join itself is filesystem-free coverage
-in ``test_runner_harness_claude_code_normalizer.py``."""
+in ``tests/test_runner_harness_claude_code_normalizer.py``."""
 
 from __future__ import annotations
 
@@ -400,7 +400,7 @@ def test_turns_since_batch_budget_exhaustion_returns_incomplete_with_a_next_posi
 
 
 # Sidecar-backed sidechain nesting (link route 1): batch-boundary I/O only — the join's
-# own behavior lives filesystem-free in test_runner_harness_claude_code_normalizer.py.
+# own behavior lives filesystem-free in tests/test_runner_harness_claude_code_normalizer.py.
 
 
 @pytest.mark.unit

@@ -2,7 +2,7 @@
 
 Proves the *runner's* half of pause/resume: the runner route over a real app, the hub
 reached through a stubbed ``httpx.Client``, and the 202/404/409 + 502-on-unreachable
-pass-through. The hub half (the domain refusal, the pause fact) is ``test_chunks_api.py``'s.
+pass-through. The hub half (the domain refusal, the pause fact) is ``tests/test_chunks_api.py``'s.
 """
 
 from __future__ import annotations

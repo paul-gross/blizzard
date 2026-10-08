@@ -179,9 +179,9 @@ def deliver_and_report(
     action: str,
 ) -> int:
     """POST ``body`` to a delivery route and translate its outcome into a land script's
-    own exit shape — the POST/status-check/outcome-dispatch/failure-marker block
-    ``garden_deliver.py`` and ``review_deliver.py`` both build a `main()` around, shared
-    here rather than duplicated. ``action`` names the delivery in a diagnostic; may raise
+    own exit shape — the POST and outcome-dispatch block
+    ``src/blizzard/hub/graphs/scripts/garden_deliver.py`` and ``src/blizzard/hub/graphs/scripts/review_deliver.py``
+    both build a `main()` around. ``action`` names the delivery in a diagnostic; may raise
     :class:`MarkerWriteError`, left for the caller's own top-level ``try`` to report."""
     status, resp_body = forge_request("POST", url, token=None, body=body, headers={_MARKER_TOKEN_HEADER: token})
     if not (200 <= status < 300):

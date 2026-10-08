@@ -54,7 +54,7 @@ class RoutineBaseline:
 
 class MalformedFindingSetIdError(ValueError):
     """A `finding_sets` row carried an id outside the prefixed-ULID shape
-    `foundation/ids.py` mints — every id this service reads was minted by the hub
+    `src/blizzard/foundation/ids.py` mints — every id this service reads was minted by the hub
     itself, so this names a store-level invariant break, not a user-facing refusal."""
 
     def __init__(self, finding_set_id: str) -> None:

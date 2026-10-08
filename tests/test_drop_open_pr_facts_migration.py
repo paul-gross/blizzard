@@ -1,6 +1,6 @@
 """The drop-open-pr-facts revision removes ``delivery_pr_opened`` and ``delivery_pr_closed``.
 
-Seeded with literal ``sa.Table`` shapes rather than importing ``schema.py``, which no longer
+Seeded with literal ``sa.Table`` shapes rather than importing ``src/blizzard/hub/store/schema.py``, which no longer
 declares either table."""
 
 from __future__ import annotations

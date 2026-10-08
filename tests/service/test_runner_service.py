@@ -927,7 +927,7 @@ def _bare_runner_config(tmp_path: Path) -> RunnerConfig:
 def test_runner_stream_delivers_live_and_replays_from_last_event_id(tmp_path: Path) -> None:
     """A live subscriber receives a published frame, and a reconnect with
     ``Last-Event-ID`` replays only what it missed — the runner's own route wiring,
-    beside the shared core's generic keepalive proof (test_foundation_events.py)."""
+    beside the shared core's generic keepalive proof (tests/test_foundation_events.py)."""
     broker = EventBroker()
     config = _bare_runner_config(tmp_path)
 
@@ -1004,7 +1004,7 @@ def test_runner_stream_replays_a_restarted_brokers_buffered_tail_past_a_stale_cu
 
 
 def test_events_stream_401s_without_a_session_over_tcp_under_oauth(tmp_path: Path) -> None:
-    """``test_runner_route_gating.py`` proves this generically, in-process, over every
+    """``tests/test_runner_route_gating.py`` proves this generically, in-process, over every
     human-lane route; this reproves it against a genuinely running daemon, whose
     hub-auth-mode probe hits a real listening stub, not an in-process double."""
     config = _bare_runner_config(tmp_path)

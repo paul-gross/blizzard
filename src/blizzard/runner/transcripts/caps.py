@@ -7,7 +7,7 @@ can import it without a cycle."""
 from __future__ import annotations
 
 #: The runner's own per-record cap — held below the hub's `RECORD_MAX_BYTES`, which
-#: REJECTS what this one merely shrinks; `test_record_caps.py` asserts that ordering.
+#: REJECTS what this one merely shrinks; `tests/test_record_caps.py` asserts that ordering.
 TRANSCRIPT_RECORD_MAX_BYTES = 8 * 1024 * 1024
 
 #: The per-chunk budget — the sum of `shipped_bytes` across the chunk's segments, which

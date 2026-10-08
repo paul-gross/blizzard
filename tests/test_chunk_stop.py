@@ -21,7 +21,7 @@ _POINTER = {"source": "default", "ref": "12"}
 
 
 def _writable(hub) -> IWriteChunkHubExecRepository:  # type: ignore[no-untyped-def]
-    """A test-only cast — see ``test_hub_command_node.py``'s helper of the same name."""
+    """A test-only cast — see ``tests/test_hub_command_node.py``'s helper of the same name."""
     return cast(IWriteChunkHubExecRepository, hub.services.chunks.hub_exec)
 
 

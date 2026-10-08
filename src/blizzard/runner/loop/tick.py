@@ -77,8 +77,8 @@ def _tick(ctx: LoopContext) -> None:
     _traced(ctx, Pull)
     _traced(ctx, Fill)
     _traced(ctx, Advance)
-    # After every fact-lane-draining step — bounded (the real bound
-    # is `transcripts/transcript_drain.py`'s own, see there), so it delays nothing fleet-truth-bearing.
+    # After every fact-lane-draining step — bounded (the real bound is in
+    # `src/blizzard/runner/transcripts/transcript_drain.py`), so it delays nothing fleet-truth-bearing.
     _traced(ctx, TranscriptDrain)
     # Not load-bearing: each prune preserves what this tick's other readers see
     # — placed here only so a fact just enqueued isn't pruned the same tick it lands.

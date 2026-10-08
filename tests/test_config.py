@@ -833,7 +833,7 @@ def test_work_source_duplicate_provider_and_repo_raises(tmp_path: Path) -> None:
 
 @pytest.mark.unit
 def test_work_source_name_with_a_colon_raises(tmp_path: Path) -> None:
-    # see hub/cli/chunk.py's ingest token parsing.
+    # see src/blizzard/hub/cli/chunk.py's ingest token parsing.
     with pytest.raises(HubConfigError, match=":"):
         _legacy(tmp_path, _BLOCK.replace('"blizzard"', '"acme:blizzard"'))
 
@@ -1368,7 +1368,7 @@ def test_hub_db_url_honored_identically_by_host_and_migrate(tmp_path: Path, monk
     init_environment(root)  # scaffolds + migrates the default sqlite store
 
     # Inside root: an override pointing elsewhere is exactly what the --dir isolation
-    # guard exists to catch — see test_config.py's own guard tests below.
+    # guard exists to catch — see tests/test_config.py's own guard tests below.
     override_url = f"sqlite:///{root / 'override.db'}"
     monkeypatch.setenv(HUB_ENV_DB_URL, override_url)
 

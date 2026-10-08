@@ -194,7 +194,7 @@ def test_a_completed_dependent_derives_no_marking_despite_its_standing_edge(tmp_
 
 
 class _CountingFactsStore(ChunkFactsStore):
-    """Counts calls to the bulk and per-chunk facts reads, the ``test_list_chunks_bulk_reads.py``
+    """Counts calls to the bulk and per-chunk facts reads, the ``tests/test_list_chunks_bulk_reads.py``
     shape, so a test can pin which shape the detail route's blocked-marking derivation reaches."""
 
     def __init__(self, store: HubStoreConnections, clock: IClock) -> None:

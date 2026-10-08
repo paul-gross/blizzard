@@ -2,8 +2,8 @@
 ``service.name`` its telemetry leaves the runner with, and the per-signal plan for pointing a worker's exporters
 at the runner.
 
-The plan and names types live in ``harness/harness_telemetry_plan.py``. The declaration answers both through the
-seam; Claude Code's name rules live in ``claude_code/telemetry.py``."""
+The plan and names types live in ``src/blizzard/runner/harness/harness_telemetry_plan.py``; the declaration
+answers both through the seam. Name rules: ``src/blizzard/runner/harness/claude_code/telemetry.py``."""
 
 from __future__ import annotations
 

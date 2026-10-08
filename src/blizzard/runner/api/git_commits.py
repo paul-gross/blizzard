@@ -1,7 +1,7 @@
 """``blizzard runner artifact commit`` — ``POST /api/leases/{lease_id}/git-commits``.
 
 A worker durably declares a ``git_commit`` artifact for a repo it touched, authorized by its inherited
-lease token (presentation owned by ``lease_token.py``). ``404`` unknown lease, ``403``
+lease token (presentation owned by ``src/blizzard/runner/api/lease_token.py``). ``404`` unknown lease, ``403``
 bad token, ``400`` for a repo the lease does not hold, ``409`` once the outcome is buffered or the
 standing refuses. A declaration against an open takeover's closed reference lease lands, riding no completion."""
 
