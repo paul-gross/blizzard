@@ -19,7 +19,7 @@ from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.hub.domain.runners.registration import RunnerAddition
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from blizzard.hub.tenancy import TenantId
-from tests.support import migrate_to, scoped_connections
+from tests.support import hub_store_connections, migrate_to, scoped_connections
 
 pytestmark = pytest.mark.component
 
@@ -308,7 +308,8 @@ def test_downgrade_keys_runners_added_after_the_upgrade_by_their_unshared_names(
     connected reads as registered when it was added, in an empty workspace."""
     runner, engine = migrate_to(tmp_path, "head")
     engine.dispose()
-    registry = _registry(tmp_path)
+    # A scoped write refuses a tenant the store does not hold, so the registry writes as the store's own.
+    registry = RunnerRegistryStore(hub_store_connections(create_engine_from_url(_db_url(tmp_path))))
     for runner_id, name in (("rn_A", "solo"), ("rn_B", "twin"), ("rn_C", "twin"), ("rn_D", "rn_A")):
         registry.add(RunnerAddition(runner_id, name, f"hash-{runner_id}", at=_T0, by="admin"))
     for runner_id in ("rn_A", "rn_B", "rn_C"):

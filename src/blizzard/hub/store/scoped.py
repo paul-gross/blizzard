@@ -28,9 +28,14 @@ block, never on the pooled driver connection behind it.
 
 The stamp is also guarded at execute: a statement run through a scoped connection that writes a
 tenant-owned table and carries ``tenant_id`` among its execute-time parameters is refused, since an
-``executemany`` row's own ``tenant_id`` would override the builder's stamp. A ``write`` first
-confirms, inside its own transaction, that the scope's tenant is still open, raising
-:class:`TenantClosed` when it has a ``tenant_deletions`` row."""
+``executemany`` row's own ``tenant_id`` would override the builder's stamp.
+
+A ``write`` opens by locking the scope's tenant row on the condition that the tenant is still
+open — one statement that both takes the store's write lock and reads ``tenant_deletions`` under
+it — and raises :class:`TenantClosed` when the tenant is closed (:class:`UnknownTenant` when no
+tenant has the id). On SQLite that statement is the transaction's first write, so the driver's
+deferred ``BEGIN`` precedes it and the read runs under the single writer lock: a close either
+committed before it, and is seen, or waits for the writer's commit."""
 
 from __future__ import annotations
 
@@ -44,7 +49,7 @@ from sqlalchemy.sql import Alias, ColumnElement, Delete, FromClause, Insert, Joi
 
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
-from blizzard.hub.tenancy import StoreScope, TenantClosed
+from blizzard.hub.tenancy import StoreScope, TenantClosed, UnknownTenant
 
 TENANT_COLUMN = "tenant_id"
 
@@ -206,12 +211,25 @@ class ScopedConnections(HubStoreConnections, ScopedStatements):
 
     @contextmanager
     def write(self, operation: str, *, expect: tuple[type[BaseException], ...] = ()) -> Iterator[Connection]:
-        """Like :meth:`HubStoreConnections.write`, after confirming inside the same transaction
-        that the scope's tenant is open; raises :class:`TenantClosed` when it is not."""
+        """Like :meth:`HubStoreConnections.write`, opened by :meth:`_lock_open_tenant`, so the
+        whole transaction runs under the tenant's lock and a closed tenant writes nothing."""
         with super().write(operation, expect=expect) as conn:
-            closed = conn.execute(
-                sa.select(s.tenant_deletions.c.id).where(s.tenant_deletions.c.tenant_id == self.scope.tenant).limit(1)
-            ).first()
-            if closed is not None:
-                raise TenantClosed(self.scope.tenant)
+            self._lock_open_tenant(conn)
             yield self._bind(conn)
+
+    def _lock_open_tenant(self, conn: Connection) -> None:
+        """Lock the scope's tenant row if the tenant is open, as the transaction's first
+        statement: a no-op ``UPDATE`` whose condition reads ``tenant_deletions``. On SQLite the
+        ``UPDATE`` takes the single writer lock before its condition is read, so no close can
+        commit between the check and the caller's writes. Only when it matches no row does a
+        second read tell a closed tenant from an unknown one."""
+        tenant = self.scope.tenant
+        closed = sa.exists().where(s.tenant_deletions.c.tenant_id == tenant)
+        locked = conn.execute(
+            sa.update(s.tenants).where(s.tenants.c.tenant_id == tenant, ~closed).values(name=s.tenants.c.name)
+        )
+        if locked.rowcount == 1:
+            return
+        if conn.execute(sa.select(closed)).scalar_one():
+            raise TenantClosed(tenant)
+        raise UnknownTenant(tenant)

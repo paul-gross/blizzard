@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import pytest
+import sqlalchemy as sa
 from sqlalchemy import create_engine
 
 from blizzard.foundation.clock import FixedClock
@@ -20,7 +21,7 @@ from blizzard.hub.domain.graph.authoring import Reification
 from blizzard.hub.domain.graph.model import SESSION_KNOWN_KEYS, GraphDoc, GraphParseError, RotatePolicy, SessionDecl
 from blizzard.hub.domain.graph.validation import Validator
 from blizzard.hub.store.internal.graph_store import GraphStore
-from blizzard.hub.store.schema import metadata
+from blizzard.hub.store.schema import metadata, tenants
 from blizzard.hub.tenancy import TenantId
 from tests.support import scoped_connections
 
@@ -381,7 +382,14 @@ def test_reify_carries_the_node_session_reference() -> None:
 def _store() -> GraphStore:
     engine = create_engine("sqlite://")
     metadata.create_all(engine)
-    return GraphStore(scoped_connections(engine, TenantId("ten_A")))
+    tenant = TenantId("ten_A")
+    with engine.begin() as conn:
+        conn.execute(
+            sa.insert(tenants).values(
+                tenant_id=tenant, name=tenant, created_at=datetime(2026, 1, 1, tzinfo=UTC), created_by="usr_test"
+            )
+        )
+    return GraphStore(scoped_connections(engine, tenant))
 
 
 def test_mint_and_load_round_trip_the_declarations_identically() -> None:

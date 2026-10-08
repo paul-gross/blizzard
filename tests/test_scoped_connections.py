@@ -8,7 +8,9 @@ rows of two tenants so a missing or misplaced predicate shows up as a wrong row,
 from __future__ import annotations
 
 import dataclasses
+import sqlite3
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -27,12 +29,13 @@ from blizzard.hub.store.scoped import (
     is_tenant_owned,
     statements_of,
 )
-from blizzard.hub.tenancy import StoreScope, TenantClosed, TenantId
+from blizzard.hub.tenancy import StoreScope, TenantClosed, TenantId, UnknownTenant
 
 pytestmark = pytest.mark.component
 
 TEN_A = TenantId("ten_A")
 TEN_B = TenantId("ten_B")
+CREATED_AT = datetime(2026, 1, 1, tzinfo=UTC)
 
 md = MetaData()
 chunks = Table(
@@ -79,8 +82,16 @@ memberships = Table(
 def engine(tmp_path: Path) -> Iterator[Engine]:
     eng = create_engine_from_url(f"sqlite:///{tmp_path / 'scoped.db'}")
     md.create_all(eng)
+    s.tenants.create(eng)
     s.tenant_deletions.create(eng)
     with eng.begin() as conn:
+        conn.execute(
+            sa.insert(s.tenants),
+            [
+                {"tenant_id": tenant, "name": tenant, "created_at": CREATED_AT, "created_by": "usr_test"}
+                for tenant in (TEN_A, TEN_B)
+            ],
+        )
         conn.execute(
             sa.insert(chunks),
             [
@@ -390,3 +401,41 @@ def test_a_write_on_a_closed_tenant_is_refused_inside_its_transaction(
     with other.write("test") as conn:
         conn.execute(other.insert(notes).values(chunk_id="c9", body="b-later"))
     assert _all_notes(hub)[-1] == (TEN_B, "b-later")
+
+
+def test_a_write_on_a_drained_tenant_is_refused(hub: HubStoreConnections, scoped: ScopedConnections) -> None:
+    # A finished teardown leaves the deletion fact and no tenant row.
+    _close(hub, TEN_A)
+    with hub.write("test") as conn:
+        conn.execute(sa.delete(s.tenants).where(s.tenants.c.tenant_id == TEN_A))
+    with pytest.raises(TenantClosed), scoped.write("test"):
+        pass
+
+
+def test_a_write_on_an_unknown_tenant_is_refused(hub: HubStoreConnections) -> None:
+    nobody = hub.scoped(StoreScope(TenantId("ten_NOBODY")))
+    with pytest.raises(UnknownTenant) as refused, nobody.write("test"):
+        pass
+    assert refused.value.tenant == "ten_NOBODY"
+
+
+def test_a_close_cannot_commit_while_an_open_write_is_in_flight(
+    engine: Engine, hub: HubStoreConnections, scoped: ScopedConnections
+) -> None:
+    # A close committed after the writer opened would let the writer's rows land behind the
+    # drain. The writer's opening statement holds the store's write lock, so a close from
+    # another connection waits for the writer's commit — here, with no busy wait, it fails.
+    closer = sqlite3.connect(str(engine.url.database), timeout=0, isolation_level=None)
+    close = "INSERT INTO tenant_deletions (tenant_id, name, deleted_by) VALUES (?, ?, 'usr_test')"
+    try:
+        with scoped.write("test") as conn:
+            with pytest.raises(sqlite3.OperationalError, match="locked"):
+                closer.execute(close, (TEN_A, TEN_A))
+            conn.execute(scoped.insert(notes).values(chunk_id="c9", body="in-flight"))
+        closer.execute(close, (TEN_A, TEN_A))
+    finally:
+        closer.close()
+    # The writer's row committed before the close, so a drain that follows the close sees it.
+    assert _all_notes(hub)[-1] == (TEN_A, "in-flight")
+    with pytest.raises(TenantClosed), scoped.write("test"):
+        pass
