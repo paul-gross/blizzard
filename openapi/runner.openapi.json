@@ -2883,6 +2883,66 @@
         "title": "HubConnectivityView",
         "type": "object"
       },
+      "IdentityVerdictView": {
+        "description": "Whether the runner's token resolves to the runner its store belongs to.\n\n``unchecked`` until the hub first answers the check, ``matched`` while it does, ``mismatched``\nwhile the token names another runner \u2014 the runner then drives no lease until the right token\nreturns or the store is cleared with ``reset_command``.",
+        "properties": {
+          "checked_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checked At"
+          },
+          "reset_command": {
+            "title": "Reset Command",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "unchecked",
+              "matched",
+              "mismatched"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "store_runner_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Store Runner Id"
+          },
+          "token_runner_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token Runner Id"
+          }
+        },
+        "required": [
+          "state",
+          "store_runner_id",
+          "token_runner_id",
+          "checked_at",
+          "reset_command"
+        ],
+        "title": "IdentityVerdictView",
+        "type": "object"
+      },
       "IntendedMigrationView": {
         "description": "A chunk's standing migration intent \u2014 editable at any non-terminal status and\nconsulted, never applied eagerly, at the chunk's next transition. ``graph_name`` is resolved\nserver-side from the stored ``graph_id``, null when unresolvable. ``node_name`` is the ``forced``\nmode's landing target, null for ``auto``, whose landing is derived at consult time.",
         "properties": {
@@ -4002,6 +4062,16 @@
           },
           "hub": {
             "$ref": "#/components/schemas/HubConnectivityView"
+          },
+          "identity": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IdentityVerdictView"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "last_tick_at": {
             "anyOf": [

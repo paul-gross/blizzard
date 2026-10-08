@@ -1821,6 +1821,38 @@ export type HubConnectivityView = {
 };
 
 /**
+ * IdentityVerdictView
+ *
+ * Whether the runner's token resolves to the runner its store belongs to.
+ *
+ * ``unchecked`` until the hub first answers the check, ``matched`` while it does, ``mismatched``
+ * while the token names another runner — the runner then drives no lease until the right token
+ * returns or the store is cleared with ``reset_command``.
+ */
+export type IdentityVerdictView = {
+    /**
+     * Checked At
+     */
+    checked_at: string | null;
+    /**
+     * Reset Command
+     */
+    reset_command: string;
+    /**
+     * State
+     */
+    state: 'unchecked' | 'matched' | 'mismatched';
+    /**
+     * Store Runner Id
+     */
+    store_runner_id: string | null;
+    /**
+     * Token Runner Id
+     */
+    token_runner_id: string | null;
+};
+
+/**
  * IntendedMigrationView
  *
  * A chunk's standing migration intent — editable at any non-terminal status and
@@ -2597,6 +2629,7 @@ export type RunnerStatusView = {
      */
     gates?: Array<string>;
     hub: HubConnectivityView;
+    identity?: IdentityVerdictView | null;
     /**
      * Last Tick At
      */

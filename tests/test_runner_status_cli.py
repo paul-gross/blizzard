@@ -25,6 +25,7 @@ from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.cli.daemon import RunnerDaemon
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.hub.identity import IdentityState
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.listeners import Listeners, Uds
 from blizzard.runner.subscriptions.credential_renewer import (
@@ -56,9 +57,18 @@ def _init_runner(tmp_path: Path) -> Path:
 
 
 @contextmanager
-def _serve_local_api(root: Path, *, trace_status: bool = True) -> Iterator[tuple[Path, str]]:
+def _serve_local_api(
+    root: Path, *, trace_status: bool = True, refusing: tuple[str, str] | None = None
+) -> Iterator[tuple[Path, str]]:
     config = RunnerConfig.load(root, port=0)
     app = build_hosted_app(config).app
+    if refusing is not None:  # (store runner, token runner): the verdict the loop's check would hold
+        app.state.identity_verdict.record(
+            IdentityState.MISMATCHED,
+            store_runner_id=refusing[0],
+            token_runner_id=refusing[1],
+            checked_at=datetime(2026, 7, 16, 12, 0, tzinfo=UTC),
+        )
     if not trace_status:
         app.state.trace_status = None  # `GET /api/traces/status` then refuses with a 503
     sockets = Listeners.of(config).bound()
@@ -227,6 +237,24 @@ def test_status_renders_empty_sections_on_a_fresh_runner(tmp_path: Path, monkeyp
     assert "subscriptions (1):" in result.output  # the synthesized legacy anthropic declaration
     assert "never sampled" in result.output
     assert "gates: none" in result.output
+    assert "identity: unchecked" in result.output
+    assert "REFUSING" not in result.output
+
+
+@pytest.mark.component
+def test_status_names_both_runners_and_the_reset_command_while_refusing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _init_runner(tmp_path)
+    _no_hub(monkeypatch)
+    with _serve_local_api(root, refusing=("rn_store", "rn_other")):
+        result = CliRunner().invoke(runner_group, ["status", "--dir", str(root)])
+
+    assert result.exit_code == 0, result.output
+    refusing = next(line for line in result.output.splitlines() if "REFUSING" in line)
+    assert "token belongs to runner rn_other" in refusing
+    assert "store belongs to runner rn_store" in refusing
+    assert f"blizzard runner store reset {root}" in refusing
 
 
 @pytest.mark.component

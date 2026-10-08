@@ -479,6 +479,7 @@ def _wire_hosted_app(
         takeover=read_stores.takeover,
         escalations=read_stores.escalations,
         identity=graph.identity,
+        identity_verdict=graph.identity_verdict,
         runner_name=config.name,
         workspace_id=config.workspace_id,
         max_agents=config.max_agents,

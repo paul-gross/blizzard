@@ -12,8 +12,15 @@ from pydantic import BaseModel
 
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.api.wiring import RunnerWiring
+from blizzard.runner.hub.identity import IdentityVerdict
 from blizzard.runner.status.view import RunnerStatusService
-from blizzard.wire.runner_status import CapacitiesView, HubConnectivityView, PauseStateView, RunnerStatusView
+from blizzard.wire.runner_status import (
+    CapacitiesView,
+    HubConnectivityView,
+    IdentityVerdictView,
+    PauseStateView,
+    RunnerStatusView,
+)
 
 router = APIRouter(prefix="/api", tags=["runner"])
 
@@ -87,4 +94,15 @@ def _runner_status_view(service: RunnerStatusService) -> RunnerStatusView:
         ),
         last_tick_at=iso_utc(summary.last_tick_at) if summary.last_tick_at is not None else None,
         gates=list(summary.gates),
+        identity=_identity_view(summary.identity) if summary.identity is not None else None,
+    )
+
+
+def _identity_view(verdict: IdentityVerdict) -> IdentityVerdictView:
+    return IdentityVerdictView(
+        state=verdict.state.value,
+        store_runner_id=verdict.store_runner_id,
+        token_runner_id=verdict.token_runner_id,
+        checked_at=iso_utc(verdict.checked_at) if verdict.checked_at is not None else None,
+        reset_command=verdict.reset_command,
     )

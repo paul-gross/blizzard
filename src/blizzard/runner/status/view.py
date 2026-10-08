@@ -19,7 +19,7 @@ from blizzard.runner.environments.repository import (
     group_bindings_by_chunk,
 )
 from blizzard.runner.harness.registry import IHarnessLifecycleRegistry, UnavailableHarnessError, UnknownHarnessError
-from blizzard.runner.hub.identity import ICurrentRunnerIdentity
+from blizzard.runner.hub.identity import ICurrentIdentityVerdict, ICurrentRunnerIdentity, IdentityVerdict
 from blizzard.runner.hub.outbound_buffer import IReadOutboundRepository, OutboundFactEntry
 from blizzard.runner.leases.asks import IReadAskRepository, OpenAsk
 from blizzard.runner.leases.escalations import IReadEscalationRepository
@@ -132,6 +132,8 @@ class RunnerStatusSummary:
     last_tick_at: datetime | None
     #: The node names this runner's loaded configuration holds for a human decision.
     gates: tuple[str, ...] = ()
+    #: Whether the token resolves to the store's runner; ``None`` where no loop checks it.
+    identity: IdentityVerdict | None = None
 
 
 @domain_model
@@ -234,6 +236,7 @@ class RunnerStatusService:
         takeover: IReadTakeoverRepository,
         escalations: IReadEscalationRepository,
         identity: ICurrentRunnerIdentity,
+        identity_verdict: ICurrentIdentityVerdict | None = None,
         runner_name: str,
         workspace_id: str,
         max_agents: int,
@@ -256,6 +259,7 @@ class RunnerStatusService:
         self._clock = clock
         self._harnesses = harnesses
         self._identity = identity
+        self._identity_verdict = identity_verdict
         self._runner_name = runner_name
         self._workspace_id = workspace_id
         self._max_agents = max_agents
@@ -285,6 +289,7 @@ class RunnerStatusService:
             ),
             last_tick_at=self._pause.last_daemon_liveness(),
             gates=self._gates,
+            identity=self._identity_verdict.verdict() if self._identity_verdict is not None else None,
         )
 
     def environments(self) -> list[EnvironmentSlot]:

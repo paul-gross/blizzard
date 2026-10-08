@@ -43,17 +43,23 @@ export class LocalInfoView {
   } as const;
 
   /** The hub-link facts table's rows — a method, not a stored computed, since the
-   * identity/endpoint/link/loop rows need the `<ng-template>`s this template declares for them
+   * identity/verdict/endpoint/link/loop rows need the `<ng-template>`s this template declares for them
    * (`KitFactList`'s own templated-row contract). */
   protected factRows(
     identityValue: TemplateRef<unknown>,
+    verdictValue: TemplateRef<unknown>,
     endpointValue: TemplateRef<unknown>,
     linkValue: TemplateRef<unknown>,
     loopValue: TemplateRef<unknown>,
   ): readonly KitFact[] {
     const v = this.view();
+    // A runner with no loop checking its token reports no verdict, so the row is left out.
+    const verdict: readonly KitFact[] = v.identity
+      ? [{ label: 'identity', template: verdictValue, testid: 'runner-verdict' }]
+      : [];
     return [
       { label: 'runner', template: identityValue, testid: 'runner-identity' },
+      ...verdict,
       { label: 'endpoint', template: endpointValue },
       { label: 'link', template: linkValue },
       { label: 'last flush', value: this.lastFlushLabel(), testid: 'hub-last-flush' },
