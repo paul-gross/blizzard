@@ -8,7 +8,7 @@ a cut never splits a derivation, so one larger than the limit is taken alone."""
 from __future__ import annotations
 
 import heapq
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import date, datetime
 
 from blizzard.foundation.logging import get_logger
@@ -24,12 +24,26 @@ from blizzard.hub.domain.observability.egress.repository import EventsPosition
 from blizzard.hub.domain.observability.egress.schema import events_egress_row, partition_of
 from blizzard.hub.domain.observability.tracing.facts import StepFacts
 from blizzard.hub.egress.writer import EgressValues
+from blizzard.hub.tenancy import TenantId
 
 _log = get_logger("blizzard.hub.egress")
 
-__all__ = ["EventsItem", "events_rows", "position_of", "take"]
+__all__ = ["DerivationKey", "EventsItem", "derivations_by_marker", "events_rows", "position_of", "take"]
 
 type EventsItem = DerivationMarker | DropFact
+
+#: A derivation's marker's tenant, segment and extractor version — segment ids are runner-minted, so
+#: two tenants may each hold a derivation of the same segment id and version.
+type DerivationKey = tuple[TenantId | None, str, str]
+
+
+def _derivation_key(marker: DerivationMarker) -> DerivationKey:
+    return (marker.tenant, marker.segment_id, marker.extractor_version)
+
+
+def derivations_by_marker(derivations: Iterable[EventDerivation]) -> dict[DerivationKey, EventDerivation]:
+    """Each derivation under its own marker's key, for :func:`events_rows` to match each marker in its tenant."""
+    return {_derivation_key(held.marker): held for held in derivations}
 
 
 def position_of(item: EventsItem) -> EventsPosition:
@@ -67,7 +81,7 @@ def take(
 
 def events_rows(
     items: Sequence[EventsItem],
-    derivations: Mapping[tuple[str, str], EventDerivation],
+    derivations: Mapping[DerivationKey, EventDerivation],
     facts: Mapping[str, StepFacts],
     paths: FilePathPolicy,
     now: datetime,
@@ -88,14 +102,14 @@ def events_rows(
 
 def _assemble(
     item: EventsItem,
-    derivations: Mapping[tuple[str, str], EventDerivation],
+    derivations: Mapping[DerivationKey, EventDerivation],
     facts: Mapping[str, StepFacts],
     paths: FilePathPolicy,
     now: datetime,
 ) -> tuple[ExportedEventsEntry, ...]:
     if isinstance(item, DropFact):
         return (dropped_row(_facts(facts, item.chunk_id), item, now),)
-    derivation = derivations.get((item.segment_id, item.extractor_version))
+    derivation = derivations.get(_derivation_key(item))
     if derivation is None:
         return ()
     return derivation_rows(_facts(facts, derivation.chunk_id), derivation, paths, now)
