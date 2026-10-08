@@ -27,7 +27,7 @@ from blizzard.hub.store.scoped import (
     is_tenant_owned,
     statements_of,
 )
-from blizzard.hub.tenancy import StoreScope, TenantId
+from blizzard.hub.tenancy import StoreScope, TenantClosed, TenantId
 
 pytestmark = pytest.mark.component
 
@@ -362,3 +362,31 @@ def test_an_unscoped_connection_yields_no_builders(hub: HubStoreConnections, sco
             statements_of(conn)
         # The execute-time refusal is the scoped seam's alone.
         conn.execute(sa.insert(notes), [{"tenant_id": TEN_B, "chunk_id": "c9", "body": "raw"}])
+
+
+# --- A closed tenant ---------------------------------------------------------------------
+
+
+def _close(hub: HubStoreConnections, tenant: TenantId) -> None:
+    with hub.write("test") as conn:
+        conn.execute(sa.insert(s.tenant_deletions).values(tenant_id=tenant, name=tenant, deleted_by="usr_test"))
+
+
+def test_a_write_on_a_closed_tenant_is_refused_inside_its_transaction(
+    hub: HubStoreConnections, scoped: ScopedConnections
+) -> None:
+    before = _all_notes(hub)
+    _close(hub, TEN_A)
+    reached = False
+    with pytest.raises(TenantClosed) as refused, scoped.write("test") as conn:
+        reached = True
+        conn.execute(scoped.insert(notes).values(chunk_id="c9", body="late"))
+    assert refused.value.tenant == TEN_A
+    assert not reached
+    assert _all_notes(hub) == before
+    # Reads of a closed tenant still run; another tenant's writes are unaffected.
+    assert _rows(scoped, scoped.select(notes, notes.c.body)) == [("a-c1",)]
+    other = hub.scoped(StoreScope(TEN_B))
+    with other.write("test") as conn:
+        conn.execute(other.insert(notes).values(chunk_id="c9", body="b-later"))
+    assert _all_notes(hub)[-1] == (TEN_B, "b-later")

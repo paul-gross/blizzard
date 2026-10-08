@@ -28,7 +28,9 @@ block, never on the pooled driver connection behind it.
 
 The stamp is also guarded at execute: a statement run through a scoped connection that writes a
 tenant-owned table and carries ``tenant_id`` among its execute-time parameters is refused, since an
-``executemany`` row's own ``tenant_id`` would override the builder's stamp."""
+``executemany`` row's own ``tenant_id`` would override the builder's stamp. A ``write`` first
+confirms, inside its own transaction, that the scope's tenant is still open, raising
+:class:`TenantClosed` when it has a ``tenant_deletions`` row."""
 
 from __future__ import annotations
 
@@ -42,7 +44,7 @@ from sqlalchemy.sql import Alias, ColumnElement, Delete, FromClause, Insert, Joi
 
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
-from blizzard.hub.tenancy import StoreScope
+from blizzard.hub.tenancy import StoreScope, TenantClosed
 
 TENANT_COLUMN = "tenant_id"
 
@@ -204,5 +206,12 @@ class ScopedConnections(HubStoreConnections, ScopedStatements):
 
     @contextmanager
     def write(self, operation: str, *, expect: tuple[type[BaseException], ...] = ()) -> Iterator[Connection]:
+        """Like :meth:`HubStoreConnections.write`, after confirming inside the same transaction
+        that the scope's tenant is open; raises :class:`TenantClosed` when it is not."""
         with super().write(operation, expect=expect) as conn:
+            closed = conn.execute(
+                sa.select(s.tenant_deletions.c.id).where(s.tenant_deletions.c.tenant_id == self.scope.tenant).limit(1)
+            ).first()
+            if closed is not None:
+                raise TenantClosed(self.scope.tenant)
             yield self._bind(conn)
