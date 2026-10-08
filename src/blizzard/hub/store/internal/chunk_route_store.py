@@ -10,7 +10,7 @@ from collections import defaultdict
 from collections.abc import Iterable, Sequence
 from datetime import datetime
 
-from sqlalchemy import Connection, select
+from sqlalchemy import Connection
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id
@@ -101,14 +101,14 @@ class ChunkRouteStore:
         """Row construction and grouping for one batch (or the whole fleet, when
         ``chunk_ids`` is ``None``) — shared by both of :meth:`_routes`'s branches."""
 
-        def scoped(query, column):  # type: ignore[no-untyped-def]
+        def in_batch(query, column):  # type: ignore[no-untyped-def]
             return query if chunk_ids is None else query.where(column.in_(chunk_ids))
 
         newest_created: dict[str, RouteCreatedFact] = {}
         route_id_of: dict[str, str] = {}
         runner_of: dict[str, str] = {}
         workspace_of: dict[str, str] = {}
-        for r in conn.execute(scoped(select(s.route_created), s.route_created.c.chunk_id)).all():
+        for r in conn.execute(in_batch(self._store.select(s.route_created), s.route_created.c.chunk_id)).all():
             existing = newest_created.get(r.chunk_id)
             if existing is None or (r.created_at, r.seq) > (existing.created_at, existing.seq):
                 newest_created[r.chunk_id] = RouteCreatedFact(created_at=r.created_at, seq=r.seq)
@@ -118,8 +118,13 @@ class ChunkRouteStore:
 
         newest_released: dict[str, RouteReleasedFact] = {}
         for r in conn.execute(
-            scoped(
-                select(s.route_released.c.chunk_id, s.route_released.c.released_at, s.route_released.c.seq),
+            in_batch(
+                self._store.select(
+                    s.route_released,
+                    s.route_released.c.chunk_id,
+                    s.route_released.c.released_at,
+                    s.route_released.c.seq,
+                ),
                 s.route_released.c.chunk_id,
             )
         ).all():

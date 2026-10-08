@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, update
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id, IdPrefix
@@ -45,7 +45,7 @@ class ChunkHubExecStore:
         with self._store.read("count_live_hub_exec_slots") as conn:
             return int(
                 conn.execute(
-                    select(func.count()).select_from(s.hub_exec_slot).where(s.hub_exec_slot.c.released_at.is_(None))
+                    self._store.select(s.hub_exec_slot, func.count()).where(s.hub_exec_slot.c.released_at.is_(None))
                 ).scalar()
                 or 0
             )
@@ -88,6 +88,8 @@ class ChunkHubExecStore:
             )
 
     def release_live_hub_exec_slots(self, *, at: datetime) -> int:
+        """Release every live slot across the hub, spanning every tenant — the boot step's
+        release of slots a crash orphaned."""
         with self._store.write("release_live_hub_exec_slots") as conn:
             return conn.execute(
                 update(s.hub_exec_slot).where(s.hub_exec_slot.c.released_at.is_(None)).values(released_at=at)
