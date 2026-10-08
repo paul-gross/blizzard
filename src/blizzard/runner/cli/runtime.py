@@ -16,7 +16,9 @@ import click
 import httpx
 
 from blizzard.cli.host_directory import HostDirectory
+from blizzard.cli.operator_trace import ITraceHeaders, OperatorTrace
 from blizzard.cli.runtime import build_early_shutdown_server, click_exception_on, run_init, run_migrate
+from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.operator_sessions.internal.session_file import SessionFile
 from blizzard.foundation.roles import collaborator
@@ -24,6 +26,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import RevisionMismatchError
 from blizzard.runner.app import HostedApp, build_hosted_app
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
+from blizzard.runner.cli.store import refuse_while_held
 from blizzard.runner.composition import (
     RunnerProcess,
     build_read_stores,
@@ -39,6 +42,7 @@ from blizzard.runner.hub.bootstrap import (
     BootstrapStop,
     BootstrapStopped,
     HeldToken,
+    IRunnerStoreAside,
     RunnerBootstrap,
     TokenNotWritten,
 )
@@ -54,7 +58,15 @@ from blizzard.runner.hub.internal.http_hub import HttpHubClient, HttpHubRunnerAd
 from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.runner.listeners import ListenerError, Listeners, Uds
 from blizzard.runner.loop_wiring import LoopWiring, PeriodicDriver
-from blizzard.runner.runtime import ensure_current_revision, init_environment, migrate, migration_runner
+from blizzard.runner.runtime import (
+    Runtime,
+    StoreResetRefused,
+    ensure_current_revision,
+    init_environment,
+    migrate,
+    migration_runner,
+    reset_command,
+)
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.stores import RunnerReadStores
 from blizzard.runner.tracing.sweep import announce_rejected_tracing
@@ -120,11 +132,36 @@ def init(ctx: click.Context, directory: str, hub_url: str | None, allow_readd: b
         config = RunnerConfig.load(Path(directory))
     collaborators = ctx.find_object(InitCollaborators) or InitCollaborators(_http_hub_clients)
     with collaborators.join_with(config) as (identity, admin):
-        _join_hub(config, identity, admin, allow_readd=allow_readd)
+        _join_hub(config, identity, admin, _RuntimeStore(config, OperatorTrace.source(ctx)), allow_readd=allow_readd)
+
+
+class _RuntimeStore:
+    """The runtime's own store, as ``init`` sees it while the daemon is down."""
+
+    def __init__(self, config: RunnerConfig, trace: ITraceHeaders) -> None:
+        self.config = config
+        self.trace = trace
+
+    def stored_runner_id(self) -> str | None:
+        with read_stores(self.config) as stores:
+            stored = stores.identity.runner_identity()
+        return stored.runner_id if stored is not None else None
+
+    def set_aside(self) -> None:
+        refuse_while_held(self.config.root, self.trace, action="set the old runner's store aside")
+        with click_exception_on(ConfigError, StoreResetRefused):
+            aside = Runtime(self.config.root).reset_store(now=SystemClock().now())
+        for path in aside.moved:
+            click.echo(f"set the old runner's store aside as {path}")
 
 
 def _join_hub(
-    config: RunnerConfig, identity: ITokenIdentityReader, admin: IHubRunnerAdmin, *, allow_readd: bool
+    config: RunnerConfig,
+    identity: ITokenIdentityReader,
+    admin: IHubRunnerAdmin,
+    store: IRunnerStoreAside,
+    *,
+    allow_readd: bool,
 ) -> None:
     """Keep the runner the held token names, or add one and write its token; any stop exits
     non-zero with nothing added."""
@@ -136,7 +173,9 @@ def _join_hub(
     )
     hub = config.hub_url
     try:
-        joined = RunnerBootstrap(identity, admin, token_file).join(config.name, held=held, allow_readd=allow_readd)
+        joined = RunnerBootstrap(identity, admin, token_file, store).join(
+            config.name, held=held, allow_readd=allow_readd
+        )
     except BootstrapStopped as exc:
         from_env = held is not None and held.from_process_env
         raise click.ClickException(_stopped(exc, config, token_file, from_env=from_env)) from exc
@@ -199,6 +238,13 @@ def _stopped(exc: BootstrapStopped, config: RunnerConfig, token_file: HubTokenFi
             )
         case BootstrapStop.TOKEN_NOT_RECEIVED:
             return f"the hub at {hub} received no token from this runner, so nothing was added"
+        case BootstrapStop.STORE_NAMES_A_RUNNER:
+            return (
+                f"this runner holds no token, but its store belongs to runner {runner_id}, so nothing was added: "
+                f"put that runner's token in {token_file.path} as {config.token_env}, or — if it is gone for good — "
+                f"re-run init with --allow-readd to set its store aside and add a new runner, or clear the store "
+                f"with `{reset_command(config.root)}`"
+            )
         case BootstrapStop.TOKEN_OVERRIDDEN:
             return (
                 f"the hub at {hub} does not know the token ${config.token_env} carries, and a replacement in "

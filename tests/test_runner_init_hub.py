@@ -6,7 +6,10 @@ from __future__ import annotations
 
 import errno
 import os
+import sqlite3
 import stat
+from contextlib import closing
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import pytest
@@ -16,9 +19,10 @@ from blizzard.cli.main import blizzard
 from blizzard.foundation.operator_sessions.internal.session_file import SessionFile
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
 from blizzard.runner.config import CONFIG_FILENAME, DEFAULT_TOKEN_ENV, RunnerConfig
-from blizzard.runner.hub.bootstrap import BootstrapStop, BootstrapStopped, HeldToken, kept_identity
+from blizzard.runner.hub.bootstrap import BootstrapStop, BootstrapStopped, HeldToken, RunnerBootstrap, kept_identity
 from blizzard.runner.hub.client import (
     HubClientError,
+    IssuedIdentity,
     RunnerAddRefusalReason,
     RunnerAddRefused,
     TokenIdentity,
@@ -26,7 +30,8 @@ from blizzard.runner.hub.client import (
 )
 from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.runner.hub.token_file import ENV_FILENAME, assigned_token, with_token
-from tests.runner_init_fakes import FakeInitHub, FakeTokenIdentityReader, init_runner
+from blizzard.runner.runtime import sqlite_store_file
+from tests.runner_init_fakes import FakeHubRunnerAdmin, FakeInitHub, FakeTokenIdentityReader, init_runner
 
 _HUB = "http://hub.test:8421"
 _FROM_FILE = HeldToken("t", from_process_env=False)
@@ -411,3 +416,135 @@ def test_init_adds_a_legacy_runner_id_only_config_under_that_id_as_its_name(
     result = _init(fake_init_hub, root)
     assert result.exit_code == 0, result.output
     assert fake_init_hub.admin.added[-1].runner_name == "r-legacy"
+
+
+# --- the old runner's store on a re-add ----------------------------------------------------------
+
+
+@dataclass
+class _JoinLog:
+    """Records, in order, each store and add call a join makes."""
+
+    stored: str | None = None
+    calls: list[str] = field(default_factory=list)
+
+    def stored_runner_id(self) -> str | None:
+        return self.stored
+
+    def set_aside(self) -> None:
+        self.calls.append("set_aside")
+
+
+@dataclass
+class _LoggedAdmin(FakeHubRunnerAdmin):
+    log: _JoinLog = field(default_factory=_JoinLog)
+
+    def add_runner(self, name: str) -> IssuedIdentity:
+        self.log.calls.append("add")
+        return super().add_runner(name)
+
+
+class _Tokens:
+    def write(self, token: str) -> None:
+        pass
+
+
+def _join(log: _JoinLog, answer: TokenIdentity | TokenRefusal, *, held: HeldToken | None, allow_readd: bool) -> None:
+    RunnerBootstrap(FakeTokenIdentityReader(answer), _LoggedAdmin(log=log), _Tokens(), log).join(
+        "r", held=held, allow_readd=allow_readd
+    )
+
+
+@pytest.mark.unit
+def test_a_re_add_sets_the_old_store_aside_before_adding() -> None:
+    log = _JoinLog(stored="rn_old")
+    _join(log, TokenRefusal(reason=RunnerTokenRefusalReason.UNKNOWN), held=_FROM_FILE, allow_readd=True)
+    assert log.calls == ["set_aside", "add"]
+
+
+@pytest.mark.unit
+def test_a_kept_token_keeps_the_store() -> None:
+    log = _JoinLog(stored="rn_1")
+    _join(log, TokenIdentity(runner_id="rn_1", runner_name="r"), held=_FROM_FILE, allow_readd=True)
+    assert log.calls == []
+
+
+@pytest.mark.unit
+def test_no_token_over_a_store_naming_a_runner_stops_unless_a_readd_is_allowed() -> None:
+    unknown = TokenRefusal(reason=RunnerTokenRefusalReason.UNKNOWN)
+    with pytest.raises(BootstrapStopped) as stopped:
+        _join(_JoinLog(stored="rn_old"), unknown, held=None, allow_readd=False)
+    assert (stopped.value.stop, stopped.value.runner_id) == (BootstrapStop.STORE_NAMES_A_RUNNER, "rn_old")
+    log = _JoinLog(stored="rn_old")
+    _join(log, unknown, held=None, allow_readd=True)
+    assert log.calls == ["set_aside", "add"]
+
+
+@pytest.mark.unit
+def test_no_token_over_a_store_naming_no_runner_adds_without_setting_it_aside() -> None:
+    log = _JoinLog()
+    _join(log, TokenRefusal(reason=RunnerTokenRefusalReason.UNKNOWN), held=None, allow_readd=False)
+    assert log.calls == ["add"]
+
+
+def _record_identity(root: Path, runner_id: str) -> Path:
+    database = sqlite_store_file(RunnerConfig.load(root).db_url)
+    with closing(sqlite3.connect(database)) as conn, conn:
+        conn.execute(
+            "INSERT INTO runner_identity (runner_id, runner_name, registered_at) VALUES (?, 'r', '2026-10-08')",
+            (runner_id,),
+        )
+    return database
+
+
+def _identity_ids(database: Path) -> list[str]:
+    with closing(sqlite3.connect(database)) as conn:
+        return [row[0] for row in conn.execute("SELECT runner_id FROM runner_identity")]
+
+
+@pytest.mark.component
+def test_init_re_adding_after_a_hub_reset_sets_the_old_store_aside_keeping_it(
+    tmp_path: Path, fake_init_hub: FakeInitHub
+) -> None:
+    root, _ = _joined(tmp_path, fake_init_hub)
+    database = _record_identity(root, "rn_init1")
+    fake_init_hub.admin.added.clear()
+
+    result = _init(fake_init_hub, root, "--allow-readd")
+
+    assert result.exit_code == 0, result.output
+    aside = [p for p in database.parent.iterdir() if p.name.startswith("runner.db.")]
+    assert len(aside) == 1
+    assert "set the old runner's store aside as" in result.output
+    assert _identity_ids(aside[0]) == ["rn_init1"]
+    assert _identity_ids(database) == []
+
+
+@pytest.mark.component
+def test_init_keeping_its_token_keeps_the_store(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
+    root, _ = _joined(tmp_path, fake_init_hub)
+    database = _record_identity(root, "rn_init1")
+
+    result = _init(fake_init_hub, root, "--allow-readd")
+
+    assert result.exit_code == 0, result.output
+    assert _identity_ids(database) == ["rn_init1"]
+    assert not [p for p in database.parent.iterdir() if p.name.startswith("runner.db.")]
+
+
+@pytest.mark.component
+def test_init_with_no_token_over_a_store_naming_a_runner_stops_naming_it_and_the_reset_command(
+    tmp_path: Path, fake_init_hub: FakeInitHub
+) -> None:
+    root, _ = _joined(tmp_path, fake_init_hub)
+    database = _record_identity(root, "rn_init1")
+    (root / ENV_FILENAME).write_text("")
+
+    result = _init(fake_init_hub, root)
+
+    assert result.exit_code != 0
+    assert "rn_init1" in result.output
+    assert "--allow-readd" in result.output
+    assert f"blizzard runner store reset {root}" in result.output
+    assert len(fake_init_hub.admin.added) == 1
+    assert _identity_ids(database) == ["rn_init1"]

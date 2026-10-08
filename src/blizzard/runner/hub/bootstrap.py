@@ -3,7 +3,12 @@
 A held token the hub accepts is kept. A runner is added only when it holds none the hub accepts, and
 only when adding cannot undo an operator's act: a **revoked** or **retired** token stops, and an
 **unknown** one — also what a runner pointed at the wrong hub sees, where adding would overwrite the
-only token it holds for its own — adds it again only when the operator says the hub's data was reset."""
+only token it holds for its own — adds it again only when the operator says the hub's data was reset.
+
+A runner's store belongs to the runner that wrote it, so a runner added again never inherits the old
+one's: the store is set aside before the add, never after it. A crash between the two leaves the same
+unknown token over a fresh store, which the next init adds over again; the other order could leave a
+token the hub knows over a store naming another runner, which the runner refuses for good."""
 
 from __future__ import annotations
 
@@ -29,6 +34,8 @@ class BootstrapStop(StrEnum):
     TOKEN_NOT_RECEIVED = "token_not_received"
     #: A replacement token would go unread: the process environment supplies the held one.
     TOKEN_OVERRIDDEN = "token_overridden"
+    #: No token is held, but the store belongs to runner ``runner_id``, and adding another was not allowed.
+    STORE_NAMES_A_RUNNER = "store_names_a_runner"
 
 
 class BootstrapStopped(Exception):
@@ -97,14 +104,30 @@ class ITokenWriter(Protocol):
         ...
 
 
-class RunnerBootstrap:
-    """Joins one runner to its hub: the identity read under the runner's own token, the add under
-    the operator's credential, and the new token written straight after the add."""
+class IRunnerStoreAside(Protocol):
+    """The runner's local store, as joining sees it: whose it is, and moving it aside."""
 
-    def __init__(self, identity: ITokenIdentityReader, admin: IHubRunnerAdmin, tokens: ITokenWriter) -> None:
+    def stored_runner_id(self) -> str | None:
+        """The id of the runner the store's identity row names, or ``None`` when it names none."""
+        ...
+
+    def set_aside(self) -> None:
+        """Move the store aside under a timestamped name and start a fresh one; never deletes."""
+        ...
+
+
+class RunnerBootstrap:
+    """Joins one runner to its hub: the identity read under the runner's own token, the store set
+    aside when a runner is added in place of the one it belonged to, the add under the operator's
+    credential, and the new token written straight after the add."""
+
+    def __init__(
+        self, identity: ITokenIdentityReader, admin: IHubRunnerAdmin, tokens: ITokenWriter, store: IRunnerStoreAside
+    ) -> None:
         self._identity = identity
         self._admin = admin
         self._tokens = tokens
+        self._store = store
 
     def join(self, name: str, *, held: HeldToken | None, allow_readd: bool) -> JoinedRunner:
         """Keep the runner ``held`` names, or add one under ``name`` and write its token. An
@@ -114,6 +137,11 @@ class RunnerBootstrap:
             kept = kept_identity(self._identity.identity(), held=held, allow_readd=allow_readd)
             if kept is not None:
                 return JoinedRunner(runner_id=kept.runner_id, runner_name=kept.runner_name, added=False)
+            self._store.set_aside()
+        elif (stored := self._store.stored_runner_id()) is not None:
+            if not allow_readd:
+                raise BootstrapStopped(BootstrapStop.STORE_NAMES_A_RUNNER, runner_id=stored)
+            self._store.set_aside()
         issued = self._admin.add_runner(name)
         try:
             self._tokens.write(issued.token)
