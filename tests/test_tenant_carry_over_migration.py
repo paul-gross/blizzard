@@ -10,11 +10,15 @@ these revisions."""
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 import sqlalchemy as sa
+from alembic.script import ScriptDirectory
+from sqlalchemy import event
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.ids import Id, IdPrefix
@@ -434,6 +438,106 @@ def test_a_rerun_of_the_backfill_over_a_partly_keyed_store_finishes(tmp_path: Pa
         assert [c["name"] for c in sa.inspect(engine).get_columns("chunks")].count("tenant_id") == 1
         for table in ("graphs", "chunks", "event_log"):
             assert set(_tenants_of(engine, table)) == {tenant_id}, table
+    finally:
+        engine.dispose()
+
+
+def _backfill_batch_rows() -> int:
+    """The backfill's batch size, read from the revision as Alembic loads it."""
+    revision = ScriptDirectory(str(MIGRATIONS_DIR)).get_revision(_BACKFILL)
+    assert revision is not None
+    return revision.module._BATCH_ROWS
+
+
+def _seed_past_a_batch(engine: sa.Engine) -> int:
+    """Fill ``event_log`` (an integer key) and ``graph_artifacts`` (a two-column text key, its rows spread over
+    several graphs so a page boundary falls inside one graph) with more rows than two of the backfill's batches hold,
+    leaving a part-filled last page. Returns the row count seeded into each."""
+    count = 2 * _backfill_batch_rows() + 7
+    with engine.begin() as conn:
+        conn.execute(
+            sa.text("INSERT INTO event_log (recorded_at, severity, kind, message) VALUES (:at, 'info', 'k', 'm')"),
+            [{"at": _T0}] * count,
+        )
+        conn.execute(
+            sa.text("INSERT INTO graph_artifacts (graph_id, name, ordinal, content) VALUES (:graph, :name, 1, '')"),
+            [{"graph": f"gr_{n % 3}", "name": f"artifact-{n:05}"} for n in range(count)],
+        )
+    return count
+
+
+def _tenant_counts(engine: sa.Engine, table: str) -> dict[str | None, int]:
+    tenant = sa.column("tenant_id", sa.String)
+    with engine.connect() as conn:
+        rows = conn.execute(sa.select(tenant, sa.func.count()).select_from(sa.table(table)).group_by(tenant)).tuples()
+        return dict(rows.all())
+
+
+@contextmanager
+def _rows_each_update_changed() -> Iterator[list[tuple[str, int]]]:
+    """Every ``UPDATE`` any engine in the process runs while the context is open — the migration runner's engine
+    included — as the table it names and the rows it changed, in issue order."""
+    updates: list[tuple[str, int]] = []
+
+    def record(conn, cursor, statement, parameters, context, executemany):  # type: ignore[no-untyped-def]
+        words = statement.split()
+        if words[0].upper() == "UPDATE":
+            updates.append((words[1], cursor.rowcount))
+
+    event.listen(sa.Engine, "after_cursor_execute", record)
+    try:
+        yield updates
+    finally:
+        event.remove(sa.Engine, "after_cursor_execute", record)
+
+
+def test_the_backfill_stamps_every_row_of_a_table_holding_more_than_one_batch(tmp_path: Path) -> None:
+    db_url, engine = _store(tmp_path)
+    runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
+    try:
+        runner.upgrade(_TENANTS)
+        count = _seed_past_a_batch(engine)
+        [(tenant_id, *_)] = _tenant_rows(engine)
+
+        with _rows_each_update_changed() as updates:
+            runner.upgrade(_BACKFILL)
+
+        for table in ("event_log", "graph_artifacts"):
+            assert _tenant_counts(engine, table) == {tenant_id: count}, table
+            stamped = [rows for updated, rows in updates if updated == table]
+            assert len(stamped) >= 3, table
+            assert max(stamped) <= _backfill_batch_rows(), table
+            assert sum(stamped) == count, table
+    finally:
+        engine.dispose()
+
+
+def test_a_rerun_of_the_backfill_over_rows_stamped_across_batches_stamps_the_rest(tmp_path: Path) -> None:
+    """Re-entry inside a table: the rows a stopped run already stamped are scattered through the key range and span
+    whole pages, and the rerun stamps every row between and after them."""
+    db_url, engine = _store(tmp_path)
+    runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
+    try:
+        runner.upgrade(_TENANTS)
+        count = _seed_past_a_batch(engine)
+        batch = _backfill_batch_rows()
+        [(tenant_id, *_)] = _tenant_rows(engine)
+        with engine.begin() as conn:
+            conn.execute(sa.text("ALTER TABLE event_log ADD COLUMN tenant_id VARCHAR"))
+            conn.execute(sa.text("ALTER TABLE graph_artifacts ADD COLUMN tenant_id VARCHAR"))
+            conn.execute(
+                sa.text("UPDATE event_log SET tenant_id = :tenant WHERE id % 3 = 0 OR id BETWEEN :low AND :high"),
+                {"tenant": tenant_id, "low": batch // 2, "high": batch + batch // 2},
+            )
+            conn.execute(
+                sa.text("UPDATE graph_artifacts SET tenant_id = :tenant WHERE graph_id = 'gr_1'"), {"tenant": tenant_id}
+            )
+        assert all(None in _tenant_counts(engine, table) for table in ("event_log", "graph_artifacts"))
+
+        runner.upgrade(_BACKFILL)
+
+        for table in ("event_log", "graph_artifacts"):
+            assert _tenant_counts(engine, table) == {tenant_id: count}, table
     finally:
         engine.dispose()
 
