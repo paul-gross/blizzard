@@ -12,7 +12,7 @@ from typing import Any, cast
 
 import pytest
 import sqlalchemy as sa
-from sqlalchemy import Engine, select
+from sqlalchemy import Engine
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
@@ -103,7 +103,8 @@ def _kinds(engine: Engine, finding_id: str) -> list[str]:
         return [
             r.kind
             for r in conn.execute(
-                select(finding_facts.c.kind)
+                hub_store_connections(engine)
+                .select(finding_facts, finding_facts.c.kind)
                 .where(finding_facts.c.finding_id == finding_id)
                 .order_by(finding_facts.c.id)
             )
@@ -112,7 +113,8 @@ def _kinds(engine: Engine, finding_id: str) -> list[str]:
 
 def _markers(engine: Engine) -> int:
     with engine.connect() as conn:
-        return len(conn.execute(select(artifacts.c.artifact_id).where(artifacts.c.name == "garden-delivered")).all())
+        markers = hub_store_connections(engine).select(artifacts, artifacts.c.artifact_id)
+        return len(conn.execute(markers.where(artifacts.c.name == "garden-delivered")).all())
 
 
 @pytest.mark.component

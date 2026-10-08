@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from sqlalchemy import Engine, select
+from sqlalchemy import Engine
 from structlog.testing import capture_logs
 
 from blizzard.foundation.store.engine import create_engine_from_url
@@ -56,13 +56,14 @@ def _ensure(store: ScopeStore, slug: str, *, description: str = "", at: datetime
 
 def _changes(engine: Engine) -> list[tuple[str, str, int, str]]:
     with engine.connect() as conn:
-        rows = conn.execute(select(config_changes).order_by(config_changes.c.id)).all()
+        rows = conn.execute(hub_store_connections(engine).select(config_changes).order_by(config_changes.c.id)).all()
     return [(row.record_kind, row.record_key, row.revision, row.op) for row in rows]
 
 
 def _facts(engine: Engine) -> list[tuple[str, bool, str]]:
     with engine.connect() as conn:
-        rows = conn.execute(select(scope_lifecycle_facts).order_by(scope_lifecycle_facts.c.id)).all()
+        facts = hub_store_connections(engine).select(scope_lifecycle_facts)
+        rows = conn.execute(facts.order_by(scope_lifecycle_facts.c.id)).all()
     return [(row.slug, row.retired, row.set_by) for row in rows]
 
 

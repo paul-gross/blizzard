@@ -29,6 +29,7 @@ from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
 from blizzard.hub.store.internal.chunk_rows import DEFAULT_MODEL
 from blizzard.hub.store.internal.sole_tenant import SoleTenantConnections
+from blizzard.hub.tenancy import HUB_SCOPED_OPTION
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from blizzard.runner.process.probe import IProcessProbe
 from blizzard.runner.store import schema as runner
@@ -1082,7 +1083,9 @@ class HubInvariants:
 
     def run(self) -> list[Violation]:
         violations: list[Violation] = []
-        with self.engine.connect() as conn:
+        # The query checks audit the store as a whole, every tenant's rows at once.
+        hub_wide = self.engine.execution_options(**{HUB_SCOPED_OPTION: True})
+        with hub_wide.connect() as conn:
             checks: tuple[QueryCheck, ...] = (
                 OneTransitionPerNodeEpoch(conn),
                 EpochConsistentTransitions(conn),
@@ -1103,7 +1106,7 @@ class HubInvariants:
             )
             for check in checks:
                 violations.extend(check.run())
-        with self.engine.connect() as conn:
+        with hub_wide.connect() as conn:
             violations.extend(MigrationsAtomic(conn).run())
         store_connections = SoleTenantConnections(self.engine, HubStoreErrorFactory(get_logger("blizzard.hub.store")))
         facts_store = ChunkFactsStore(store_connections, self.clock)

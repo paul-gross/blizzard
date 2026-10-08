@@ -9,14 +9,14 @@ from pathlib import Path
 from typing import cast
 
 import pytest
-from sqlalchemy import Engine, func, select
+from sqlalchemy import Engine, func
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.chunk.ports.dependencies import FoldMint, FoldTarget, IWriteChunkDependenciesRepository
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreError
-from tests.support import chunk_stores, migrate_to, seed_chunk, seed_graph
+from tests.support import chunk_stores, hub_store_connections, migrate_to, seed_chunk, seed_graph
 
 pytestmark = pytest.mark.component
 
@@ -73,8 +73,8 @@ def test_released_edge_reads_released_and_still_exists(tmp_path: Path) -> None:
     # The row is never deleted — it still exists, released.
     with engine.connect() as conn:
         count = conn.execute(
-            select(func.count())
-            .select_from(s.chunk_dependencies)
+            hub_store_connections(engine)
+            .select(s.chunk_dependencies, func.count())
             .where(s.chunk_dependencies.c.dependency_id == declared.dependency_id)
         ).scalar()
     assert count == 1
@@ -193,7 +193,9 @@ def test_record_fold_releases_mints_and_records_grouped_atomically(tmp_path: Pat
     with engine.connect() as conn:
         released = (
             conn.execute(
-                select(s.chunk_dependencies).where(s.chunk_dependencies.c.dependency_id == declared.dependency_id)
+                hub_store_connections(engine)
+                .select(s.chunk_dependencies)
+                .where(s.chunk_dependencies.c.dependency_id == declared.dependency_id)
             )
             .mappings()
             .one()
@@ -201,7 +203,8 @@ def test_record_fold_releases_mints_and_records_grouped_atomically(tmp_path: Pat
     assert released["released_at"] == at
 
     with engine.connect() as conn:
-        row = conn.execute(select(s.chunk_grouped).where(s.chunk_grouped.c.chunk_id == "ch_prereq")).mappings().one()
+        grouped = hub_store_connections(engine).select(s.chunk_grouped)
+        row = conn.execute(grouped.where(s.chunk_grouped.c.chunk_id == "ch_prereq")).mappings().one()
     assert row["grouped_into"] == "ch_survivor"
 
 
@@ -231,7 +234,7 @@ def test_record_fold_writes_every_target_in_one_transaction(tmp_path: Path) -> N
         )
 
     with engine.connect() as conn:
-        assert conn.execute(select(s.chunk_grouped)).all() == []
+        assert conn.execute(hub_store_connections(engine).select(s.chunk_grouped)).all() == []
 
 
 def test_list_standing_edges_breaks_a_declared_at_tie_by_dependency_id(tmp_path: Path) -> None:

@@ -27,7 +27,7 @@ from blizzard.hub.store.schema import (
     secrets,
     work_sources,
 )
-from tests.support import hub_scoped, seed_chunk, seed_graph, stamp
+from tests.support import hub_scoped, hub_store_connections, seed_chunk, seed_graph, stamp
 
 pytestmark = pytest.mark.component
 
@@ -100,8 +100,9 @@ def hub(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> HubConfig:
 def _rows(config: HubConfig) -> dict[str, list[dict[str, object]]]:
     engine = create_engine_from_url(config.db_url)
     try:
+        store = hub_store_connections(engine)
         with engine.connect() as conn:
-            return {t.name: [dict(r._mapping) for r in conn.execute(sa.select(t)).all()] for t in _TABLES}
+            return {t.name: [dict(r._mapping) for r in conn.execute(store.select(t)).all()] for t in _TABLES}
     finally:
         engine.dispose()
 

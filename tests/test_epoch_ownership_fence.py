@@ -8,11 +8,11 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import func
 
 from blizzard.hub.domain.execution.auth.route import ROUTE_TOKEN_WARN
 from blizzard.hub.store import schema as s
-from tests.support import HubHarness, build_hub, ingest
+from tests.support import HubHarness, build_hub, hub_store_connections, ingest
 
 pytestmark = pytest.mark.component
 
@@ -167,7 +167,9 @@ class _Chunk:
     def rows(self, table) -> int:  # type: ignore[no-untyped-def]
         with self.hub.engine.connect() as conn:
             return conn.execute(
-                select(func.count()).select_from(table).where(table.c.chunk_id == self.chunk_id)
+                hub_store_connections(self.hub.engine)
+                .select(table, func.count())
+                .where(table.c.chunk_id == self.chunk_id)
             ).scalar_one()
 
 

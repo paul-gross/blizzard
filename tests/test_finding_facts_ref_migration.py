@@ -214,6 +214,7 @@ def test_republish_over_a_preref_finding_set_drops_the_unresolvable_citation(tmp
 
     assert store.deliver(_republish_plan(), admission=EpochAdmission.AT_OR_ABOVE) is DeliveryOutcome.RECORDED
 
+    scoped = hub_store_connections(engine)
     with engine.connect() as conn:
-        assert {r.finding_id for r in conn.execute(sa.select(findings_table))} == {"fin_a"}
-        assert conn.execute(sa.select(garden_proposal_findings)).all() == []
+        assert {r.finding_id for r in conn.execute(scoped.select(findings_table))} == {"fin_a"}
+        assert conn.execute(scoped.select(garden_proposal_findings)).all() == []

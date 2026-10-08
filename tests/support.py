@@ -154,10 +154,18 @@ def stamp(table: sa.Table, /, **values: Any) -> dict[str, Any]:
     tenant-owned and the caller named none — what the scoped insert stamps in production.
 
     The tenant is a scalar subquery over ``tenants``, so a raw write needs no engine in hand; it names
-    the store's only tenant, the same one ``default_tenant`` reads."""
+    the store's only tenant, the same one ``default_tenant`` reads, and ``NULL`` when the store holds
+    none or several — never one picked from many: a test with a second tenant names the one it means."""
     if is_tenant_owned(table) and "tenant_id" not in values:
-        values["tenant_id"] = sa.select(schema.tenants.c.tenant_id).scalar_subquery()
+        values["tenant_id"] = sole_tenant_subquery()
     return values
+
+
+def sole_tenant_subquery() -> sa.ScalarSelect[Any]:
+    """The store's only tenant as a scalar subquery, ``NULL`` unless ``tenants`` holds exactly one row."""
+    tenants = schema.tenants
+    holds_one = sa.select(sa.func.count()).select_from(tenants).correlate(None).scalar_subquery() == 1
+    return sa.select(tenants.c.tenant_id).where(holds_one).scalar_subquery()
 
 
 def hub_scoped[E: Executable](statement: E) -> E:
@@ -1439,19 +1447,20 @@ def _stamp_as_stored(conn: sa.Connection, table: sa.Table, values: dict[str, Any
     """``values`` carrying the store's only tenant when the store's own ``table`` has a ``tenant_id``
     column — decided by the store's revision, not today's schema, so the seed fits any revision."""
     if any(column["name"] == "tenant_id" for column in sa.inspect(conn).get_columns(table.name)):
-        values["tenant_id"] = sa.select(schema.tenants.c.tenant_id).scalar_subquery()
+        values["tenant_id"] = sole_tenant_subquery()
     return values
 
 
 def migrate_to(tmp_path: Path, revision: str) -> tuple[MigrationRunner, Engine]:
     """A hub store migrated to ``revision``, ready for a test's own revision-pinned seed
     rows. The returned runner is the same handle a test upgrades onward from (e.g. to
-    ``"head"``) once its seed is in place. The engine is hub-scoped: rows seeded at a pinned
-    revision are written to the store as a whole, outside any tenant scope."""
+    ``"head"``) once its seed is in place. The engine is plain, so the tenant statement guard
+    watches every adapter a test wires over it; a seed written at a pinned revision through
+    today's ``schema`` tables, outside any tenant scope, goes through ``hub_scoped_engine``."""
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     runner = Migrations(HubConfig(root=tmp_path, db_url=db_url), MIGRATION_CLOCK).runner
     runner.upgrade(revision)
-    return runner, hub_scoped_engine(create_engine_from_url(db_url))
+    return runner, create_engine_from_url(db_url)
 
 
 def seed_graph(conn: sa.Connection, graph_id: str, *, at: datetime) -> None:

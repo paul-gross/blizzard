@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import cast
 
 import pytest
-from sqlalchemy import Engine, select
+from sqlalchemy import Engine
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.work_items import WorkItemClosure
@@ -203,11 +203,12 @@ def test_create_with_chunk_inserts_the_item_and_the_chunk_rows_together(tmp_path
     assert fetched is not None
     assert fetched.title == "widget is broken"
 
+    scoped = hub_store_connections(engine)
     with engine.begin() as conn:
-        chunk_rows = conn.execute(select(s.chunks)).all()
+        chunk_rows = conn.execute(scoped.select(s.chunks)).all()
         assert [row.chunk_id for row in chunk_rows] == ["ch_1"]
         assert chunk_rows[0].graph_id == "gr_1"
-        ref_rows = conn.execute(select(s.chunk_work_refs)).all()
+        ref_rows = conn.execute(scoped.select(s.chunk_work_refs)).all()
         assert [(row.chunk_id, row.source, row.ref) for row in ref_rows] == [("ch_1", "hub", "1")]
 
 
@@ -233,9 +234,10 @@ def test_create_with_chunk_rolls_back_the_item_and_the_chunk_rows_on_a_failing_c
         )
 
     assert store.get("hub", "1") is None
+    scoped = hub_store_connections(engine)
     with engine.begin() as conn:
-        assert conn.execute(select(s.chunks)).all() == []
-        assert conn.execute(select(s.chunk_work_refs)).all() == []
+        assert conn.execute(scoped.select(s.chunks)).all() == []
+        assert conn.execute(scoped.select(s.chunk_work_refs)).all() == []
 
 
 def test_allocate_ref_is_monotonic_and_never_reused(tmp_path: Path) -> None:

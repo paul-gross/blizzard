@@ -16,7 +16,7 @@ from blizzard.hub.domain.garden.routines import Routine
 from blizzard.hub.domain.garden.runs.baselines import RepoLandings, RoutineBaselineService
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingSetStore
-from tests.support import chunk_stores, hub_store_connections, migrate_to, seed_chunk, seed_graph
+from tests.support import chunk_stores, hub_store_connections, migrate_to, seed_chunk, seed_graph, stamp
 
 pytestmark = pytest.mark.component
 
@@ -29,16 +29,19 @@ _ROUTINE = Routine(
 def _seed_artifact(conn, artifact_id: str, *, chunk_id: str) -> None:  # type: ignore[no-untyped-def]
     conn.execute(
         insert(s.artifacts).values(
-            artifact_id=artifact_id,
-            chunk_id=chunk_id,
-            node_id="nd_1",
-            node_name="survey",
-            epoch=1,
-            name="findings-blizzard",
-            kind="asset",
-            data="[]",
-            produced_at=_NOW,
-            seq=1,
+            stamp(
+                s.artifacts,
+                artifact_id=artifact_id,
+                chunk_id=chunk_id,
+                node_id="nd_1",
+                node_name="survey",
+                epoch=1,
+                name="findings-blizzard",
+                kind="asset",
+                data="[]",
+                produced_at=_NOW,
+                seq=1,
+            )
         )
     )
 
@@ -49,7 +52,7 @@ def test_landed_since_joins_the_finding_sets_repo_names_against_delivery(tmp_pat
         seed_graph(conn, "gr_1", at=_NOW)
         seed_chunk(conn, "ch_1", graph_id="gr_1", at=_NOW)
         seed_chunk(conn, "ch_2", graph_id="gr_1", at=_NOW)
-        conn.execute(insert(s.scopes).values(slug="blizzard", description="", created_at=_NOW))
+        conn.execute(insert(s.scopes).values(stamp(s.scopes, slug="blizzard", description="", created_at=_NOW)))
         _seed_artifact(conn, "art_1", chunk_id="ch_1")
 
     baseline_at = _NOW

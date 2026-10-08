@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from sqlalchemy import Engine, func, select
+from sqlalchemy import Engine, func
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
@@ -90,7 +90,7 @@ class _World:
 
     def count(self) -> int:
         with self.engine.connect() as conn:
-            return conn.execute(select(func.count()).select_from(config_changes)).scalar_one()
+            return conn.execute(hub_store_connections(self.engine).select(config_changes, func.count())).scalar_one()
 
     def source(self, name: str = "demo") -> ConfiguredWorkSource:
         record = self.sources.get(name)

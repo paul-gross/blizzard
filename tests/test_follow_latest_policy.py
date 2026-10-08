@@ -13,12 +13,11 @@ from pathlib import Path
 
 import httpx
 import pytest
-from sqlalchemy import select
 
 from blizzard.foundation.migration_source import MigrationSource
 from blizzard.hub.domain.graph.model import FollowLatest
 from blizzard.hub.store.schema import graph_policy_facts
-from tests.support import HubHarness, build_hub, pointer_token, report_lease
+from tests.support import HubHarness, build_hub, hub_store_connections, pointer_token, report_lease
 
 _POINTER = {"source": "default", "ref": "9"}
 
@@ -443,6 +442,8 @@ def test_setting_the_same_value_twice_appends_a_duplicate_fact(tmp_path: Path) -
 
     with hub.engine.connect() as conn:
         rows = conn.execute(
-            select(graph_policy_facts.c.follow_latest).where(graph_policy_facts.c.graph_id == graph_id)
+            hub_store_connections(hub.engine)
+            .select(graph_policy_facts, graph_policy_facts.c.follow_latest)
+            .where(graph_policy_facts.c.graph_id == graph_id)
         ).all()
     assert [r.follow_latest for r in rows] == [True, True]

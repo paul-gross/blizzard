@@ -111,6 +111,24 @@ def test_stamp_carries_the_stores_tenant_into_a_tenant_owned_table(tmp_path: Pat
     assert rows == {"p_1": default_tenant(engine), "p_2": "ten_named"}
 
 
+def test_stamp_names_no_tenant_when_the_store_holds_several(tmp_path: Path) -> None:
+    engine = _head_store(tmp_path)
+    _add_tenant(engine, "ten_second")
+    owned = sa.Table(
+        "probe_rows",
+        sa.MetaData(),
+        sa.Column("probe_id", sa.String, primary_key=True),
+        sa.Column("tenant_id", sa.String, nullable=True),
+    )
+    owned.create(engine)
+
+    with engine.begin() as conn:
+        conn.execute(sa.insert(owned).values(stamp(owned, probe_id="p_1")))
+        stored = conn.execute(sa.select(owned.c.tenant_id)).scalar_one()
+
+    assert stored is None
+
+
 def test_hub_scoped_marks_the_statement_and_leaves_the_original_unmarked() -> None:
     plain = sa.select(schema.tenants.c.tenant_id)
 

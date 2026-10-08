@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
-from sqlalchemy import Engine, insert, select
+from sqlalchemy import Engine, insert
 
 from blizzard.auth_core import Role
 from blizzard.foundation.clock import FixedClock
@@ -685,9 +685,9 @@ def test_close_delivers_the_accepted_proposals_live_finding_attributed_to_it(tmp
     assert finding.state == "delivered"
     with engine.connect() as conn:
         fact = conn.execute(
-            select(s.finding_facts).where(
-                s.finding_facts.c.finding_id == "fin_1", s.finding_facts.c.kind == "delivered"
-            )
+            hub_store_connections(engine)
+            .select(s.finding_facts)
+            .where(s.finding_facts.c.finding_id == "fin_1", s.finding_facts.c.kind == "delivered")
         ).one()
     assert fact.proposal_id == proposal_id
     assert fact.actor == "u_1"
@@ -718,9 +718,9 @@ def test_close_of_a_withdrawn_item_still_delivers_the_accepted_proposals_live_fi
     assert finding.state == "delivered"
     with engine.connect() as conn:
         fact = conn.execute(
-            select(s.finding_facts).where(
-                s.finding_facts.c.finding_id == "fin_1", s.finding_facts.c.kind == "delivered"
-            )
+            hub_store_connections(engine)
+            .select(s.finding_facts)
+            .where(s.finding_facts.c.finding_id == "fin_1", s.finding_facts.c.kind == "delivered")
         ).one()
     assert fact.proposal_id == proposal_id
 
@@ -743,7 +743,9 @@ def test_close_run_twice_appends_only_one_delivery(tmp_path: Path) -> None:
     source.close(pointer, trace=None)
 
     with engine.connect() as conn:
-        facts = conn.execute(select(s.finding_facts).where(s.finding_facts.c.finding_id == "fin_1")).all()
+        facts = conn.execute(
+            hub_store_connections(engine).select(s.finding_facts).where(s.finding_facts.c.finding_id == "fin_1")
+        ).all()
     assert [f.kind for f in facts] == ["add", "delivered"]
 
 
@@ -778,9 +780,9 @@ def test_close_never_redelivers_a_proposal_a_legacy_resolved_fact_already_closed
     assert finding.state == "live"
     with engine.connect() as conn:
         delivered = conn.execute(
-            select(s.finding_facts).where(
-                s.finding_facts.c.finding_id == "fin_1", s.finding_facts.c.kind == "delivered"
-            )
+            hub_store_connections(engine)
+            .select(s.finding_facts)
+            .where(s.finding_facts.c.finding_id == "fin_1", s.finding_facts.c.kind == "delivered")
         ).all()
     assert delivered == []
 

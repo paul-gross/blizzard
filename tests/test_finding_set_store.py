@@ -15,7 +15,7 @@ from sqlalchemy import Engine, insert
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal.finding_store import FindingSetStore
-from tests.support import hub_store_connections, migrate_to, seed_chunk, seed_graph
+from tests.support import hub_store_connections, migrate_to, seed_chunk, seed_graph, stamp
 
 pytestmark = pytest.mark.component
 
@@ -25,16 +25,19 @@ _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 def _seed_artifact(conn: sa.Connection, artifact_id: str, *, chunk_id: str, name: str) -> None:
     conn.execute(
         insert(s.artifacts).values(
-            artifact_id=artifact_id,
-            chunk_id=chunk_id,
-            node_id="nd_1",
-            node_name="survey",
-            epoch=1,
-            name=name,
-            kind="asset",
-            data="[]",
-            produced_at=_NOW,
-            seq=1,
+            stamp(
+                s.artifacts,
+                artifact_id=artifact_id,
+                chunk_id=chunk_id,
+                node_id="nd_1",
+                node_name="survey",
+                epoch=1,
+                name=name,
+                kind="asset",
+                data="[]",
+                produced_at=_NOW,
+                seq=1,
+            )
         )
     )
 
@@ -44,7 +47,7 @@ def _store(tmp_path: Path) -> tuple[FindingSetStore, Engine]:
     with engine.begin() as conn:
         seed_graph(conn, "gr_1", at=_NOW)
         seed_chunk(conn, "ch_1", graph_id="gr_1", at=_NOW)
-        conn.execute(insert(s.scopes).values(slug="blizzard", description="", created_at=_NOW))
+        conn.execute(insert(s.scopes).values(stamp(s.scopes, slug="blizzard", description="", created_at=_NOW)))
         _seed_artifact(conn, "art_1", chunk_id="ch_1", name="findings-billing")
         _seed_artifact(conn, "art_2", chunk_id="ch_1", name="findings-auth")
         _seed_artifact(conn, "art_3", chunk_id="ch_1", name="findings-web")
@@ -191,7 +194,7 @@ def test_newest_by_scope_for_routine_returns_one_entry_per_scope(tmp_path: Path)
     newest by `finding_set_id`."""
     store, engine = _store(tmp_path)
     with engine.begin() as conn:
-        conn.execute(insert(s.scopes).values(slug="web", description="", created_at=_NOW))
+        conn.execute(insert(s.scopes).values(stamp(s.scopes, slug="web", description="", created_at=_NOW)))
         _seed_artifact(conn, "art_4", chunk_id="ch_1", name="findings-web-2")
     store.create(
         "fins_01A",

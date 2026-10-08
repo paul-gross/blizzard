@@ -78,9 +78,9 @@ def _service(engine: sa.Engine, clock: FixedClock) -> FactIngestService:
 def _row(engine: sa.Engine, runner_id: str, slug: str = "anthropic"):  # type: ignore[no-untyped-def]
     with engine.connect() as conn:
         return conn.execute(
-            sa.select(s.runner_external_usage).where(
-                s.runner_external_usage.c.runner_id == runner_id, s.runner_external_usage.c.slug == slug
-            )
+            hub_store_connections(engine)
+            .select(s.runner_external_usage)
+            .where(s.runner_external_usage.c.runner_id == runner_id, s.runner_external_usage.c.slug == slug)
         ).one_or_none()
 
 
@@ -120,7 +120,8 @@ def test_applying_the_fact_upserts_one_row_and_a_later_call_wins(tmp_path: Path)
 
     # Exactly one row (upsert, not append), and it carries the later call's payload.
     with engine.connect() as conn:
-        rows = conn.execute(sa.select(s.runner_external_usage).where(s.runner_external_usage.c.runner_id == "r1")).all()
+        usage = hub_store_connections(engine).select(s.runner_external_usage)
+        rows = conn.execute(usage.where(s.runner_external_usage.c.runner_id == "r1")).all()
     assert len(rows) == 1
     assert rows[0].sampled_at == later
     assert json.loads(rows[0].windows)[0]["utilization_pct"] == 55.0
@@ -461,7 +462,8 @@ def test_a_historical_malformed_window_cannot_break_runner_reads(tmp_path: Path)
     )
     with hub.engine.begin() as conn:
         conn.execute(
-            s.runner_external_usage.update()
+            hub_store_connections(hub.engine)
+            .update(s.runner_external_usage)
             .where(s.runner_external_usage.c.runner_id == "r1")
             .values(windows='[{"window":"5h"}]')
         )
@@ -569,7 +571,9 @@ def _miss_payload(*, slug: str, missed_at: datetime, reason: str, name: str | No
 def _miss_row(engine: sa.Engine, runner_id: str, slug: str = "openai"):  # type: ignore[no-untyped-def]
     with engine.connect() as conn:
         return conn.execute(
-            sa.select(s.runner_external_usage_misses).where(
+            hub_store_connections(engine)
+            .select(s.runner_external_usage_misses)
+            .where(
                 s.runner_external_usage_misses.c.runner_id == runner_id,
                 s.runner_external_usage_misses.c.slug == slug,
             )
@@ -613,7 +617,9 @@ def test_a_missed_fact_upserts_one_row_and_a_later_call_wins(tmp_path: Path) -> 
 
     with engine.connect() as conn:
         rows = conn.execute(
-            sa.select(s.runner_external_usage_misses).where(s.runner_external_usage_misses.c.runner_id == "r1")
+            hub_store_connections(engine)
+            .select(s.runner_external_usage_misses)
+            .where(s.runner_external_usage_misses.c.runner_id == "r1")
         ).all()
     # Exactly one row (upsert, not append), carrying the later call's payload.
     assert len(rows) == 1
@@ -798,7 +804,8 @@ def test_a_stored_unrecognized_miss_reason_reads_as_none_instead_of_breaking_run
     assert response.status_code == 200, response.text
     with hub.engine.begin() as conn:
         conn.execute(
-            s.runner_external_usage_misses.update()
+            hub_store_connections(hub.engine)
+            .update(s.runner_external_usage_misses)
             .where(s.runner_external_usage_misses.c.runner_id == "r1")
             .values(reason="")
         )

@@ -180,7 +180,8 @@ def test_an_attach_racing_a_link_holding_the_row_raises_already_linked_not_an_in
     holder = engine.connect()
     holder_txn = holder.begin()
     holder.execute(
-        garden_proposals.update()
+        hub_store_connections(engine)
+        .update(garden_proposals)
         .where(garden_proposals.c.proposal_id == proposal.proposal_id)
         .values(proposal_id=proposal.proposal_id)
     )

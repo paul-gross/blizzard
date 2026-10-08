@@ -689,7 +689,7 @@ def test_duplicate_repo_land_is_a_violation(tmp_path: Path) -> None:
         for _ in range(2):
             conn.execute(
                 insert(hub.delivery_repo_landed).values(
-                    chunk_id="ch_1", repo="toy-api", commit_hash="abc", landed_at=_NOW
+                    stamp(hub.delivery_repo_landed, chunk_id="ch_1", repo="toy-api", commit_hash="abc", landed_at=_NOW)
                 )
             )
     slugs = {v.invariant for v in HubInvariants(engine).run()}
@@ -701,12 +701,22 @@ def test_duplicate_route_seq_across_tables_is_a_violation(tmp_path: Path) -> Non
     with engine.begin() as conn:
         conn.execute(
             insert(hub.route_created).values(
-                route_id="rt_1", chunk_id="ch_1", runner_id="r", workspace_id="w", created_at=_NOW, seq=1
+                stamp(
+                    hub.route_created,
+                    route_id="rt_1",
+                    chunk_id="ch_1",
+                    runner_id="r",
+                    workspace_id="w",
+                    created_at=_NOW,
+                    seq=1,
+                )
             )
         )
         # Same chunk, same seq as the create above — the exact race #41's tiebreak
         # closed: two route writes both computed seq=1 for chunk ch_1.
-        conn.execute(insert(hub.route_released).values(chunk_id="ch_1", released_at=_NOW, seq=1))
+        conn.execute(
+            insert(hub.route_released).values(stamp(hub.route_released, chunk_id="ch_1", released_at=_NOW, seq=1))
+        )
     slugs = {v.invariant for v in HubInvariants(engine).run()}
     assert "hub:route-seq-unique" in slugs
 
@@ -716,14 +726,30 @@ def test_two_live_routes_for_one_chunk_is_a_violation(tmp_path: Path) -> None:
     with engine.begin() as conn:
         conn.execute(
             insert(hub.route_created).values(
-                route_id="rt_1", chunk_id="ch_1", runner_id="r_a", workspace_id="w", created_at=_NOW, seq=1
+                stamp(
+                    hub.route_created,
+                    route_id="rt_1",
+                    chunk_id="ch_1",
+                    runner_id="r_a",
+                    workspace_id="w",
+                    created_at=_NOW,
+                    seq=1,
+                )
             )
         )
         # A second `route_created` at a later seq with no `route_released` between the
         # two — the gap `bzh:store-exclusive-write`'s row lock exists to close.
         conn.execute(
             insert(hub.route_created).values(
-                route_id="rt_2", chunk_id="ch_1", runner_id="r_b", workspace_id="w", created_at=_NOW, seq=2
+                stamp(
+                    hub.route_created,
+                    route_id="rt_2",
+                    chunk_id="ch_1",
+                    runner_id="r_b",
+                    workspace_id="w",
+                    created_at=_NOW,
+                    seq=2,
+                )
             )
         )
     slugs = {v.invariant for v in HubInvariants(engine).run()}
@@ -735,13 +761,31 @@ def test_a_released_route_followed_by_a_fresh_claim_is_not_a_violation(tmp_path:
     with engine.begin() as conn:
         conn.execute(
             insert(hub.route_created).values(
-                route_id="rt_1", chunk_id="ch_1", runner_id="r_a", workspace_id="w", created_at=_NOW, seq=1
+                stamp(
+                    hub.route_created,
+                    route_id="rt_1",
+                    chunk_id="ch_1",
+                    runner_id="r_a",
+                    workspace_id="w",
+                    created_at=_NOW,
+                    seq=1,
+                )
             )
         )
-        conn.execute(insert(hub.route_released).values(chunk_id="ch_1", released_at=_NOW, seq=2))
+        conn.execute(
+            insert(hub.route_released).values(stamp(hub.route_released, chunk_id="ch_1", released_at=_NOW, seq=2))
+        )
         conn.execute(
             insert(hub.route_created).values(
-                route_id="rt_2", chunk_id="ch_1", runner_id="r_b", workspace_id="w", created_at=_NOW, seq=3
+                stamp(
+                    hub.route_created,
+                    route_id="rt_2",
+                    chunk_id="ch_1",
+                    runner_id="r_b",
+                    workspace_id="w",
+                    created_at=_NOW,
+                    seq=3,
+                )
             )
         )
     slugs = {v.invariant for v in HubInvariants(engine).run()}
@@ -751,18 +795,25 @@ def test_a_released_route_followed_by_a_fresh_claim_is_not_a_violation(tmp_path:
 def test_transition_epoch_beyond_latest_lease_is_a_violation(tmp_path: Path) -> None:
     engine = _hub_engine(tmp_path)
     with engine.begin() as conn:
-        conn.execute(insert(hub.lease_facts).values(chunk_id="ch_1", epoch=1, runner_id="r", minted_at=_NOW))
+        conn.execute(
+            insert(hub.lease_facts).values(
+                stamp(hub.lease_facts, chunk_id="ch_1", epoch=1, runner_id="r", minted_at=_NOW)
+            )
+        )
         conn.execute(
             insert(hub.transitions).values(
-                transition_id="tr_1",
-                chunk_id="ch_1",
-                graph_id="gr_1",
-                from_node_id="nd_a",
-                to_node_id="nd_b",
-                choice_name="pass",
-                epoch=2,  # a transition fenced beyond any known lease — a zombie land
-                runner_id="r",
-                recorded_at=_NOW,
+                stamp(
+                    hub.transitions,
+                    transition_id="tr_1",
+                    chunk_id="ch_1",
+                    graph_id="gr_1",
+                    from_node_id="nd_a",
+                    to_node_id="nd_b",
+                    choice_name="pass",
+                    epoch=2,  # a transition fenced beyond any known lease — a zombie land
+                    runner_id="r",
+                    recorded_at=_NOW,
+                )
             )
         )
     slugs = {v.invariant for v in HubInvariants(engine).run()}
@@ -770,8 +821,14 @@ def test_transition_epoch_beyond_latest_lease_is_a_violation(tmp_path: Path) -> 
 
 
 def _seed_owned_chunk(conn) -> None:  # type: ignore[no-untyped-def]
-    conn.execute(insert(hub.chunks).values(chunk_id="ch_1", graph_id="gr_1", minted_at=_NOW, model="m"))
-    conn.execute(insert(hub.epoch_owners).values(chunk_id="ch_1", epoch=1, runner_id="r_a", recorded_at=_NOW))
+    conn.execute(
+        insert(hub.chunks).values(stamp(hub.chunks, chunk_id="ch_1", graph_id="gr_1", minted_at=_NOW, model="m"))
+    )
+    conn.execute(
+        insert(hub.epoch_owners).values(
+            stamp(hub.epoch_owners, chunk_id="ch_1", epoch=1, runner_id="r_a", recorded_at=_NOW)
+        )
+    )
 
 
 def test_owned_epochs_with_matching_leases_are_clean(tmp_path: Path) -> None:
@@ -780,16 +837,44 @@ def test_owned_epochs_with_matching_leases_are_clean(tmp_path: Path) -> None:
     engine = _hub_engine(tmp_path)
     with engine.begin() as conn:
         _seed_owned_chunk(conn)
-        conn.execute(insert(hub.lease_facts).values(chunk_id="ch_1", epoch=1, runner_id="r_a", minted_at=_NOW))
-        conn.execute(insert(hub.epoch_owners).values(chunk_id="ch_1", epoch=2, runner_id=None, recorded_at=_NOW))
-        conn.execute(insert(hub.lease_facts).values(chunk_id="ch_1", epoch=2, runner_id="hub", minted_at=_NOW))
-        conn.execute(insert(hub.epoch_owners).values(chunk_id="ch_1", epoch=3, runner_id=None, recorded_at=_NOW))
         conn.execute(
-            insert(hub.chunk_restarts).values(
-                chunk_id="ch_1", graph_id="gr_1", to_node_id="nd_a", epoch=3, restarted_by="op", recorded_at=_NOW
+            insert(hub.lease_facts).values(
+                stamp(hub.lease_facts, chunk_id="ch_1", epoch=1, runner_id="r_a", minted_at=_NOW)
             )
         )
-        conn.execute(insert(hub.epoch_owners).values(chunk_id="ch_1", epoch=4, runner_id="r_b", recorded_at=_NOW))
+        conn.execute(
+            insert(hub.epoch_owners).values(
+                stamp(hub.epoch_owners, chunk_id="ch_1", epoch=2, runner_id=None, recorded_at=_NOW)
+            )
+        )
+        conn.execute(
+            insert(hub.lease_facts).values(
+                stamp(hub.lease_facts, chunk_id="ch_1", epoch=2, runner_id="hub", minted_at=_NOW)
+            )
+        )
+        conn.execute(
+            insert(hub.epoch_owners).values(
+                stamp(hub.epoch_owners, chunk_id="ch_1", epoch=3, runner_id=None, recorded_at=_NOW)
+            )
+        )
+        conn.execute(
+            insert(hub.chunk_restarts).values(
+                stamp(
+                    hub.chunk_restarts,
+                    chunk_id="ch_1",
+                    graph_id="gr_1",
+                    to_node_id="nd_a",
+                    epoch=3,
+                    restarted_by="op",
+                    recorded_at=_NOW,
+                )
+            )
+        )
+        conn.execute(
+            insert(hub.epoch_owners).values(
+                stamp(hub.epoch_owners, chunk_id="ch_1", epoch=4, runner_id="r_b", recorded_at=_NOW)
+            )
+        )
     slugs = {v.invariant for v in HubInvariants(engine).run()}
     assert "hub:epochs-owned" not in slugs
 
@@ -798,7 +883,11 @@ def test_a_lease_at_an_unowned_epoch_is_a_violation(tmp_path: Path) -> None:
     engine = _hub_engine(tmp_path)
     with engine.begin() as conn:
         _seed_owned_chunk(conn)
-        conn.execute(insert(hub.lease_facts).values(chunk_id="ch_1", epoch=2, runner_id="r_a", minted_at=_NOW))
+        conn.execute(
+            insert(hub.lease_facts).values(
+                stamp(hub.lease_facts, chunk_id="ch_1", epoch=2, runner_id="r_a", minted_at=_NOW)
+            )
+        )
     assert [v.detail for v in HubInvariants(engine).run() if v.invariant == "hub:epochs-owned"] == [
         "chunk ch_1 epoch 2 has no owner"
     ]
@@ -810,7 +899,15 @@ def test_a_restart_at_an_unowned_epoch_is_a_violation(tmp_path: Path) -> None:
         _seed_owned_chunk(conn)
         conn.execute(
             insert(hub.chunk_restarts).values(
-                chunk_id="ch_1", graph_id="gr_1", to_node_id="nd_a", epoch=2, restarted_by="op", recorded_at=_NOW
+                stamp(
+                    hub.chunk_restarts,
+                    chunk_id="ch_1",
+                    graph_id="gr_1",
+                    to_node_id="nd_a",
+                    epoch=2,
+                    restarted_by="op",
+                    recorded_at=_NOW,
+                )
             )
         )
     assert [v.detail for v in HubInvariants(engine).run() if v.invariant == "hub:epochs-owned"] == [
@@ -823,9 +920,21 @@ def test_a_runner_lease_level_with_another_owners_epoch_is_a_violation(tmp_path:
     engine = _hub_engine(tmp_path)
     with engine.begin() as conn:
         _seed_owned_chunk(conn)
-        conn.execute(insert(hub.lease_facts).values(chunk_id="ch_1", epoch=1, runner_id="r_b", minted_at=_NOW))
-        conn.execute(insert(hub.epoch_owners).values(chunk_id="ch_1", epoch=2, runner_id=None, recorded_at=_NOW))
-        conn.execute(insert(hub.lease_facts).values(chunk_id="ch_1", epoch=2, runner_id="r_a", minted_at=_NOW))
+        conn.execute(
+            insert(hub.lease_facts).values(
+                stamp(hub.lease_facts, chunk_id="ch_1", epoch=1, runner_id="r_b", minted_at=_NOW)
+            )
+        )
+        conn.execute(
+            insert(hub.epoch_owners).values(
+                stamp(hub.epoch_owners, chunk_id="ch_1", epoch=2, runner_id=None, recorded_at=_NOW)
+            )
+        )
+        conn.execute(
+            insert(hub.lease_facts).values(
+                stamp(hub.lease_facts, chunk_id="ch_1", epoch=2, runner_id="r_a", minted_at=_NOW)
+            )
+        )
     assert [v.detail for v in HubInvariants(engine).run() if v.invariant == "hub:epochs-owned"] == [
         "chunk ch_1 epoch 1 taken by r_b but owned by r_a",
         "chunk ch_1 epoch 2 taken by r_a but owned by the hub",
@@ -874,24 +983,39 @@ def test_merged_into_post_merge_node_is_not_a_violation(tmp_path: Path) -> None:
     ``delivery.landed`` fact, so it derives its live status rather than DONE."""
     engine = _hub_engine(tmp_path)
     with engine.begin() as conn:
-        conn.execute(insert(hub.chunks).values(chunk_id="ch_1", graph_id="gr_1", minted_at=_NOW, model="m"))
-        conn.execute(insert(hub.lease_facts).values(chunk_id="ch_1", epoch=2, runner_id="hub", minted_at=_NOW))
-        conn.execute(insert(hub.epoch_owners).values(chunk_id="ch_1", epoch=2, runner_id=None, recorded_at=_NOW))
         conn.execute(
-            insert(hub.transitions).values(
-                transition_id="tr_1",
-                chunk_id="ch_1",
-                graph_id="gr_1",
-                from_node_id="nd_deliver",
-                to_node_id="nd_verify",
-                choice_name="landed",
-                epoch=2,
-                runner_id="hub",
-                recorded_at=_NOW,
+            insert(hub.chunks).values(stamp(hub.chunks, chunk_id="ch_1", graph_id="gr_1", minted_at=_NOW, model="m"))
+        )
+        conn.execute(
+            insert(hub.lease_facts).values(
+                stamp(hub.lease_facts, chunk_id="ch_1", epoch=2, runner_id="hub", minted_at=_NOW)
             )
         )
         conn.execute(
-            insert(hub.delivery_repo_landed).values(chunk_id="ch_1", repo="toy-api", commit_hash="abc", landed_at=_NOW)
+            insert(hub.epoch_owners).values(
+                stamp(hub.epoch_owners, chunk_id="ch_1", epoch=2, runner_id=None, recorded_at=_NOW)
+            )
+        )
+        conn.execute(
+            insert(hub.transitions).values(
+                stamp(
+                    hub.transitions,
+                    transition_id="tr_1",
+                    chunk_id="ch_1",
+                    graph_id="gr_1",
+                    from_node_id="nd_deliver",
+                    to_node_id="nd_verify",
+                    choice_name="landed",
+                    epoch=2,
+                    runner_id="hub",
+                    recorded_at=_NOW,
+                )
+            )
+        )
+        conn.execute(
+            insert(hub.delivery_repo_landed).values(
+                stamp(hub.delivery_repo_landed, chunk_id="ch_1", repo="toy-api", commit_hash="abc", landed_at=_NOW)
+            )
         )
     assert HubInvariants(engine).run() == []
 
@@ -988,41 +1112,52 @@ def _seed_migration(
     # lands in `default_model`, so that is what a seeded pin has to carry.
     conn.execute(
         insert(hub.chunks).values(
-            chunk_id="ch_1",
-            graph_id=pin_graph,
-            minted_at=_NOW,
-            model="unread-since-144",
-            default_model=json.dumps(pin_default_model) if pin_default_model else None,
+            stamp(
+                hub.chunks,
+                chunk_id="ch_1",
+                graph_id=pin_graph,
+                minted_at=_NOW,
+                model="unread-since-144",
+                default_model=json.dumps(pin_default_model) if pin_default_model else None,
+            )
         )
     )
     if landed_executor is not None:
         conn.execute(
             insert(hub.graph_nodes).values(
-                node_id="nd_landed",
-                graph_id=to_graph,
-                name="build",
-                executor=landed_executor,
-                session="fresh",
-                judged_by="worker",
+                stamp(
+                    hub.graph_nodes,
+                    node_id="nd_landed",
+                    graph_id=to_graph,
+                    name="build",
+                    executor=landed_executor,
+                    session="fresh",
+                    judged_by="worker",
+                )
             )
         )
     conn.execute(
         insert(hub.chunk_migrations).values(
-            migration_id="mg_1",
-            chunk_id="ch_1",
-            from_node_id="nd_from",
-            from_graph_id="gr_src",
-            to_graph_id=to_graph,
-            landed_node_id="nd_landed",
-            choice_name="migrate",
-            model_after=model_after,
-            epoch=1,
-            recorded_at=_NOW,
-            source=source,
+            stamp(
+                hub.chunk_migrations,
+                migration_id="mg_1",
+                chunk_id="ch_1",
+                from_node_id="nd_from",
+                from_graph_id="gr_src",
+                to_graph_id=to_graph,
+                landed_node_id="nd_landed",
+                choice_name="migrate",
+                model_after=model_after,
+                epoch=1,
+                recorded_at=_NOW,
+                source=source,
+            )
         )
     )
     if release_route:
-        conn.execute(insert(hub.route_released).values(chunk_id="ch_1", released_at=_NOW, seq=1))
+        conn.execute(
+            insert(hub.route_released).values(stamp(hub.route_released, chunk_id="ch_1", released_at=_NOW, seq=1))
+        )
 
 
 def test_a_consistent_migration_is_not_a_violation(tmp_path: Path) -> None:
@@ -1131,20 +1266,27 @@ def test_two_migrations_at_one_node_epoch_is_a_violation(tmp_path: Path) -> None
     crash-replay double-landed the migration (#90)."""
     engine = _hub_engine(tmp_path)
     with engine.begin() as conn:
-        conn.execute(insert(hub.chunks).values(chunk_id="ch_1", graph_id="gr_triage", minted_at=_NOW, model="m"))
+        conn.execute(
+            insert(hub.chunks).values(
+                stamp(hub.chunks, chunk_id="ch_1", graph_id="gr_triage", minted_at=_NOW, model="m")
+            )
+        )
         for mid in ("mg_1", "mg_2"):
             conn.execute(
                 insert(hub.chunk_migrations).values(
-                    migration_id=mid,
-                    chunk_id="ch_1",
-                    from_node_id="nd_from",
-                    from_graph_id="gr_src",
-                    to_graph_id="gr_triage",
-                    landed_node_id="nd_landed",
-                    choice_name="migrate",
-                    model_after=None,
-                    epoch=1,
-                    recorded_at=_NOW,
+                    stamp(
+                        hub.chunk_migrations,
+                        migration_id=mid,
+                        chunk_id="ch_1",
+                        from_node_id="nd_from",
+                        from_graph_id="gr_src",
+                        to_graph_id="gr_triage",
+                        landed_node_id="nd_landed",
+                        choice_name="migrate",
+                        model_after=None,
+                        epoch=1,
+                        recorded_at=_NOW,
+                    )
                 )
             )
     slugs = {v.invariant for v in HubInvariants(engine).run()}
@@ -1157,7 +1299,15 @@ def test_a_ref_closed_and_gone_both_is_a_violation(tmp_path: Path) -> None:
         for outcome in ("closed", "gone"):
             conn.execute(
                 insert(hub.work_item_closures).values(
-                    chunk_id="ch_1", source="default", ref="1", outcome=outcome, reason=None, recorded_at=_NOW
+                    stamp(
+                        hub.work_item_closures,
+                        chunk_id="ch_1",
+                        source="default",
+                        ref="1",
+                        outcome=outcome,
+                        reason=None,
+                        recorded_at=_NOW,
+                    )
                 )
             )
     slugs = {v.invariant for v in HubInvariants(engine).run()}
@@ -1169,7 +1319,15 @@ def test_a_ref_closed_just_once_is_not_a_violation(tmp_path: Path) -> None:
     with engine.begin() as conn:
         conn.execute(
             insert(hub.work_item_closures).values(
-                chunk_id="ch_1", source="default", ref="1", outcome="closed", reason=None, recorded_at=_NOW
+                stamp(
+                    hub.work_item_closures,
+                    chunk_id="ch_1",
+                    source="default",
+                    ref="1",
+                    outcome="closed",
+                    reason=None,
+                    recorded_at=_NOW,
+                )
             )
         )
     slugs = {v.invariant for v in HubInvariants(engine).run()}
@@ -1181,12 +1339,20 @@ def test_a_pending_intent_against_an_already_terminal_ref_is_a_violation(tmp_pat
     with engine.begin() as conn:
         conn.execute(
             insert(hub.work_item_closures).values(
-                chunk_id="ch_1", source="default", ref="1", outcome="closed", reason=None, recorded_at=_NOW
+                stamp(
+                    hub.work_item_closures,
+                    chunk_id="ch_1",
+                    source="default",
+                    ref="1",
+                    outcome="closed",
+                    reason=None,
+                    recorded_at=_NOW,
+                )
             )
         )
         conn.execute(
             insert(hub.close_intents).values(
-                chunk_id="ch_1", source="default", ref="1", enqueued_at=_NOW, retired_at=None
+                stamp(hub.close_intents, chunk_id="ch_1", source="default", ref="1", enqueued_at=_NOW, retired_at=None)
             )
         )
     slugs = {v.invariant for v in HubInvariants(engine).run()}
@@ -1198,12 +1364,20 @@ def test_a_retired_intent_against_a_terminal_ref_is_not_a_violation(tmp_path: Pa
     with engine.begin() as conn:
         conn.execute(
             insert(hub.work_item_closures).values(
-                chunk_id="ch_1", source="default", ref="1", outcome="closed", reason=None, recorded_at=_NOW
+                stamp(
+                    hub.work_item_closures,
+                    chunk_id="ch_1",
+                    source="default",
+                    ref="1",
+                    outcome="closed",
+                    reason=None,
+                    recorded_at=_NOW,
+                )
             )
         )
         conn.execute(
             insert(hub.close_intents).values(
-                chunk_id="ch_1", source="default", ref="1", enqueued_at=_NOW, retired_at=_NOW
+                stamp(hub.close_intents, chunk_id="ch_1", source="default", ref="1", enqueued_at=_NOW, retired_at=_NOW)
             )
         )
     slugs = {v.invariant for v in HubInvariants(engine).run()}
@@ -1215,7 +1389,7 @@ def test_a_pending_intent_against_a_non_terminal_ref_is_not_a_violation(tmp_path
     with engine.begin() as conn:
         conn.execute(
             insert(hub.close_intents).values(
-                chunk_id="ch_1", source="default", ref="1", enqueued_at=_NOW, retired_at=None
+                stamp(hub.close_intents, chunk_id="ch_1", source="default", ref="1", enqueued_at=_NOW, retired_at=None)
             )
         )
     slugs = {v.invariant for v in HubInvariants(engine).run()}
@@ -1227,14 +1401,22 @@ def test_a_landed_refs_pending_close_intent_is_not_a_violation(tmp_path: Path) -
     ref, so it carries a ``close_intents`` row."""
     engine = _hub_engine(tmp_path)
     with engine.begin() as conn:
-        conn.execute(insert(hub.chunks).values(chunk_id="ch_1", graph_id="gr_triage", minted_at=_NOW, model="m"))
-        conn.execute(insert(hub.chunk_work_refs).values(chunk_id="ch_1", source="default", ref="1"))
         conn.execute(
-            insert(hub.delivery_repo_landed).values(chunk_id="ch_1", repo="widget", commit_hash="sha", landed_at=_NOW)
+            insert(hub.chunks).values(
+                stamp(hub.chunks, chunk_id="ch_1", graph_id="gr_triage", minted_at=_NOW, model="m")
+            )
+        )
+        conn.execute(
+            insert(hub.chunk_work_refs).values(stamp(hub.chunk_work_refs, chunk_id="ch_1", source="default", ref="1"))
+        )
+        conn.execute(
+            insert(hub.delivery_repo_landed).values(
+                stamp(hub.delivery_repo_landed, chunk_id="ch_1", repo="widget", commit_hash="sha", landed_at=_NOW)
+            )
         )
         conn.execute(
             insert(hub.close_intents).values(
-                chunk_id="ch_1", source="default", ref="1", enqueued_at=_NOW, retired_at=None
+                stamp(hub.close_intents, chunk_id="ch_1", source="default", ref="1", enqueued_at=_NOW, retired_at=None)
             )
         )
     slugs = {v.invariant for v in HubInvariants(engine).run()}
@@ -1246,14 +1428,22 @@ def test_a_landed_refs_retired_close_intent_is_not_a_violation(tmp_path: Path) -
     ``close_intents`` row at all is the violation."""
     engine = _hub_engine(tmp_path)
     with engine.begin() as conn:
-        conn.execute(insert(hub.chunks).values(chunk_id="ch_1", graph_id="gr_triage", minted_at=_NOW, model="m"))
-        conn.execute(insert(hub.chunk_work_refs).values(chunk_id="ch_1", source="default", ref="1"))
         conn.execute(
-            insert(hub.delivery_repo_landed).values(chunk_id="ch_1", repo="widget", commit_hash="sha", landed_at=_NOW)
+            insert(hub.chunks).values(
+                stamp(hub.chunks, chunk_id="ch_1", graph_id="gr_triage", minted_at=_NOW, model="m")
+            )
+        )
+        conn.execute(
+            insert(hub.chunk_work_refs).values(stamp(hub.chunk_work_refs, chunk_id="ch_1", source="default", ref="1"))
+        )
+        conn.execute(
+            insert(hub.delivery_repo_landed).values(
+                stamp(hub.delivery_repo_landed, chunk_id="ch_1", repo="widget", commit_hash="sha", landed_at=_NOW)
+            )
         )
         conn.execute(
             insert(hub.close_intents).values(
-                chunk_id="ch_1", source="default", ref="1", enqueued_at=_NOW, retired_at=_NOW
+                stamp(hub.close_intents, chunk_id="ch_1", source="default", ref="1", enqueued_at=_NOW, retired_at=_NOW)
             )
         )
     slugs = {v.invariant for v in HubInvariants(engine).run()}
@@ -1263,14 +1453,30 @@ def test_a_landed_refs_retired_close_intent_is_not_a_violation(tmp_path: Path) -
 def test_a_landed_ref_already_terminal_with_no_intent_is_not_a_violation(tmp_path: Path) -> None:
     engine = _hub_engine(tmp_path)
     with engine.begin() as conn:
-        conn.execute(insert(hub.chunks).values(chunk_id="ch_1", graph_id="gr_triage", minted_at=_NOW, model="m"))
-        conn.execute(insert(hub.chunk_work_refs).values(chunk_id="ch_1", source="default", ref="1"))
         conn.execute(
-            insert(hub.delivery_repo_landed).values(chunk_id="ch_1", repo="widget", commit_hash="sha", landed_at=_NOW)
+            insert(hub.chunks).values(
+                stamp(hub.chunks, chunk_id="ch_1", graph_id="gr_triage", minted_at=_NOW, model="m")
+            )
+        )
+        conn.execute(
+            insert(hub.chunk_work_refs).values(stamp(hub.chunk_work_refs, chunk_id="ch_1", source="default", ref="1"))
+        )
+        conn.execute(
+            insert(hub.delivery_repo_landed).values(
+                stamp(hub.delivery_repo_landed, chunk_id="ch_1", repo="widget", commit_hash="sha", landed_at=_NOW)
+            )
         )
         conn.execute(
             insert(hub.work_item_closures).values(
-                chunk_id="ch_1", source="default", ref="1", outcome="closed", reason=None, recorded_at=_NOW
+                stamp(
+                    hub.work_item_closures,
+                    chunk_id="ch_1",
+                    source="default",
+                    ref="1",
+                    outcome="closed",
+                    reason=None,
+                    recorded_at=_NOW,
+                )
             )
         )
     slugs = {v.invariant for v in HubInvariants(engine).run()}
@@ -1281,8 +1487,14 @@ def test_a_non_landed_refs_missing_intent_is_not_a_violation(tmp_path: Path) -> 
     """A ref on a chunk that has neither landed nor been hand-completed owes no intent yet."""
     engine = _hub_engine(tmp_path)
     with engine.begin() as conn:
-        conn.execute(insert(hub.chunks).values(chunk_id="ch_1", graph_id="gr_triage", minted_at=_NOW, model="m"))
-        conn.execute(insert(hub.chunk_work_refs).values(chunk_id="ch_1", source="default", ref="1"))
+        conn.execute(
+            insert(hub.chunks).values(
+                stamp(hub.chunks, chunk_id="ch_1", graph_id="gr_triage", minted_at=_NOW, model="m")
+            )
+        )
+        conn.execute(
+            insert(hub.chunk_work_refs).values(stamp(hub.chunk_work_refs, chunk_id="ch_1", source="default", ref="1"))
+        )
     slugs = {v.invariant for v in HubInvariants(engine).run()}
     assert "hub:no-unenqueued-closable-ref" not in slugs
 
@@ -1293,10 +1505,18 @@ def test_a_landed_ref_with_no_close_intent_and_no_terminal_outcome_is_a_violatio
     writer that forgot the call."""
     engine = _hub_engine(tmp_path)
     with engine.begin() as conn:
-        conn.execute(insert(hub.chunks).values(chunk_id="ch_1", graph_id="gr_triage", minted_at=_NOW, model="m"))
-        conn.execute(insert(hub.chunk_work_refs).values(chunk_id="ch_1", source="default", ref="1"))
         conn.execute(
-            insert(hub.delivery_repo_landed).values(chunk_id="ch_1", repo="widget", commit_hash="sha", landed_at=_NOW)
+            insert(hub.chunks).values(
+                stamp(hub.chunks, chunk_id="ch_1", graph_id="gr_triage", minted_at=_NOW, model="m")
+            )
+        )
+        conn.execute(
+            insert(hub.chunk_work_refs).values(stamp(hub.chunk_work_refs, chunk_id="ch_1", source="default", ref="1"))
+        )
+        conn.execute(
+            insert(hub.delivery_repo_landed).values(
+                stamp(hub.delivery_repo_landed, chunk_id="ch_1", repo="widget", commit_hash="sha", landed_at=_NOW)
+            )
         )
     slugs = {v.invariant for v in HubInvariants(engine).run()}
     assert "hub:no-unenqueued-closable-ref" in slugs
@@ -1306,9 +1526,19 @@ def test_a_hand_completed_refs_missing_intent_is_a_violation(tmp_path: Path) -> 
     """The completion path owes the same coverage as landing does."""
     engine = _hub_engine(tmp_path)
     with engine.begin() as conn:
-        conn.execute(insert(hub.chunks).values(chunk_id="ch_1", graph_id="gr_triage", minted_at=_NOW, model="m"))
-        conn.execute(insert(hub.chunk_work_refs).values(chunk_id="ch_1", source="default", ref="1"))
-        conn.execute(insert(hub.chunk_completed).values(chunk_id="ch_1", completed_at=_NOW, completed_by="test"))
+        conn.execute(
+            insert(hub.chunks).values(
+                stamp(hub.chunks, chunk_id="ch_1", graph_id="gr_triage", minted_at=_NOW, model="m")
+            )
+        )
+        conn.execute(
+            insert(hub.chunk_work_refs).values(stamp(hub.chunk_work_refs, chunk_id="ch_1", source="default", ref="1"))
+        )
+        conn.execute(
+            insert(hub.chunk_completed).values(
+                stamp(hub.chunk_completed, chunk_id="ch_1", completed_at=_NOW, completed_by="test")
+            )
+        )
     slugs = {v.invariant for v in HubInvariants(engine).run()}
     assert "hub:no-unenqueued-closable-ref" in slugs
 
@@ -1318,13 +1548,29 @@ def test_a_grouped_chunks_missing_intent_is_not_a_violation(tmp_path: Path) -> N
     no coverage either."""
     engine = _hub_engine(tmp_path)
     with engine.begin() as conn:
-        conn.execute(insert(hub.chunks).values(chunk_id="ch_1", graph_id="gr_triage", minted_at=_NOW, model="m"))
-        conn.execute(insert(hub.chunks).values(chunk_id="ch_2", graph_id="gr_triage", minted_at=_NOW, model="m"))
-        conn.execute(insert(hub.chunk_work_refs).values(chunk_id="ch_1", source="default", ref="1"))
         conn.execute(
-            insert(hub.delivery_repo_landed).values(chunk_id="ch_1", repo="widget", commit_hash="sha", landed_at=_NOW)
+            insert(hub.chunks).values(
+                stamp(hub.chunks, chunk_id="ch_1", graph_id="gr_triage", minted_at=_NOW, model="m")
+            )
         )
-        conn.execute(insert(hub.chunk_grouped).values(chunk_id="ch_1", grouped_into="ch_2", grouped_at=_NOW))
+        conn.execute(
+            insert(hub.chunks).values(
+                stamp(hub.chunks, chunk_id="ch_2", graph_id="gr_triage", minted_at=_NOW, model="m")
+            )
+        )
+        conn.execute(
+            insert(hub.chunk_work_refs).values(stamp(hub.chunk_work_refs, chunk_id="ch_1", source="default", ref="1"))
+        )
+        conn.execute(
+            insert(hub.delivery_repo_landed).values(
+                stamp(hub.delivery_repo_landed, chunk_id="ch_1", repo="widget", commit_hash="sha", landed_at=_NOW)
+            )
+        )
+        conn.execute(
+            insert(hub.chunk_grouped).values(
+                stamp(hub.chunk_grouped, chunk_id="ch_1", grouped_into="ch_2", grouped_at=_NOW)
+            )
+        )
     slugs = {v.invariant for v in HubInvariants(engine).run()}
     assert "hub:no-unenqueued-closable-ref" not in slugs
 
@@ -1357,7 +1603,11 @@ def test_a_segment_naming_no_chunk_is_a_violation(tmp_path: Path) -> None:
     foreign keys, so a segment can outlive — or never have had — the chunk row it declares."""
     engine = _hub_engine(tmp_path)
     with engine.begin() as conn:
-        conn.execute(insert(hub.transcript_segments).values(**_segment_values(chunk_id="ch_never_minted")))
+        conn.execute(
+            insert(hub.transcript_segments).values(
+                stamp(hub.transcript_segments, **_segment_values(chunk_id="ch_never_minted"))
+            )
+        )
 
     violations = [v for v in HubInvariants(engine).run() if v.invariant == "hub:segment-chunk-resolves"]
 
@@ -1367,8 +1617,12 @@ def test_a_segment_naming_no_chunk_is_a_violation(tmp_path: Path) -> None:
 def test_a_segment_naming_a_minted_chunk_is_not_a_violation(tmp_path: Path) -> None:
     engine = _hub_engine(tmp_path)
     with engine.begin() as conn:
-        conn.execute(insert(hub.chunks).values(chunk_id="ch_1", graph_id="gr_triage", minted_at=_NOW, model="m"))
-        conn.execute(insert(hub.transcript_segments).values(**_segment_values()))
+        conn.execute(
+            insert(hub.chunks).values(
+                stamp(hub.chunks, chunk_id="ch_1", graph_id="gr_triage", minted_at=_NOW, model="m")
+            )
+        )
+        conn.execute(insert(hub.transcript_segments).values(stamp(hub.transcript_segments, **_segment_values())))
 
     slugs = {v.invariant for v in HubInvariants(engine).run()}
 
@@ -1396,15 +1650,21 @@ def test_a_standing_dependency_cycle_is_a_violation(tmp_path: Path) -> None:
     with engine.begin() as conn:
         conn.execute(
             insert(hub.chunk_dependencies).values(
-                **_dependency_edge_values(
-                    dependency_id="dep_1", dependent_chunk_id="ch_a", prerequisite_chunk_id="ch_b"
+                stamp(
+                    hub.chunk_dependencies,
+                    **_dependency_edge_values(
+                        dependency_id="dep_1", dependent_chunk_id="ch_a", prerequisite_chunk_id="ch_b"
+                    ),
                 )
             )
         )
         conn.execute(
             insert(hub.chunk_dependencies).values(
-                **_dependency_edge_values(
-                    dependency_id="dep_2", dependent_chunk_id="ch_b", prerequisite_chunk_id="ch_a"
+                stamp(
+                    hub.chunk_dependencies,
+                    **_dependency_edge_values(
+                        dependency_id="dep_2", dependent_chunk_id="ch_b", prerequisite_chunk_id="ch_a"
+                    ),
                 )
             )
         )
@@ -1419,15 +1679,21 @@ def test_an_acyclic_dependency_chain_is_not_a_violation(tmp_path: Path) -> None:
     with engine.begin() as conn:
         conn.execute(
             insert(hub.chunk_dependencies).values(
-                **_dependency_edge_values(
-                    dependency_id="dep_1", dependent_chunk_id="ch_a", prerequisite_chunk_id="ch_b"
+                stamp(
+                    hub.chunk_dependencies,
+                    **_dependency_edge_values(
+                        dependency_id="dep_1", dependent_chunk_id="ch_a", prerequisite_chunk_id="ch_b"
+                    ),
                 )
             )
         )
         conn.execute(
             insert(hub.chunk_dependencies).values(
-                **_dependency_edge_values(
-                    dependency_id="dep_2", dependent_chunk_id="ch_b", prerequisite_chunk_id="ch_c"
+                stamp(
+                    hub.chunk_dependencies,
+                    **_dependency_edge_values(
+                        dependency_id="dep_2", dependent_chunk_id="ch_b", prerequisite_chunk_id="ch_c"
+                    ),
                 )
             )
         )
@@ -1444,19 +1710,25 @@ def test_a_released_edge_reopening_a_cycle_is_not_a_violation(tmp_path: Path) ->
     with engine.begin() as conn:
         conn.execute(
             insert(hub.chunk_dependencies).values(
-                **_dependency_edge_values(
-                    dependency_id="dep_1", dependent_chunk_id="ch_a", prerequisite_chunk_id="ch_b"
+                stamp(
+                    hub.chunk_dependencies,
+                    **_dependency_edge_values(
+                        dependency_id="dep_1", dependent_chunk_id="ch_a", prerequisite_chunk_id="ch_b"
+                    ),
                 )
             )
         )
         conn.execute(
             insert(hub.chunk_dependencies).values(
-                **_dependency_edge_values(
-                    dependency_id="dep_2",
-                    dependent_chunk_id="ch_b",
-                    prerequisite_chunk_id="ch_a",
-                    released_at=_NOW,
-                    released_by="user:alice",
+                stamp(
+                    hub.chunk_dependencies,
+                    **_dependency_edge_values(
+                        dependency_id="dep_2",
+                        dependent_chunk_id="ch_b",
+                        prerequisite_chunk_id="ch_a",
+                        released_at=_NOW,
+                        released_by="user:alice",
+                    ),
                 )
             )
         )
@@ -1472,8 +1744,16 @@ def test_two_standing_rows_for_one_ordered_pair_is_a_violation(tmp_path: Path) -
     exact breach ``NoDuplicateStandingDependency`` exists to catch."""
     engine = _hub_engine(tmp_path)
     with engine.begin() as conn:
-        conn.execute(insert(hub.chunk_dependencies).values(**_dependency_edge_values(dependency_id="dep_1")))
-        conn.execute(insert(hub.chunk_dependencies).values(**_dependency_edge_values(dependency_id="dep_2")))
+        conn.execute(
+            insert(hub.chunk_dependencies).values(
+                stamp(hub.chunk_dependencies, **_dependency_edge_values(dependency_id="dep_1"))
+            )
+        )
+        conn.execute(
+            insert(hub.chunk_dependencies).values(
+                stamp(hub.chunk_dependencies, **_dependency_edge_values(dependency_id="dep_2"))
+            )
+        )
 
     slugs = {v.invariant for v in HubInvariants(engine).run()}
 
@@ -1487,10 +1767,17 @@ def test_a_declared_edge_after_a_release_of_the_same_pair_is_not_a_violation(tmp
     with engine.begin() as conn:
         conn.execute(
             insert(hub.chunk_dependencies).values(
-                **_dependency_edge_values(dependency_id="dep_1", released_at=_NOW, released_by="user:alice")
+                stamp(
+                    hub.chunk_dependencies,
+                    **_dependency_edge_values(dependency_id="dep_1", released_at=_NOW, released_by="user:alice"),
+                )
             )
         )
-        conn.execute(insert(hub.chunk_dependencies).values(**_dependency_edge_values(dependency_id="dep_2")))
+        conn.execute(
+            insert(hub.chunk_dependencies).values(
+                stamp(hub.chunk_dependencies, **_dependency_edge_values(dependency_id="dep_2"))
+            )
+        )
 
     slugs = {v.invariant for v in HubInvariants(engine).run()}
 
@@ -1502,9 +1789,11 @@ def test_a_standing_edge_onto_a_grouped_away_prerequisite_is_a_violation(tmp_pat
     lock leaves — a standing edge naming a prerequisite grouped away after the guard read."""
     engine = _hub_engine(tmp_path)
     with engine.begin() as conn:
-        conn.execute(insert(hub.chunk_dependencies).values(**_dependency_edge_values()))
+        conn.execute(insert(hub.chunk_dependencies).values(stamp(hub.chunk_dependencies, **_dependency_edge_values())))
         conn.execute(
-            insert(hub.chunk_grouped).values(chunk_id="ch_prereq", grouped_into="ch_survivor", grouped_at=_NOW)
+            insert(hub.chunk_grouped).values(
+                stamp(hub.chunk_grouped, chunk_id="ch_prereq", grouped_into="ch_survivor", grouped_at=_NOW)
+            )
         )
 
     slugs = {v.invariant for v in HubInvariants(engine).run()}
@@ -1515,8 +1804,12 @@ def test_a_standing_edge_onto_a_grouped_away_prerequisite_is_a_violation(tmp_pat
 def test_a_standing_edge_onto_a_deleted_prerequisite_is_a_violation(tmp_path: Path) -> None:
     engine = _hub_engine(tmp_path)
     with engine.begin() as conn:
-        conn.execute(insert(hub.chunk_dependencies).values(**_dependency_edge_values()))
-        conn.execute(insert(hub.chunk_deleted).values(chunk_id="ch_prereq", deleted_at=_NOW, deleted_by="user:alice"))
+        conn.execute(insert(hub.chunk_dependencies).values(stamp(hub.chunk_dependencies, **_dependency_edge_values())))
+        conn.execute(
+            insert(hub.chunk_deleted).values(
+                stamp(hub.chunk_deleted, chunk_id="ch_prereq", deleted_at=_NOW, deleted_by="user:alice")
+            )
+        )
 
     slugs = {v.invariant for v in HubInvariants(engine).run()}
 
@@ -1528,9 +1821,11 @@ def test_a_standing_edges_dependent_gone_ephemeral_is_also_a_violation(tmp_path:
     engine as the prerequisite doing so."""
     engine = _hub_engine(tmp_path)
     with engine.begin() as conn:
-        conn.execute(insert(hub.chunk_dependencies).values(**_dependency_edge_values()))
+        conn.execute(insert(hub.chunk_dependencies).values(stamp(hub.chunk_dependencies, **_dependency_edge_values())))
         conn.execute(
-            insert(hub.chunk_deleted).values(chunk_id="ch_dependent", deleted_at=_NOW, deleted_by="user:alice")
+            insert(hub.chunk_deleted).values(
+                stamp(hub.chunk_deleted, chunk_id="ch_dependent", deleted_at=_NOW, deleted_by="user:alice")
+            )
         )
 
     slugs = {v.invariant for v in HubInvariants(engine).run()}
@@ -1543,9 +1838,15 @@ def test_a_released_edge_onto_an_ephemeral_chunk_is_not_a_violation(tmp_path: Pa
     engine = _hub_engine(tmp_path)
     with engine.begin() as conn:
         conn.execute(
-            insert(hub.chunk_dependencies).values(**_dependency_edge_values(released_at=_NOW, released_by="user:alice"))
+            insert(hub.chunk_dependencies).values(
+                stamp(hub.chunk_dependencies, **_dependency_edge_values(released_at=_NOW, released_by="user:alice"))
+            )
         )
-        conn.execute(insert(hub.chunk_deleted).values(chunk_id="ch_prereq", deleted_at=_NOW, deleted_by="user:alice"))
+        conn.execute(
+            insert(hub.chunk_deleted).values(
+                stamp(hub.chunk_deleted, chunk_id="ch_prereq", deleted_at=_NOW, deleted_by="user:alice")
+            )
+        )
 
     slugs = {v.invariant for v in HubInvariants(engine).run()}
 

@@ -10,11 +10,11 @@ from datetime import timedelta
 from pathlib import Path
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import func
 
 from blizzard.auth_core import Role
 from blizzard.hub.store import schema as s
-from tests.support import HubHarness, build_hub, pointer_token, seed_session, seed_user
+from tests.support import HubHarness, build_hub, hub_store_connections, pointer_token, seed_session, seed_user
 
 pytestmark = pytest.mark.component
 
@@ -189,7 +189,7 @@ def test_put_queue_duplicate_ids_is_422(tmp_path: Path) -> None:
 
 def _position_row_count(hub: HubHarness) -> int:
     with hub.engine.connect() as conn:
-        return conn.execute(select(func.count()).select_from(s.queue_positions)).scalar_one()
+        return conn.execute(hub_store_connections(hub.engine).select(s.queue_positions, func.count())).scalar_one()
 
 
 def test_post_queue_position_inserts_between_two_neighbours(tmp_path: Path) -> None:

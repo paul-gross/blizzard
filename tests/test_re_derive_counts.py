@@ -7,11 +7,11 @@ from datetime import timedelta
 from pathlib import Path
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import func
 
 from blizzard.hub.domain.observability.analytics.derivation import FORCED_FULL_PASS_FLOOR, ReDeriveScope
 from blizzard.hub.store import schema as s
-from tests.support import build_hub
+from tests.support import build_hub, hub_store_connections
 from tests.test_analytics_events_api import _ingest_chunk, _record, _tool_turn
 
 pytestmark = pytest.mark.component
@@ -63,7 +63,7 @@ def _push(hub, chunk_id: str, *, segment_id: str, supersedes: str | None = None,
 
 def _count(hub, table) -> int:  # type: ignore[no-untyped-def]
     with hub.engine.connect() as conn:
-        return int(conn.execute(select(func.count()).select_from(table)).scalar_one())
+        return int(conn.execute(hub_store_connections(hub.engine).select(table, func.count())).scalar_one())
 
 
 def _force(hub, segment_id: str) -> dict:  # type: ignore[no-untyped-def]

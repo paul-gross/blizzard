@@ -11,7 +11,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
-from sqlalchemy import Engine, insert, select
+from sqlalchemy import Engine, insert
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
@@ -21,7 +21,16 @@ from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.store import schema as s
-from tests.support import chunk_stores, count_queries, migrate_to, seed_chunk, seed_graph, seed_lease, stamp
+from tests.support import (
+    chunk_stores,
+    count_queries,
+    hub_store_connections,
+    migrate_to,
+    seed_chunk,
+    seed_graph,
+    seed_lease,
+    stamp,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -410,7 +419,7 @@ def test_migration_creates_event_log_on_in_place_upgrade(tmp_path: Path) -> None
                 )
             )
         )
-        rows = conn.execute(select(s.event_log)).all()
+        rows = conn.execute(hub_store_connections(engine).select(s.event_log)).all()
     assert len(rows) == 1
 
 

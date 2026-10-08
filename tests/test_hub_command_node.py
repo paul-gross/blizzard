@@ -16,7 +16,6 @@ from typing import cast
 import pytest
 import yaml
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
-from sqlalchemy import select
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import FixedClock
@@ -66,6 +65,7 @@ from tests.support import (
     FakeWorkSource,
     build_hub,
     emitted_events,
+    hub_store_connections,
     pointer_token,
     report_lease,
 )
@@ -1268,8 +1268,11 @@ def test_a_fresh_merged_marker_records_the_delivery_landed_fact(tmp_path: Path) 
     assert hub.services.chunks.delivery.count_landed_since("acme-widget", since) == 1
     with hub.engine.begin() as conn:
         row = conn.execute(
-            select(
-                s.delivery_repo_landed.c.repo, s.delivery_repo_landed.c.commit_hash, s.delivery_repo_landed.c.landed_at
+            hub_store_connections(hub.engine).select(
+                s.delivery_repo_landed,
+                s.delivery_repo_landed.c.repo,
+                s.delivery_repo_landed.c.commit_hash,
+                s.delivery_repo_landed.c.landed_at,
             )
         ).one()
         assert row.repo == "acme-widget"
