@@ -53,10 +53,10 @@ from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
 from blizzard.hub.store.internal.chunk_route_store import ChunkRouteStore
 from blizzard.hub.store.internal.chunk_usage_store import ChunkUsageStore
 from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
-from blizzard.hub.store.internal.egress_event_store import EgressEventStore
 from blizzard.hub.store.internal.finding_store import FindingSetStore, FindingStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
 from blizzard.hub.store.internal.graph_store import GraphStore
+from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
 from blizzard.hub.store.internal.routine_store import RoutineStore
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from blizzard.hub.store.internal.scope_store import ScopeStore
@@ -193,40 +193,40 @@ _ADAPTER_CASES = [
         "list_standing_edges",
     ),
     _AdapterCase(
-        "EgressEventStore.markers_after",
-        lambda store: EgressEventStore(store),
+        "SweepCorpusReads.markers_after",
+        lambda store: build_hub_scoped_reads(store).corpus,
         lambda a: a.markers_after(EventsPosition(_NOW), _NOW, 1, extractor_version=None),
-        "egress_markers_after",
+        "corpus markers after",
     ),
     _AdapterCase(
-        "EgressEventStore.drops_after",
-        lambda store: EgressEventStore(store),
+        "SweepCorpusReads.drops_after",
+        lambda store: build_hub_scoped_reads(store).corpus,
         lambda a: a.drops_after(EventsPosition(_NOW), _NOW, 1),
-        "egress_drops_after",
+        "corpus drops after",
     ),
     _AdapterCase(
-        "EgressEventStore.derivations",
-        lambda store: EgressEventStore(store),
+        "SweepCorpusReads.derivations",
+        lambda store: build_hub_scoped_reads(store).corpus,
         lambda a: a.derivations([_MARKER]),
-        "egress_derivations",
+        "corpus derivations",
     ),
     _AdapterCase(
-        "EgressEventStore.epochs_minted_between",
-        lambda store: EgressEventStore(store),
+        "SweepCorpusReads.epochs_minted_between",
+        lambda store: build_hub_scoped_reads(store).corpus,
         lambda a: a.epochs_minted_between(_NOW, _NOW, None, 1),
-        "egress_epochs_minted_between",
+        "corpus epochs minted between",
     ),
     _AdapterCase(
-        "EgressEventStore.epoch_markers",
-        lambda store: EgressEventStore(store),
+        "SweepCorpusReads.epoch_markers",
+        lambda store: build_hub_scoped_reads(store).corpus,
         lambda a: a.epoch_markers([EpochKey("ch_x", 1)], extractor_version=None),
-        "egress_epoch_markers",
+        "corpus epoch markers",
     ),
     _AdapterCase(
-        "EgressEventStore.epoch_drops",
-        lambda store: EgressEventStore(store),
+        "SweepCorpusReads.epoch_drops",
+        lambda store: build_hub_scoped_reads(store).corpus,
         lambda a: a.epoch_drops([EpochKey("ch_x", 1)]),
-        "egress_epoch_drops",
+        "corpus epoch drops",
     ),
     _AdapterCase("FindingStore", lambda store: FindingStore(store), lambda a: a.get("fin_x"), "get"),
     _AdapterCase("FindingSetStore", lambda store: FindingSetStore(store), lambda a: a.get("fins_x"), "get"),

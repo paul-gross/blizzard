@@ -1,7 +1,8 @@
 """SQLAlchemy adapter for the egress export seam (package-private).
 
-Reads usage facts past a cursor position and appends the cursor's fact rows (``bzh:facts-not-status``). Closed
-steps are read through :class:`~blizzard.hub.store.internal.trace_store.TraceStore`, the trace sweep's own reader."""
+Reads the cursor and its latch and appends the cursor's fact rows (``bzh:facts-not-status``). Usage facts past a cursor
+position span every tenant, so they come from the sweep corpus (:class:`IReadUsageCorpus`); closed steps are read
+through :class:`~blizzard.hub.store.internal.trace_store.TraceStore`, the trace sweep's own reader."""
 
 from __future__ import annotations
 
@@ -9,15 +10,15 @@ import json
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import and_, insert, or_, select
+from sqlalchemy import insert, select
 
 from blizzard.foundation.event_log import EventLogKind
-from blizzard.hub.domain.chunk.model import UsageFact
 from blizzard.hub.domain.observability.egress.config import EGRESS_DATASETS
 from blizzard.hub.domain.observability.egress.repository import (
     EgressCheckpoint,
     EgressWriteFailure,
     EventsPosition,
+    IReadUsageCorpus,
     IWriteEgressCursor,
     UsagePosition,
 )
@@ -34,8 +35,9 @@ _NO_FILES = json.dumps([])
 class EgressStore:
     """The egress export's usage reads and its cursor's appends."""
 
-    def __init__(self, store: HubStoreConnections) -> None:
+    def __init__(self, store: HubStoreConnections, *, usage: IReadUsageCorpus) -> None:
         self._store = store
+        self._usage = usage
 
     def newest_cursor(self, dataset: str) -> EgressCheckpoint | None:
         c = s.egress_cursor.c
@@ -75,14 +77,7 @@ class EgressStore:
         return EgressWriteFailure(row.recorded_at, row.message) if row is not None else None
 
     def usage_after(self, position: UsagePosition, until: datetime, limit: int) -> Sequence[AttributedUsage]:
-        u = s.usage_facts.c
-        past = or_(
-            u.recorded_at > position.recorded_at, and_(u.recorded_at == position.recorded_at, u.id > position.usage_id)
-        )
-        stmt = select(s.usage_facts).where(past, u.recorded_at <= until).order_by(u.recorded_at, u.id).limit(limit)
-        with self._store.read("egress_usage_after") as conn:
-            rows = conn.execute(stmt).all()
-        return [AttributedUsage(r.id, r.chunk_id, r.runner_id, _fact(r)) for r in rows]
+        return self._usage.usage_after(position, until, limit)
 
     def newest_egress_latch(self) -> EventLogKind | None:
         """Walks the event log newest-first to the first match — run once per process start, not per pass."""
@@ -133,24 +128,6 @@ def _cursor(row) -> EgressCheckpoint:  # type: ignore[no-untyped-def]
         files=tuple(json.loads(row.files)),
         recorded_at=row.recorded_at,
         events=events,
-    )
-
-
-def _fact(u) -> UsageFact:  # type: ignore[no-untyped-def]
-    return UsageFact(
-        node_id=u.node_id,
-        epoch=u.epoch,
-        kind=u.kind,
-        model=u.model,
-        input_tokens=u.input_tokens,
-        output_tokens=u.output_tokens,
-        cache_read_tokens=u.cache_read_tokens,
-        cache_create_tokens=u.cache_create_tokens,
-        cost_usd=u.cost_usd,
-        recorded_at=u.recorded_at,
-        harness_id=u.harness_id,
-        harness_version=u.harness_version,
-        estimated_cost_usd=u.estimated_cost_usd,
     )
 
 

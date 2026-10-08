@@ -25,10 +25,11 @@ from blizzard.hub.domain.observability.egress.repository import EventsPosition
 from blizzard.hub.domain.observability.transcripts import TranscriptSlice
 from blizzard.hub.store import schema
 from blizzard.hub.store.internal.egress_store import EgressStore
+from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
 from tests.repo_files import repo_root
-from tests.support import HubHarness, hub_scoped, hub_store_connections
+from tests.support import HubHarness, hub_level_connections, hub_scoped, hub_store_connections
 from tests.test_egress_sweep import _closed_step, _kinds, _node_id
 from tests.trace_hub import trace_hub
 
@@ -291,7 +292,8 @@ def test_status_reports_the_events_cursor_and_its_lag_and_reset_moves_it(tmp_pat
     resp = hub.client.post("/api/egress/reset", json={"dataset": "events", "to": iso_utc(derived_at - timedelta(1))})
     assert resp.status_code == 200, resp.text
     assert resp.json()["direction"] == "repeated"
-    moved = EgressStore(hub_store_connections(hub.engine)).newest_cursor("events")
+    usage = build_hub_scoped_reads(hub_level_connections(hub.engine)).corpus
+    moved = EgressStore(hub_store_connections(hub.engine), usage=usage).newest_cursor("events")
     assert moved is not None
     assert moved.events == EventsPosition(derived_at - timedelta(1))
     world.sweep()

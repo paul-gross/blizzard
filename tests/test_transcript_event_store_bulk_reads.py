@@ -24,6 +24,8 @@ from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore, _segment_contexts_stmt
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
+from blizzard.hub.store.scoped import ScopedStatements
+from blizzard.hub.tenancy import StoreScope, TenantId
 from tests.support import hub_store_connections, seed_chunk, seed_graph
 
 pytestmark = pytest.mark.component
@@ -240,5 +242,5 @@ def test_segment_contexts_matches_across_a_batch_boundary(tmp_path: Path, monkey
 
 
 def test_segment_contexts_never_selects_the_content_column() -> None:
-    stmt = _segment_contexts_stmt(["sg_1"])
+    stmt = _segment_contexts_stmt(ScopedStatements(StoreScope(TenantId("ten_bulk"))), ["sg_1"])
     assert "content" not in {column.name for column in stmt.selected_columns}

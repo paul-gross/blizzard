@@ -6,7 +6,7 @@ source has its labels cleared once; a fresh process runs full, and the floor bou
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Literal, Protocol
@@ -16,7 +16,9 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.model import WorkRef
-from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository, WorkRefsSignature
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunk.ports.work_refs import IReadWorkRefsCorpus, WorkRefsSignature, live_work_ref_statuses
+from blizzard.hub.tenancy import TenantId
 from blizzard.hub.work_sources.annotator import IWorkAnnotator, WorkAnnotateError, WorkStatusMarker
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
 
@@ -112,18 +114,24 @@ class _Tally:
 class AnnotationReconciler:
     """Per opted-in work source: desired-vs-actual marker diff, writes only the gap. Holds, in
     memory only, the probe and instant of its last converged pass; ``full_pass_floor`` bounds how
-    stale a pass the probe skipped can leave the forge."""
+    stale a pass the probe skipped can leave the forge. ``corpus`` names every open tenant's work
+    refs; the pass derives statuses for ``tenant``'s — the tenant ``facts`` serves, named when a pass
+    runs — and leaves another tenant's rows without a status."""
 
     def __init__(
         self,
         *,
-        work_refs: IReadChunkWorkRefsRepository,
+        corpus: IReadWorkRefsCorpus,
+        facts: IReadChunkFactsRepository,
+        tenant: Callable[[], TenantId],
         work_sources: IWorkSourceRegistry,
         memory: IWriteAnnotatedSources,
         clock: IClock,
         full_pass_floor: timedelta,
     ) -> None:
-        self._work_refs = work_refs
+        self._corpus = corpus
+        self._facts = facts
+        self._tenant = tenant
         self._work_sources = work_sources
         self._memory = memory
         self._clock = clock
@@ -136,7 +144,7 @@ class AnnotationReconciler:
         one — or a skip while the probe is unchanged and the floor not due. Failures are counted, not
         raised; only a converged pass records its probe, so anything less is retried next pass."""
         annotating = self._work_sources.annotating_names()
-        probe = AnnotationProbe(work_refs=self._work_refs.live_work_refs_signature(), annotating=frozenset(annotating))
+        probe = AnnotationProbe(work_refs=self._corpus.live_work_refs_signature(), annotating=frozenset(annotating))
         now = self._clock.now()
         if not annotation_due(self._last_probe, probe, self._last_full_pass_at, now, self._full_pass_floor):
             _log.info("forge-status sweep skipped", reason="probe unchanged")
@@ -147,7 +155,9 @@ class AnnotationReconciler:
             self._converged(probe, now)
             return
         self._remember(AnnotationMemoryChange.on_entry(remembered, annotating))
-        desired = self._work_refs.live_work_refs()
+        desired = live_work_ref_statuses(
+            self._corpus.live_work_refs(), {self._tenant(): self._facts.load_live_statuses()}
+        )
         tally = _Tally()
         sources_skipped: list[str] = []
         for name in annotating:

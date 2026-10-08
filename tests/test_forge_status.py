@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from datetime import timedelta
+from functools import partial
 from pathlib import Path
 
 import pytest
@@ -21,6 +22,8 @@ from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.observability.forge_status import AnnotationReconciler
 from blizzard.hub.store.internal.forge_annotation_store import ForgeAnnotationStore
+from blizzard.hub.store.internal.hub_scoped_corpus import SweepCorpusReads
+from blizzard.hub.store.internal.hub_scoped_reads import hub_scoped_read
 from blizzard.hub.work_sources.annotator import IWorkAnnotator, WorkAnnotateError, WorkStatusMarker
 from tests.support import (
     FakeAnnotator,
@@ -29,7 +32,9 @@ from tests.support import (
     WorkSourceRegistry,
     build_hub,
     count_queries,
+    default_tenant,
     forge_state,
+    hub_level_connections,
     hub_store_connections,
     ingest,
 )
@@ -137,7 +142,9 @@ _FLOOR = timedelta(minutes=10)
 def _reconciler(hub: HubHarness, work_sources: WorkSourceRegistry) -> AnnotationReconciler:
     """A reconciler over ``hub``'s own store — a fresh one per call, as a restart builds."""
     return AnnotationReconciler(
-        work_refs=hub.services.chunks.work_refs,
+        corpus=SweepCorpusReads(partial(hub_scoped_read, hub_level_connections(hub.engine))),
+        facts=hub.services.chunks.facts,
+        tenant=partial(default_tenant, hub.engine),
         work_sources=work_sources,
         memory=ForgeAnnotationStore(hub_store_connections(hub.engine)),
         clock=hub.clock,

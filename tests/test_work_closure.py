@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from functools import partial
 from pathlib import Path
 from typing import cast
 
@@ -33,16 +34,22 @@ from blizzard.hub.domain.work_items.closure import (
     CLOSE_DRAIN_BACKOFF_BASE_SECONDS,
     CLOSE_DRAIN_PASS_LIMIT,
     CloseIntentDrainer,
+    TenantCloseIntent,
     close_intent_is_due,
 )
+from blizzard.hub.store.internal.hub_scoped_corpus import SweepCorpusReads
+from blizzard.hub.store.internal.hub_scoped_reads import hub_scoped_read
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
+from blizzard.hub.tenancy import TenantId
 from tests.support import (
     FakeCloser,
     HubHarness,
     WorkSourceRegistry,
     build_hub,
     count_queries,
+    default_tenant,
     emitted_events,
+    hub_level_connections,
     hub_store_connections,
     ingest,
 )
@@ -265,8 +272,8 @@ class _FakeCloseChunks:
         self.delivery_reads.append(list(chunk_ids))
         return {c: self.sources[c] for c in chunk_ids if c in self.sources}
 
-    def pending_close_intents(self) -> list[PendingCloseIntent]:
-        return list(self._candidates)
+    def pending_close_intents(self) -> list[TenantCloseIntent]:
+        return [TenantCloseIntent(tenant=_FAKE_TENANT, intent=intent) for intent in self._candidates]
 
     def record_close_attempt_skipped(self, intent_id: int, *, at: object) -> None:
         self.skipped_attempts.append(intent_id)
@@ -312,6 +319,11 @@ def _as_events(chunks: _FakeCloseChunks) -> EventLogService:
 
 
 _NOW = datetime(2026, 8, 1, tzinfo=UTC)
+_FAKE_TENANT = TenantId("ten_close_drain")
+
+
+def _corpus(hub: HubHarness) -> SweepCorpusReads:
+    return SweepCorpusReads(partial(hub_scoped_read, hub_level_connections(hub.engine)))
 
 
 def _drainer(
@@ -323,6 +335,8 @@ def _drainer(
     registry = WorkSourceRegistry({}, closers=closers)  # type: ignore[arg-type]
     clock = clock or FixedClock(_NOW)
     return CloseIntentDrainer(
+        corpus=chunks,
+        tenant=lambda: _FAKE_TENANT,
         delivery=_as_delivery(chunks),
         artifacts=cast(IReadChunkArtifactsRepository, chunks),
         events=_as_events(chunks),
@@ -590,6 +604,8 @@ def test_sweep_against_a_real_store_is_idempotent_on_a_second_pass(tmp_path: Pat
     closer = FakeCloser()
     registry = WorkSourceRegistry({}, closers={"default": closer})
     drainer = CloseIntentDrainer(
+        corpus=_corpus(hub),
+        tenant=partial(default_tenant, hub.engine),
         delivery=cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery),
         artifacts=hub.services.chunks.artifacts,
         events=_event_log(hub),
@@ -620,6 +636,8 @@ def test_sweep_retries_a_failed_intent_on_the_next_pass_until_it_converges(tmp_p
     closer = FakeCloser(fail_refs={"1"})
     registry = WorkSourceRegistry({}, closers={"default": closer})
     drainer = CloseIntentDrainer(
+        corpus=_corpus(hub),
+        tenant=partial(default_tenant, hub.engine),
         delivery=cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery),
         artifacts=hub.services.chunks.artifacts,
         events=_event_log(hub),
@@ -651,6 +669,8 @@ def test_sweep_over_a_repeated_failure_publishes_one_event_logged_frame(tmp_path
     closer = FakeCloser(fail_refs={"1"})
     registry = WorkSourceRegistry({}, closers={"default": closer})
     drainer = CloseIntentDrainer(
+        corpus=_corpus(hub),
+        tenant=partial(default_tenant, hub.engine),
         delivery=cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery),
         artifacts=hub.services.chunks.artifacts,
         events=_event_log(hub),
@@ -684,6 +704,8 @@ def test_sweep_over_an_intent_whose_source_has_no_closer_leaves_it_pending(tmp_p
     _land(hub, chunk_id)
     registry = WorkSourceRegistry({}, closers={})  # no closer seated for any source
     drainer = CloseIntentDrainer(
+        corpus=_corpus(hub),
+        tenant=partial(default_tenant, hub.engine),
         delivery=cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery),
         artifacts=hub.services.chunks.artifacts,
         events=_event_log(hub),

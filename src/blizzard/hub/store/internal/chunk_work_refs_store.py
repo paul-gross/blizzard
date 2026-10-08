@@ -24,7 +24,7 @@ from blizzard.hub.domain.chunk.ports.work_refs import (
 )
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore, status_family_tables
-from blizzard.hub.store.internal.chunk_rows import conn_of, ephemeral_ids_in, hub_wide_ephemeral_ids
+from blizzard.hub.store.internal.chunk_rows import conn_of, ephemeral_ids, ephemeral_ids_in
 from blizzard.hub.store.internal.chunk_terminal_predicates import maybe_live
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
 
@@ -41,15 +41,13 @@ class ChunkWorkRefsStore:
         return self.live_holders([pointer]).get(pointer)
 
     def live_work_refs(self) -> dict[WorkRef, ChunkStatus]:
-        """Reads the fleet's statuses, then the pointer rows; a row whose chunk carries
-        no status — minted in the gap between the two reads, or ephemeral — is
-        excluded."""
+        """Reads the tenant's statuses, then its pointer rows; a row whose chunk carries
+        no status — minted in the gap between the two reads, or ephemeral — is excluded."""
         statuses = self._facts.load_live_statuses()
+        refs = s.chunk_work_refs
         with self._store.read("live_work_refs") as conn:
-            ephemeral = hub_wide_ephemeral_ids(conn)
-            rows = conn.execute(
-                select(s.chunk_work_refs.c.chunk_id, s.chunk_work_refs.c.source, s.chunk_work_refs.c.ref)
-            ).all()
+            ephemeral = ephemeral_ids(conn)
+            rows = conn.execute(self._store.select(refs, refs.c.chunk_id, refs.c.source, refs.c.ref)).all()
         result: dict[WorkRef, ChunkStatus] = {}
         for row in rows:
             if row.chunk_id in ephemeral:
@@ -61,18 +59,19 @@ class ChunkWorkRefsStore:
         return result
 
     def live_work_refs_signature(self) -> WorkRefsSignature:
-        """One statement of append-only aggregates over every table :meth:`live_work_refs` reads:
-        the status families' tables, ``chunk_work_refs``, and the ephemeral ``chunk_grouped`` /
-        ``chunk_deleted`` — a count each, plus the highest ``id`` where the table has one."""
+        """One statement of append-only aggregates over the tenant's rows of every table
+        :meth:`live_work_refs` reads: the status families' tables, ``chunk_work_refs``, and the
+        ephemeral ``chunk_grouped`` / ``chunk_deleted`` — a count each, plus the highest ``id``
+        where the table has one."""
         tables = sorted(
             (*status_family_tables(), s.chunk_work_refs, s.chunk_grouped, s.chunk_deleted), key=lambda t: t.name
         )
         columns = []
         for table in tables:
-            columns.append(select(func.count()).select_from(table).scalar_subquery().label(f"{table.name}__count"))
+            columns.append(self._store.select(table, func.count()).scalar_subquery().label(f"{table.name}__count"))
             if "id" in table.c:
                 columns.append(
-                    select(func.max(table.c.id)).select_from(table).scalar_subquery().label(f"{table.name}__max_id")
+                    self._store.select(table, func.max(table.c.id)).scalar_subquery().label(f"{table.name}__max_id")
                 )
         with self._store.read("live_work_refs_signature") as conn:
             row = conn.execute(select(*columns)).one()

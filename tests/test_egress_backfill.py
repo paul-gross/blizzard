@@ -18,9 +18,9 @@ from blizzard.hub.domain.observability.egress.backfill import EgressBackfill
 from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.event_rows import FilePathPolicy
 from blizzard.hub.egress.writer import EgressFailure, EgressFailureCause
-from blizzard.hub.store.internal.egress_event_store import EgressEventStore
+from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
 from blizzard.hub.store.internal.trace_store import TraceStore
-from tests.support import HubHarness, InMemoryEgressWriter, hub_store_connections
+from tests.support import HubHarness, InMemoryEgressWriter, hub_level_connections, hub_store_connections
 from tests.test_egress_events_sweep import _OLD_VERSION, _Events
 from tests.test_egress_sweep import _SETTLED, _closed_step, _cursor_rows, _hub, _kinds, _rows, _store, _sweep
 from tests.trace_hub import label
@@ -42,10 +42,13 @@ def _backfill(hub: HubHarness, since: datetime, until: datetime, **extra: object
 
 def _service(hub: HubHarness, config: EgressConfig, writer: InMemoryEgressWriter) -> EgressBackfill:
     connections = hub_store_connections(hub.engine)
+    corpus = build_hub_scoped_reads(hub_level_connections(hub.engine)).corpus
     return EgressBackfill(
-        steps=TraceStore(connections, graphs=hub.services.graphs, names=hub.services.registry, label=label),
+        steps=TraceStore(
+            connections, corpus=corpus, graphs=hub.services.graphs, names=hub.services.registry, label=label
+        ),
         egress=_store(hub),
-        event_reads=EgressEventStore(connections),
+        event_reads=corpus,
         paths=FilePathPolicy("absolute"),
         clock=hub.clock,
         config=config,

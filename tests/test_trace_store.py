@@ -23,12 +23,14 @@ from blizzard.hub.domain.observability.tracing.facts import (
 from blizzard.hub.domain.observability.tracing.repository import TraceCheckpoint
 from blizzard.hub.domain.observability.tracing.steps import StepOutcome, identify_steps
 from blizzard.hub.domain.observability.tracing.window import read_window
+from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
 from blizzard.hub.store.internal.trace_store import TraceStore
 from tests.support import (
     SEEDED_CAPABILITIES,
     HubHarness,
     added_runner,
     count_queries,
+    hub_level_connections,
     hub_store_connections,
     seed_runner,
 )
@@ -39,7 +41,11 @@ pytestmark = pytest.mark.component
 
 def _store(hub: HubHarness) -> TraceStore:
     return TraceStore(
-        hub_store_connections(hub.engine), graphs=hub.services.graphs, names=hub.services.registry, label=label
+        hub_store_connections(hub.engine),
+        corpus=build_hub_scoped_reads(hub_level_connections(hub.engine)).corpus,
+        graphs=hub.services.graphs,
+        names=hub.services.registry,
+        label=label,
     )
 
 

@@ -40,8 +40,8 @@ from blizzard.hub.egress.writer import (
     PlacedFile,
 )
 from blizzard.hub.store import schema
-from blizzard.hub.store.internal.egress_event_store import EgressEventStore
 from blizzard.hub.store.internal.egress_store import EgressStore
+from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
 from blizzard.hub.store.internal.trace_store import TraceStore
 from tests.support import (
     HubHarness,
@@ -49,6 +49,7 @@ from tests.support import (
     added_runner,
     count_queries,
     count_rows_read,
+    hub_level_connections,
     hub_scoped,
     hub_store_connections,
     ingest,
@@ -80,17 +81,22 @@ def _app(hub: HubHarness) -> FastAPI:
 
 
 def _store(hub: HubHarness) -> EgressStore:
-    return EgressStore(hub_store_connections(hub.engine))
+    return EgressStore(
+        hub_store_connections(hub.engine), usage=build_hub_scoped_reads(hub_level_connections(hub.engine)).corpus
+    )
 
 
 def _sweep(
     hub: HubHarness, writer: IEgressWriter, config: EgressConfig = _SETTLED, *, store: EgressStore | None = None
 ) -> EgressSweep:
     connections = hub_store_connections(hub.engine)
+    corpus = build_hub_scoped_reads(hub_level_connections(hub.engine)).corpus
     return EgressSweep(
-        steps=TraceStore(connections, graphs=hub.services.graphs, names=hub.services.registry, label=label),
-        egress=store or EgressStore(connections),
-        event_reads=EgressEventStore(connections),
+        steps=TraceStore(
+            connections, corpus=corpus, graphs=hub.services.graphs, names=hub.services.registry, label=label
+        ),
+        egress=store or EgressStore(connections, usage=corpus),
+        event_reads=corpus,
         paths=_PATHS,
         writer=writer,
         events=hub.services.event_log,
@@ -555,7 +561,14 @@ def test_a_crash_before_the_cursor_writes_the_same_rows_again_in_new_files(tmp_p
             raise Killed
 
     with pytest.raises(Killed):
-        _sweep(hub, first, store=DiesBeforeCursor(hub_store_connections(hub.engine))).sweep()
+        _sweep(
+            hub,
+            first,
+            store=DiesBeforeCursor(
+                hub_store_connections(hub.engine),
+                usage=build_hub_scoped_reads(hub_level_connections(hub.engine)).corpus,
+            ),
+        ).sweep()
     placed_before = sorted(p.name for p in directory.rglob("*.ndjson.gz"))
     assert placed_before
     hub.clock.advance(timedelta(seconds=10))

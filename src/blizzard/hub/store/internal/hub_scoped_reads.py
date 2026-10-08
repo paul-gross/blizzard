@@ -21,6 +21,7 @@ from functools import partial
 from sqlalchemy import Connection, select
 
 from blizzard.hub.store.errors import HubStoreConnections
+from blizzard.hub.store.internal.hub_scoped_corpus import SweepCorpusReads
 from blizzard.hub.store.internal.hub_scoped_credentials import CredentialReads
 from blizzard.hub.store.schema import tenant_deletions, tenants
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION, TenantClosed, TenantId, UnknownTenant
@@ -59,6 +60,7 @@ class HubScopedReads:
 
     tenants: TenantStateReads
     credentials: CredentialReads
+    corpus: SweepCorpusReads
 
 
 def build_hub_scoped_reads(connections: HubStoreConnections) -> HubScopedReads:
@@ -66,4 +68,5 @@ def build_hub_scoped_reads(connections: HubStoreConnections) -> HubScopedReads:
     return HubScopedReads(
         tenants=TenantStateReads(connections),
         credentials=CredentialReads(partial(hub_scoped_read, connections)),
+        corpus=SweepCorpusReads(partial(hub_scoped_read, connections)),
     )

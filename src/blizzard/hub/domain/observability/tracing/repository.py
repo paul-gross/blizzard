@@ -9,6 +9,7 @@ from typing import Protocol
 
 from blizzard.foundation.event_log import EventLogKind
 from blizzard.foundation.roles import domain_model
+from blizzard.hub.domain.chunk.model import WorkRefLabel
 from blizzard.hub.domain.observability.tracing.cursor import CursorKey
 from blizzard.hub.domain.observability.tracing.facts import StepFacts
 
@@ -52,6 +53,19 @@ class TraceExportFailure:
 
     at: datetime
     message: str
+
+
+class IReadStepCorpus(Protocol):
+    """The trace and egress sweeps' window of closed steps, read across every open tenant."""
+
+    def closing_candidates(self, since: datetime, until: datetime, limit: int) -> ClosingCandidates:
+        """As :meth:`IReadTraceSteps.closing_candidates`, over every open tenant's closing facts."""
+        ...
+
+    def step_facts_for(self, chunk_ids: Sequence[str], label: WorkRefLabel) -> dict[str, StepFacts]:
+        """Each existing chunk of an open tenant's :class:`StepFacts`, tagged with that tenant and its work
+        refs rendered through ``label``, keyed by chunk id; ``graphs`` and ``runner_names`` are left unread."""
+        ...
 
 
 class IReadTraceSteps(Protocol):

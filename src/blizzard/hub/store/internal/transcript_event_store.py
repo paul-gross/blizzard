@@ -15,7 +15,7 @@ from collections.abc import Collection, Sequence
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Delete, Insert, Select, func, select
+from sqlalchemy import Delete, Insert, Select, func
 
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.observability.analytics.events import (
@@ -36,29 +36,33 @@ from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements
 
 # --- statements: nothing below executes a statement built elsewhere, so the unit tier
 # compiles the real ones under both dialects (`bzh:sql-portable`). The derivation sweep's
-# corpus reads (``_minted_chunk_ids_subselect`` through ``_derivation_signature_stmt``,
-# ``_current_markers_stmt`` and ``_segment_contexts_stmt``) span every tenant and stay
-# unscoped; every other builder takes the tenant's ``ScopedStatements``.
+# corpus reads span every tenant through the hub-scoped seam; every builder here takes the
+# tenant's ``ScopedStatements``.
 
 #: `drop_segments`'s own batch size — an unbounded `IN (...)` over a mass, simultaneous
 #: visibility loss has no ceiling; this bounds each DELETE regardless of stale-set size.
 _DROP_SEGMENTS_BATCH_SIZE = 1000
 
 
-def _minted_chunk_ids_subselect() -> Select[Any]:
+def _minted_chunk_ids_subselect(stmts: ScopedStatements) -> Select[Any]:
     """Every chunk id the ``chunks`` table holds — the parent ``transcript_segments.chunk_id``
     declares a foreign key to. A subquery, not a ``_stmt`` builder: composed into one, never
     executed itself."""
-    return select(s.chunks.c.chunk_id)
+    return stmts.select(s.chunks, s.chunks.c.chunk_id)
 
 
-def _visible_segment_ids_stmt(chunk_id: str | None = None, segment_id: str | None = None) -> Select[Any]:
-    superseded = select(s.transcript_segments.c.supersedes).where(s.transcript_segments.c.supersedes.is_not(None))
+def _visible_segment_ids_stmt(
+    stmts: ScopedStatements, chunk_id: str | None = None, segment_id: str | None = None
+) -> Select[Any]:
+    """The tenant's visible segments; the superseded-pointer check is a correlated ``NOT EXISTS``
+    over the same tenant's segments, since a segment id is runner-minted."""
+    successor = s.transcript_segments.alias("successor")
+    superseded = stmts.exists(successor, successor.c.supersedes == s.transcript_segments.c.segment_id)
     stmt = (
-        select(s.transcript_segments.c.segment_id)
+        stmts.select(s.transcript_segments, s.transcript_segments.c.segment_id)
         .where(s.transcript_segments.c.final.is_(True))
-        .where(s.transcript_segments.c.segment_id.not_in(superseded))
-        .where(s.transcript_segments.c.chunk_id.in_(_minted_chunk_ids_subselect()))
+        .where(~superseded)
+        .where(s.transcript_segments.c.chunk_id.in_(_minted_chunk_ids_subselect(stmts)))
         .distinct()
     )
     if chunk_id is not None:
@@ -68,34 +72,36 @@ def _visible_segment_ids_stmt(chunk_id: str | None = None, segment_id: str | Non
     return stmt
 
 
-def _derived_segment_ids_stmt() -> Select[Any]:
-    return select(s.transcript_event_derivations.c.segment_id).distinct()
+def _derived_segment_ids_stmt(stmts: ScopedStatements) -> Select[Any]:
+    return stmts.select(s.transcript_event_derivations, s.transcript_event_derivations.c.segment_id).distinct()
 
 
-def _candidacy_digests_stmt(chunk_id: str | None = None) -> Select[Any]:
+def _candidacy_digests_stmt(stmts: ScopedStatements, chunk_id: str | None = None) -> Select[Any]:
     """Each visible segment's own ``content_digest`` and ``harness_version``
     — the latter folds per shipped window, so a still-rejected re-offer that only
     refreshes it still changes the fingerprint. No ``content`` column named — the
     candidacy read's whole point. Ordered so a segment's rows arrive in range order."""
     return (
-        select(
+        stmts.select(
+            s.transcript_segments,
             s.transcript_segments.c.segment_id,
             s.transcript_segments.c.turn_range_start,
             s.transcript_segments.c.content_digest,
             s.transcript_segments.c.harness_version,
         )
-        .where(s.transcript_segments.c.segment_id.in_(_visible_segment_ids_stmt(chunk_id)))
+        .where(s.transcript_segments.c.segment_id.in_(_visible_segment_ids_stmt(stmts, chunk_id)))
         .order_by(s.transcript_segments.c.segment_id, s.transcript_segments.c.turn_range_start)
     )
 
 
-def _derivation_signature_stmt() -> Select[Any]:
+def _derivation_signature_stmt(stmts: ScopedStatements) -> Select[Any]:
     """The change probe's one cheap aggregate read: row count, max
     ``id``, and max ``received_at`` over ``transcript_segments``, plus the ``chunks`` row
     count as a scalar subquery, so the whole probe is one statement. No per-row read: a
     fixed number of aggregates regardless of corpus size."""
-    chunk_count = select(func.count()).select_from(s.chunks).scalar_subquery()
-    return select(
+    chunk_count = stmts.select(s.chunks, func.count()).scalar_subquery()
+    return stmts.select(
+        s.transcript_segments,
         func.count(s.transcript_segments.c.id).label("segment_count"),
         func.max(s.transcript_segments.c.id).label("max_segment_id"),
         func.max(s.transcript_segments.c.received_at).label("max_received_at"),
@@ -103,9 +109,11 @@ def _derivation_signature_stmt() -> Select[Any]:
     )
 
 
-def _current_markers_stmt(extractor_version: str) -> Select[Any]:
-    return select(
-        s.transcript_event_derivations.c.segment_id, s.transcript_event_derivations.c.content_fingerprint
+def _current_markers_stmt(stmts: ScopedStatements, extractor_version: str) -> Select[Any]:
+    return stmts.select(
+        s.transcript_event_derivations,
+        s.transcript_event_derivations.c.segment_id,
+        s.transcript_event_derivations.c.content_fingerprint,
     ).where(s.transcript_event_derivations.c.extractor_version == extractor_version)
 
 
@@ -138,11 +146,12 @@ def _segment_records_for_ids_stmt(stmts: ScopedStatements, segment_ids: Sequence
     )
 
 
-def _segment_contexts_stmt(segment_ids: Sequence[str]) -> Select[Any]:
+def _segment_contexts_stmt(stmts: ScopedStatements, segment_ids: Sequence[str]) -> Select[Any]:
     """``_segment_records_for_ids_stmt``'s content-free sibling — every column
     :meth:`TranscriptEventStore.segment_contexts` needs, minus ``content``."""
     return (
-        select(
+        stmts.select(
+            s.transcript_segments,
             s.transcript_segments.c.segment_id,
             s.transcript_segments.c.chunk_id,
             s.transcript_segments.c.node_id,
@@ -262,7 +271,7 @@ def _delete_all_markers_for_segments_stmt(stmts: ScopedStatements, segment_ids: 
     )
 
 
-def _fingerprint_from_parts(parts: Sequence[tuple[str, str | None]]) -> str:
+def fingerprint_from_parts(parts: Sequence[tuple[str, str | None]]) -> str:
     digest = hashlib.sha256()
     for content_digest_value, harness_version in parts:
         digest.update(content_digest_value.encode("ascii"))
@@ -278,7 +287,7 @@ def content_fingerprint(records: Sequence[Any]) -> str:
     harness_version folded in too since a still-rejected re-offer can refresh it with no
     content change. Rebased onto persisted state, not raw content: recomputing it never
     reads a content byte."""
-    return _fingerprint_from_parts([(row.content_digest, row.harness_version) for row in records])
+    return fingerprint_from_parts([(row.content_digest, row.harness_version) for row in records])
 
 
 def _provenance(rows: Sequence[Any]) -> SegmentProvenance:
@@ -320,33 +329,33 @@ class TranscriptEventStore:
 
     def visible_segment_ids(self, *, chunk_id: str | None = None, segment_id: str | None = None) -> frozenset[str]:
         with self._store.read("visible_segment_ids") as conn:
-            rows = conn.execute(_visible_segment_ids_stmt(chunk_id, segment_id)).all()
+            rows = conn.execute(_visible_segment_ids_stmt(self._store, chunk_id, segment_id)).all()
         return frozenset(row.segment_id for row in rows)
 
     def derived_segment_ids(self) -> frozenset[str]:
         with self._store.read("derived_segment_ids") as conn:
-            rows = conn.execute(_derived_segment_ids_stmt()).all()
+            rows = conn.execute(_derived_segment_ids_stmt(self._store)).all()
         return frozenset(row.segment_id for row in rows)
 
     def candidacy(self, extractor_version: str, *, chunk_id: str | None = None) -> CandidacyRead:
         with self._store.read("candidacy") as conn:
-            digest_rows = conn.execute(_candidacy_digests_stmt(chunk_id)).all()
+            digest_rows = conn.execute(_candidacy_digests_stmt(self._store, chunk_id)).all()
             markers = {
                 row.segment_id: row.content_fingerprint
-                for row in conn.execute(_current_markers_stmt(extractor_version))
+                for row in conn.execute(_current_markers_stmt(self._store, extractor_version))
             }
         visible_segment_ids: set[str] = set()
         candidates: list[str] = []
         for segment_id, rows in itertools.groupby(digest_rows, key=lambda r: r.segment_id):
             visible_segment_ids.add(segment_id)
-            fingerprint = _fingerprint_from_parts([(row.content_digest, row.harness_version) for row in rows])
+            fingerprint = fingerprint_from_parts([(row.content_digest, row.harness_version) for row in rows])
             if is_candidate(markers.get(segment_id), fingerprint):
                 candidates.append(segment_id)
         return CandidacyRead(visible_segment_ids=frozenset(visible_segment_ids), candidate_segment_ids=candidates)
 
     def derivation_signature(self) -> DerivationSignature:
         with self._store.read("derivation_signature") as conn:
-            row = conn.execute(_derivation_signature_stmt()).one()
+            row = conn.execute(_derivation_signature_stmt(self._store)).one()
         return DerivationSignature(
             segment_count=row.segment_count,
             max_segment_id=row.max_segment_id,
@@ -438,7 +447,7 @@ class TranscriptEventStore:
             return result
         with self._store.read("segment_contexts") as conn:
             for batch in id_batches(list(segment_ids)):
-                rows = conn.execute(_segment_contexts_stmt(batch)).all()
+                rows = conn.execute(_segment_contexts_stmt(self._store, batch)).all()
                 for segment_id, group in itertools.groupby(rows, key=lambda row: row.segment_id):
                     group_rows = list(group)
                     result[segment_id] = SegmentContext(

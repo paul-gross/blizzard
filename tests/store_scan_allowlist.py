@@ -11,9 +11,11 @@ from dataclasses import dataclass
 
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.questions import IReadChunkQuestionsRepository
+from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository
 from blizzard.hub.domain.config.carry_over import IReadConfigImports
 from blizzard.hub.domain.config.changes import IReadConfigChanges
 from blizzard.hub.domain.garden.findings.model import IReadFindingRepository
+from blizzard.hub.domain.observability.analytics.derivation import IReadDerivationCorpus
 from blizzard.hub.domain.observability.analytics.events import IReadTranscriptEvents
 from blizzard.runner.hub.outbound_buffer import IReadOutboundRepository
 from blizzard.runner.transcripts.ledger import IReadTranscriptLedgerRepository
@@ -185,6 +187,13 @@ _UNTIL_TENANT_KEYS_REASON = (
     "20261008_1300_tenant_keys rebuilds its keys; that revision removes this entry."
 )
 
+# A sweep's whole-corpus read, filtered to open tenants, that a covering key served until the filter named tenant_id.
+_CORPUS_UNTIL_TENANT_KEYS_REASON = (
+    "a sweep's whole-corpus read across every open tenant; its closed-tenant filter on tenant_id leaves the "
+    "covering primary key unusable until 20261008_1300_tenant_keys leads it with tenant_id; that revision "
+    "removes this entry."
+)
+
 # The legacy-config import runs once per hub, offline, by an operator — never on a serving path.
 _ONE_SHOT_IMPORT_REASON = (
     "read only by `blizzard hub config import-legacy`, an offline verb an operator runs once per hub."
@@ -209,6 +218,32 @@ HUB_ALLOWED_SCANS: list[TableWideAllowance | MethodScopedAllowance] = [
     ),
     MethodScopedAllowance(
         IReadChunkQuestionsRepository, "list_open_questions", "question_answers", 200, _UNTIL_TENANT_KEYS_REASON
+    ),
+    MethodScopedAllowance(
+        IReadChunkWorkRefsRepository, "live_work_refs_signature", "chunk_promoted", 200, _UNTIL_TENANT_KEYS_REASON
+    ),
+    MethodScopedAllowance(
+        IReadChunkWorkRefsRepository,
+        "live_work_refs_signature",
+        "decision_resolutions",
+        200,
+        _UNTIL_TENANT_KEYS_REASON,
+    ),
+    MethodScopedAllowance(
+        IReadChunkWorkRefsRepository, "live_work_refs_signature", "question_answers", 200, _UNTIL_TENANT_KEYS_REASON
+    ),
+    MethodScopedAllowance(
+        IReadTranscriptEvents, "derivation_signature", "transcript_segments", 200, _UNTIL_TENANT_KEYS_REASON
+    ),
+    MethodScopedAllowance(
+        IReadDerivationCorpus, "candidacy", "transcript_event_derivations", 200, _CORPUS_UNTIL_TENANT_KEYS_REASON
+    ),
+    MethodScopedAllowance(
+        IReadDerivationCorpus,
+        "derived_segment_ids",
+        "transcript_event_derivations",
+        200,
+        _CORPUS_UNTIL_TENANT_KEYS_REASON,
     ),
     # --- fleet-wide-by-design snapshot reads ------------------------------
     TableWideAllowance("chunk_bounces", 200, _FLEET_SNAPSHOT_REASON),

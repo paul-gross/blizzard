@@ -18,6 +18,7 @@ from blizzard.hub.store.errors import HubStoreErrorFactory
 from blizzard.hub.store.internal.chunk_queue_store import ChunkQueueStore
 from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.graph_store import GraphStore
+from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
 from blizzard.hub.store.internal.newest_fact import newest_fact_select, newest_retired_select
 from blizzard.hub.store.internal.repository_record_store import _retirements
 from blizzard.hub.store.internal.routine_store import RoutineStore
@@ -28,7 +29,7 @@ from blizzard.hub.store.internal.trace_store import TraceStore
 from blizzard.hub.store.internal.work_source_record_store import _retired_names
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.tenancy import StoreScope, TenantId
-from tests.support import build_hub, count_rows_read, hub_store_connections, stamp
+from tests.support import build_hub, count_rows_read, hub_level_connections, hub_store_connections, stamp
 
 pytestmark = pytest.mark.component
 
@@ -185,12 +186,13 @@ def test_newest_failure_reads_keep_the_old_failure_after_a_recovery(tmp_path: Pa
             )
     store = hub_store_connections(engine)
 
-    egress = EgressStore(store).newest_egress_failure()
-    export = TraceStore(store, graphs=None, names=None, label=None).newest_export_failure()  # type: ignore[arg-type]
+    corpus = build_hub_scoped_reads(hub_level_connections(engine)).corpus
+    egress = EgressStore(store, usage=corpus).newest_egress_failure()
+    export = TraceStore(store, corpus=corpus, graphs=None, names=None, label=None).newest_export_failure()  # type: ignore[arg-type]
 
     assert egress is not None and egress.message == "m0"
     assert export is not None and export.message == "m2"
-    assert count_rows_read(engine, lambda: EgressStore(store).newest_egress_failure()) <= 1
+    assert count_rows_read(engine, lambda: EgressStore(store, usage=corpus).newest_egress_failure()) <= 1
 
 
 # --- the newest-fact read is confined to its scope, inner group-by included -----------------------

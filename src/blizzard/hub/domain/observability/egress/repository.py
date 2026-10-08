@@ -4,7 +4,7 @@ dataset's read-only projection of the derivation markers, their events and the d
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING, Protocol
 
@@ -13,6 +13,7 @@ from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.observability.analytics.events import DerivationMarker, DropFact
 from blizzard.hub.domain.observability.egress.rows import AttributedUsage
 from blizzard.hub.domain.observability.tracing.cursor import CursorKey
+from blizzard.hub.tenancy import TenantId
 
 if TYPE_CHECKING:
     from blizzard.hub.domain.observability.egress.event_rows import EventDerivation
@@ -99,6 +100,14 @@ class IReadEgress(Protocol):
         ...
 
 
+class IReadUsageCorpus(Protocol):
+    """The egress sweep's usage pages, read across every open tenant."""
+
+    def usage_after(self, position: UsagePosition, until: datetime, limit: int) -> Sequence[AttributedUsage]:
+        """As :meth:`IReadEgress.usage_after`, over every open tenant's usage facts, each tagged with its tenant."""
+        ...
+
+
 class IWriteEgressCursor(IReadEgress, Protocol):
     def append_cursor(self, record: EgressCheckpoint) -> None: ...
 
@@ -110,6 +119,9 @@ class EpochKey:
 
     chunk_id: str
     epoch: int
+    #: The tenant the row was read in — carried beside it, not part of its identity: equality, order and
+    #: hashing stay on the fields above. ``None`` where no tenant was read.
+    tenant: TenantId | None = field(default=None, compare=False)
 
 
 class IReadEgressEvents(Protocol):

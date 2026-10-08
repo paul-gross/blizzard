@@ -155,7 +155,6 @@ from blizzard.hub.store.internal.config_apply_store import ConfigApplyStore
 from blizzard.hub.store.internal.config_change_store import ConfigChangeStore
 from blizzard.hub.store.internal.config_import_store import ConfigImportStore
 from blizzard.hub.store.internal.config_revisions_store import ConfigRevisionsStore
-from blizzard.hub.store.internal.egress_event_store import EgressEventStore
 from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.finding_store import FindingSetStore, FindingStore
 from blizzard.hub.store.internal.forge_annotation_store import ForgeAnnotationStore
@@ -753,7 +752,13 @@ def build_services(
     event_derivation_service = EventDerivationService(
         events=event_store, facts=chunk_facts, record=chunk_record, clock=clock
     )
-    event_derivation = EventDerivationReconciler(service=event_derivation_service, events=event_store, clock=clock)
+    event_derivation = EventDerivationReconciler(
+        corpus=core.hub_scoped_reads.corpus,
+        tenant=lambda: tenant_connections.scope.tenant,
+        service=event_derivation_service,
+        events=event_store,
+        clock=clock,
+    )
     analytics_event_queries = AnalyticsEventQueryStore(tenant_connections)
     operational_analytics = AnalyticsOperationalStore(tenant_connections)
     marker_authority = MarkerAuthority()
@@ -762,7 +767,11 @@ def build_services(
     # broker instance every other collaborator holds.
     event_log = EventLogService(events=chunk_events, publisher=events)
     trace_store = TraceStore(
-        store_connections, graphs=graph_store, names=registry_store, label=_work_ref_label(work_sources)
+        store_connections,
+        corpus=core.hub_scoped_reads.corpus,
+        graphs=graph_store,
+        names=registry_store,
+        label=_work_ref_label(work_sources),
     )
     trace_config = tracing or TracingConfig()
     trace_export = (
@@ -796,8 +805,8 @@ def build_services(
         if egress_config.directory is not None
         else None
     )
-    egress_store = EgressStore(store_connections)
-    egress_event_store = EgressEventStore(store_connections)
+    egress_store = EgressStore(store_connections, usage=core.hub_scoped_reads.corpus)
+    egress_event_reads = core.hub_scoped_reads.corpus
     egress_pass_lock = threading.Lock()
     egress_unavailable = egress_writer if isinstance(egress_writer, EgressUnavailable) else None
     # The missing key matters only to an export that runs; with it off, nothing would have been written anyway.
@@ -807,7 +816,7 @@ def build_services(
         rejected=egress_unavailable is not None,
         missing_path_key=egress_missing_path_key,
         egress=egress_store,
-        event_reads=egress_event_store,
+        event_reads=egress_event_reads,
         steps=trace_store,
         clock=clock,
         free_space=lambda: free_bytes(egress_config.directory) if egress_config.directory is not None else None,
@@ -816,7 +825,7 @@ def build_services(
         EgressSweep(
             steps=trace_store,
             egress=egress_store,
-            event_reads=egress_event_store,
+            event_reads=egress_event_reads,
             paths=egress_paths,
             writer=egress_writer,
             events=event_log,
@@ -839,7 +848,7 @@ def build_services(
     egress_backfill = EgressBackfill(
         steps=trace_store,
         egress=egress_store,
-        event_reads=egress_event_store,
+        event_reads=egress_event_reads,
         paths=egress_paths,
         clock=clock,
         config=egress_config,
@@ -1039,6 +1048,8 @@ def build_services(
         system_artifacts=system_artifacts or SYSTEM_ARTIFACTS_PACKAGED,
         work_sources=work_sources,
         close_drain=CloseIntentDrainer(
+            corpus=core.hub_scoped_reads.corpus,
+            tenant=lambda: tenant_connections.scope.tenant,
             delivery=chunk_delivery,
             artifacts=chunk_artifacts,
             events=event_log,
@@ -1149,7 +1160,9 @@ def build_services(
             clock=clock,
         ),
         annotation=AnnotationReconciler(
-            work_refs=chunk_work_refs,
+            corpus=core.hub_scoped_reads.corpus,
+            facts=chunk_facts,
+            tenant=lambda: tenant_connections.scope.tenant,
             work_sources=work_sources,
             memory=ForgeAnnotationStore(tenant_connections),
             clock=clock,

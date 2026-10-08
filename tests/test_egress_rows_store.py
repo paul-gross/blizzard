@@ -13,9 +13,10 @@ from blizzard.hub.domain.observability.egress.rows import AttributedUsage, Expor
 from blizzard.hub.domain.observability.tracing.steps import StepKind, identify_steps
 from blizzard.hub.domain.observability.tracing.summary import summarize_step
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
 from blizzard.hub.store.internal.trace_store import TraceStore
 from tests import trace_fixtures as fx
-from tests.support import HubHarness, hub_store_connections, ingest, stamp
+from tests.support import HubHarness, hub_level_connections, hub_store_connections, ingest, stamp
 from tests.trace_hub import claim, label, pass_build, trace_hub
 
 pytestmark = pytest.mark.component
@@ -160,7 +161,11 @@ def test_planted_content_hydrated_through_the_store_never_reaches_a_row(tmp_path
     pass_build(hub, chunk_id, graph)
 
     facts = TraceStore(
-        hub_store_connections(hub.engine), graphs=hub.services.graphs, names=hub.services.registry, label=label
+        hub_store_connections(hub.engine),
+        corpus=build_hub_scoped_reads(hub_level_connections(hub.engine)).corpus,
+        graphs=hub.services.graphs,
+        names=hub.services.registry,
+        label=label,
     ).step_facts_for([chunk_id])[chunk_id]
     steps = identify_steps(facts)
     closed = [st for st in steps if st.close is not None]

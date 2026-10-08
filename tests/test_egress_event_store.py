@@ -21,11 +21,19 @@ from blizzard.hub.domain.observability.egress.repository import (
 )
 from blizzard.hub.domain.observability.transcripts import TranscriptSlice
 from blizzard.hub.runtime import migration_runner
-from blizzard.hub.store.internal.egress_event_store import EgressEventStore
 from blizzard.hub.store.internal.egress_store import EgressStore
+from blizzard.hub.store.internal.hub_scoped_corpus import SweepCorpusReads
+from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
-from tests.support import count_queries, hub_store_connections, seed_chunk, seed_graph, seed_lease
+from tests.support import (
+    count_queries,
+    hub_level_connections,
+    hub_store_connections,
+    seed_chunk,
+    seed_graph,
+    seed_lease,
+)
 
 pytestmark = pytest.mark.component
 
@@ -109,8 +117,8 @@ def _drop(engine: Engine, segment_id: str, at: datetime) -> None:
     TranscriptEventStore(hub_store_connections(engine)).drop_segments(frozenset({segment_id}), at=at)
 
 
-def _store(engine: Engine) -> EgressEventStore:
-    return EgressEventStore(hub_store_connections(engine))
+def _store(engine: Engine) -> SweepCorpusReads:
+    return build_hub_scoped_reads(hub_level_connections(engine)).corpus
 
 
 def test_markers_after_a_position_come_in_cursor_order_settled_and_limited(tmp_path: Path) -> None:
@@ -242,7 +250,7 @@ def test_the_backfill_reads_select_epochs_minted_in_the_window_and_their_markers
 
 def test_the_events_cursor_round_trips(tmp_path: Path) -> None:
     engine = _engine(tmp_path)
-    store = EgressStore(hub_store_connections(engine))
+    store = EgressStore(hub_store_connections(engine), usage=_store(engine))
     position = EventsPosition(_at(10), "sg_a", _V1)
 
     store.append_cursor(EgressCheckpoint("events", None, UsagePosition(_at(0)), 3, ("a", "m"), _at(11), position))

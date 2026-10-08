@@ -6,10 +6,11 @@ complete, directly-callable step (``bzh:steppable-loop``); ground is
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
+from typing import Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
@@ -19,9 +20,10 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.delivery_read import DeliverySources, DeliveryTrace, board_chunk_url
 from blizzard.hub.domain.chunk.event_log import EventLogService
-from blizzard.hub.domain.chunk.model import WorkItemCloseOutcome, WorkRef
+from blizzard.hub.domain.chunk.model import PendingCloseIntent, WorkItemCloseOutcome, WorkRef
 from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.delivery import IWriteChunkDeliveryRepository
+from blizzard.hub.tenancy import TenantId
 from blizzard.hub.work_sources.closer import WorkCloseError, WorkItemGoneError
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
 
@@ -109,13 +111,35 @@ def close_event(ref: WorkRef, outcome: WorkItemCloseOutcome, reason: str | None)
     )
 
 
+@domain_model
+@dataclass(frozen=True)
+class TenantCloseIntent:
+    """One row of the close drain's hub-wide corpus: a pending intent and the tenant it belongs to."""
+
+    tenant: TenantId
+    intent: PendingCloseIntent
+
+
+class IReadCloseIntentCorpus(Protocol):
+    """The close-drain sweep's corpus, read across every open tenant."""
+
+    def pending_close_intents(self) -> Sequence[TenantCloseIntent]:
+        """Every open tenant's pending intent whose chunk is neither grouped away nor deleted, with
+        its attempt history, in intent order; due-ness is the drainer's call."""
+        ...
+
+
 class CloseIntentDrainer:
     """Per pending close intent: retire it through its ref's own source binding,
-    recording the attempt's outcome."""
+    recording the attempt's outcome. ``corpus`` names every open tenant's intents; the drainer
+    acts on those of ``tenant``, the tenant its ``delivery``, ``artifacts`` and ``events`` serve, named
+    when a pass runs."""
 
     def __init__(
         self,
         *,
+        corpus: IReadCloseIntentCorpus,
+        tenant: Callable[[], TenantId],
         delivery: IWriteChunkDeliveryRepository,
         artifacts: IReadChunkArtifactsRepository,
         events: EventLogService,
@@ -123,6 +147,8 @@ class CloseIntentDrainer:
         clock: IClock,
         public_url: str | None = None,
     ) -> None:
+        self._corpus = corpus
+        self._tenant = tenant
         self._delivery = delivery
         self._artifacts = artifacts
         self._public_url = public_url
@@ -150,10 +176,14 @@ class CloseIntentDrainer:
         informative result. One aggregate INFO summary per pass (``bzh:structlog-logging``)."""
         closed = gone = failed = skipped = 0
         now = self._clock.now()
+        tenant = self._tenant()
         due = [
-            intent
-            for intent in self._delivery.pending_close_intents()
-            if close_intent_is_due(now, attempt_count=intent.attempt_count, last_attempt_at=intent.last_attempt_at)
+            row.intent
+            for row in self._corpus.pending_close_intents()
+            if row.tenant == tenant
+            and close_intent_is_due(
+                now, attempt_count=row.intent.attempt_count, last_attempt_at=row.intent.last_attempt_at
+            )
         ][:CLOSE_DRAIN_PASS_LIMIT]
         traces = self._traces({intent.chunk_id for intent in due})
         for intent in due:

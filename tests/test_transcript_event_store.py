@@ -120,8 +120,8 @@ def _migrated_engine(tmp_path: Path, *, chunk_ids: tuple[str, ...] = ("ch_1", "c
 def _executed_statements() -> dict[str, ClauseElement]:
     m = store_module
     return {
-        "_visible_segment_ids_stmt": m._visible_segment_ids_stmt(),
-        "_derived_segment_ids_stmt": m._derived_segment_ids_stmt(),
+        "_visible_segment_ids_stmt": m._visible_segment_ids_stmt(_STMTS),
+        "_derived_segment_ids_stmt": m._derived_segment_ids_stmt(_STMTS),
         "_segment_records_stmt": m._segment_records_stmt(_STMTS, "sg_1"),
         "_marker_stmt": m._marker_stmt(_STMTS, "sg_1", _EXTRACTOR_VERSION),
         "_delete_events_stmt": m._delete_events_stmt(_STMTS, "sg_1", _EXTRACTOR_VERSION),
@@ -132,12 +132,12 @@ def _executed_statements() -> dict[str, ClauseElement]:
         ),
         "_delete_all_events_for_segments_stmt": m._delete_all_events_for_segments_stmt(_STMTS, frozenset({"sg_1"})),
         "_delete_all_markers_for_segments_stmt": m._delete_all_markers_for_segments_stmt(_STMTS, frozenset({"sg_1"})),
-        "_candidacy_digests_stmt": m._candidacy_digests_stmt(),
-        "_current_markers_stmt": m._current_markers_stmt(_EXTRACTOR_VERSION),
-        "_derivation_signature_stmt": m._derivation_signature_stmt(),
+        "_candidacy_digests_stmt": m._candidacy_digests_stmt(_STMTS),
+        "_current_markers_stmt": m._current_markers_stmt(_STMTS, _EXTRACTOR_VERSION),
+        "_derivation_signature_stmt": m._derivation_signature_stmt(_STMTS),
         "_markers_stmt": m._markers_stmt(_STMTS, _EXTRACTOR_VERSION),
         "_segment_records_for_ids_stmt": m._segment_records_for_ids_stmt(_STMTS, ["sg_1"]),
-        "_segment_contexts_stmt": m._segment_contexts_stmt(["sg_1"]),
+        "_segment_contexts_stmt": m._segment_contexts_stmt(_STMTS, ["sg_1"]),
         "_drop_identities_stmt": m._drop_identities_stmt(_STMTS, ["sg_1"]),
         "_insert_drops_stmt": m._insert_drops_stmt(_STMTS),
     }

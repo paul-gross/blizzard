@@ -28,12 +28,14 @@ from blizzard.hub.domain.observability.tracing.cursor import CursorKey
 from blizzard.hub.domain.observability.tracing.repository import TraceCheckpoint
 from blizzard.hub.domain.observability.tracing.sweep import TraceExportSweep
 from blizzard.hub.store import schema
+from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
 from blizzard.hub.store.internal.trace_store import TraceStore
 from tests.support import (
     HubHarness,
     InMemoryTraceExporter,
     count_queries,
     count_rows_read,
+    hub_level_connections,
     hub_scoped,
     hub_store_connections,
     ingest,
@@ -52,7 +54,11 @@ def _sweep(hub: HubHarness) -> TraceExportSweep:
 
 def _store(hub: HubHarness) -> TraceStore:
     return TraceStore(
-        hub_store_connections(hub.engine), graphs=hub.services.graphs, names=hub.services.registry, label=label
+        hub_store_connections(hub.engine),
+        corpus=build_hub_scoped_reads(hub_level_connections(hub.engine)).corpus,
+        graphs=hub.services.graphs,
+        names=hub.services.registry,
+        label=label,
     )
 
 

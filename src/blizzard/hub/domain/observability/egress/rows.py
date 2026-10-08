@@ -7,7 +7,7 @@ money and lists into a file format is the writer's job."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 
@@ -17,6 +17,7 @@ from blizzard.hub.domain.chunk.model import UsageFact
 from blizzard.hub.domain.observability.tracing.facts import StepFacts
 from blizzard.hub.domain.observability.tracing.steps import NodeStep, StepKind
 from blizzard.hub.domain.observability.tracing.summary import StepSummary
+from blizzard.hub.tenancy import TenantId
 
 _MONEY_SCALE = Decimal("0.000000001")
 
@@ -80,6 +81,9 @@ class AttributedUsage:
     chunk_id: str
     runner_id: str
     fact: UsageFact
+    #: The tenant the row was read in — carried beside it, not part of its identity: equality, order and
+    #: hashing stay on the fields above. ``None`` where no tenant was read.
+    tenant: TenantId | None = field(default=None, compare=False)
 
 
 @domain_model

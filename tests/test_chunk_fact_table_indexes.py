@@ -47,6 +47,8 @@ from blizzard.hub.store.internal.chunk_events_store import (
     _transitions_activity_stmt,
 )
 from blizzard.hub.store.internal.transcript_event_store import _visible_segment_ids_stmt
+from blizzard.hub.store.scoped import ScopedStatements
+from blizzard.hub.tenancy import StoreScope, TenantId
 
 from .support import hub_store_connections, seed_chunk, seed_graph
 
@@ -214,14 +216,16 @@ def test_spend_by_node_prefers_the_range_index_and_sorts_for_group_by_when_windo
 
 
 def test_visible_segment_ids_supersedes_subquery_plans_as_an_index_search(tmp_path: Path) -> None:
-    """`_visible_segment_ids_stmt`'s `NOT IN (SELECT supersedes ...)` subquery
+    """`_visible_segment_ids_stmt`'s correlated `NOT EXISTS` over `supersedes`
     — the outer `final = TRUE` filter plans through
     `ix_transcript_segments_final_chunk_id`, and the subquery's own `supersedes IS NOT
     NULL` scan plans through `ix_transcript_segments_supersedes`. Compiles the real
     statement rather than a hand-written mirror, so the two can't silently diverge."""
     engine = _engine(tmp_path)
     compiled = str(
-        _visible_segment_ids_stmt().compile(dialect=sqlite.dialect(), compile_kwargs={"literal_binds": True})
+        _visible_segment_ids_stmt(ScopedStatements(StoreScope(TenantId("ten_index")))).compile(
+            dialect=sqlite.dialect(), compile_kwargs={"literal_binds": True}
+        )
     )
     with engine.connect() as conn:
         plan = conn.execute(sa.text(f"EXPLAIN QUERY PLAN {compiled}")).all()

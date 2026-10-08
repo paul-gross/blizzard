@@ -39,7 +39,6 @@ from blizzard.hub.store.internal.chunk_rows import (
     QUESTIONS,
     ephemeral_ids_select,
     fence,
-    hub_wide_ephemeral_ids_select,
     lock_chunk_row,
 )
 from blizzard.hub.store.internal.chunk_terminal_predicates import maybe_live, settled_done, settled_stopped
@@ -285,8 +284,6 @@ def test_each_ephemeral_union_arm_is_scoped(stand_in_engine: Engine) -> None:
             "ch_done",
             "ch_fresh",
         }
-    with stand_in_engine.connect() as conn:
-        assert set(conn.execute(hub_wide_ephemeral_ids_select()).scalars()) == {"ch_gone_a", "ch_gone_b"}
 
 
 def test_the_question_read_keeps_its_outer_joins_outer_within_the_scope(stand_in_engine: Engine) -> None:

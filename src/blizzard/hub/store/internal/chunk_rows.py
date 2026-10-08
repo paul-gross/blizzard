@@ -7,8 +7,7 @@ module.
 Every statement a helper builds goes through the scope: a helper handed a ``Connection``
 recovers the builders with :func:`statements_of` (so the connection must come from a scoped
 ``read``/``write`` or a locked handle over one), and one that builds a reusable statement takes
-the caller's :class:`ScopedStatements`. The ``hub_wide_*`` helpers are the exception — they read
-every tenant's rows, for a cross-tenant sweep's corpus only.
+the caller's :class:`ScopedStatements`.
 """
 
 from __future__ import annotations
@@ -228,13 +227,6 @@ def ephemeral_ids_select(stmts: ScopedStatements) -> Select:  # type: ignore[typ
     return first.union(*rest)  # type: ignore[return-value]
 
 
-def hub_wide_ephemeral_ids_select() -> Select:  # type: ignore[type-arg]
-    """:func:`ephemeral_ids_select` across every tenant — for a cross-tenant sweep's corpus
-    read only, whose own statement reads every tenant's rows."""
-    first, *rest = (select(t.c.chunk_id) for t in _EPHEMERAL_TABLES)
-    return first.union(*rest)  # type: ignore[return-value]
-
-
 def ephemeral_ids(conn) -> set[str]:  # type: ignore[no-untyped-def]
     """Every chunk id gone from every read — the union of grouped-away
     and deleted chunks; widened here so every consumer across every seam inherits the
@@ -243,12 +235,6 @@ def ephemeral_ids(conn) -> set[str]:  # type: ignore[no-untyped-def]
     return {
         r.chunk_id for table in _EPHEMERAL_TABLES for r in conn.execute(stmts.select(table, table.c.chunk_id)).all()
     }
-
-
-def hub_wide_ephemeral_ids(conn) -> set[str]:  # type: ignore[no-untyped-def]
-    """:func:`ephemeral_ids` across every tenant — for a cross-tenant sweep's corpus read
-    only."""
-    return {r.chunk_id for table in _EPHEMERAL_TABLES for r in conn.execute(select(table.c.chunk_id)).all()}
 
 
 def is_ephemeral_id(conn, chunk_id: str) -> bool:  # type: ignore[no-untyped-def]

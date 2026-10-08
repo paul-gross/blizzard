@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import func
 
 from blizzard.hub.domain.chunk.model import PendingCloseIntent, WorkItemCloseOutcome, WorkRef
 from blizzard.hub.domain.chunk.ports.delivery import IWriteChunkDeliveryRepository
@@ -20,8 +20,8 @@ from blizzard.hub.domain.work_items.closure import TERMINAL_CLOSE_OUTCOMES
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import (
     enqueue_close_intents,
+    ephemeral_ids_select,
     graph_id_of,
-    hub_wide_ephemeral_ids_select,
     lock_chunk_row,
     next_route_seq,
     record_hub_lease,
@@ -57,12 +57,10 @@ class ChunkDeliveryStore:
     def pending_close_intents(self) -> list[PendingCloseIntent]:
         """Every pending, non-ephemeral intent's own backoff history in one flat, outer-
         joined, already-aggregated read — never one query per intent. Due-ness is not decided
-        here: the drainer applies ``close_intent_is_due`` to the history each row carries.
-
-        The close-drain sweep's corpus, read across every tenant by design — unscoped, unlike
-        every other read here."""
+        here: the drainer applies ``close_intent_is_due`` to the history each row carries."""
         attempts = (
-            select(
+            self._store.select(
+                s.close_intent_attempts,
                 s.close_intent_attempts.c.intent_id,
                 func.count(s.close_intent_attempts.c.id).label("attempt_count"),
                 func.max(s.close_intent_attempts.c.attempted_at).label("last_attempt_at"),
@@ -72,7 +70,10 @@ class ChunkDeliveryStore:
         )
         with self._store.read("pending_close_intents") as conn:
             rows = conn.execute(
-                select(
+                self._store.select(
+                    self._store.scope_join(
+                        s.close_intents, attempts, attempts.c.intent_id == s.close_intents.c.id, isouter=True
+                    ),
                     s.close_intents.c.id,
                     s.close_intents.c.chunk_id,
                     s.close_intents.c.source,
@@ -80,9 +81,8 @@ class ChunkDeliveryStore:
                     attempts.c.attempt_count,
                     attempts.c.last_attempt_at,
                 )
-                .select_from(s.close_intents.outerjoin(attempts, attempts.c.intent_id == s.close_intents.c.id))
                 .where(s.close_intents.c.retired_at.is_(None))
-                .where(s.close_intents.c.chunk_id.not_in(hub_wide_ephemeral_ids_select()))
+                .where(s.close_intents.c.chunk_id.not_in(ephemeral_ids_select(self._store)))
                 .order_by(s.close_intents.c.id)  # An explicit total order (`bzh:sql-portable`)
             ).all()
         return [
