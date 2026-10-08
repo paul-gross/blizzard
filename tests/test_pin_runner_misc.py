@@ -186,7 +186,7 @@ def test_the_hub_retry_ceiling_leaves_the_worker_read_timeout_room() -> None:
     assert _HUB_RETRY_CEILING < READ_TIMEOUT
 
 
-# --- src/blizzard/runner/cli.py: the deprecated `pm-items` alias ----------------------------------
+# --- src/blizzard/runner/cli/worker.py: the deprecated `pm-items` alias ----------------------------------
 
 
 class _FakeLocalResponse:
