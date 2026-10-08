@@ -26,6 +26,7 @@ from tests.support import (
     FakeHubCommandRunner,
     FakeHubWorkdir,
     build_hub,
+    chunk_facts_of,
     chunk_stores,
     pointer_token,
     report_lease,
@@ -69,6 +70,18 @@ def _bounce_capped_chunk(tmp_path: Path):  # type: ignore[no-untyped-def]
     _submit_build_pass(hub, chunk_id, second_build, 3)
     hub.clock.advance(timedelta(seconds=31))
     return hub, chunk_id
+
+
+def test_a_poll_timeout_bounce_cap_escalation_keeps_the_route_held(tmp_path: Path) -> None:
+    hub, chunk_id = _bounce_capped_chunk(tmp_path)
+
+    hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance")
+
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert detail["status"] == "needs_human"
+    assert detail["escalation"]["cause"] == "bounce-cap"
+    assert _count(hub, s.route_released, chunk_id) == 0
+    assert chunk_facts_of(hub, chunk_id).routes.newest is not None
 
 
 @pytest.mark.parametrize("writer", [_restart_under_lock, _stop_under_lock], ids=["restart", "stop"])

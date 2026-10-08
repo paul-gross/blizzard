@@ -14,7 +14,14 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.hub_event_types import HubEventType
-from tests.support import assert_all_timestamps_utc, build_hub, emitted_events, make_ready, pointer_token
+from tests.support import (
+    assert_all_timestamps_utc,
+    build_hub,
+    emitted_events,
+    make_ready,
+    pointer_token,
+    report_lease,
+)
 
 pytestmark = pytest.mark.component
 
@@ -404,3 +411,44 @@ def test_question_on_unknown_chunk_is_404(tmp_path: Path) -> None:
         },
     )
     assert resp.status_code == 404
+
+
+def test_a_restart_after_the_answer_supersedes_its_delivery(tmp_path: Path) -> None:
+    """The asking session ends at the restart, so the answer's return trip to it is refused:
+    ``answer.delivered`` rejected, and ``delivered_at`` never stamped."""
+    hub = build_hub(tmp_path)
+    chunk_id = _claim(hub)
+    report_lease(hub, chunk_id, epoch=1, seq=1)
+    _ask(hub, chunk_id)
+    assert hub.client.post("/api/questions/qn_1/answers", json={"answer": "rest"}).status_code == 201
+    assert hub.client.post(f"/api/chunks/{chunk_id}/restart", json={}).status_code == 202
+
+    resp = _deliver(hub, chunk_id)
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["applied"] == []
+    assert resp.json()["rejected"] == [9]
+    question = hub.client.get(f"/api/chunks/{chunk_id}").json()["questions"][0]
+    assert question["delivered"] is False
+    assert question["delivered_at"] is None
+
+
+@pytest.mark.parametrize("end", ["stop", "complete"])
+def test_an_answer_on_an_ended_chunk_is_refused_and_the_question_stays_unanswered(tmp_path: Path, end: str) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = _claim(hub)
+    _ask(hub, chunk_id)
+    chunk = hub.services.chunks.record.get(chunk_id)
+    assert chunk is not None
+    if end == "stop":
+        hub.services.stop.stop(chunk, by="operator")
+    else:
+        hub.services.complete.complete(chunk, by="operator")
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == ("stopped" if end == "stop" else "done")
+
+    resp = hub.client.post("/api/questions/qn_1/answers", json={"answer": "rest"})
+
+    assert resp.status_code == 409, resp.text
+    poll = hub.client.get("/api/fleet/questions/qn_1").json()
+    assert poll["answered"] is False
+    assert poll["answer"] is None

@@ -888,15 +888,11 @@ def holds_claim(status: ChunkStatus) -> bool:
 class ChunkVerb(StrEnum):
     """A verb that reads a chunk's derived status to decide whether it is legal — the rows of
     :data:`CHUNK_VERB_LEGALITY`. A verb names the chunk's role when it acts on one end of a
-    relation (``DECLARE_DEPENDENCY`` is the dependent's, ``NAME_AS_PREREQUISITE`` the prerequisite's).
+    relation (``DECLARE_DEPENDENCY`` is the dependent's).
     An ephemeral (grouped-away or deleted) chunk has no status: every verb reads it as unknown."""
 
     #: Declare a dependency, as the dependent.
     DECLARE_DEPENDENCY = "declare-dependency"
-    #: Be named as the prerequisite of a declared dependency.
-    NAME_AS_PREREQUISITE = "name-as-prerequisite"
-    #: Release a standing dependency, as its dependent — the lever that keeps blocked a held state.
-    RELEASE_DEPENDENCY = "release-dependency"
     #: Let a new ingest mint over a work ref this chunk holds: only once the holder is finished.
     INGEST_HELD_WORK_REF = "ingest-held-work-ref"
     #: The operator's promote; on an already-promoted chunk, a replay that writes nothing whatever the status.
@@ -947,8 +943,6 @@ _NON_TERMINAL: frozenset[ChunkStatus] = _EVERY_STATUS - TERMINAL_STATUSES
 CHUNK_VERB_LEGALITY: Mapping[ChunkVerb, frozenset[ChunkStatus]] = MappingProxyType(
     {
         ChunkVerb.DECLARE_DEPENDENCY: PRE_CLAIM_STATUSES,
-        ChunkVerb.NAME_AS_PREREQUISITE: _EVERY_STATUS,
-        ChunkVerb.RELEASE_DEPENDENCY: _EVERY_STATUS,
         ChunkVerb.INGEST_HELD_WORK_REF: TERMINAL_STATUSES,
         ChunkVerb.PROMOTE: _NON_TERMINAL,
         ChunkVerb.PAUSE: _NON_TERMINAL - {ChunkStatus.DELIVERING},

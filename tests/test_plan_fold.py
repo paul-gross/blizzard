@@ -87,3 +87,13 @@ def test_a_duplicate_pair_after_collapse_does_not_stop_the_edges_after_it_planni
     assert plan.release_by_target == {"a": ["dep_d_a"], "b": ["dep_d_b", "dep_e_b"]}
     assert plan.mint_by_target == {"a": [FoldMint("d", "s", _T0)], "b": [FoldMint("e", "s", _T0)]}
     assert plan.remaining == []
+
+
+def test_folding_two_targets_onto_one_pair_keeps_the_earliest_declared_edge() -> None:
+    t1, t2 = _T0 - timedelta(hours=2), _T0 - timedelta(hours=1)
+
+    plan = plan_fold([_edge("d", "b", declared_at=t1), _edge("d", "a", declared_at=t2)], "s", ["a", "b"])
+
+    assert plan.release_by_target == {"a": ["dep_d_a"], "b": ["dep_d_b"]}
+    assert plan.mint_by_target == {"a": [], "b": [FoldMint("d", "s", t1)]}
+    assert plan.remaining == []

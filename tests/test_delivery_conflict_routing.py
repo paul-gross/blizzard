@@ -31,6 +31,7 @@ from tests.support import (
     FakeHubWorkdir,
     HubHarness,
     build_hub,
+    chunk_facts_of,
     make_ready,
     pointer_token,
     report_lease,
@@ -174,6 +175,8 @@ def test_a_dirty_conflict_escalates_once_the_bounce_cap_is_crossed(tmp_path: Pat
     assert detail["escalation"]["detail"] == (
         f"bounce cap ({DEFAULT_BOUNCE_CAP}) crossed after {DEFAULT_BOUNCE_CAP + 1} bounces"
     )
+    # The escalation holds the route: the runner's tenure outlives it, so a requeue resumes in place.
+    assert chunk_facts_of(hub, chunk_id).routes.newest is not None
 
 
 def _envelope(hub: HubHarness, chunk_id: str) -> dict:
