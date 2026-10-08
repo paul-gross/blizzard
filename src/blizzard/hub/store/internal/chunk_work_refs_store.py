@@ -118,13 +118,14 @@ class ChunkWorkRefsStore:
         for pointer in pointers:
             refs_by_source[pointer.source].append(pointer.ref)
 
+        stmts = statements_of(conn)
         pairs: list[tuple[WorkRef, str]] = []
         for source, refs in refs_by_source.items():
             for batch in id_batches(refs):
                 rows = conn.execute(
-                    statements_of(conn)
-                    .select(s.chunk_work_refs, s.chunk_work_refs.c.chunk_id, s.chunk_work_refs.c.ref)
-                    .where((s.chunk_work_refs.c.source == source) & (s.chunk_work_refs.c.ref.in_(batch)))
+                    stmts.select(s.chunk_work_refs, s.chunk_work_refs.c.chunk_id, s.chunk_work_refs.c.ref).where(
+                        (s.chunk_work_refs.c.source == source) & (s.chunk_work_refs.c.ref.in_(batch))
+                    )
                 ).all()
                 pairs.extend((WorkRef(source=source, ref=row.ref), row.chunk_id) for row in rows)
         held_ids = sorted({chunk_id for _, chunk_id in pairs})
@@ -133,7 +134,7 @@ class ChunkWorkRefsStore:
             chunk_id
             for batch in id_batches([c for c in held_ids if c not in ephemeral])
             for chunk_id in conn.execute(
-                select(s.chunks.c.chunk_id).where(s.chunks.c.chunk_id.in_(batch), maybe_live(statements_of(conn)))
+                stmts.select(s.chunks, s.chunks.c.chunk_id).where(s.chunks.c.chunk_id.in_(batch), maybe_live(stmts))
             ).scalars()
         }
         return pairs, maybe_live_ids
