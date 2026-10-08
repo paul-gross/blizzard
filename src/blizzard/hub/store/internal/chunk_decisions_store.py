@@ -93,7 +93,7 @@ class ChunkDecisionsStore:
     def live_decisions_for(self, chunk_ids: Iterable[str]) -> dict[str, LiveDecisionStatus]:
         """See :meth:`~blizzard.hub.domain.chunk.ports.decisions.IReadChunkDecisionsRepository.live_decisions_for` —
         set-based throughout, unlike :meth:`_decision_row`'s per-decision
-        docket/choices reads, sharing its closure rule via :meth:`_decision_closure_ids`.
+        docket/choices reads, sharing its closure rule via :func:`decision_closure_ids`.
         Newest-first per chunk, same "newest not-yet-transitioned" semantics as
         :meth:`decision_for_chunk`. Batched (`bzh:bulk-reconstitution`)."""
         ids = list(chunk_ids)
@@ -124,7 +124,7 @@ class ChunkDecisionsStore:
                     ).all()
                 }
             )
-        transitioned_ids = self._decision_closure_ids(conn, decision_ids)
+        transitioned_ids = decision_closure_ids(conn, decision_ids)
         result: dict[str, LiveDecisionStatus] = {}
         for row in rows:  # newest-first; the newest not-yet-transitioned decision is live
             if row.chunk_id in result or row.decision_id in transitioned_ids:
@@ -137,23 +137,6 @@ class ChunkDecisionsStore:
                 transitioned=False,
             )
         return result
-
-    @staticmethod
-    def _decision_closure_ids(conn: Connection, decision_ids: Sequence[str]) -> set[str]:
-        """The ids among ``decision_ids`` closed by a fact in :data:`_DECISION_CLOSURE_TABLES`
-        — :meth:`_not_closed_clause`'s own predicate, inverted, so the two closure reads
-        share one rule."""
-        if not decision_ids:
-            return set()
-        closed: set[str] = set()
-        for batch in id_batches(decision_ids):
-            rows = conn.execute(
-                select(s.decisions.c.decision_id).where(
-                    s.decisions.c.decision_id.in_(batch), ~ChunkDecisionsStore._not_closed_clause()
-                )
-            ).all()
-            closed |= {r.decision_id for r in rows}
-        return closed
 
     def list_open_decisions(self) -> list[GateDecision]:
         """The gates still awaiting a resolution, hydrated in one batched pass through :meth:`_hydrate`.
@@ -406,7 +389,7 @@ class ChunkDecisionsStore:
         resolution = conn.execute(
             select(s.decision_resolutions).where(s.decision_resolutions.c.decision_id == row.decision_id)
         ).one_or_none()
-        transitioned = row.decision_id in self._decision_closure_ids(conn, [row.decision_id])
+        transitioned = row.decision_id in decision_closure_ids(conn, [row.decision_id])
         return self._build_row(row, resolution, transitioned, self._pending_proposals(conn, row.chunk_id))
 
     def _hydrate(self, conn: Connection, rows: Sequence) -> list[GateDecision]:  # type: ignore[no-untyped-def]
@@ -427,7 +410,7 @@ class ChunkDecisionsStore:
                     ).all()
                 }
             )
-        transitioned_ids = self._decision_closure_ids(conn, decision_ids)
+        transitioned_ids = decision_closure_ids(conn, decision_ids)
         chunk_ids = list(dict.fromkeys(row.chunk_id for row in rows))
         dockets: dict[str, list[DocketEntry]] = {}
         for batch in id_batches(chunk_ids):
@@ -470,6 +453,23 @@ class ChunkDecisionsStore:
         fold it into its own already-open read — :meth:`_docket_entries` narrowed to one
         chunk."""
         return ChunkDecisionsStore._docket_entries(conn, [chunk_id]).get(chunk_id, [])
+
+
+def decision_closure_ids(conn: Connection, decision_ids: Sequence[str]) -> set[str]:
+    """The ids among ``decision_ids`` closed by a fact in :data:`_DECISION_CLOSURE_TABLES`
+    — :meth:`ChunkDecisionsStore._not_closed_clause`'s own predicate, inverted, so every
+    closure read (the live decision, the bulk status read, the chunk facts) shares one rule."""
+    if not decision_ids:
+        return set()
+    closed: set[str] = set()
+    for batch in id_batches(decision_ids):
+        rows = conn.execute(
+            select(s.decisions.c.decision_id).where(
+                s.decisions.c.decision_id.in_(batch), ~ChunkDecisionsStore._not_closed_clause()
+            )
+        ).all()
+        closed |= {r.decision_id for r in rows}
+    return closed
 
 
 def _conforms_decisions(x: ChunkDecisionsStore) -> IWriteChunkDecisionsRepository:

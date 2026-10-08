@@ -360,11 +360,14 @@ class DecisionFact:
     """A gate's ``decision.submitted`` row and whether anything has closed it. An **open**
     decision — carrying neither its own resolution row nor a restart that superseded it
     (#370) — is what ``waiting_on_human`` derives from. ``resolved`` is computed by the
-    hydrating repository so the derivation reads a plain boolean."""
+    hydrating repository so the derivation reads a plain boolean. ``closed`` is a second,
+    later state: a fact consumed the decision — a transition, a migration, an escalation or a
+    restart — so a decision can be resolved yet not closed while the runner has not moved on."""
 
     decision_id: str
     submitted_at: datetime
     resolved: bool = False
+    closed: bool = False
 
 
 @domain_model
@@ -1331,6 +1334,17 @@ class ChunkFacts:
         if not unresolved:
             return None
         return max(unresolved, key=lambda d: d.submitted_at)
+
+    def unclosed_decision(self) -> DecisionFact | None:
+        """The newest gate decision no fact has consumed yet, resolved or not, or ``None``.
+
+        What a move that consumes the gate closes: a person's resolution ends the wait
+        (:meth:`open_decision`) but leaves the decision for the runner to act on until a
+        transition, migration, escalation or restart closes it."""
+        unclosed = [d for d in self.decisions if not d.closed]
+        if not unclosed:
+            return None
+        return max(unclosed, key=lambda d: d.submitted_at)
 
     def has_open_decision(self) -> bool:
         """True iff a gate's decision is unresolved — no resolution flips it off."""

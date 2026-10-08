@@ -156,7 +156,7 @@ def test_decision_closed_by_restart_chunk_field_parity(tmp_path: Path) -> None:
     """The decision-closure check has four arms (transitions, migrations, escalations,
     restarts); every other decision test here closes one via a transition.
     This one closes it via a restart instead, so the shared closure rule
-    (`ChunkDecisionsStore._decision_closure_ids`) is proven on a second arm, not just the
+    (`decision_closure_ids`) is proven on a second arm, not just the
     one every sibling test happens to exercise."""
     hub = build_hub(tmp_path)
     build_node_id = _build_node_id(hub)

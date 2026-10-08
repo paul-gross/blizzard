@@ -144,7 +144,7 @@ def plan_restart(
 
     Refuses a terminal chunk, a cross-graph target that is retired or the current pin, a
     same-graph ``graph`` that is no longer the chunk's pin, and an unresolvable landing node;
-    otherwise records what the move consumes — the open gate, the open asks, the re-pin."""
+    otherwise records what the move consumes — the unclosed gate decision, the open asks, the re-pin."""
     require_restartable(chunk.chunk_id, facts)
     if to_graph is not None:
         require_crossable(chunk, to_graph, retired=to_graph_retired)
@@ -152,7 +152,7 @@ def plan_restart(
         raise RestartGraphPinChanged(chunk.chunk_id, graph.graph_id, chunk.graph_id)
     from_node_id = facts.current_node_id()
     target = restart_landing(graph, to_graph, from_node_id, node_name)
-    decision = facts.open_decision()
+    decision = facts.unclosed_decision()
     return RestartPlan(
         from_node_id=from_node_id,
         to_node_id=target.node_id,
