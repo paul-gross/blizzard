@@ -52,6 +52,7 @@ from tests.support import (
     seed_chunk_record,
     seed_graph,
     seed_lease,
+    stamp,
 )
 
 pytestmark = pytest.mark.component
@@ -66,7 +67,15 @@ def _at(seconds: int) -> datetime:
 def _seed_node(conn: sa.Connection, graph_id: str, node_id: str, *, executor: str) -> None:
     conn.execute(
         insert(s.graph_nodes).values(
-            node_id=node_id, graph_id=graph_id, name=node_id, executor=executor, session="resume", judged_by="worker"
+            stamp(
+                s.graph_nodes,
+                node_id=node_id,
+                graph_id=graph_id,
+                name=node_id,
+                executor=executor,
+                session="resume",
+                judged_by="worker",
+            )
         )
     )
 

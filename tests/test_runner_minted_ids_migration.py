@@ -18,8 +18,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.hub.domain.runners.registration import RunnerAddition
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
-from blizzard.hub.tenancy import TenantId
-from tests.support import hub_store_connections, migrate_to, scoped_connections
+from tests.support import hub_store_connections, migrate_to
 
 pytestmark = pytest.mark.component
 
@@ -174,13 +173,51 @@ def _picture(tmp_path: Path, columns: list[tuple[str, str]]) -> _Picture:
         engine.dispose()
 
 
-def _registry(tmp_path: Path) -> RunnerRegistryStore:
-    return RunnerRegistryStore(scoped_connections(create_engine_from_url(_db_url(tmp_path)), TenantId("ten_A")))
+class _FrozenRegistry:
+    """The runner registry as this revision left it, read with literal SQL: the live adapter's
+    statements follow today's schema, whose runner tables keep changing shape after this revision."""
+
+    def __init__(self, tmp_path: Path) -> None:
+        self._db_url = _db_url(tmp_path)
+
+    def _rows(self, statement: str, **params: object) -> list[sa.Row]:
+        engine = create_engine_from_url(self._db_url)
+        try:
+            with engine.connect() as conn:
+                return list(conn.execute(sa.text(statement), params))
+        finally:
+            engine.dispose()
+
+    def minted(self) -> dict[str, str]:
+        return {r.name: r.runner_id for r in self._rows("SELECT name, runner_id FROM runner_registrations")}
+
+    def registration(self, runner_id: str) -> sa.Row | None:
+        rows = self._rows(
+            "SELECT name, added_at, added_by, registered_at FROM runner_registrations WHERE runner_id = :runner_id",
+            runner_id=runner_id,
+        )
+        return rows[0] if rows else None
+
+    def runner_for_token(self, token_hash: str) -> str | None:
+        rows = self._rows("SELECT runner_id FROM runner_registrations WHERE token_hash = :h", h=token_hash)
+        return rows[0].runner_id if rows else None
+
+    def runner_for_revoked_token(self, token_hash: str) -> str | None:
+        rows = self._rows("SELECT runner_id FROM runner_token_revocations WHERE token_hash = :h", h=token_hash)
+        return rows[0].runner_id if rows else None
+
+    def newest(self, table: str, column: str, runner_id: str) -> bool:
+        """The newest fact's flag in ``table`` for ``runner_id``; ``False`` when it has none."""
+        rows = self._rows(
+            f'SELECT "{column}" FROM "{table}" WHERE runner_id = :runner_id ORDER BY id DESC LIMIT 1',
+            runner_id=runner_id,
+        )
+        return bool(rows[0][0]) if rows else False
 
 
 def _minted(tmp_path: Path) -> dict[str, str]:
     """Each runner's old id (now its name) → its minted id."""
-    return {r.name: r.runner_id for r in _registry(tmp_path).list_runners(include_retired=True)}
+    return _FrozenRegistry(tmp_path).minted()
 
 
 def _registrations_columns(tmp_path: Path) -> dict[str, bool]:
@@ -204,34 +241,30 @@ def test_every_runner_is_keyed_by_a_minted_id_named_after_its_old_one(tmp_path: 
     # Minted in (registered_at, old id) order — the two sharing an instant included.
     assert sorted(minted, key=minted.__getitem__) == sorted(_RUNNERS, key=lambda old_id: (_RUNNERS[old_id][0], old_id))
 
-    registry = _registry(tmp_path)
-    for runner_id in minted.values():
-        registration = registry.get_runner(runner_id)
+    registry = _FrozenRegistry(tmp_path)
+    for old_id, runner_id in minted.items():
+        registration = registry.registration(runner_id)
         assert registration is not None
+        assert registration.name == old_id
         assert registration.added_at == registration.registered_at
         assert registration.added_by is None
-        assert not registration.never_connected()
-    assert registry.names_for(minted.values()) == {new_id: old_id for old_id, new_id in minted.items()}
+        assert registration.registered_at is not None  # connected, not merely added
 
 
 def test_tokens_brakes_and_retirement_follow_the_minted_id(tmp_path: Path) -> None:
     runner, _columns = _seed(tmp_path)
     runner.upgrade(_REVISION)
     minted = _minted(tmp_path)
-    registry = _registry(tmp_path)
+    registry = _FrozenRegistry(tmp_path)
 
     for old_id, (_registered_at, token_hash) in _RUNNERS.items():
         if token_hash is not None:
-            resolved = registry.registration_for_token_hash(token_hash)
-            assert resolved is not None and resolved.runner_id == minted[old_id]
+            assert registry.runner_for_token(token_hash) == minted[old_id]
     for old_id, revoked_hash in _REVOKED_HASHES.items():
-        assert registry.is_token_revoked(revoked_hash)
-        assert registry.revoked_token_runner_id(revoked_hash) == minted[old_id]
-    retired = registry.get_runner(minted[_RETIRED])
-    paused = registry.get_runner(minted[_PAUSED])
-    assert retired is not None and retired.retired
-    assert paused is not None and paused.hub_paused
-    assert {r.runner_id for r in registry.list_runners()} == {minted[_ENROLLED], minted[_REVOKED], minted[_PAUSED]}
+        assert registry.runner_for_revoked_token(revoked_hash) == minted[old_id]
+    assert registry.newest("runner_pause_facts", "paused", minted[_PAUSED])
+    retired = {old_id for old_id in _RUNNERS if registry.newest("runner_lifecycle_facts", "retired", minted[old_id])}
+    assert retired == {_RETIRED}
 
 
 def test_every_runner_id_column_follows_except_the_hubs_rows_and_unregistered_ids(tmp_path: Path) -> None:

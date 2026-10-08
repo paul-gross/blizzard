@@ -22,7 +22,7 @@ from blizzard.runner.runtime import init_environment as init_runner
 from blizzard.runner.store import schema as runner
 from blizzard.tools.invariants import HubInvariants, RunnerInvariants
 from tests.runner_fakes import FakeProbe
-from tests.support import migrate_to, seed_chunk, seed_graph
+from tests.support import migrate_to, seed_chunk, seed_graph, stamp
 
 pytestmark = pytest.mark.component
 
@@ -838,23 +838,32 @@ def test_landed_fact_without_terminal_transition_is_a_two_state_violation(tmp_pa
     defense-in-depth, since a real store never writes this shape."""
     engine = _hub_engine(tmp_path)
     with engine.begin() as conn:
-        conn.execute(insert(hub.chunks).values(chunk_id="ch_1", graph_id="gr_1", minted_at=_NOW, model="m"))
-        conn.execute(insert(hub.lease_facts).values(chunk_id="ch_1", epoch=2, runner_id="hub", minted_at=_NOW))
+        conn.execute(
+            insert(hub.chunks).values(stamp(hub.chunks, chunk_id="ch_1", graph_id="gr_1", minted_at=_NOW, model="m"))
+        )
+        conn.execute(
+            insert(hub.lease_facts).values(
+                stamp(hub.lease_facts, chunk_id="ch_1", epoch=2, runner_id="hub", minted_at=_NOW)
+            )
+        )
         # Newest transition targets a post-merge worker node, NOT the reserved terminal.
         conn.execute(
             insert(hub.transitions).values(
-                transition_id="tr_1",
-                chunk_id="ch_1",
-                graph_id="gr_1",
-                from_node_id="nd_deliver",
-                to_node_id="nd_verify",
-                choice_name="landed",
-                epoch=2,
-                runner_id="hub",
-                recorded_at=_NOW,
+                stamp(
+                    hub.transitions,
+                    transition_id="tr_1",
+                    chunk_id="ch_1",
+                    graph_id="gr_1",
+                    from_node_id="nd_deliver",
+                    to_node_id="nd_verify",
+                    choice_name="landed",
+                    epoch=2,
+                    runner_id="hub",
+                    recorded_at=_NOW,
+                )
             )
         )
-        conn.execute(insert(hub.delivery_landed).values(chunk_id="ch_1", landed_at=_NOW))
+        conn.execute(insert(hub.delivery_landed).values(stamp(hub.delivery_landed, chunk_id="ch_1", landed_at=_NOW)))
     slugs = {v.invariant for v in HubInvariants(engine).run()}
     assert "hub:merge-queue-single-state" in slugs
 

@@ -48,7 +48,8 @@ def test_an_edge_onto_a_done_prerequisite_is_accepted_with_no_satisfaction_state
     with hub.engine.connect() as conn:
         rows = conn.execute(hub_scoped(select(s.chunk_dependencies))).mappings().all()
     assert len(rows) == 1
-    assert set(rows[0]) == {
+    # The tenant key is the store seam's, carried by every tenant-owned row; it is no satisfaction state.
+    assert set(rows[0]) - {"tenant_id"} == {
         "dependency_id",
         "dependent_chunk_id",
         "prerequisite_chunk_id",

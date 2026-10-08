@@ -14,7 +14,7 @@ from sqlalchemy import insert
 
 from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.store import schema as s
-from tests.support import HubHarness, build_hub, make_ready, pointer_token, report_lease
+from tests.support import HubHarness, build_hub, make_ready, pointer_token, report_lease, stamp
 
 pytestmark = pytest.mark.component
 
@@ -50,15 +50,18 @@ def _seed_at_retrospective(hub: HubHarness, chunk_id: str, graph_id: str, node_i
     with hub.engine.begin() as conn:
         conn.execute(
             insert(s.transitions).values(
-                transition_id="tr_seed_1",
-                chunk_id=chunk_id,
-                graph_id=graph_id,
-                from_node_id=None,
-                to_node_id=node_id,
-                choice_name=None,
-                epoch=1,
-                runner_id="r1",
-                recorded_at=hub.clock.now(),
+                stamp(
+                    s.transitions,
+                    transition_id="tr_seed_1",
+                    chunk_id=chunk_id,
+                    graph_id=graph_id,
+                    from_node_id=None,
+                    to_node_id=node_id,
+                    choice_name=None,
+                    epoch=1,
+                    runner_id="r1",
+                    recorded_at=hub.clock.now(),
+                )
             )
         )
 

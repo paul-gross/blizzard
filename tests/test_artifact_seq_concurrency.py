@@ -27,7 +27,7 @@ from blizzard.hub.store.errors import HubStoreErrorFactory
 from blizzard.hub.store.internal.chunk_rows import next_artifact_seq
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.tenancy import StoreScope, TenantId
-from tests.support import hub_store_connections
+from tests.support import hub_store_connections, stamp
 
 pytestmark = pytest.mark.unit
 
@@ -93,16 +93,19 @@ def test_concurrent_artifact_seq_allocation_on_sqlite_never_duplicates(tmp_path:
                 seq = next_artifact_seq(conn, "ch_1")
                 conn.execute(
                     insert(s.artifacts).values(
-                        artifact_id=artifact_id,
-                        chunk_id="ch_1",
-                        node_id="nd_1",
-                        node_name="deliver",
-                        epoch=1,
-                        name=artifact_id,
-                        kind="asset",
-                        data="",
-                        produced_at=_NOW,
-                        seq=seq,
+                        stamp(
+                            s.artifacts,
+                            artifact_id=artifact_id,
+                            chunk_id="ch_1",
+                            node_id="nd_1",
+                            node_name="deliver",
+                            epoch=1,
+                            name=artifact_id,
+                            kind="asset",
+                            data="",
+                            produced_at=_NOW,
+                            seq=seq,
+                        )
                     )
                 )
             with lock:

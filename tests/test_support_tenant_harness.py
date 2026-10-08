@@ -76,11 +76,11 @@ def test_default_tenant_refuses_a_store_with_several_tenants(tmp_path: Path) -> 
 
 
 def test_stamp_leaves_a_table_without_a_tenant_key_unchanged() -> None:
-    assert "tenant_id" not in schema.chunk_pause_facts.c
+    assert "tenant_id" not in schema.users.c
 
-    values = stamp(schema.chunk_pause_facts, chunk_id="ch_1", paused=True)
+    values = stamp(schema.users, username="ada", display_name="Ada")
 
-    assert values == {"chunk_id": "ch_1", "paused": True}
+    assert values == {"username": "ada", "display_name": "Ada"}
 
 
 @pytest.mark.parametrize("table", ["tenants", "tenant_deletions"])

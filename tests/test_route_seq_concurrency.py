@@ -27,7 +27,7 @@ from blizzard.hub.store.errors import HubStoreErrorFactory
 from blizzard.hub.store.internal.chunk_rows import lock_chunk_row, next_route_seq
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.tenancy import StoreScope, TenantId
-from tests.support import hub_store_connections
+from tests.support import hub_store_connections, stamp
 
 pytestmark = pytest.mark.unit
 
@@ -114,7 +114,15 @@ def test_concurrent_seq_allocation_on_sqlite_never_duplicates(tmp_path: Path) ->
                 seq = next_route_seq(conn, "ch_1")
                 conn.execute(
                     insert(s.route_created).values(
-                        route_id=route_id, chunk_id="ch_1", runner_id="r", workspace_id="w", created_at=_NOW, seq=seq
+                        stamp(
+                            s.route_created,
+                            route_id=route_id,
+                            chunk_id="ch_1",
+                            runner_id="r",
+                            workspace_id="w",
+                            created_at=_NOW,
+                            seq=seq,
+                        )
                     )
                 )
             with lock:

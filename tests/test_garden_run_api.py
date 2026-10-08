@@ -19,7 +19,7 @@ from blizzard.hub.domain.garden.routines import Routine
 from blizzard.hub.domain.garden.scopes import ScopeSlug
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.store import schema as s
-from tests.support import HubHarness, build_hub, count_queries
+from tests.support import HubHarness, build_hub, count_queries, stamp
 
 pytestmark = pytest.mark.component
 
@@ -76,29 +76,35 @@ def _seed_delivery(
     with hub.engine.begin() as conn:
         conn.execute(
             insert(s.artifacts).values(
-                artifact_id=artifact_id,
-                chunk_id=chunk_id,
-                node_id="nd_1",
-                node_name="deliver",
-                epoch=1,
-                name="findings",
-                kind="asset",
-                data=json.dumps(
-                    {"scope": "blizzard", "revisions": revisions, "measurement": measurement, "findings": findings}
-                ),
-                produced_at=produced_at,
-                seq=1,
+                stamp(
+                    s.artifacts,
+                    artifact_id=artifact_id,
+                    chunk_id=chunk_id,
+                    node_id="nd_1",
+                    node_name="deliver",
+                    epoch=1,
+                    name="findings",
+                    kind="asset",
+                    data=json.dumps(
+                        {"scope": "blizzard", "revisions": revisions, "measurement": measurement, "findings": findings}
+                    ),
+                    produced_at=produced_at,
+                    seq=1,
+                )
             )
         )
         conn.execute(
             insert(s.finding_sets).values(
-                finding_set_id=finding_set_id,
-                artifact_id=artifact_id,
-                chunk_id=chunk_id,
-                scope_slug="blizzard",
-                routine_name="gardening",
-                revisions=json.dumps(revisions),
-                measurement=measurement,
+                stamp(
+                    s.finding_sets,
+                    finding_set_id=finding_set_id,
+                    artifact_id=artifact_id,
+                    chunk_id=chunk_id,
+                    scope_slug="blizzard",
+                    routine_name="gardening",
+                    revisions=json.dumps(revisions),
+                    measurement=measurement,
+                )
             )
         )
 
@@ -107,11 +113,14 @@ def _seed_escalation(hub: HubHarness, chunk_id: str, *, at: datetime = _NOW) -> 
     with hub.engine.begin() as conn:
         conn.execute(
             insert(s.escalations).values(
-                chunk_id=chunk_id,
-                epoch=1,
-                takeover_command="resume",
-                wrapped_takeover_command="wrapped-resume",
-                recorded_at=at,
+                stamp(
+                    s.escalations,
+                    chunk_id=chunk_id,
+                    epoch=1,
+                    takeover_command="resume",
+                    wrapped_takeover_command="wrapped-resume",
+                    recorded_at=at,
+                )
             )
         )
 
@@ -240,29 +249,37 @@ def test_run_delta_reads_back_the_added_observed_and_gone_groups(tmp_path: Path)
     with hub.engine.begin() as conn:
         conn.execute(
             insert(s.findings).values(
-                finding_id="fin_new",
-                routine_name="gardening",
-                scope_slug="blizzard",
-                class_="stale-docstring",
-                locus="a.py:1",
-                summary="s",
-                introduced=None,
-                introduced_at=None,
+                stamp(
+                    s.findings,
+                    finding_id="fin_new",
+                    routine_name="gardening",
+                    scope_slug="blizzard",
+                    class_="stale-docstring",
+                    locus="a.py:1",
+                    summary="s",
+                    introduced=None,
+                    introduced_at=None,
+                )
             )
         )
         conn.execute(
-            insert(s.finding_facts).values(finding_id="fin_new", kind="add", recorded_at=_NOW, finding_set_id="fins_1")
+            insert(s.finding_facts).values(
+                stamp(s.finding_facts, finding_id="fin_new", kind="add", recorded_at=_NOW, finding_set_id="fins_1")
+            )
         )
         conn.execute(
             insert(s.findings).values(
-                finding_id="fin_seen",
-                routine_name="gardening",
-                scope_slug="blizzard",
-                class_="dead-code",
-                locus="b.py:7",
-                summary="unused helper",
-                introduced=None,
-                introduced_at=None,
+                stamp(
+                    s.findings,
+                    finding_id="fin_seen",
+                    routine_name="gardening",
+                    scope_slug="blizzard",
+                    class_="dead-code",
+                    locus="b.py:7",
+                    summary="unused helper",
+                    introduced=None,
+                    introduced_at=None,
+                )
             )
         )
 

@@ -21,9 +21,10 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.garden.findings.model import FactEntry, Finding, FindingAlreadyExited, FindingExitService
 from blizzard.hub.runtime import migration_runner
+from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal.finding_store import FindingStore, lock_findings
-from tests.support import count_queries, hub_store_connections
+from tests.support import count_queries, hub_store_connections, stamp
 
 pytestmark = pytest.mark.component
 
@@ -36,13 +37,8 @@ def _store_and_engine(tmp_path: Path) -> tuple[FindingStore, Engine]:
     migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
     engine = create_engine_from_url(db_url)
     with engine.begin() as conn:
-        conn.execute(
-            sa.text("INSERT INTO scopes (slug, description, created_at) VALUES ('blizzard', '', :now)"), {"now": _NOW}
-        )
-        conn.execute(
-            sa.text("INSERT INTO scopes (slug, description, created_at) VALUES ('other-scope', '', :now)"),
-            {"now": _NOW},
-        )
+        for slug in ("blizzard", "other-scope"):
+            conn.execute(sa.insert(s.scopes).values(stamp(s.scopes, slug=slug, description="", created_at=_NOW)))
     return FindingStore(hub_store_connections(engine)), engine
 
 
@@ -351,16 +347,25 @@ def test_count_by_class_counts_across_the_named_routine(tmp_path: Path) -> None:
 def _add_review_finding(engine: Engine, finding_id: str = "fin_review", *, scope_slug: str = "blizzard") -> None:
     with engine.begin() as conn:
         conn.execute(
-            sa.text(
-                "INSERT INTO findings (finding_id, routine_name, scope_slug, class, locus, summary, source,"
-                " severity, raised_by_chunk_id) VALUES (:id, NULL, :scope, 'correctness', 'a.py:1', 's',"
-                " 'review', 'should-fix', 'ch_1')"
-            ),
-            {"id": finding_id, "scope": scope_slug},
+            sa.insert(s.findings).values(
+                stamp(
+                    s.findings,
+                    finding_id=finding_id,
+                    routine_name=None,
+                    scope_slug=scope_slug,
+                    class_="correctness",
+                    locus="a.py:1",
+                    summary="s",
+                    source="review",
+                    severity="should-fix",
+                    raised_by_chunk_id="ch_1",
+                )
+            )
         )
         conn.execute(
-            sa.text("INSERT INTO finding_facts (finding_id, kind, recorded_at) VALUES (:id, 'add', :now)"),
-            {"id": finding_id, "now": _NOW},
+            sa.insert(s.finding_facts).values(
+                stamp(s.finding_facts, finding_id=finding_id, kind="add", recorded_at=_NOW)
+            )
         )
 
 

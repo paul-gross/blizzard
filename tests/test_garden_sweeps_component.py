@@ -20,7 +20,7 @@ from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.garden_sweeps_store import GardenSweepsStore
 from blizzard.hub.store.internal.routine_scope_store import RoutineScopeStore
 from blizzard.hub.store.internal.scope_store import ScopeStore
-from tests.support import hub_store_connections, migrate_to, seed_chunk, seed_graph
+from tests.support import hub_store_connections, migrate_to, seed_chunk, seed_graph, stamp
 
 pytestmark = pytest.mark.component
 
@@ -42,34 +42,40 @@ def _routine(*, routine_id: str = "rtn_1", default_scope_slug: str = "blizzard")
 def _seed_routine(conn: sa.Connection, routine: Routine) -> None:
     conn.execute(
         insert(s.routines).values(
-            routine_id=routine.routine_id,
-            name=routine.name,
-            graph_name=routine.graph_name,
-            default_scope_slug=routine.default_scope_slug,
-            default_model=json.dumps([]),
-            default_effort=None,
-            created_at=routine.created_at,
+            stamp(
+                s.routines,
+                routine_id=routine.routine_id,
+                name=routine.name,
+                graph_name=routine.graph_name,
+                default_scope_slug=routine.default_scope_slug,
+                default_model=json.dumps([]),
+                default_effort=None,
+                created_at=routine.created_at,
+            )
         )
     )
 
 
 def _link(conn: sa.Connection, routine_id: str, scope_slug: str) -> None:
-    conn.execute(insert(s.routine_scopes).values(routine_id=routine_id, scope_slug=scope_slug))
+    conn.execute(insert(s.routine_scopes).values(stamp(s.routine_scopes, routine_id=routine_id, scope_slug=scope_slug)))
 
 
 def _seed_artifact(conn: sa.Connection, artifact_id: str, *, chunk_id: str, produced_at: datetime) -> None:
     conn.execute(
         insert(s.artifacts).values(
-            artifact_id=artifact_id,
-            chunk_id=chunk_id,
-            node_id="nd_1",
-            node_name="survey",
-            epoch=1,
-            name="findings",
-            kind="asset",
-            data="[]",
-            produced_at=produced_at,
-            seq=1,
+            stamp(
+                s.artifacts,
+                artifact_id=artifact_id,
+                chunk_id=chunk_id,
+                node_id="nd_1",
+                node_name="survey",
+                epoch=1,
+                name="findings",
+                kind="asset",
+                data="[]",
+                produced_at=produced_at,
+                seq=1,
+            )
         )
     )
 
@@ -87,13 +93,16 @@ def _seed_finding_set(
 ) -> None:
     conn.execute(
         insert(s.finding_sets).values(
-            finding_set_id=finding_set_id,
-            artifact_id=artifact_id,
-            chunk_id=chunk_id,
-            scope_slug=scope_slug,
-            routine_name=routine_name,
-            revisions=json.dumps(revisions),
-            measurement=measurement,
+            stamp(
+                s.finding_sets,
+                finding_set_id=finding_set_id,
+                artifact_id=artifact_id,
+                chunk_id=chunk_id,
+                scope_slug=scope_slug,
+                routine_name=routine_name,
+                revisions=json.dumps(revisions),
+                measurement=measurement,
+            )
         )
     )
 
@@ -110,7 +119,7 @@ def _service(engine: sa.Engine) -> GardenSweepsService:
 def _seed_common(conn: sa.Connection, routine: Routine) -> None:
     seed_graph(conn, "gr_1", at=_NOW)
     seed_chunk(conn, "ch_1", graph_id="gr_1", at=_NOW)
-    conn.execute(insert(s.scopes).values(slug="blizzard", description="", created_at=_NOW))
+    conn.execute(insert(s.scopes).values(stamp(s.scopes, slug="blizzard", description="", created_at=_NOW)))
     _seed_routine(conn, routine)
     _link(conn, routine.routine_id, "blizzard")
 
@@ -179,10 +188,12 @@ def test_last_swept_covers_the_declared_set_scoped_by_link_and_retirement(tmp_pa
         seed_graph(conn, "gr_1", at=_NOW)
         seed_chunk(conn, "ch_1", graph_id="gr_1", at=_NOW)
         for slug in all_slugs:
-            conn.execute(insert(s.scopes).values(slug=slug, description="", created_at=_NOW))
+            conn.execute(insert(s.scopes).values(stamp(s.scopes, slug=slug, description="", created_at=_NOW)))
         for slug in retired_slugs:
             conn.execute(
-                insert(s.scope_lifecycle_facts).values(slug=slug, retired=True, set_at=_NOW, set_by="operator")
+                insert(s.scope_lifecycle_facts).values(
+                    stamp(s.scope_lifecycle_facts, slug=slug, retired=True, set_at=_NOW, set_by="operator")
+                )
             )
         _seed_routine(conn, routine)
         for slug in linked_slugs:

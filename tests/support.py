@@ -1411,7 +1411,8 @@ def chunk_rows(hub: HubHarness, table: sa.Table, chunk_id: str) -> int:
 
 
 # Migration-test scaffolding: `graphs`/`chunks` carry no revision-pinned shape, so these
-# seeds are shared. A revision's own frozen table-under-test must NOT move here.
+# seeds are shared. A revision's own frozen table-under-test must NOT move here. `tenant_id`
+# is written only when the store the seed runs against has the column.
 
 _GRAPHS = sa.Table(
     "graphs",
@@ -1421,6 +1422,7 @@ _GRAPHS = sa.Table(
     sa.Column("entry_node_id", sa.String, nullable=False),
     sa.Column("definition_yaml", sa.Text, nullable=False),
     sa.Column("created_at", sa.DateTime, nullable=False),
+    sa.Column("tenant_id", sa.String),
 )
 
 _CHUNKS = sa.Table(
@@ -1429,7 +1431,16 @@ _CHUNKS = sa.Table(
     sa.Column("chunk_id", sa.String, primary_key=True),
     sa.Column("graph_id", sa.String, nullable=False),
     sa.Column("minted_at", sa.DateTime, nullable=False),
+    sa.Column("tenant_id", sa.String),
 )
+
+
+def _stamp_as_stored(conn: sa.Connection, table: sa.Table, values: dict[str, Any]) -> dict[str, Any]:
+    """``values`` carrying the store's only tenant when the store's own ``table`` has a ``tenant_id``
+    column — decided by the store's revision, not today's schema, so the seed fits any revision."""
+    if any(column["name"] == "tenant_id" for column in sa.inspect(conn).get_columns(table.name)):
+        values["tenant_id"] = sa.select(schema.tenants.c.tenant_id).scalar_subquery()
+    return values
 
 
 def migrate_to(tmp_path: Path, revision: str) -> tuple[MigrationRunner, Engine]:
@@ -1445,9 +1456,8 @@ def migrate_to(tmp_path: Path, revision: str) -> tuple[MigrationRunner, Engine]:
 
 def seed_graph(conn: sa.Connection, graph_id: str, *, at: datetime) -> None:
     """Seed one ``graphs`` parent row — the FK a seeded chunk needs, at any revision."""
-    conn.execute(
-        sa.insert(_GRAPHS).values(graph_id=graph_id, name="g", entry_node_id="nd_1", definition_yaml="", created_at=at)
-    )
+    values = {"graph_id": graph_id, "name": "g", "entry_node_id": "nd_1", "definition_yaml": "", "created_at": at}
+    conn.execute(sa.insert(_GRAPHS).values(_stamp_as_stored(conn, _GRAPHS, values)))
 
 
 def mint_graph(engine: Engine, graph_id: str, *, name: str, nodes: dict[str, str], at: datetime) -> None:
@@ -1478,7 +1488,8 @@ def mint_graph(engine: Engine, graph_id: str, *, name: str, nodes: dict[str, str
 
 def seed_chunk(conn: sa.Connection, chunk_id: str, *, graph_id: str, at: datetime) -> None:
     """Seed one ``chunks`` parent row — the FK a seeded route/pointer/etc. needs."""
-    conn.execute(sa.insert(_CHUNKS).values(chunk_id=chunk_id, graph_id=graph_id, minted_at=at))
+    values = {"chunk_id": chunk_id, "graph_id": graph_id, "minted_at": at}
+    conn.execute(sa.insert(_CHUNKS).values(_stamp_as_stored(conn, _CHUNKS, values)))
 
 
 def seed_lease(engine: Engine, chunk_id: str, *, epoch: int, runner_id: str, at: datetime) -> None:

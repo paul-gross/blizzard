@@ -44,7 +44,15 @@ from blizzard.hub.work_sources.closer import WorkItemGoneError
 from blizzard.hub.work_sources.editor import WorkItemRefUnknownError
 from blizzard.hub.work_sources.internal.hub_work_source import HubWorkSource
 from blizzard.hub.work_sources.source import WorkSourceError
-from tests.support import chunk_stores, hub_store_connections, migrate_to, seed_chunk_record, seed_graph, seed_work_item
+from tests.support import (
+    chunk_stores,
+    hub_store_connections,
+    migrate_to,
+    seed_chunk_record,
+    seed_graph,
+    seed_work_item,
+    stamp,
+)
 
 pytestmark = pytest.mark.component
 
@@ -617,7 +625,7 @@ def _seed_accepted_proposal(engine: Engine, *, pointer: WorkRef, finding_id: str
     `pointer` — the shape `close()` must resolve through. Returns the proposal id."""
     store = hub_store_connections(engine)
     with engine.begin() as conn:
-        conn.execute(insert(s.scopes).values(slug="blizzard", description="", created_at=_T0))
+        conn.execute(insert(s.scopes).values(stamp(s.scopes, slug="blizzard", description="", created_at=_T0)))
     FindingStore(store).add(
         finding_id,
         routine_name="nightly",
@@ -642,14 +650,17 @@ def _seed_accepted_proposal(engine: Engine, *, pointer: WorkRef, finding_id: str
     with engine.begin() as conn:
         conn.execute(
             insert(s.garden_proposal_closures).values(
-                proposal_id=proposal_id,
-                closure="accepted",
-                reason=None,
-                closed_by="u_1",
-                closed_at=_T0,
-                item_outcome="minted",
-                source=pointer.source,
-                ref=pointer.ref,
+                stamp(
+                    s.garden_proposal_closures,
+                    proposal_id=proposal_id,
+                    closure="accepted",
+                    reason=None,
+                    closed_by="u_1",
+                    closed_at=_T0,
+                    item_outcome="minted",
+                    source=pointer.source,
+                    ref=pointer.ref,
+                )
             )
         )
     return proposal_id
@@ -753,10 +764,12 @@ def test_close_never_redelivers_a_proposal_a_legacy_resolved_fact_already_closed
     with engine.begin() as conn:
         conn.execute(
             insert(s.finding_facts).values(
-                finding_id="fin_1", kind="resolved", recorded_at=_T0, proposal_id=proposal_id
+                stamp(s.finding_facts, finding_id="fin_1", kind="resolved", recorded_at=_T0, proposal_id=proposal_id)
             )
         )
-        conn.execute(insert(s.finding_facts).values(finding_id="fin_1", kind="observed", recorded_at=_T0))
+        conn.execute(
+            insert(s.finding_facts).values(stamp(s.finding_facts, finding_id="fin_1", kind="observed", recorded_at=_T0))
+        )
 
     source.close(pointer, trace=None)
 
@@ -784,7 +797,7 @@ def test_close_with_no_garden_proposal_behind_it_leaves_findings_untouched(tmp_p
     pointer = WorkRef(source="hub", ref=created.ref)
     # A finding exists, but no proposal or closure names this item at all.
     with engine.begin() as conn:
-        conn.execute(insert(s.scopes).values(slug="blizzard", description="", created_at=_T0))
+        conn.execute(insert(s.scopes).values(stamp(s.scopes, slug="blizzard", description="", created_at=_T0)))
     FindingStore(hub_store_connections(engine)).add(
         "fin_1",
         routine_name="nightly",

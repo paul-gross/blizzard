@@ -31,7 +31,7 @@ from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStor
 from blizzard.hub.store.schema import garden_proposal_findings, garden_proposals
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.tenancy import StoreScope, TenantId
-from tests.support import hub_store_connections
+from tests.support import hub_store_connections, stamp
 
 pytestmark = pytest.mark.component
 
@@ -184,7 +184,11 @@ def test_an_attach_racing_a_link_holding_the_row_raises_already_linked_not_an_in
         .where(garden_proposals.c.proposal_id == proposal.proposal_id)
         .values(proposal_id=proposal.proposal_id)
     )
-    holder.execute(insert(garden_proposal_findings).values(proposal_id=proposal.proposal_id, finding_id="fin_1"))
+    holder.execute(
+        insert(garden_proposal_findings).values(
+            stamp(garden_proposal_findings, proposal_id=proposal.proposal_id, finding_id="fin_1")
+        )
+    )
 
     attach_done = threading.Event()
     attach_outcome: list[BaseException | None] = []
