@@ -11,7 +11,7 @@ import json
 from collections.abc import Iterable, Sequence
 from datetime import datetime
 
-from sqlalchemy import Connection, select
+from sqlalchemy import Connection
 
 from blizzard.foundation.store.batching import id_batches
 from blizzard.foundation.store.utc import as_utc
@@ -106,40 +106,6 @@ class RunnerRegistryStore:
                 )
                 for row in rows
             ]
-
-    def is_token_revoked(self, token_hash: str) -> bool:
-        with self._store.read("is_token_revoked") as conn:
-            row = conn.execute(
-                select(s.runner_token_revocations.c.id)
-                .where(s.runner_token_revocations.c.token_hash == token_hash)
-                .limit(1)
-            ).first()
-            return row is not None
-
-    def revoked_token_runner_id(self, token_hash: str) -> str | None:
-        with self._store.read("revoked_token_runner_id") as conn:
-            return conn.execute(
-                select(s.runner_token_revocations.c.runner_id)
-                .where(s.runner_token_revocations.c.token_hash == token_hash)
-                .order_by(s.runner_token_revocations.c.id.desc())
-                .limit(1)
-            ).scalar_one_or_none()
-
-    def registration_for_token_hash(self, token_hash: str) -> RunnerRegistration | None:
-        with self._store.read("registration_for_token_hash") as conn:
-            row = conn.execute(
-                select(s.runner_registrations).where(s.runner_registrations.c.token_hash == token_hash)
-            ).one_or_none()
-            if row is None:
-                return None
-            return self._registration(
-                row,
-                self._paused(conn, row.runner_id),
-                self._local_pause_detail(conn, row.runner_id),
-                self._external_usage(conn, row.runner_id),
-                self._external_usage_misses(conn, row.runner_id),
-                self._lifecycle(conn, row.runner_id),
-            )
 
     def list_pause_facts_since(self, since: datetime, *, limit: int) -> list[RecordedPause]:
         with self._store.read("list_pause_facts_since") as conn:

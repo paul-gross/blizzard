@@ -135,7 +135,7 @@ def test_registration_records_the_tokens_runner_whatever_the_body_declares(tmp_p
     assert registered is not None and registered.workspace_id == "ws-b"
 
 
-# `registration_for_token_hash` resolves the right row among several
+# a runner token resolves the right row among several
 
 
 def test_each_runners_token_resolves_only_its_own_registration(tmp_path: Path) -> None:

@@ -1,6 +1,5 @@
 """The fleet-registry store (``RunnerRegistryStore``) at its own seam — adding a runner, its first and
-later registrations, the heartbeat, the batched name read, the revoked-hash lookup, and the listing
-order."""
+later registrations, the heartbeat, the batched name read, and the listing order."""
 
 from __future__ import annotations
 
@@ -12,7 +11,7 @@ import sqlalchemy as sa
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
-from blizzard.hub.domain.runners.registration import RunnerAddition, RunnerRegistration, TokenRotation
+from blizzard.hub.domain.runners.registration import RunnerAddition, RunnerRegistration
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
@@ -52,9 +51,6 @@ def test_an_added_runner_holds_its_name_and_token_and_is_never_connected(tmp_pat
     assert (added.name, added.added_at, added.added_by, added.token_hash) == ("r-claude", _T0, "admin", "hash-rn_1")
     assert (added.workspace_id, added.registered_at, added.last_seen_at) == (None, None, None)
     assert added.never_connected()
-    # Its token already resolves — that is how its first registration authenticates.
-    resolved = store.registration_for_token_hash("hash-rn_1")
-    assert resolved is not None and resolved.runner_id == "rn_1"
 
 
 def test_adding_an_id_twice_is_refused(tmp_path: Path) -> None:
@@ -125,19 +121,6 @@ def test_names_for_answers_every_known_id_in_one_query(tmp_path: Path) -> None:
     assert count_queries(engine, read) == 1
     assert names == {"rn_1": "twin", "rn_2": "twin"}
     assert count_queries(engine, lambda: store.names_for([])) == 0
-
-
-def test_a_revoked_hash_names_the_runner_it_was_issued_to(tmp_path: Path) -> None:
-    store = _store(tmp_path)
-    _add(store, "rn_rotated")
-    _add(store, "rn_revoked")
-    store.rotate_token(TokenRotation("rn_rotated", "hash-current", at=_T0, by="admin"))
-    store.revoke_token("rn_revoked", at=_T0, by="admin")  # as retiring a runner does
-
-    assert store.revoked_token_runner_id("hash-rn_rotated") == "rn_rotated"
-    assert store.revoked_token_runner_id("hash-rn_revoked") == "rn_revoked"
-    assert store.revoked_token_runner_id("hash-current") is None
-    assert store.revoked_token_runner_id("hash-never-issued") is None
 
 
 def test_runners_list_oldest_added_first_with_the_id_breaking_a_tie(tmp_path: Path) -> None:

@@ -21,7 +21,7 @@ from pydantic import BaseModel
 
 from blizzard.auth_core import Permission
 from blizzard.foundation.roles import dto
-from blizzard.hub.api.auth import reject_runner_principal
+from blizzard.hub.api.auth import reject_runner_principal, runner_signing_in
 from blizzard.hub.api.auth_session import require, resolve_identity
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.auth.service import CLI_CLIENT_ID
@@ -211,7 +211,7 @@ def authorize(
     else:
         # One undifferentiated 400 for an unknown client and an unregistered redirect URI, so a caller cannot
         # fingerprint client ids by probing; a retired runner's ``RunnerRetired`` (403) reaches the app handler.
-        registration = services.registry.get_runner(client)
+        registration = runner_signing_in(services, client)
         unregistered = registration is None
         if registration is not None:
             try:

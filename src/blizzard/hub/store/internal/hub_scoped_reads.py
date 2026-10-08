@@ -7,7 +7,8 @@ and the identity reads of memberships and hub administrators. A group reads over
 :class:`HubStoreConnections` and never writes; every statement it issues runs on a connection
 :func:`hub_scoped_read` marks with :data:`HUB_SCOPED_OPTION`, which exempts it from the tenant
 statement guard. A group lives in a module of its own beside this one, named ``hub_scoped_<kind>``,
-and the aggregate names it once. The composition root takes the seam whole through
+and the aggregate names it once; such a group takes :func:`hub_scoped_read` already bound to the
+connections, so it never holds an unmarked one. The composition root takes the seam whole through
 :func:`build_hub_scoped_reads`, so no member group lands in a namespace another module imports."""
 
 from __future__ import annotations
@@ -15,10 +16,12 @@ from __future__ import annotations
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
+from functools import partial
 
 from sqlalchemy import Connection, select
 
 from blizzard.hub.store.errors import HubStoreConnections
+from blizzard.hub.store.internal.hub_scoped_credentials import CredentialReads
 from blizzard.hub.store.schema import tenant_deletions, tenants
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION, TenantClosed, TenantId, UnknownTenant
 
@@ -55,8 +58,12 @@ class HubScopedReads:
     """Every read that spans tenants, one member group per kind."""
 
     tenants: TenantStateReads
+    credentials: CredentialReads
 
 
 def build_hub_scoped_reads(connections: HubStoreConnections) -> HubScopedReads:
     """The seam over the hub-level ``connections``, every member group built."""
-    return HubScopedReads(tenants=TenantStateReads(connections))
+    return HubScopedReads(
+        tenants=TenantStateReads(connections),
+        credentials=CredentialReads(partial(hub_scoped_read, connections)),
+    )

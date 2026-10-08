@@ -2,6 +2,9 @@
 
 A presented token resolves by sha256-hex-digest lookup against the stored hash column;
 that selection **is** the match, so no separate ``hmac.compare_digest`` is load-bearing.
+The lookup spans tenants — no tenant is known until it answers — so it runs through the
+hub-scoped credential reads and names the runner's tenant; the registration itself is then read
+through that tenant's own registry.
 """
 
 from __future__ import annotations
@@ -21,6 +24,7 @@ from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.observability.tracing.attributes import RUNNER_ID, RUNNER_NAME
 from blizzard.hub.domain.runners.registration import RunnerRegistration, RunnerTokenRefused, refuse_runner_token
+from blizzard.hub.tenancy import TenantClosed, TenantId, UnknownTenant
 
 _log = get_logger("blizzard.hub.auth")
 
@@ -73,7 +77,10 @@ class RunnerAuth:
         token = presented_bearer(self.request)
         if token is None:
             return None
-        registration = self.services.registry.registration_for_token_hash(TokenHash(token).hex)
+        resolved = self.services.hub_scoped_reads.credentials.runner_for_token_hash(TokenHash(token).hex)
+        if resolved is None:
+            return None
+        registration = _registration_in_tenant(self.services, resolved.tenant, resolved.runner_id)
         if registration is None:
             return None
         self.request.scope[_REGISTRATION_SCOPE_KEY] = registration
@@ -94,7 +101,8 @@ class RunnerAuth:
                 registration.refuse_if_retired(action="fleet call")
             return principal
         token = presented_bearer(self.request)
-        if token is not None and self.services.registry.is_token_revoked(TokenHash(token).hex):
+        credentials = self.services.hub_scoped_reads.credentials
+        if token is not None and credentials.revoked_token_runner(TokenHash(token).hex) is not None:
             _log.warning("revoked runner token presented", path=self.request.url.path)
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="bearer token has been revoked")
         reason = (
@@ -114,10 +122,14 @@ class RunnerAuth:
         if token is None:
             raise RunnerTokenRefused(RunnerTokenRefusalReason.MISSING)
         token_hash = TokenHash(token).hex
-        registry = self.services.registry
-        current = registry.registration_for_token_hash(token_hash)
-        revoked_runner_id = registry.revoked_token_runner_id(token_hash) if current is None else None
-        revoked_for = registry.get_runner(revoked_runner_id) if revoked_runner_id is not None else None
+        credentials = self.services.hub_scoped_reads.credentials
+        resolved = credentials.runner_for_token_hash(token_hash)
+        current = None
+        if resolved is not None:
+            current = _registration_in_tenant(self.services, resolved.tenant, resolved.runner_id)
+        revoked_for = None
+        if current is None and (revoked := credentials.revoked_token_runner(token_hash)) is not None:
+            revoked_for = _registration_in_tenant(self.services, revoked.tenant, revoked.runner_id)
         return refuse_runner_token(current, revoked_for=revoked_for)
 
     def refuse_runner(self) -> None:
@@ -134,6 +146,26 @@ class RunnerAuth:
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"runner token for {principal.runner_id!r} is not valid on an operator verb",
         )
+
+
+def _registration_in_tenant(services: HubServices, tenant: TenantId, runner_id: str) -> RunnerRegistration | None:
+    """``runner_id``'s registration, read through the registry of ``tenant`` — the tenant a credential
+    resolved it to — or ``None`` when that tenant has no registration of it or no stores to open."""
+    try:
+        registry = services.tenant_registry(tenant)
+    except (UnknownTenant, TenantClosed):
+        return None
+    return registry.get_runner(runner_id)
+
+
+def runner_signing_in(services: HubServices, client: str) -> RunnerRegistration | None:
+    """The runner a sign-in names as its ``client``, read in the runner's own tenant, or ``None``
+    when no open tenant holds a runner of that id. A runner id is hub-minted, so the client alone
+    settles the tenant."""
+    resolved = services.hub_scoped_reads.credentials.runner_by_id(client)
+    if resolved is None:
+        return None
+    return _registration_in_tenant(services, resolved.tenant, resolved.runner_id)
 
 
 def require_runner_principal(

@@ -231,6 +231,12 @@ class HubServices:
     enrollment: RunnerEnrollmentService
     #: The fleet registry's read Protocol — the same store instance as ``fleet``'s writes.
     registry: IReadRunnerRegistry
+    #: The hub-scoped reads a runner's credential resolves its tenant through — held only by the
+    #: runner-auth edge (``bzh:hub-scoped-reads-confined``).
+    hub_scoped_reads: HubScopedReads
+    #: The read registry of the tenant a runner credential resolved to; raises ``UnknownTenant`` or
+    #: ``TenantClosed`` for a tenant there are no stores to open for.
+    tenant_registry: Callable[[TenantId], IReadRunnerRegistry]
     hub_node: HubNodeExecutor
     #: The mid-run marker-write capability authority — one shared instance,
     #: so every reader agrees on the one live token per (chunk, node, epoch).
@@ -1021,6 +1027,8 @@ def build_services(
         fleet=fleet,
         enrollment=enrollment,
         registry=registry_store,
+        hub_scoped_reads=core.hub_scoped_reads,
+        tenant_registry=lambda tenant: core.open(StoreScope(tenant)).registry,
         hub_node=hub_node,
         marker_authority=marker_authority,
         events=events,

@@ -111,6 +111,7 @@ from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStor
 from blizzard.hub.store.internal.garden_run_store import GardenRunStore
 from blizzard.hub.store.internal.garden_sweeps_store import GardenSweepsStore
 from blizzard.hub.store.internal.garden_trend_store import GardenTrendStore
+from blizzard.hub.store.internal.hub_scoped_credentials import CredentialReads
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
 from blizzard.hub.store.internal.secret_store import SecretStore
 from blizzard.hub.store.internal.trace_store import TraceStore
@@ -1810,7 +1811,7 @@ HubRecipe = Callable[[HubWorld], object]
 
 #: Every reflected hub ``(Protocol, method)``, mapped to a recipe against :func:`build_hub_world`'s world.
 #: Hub read seams named outside the ``IRead*`` convention, reflected beside it.
-HUB_NAMED_READ_SEAMS: tuple[type, ...] = (ISecretCatalog,)
+HUB_NAMED_READ_SEAMS: tuple[type, ...] = (ISecretCatalog, CredentialReads)
 
 HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadAuthStateRepository, "get"): lambda w: w.auth_state.get(w.auth_state_value),
@@ -2058,12 +2059,14 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     ),
     (IReadRunnerRegistry, "get_runner"): lambda w: w.hub.services.registry.get_runner(HUB_RUNNER_ID),
     (IReadRunnerRegistry, "list_runners"): lambda w: w.hub.services.registry.list_runners(),
-    (IReadRunnerRegistry, "registration_for_token_hash"): lambda w: w.hub.services.registry.registration_for_token_hash(
-        w.runner_token_hash
+    (CredentialReads, "runner_for_token_hash"): lambda w: (
+        w.hub.services.hub_scoped_reads.credentials.runner_for_token_hash(w.runner_token_hash)
     ),
-    (IReadRunnerRegistry, "is_token_revoked"): lambda w: w.hub.services.registry.is_token_revoked(w.runner_token_hash),
-    (IReadRunnerRegistry, "revoked_token_runner_id"): lambda w: w.hub.services.registry.revoked_token_runner_id(
-        w.runner_token_hash
+    (CredentialReads, "revoked_token_runner"): lambda w: (
+        w.hub.services.hub_scoped_reads.credentials.revoked_token_runner(w.runner_token_hash)
+    ),
+    (CredentialReads, "runner_by_id"): lambda w: w.hub.services.hub_scoped_reads.credentials.runner_by_id(
+        HUB_RUNNER_ID
     ),
     (IReadRunnerRegistry, "list_pause_facts_since"): lambda w: w.hub.services.registry.list_pause_facts_since(
         _HUB_BASE, limit=50
