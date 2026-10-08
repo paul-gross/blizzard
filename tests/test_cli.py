@@ -20,8 +20,7 @@ from sqlalchemy import insert
 from blizzard.cli.main import blizzard
 from blizzard.cli.operator_trace import UNTRACED
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.runner.cli.daemon import LOCAL_CLIENT_TIMEOUT
-from blizzard.runner.cli.transcript import _daemon_holding
+from blizzard.runner.cli.daemon import LOCAL_CLIENT_TIMEOUT, daemon_holding
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.store import schema as runner_schema
 from tests.runner_init_fakes import init_runner
@@ -380,7 +379,7 @@ def test_a_stale_socket_file_is_not_a_serving_daemon(tmp_path: Path) -> None:
     assert init_runner().invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
     RunnerConfig.socket_path_for(root).write_bytes(b"")
 
-    assert _daemon_holding(RunnerConfig.load(root), UNTRACED) is None
+    assert daemon_holding(root, UNTRACED) is None
 
 
 def test_a_daemon_answering_its_socket_is_holding_the_store(tmp_path: Path) -> None:
@@ -389,7 +388,7 @@ def test_a_daemon_answering_its_socket_is_holding_the_store(tmp_path: Path) -> N
     server = _serve_on(RunnerConfig.socket_path_for(root), _OK)
 
     try:
-        assert _daemon_holding(RunnerConfig.load(root), UNTRACED) is not None
+        assert daemon_holding(root, UNTRACED) is not None
     finally:
         server.close()
 
@@ -403,7 +402,7 @@ def test_an_ambiguous_liveness_answer_fails_closed(reply: bytes | None, expected
     server = _serve_on(RunnerConfig.socket_path_for(root), reply)
 
     try:
-        holding = _daemon_holding(RunnerConfig.load(root), UNTRACED)
+        holding = daemon_holding(root, UNTRACED)
     finally:
         server.close()
 

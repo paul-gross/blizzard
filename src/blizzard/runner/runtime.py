@@ -1,12 +1,16 @@
 """Offline store administration for the runner (``bzh:manual-migrations``).
 
-The ``init``/``migrate`` verbs run while the daemon is **down** — the only carve-out to
-"only a daemon opens its own store". ``init`` is idempotent; ``Migrations.check_current``
-is the startup guard that refuses to run on a schema mismatch."""
+The ``init``/``migrate``/``store reset`` verbs run while the daemon is **down** — the only carve-out
+to "only a daemon opens its own store". ``init`` is idempotent; ``Migrations.check_current``
+is the startup guard that refuses to run on a schema mismatch. A store is never deleted: resetting
+one moves its files aside under a timestamped name and migrates a fresh one in their place."""
 
 from __future__ import annotations
 
+import contextlib
+import sqlite3
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
 from blizzard.foundation.logging import get_logger
@@ -17,6 +21,10 @@ from blizzard.runner.harness.wiring import declared
 from blizzard.runner.store import MIGRATIONS_DIR, STORE_NAME
 
 MIGRATE_COMMAND = "blizzard runner migrate"
+STORE_RESET_COMMAND = "blizzard runner store reset"
+
+#: The files beside a SQLite database that hold part of it, each moved aside under the database's new name.
+_SQLITE_SIBLING_SUFFIXES = ("-wal", "-shm", "-journal")
 
 _log = get_logger("blizzard.runner.runtime")
 
@@ -35,6 +43,63 @@ class Migrations:
     def check_current(self) -> None:
         """Refuse to run on a store-revision mismatch, naming the migrate command."""
         self.runner.check_current(store=STORE_NAME, remedy=f"{MIGRATE_COMMAND} --dir {self.config.root}")
+
+
+class StoreResetRefused(Exception):
+    """The store cannot be moved aside — it is not a SQLite file, or its stamped name is taken."""
+
+
+def reset_command(root: Path) -> str:
+    """The command that moves ``root``'s store aside and starts a fresh one."""
+    return f"{STORE_RESET_COMMAND} {root}"
+
+
+def sqlite_store_file(db_url: str) -> Path:
+    """The database file a ``sqlite:///<path>`` store URL names. Raises :class:`StoreResetRefused`
+    for any other store — a server database or an in-memory one has no file to move aside."""
+    scheme, sep, rest = db_url.partition("://")
+    location = rest.split("?", 1)[0].removeprefix("/")
+    if not sep or scheme.split("+", 1)[0] != "sqlite" or location in ("", ":memory:"):
+        raise StoreResetRefused(
+            f"the runner store at {db_url} is not a SQLite file, so it cannot be moved aside; "
+            "clear it with that database's own tools"
+        )
+    return Path(location)
+
+
+@domain_model
+@dataclass(frozen=True)
+class SetAsideStore:
+    """A runner store moved aside: each file that held it, under its stamped name."""
+
+    moved: tuple[Path, ...]
+
+
+def set_aside_sqlite(database: Path, *, now: datetime) -> SetAsideStore:
+    """Move ``database`` and its siblings aside under ``<name>.<UTC stamp>``, never deleting any.
+
+    The write-ahead log is folded into the database first, so the database moves in one rename and a
+    sibling left behind by a crash between renames holds nothing a fresh store at the old name would
+    replay. Raises :class:`StoreResetRefused` when a stamped name is already taken."""
+    stamp = now.astimezone(UTC).strftime("%Y%m%dT%H%M%SZ")
+    aside = database.with_name(f"{database.name}.{stamp}")
+    present = [
+        (database.with_name(database.name + suffix), aside.with_name(aside.name + suffix))
+        for suffix in ("", *_SQLITE_SIBLING_SUFFIXES)
+        if database.with_name(database.name + suffix).exists()
+    ]
+    taken = [target for _, target in present if target.exists()]
+    if taken:
+        raise StoreResetRefused(f"cannot move the runner store aside: {taken[0]} already exists")
+    if database.exists():
+        with contextlib.closing(sqlite3.connect(database)) as conn:
+            conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    moved: list[Path] = []
+    for source, target in present:
+        if source.exists():
+            source.rename(target)
+            moved.append(target)
+    return SetAsideStore(moved=tuple(moved))
 
 
 @collaborator
@@ -81,6 +146,18 @@ class Runtime:
         _log.info("runner store migrated to head", root=str(root), db_url=config.db_url)
         return config
 
+    def reset_store(self, *, now: datetime) -> SetAsideStore:
+        """Move the store aside under a ``now``-stamped name and migrate a fresh one to head in its
+        place. Never deletes. The daemon must be down: its caller refuses while one answers."""
+        config = RunnerConfig.load(self.root)
+        moved = set_aside_sqlite(sqlite_store_file(config.db_url), now=now)
+        try:
+            Migrations(config).runner.upgrade("head")
+        except MigrationConnectionError as exc:
+            raise ConfigError(f"cannot open the runner store at {config.db_url}: {exc}") from exc
+        _log.info("runner store set aside", root=str(self.root), moved=[str(p) for p in moved.moved])
+        return moved
+
     def migrate(self, *, down: str | None = None) -> None:
         """Apply pending revisions, or reverse to ``down`` when given."""
         runner = Migrations(RunnerConfig.load(self.root)).runner
@@ -111,11 +188,17 @@ def ensure_current_revision(config: RunnerConfig) -> None:
 __all__ = [
     "CONFIG_FILENAME",
     "MIGRATE_COMMAND",
+    "STORE_RESET_COMMAND",
     "Migrations",
     "RunnerConfig",
     "Runtime",
+    "SetAsideStore",
+    "StoreResetRefused",
     "ensure_current_revision",
     "init_environment",
     "migrate",
     "migration_runner",
+    "reset_command",
+    "set_aside_sqlite",
+    "sqlite_store_file",
 ]

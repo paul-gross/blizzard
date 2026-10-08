@@ -1281,6 +1281,32 @@
       "path": "runner status",
       "short_help": "The machine-local view: capacities, held environments, open asks, escalations, open takeovers."
     },
+    "store": {
+      "commands": {
+        "reset": {
+          "help": "Move the store under DIRECTORY aside under a timestamped name, then migrate a fresh one.\n\nNothing is deleted: the old store keeps its undelivered events and in-flight leases beside the\nnew one. Refused while the runner's daemon answers on its socket, and for a store that is not a\nSQLite file. DIRECTORY defaults to $BZ_RUNNER_DIR, then the cwd.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "directory",
+              "opts": [
+                "directory"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "runner store reset",
+          "short_help": "Move the store under DIRECTORY aside under a timestamped name, then migrate a fresh one."
+        }
+      },
+      "help": "Administer the runner's local store while its daemon is down.",
+      "params": [],
+      "path": "runner store",
+      "short_help": "Administer the runner's local store while its daemon is down."
+    },
     "takeover": {
       "help": "Take over a parked chunk: exec the interactive resume command in this terminal. The\ntakeover fact is recorded before anything else runs, so no loop step can respawn or judge the\nsession while it is open; the lease token travels only in the response body and the exec, never\nprinted. ``--force`` supersedes a live worker attempt instead of refusing. An interrupted session\nstill closes the takeover.",
       "params": [

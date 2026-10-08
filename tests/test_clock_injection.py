@@ -78,6 +78,7 @@ _CLOCK_COMPOSITION_ROOTS: dict[Path, str] = {
     _HUB_DIR / "cli" / "egress.py": "a short-lived CLI process's own composition root",
     _RUNNER_DIR / "cli" / "traces.py": "a short-lived CLI process's own composition root",
     _RUNNER_DIR / "cli" / "runtime.py": "a short-lived CLI process's own composition root",
+    _RUNNER_DIR / "cli" / "store.py": "a short-lived CLI process's own composition root",
     _RUNNER_DIR / "cli" / "external_usage.py": "a short-lived CLI process's own composition root",
 }
 

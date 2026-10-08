@@ -17,6 +17,7 @@ _COMMANDS = {
     "migrate": f"{_CLI}.runtime:migrate_cmd",
     "host": f"{_CLI}.runtime:host",
     "tick": f"{_CLI}.runtime:tick_cmd",
+    "store": f"{_CLI}.store:store_group",
     "external-usage": f"{_CLI}.external_usage:external_usage_group",
     "heartbeat": f"{_CLI}.worker:heartbeat",
     "session-end": f"{_CLI}.worker:session_end",

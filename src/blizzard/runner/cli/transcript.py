@@ -3,11 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 
 import click
-import httpx
 
 from blizzard.cli.operator_trace import ITraceHeaders, OperatorTrace
 from blizzard.foundation.store.migrations import RevisionMismatchError
-from blizzard.runner.cli.daemon import uds_client
+from blizzard.runner.cli.daemon import daemon_holding
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.config import ConfigError, RunnerConfig
 from blizzard.runner.loop_wiring import LoopWiring
@@ -20,25 +19,6 @@ def transcript_group() -> None:
     """Operator: maintenance over this runner's own transcript lane."""
 
 
-def _daemon_holding(config: RunnerConfig, trace: ITraceHeaders) -> str | None:
-    """What is holding this runtime's socket, or ``None`` when nothing is — the single-writer
-    guard's probe. Fail-closed by design (pinned by
-    tests/test_cli.py::test_an_ambiguous_liveness_answer_fails_closed)."""
-    sock = RunnerConfig.socket_path_for(config.root)
-    if not sock.exists():
-        return None
-    try:
-        with uds_client(sock, trace) as client:
-            response = client.get("/api/health")
-    except httpx.ConnectError:
-        return None  # a socket file an ungraceful exit left behind — nothing is listening on the corpse
-    except httpx.HTTPError as exc:
-        return f"something holds {sock} but did not answer its health probe ({exc})"
-    if response.status_code != 200:
-        return f"something holds {sock} and answered its health probe {response.status_code}"
-    return f"a runner daemon is serving at {sock}"
-
-
 def _transcript_config(directory: str, *, verb: str, trace: ITraceHeaders) -> RunnerConfig:
     """Every store-writing transcript verb's guards — shared so a second verb cannot ship
     with fewer of them than the first."""
@@ -48,7 +28,7 @@ def _transcript_config(directory: str, *, verb: str, trace: ITraceHeaders) -> Ru
         raise click.ClickException(str(exc)) from exc
     if not config.transcripts_ship:
         raise click.ClickException(f"[transcripts] ship is false — enable the lane before {verb} into it")
-    holding = _daemon_holding(config, trace)
+    holding = daemon_holding(config.root, trace)
     if holding is not None:
         raise click.ClickException(f"{holding} — stop it first: this verb writes the store, which is single-writer")
     try:
