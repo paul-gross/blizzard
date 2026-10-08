@@ -19,7 +19,7 @@ from blizzard.hub.domain.garden.findings.model import FACT_KINDS, FindingFact, d
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
-from tests.support import count_queries, count_rows_read, hub_store_connections, stamp
+from tests.support import count_queries, count_rows_read, default_tenant, hub_store_connections, stamp
 
 pytestmark = pytest.mark.component
 
@@ -36,7 +36,10 @@ def _store_and_engine(tmp_path: Path) -> tuple[FindingStore, Engine]:
     engine = create_engine_from_url(db_url)
     with engine.begin() as conn:
         conn.execute(
-            sa.text("INSERT INTO scopes (slug, description, created_at) VALUES ('blizzard', '', :now)"), {"now": _T0}
+            sa.text(
+                "INSERT INTO scopes (slug, description, created_at, tenant_id) VALUES ('blizzard', '', :now, :tenant)"
+            ),
+            {"now": _T0, "tenant": default_tenant(engine)},
         )
     return FindingStore(hub_store_connections(engine)), engine
 

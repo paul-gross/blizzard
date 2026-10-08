@@ -17,6 +17,7 @@ from tests.support import migrate_to, seed_chunk, seed_graph
 pytestmark = pytest.mark.component
 
 _BEFORE = "20260920_1200_finding_delivered_state"  # the head just before this revision
+_AFTER = "20260922_1000_review_findings"  # the revision under test; later revisions require a tenant on these rows
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 _SCOPES = sa.Table(
@@ -62,7 +63,7 @@ def _seed_preexisting_finding(tmp_path: Path):  # type: ignore[no-untyped-def]
 def test_upgrade_backfills_preexisting_rows_to_source_routine(tmp_path: Path) -> None:
     runner, _ = _seed_preexisting_finding(tmp_path)
 
-    runner.upgrade("head")
+    runner.upgrade(_AFTER)
 
     engine = create_engine_from_url(f"sqlite:///{tmp_path / 'hub.db'}")
     with engine.connect() as conn:
@@ -72,7 +73,7 @@ def test_upgrade_backfills_preexisting_rows_to_source_routine(tmp_path: Path) ->
 
 def test_upgrade_admits_a_null_routine_name_review_sourced_row(tmp_path: Path) -> None:
     runner, _ = _seed_preexisting_finding(tmp_path)
-    runner.upgrade("head")
+    runner.upgrade(_AFTER)
     engine = create_engine_from_url(f"sqlite:///{tmp_path / 'hub.db'}")
 
     with engine.begin() as conn:
@@ -91,7 +92,7 @@ def test_upgrade_admits_a_null_routine_name_review_sourced_row(tmp_path: Path) -
 
 def test_downgrade_restores_the_old_shape_and_coalesces_a_null_routine_name(tmp_path: Path) -> None:
     runner, _ = _seed_preexisting_finding(tmp_path)
-    runner.upgrade("head")
+    runner.upgrade(_AFTER)
     engine = create_engine_from_url(f"sqlite:///{tmp_path / 'hub.db'}")
     with engine.begin() as conn:
         conn.execute(

@@ -182,28 +182,18 @@ def test_hot_path_read_plans_as_an_index_search(tmp_path: Path, label: str, sql:
     assert _plan_uses_index(plan, index_name), (label, plan)
 
 
-def test_spend_by_node_plans_through_the_node_index_when_unfiltered(tmp_path: Path) -> None:
-    """`ix_usage_facts_node_id` serves `spend_by_node`'s `GROUP BY` with no scan and no
-    temp B-tree when the caller passes no date range."""
+@pytest.mark.parametrize(
+    "criteria", [OperationalCriteria(), OperationalCriteria(since=_NOW, until=_NOW)], ids=["unfiltered", "windowed"]
+)
+def test_spend_by_node_plans_through_the_tenant_range_index_and_sorts_for_group_by(
+    tmp_path: Path, criteria: OperationalCriteria
+) -> None:
+    """`spend_by_node` searches the tenant's rows through `ix_usage_facts_tenant_recorded_at_id`,
+    windowed or not, and the `GROUP BY` sorts them in a temp B-tree; `ix_usage_facts_node_id`,
+    which would order the groups, spans every tenant and goes unused. Accepted, not fixed: the
+    tenant's equality prefix (and a window's range) is the more selective predicate, and the
+    node index keeps its hub-wide shape because `node_id` is hub-minted."""
     engine = _engine(tmp_path)
-    compiled = str(
-        _spend_by_node_stmt(hub_store_connections(engine), OperationalCriteria()).compile(
-            dialect=sqlite.dialect(), compile_kwargs={"literal_binds": True}
-        )
-    )
-    with engine.connect() as conn:
-        plan = conn.execute(sa.text(f"EXPLAIN QUERY PLAN {compiled}")).all()
-    assert _plan_uses_index(plan, "ix_usage_facts_node_id"), plan
-    assert not any("TEMP B-TREE" in str(row) for row in plan), plan
-
-
-def test_spend_by_node_prefers_the_range_index_and_sorts_for_group_by_when_windowed(tmp_path: Path) -> None:
-    """A windowed `spend_by_node` call plans through `ix_usage_facts_recorded_at_id` for the
-    range instead — `ix_usage_facts_node_id` goes unused and the `GROUP BY` falls back to
-    a temp B-tree. Accepted, not fixed: the range is the more
-    selective predicate on a windowed call, and no case elsewhere pins this trade-off."""
-    engine = _engine(tmp_path)
-    criteria = OperationalCriteria(since=_NOW, until=_NOW)
     compiled = str(
         _spend_by_node_stmt(hub_store_connections(engine), criteria).compile(
             dialect=sqlite.dialect(), compile_kwargs={"literal_binds": True}
@@ -211,7 +201,7 @@ def test_spend_by_node_prefers_the_range_index_and_sorts_for_group_by_when_windo
     )
     with engine.connect() as conn:
         plan = conn.execute(sa.text(f"EXPLAIN QUERY PLAN {compiled}")).all()
-    assert _plan_uses_index(plan, "ix_usage_facts_recorded_at_id"), plan
+    assert _plan_uses_index(plan, "ix_usage_facts_tenant_recorded_at_id"), plan
     assert any("TEMP B-TREE FOR GROUP BY" in str(row) for row in plan), plan
 
 
@@ -240,41 +230,41 @@ def test_visible_segment_ids_supersedes_subquery_plans_as_an_index_search(tmp_pa
 # includes the same joins and `chunk_deleted` anti-join production issues, not a
 # hand-written mirror that could diverge.
 _ACTIVITY_FEED_SOURCES = (
-    ("chunks", _chunk_minted_stmt, s.chunks.c.minted_at, s.chunks.c.chunk_id, "ix_chunks_minted_at_chunk_id"),
+    ("chunks", _chunk_minted_stmt, s.chunks.c.minted_at, s.chunks.c.chunk_id, "ix_chunks_tenant_minted_at_chunk_id"),
     (
         "transitions",
         _transitions_activity_stmt,
         s.transitions.c.recorded_at,
         s.transitions.c.transition_id,
-        "ix_transitions_recorded_at_transition_id",
+        "ix_transitions_tenant_recorded_at_transition_id",
     ),
     (
         "route_created",
         _route_created_activity_stmt,
         s.route_created.c.created_at,
         s.route_created.c.route_id,
-        "ix_route_created_created_at_route_id",
+        "ix_route_created_tenant_created_at_route_id",
     ),
     (
         "chunk_migrations",
         _chunk_migrations_activity_stmt,
         s.chunk_migrations.c.recorded_at,
         s.chunk_migrations.c.migration_id,
-        "ix_chunk_migrations_recorded_at_migration_id",
+        "ix_chunk_migrations_tenant_recorded_at_migration_id",
     ),
     (
         "decisions",
         _decisions_activity_stmt,
         s.decisions.c.submitted_at,
         s.decisions.c.decision_id,
-        "ix_decisions_submitted_at_decision_id",
+        "ix_decisions_tenant_submitted_at_decision_id",
     ),
     (
         "decision_resolutions",
         _decision_resolutions_activity_stmt,
         s.decision_resolutions.c.resolved_at,
         s.decision_resolutions.c.decision_id,
-        "ix_decision_resolutions_resolved_at_decision_id",
+        "ix_decision_resolutions_tenant_resolved_at_decision_id",
     ),
     (
         "questions",
@@ -295,70 +285,70 @@ _ACTIVITY_FEED_SOURCES = (
         _chunk_promoted_stmt,
         s.chunk_promoted.c.promoted_at,
         s.chunk_promoted.c.id,
-        "ix_chunk_promoted_promoted_at_id",
+        "ix_chunk_promoted_tenant_promoted_at_id",
     ),
     (
         "chunk_grouped",
         lambda stmts, d: _chunk_grouped_stmt(stmts),
         s.chunk_grouped.c.grouped_at,
         s.chunk_grouped.c.id,
-        "ix_chunk_grouped_grouped_at_id",
+        "ix_chunk_grouped_tenant_grouped_at_id",
     ),
     (
         "chunk_restarts",
         _chunk_restarts_activity_stmt,
         s.chunk_restarts.c.recorded_at,
         s.chunk_restarts.c.id,
-        "ix_chunk_restarts_recorded_at_id",
+        "ix_chunk_restarts_tenant_recorded_at_id",
     ),
     (
         "escalations",
         _escalations_activity_stmt,
         s.escalations.c.recorded_at,
         s.escalations.c.id,
-        "ix_escalations_recorded_at_id",
+        "ix_escalations_tenant_recorded_at_id",
     ),
     (
         "requeues",
         _requeues_activity_stmt,
         s.requeues.c.requeued_at,
         s.requeues.c.id,
-        "ix_requeues_requeued_at_id",
+        "ix_requeues_tenant_requeued_at_id",
     ),
     (
         "route_released",
         _route_released_activity_stmt,
         s.route_released.c.released_at,
         s.route_released.c.id,
-        "ix_route_released_released_at_id",
+        "ix_route_released_tenant_released_at_id",
     ),
     (
         "chunk_pause_facts",
         _chunk_pause_facts_activity_stmt,
         s.chunk_pause_facts.c.set_at,
         s.chunk_pause_facts.c.id,
-        "ix_chunk_pause_facts_set_at_id",
+        "ix_chunk_pause_facts_tenant_set_at_id",
     ),
     (
         "chunk_stopped",
         _chunk_stopped_activity_stmt,
         s.chunk_stopped.c.stopped_at,
         s.chunk_stopped.c.id,
-        "ix_chunk_stopped_stopped_at_id",
+        "ix_chunk_stopped_tenant_stopped_at_id",
     ),
     (
         "chunk_completed",
         _chunk_completed_activity_stmt,
         s.chunk_completed.c.completed_at,
         s.chunk_completed.c.id,
-        "ix_chunk_completed_completed_at_id",
+        "ix_chunk_completed_tenant_completed_at_id",
     ),
     (
         "chunk_deleted",
         lambda stmts, d: _chunk_deleted_activity_stmt(stmts),
         s.chunk_deleted.c.deleted_at,
         s.chunk_deleted.c.id,
-        "ix_chunk_deleted_deleted_at_id",
+        "ix_chunk_deleted_tenant_deleted_at_id",
     ),
 )
 

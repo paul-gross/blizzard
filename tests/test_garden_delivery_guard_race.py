@@ -39,7 +39,7 @@ from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_delivery_store import GardenDeliveryStore
 from blizzard.hub.store.schema import artifacts, finding_facts
-from tests.support import hub_store_connections, seed_chunk, seed_graph
+from tests.support import default_tenant, hub_store_connections, seed_chunk, seed_graph
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 _LATER = _NOW.replace(hour=13)
@@ -52,7 +52,10 @@ def _world(tmp_path: Path) -> tuple[FindingStore, GardenDeliveryStore, Engine]:
     engine = create_engine_from_url(db_url)
     with engine.begin() as conn:
         conn.execute(
-            sa.text("INSERT INTO scopes (slug, description, created_at) VALUES ('blizzard', '', :now)"), {"now": _NOW}
+            sa.text(
+                "INSERT INTO scopes (slug, description, created_at, tenant_id) VALUES ('blizzard', '', :now, :tenant)"
+            ),
+            {"now": _NOW, "tenant": default_tenant(engine)},
         )
         seed_graph(conn, "gr_1", at=_NOW)
         seed_chunk(conn, "ch_1", graph_id="gr_1", at=_NOW)

@@ -20,6 +20,7 @@ from tests.support import hub_scoped_engine
 pytestmark = pytest.mark.component
 
 _BEFORE = "20260831_0945_garden_proposal_closures"  # the head just before finding_exits
+_AFTER = "20260831_1030_finding_exits"  # the revision under test; later revisions require a tenant on these rows
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 _T1 = datetime(2026, 1, 2, tzinfo=UTC)
 
@@ -112,7 +113,7 @@ def test_upgrade_widens_the_constraint_and_adds_the_new_columns(tmp_path: Path) 
     engine = hub_scoped_engine(create_engine_from_url(db_url))
     _seed_old_shape(engine)
 
-    runner.upgrade("head")
+    runner.upgrade(_AFTER)
 
     with engine.connect() as conn:
         columns = {c["name"] for c in sa.inspect(conn).get_columns("finding_facts")}
@@ -160,7 +161,7 @@ def test_upgrade_rejects_a_kind_outside_the_widened_vocabulary(tmp_path: Path) -
     runner.upgrade(_BEFORE)
     engine = hub_scoped_engine(create_engine_from_url(db_url))
     _seed_old_shape(engine)
-    runner.upgrade("head")
+    runner.upgrade(_AFTER)
 
     with pytest.raises(IntegrityError), engine.begin() as conn:
         conn.execute(sa.insert(_NEW_FINDING_FACTS).values(finding_id="fin_1", kind="bogus", recorded_at=_T1))
@@ -172,7 +173,7 @@ def test_downgrade_reverses_the_columns_and_narrows_the_constraint(tmp_path: Pat
     runner.upgrade(_BEFORE)
     engine = hub_scoped_engine(create_engine_from_url(db_url))
     _seed_old_shape(engine)
-    runner.upgrade("head")
+    runner.upgrade(_AFTER)
 
     runner.downgrade(_BEFORE)
 
@@ -198,10 +199,10 @@ def test_downgrade_then_upgrade_round_trips(tmp_path: Path) -> None:
     runner.upgrade(_BEFORE)
     engine = hub_scoped_engine(create_engine_from_url(db_url))
     _seed_old_shape(engine)
-    runner.upgrade("head")
+    runner.upgrade(_AFTER)
 
     runner.downgrade(_BEFORE)
-    runner.upgrade("head")
+    runner.upgrade(_AFTER)
 
     with engine.connect() as conn:
         columns = {c["name"] for c in sa.inspect(conn).get_columns("finding_facts")}

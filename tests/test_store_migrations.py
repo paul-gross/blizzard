@@ -1326,13 +1326,7 @@ _SERVER_DEFAULT_EXEMPTIONS: dict[str, set[str]] = {"chunks": {"model"}}
 
 # Constraint names a hub migration gave that src/blizzard/hub/store/schema.py leaves unnamed, keyed by (table,
 # migrated name); each value is the revision that rebuilds the table and settles the name.
-_CONSTRAINT_NAME_EXEMPTIONS: dict[tuple[str, str], str] = {
-    ("findings", "fk_findings_raised_by_chunk_id"): "20261008_1400_tenant_tighten",
-    ("finding_facts", "fk_finding_facts_finding_set_id_finding_sets"): "20261008_1400_tenant_tighten",
-    ("finding_facts", "fk_finding_facts_proposal_id_garden_proposals"): "20261008_1400_tenant_tighten",
-    ("finding_facts", "fk_finding_facts_superseded_by_findings"): "20261008_1400_tenant_tighten",
-    ("runner_external_usage", "pk_runner_external_usage"): "20261008_1400_tenant_tighten",
-}
+_CONSTRAINT_NAME_EXEMPTIONS: dict[tuple[str, str], str] = {}
 _NAME_EXEMPTIONS = {"hub": _CONSTRAINT_NAME_EXEMPTIONS, "runner": {}}
 
 

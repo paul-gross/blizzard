@@ -24,7 +24,7 @@ from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal.finding_store import FindingStore, lock_findings
-from tests.support import count_queries, hub_store_connections, stamp
+from tests.support import count_queries, default_tenant, hub_store_connections, stamp
 
 pytestmark = pytest.mark.component
 
@@ -400,9 +400,13 @@ def test_list_by_source_query_plans_as_an_index_search(tmp_path: Path) -> None:
 
     with engine.connect() as conn:
         plan = conn.execute(
-            sa.text("EXPLAIN QUERY PLAN SELECT * FROM findings WHERE scope_slug = 'blizzard' AND source = 'review'")
+            sa.text(
+                "EXPLAIN QUERY PLAN SELECT * FROM findings "
+                "WHERE tenant_id = :tenant AND scope_slug = 'blizzard' AND source = 'review'"
+            ),
+            {"tenant": default_tenant(engine)},
         ).all()
-    assert any("ix_findings_scope_source" in str(row) for row in plan), plan
+    assert any("ix_findings_tenant_scope_source" in str(row) for row in plan), plan
 
 
 def test_list_for_query_plans_as_an_index_search(tmp_path: Path) -> None:
@@ -412,10 +416,12 @@ def test_list_for_query_plans_as_an_index_search(tmp_path: Path) -> None:
     with engine.connect() as conn:
         plan = conn.execute(
             sa.text(
-                "EXPLAIN QUERY PLAN SELECT * FROM findings WHERE routine_name = 'nightly' AND scope_slug = 'blizzard'"
-            )
+                "EXPLAIN QUERY PLAN SELECT * FROM findings "
+                "WHERE tenant_id = :tenant AND routine_name = 'nightly' AND scope_slug = 'blizzard'"
+            ),
+            {"tenant": default_tenant(engine)},
         ).all()
-    assert any("ix_findings_routine_scope" in str(row) for row in plan), plan
+    assert any("ix_findings_tenant_routine_scope" in str(row) for row in plan), plan
 
 
 def test_count_by_class_query_plans_as_an_index_search(tmp_path: Path) -> None:
@@ -425,10 +431,12 @@ def test_count_by_class_query_plans_as_an_index_search(tmp_path: Path) -> None:
     with engine.connect() as conn:
         plan = conn.execute(
             sa.text(
-                "EXPLAIN QUERY PLAN SELECT COUNT(*) FROM findings WHERE routine_name = 'nightly' AND class = 'stale-docstring'"
-            )
+                "EXPLAIN QUERY PLAN SELECT COUNT(*) FROM findings "
+                "WHERE tenant_id = :tenant AND routine_name = 'nightly' AND class = 'stale-docstring'"
+            ),
+            {"tenant": default_tenant(engine)},
         ).all()
-    assert any("ix_findings_routine_class" in str(row) for row in plan), plan
+    assert any("ix_findings_tenant_routine_class" in str(row) for row in plan), plan
 
 
 def test_a_guarded_finding_write_holds_the_writer_lock_until_its_transaction_ends(tmp_path: Path) -> None:

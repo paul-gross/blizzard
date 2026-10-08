@@ -9,11 +9,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
-from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository
-from blizzard.hub.domain.config.carry_over import IReadConfigImports
-from blizzard.hub.domain.config.changes import IReadConfigChanges
-from blizzard.hub.domain.garden.findings.model import IReadFindingRepository
 from blizzard.hub.domain.observability.analytics.derivation import IReadDerivationCorpus
 from blizzard.runner.hub.outbound_buffer import IReadOutboundRepository
 from blizzard.runner.transcripts.ledger import IReadTranscriptLedgerRepository
@@ -157,14 +152,6 @@ _TOMBSTONE_NO_KEY_INDEX_REASON = (
     "are rare relative to the fleet's own chunk volume."
 )
 
-# ChunkDecisionsStore._not_closed_clause correlates a NOT EXISTS on decision_id, unindexed on all four tables.
-_DECISION_CLOSURE_REASON = (
-    "ChunkDecisionsStore._not_closed_clause correlates a NOT EXISTS against this table on "
-    "decision_id, a column it carries no index on (its own indexes serve chunk_id/epoch or "
-    "recorded_at/id reads instead) — on top of being read fleet-wide by the #374 snapshot "
-    "methods above."
-)
-
 # Every table below holds an operator-created fleet entity, bounded by entity count, not chunk/work-item volume.
 _FLEET_CONFIG_REASON = (
     "an operator-created fleet entity (registered runner, scope, secret, work source, routine, graph, hub "
@@ -179,22 +166,9 @@ _SINGLETON_REASON = (
     "release history."
 )
 
-# Reads whose tenant predicate no index serves until 20261008_1400_tenant_tighten rebuilds their indexes to lead with
-# tenant_id.
-_UNTIL_TENANT_TIGHTEN_REASON = (
-    "the read now carries a tenant_id predicate, and no index on this table leads with tenant_id until "
-    "20261008_1400_tenant_tighten rebuilds its indexes; that revision removes this entry."
-)
-
-# The legacy-config import runs once per hub, offline, by an operator — never on a serving path.
-_ONE_SHOT_IMPORT_REASON = (
-    "read only by `blizzard hub config import-legacy`, an offline verb an operator runs once per hub."
-)
-
 HUB_ALLOWED_SCANS: list[TableWideAllowance | MethodScopedAllowance] = [
     # --- the one-shot legacy-config import ----------------------------------------------
     TableWideAllowance("config_import_facts", 50, _RARE_OPERATOR_EVENT_REASON),
-    MethodScopedAllowance(IReadConfigImports, "commit_coordinates", "artifacts", 200, _ONE_SHOT_IMPORT_REASON),
     # --- the derivation sweep's corpus read of every open tenant's markers ----------
     MethodScopedAllowance(
         IReadDerivationCorpus,
@@ -204,108 +178,15 @@ HUB_ALLOWED_SCANS: list[TableWideAllowance | MethodScopedAllowance] = [
         "the derivation sweep's whole-corpus read: every open tenant's markers for one extractor_version, read "
         "together; no tenant-led key narrows a read across tenants, and none leads with extractor_version.",
     ),
-    # --- tenant-predicate scans, until the indexes lead with tenant_id ---------------
-    MethodScopedAllowance(
-        IReadChunkFactsRepository, "load_all_facts", "chunk_promoted", 200, _UNTIL_TENANT_TIGHTEN_REASON
-    ),
-    MethodScopedAllowance(
-        IReadChunkFactsRepository, "load_all_facts", "decision_resolutions", 200, _UNTIL_TENANT_TIGHTEN_REASON
-    ),
-    MethodScopedAllowance(
-        IReadChunkFactsRepository, "load_all_facts", "delivery_landed", 200, _UNTIL_TENANT_TIGHTEN_REASON
-    ),
-    MethodScopedAllowance(
-        IReadChunkWorkRefsRepository, "live_work_refs_signature", "chunk_promoted", 200, _UNTIL_TENANT_TIGHTEN_REASON
-    ),
-    MethodScopedAllowance(
-        IReadChunkWorkRefsRepository,
-        "live_work_refs_signature",
-        "decision_resolutions",
-        200,
-        _UNTIL_TENANT_TIGHTEN_REASON,
-    ),
     # --- fleet-wide-by-design snapshot reads ------------------------------
-    TableWideAllowance("chunk_bounces", 200, _FLEET_SNAPSHOT_REASON),
-    TableWideAllowance("chunk_completed", 200, _FLEET_SNAPSHOT_REASON),
-    TableWideAllowance("chunk_pause_facts", 200, _FLEET_SNAPSHOT_REASON),
-    TableWideAllowance("chunk_stopped", 200, _FLEET_SNAPSHOT_REASON),
-    TableWideAllowance("chunks", 200, _FLEET_SNAPSHOT_REASON),
-    TableWideAllowance("decisions", 200, _FLEET_SNAPSHOT_REASON),
-    TableWideAllowance("delivery_repo_landed", 200, _FLEET_SNAPSHOT_REASON),
-    TableWideAllowance("hub_node_poll", 200, _FLEET_SNAPSHOT_REASON),
-    TableWideAllowance("lease_facts", 200, _FLEET_SNAPSHOT_REASON),
-    TableWideAllowance("epoch_owners", 200, _FLEET_SNAPSHOT_REASON),
-    TableWideAllowance("requeues", 200, _FLEET_SNAPSHOT_REASON),
-    TableWideAllowance("route_created", 200, _FLEET_SNAPSHOT_REASON),
-    TableWideAllowance("route_released", 200, _FLEET_SNAPSHOT_REASON),
-    TableWideAllowance("route_token_minted", 200, _FLEET_SNAPSHOT_REASON),
-    TableWideAllowance("usage_facts", 200, _FLEET_SNAPSHOT_REASON),
     TableWideAllowance("chunk_work_refs", 200, _FLEET_SNAPSHOT_REASON),
     # --- tombstones with no chunk_id index ----------------------------------------------
     TableWideAllowance("chunk_deleted", 200, _TOMBSTONE_NO_KEY_INDEX_REASON),
     TableWideAllowance("chunk_grouped", 200, _TOMBSTONE_NO_KEY_INDEX_REASON),
-    # --- decision-closure correlated NOT EXISTS on an unindexed decision_id ------------
-    TableWideAllowance("transitions", 200, _DECISION_CLOSURE_REASON),
-    TableWideAllowance("chunk_migrations", 200, _DECISION_CLOSURE_REASON),
-    TableWideAllowance("escalations", 200, _DECISION_CLOSURE_REASON),
-    TableWideAllowance("chunk_restarts", 200, _DECISION_CLOSURE_REASON),
     # --- operator-created fleet entities, bounded by entity count not chunk volume -----
-    TableWideAllowance("runner_registrations", 200, _FLEET_CONFIG_REASON),
-    TableWideAllowance("runner_pause_facts", 200, _FLEET_CONFIG_REASON),
-    TableWideAllowance("runner_local_pause_facts", 200, _FLEET_CONFIG_REASON),
-    TableWideAllowance("runner_lifecycle_facts", 200, _FLEET_CONFIG_REASON),
-    TableWideAllowance("scopes", 200, _FLEET_CONFIG_REASON),
-    TableWideAllowance("scope_lifecycle_facts", 200, _FLEET_CONFIG_REASON),
-    TableWideAllowance("routine_lifecycle_facts", 200, _FLEET_CONFIG_REASON),
-    TableWideAllowance("graph_policy_facts", 200, _FLEET_CONFIG_REASON),
     TableWideAllowance("users", 200, _FLEET_CONFIG_REASON),
     TableWideAllowance("auth_facts", 200, _FLEET_CONFIG_REASON),
     # --- singletons/near-singletons ------------------------------------------------------
     TableWideAllowance("superuser_bootstrap", 50, _SINGLETON_REASON),
     TableWideAllowance("hub_exec_slot", 50, _SINGLETON_REASON),
-    # --- one-off unindexed columns on otherwise-small or otherwise-indexed tables ------
-    TableWideAllowance(
-        "route_environments",
-        200,
-        "route_of_conn (chunk_rows.py) reads this table filtered on route_id, a column "
-        "it carries no index on at all (its only column besides the surrogate id and the "
-        "opaque environment_id) — a route rarely names more than one or two "
-        "environments, so this stays small alongside route_created/route_released.",
-    ),
-    TableWideAllowance(
-        "chunk_dependencies",
-        200,
-        "ChunkDependenciesStore.list_standing_edges filters on released_at IS NULL, a "
-        "column with no index (ix_chunk_dependencies_dependent_chunk_id/"
-        "prerequisite_chunk_id serve the OTHER reads) — standing dependency edges are a "
-        "declared-governance feature, bounded by how many edges operators/routines "
-        "declare, not by raw chunk volume.",
-    ),
-    TableWideAllowance(
-        "garden_proposals",
-        200,
-        "GardenProposalStore.list_all reads every proposal unfiltered, ordered newest "
-        "first — proposals are minted at gardening-routine pace (one per accepted "
-        "remediation), a materially smaller volume than the chunk fleet itself.",
-    ),
-    # --- deliberate whole-table read of an otherwise-indexed table ---------------------
-    MethodScopedAllowance(
-        IReadFindingRepository,
-        "has_delivery_for_proposal",
-        "finding_facts",
-        200,
-        "filters on proposal_id, a column ix_finding_facts_finding_id_id and "
-        "ix_finding_facts_finding_set_id don't cover — finding_facts's OTHER reads (by "
-        "finding_id or finding_set_id) do hit an index; this one deliberately checks a "
-        "rare, one-per-proposal delivery fact those indexes don't serve.",
-    ),
-    MethodScopedAllowance(
-        IReadConfigChanges,
-        "page",
-        "config_changes",
-        200,
-        "the change log's newest-first keyset walk orders by the integer primary key and stops at "
-        "`limit` (capped at 200), so it reads at most one page however long the log grows; the "
-        "optional record filters hit ix_config_changes_record.",
-    ),
 ]

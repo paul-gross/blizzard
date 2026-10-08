@@ -19,6 +19,9 @@ from tests.support import migrate_to
 pytestmark = pytest.mark.component
 
 _BEFORE = "20260923_1000_routine_lifecycle_facts"  # the head just before this revision
+_AFTER = (
+    "20260926_1000_operator_garden_proposals"  # the revision under test; later revisions require a tenant on these rows
+)
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 # The pre-revision shape: no `origin`/`created_by`; `routine_name` NOT NULL.
@@ -53,7 +56,7 @@ def _seed_preexisting_proposal(tmp_path: Path):  # type: ignore[no-untyped-def]
 def test_upgrade_backfills_preexisting_rows_to_origin_routine_run(tmp_path: Path) -> None:
     runner, _ = _seed_preexisting_proposal(tmp_path)
 
-    runner.upgrade("head")
+    runner.upgrade(_AFTER)
 
     engine = create_engine_from_url(f"sqlite:///{tmp_path / 'hub.db'}")
     with engine.connect() as conn:
@@ -63,7 +66,7 @@ def test_upgrade_backfills_preexisting_rows_to_origin_routine_run(tmp_path: Path
 
 def test_upgrade_admits_a_null_routine_name_operator_row(tmp_path: Path) -> None:
     runner, _ = _seed_preexisting_proposal(tmp_path)
-    runner.upgrade("head")
+    runner.upgrade(_AFTER)
     engine = create_engine_from_url(f"sqlite:///{tmp_path / 'hub.db'}")
 
     with engine.begin() as conn:
@@ -84,7 +87,7 @@ def test_upgrade_admits_a_null_routine_name_operator_row(tmp_path: Path) -> None
 
 def test_upgrade_refuses_a_routine_run_row_with_no_routine_name(tmp_path: Path) -> None:
     runner, _ = _seed_preexisting_proposal(tmp_path)
-    runner.upgrade("head")
+    runner.upgrade(_AFTER)
     engine = create_engine_from_url(f"sqlite:///{tmp_path / 'hub.db'}")
 
     with pytest.raises(IntegrityError), engine.begin() as conn:
@@ -99,7 +102,7 @@ def test_upgrade_refuses_a_routine_run_row_with_no_routine_name(tmp_path: Path) 
 
 def test_upgrade_refuses_an_operator_row_with_no_created_by(tmp_path: Path) -> None:
     runner, _ = _seed_preexisting_proposal(tmp_path)
-    runner.upgrade("head")
+    runner.upgrade(_AFTER)
     engine = create_engine_from_url(f"sqlite:///{tmp_path / 'hub.db'}")
 
     with pytest.raises(IntegrityError), engine.begin() as conn:
@@ -114,7 +117,7 @@ def test_upgrade_refuses_an_operator_row_with_no_created_by(tmp_path: Path) -> N
 
 def test_downgrade_restores_the_old_shape_and_coalesces_a_null_routine_name(tmp_path: Path) -> None:
     runner, _ = _seed_preexisting_proposal(tmp_path)
-    runner.upgrade("head")
+    runner.upgrade(_AFTER)
     engine = create_engine_from_url(f"sqlite:///{tmp_path / 'hub.db'}")
     with engine.begin() as conn:
         conn.execute(

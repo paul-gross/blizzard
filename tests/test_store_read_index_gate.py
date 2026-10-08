@@ -22,7 +22,8 @@ import sqlalchemy as sa
 import blizzard.hub as hub_pkg
 import blizzard.runner as runner_pkg
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
+from blizzard.hub.domain.observability.egress.repository import IReadEgressEvents, IReadUsageCorpus
+from blizzard.hub.domain.observability.tracing.repository import IReadStepCorpus
 from blizzard.hub.store import schema as hub_schema
 from blizzard.runner.store import schema as runner_schema
 from tests import support
@@ -257,22 +258,65 @@ def test_hub_read_methods_never_scan_an_unallowed_table(hub_world: HubWorld) -> 
     )
 
 
+# Hub-wide time-cursor indexes kept beside a tenant-led one because a hub-scoped read pages that table across
+# tenants, each with the census read that pages it. The classifier cannot guard them: without one, SQLite may walk
+# another named index in full, which it accepts, so each read is pinned to its own index instead.
+_HUB_WIDE_CURSOR_INDEXES: dict[str, tuple[str, tuple[type, str]]] = {
+    "ix_transitions_recorded_at_transition_id": ("transitions", (IReadStepCorpus, "closing_candidates")),
+    "ix_decisions_submitted_at_decision_id": ("decisions", (IReadStepCorpus, "closing_candidates")),
+    "ix_chunk_migrations_recorded_at_migration_id": ("chunk_migrations", (IReadStepCorpus, "closing_candidates")),
+    "ix_escalations_recorded_at_id": ("escalations", (IReadStepCorpus, "closing_candidates")),
+    "ix_chunk_restarts_recorded_at_id": ("chunk_restarts", (IReadStepCorpus, "closing_candidates")),
+    "ix_route_released_released_at_id": ("route_released", (IReadStepCorpus, "closing_candidates")),
+    "ix_chunk_stopped_stopped_at_id": ("chunk_stopped", (IReadStepCorpus, "closing_candidates")),
+    "ix_chunk_completed_completed_at_id": ("chunk_completed", (IReadStepCorpus, "closing_candidates")),
+    "ix_epoch_owners_recorded_at_id": ("epoch_owners", (IReadStepCorpus, "closing_candidates")),
+    "ix_usage_facts_recorded_at_id": ("usage_facts", (IReadUsageCorpus, "usage_after")),
+    "ix_transcript_event_drops_dropped_at_segment_id": ("transcript_event_drops", (IReadEgressEvents, "drops_after")),
+    "ix_transcript_event_derivations_derived_at_segment_id_extractor_version": (
+        "transcript_event_derivations",
+        (IReadEgressEvents, "markers_after"),
+    ),
+    "ix_lease_facts_minted_at": ("lease_facts", (IReadEgressEvents, "epochs_minted_between")),
+}
+
+
+@pytest.mark.parametrize("index_name", sorted(_HUB_WIDE_CURSOR_INDEXES))
+def test_each_hub_wide_cursor_index_serves_the_read_that_pages_across_tenants(
+    hub_world: HubWorld, index_name: str
+) -> None:
+    """Dropping or renaming the index, or the read ceasing to range over it, fails here."""
+    table, (protocol, method) = _HUB_WIDE_CURSOR_INDEXES[index_name]
+    with support.capture_statements(hub_world.engine) as statements:
+        HUB_CENSUS[(protocol, method)](hub_world)
+    details = [
+        row.detail
+        for statement, parameters in statements
+        if statement.lstrip().upper().startswith("SELECT")
+        for row in support.explain_query_plan(hub_world.engine, statement, parameters)
+    ]
+    assert any(detail.startswith(f"SEARCH {table} USING INDEX {index_name} (") for detail in details), (
+        f"{protocol.__name__}.{method} no longer searches {table} through {index_name}; its plan was {details}"
+    )
+
+
 def test_hub_mutation_dropping_an_index_the_census_exercises_is_caught_by_the_classifier(
     tmp_path_factory: pytest.TempPathFactory,
 ) -> None:
-    """The gate's mutation self-test: drops ``ix_artifacts_chunk_id_node_id_epoch`` on a dedicated migrated hub
-    database and asserts ``support.offending_index_scans`` reports ``artifacts`` for the read it serves —
-    load-bearing proof that weakening ``support._offending_table``'s bare-``SCAN``/``AUTOMATIC`` match fails here."""
+    """The gate's mutation self-test: drops ``ix_decisions_submitted_at_decision_id`` on a dedicated migrated hub
+    database and asserts ``support.offending_index_scans`` reports ``decisions`` for the hub-scoped read it serves —
+    load-bearing proof that weakening ``support._offending_table``'s bare-``SCAN``/``AUTOMATIC`` match fails here. A
+    scoped read cannot carry this proof: every tenant-owned table has a tenant-led index for it to fall back on."""
     root = tmp_path_factory.mktemp("hub-store-gate-mutation")
     world = build_hub_world(root)
     try:
-        index_name = "ix_artifacts_chunk_id_node_id_epoch"
+        index_name = "ix_decisions_submitted_at_decision_id"
 
         with world.engine.begin() as conn:
-            indexes_before = {row[1] for row in conn.exec_driver_sql("PRAGMA index_list(artifacts)").all()}
-        assert index_name in indexes_before, f"{index_name} no longer exists on artifacts — pick another real hub index"
+            indexes_before = {row[1] for row in conn.exec_driver_sql("PRAGMA index_list(decisions)").all()}
+        assert index_name in indexes_before, f"{index_name} no longer exists on decisions — pick another real hub index"
 
-        recipe = HUB_CENSUS[(IReadChunkArtifactsRepository, "load_artifacts")]
+        recipe = HUB_CENSUS[(IReadStepCorpus, "closing_candidates")]
         with world.engine.begin() as conn:
             conn.exec_driver_sql(f"DROP INDEX {index_name}")
 
@@ -281,9 +325,9 @@ def test_hub_mutation_dropping_an_index_the_census_exercises_is_caught_by_the_cl
             recipe(world)
         offenders = support.offending_index_scans(world.engine, statements, tables)
         offending_tables = {table for table, _row in offenders}
-        assert "artifacts" in offending_tables, (
-            f"dropping {index_name} did not surface artifacts as an offending scan — "
-            f"load_artifacts's own recipe no longer exercises that index; offenders were {offenders}"
+        assert "decisions" in offending_tables, (
+            f"dropping {index_name} did not surface decisions as an offending scan — "
+            f"closing_candidates's own recipe no longer exercises that index; offenders were {offenders}"
         )
     finally:
         world.hub.client.close()

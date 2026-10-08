@@ -229,30 +229,6 @@ def test_backfill_epochs_are_the_open_tenants_each_with_its_tenant(world: _World
     assert {(d.tenant, d.segment_id) for d in drops} == {(t, f"sg_dropped_{t}") for t in (world.carried, _OPEN)}
 
 
-@pytest.mark.parametrize("closed", [False, True], ids=["no-tenant-closed", "a-tenant-closed"])
-def test_a_row_naming_no_tenant_is_left_out_whether_or_not_a_tenant_is_closed(tmp_path: Path, closed: bool) -> None:
-    world = _World(tmp_path)
-    if closed:
-        world.close(_CLOSED)
-    live = _live(world.carried)
-    world.insert(
-        s.usage_facts,
-        tenant_id=None,
-        chunk_id=live,
-        node_id="nd_1",
-        epoch=1,
-        runner_id="r1",
-        kind="untenanted",
-        model="m",
-        input_tokens=1,
-        output_tokens=1,
-        cache_read_tokens=0,
-        cache_create_tokens=0,
-        recorded_at=_AT,
-    )
-    assert None not in {row.tenant for row in world.corpus.usage_after(UsagePosition(_BEFORE), _AFTER, 50)}
-
-
 def test_the_probes_count_every_tenant_and_a_close_moves_the_work_refs_probe(tmp_path: Path) -> None:
     world = _World(tmp_path)
     before = world.corpus.live_work_refs_signature()

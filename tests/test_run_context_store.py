@@ -18,7 +18,7 @@ from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.internal.run_context_store import RunContextStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
-from tests.support import hub_store_connections, seed_graph, seed_work_item
+from tests.support import default_tenant, hub_store_connections, seed_graph, seed_work_item
 
 pytestmark = pytest.mark.component
 
@@ -31,8 +31,10 @@ def _store_and_items(tmp_path: Path) -> tuple[RunContextStore, WorkItemStore, En
     engine = create_engine_from_url(db_url)
     with engine.begin() as conn:
         conn.execute(
-            sa.text("INSERT INTO scopes (slug, description, created_at) VALUES ('blizzard', '', :now)"),
-            {"now": _NOW},
+            sa.text(
+                "INSERT INTO scopes (slug, description, created_at, tenant_id) VALUES ('blizzard', '', :now, :tenant)"
+            ),
+            {"now": _NOW, "tenant": default_tenant(engine)},
         )
         seed_graph(conn, "gr_1", at=_NOW)
     store_connections = hub_store_connections(engine)
