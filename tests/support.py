@@ -1328,6 +1328,28 @@ def report_escalation(
     return resp.json()
 
 
+def report_question(
+    hub: HubHarness, chunk_id: str, *, epoch: int, seq: int, question_id: str = "q_1", runner_id: str = "r1"
+) -> dict:
+    """Report a runner's ``question.asked`` fact through POST /events; the caller reads
+    ``applied``/``rejected`` off the returned ack."""
+    payload = {"chunk_id": chunk_id, "question_id": question_id, "epoch": epoch, "question": "which?"}
+    resp = hub.client.post(
+        "/api/fleet/events",
+        json={"runner_id": runner_id, "facts": [{"seq": seq, "kind": "question.asked", "payload": payload}]},
+    )
+    assert resp.status_code == 200, resp.text
+    return resp.json()
+
+
+def chunk_rows(hub: HubHarness, table: sa.Table, chunk_id: str) -> int:
+    """How many rows ``table`` holds for ``chunk_id`` — a refusal's proof that nothing was written."""
+    with hub.engine.begin() as conn:
+        return conn.execute(
+            sa.select(sa.func.count()).select_from(table).where(table.c.chunk_id == chunk_id)
+        ).scalar_one()
+
+
 # Migration-test scaffolding: `graphs`/`chunks` carry no revision-pinned shape, so these
 # seeds are shared. A revision's own frozen table-under-test must NOT move here.
 

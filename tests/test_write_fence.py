@@ -12,12 +12,21 @@ from collections.abc import Callable
 from pathlib import Path
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import Table
 
 from blizzard.foundation.migration_source import MigrationSource
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission, FenceRefusal
 from blizzard.hub.store import schema as s
-from tests.support import HubHarness, build_hub, chunk_stores, ingest, report_lease
+from tests.support import (
+    HubHarness,
+    build_hub,
+    chunk_rows,
+    chunk_stores,
+    ingest,
+    report_escalation,
+    report_lease,
+    report_question,
+)
 
 pytestmark = pytest.mark.component
 
@@ -119,11 +128,8 @@ class _Chunk:
     def detail(self) -> dict:
         return self.hub.client.get(f"/api/chunks/{self.chunk_id}").json()
 
-    def rows(self, table) -> int:  # type: ignore[no-untyped-def]
-        with self.hub.engine.begin() as conn:
-            return conn.execute(
-                select(func.count()).select_from(table).where(table.c.chunk_id == self.chunk_id)
-            ).scalar_one()
+    def rows(self, table: Table) -> int:
+        return chunk_rows(self.hub, table, self.chunk_id)
 
     def gate_decision(self) -> str:
         assert self.complete("build", epoch=1, choice="pass")["outcome"] == "parked_at_gate"
@@ -307,30 +313,14 @@ def test_a_runner_config_decision_blocks_behind_a_stop_and_then_refuses(tmp_path
     assert chunk.rows(s.decisions) == 0
 
 
-def _ingest(chunk: _Chunk, kind: str, payload: dict[str, object]) -> dict:
+def _ask(chunk: _Chunk, *, epoch: int) -> dict:
     chunk.seq += 1
-    resp = chunk.hub.client.post(
-        "/api/fleet/events",
-        json={"runner_id": "r1", "facts": [{"seq": chunk.seq, "kind": kind, "payload": payload}]},
-    )
-    assert resp.status_code == 200, resp.text
-    return resp.json()
-
-
-def _ask(chunk: _Chunk, *, epoch: int, question_id: str = "q_1") -> dict:
-    return _ingest(
-        chunk,
-        "question.asked",
-        {"chunk_id": chunk.chunk_id, "question_id": question_id, "epoch": epoch, "question": "which?"},
-    )
+    return report_question(chunk.hub, chunk.chunk_id, epoch=epoch, seq=chunk.seq)
 
 
 def _escalate(chunk: _Chunk, *, epoch: int) -> dict:
-    return _ingest(
-        chunk,
-        "escalation.recorded",
-        {"chunk_id": chunk.chunk_id, "epoch": epoch, "takeover_command": "cd wd && claude --resume"},
-    )
+    chunk.seq += 1
+    return report_escalation(chunk.hub, chunk.chunk_id, epoch=epoch, seq=chunk.seq)
 
 
 def test_a_below_floor_question_after_a_restart_is_rejected_and_parks_nothing(tmp_path: Path) -> None:

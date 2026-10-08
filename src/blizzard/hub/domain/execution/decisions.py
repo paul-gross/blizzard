@@ -31,6 +31,7 @@ from blizzard.hub.domain.execution.completion import (
     CompletionRefused,
     decision_choices,
     gate_refusal,
+    refuse_hub_executed,
     refuse_incoherent_attempt,
     stamped_proposals,
     stored_artifacts,
@@ -111,8 +112,8 @@ class DecisionService:
         """Runner-config gate: park the chunk on a decision instead of transitioning. A retired
         submitting runner is refused with :class:`RunnerRetired` before anything lands.
 
-        Order is behavior: retired → node → facts → route token → replay → attempt coherence →
-        proposals → commit pointer → produces → record. Attempt coherence is re-derived under the
+        Order is behavior: retired → node → facts → route token → replay → hub-executed node →
+        attempt coherence → proposals → commit pointer → produces → record. Attempt coherence is re-derived under the
         chunk's row lock, ahead of the write itself."""
         self._retired.refuse_if_retired(submission.runner_id, action="decision")
         try:
@@ -142,6 +143,7 @@ class DecisionService:
             return DecisionSubmitResult.parked(node)
 
         try:
+            refuse_hub_executed(node)
             refuse_incoherent_attempt(facts, graph, from_node=node, epoch=submission.epoch)
             # The same unconditional policies `ApplyService.apply` runs — a runner-config gate is a
             # dispatch fork too, and the step's artifacts land here, so the produces backstop runs.
