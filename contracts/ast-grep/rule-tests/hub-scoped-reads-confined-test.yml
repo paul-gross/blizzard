@@ -1,0 +1,22 @@
+id: bzh:hub-scoped-reads-confined
+valid:
+  - |
+    from blizzard.hub.composition import HubCore, TenantStores
+  - |
+    from blizzard.hub.tenancy import HUB_SCOPED_OPTION, StoreScope
+  - |
+    reads: HubScopedReads = core.scoped_reads
+invalid:
+  - |
+    from blizzard.hub.store.internal.hub_scoped_reads import HubScopedReads
+  - |
+    from blizzard.hub.store.internal.hub_scoped_reads import TenantStateReads, hub_scoped_read
+  - |
+    from blizzard.hub.store.internal import hub_scoped_reads
+  - |
+    import blizzard.hub.store.internal.hub_scoped_reads as reads
+  - |
+    from somewhere import (
+        Other,
+        HubScopedReads as Reads,
+    )

@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import tempfile
 
-# Wires the residual cycle-check lock — debt, blizzard-context:/architecture/system-shape/exclusive-writes.md
+# Wires the residual cycle-check lock — debt, blizzard-context:/architecture/system-shape/exclusive-writes.md —
+# and the tenant cache's lock, which guards this process's memory, not a store decision
 # ast-grep-ignore: bzh:store-exclusive-write
 import threading
 from collections.abc import Callable, Sequence
@@ -165,6 +166,7 @@ from blizzard.hub.store.internal.garden_run_store import GardenRunStore
 from blizzard.hub.store.internal.garden_sweeps_store import GardenSweepsStore
 from blizzard.hub.store.internal.garden_trend_store import GardenTrendStore
 from blizzard.hub.store.internal.graph_store import GraphStore
+from blizzard.hub.store.internal.hub_scoped_reads import HubScopedReads, TenantStateReads
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
 from blizzard.hub.store.internal.review_findings_store import ReviewFindingsStore
 from blizzard.hub.store.internal.routine_scope_store import RoutineScopeStore
@@ -174,7 +176,7 @@ from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStor
 from blizzard.hub.store.internal.scope_store import ScopeStore
 from blizzard.hub.store.internal.secret_referrers import SecretReferrersStore
 from blizzard.hub.store.internal.secret_store import SecretStore
-from blizzard.hub.store.internal.sole_tenant import SoleTenantConnections
+from blizzard.hub.store.internal.sole_tenant import SoleTenantConnections, SoleTenantUnresolved
 from blizzard.hub.store.internal.trace_store import TraceStore
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
@@ -183,6 +185,7 @@ from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecor
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.system_artifacts import PACKAGED as SYSTEM_ARTIFACTS_PACKAGED
 from blizzard.hub.system_artifacts import PackagedSystemArtifacts
+from blizzard.hub.tenancy import StoreScope, TenantClosed, TenantId
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
 
 
@@ -377,20 +380,17 @@ class HubServices:
 
 
 @dataclass(frozen=True)
-class HubCore:
-    """The process-scoped stores and leaf services, each built once by :func:`build_hub_core`.
-    Every other hub wiring takes these instances from the core rather than building its own
-    copy (pinned by ``tests/test_hub_core_sharing.py``)."""
+class TenantStores:
+    """One tenant's repository set and the leaf services over it, every adapter holding the same
+    :class:`ScopedConnections`. Opened through :meth:`HubCore.open`; every other hub wiring takes
+    these instances from it rather than building its own copy (pinned by
+    ``tests/test_hub_core_sharing.py``)."""
 
-    store_connections: HubStoreConnections
-    #: The same store confined to its only tenant — the scope a single-tenant hub's adapters over
-    #: tenant-owned tables hold.
-    tenant_connections: ScopedConnections
-    auth_errors: RepoErrorFactory
-    users: UserRepository
+    connections: ScopedConnections
     registry: RunnerRegistryStore
     work_item_store: WorkItemStore
     chunk_stores: ChunkStores
+    #: The tenant's cycle-check lock — dependencies never cross tenants.
     cycle_lock: threading.Lock
     delete: DeleteService
     finding_store: FindingStore
@@ -412,50 +412,16 @@ class HubCore:
     config_import: ConfigImportStore
     clock: IClock
 
-
-@dataclass(frozen=True)
-class LiveConfig:
-    """The process's one built-object cache and the one secret reader its builders reveal
-    through — the reader reaches nothing else (``bzh:secret-write-only``)."""
-
-    objects: ConfigObjectCache
-    secrets: ISecretReader
+    @property
+    def scope(self) -> StoreScope:
+        return self.connections.scope
 
 
-def build_live_config(core: HubCore, *, secret_keys: IHubKeyProvider) -> LiveConfig:
-    return LiveConfig(
-        objects=ConfigObjectCache(ConfigRevisionsStore(core.tenant_connections)),
-        secrets=StoreSecretReader(catalog=core.secrets, sealed=core.secrets, cipher=secret_cipher(secret_keys)),
-    )
-
-
-def build_config_authoring(core: HubCore, *, secret_keys: IHubKeyProvider) -> ConfigAuthoring:
-    """The one configured-record writer, sealing under ``secret_keys``."""
-    return ConfigAuthoring(
-        work_sources=core.work_source_records,
-        repositories=core.repository_records,
-        secrets=core.secrets,
-        cipher=secret_cipher(secret_keys),
-        apply_writer=core.config_apply,
-        import_writer=core.config_import,
-        clock=core.clock,
-    )
-
-
-def build_process_core(engine: Engine) -> HubCore:
-    """:func:`build_hub_core` on the system clock."""
-    return build_hub_core(engine, clock=SystemClock())
-
-
-def build_hub_core(engine: Engine, *, clock: IClock) -> HubCore:
-    """Build the :class:`HubCore`."""
-    store_errors = HubStoreErrorFactory(get_logger("blizzard.hub.store"))
-    store_connections = HubStoreConnections(engine, store_errors)
-    tenant_connections = SoleTenantConnections(engine, store_errors)
-    auth_errors = RepoErrorFactory(get_logger("blizzard.hub.auth"))
-    registry = RunnerRegistryStore(tenant_connections)
-    work_item_store = WorkItemStore(tenant_connections)
-    chunk_stores = build_chunk_stores(tenant_connections, clock, registry=registry)
+def build_tenant_stores(connections: ScopedConnections, *, clock: IClock) -> TenantStores:
+    """Build the :class:`TenantStores` of the tenant ``connections`` is scoped to."""
+    registry = RunnerRegistryStore(connections)
+    work_item_store = WorkItemStore(connections)
+    chunk_stores = build_chunk_stores(connections, clock, registry=registry)
     cycle_lock = threading.Lock()
     delete = DeleteService(
         items=work_item_store,
@@ -463,15 +429,12 @@ def build_hub_core(engine: Engine, *, clock: IClock) -> HubCore:
         exclusive=chunk_stores.exclusive,
         cycle_lock=cycle_lock,
     )
-    finding_store = FindingStore(tenant_connections)
+    finding_store = FindingStore(connections)
     finding_exit = FindingExitService(repo=finding_store, clock=clock)
-    garden_proposal_store = GardenProposalStore(tenant_connections)
-    garden_proposal_closure_store = GardenProposalClosureStore(tenant_connections)
-    return HubCore(
-        store_connections=store_connections,
-        tenant_connections=tenant_connections,
-        auth_errors=auth_errors,
-        users=UserRepository(store_connections, auth_errors),
+    garden_proposal_store = GardenProposalStore(connections)
+    garden_proposal_closure_store = GardenProposalClosureStore(connections)
+    return TenantStores(
+        connections=connections,
         registry=registry,
         work_item_store=work_item_store,
         chunk_stores=chunk_stores,
@@ -481,13 +444,13 @@ def build_hub_core(engine: Engine, *, clock: IClock) -> HubCore:
         finding_exit=finding_exit,
         garden_proposal_store=garden_proposal_store,
         garden_proposal_closure_store=garden_proposal_closure_store,
-        secrets=SecretStore(tenant_connections),
-        work_source_records=WorkSourceRecordStore(tenant_connections),
-        repository_records=RepositoryRecordStore(tenant_connections),
-        secret_referrers=SecretReferrersStore(tenant_connections),
-        config_changes=ConfigChangeStore(tenant_connections),
-        config_apply=ConfigApplyStore(tenant_connections),
-        config_import=ConfigImportStore(tenant_connections),
+        secrets=SecretStore(connections),
+        work_source_records=WorkSourceRecordStore(connections),
+        repository_records=RepositoryRecordStore(connections),
+        secret_referrers=SecretReferrersStore(connections),
+        config_changes=ConfigChangeStore(connections),
+        config_apply=ConfigApplyStore(connections),
+        config_import=ConfigImportStore(connections),
         work_item_edits=WorkItemEditService(
             items=work_item_store,
             work_refs=chunk_stores.work_refs,
@@ -502,6 +465,178 @@ def build_hub_core(engine: Engine, *, clock: IClock) -> HubCore:
             findings=finding_store,
             exits=finding_exit,
         ),
+        clock=clock,
+    )
+
+
+class TenantCache:
+    """One :class:`TenantStores` per open tenant, built on its first open and kept until
+    :meth:`evict` drops it.
+
+    Each open first confirms the tenant exists and is open, so a closed tenant is refused whether
+    or not its stores are cached, and a cached entry found closed is dropped. Entries are built
+    under one lock, so two racing opens of a tenant never yield two sets of its stores — nor two of
+    its cycle-check locks. ``resident`` is the set a single-tenant hub serves before it knows its
+    tenant's id; the first open of that tenant adopts it rather than building a second set."""
+
+    def __init__(
+        self,
+        *,
+        build: Callable[[StoreScope], TenantStores],
+        states: TenantStateReads,
+        resident: TenantStores | None = None,
+    ) -> None:
+        self._build = build
+        self._states = states
+        self._resident = resident
+        self._entries: dict[TenantId, TenantStores] = {}
+        self._lock = threading.Lock()
+
+    def open(self, scope: StoreScope) -> TenantStores:
+        """The stores of ``scope``'s tenant. Raises :class:`UnknownTenant` or
+        :class:`TenantClosed` for a tenant there are no stores to open for."""
+        try:
+            self._states.confirm_open(scope.tenant)
+        except TenantClosed:
+            self.evict(scope.tenant)
+            raise
+        with self._lock:
+            entry = self._entries.get(scope.tenant)
+            if entry is None:
+                entry = self._adopt_resident(scope) or self._build(scope)
+                self._entries[scope.tenant] = entry
+            return entry
+
+    def evict(self, tenant: TenantId) -> None:
+        """Drop ``tenant``'s stores, if cached; the tenant's deletion calls this when it closes."""
+        with self._lock:
+            self._entries.pop(tenant, None)
+
+    def _adopt_resident(self, scope: StoreScope) -> TenantStores | None:
+        resident = self._resident
+        if resident is None:
+            return None
+        try:
+            resident_scope = resident.scope
+        except SoleTenantUnresolved:
+            # The store holds several tenants, so the resident set names none of them.
+            self._resident = None
+            return None
+        if resident_scope != scope:
+            return None
+        self._resident = None
+        return resident
+
+
+@dataclass(frozen=True)
+class HubCore:
+    """The process-scoped hub-level stores and the per-tenant store cache, built once by
+    :func:`build_hub_core`. A tenant's stores are opened through :meth:`open`."""
+
+    store_connections: HubStoreConnections
+    scoped_reads: HubScopedReads
+    auth_errors: RepoErrorFactory
+    users: UserRepository
+    tenants: TenantCache
+    #: The stores of the store's only tenant — the set a single-tenant hub serves, and the one
+    #: :meth:`open` returns for that tenant.
+    sole_tenant: TenantStores
+    clock: IClock
+
+    def open(self, scope: StoreScope) -> TenantStores:
+        """``scope``'s tenant's stores, built once per tenant. Raises :class:`UnknownTenant` or
+        :class:`TenantClosed` for a tenant there are no stores to open for."""
+        return self.tenants.open(scope)
+
+    # The sole tenant's members the hub process reads at boot and wires its work-source registry from.
+
+    @property
+    def tenant_connections(self) -> ScopedConnections:
+        return self.sole_tenant.connections
+
+    @property
+    def secrets(self) -> SecretStore:
+        return self.sole_tenant.secrets
+
+    @property
+    def work_source_records(self) -> WorkSourceRecordStore:
+        return self.sole_tenant.work_source_records
+
+    @property
+    def repository_records(self) -> RepositoryRecordStore:
+        return self.sole_tenant.repository_records
+
+    @property
+    def config_import(self) -> ConfigImportStore:
+        return self.sole_tenant.config_import
+
+    @property
+    def work_item_store(self) -> WorkItemStore:
+        return self.sole_tenant.work_item_store
+
+    @property
+    def work_item_edits(self) -> WorkItemEditService:
+        return self.sole_tenant.work_item_edits
+
+    @property
+    def garden_proposal_resolution(self) -> GardenProposalDeliveryResolution:
+        return self.sole_tenant.garden_proposal_resolution
+
+
+@dataclass(frozen=True)
+class LiveConfig:
+    """The process's one built-object cache and the one secret reader its builders reveal
+    through — the reader reaches nothing else (``bzh:secret-write-only``)."""
+
+    objects: ConfigObjectCache
+    secrets: ISecretReader
+
+
+def build_live_config(core: HubCore, *, secret_keys: IHubKeyProvider) -> LiveConfig:
+    stores = core.sole_tenant
+    return LiveConfig(
+        objects=ConfigObjectCache(ConfigRevisionsStore(stores.connections)),
+        secrets=StoreSecretReader(catalog=stores.secrets, sealed=stores.secrets, cipher=secret_cipher(secret_keys)),
+    )
+
+
+def build_config_authoring(core: HubCore, *, secret_keys: IHubKeyProvider) -> ConfigAuthoring:
+    """The one configured-record writer, sealing under ``secret_keys``."""
+    stores = core.sole_tenant
+    return ConfigAuthoring(
+        work_sources=stores.work_source_records,
+        repositories=stores.repository_records,
+        secrets=stores.secrets,
+        cipher=secret_cipher(secret_keys),
+        apply_writer=stores.config_apply,
+        import_writer=stores.config_import,
+        clock=stores.clock,
+    )
+
+
+def build_process_core(engine: Engine) -> HubCore:
+    """:func:`build_hub_core` on the system clock."""
+    return build_hub_core(engine, clock=SystemClock())
+
+
+def build_hub_core(engine: Engine, *, clock: IClock) -> HubCore:
+    """Build the :class:`HubCore`."""
+    store_errors = HubStoreErrorFactory(get_logger("blizzard.hub.store"))
+    store_connections = HubStoreConnections(engine, store_errors)
+    scoped_reads = HubScopedReads(tenants=TenantStateReads(store_connections))
+    sole_tenant = build_tenant_stores(SoleTenantConnections(engine, store_errors), clock=clock)
+    auth_errors = RepoErrorFactory(get_logger("blizzard.hub.auth"))
+
+    def build(scope: StoreScope) -> TenantStores:
+        return build_tenant_stores(store_connections.scoped(scope), clock=clock)
+
+    return HubCore(
+        store_connections=store_connections,
+        scoped_reads=scoped_reads,
+        auth_errors=auth_errors,
+        users=UserRepository(store_connections, auth_errors),
+        tenants=TenantCache(build=build, states=scoped_reads.tenants, resident=sole_tenant),
+        sole_tenant=sole_tenant,
         clock=clock,
     )
 
@@ -568,19 +703,21 @@ def build_services(
     egress_path_key: bytes | None = None,
     annotation_interval_seconds: int = 120,
 ) -> HubServices:
-    """Construct and wire every fleet service over the shared :class:`HubCore`.
+    """Construct and wire every fleet service over the shared :class:`HubCore` — each tenant-owned
+    store from the one tenant's :class:`TenantStores` the single-tenant hub serves.
     ``hub_command_runner``/``hub_workdir`` are the hub command node's mechanism seams,
     left ``None`` for real adapters; an explicit ``oauth_registry`` wins over
     ``oauth_providers``."""
+    stores = core.sole_tenant
     clock = core.clock
     store_connections = core.store_connections
-    tenant_connections = core.tenant_connections
-    chunk_stores = core.chunk_stores
-    work_item_store = core.work_item_store
-    finding_store = core.finding_store
-    garden_proposal_store = core.garden_proposal_store
-    garden_proposal_closure_store = core.garden_proposal_closure_store
-    registry_store = core.registry
+    tenant_connections = stores.connections
+    chunk_stores = stores.chunk_stores
+    work_item_store = stores.work_item_store
+    finding_store = stores.finding_store
+    garden_proposal_store = stores.garden_proposal_store
+    garden_proposal_closure_store = stores.garden_proposal_closure_store
+    registry_store = stores.registry
     chunk_facts = chunk_stores.facts
     chunk_record = chunk_stores.record
     chunk_lifecycle = chunk_stores.lifecycle
@@ -709,7 +846,7 @@ def build_services(
         or FilesystemHubWorkdir(hub_workdir_root or Path(tempfile.gettempdir()) / "blizzard-hub-workdirs"),
         clock=clock,
         marker_authority=marker_authority,
-        repositories=core.repository_records,
+        repositories=stores.repository_records,
         secrets=secrets,
         marker_callback_base_url=hub_marker_callback_base_url,
         tracer=platform_tracer,
@@ -775,7 +912,7 @@ def build_services(
     # Bound as `.resolve` (a plain `delivery.validation.CommitResolver` callable), not the bare
     # instance, so `HubServices.commit_resolver` carries no dependency on the concrete class.
     commit_resolver = RepositoryCommitResolver(
-        repositories=core.repository_records,
+        repositories=stores.repository_records,
         secrets=secrets,
         forge=GitHubCommitResolver(forge_http_client or httpx.Client(timeout=10.0)),
     ).resolve
@@ -847,9 +984,9 @@ def build_services(
             dependencies=chunk_dependencies,
             exclusive=chunk_exclusive,
             clock=clock,
-            cycle_lock=core.cycle_lock,
+            cycle_lock=stores.cycle_lock,
         ),
-        delete=core.delete,
+        delete=stores.delete,
         facts=FactIngestService(
             facts=chunk_facts,
             route=chunk_route,
@@ -873,7 +1010,7 @@ def build_services(
             dependencies=chunk_dependencies,
             exclusive=chunk_exclusive,
             clock=clock,
-            cycle_lock=core.cycle_lock,
+            cycle_lock=stores.cycle_lock,
         ),
         fleet=fleet,
         enrollment=enrollment,
@@ -921,12 +1058,12 @@ def build_services(
         scopes=scope_store,
         scope_registry=scope_registry,
         scope_lifecycle=ScopeLifecycle(scopes=scope_store, clock=clock),
-        secret_catalog=core.secrets,
-        secret_references=core.secret_referrers,
+        secret_catalog=stores.secrets,
+        secret_references=stores.secret_referrers,
         config_authoring=build_config_authoring(core, secret_keys=secret_keys),
-        work_source_records=core.work_source_records,
-        repository_records=core.repository_records,
-        config_changes=core.config_changes,
+        work_source_records=stores.work_source_records,
+        repository_records=stores.repository_records,
+        config_changes=stores.config_changes,
         routines=routine_store,
         routine_scopes=routine_scope_store,
         routine_scope_membership=RoutineScopeMembership(routine_scopes=routine_scope_store, clock=clock),
@@ -949,7 +1086,7 @@ def build_services(
         ),
         routine_baselines=RoutineBaselineService(finding_sets=finding_set_store, delivery=chunk_delivery),
         findings=finding_store,
-        finding_exit=core.finding_exit,
+        finding_exit=stores.finding_exit,
         finding_sets=finding_set_store,
         garden_proposals=garden_proposal_store,
         garden_proposal_authoring=GardenProposalAuthoring(
@@ -958,7 +1095,7 @@ def build_services(
         garden_proposal_closures=garden_proposal_closure_store,
         garden_proposal_closure=GardenProposalClosureService(
             closures=garden_proposal_closure_store,
-            items=core.work_item_edits,
+            items=stores.work_item_edits,
             default_graph=lambda: graph_mint.ensure_default(
                 PACKAGED.default.doc, definition_yaml=PACKAGED.default.text
             ),

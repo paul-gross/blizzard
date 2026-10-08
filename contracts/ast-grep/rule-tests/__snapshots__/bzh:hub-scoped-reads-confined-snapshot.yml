@@ -1,0 +1,44 @@
+id: bzh:hub-scoped-reads-confined
+snapshots:
+  ? |
+    from blizzard.hub.store.internal import hub_scoped_reads
+  : labels:
+    - source: from blizzard.hub.store.internal import hub_scoped_reads
+      style: primary
+      start: 0
+      end: 56
+  ? |
+    from blizzard.hub.store.internal.hub_scoped_reads import HubScopedReads
+  : labels:
+    - source: from blizzard.hub.store.internal.hub_scoped_reads import HubScopedReads
+      style: primary
+      start: 0
+      end: 71
+  ? |
+    from blizzard.hub.store.internal.hub_scoped_reads import TenantStateReads, hub_scoped_read
+  : labels:
+    - source: from blizzard.hub.store.internal.hub_scoped_reads import TenantStateReads, hub_scoped_read
+      style: primary
+      start: 0
+      end: 90
+  ? |
+    from somewhere import (
+        Other,
+        HubScopedReads as Reads,
+    )
+  : labels:
+    - source: |-
+        from somewhere import (
+            Other,
+            HubScopedReads as Reads,
+        )
+      style: primary
+      start: 0
+      end: 65
+  ? |
+    import blizzard.hub.store.internal.hub_scoped_reads as reads
+  : labels:
+    - source: import blizzard.hub.store.internal.hub_scoped_reads as reads
+      style: primary
+      start: 0
+      end: 60
