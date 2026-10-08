@@ -1324,10 +1324,48 @@ _SCHEMA_METADATA = {"hub": hub_schema.metadata, "runner": runner_schema.metadata
 _SERVER_DEFAULT_EXEMPTIONS: dict[str, set[str]] = {"chunks": {"model"}}
 
 
-def _schema_snapshot(engine: sa.engine.Engine, *, exemptions: dict[str, set[str]]) -> dict[str, object]:
+# Constraint names a hub migration gave that src/blizzard/hub/store/schema.py leaves unnamed, keyed by (table,
+# migrated name); each value is the revision that rebuilds the table and settles the name.
+_CONSTRAINT_NAME_EXEMPTIONS: dict[tuple[str, str], str] = {
+    ("findings", "fk_findings_raised_by_chunk_id"): "20261008_1400_tenant_tighten",
+    ("finding_facts", "fk_finding_facts_finding_set_id_finding_sets"): "20261008_1400_tenant_tighten",
+    ("finding_facts", "fk_finding_facts_proposal_id_garden_proposals"): "20261008_1400_tenant_tighten",
+    ("finding_facts", "fk_finding_facts_superseded_by_findings"): "20261008_1400_tenant_tighten",
+    ("runner_external_usage", "pk_runner_external_usage"): "20261008_1400_tenant_tighten",
+}
+_NAME_EXEMPTIONS = {"hub": _CONSTRAINT_NAME_EXEMPTIONS, "runner": {}}
+
+
+def _compared_name(table_name: str, name: str | None, name_exemptions: dict[tuple[str, str], str]) -> str | None:
+    """A constraint's name as the snapshot compares it — ``None`` for an unnamed or an exempted one."""
+    return None if name is None or (table_name, name) in name_exemptions else name
+
+
+def _constraint_names(engine: sa.engine.Engine) -> set[tuple[str, str]]:
+    """Every named primary key, foreign key, unique constraint and index, as (table, name)."""
+    inspector = sa.inspect(engine)
+    names: set[tuple[str, str]] = set()
+    for table_name in inspector.get_table_names():
+        reflected = [
+            inspector.get_pk_constraint(table_name).get("name"),
+            *(fk.get("name") for fk in inspector.get_foreign_keys(table_name)),
+            *(uq.get("name") for uq in inspector.get_unique_constraints(table_name)),
+            *(idx.get("name") for idx in inspector.get_indexes(table_name)),
+        ]
+        names.update((table_name, name) for name in reflected if name is not None)
+    return names
+
+
+def _schema_snapshot(
+    engine: sa.engine.Engine,
+    *,
+    exemptions: dict[str, set[str]],
+    name_exemptions: dict[tuple[str, str], str],
+) -> dict[str, object]:
     """A comparable schema fingerprint: table set, and per table its column set (name,
-    type, nullability, server default), primary key, foreign keys, and indexes — column
-    *order* excluded, since ``add_column`` always appends and a migration can't undo that."""
+    type, nullability, server default), primary key, foreign keys, unique constraints and
+    indexes — each constraint with its name, ``None`` where it is unnamed. Column *order*
+    is excluded, since ``add_column`` always appends and a migration can't undo that."""
     inspector = sa.inspect(engine)
     snapshot: dict[str, object] = {}
     for table_name in inspector.get_table_names():
@@ -1338,13 +1376,28 @@ def _schema_snapshot(engine: sa.engine.Engine, *, exemptions: dict[str, set[str]
             (c["name"], str(c["type"]), c["nullable"], None if c["name"] in exempt else c["default"])
             for c in inspector.get_columns(table_name)
         )
-        pk = frozenset(inspector.get_pk_constraint(table_name)["constrained_columns"])
+        pk_constraint = inspector.get_pk_constraint(table_name)
+        pk = (
+            _compared_name(table_name, pk_constraint.get("name"), name_exemptions),
+            frozenset(pk_constraint["constrained_columns"]),
+        )
         foreign_keys = frozenset(
-            (tuple(sorted(fk["constrained_columns"])), fk["referred_table"], tuple(sorted(fk["referred_columns"])))
+            (
+                _compared_name(table_name, fk.get("name"), name_exemptions),
+                tuple(sorted(fk["constrained_columns"])),
+                fk["referred_table"],
+                tuple(sorted(fk["referred_columns"])),
+            )
             for fk in inspector.get_foreign_keys(table_name)
         )
-        indexes = frozenset((tuple(idx["column_names"]), idx["unique"]) for idx in inspector.get_indexes(table_name))
-        snapshot[table_name] = (columns, pk, foreign_keys, indexes)
+        uniques = frozenset(
+            (_compared_name(table_name, uq.get("name"), name_exemptions), tuple(uq["column_names"]))
+            for uq in inspector.get_unique_constraints(table_name)
+        )
+        indexes = frozenset(
+            (idx["name"], tuple(idx["column_names"]), idx["unique"]) for idx in inspector.get_indexes(table_name)
+        )
+        snapshot[table_name] = (columns, pk, foreign_keys, uniques, indexes)
     return snapshot
 
 
@@ -1357,12 +1410,42 @@ def test_migrated_store_matches_declared_schema(daemon: Daemon, tmp_path: Path) 
     declared = create_engine_from_url(f"sqlite:///{tmp_path / f'{daemon.name}-declared.db'}")
     try:
         _SCHEMA_METADATA[daemon.name].create_all(declared)
-        assert _schema_snapshot(migrated, exemptions=_SERVER_DEFAULT_EXEMPTIONS) == _schema_snapshot(
-            declared, exemptions=_SERVER_DEFAULT_EXEMPTIONS
-        )
+        name_exemptions = _NAME_EXEMPTIONS[daemon.name]
+        assert _schema_snapshot(
+            migrated, exemptions=_SERVER_DEFAULT_EXEMPTIONS, name_exemptions=name_exemptions
+        ) == _schema_snapshot(declared, exemptions=_SERVER_DEFAULT_EXEMPTIONS, name_exemptions=name_exemptions)
+        assert set(name_exemptions) <= _constraint_names(migrated), "a name exemption matches no constraint"
     finally:
         migrated.dispose()
         declared.dispose()
+
+
+@pytest.mark.parametrize(
+    ("left", "right"),
+    [
+        (sa.UniqueConstraint("a", "b"), sa.UniqueConstraint("b", "a")),
+        (sa.UniqueConstraint("a", "b"), sa.UniqueConstraint("a", "b", name="uq_pair_a_b")),
+        (sa.UniqueConstraint("a", "b", name="uq_pair_a_b"), sa.UniqueConstraint("a", "b", name="uq_pair_ab")),
+        (sa.PrimaryKeyConstraint("a", "b"), sa.PrimaryKeyConstraint("a", "b", name="pk_pair")),
+    ],
+    ids=["unique-columns", "unique-unnamed-vs-named", "unique-renamed", "pk-unnamed-vs-named"],
+)
+def test_schema_snapshot_tells_constraint_shapes_and_names_apart(
+    tmp_path: Path, left: sa.Constraint, right: sa.Constraint
+) -> None:
+    """SQLite reflects a unique constraint through ``get_unique_constraints`` only, never
+    ``get_indexes``; the snapshot reads both, and every constraint's name."""
+    snapshots = []
+    for side, constraint in (("left", left), ("right", right)):
+        metadata = sa.MetaData()
+        sa.Table("pair", metadata, sa.Column("a", sa.Text, nullable=False), sa.Column("b", sa.Text), constraint)
+        engine = create_engine_from_url(f"sqlite:///{tmp_path / f'{side}.db'}")
+        try:
+            metadata.create_all(engine)
+            snapshots.append(_schema_snapshot(engine, exemptions={}, name_exemptions={}))
+        finally:
+            engine.dispose()
+    assert snapshots[0] != snapshots[1]
 
 
 _MIGRATIONS_DIRS = {"hub": HUB_MIGRATIONS_DIR, "runner": RUNNER_MIGRATIONS_DIR}
