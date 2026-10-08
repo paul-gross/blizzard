@@ -24,9 +24,13 @@ from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal import transcript_segment_store as store_module
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
+from blizzard.hub.store.scoped import ScopedStatements
+from blizzard.hub.tenancy import StoreScope, TenantId
 from tests.support import hub_store_connections
 
 pytestmark = pytest.mark.unit
+
+_STMTS = ScopedStatements(StoreScope(TenantId("ten_transcripts")))
 
 _NOW = datetime(2026, 8, 9, tzinfo=UTC)
 
@@ -66,24 +70,28 @@ def _executed_statements() -> dict[str, ClauseElement]:
     record = _record()
     m = store_module
     return {
-        "_segments_for_chunk_stmt": m._segments_for_chunk_stmt("ch_1"),
-        "_records_for_segment_stmt": m._records_for_segment_stmt("ch_1", "sg_1"),
-        "_lease_runner_ids_stmt": m._lease_runner_ids_stmt("ch_1", "nd_build", 1),
-        "_records_for_lease_stmt": m._records_for_lease_stmt("ch_1", "nd_build", 1, "r1"),
-        "_high_water_stmt": m._high_water_stmt("r1"),
-        "_high_water_owner_stmt": m._high_water_owner_stmt("r1"),
-        "_natural_key_state_stmt": m._natural_key_state_stmt("sg_1", 0),
-        "_chunk_stored_bytes_stmt": m._chunk_stored_bytes_stmt("ch_1"),
-        "_runner_window_bytes_stmt": m._runner_window_bytes_stmt("r1", _NOW),
-        "_insert_high_water_stmt": m._insert_high_water_stmt("r1", seq=7, at=_NOW),
-        "_update_high_water_stmt": m._update_high_water_stmt("r1", seq=7, at=_NOW),
-        "_insert_accepted_stmt": m._insert_accepted_stmt(record, byte_count=10, codec="zlib", content=b"z", at=_NOW),
-        "_insert_rejected_stmt": m._insert_rejected_stmt(record, byte_count=999, reason="record_too_large", at=_NOW),
+        "_segments_for_chunk_stmt": m._segments_for_chunk_stmt(_STMTS, "ch_1"),
+        "_records_for_segment_stmt": m._records_for_segment_stmt(_STMTS, "ch_1", "sg_1"),
+        "_lease_runner_ids_stmt": m._lease_runner_ids_stmt(_STMTS, "ch_1", "nd_build", 1),
+        "_records_for_lease_stmt": m._records_for_lease_stmt(_STMTS, "ch_1", "nd_build", 1, "r1"),
+        "_high_water_stmt": m._high_water_stmt(_STMTS, "r1"),
+        "_high_water_owner_stmt": m._high_water_owner_stmt(_STMTS, "r1"),
+        "_natural_key_state_stmt": m._natural_key_state_stmt(_STMTS, "sg_1", 0),
+        "_chunk_stored_bytes_stmt": m._chunk_stored_bytes_stmt(_STMTS, "ch_1"),
+        "_runner_window_bytes_stmt": m._runner_window_bytes_stmt(_STMTS, "r1", _NOW),
+        "_insert_high_water_stmt": m._insert_high_water_stmt(_STMTS, "r1", seq=7, at=_NOW),
+        "_update_high_water_stmt": m._update_high_water_stmt(_STMTS, "r1", seq=7, at=_NOW),
+        "_insert_accepted_stmt": m._insert_accepted_stmt(
+            _STMTS, record, byte_count=10, codec="zlib", content=b"z", at=_NOW
+        ),
+        "_insert_rejected_stmt": m._insert_rejected_stmt(
+            _STMTS, record, byte_count=999, reason="record_too_large", at=_NOW
+        ),
         "_update_to_accepted_stmt": m._update_to_accepted_stmt(
-            record, byte_count=10, codec="zlib", content=b"z", at=_NOW
+            _STMTS, record, byte_count=10, codec="zlib", content=b"z", at=_NOW
         ),
         "_update_still_rejected_stmt": m._update_still_rejected_stmt(
-            record, byte_count=999, reason="record_too_large", at=_NOW
+            _STMTS, record, byte_count=999, reason="record_too_large", at=_NOW
         ),
     }
 

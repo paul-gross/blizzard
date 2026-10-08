@@ -27,9 +27,13 @@ from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal import transcript_event_store as store_module
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
+from blizzard.hub.store.scoped import ScopedStatements
+from blizzard.hub.tenancy import StoreScope, TenantId
 from tests.support import hub_store_connections, seed_chunk, seed_graph
 
 pytestmark = pytest.mark.unit
+
+_STMTS = ScopedStatements(StoreScope(TenantId("ten_transcripts")))
 
 _NOW = datetime(2026, 8, 12, tzinfo=UTC)
 _EXTRACTOR_VERSION = "blizzard-analytics/1"
@@ -118,26 +122,24 @@ def _executed_statements() -> dict[str, ClauseElement]:
     return {
         "_visible_segment_ids_stmt": m._visible_segment_ids_stmt(),
         "_derived_segment_ids_stmt": m._derived_segment_ids_stmt(),
-        "_segment_records_stmt": m._segment_records_stmt("sg_1"),
-        "_marker_stmt": m._marker_stmt("sg_1", _EXTRACTOR_VERSION),
-        "_delete_events_stmt": m._delete_events_stmt("sg_1", _EXTRACTOR_VERSION),
-        "_delete_marker_stmt": m._delete_marker_stmt("sg_1", _EXTRACTOR_VERSION),
-        "_insert_events_stmt": m._insert_events_stmt("sg_1", _EXTRACTOR_VERSION, [_event()], _PROVENANCE),
+        "_segment_records_stmt": m._segment_records_stmt(_STMTS, "sg_1"),
+        "_marker_stmt": m._marker_stmt(_STMTS, "sg_1", _EXTRACTOR_VERSION),
+        "_delete_events_stmt": m._delete_events_stmt(_STMTS, "sg_1", _EXTRACTOR_VERSION),
+        "_delete_marker_stmt": m._delete_marker_stmt(_STMTS, "sg_1", _EXTRACTOR_VERSION),
+        "_insert_events_stmt": m._insert_events_stmt(_STMTS),
         "_upsert_marker_stmt": m._upsert_marker_stmt(
-            "sg_1", _EXTRACTOR_VERSION, content_fingerprint="fp", event_count=1, complete=True, at=_NOW
+            _STMTS, "sg_1", _EXTRACTOR_VERSION, content_fingerprint="fp", event_count=1, complete=True, at=_NOW
         ),
-        "_delete_all_events_for_segments_stmt": m._delete_all_events_for_segments_stmt(frozenset({"sg_1"})),
-        "_delete_all_markers_for_segments_stmt": m._delete_all_markers_for_segments_stmt(frozenset({"sg_1"})),
+        "_delete_all_events_for_segments_stmt": m._delete_all_events_for_segments_stmt(_STMTS, frozenset({"sg_1"})),
+        "_delete_all_markers_for_segments_stmt": m._delete_all_markers_for_segments_stmt(_STMTS, frozenset({"sg_1"})),
         "_candidacy_digests_stmt": m._candidacy_digests_stmt(),
         "_current_markers_stmt": m._current_markers_stmt(_EXTRACTOR_VERSION),
         "_derivation_signature_stmt": m._derivation_signature_stmt(),
-        "_markers_stmt": m._markers_stmt(_EXTRACTOR_VERSION),
-        "_segment_records_for_ids_stmt": m._segment_records_for_ids_stmt(["sg_1"]),
+        "_markers_stmt": m._markers_stmt(_STMTS, _EXTRACTOR_VERSION),
+        "_segment_records_for_ids_stmt": m._segment_records_for_ids_stmt(_STMTS, ["sg_1"]),
         "_segment_contexts_stmt": m._segment_contexts_stmt(["sg_1"]),
-        "_drop_identities_stmt": m._drop_identities_stmt(["sg_1"]),
-        "_insert_drops_stmt": m._insert_drops_stmt(
-            [{"segment_id": "sg_1", "chunk_id": "ch_1", "epoch": 1, "spawn_generation": 1, "dropped_at": _NOW}]
-        ),
+        "_drop_identities_stmt": m._drop_identities_stmt(_STMTS, ["sg_1"]),
+        "_insert_drops_stmt": m._insert_drops_stmt(_STMTS),
     }
 
 
@@ -589,10 +591,12 @@ def test_replace_segment_events_with_no_events_still_writes_a_marker(tmp_path: P
 
 def test_the_natural_key_is_enforced_by_the_schema(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
+    insert = store_module._insert_events_stmt(hub_store_connections(engine))
+    rows = store_module._event_rows("sg_1", _EXTRACTOR_VERSION, [_event()], _PROVENANCE)
     with engine.begin() as conn:
-        conn.execute(store_module._insert_events_stmt("sg_1", _EXTRACTOR_VERSION, [_event()], _PROVENANCE))
+        conn.execute(insert, rows)
         with pytest.raises(IntegrityError):
-            conn.execute(store_module._insert_events_stmt("sg_1", _EXTRACTOR_VERSION, [_event()], _PROVENANCE))
+            conn.execute(insert, rows)
 
 
 def test_drop_segments_removes_events_and_markers_at_every_extractor_version(tmp_path: Path) -> None:
@@ -704,7 +708,7 @@ def test_a_failure_after_the_deletes_leaves_events_markers_and_no_drop_fact(
     )
     _derive(store, "sg_1")
 
-    def _boom(rows: list[dict[str, Any]]) -> Any:
+    def _boom(stmts: ScopedStatements) -> Any:
         raise RuntimeError("injected")
 
     monkeypatch.setattr(store_module, "_insert_drops_stmt", _boom)

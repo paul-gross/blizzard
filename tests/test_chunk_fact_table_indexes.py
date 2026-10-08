@@ -185,7 +185,7 @@ def test_spend_by_node_plans_through_the_node_index_when_unfiltered(tmp_path: Pa
     temp B-tree when the caller passes no date range."""
     engine = _engine(tmp_path)
     compiled = str(
-        _spend_by_node_stmt(OperationalCriteria()).compile(
+        _spend_by_node_stmt(hub_store_connections(engine), OperationalCriteria()).compile(
             dialect=sqlite.dialect(), compile_kwargs={"literal_binds": True}
         )
     )
@@ -203,7 +203,9 @@ def test_spend_by_node_prefers_the_range_index_and_sorts_for_group_by_when_windo
     engine = _engine(tmp_path)
     criteria = OperationalCriteria(since=_NOW, until=_NOW)
     compiled = str(
-        _spend_by_node_stmt(criteria).compile(dialect=sqlite.dialect(), compile_kwargs={"literal_binds": True})
+        _spend_by_node_stmt(hub_store_connections(engine), criteria).compile(
+            dialect=sqlite.dialect(), compile_kwargs={"literal_binds": True}
+        )
     )
     with engine.connect() as conn:
         plan = conn.execute(sa.text(f"EXPLAIN QUERY PLAN {compiled}")).all()
