@@ -43,7 +43,12 @@ from blizzard.hub.domain.config.work_sources import (
 from blizzard.hub.domain.graph.authoring import DefaultGraphRetired
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.kernel.unset import UNSET
-from blizzard.hub.domain.work_items.editing import WorkItemHeldByDependents, WorkItemHeldByLiveChunk
+from blizzard.hub.domain.work_items.editing import (
+    WithdrawalLostToClosure,
+    WithdrawnWorkItem,
+    WorkItemHeldByDependents,
+    WorkItemHeldByLiveChunk,
+)
 from blizzard.hub.domain.work_items.model import WorkItemEdit, WorkItemFieldBlank, WorkItemNotEditable, WorkItemText
 from blizzard.hub.work_sources.editor import IWorkEditor, WorkItemRefUnknownError
 from blizzard.hub.work_sources.source import AuthorView, IWorkSource, resolve_author_view
@@ -474,18 +479,12 @@ def withdraw_work_item(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except ChunkNotFound as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except WithdrawalLostToClosure as exc:
+        _publish_holder_deletion(services, exc.deletion, by=identity.user_id)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except (WorkItemNotEditable, WorkItemHeldByLiveChunk, WorkItemHeldByDependents) as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    if withdrawn.deleted_chunk_id is not None:
-        chunk_events.ChunkChanged.of(
-            services, withdrawn.deleted_chunk_id, prev_status=withdrawn.deleted_chunk_status
-        ).publish(
-            cause="deleted",
-            key=f"chunk_deleted:{withdrawn.deleted_chunk_fact_id}",
-            by=identity.user_id,
-            status=withdrawn.deleted_chunk_status,
-        )
-        services.events.publish_queue_changed()  # a deleted chunk is never offered for claim again
+    _publish_holder_deletion(services, withdrawn, by=identity.user_id)
     holder = services.chunks.work_refs.find_live_holder(pointer)
     return _view(
         withdrawn.item,
@@ -494,3 +493,19 @@ def withdraw_work_item(
         live_holder=holder,
         runner_names=_runner_names(services, [withdrawn.item.author]),
     )
+
+
+def _publish_holder_deletion(services: HubServices, withdrawn: WithdrawnWorkItem, *, by: str) -> None:
+    """Publish the cascade-deleted holder's frames, if the withdrawal deleted one — whether
+    the withdrawal then stood or was refused, the deletion has committed."""
+    if withdrawn.deleted_chunk_id is None:
+        return
+    chunk_events.ChunkChanged.of(
+        services, withdrawn.deleted_chunk_id, prev_status=withdrawn.deleted_chunk_status
+    ).publish(
+        cause="deleted",
+        key=f"chunk_deleted:{withdrawn.deleted_chunk_fact_id}",
+        by=by,
+        status=withdrawn.deleted_chunk_status,
+    )
+    services.events.publish_queue_changed()  # a deleted chunk is never offered for claim again

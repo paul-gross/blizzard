@@ -29,6 +29,7 @@ from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.operations.delete import DeleteService
 from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.domain.work_items.editing import (
+    WithdrawalLostToClosure,
     WorkItemEditService,
     WorkItemHeldByDependents,
     WorkItemHeldByLiveChunk,
@@ -354,6 +355,27 @@ def test_edit_replaces_fields_and_stamps_edited_at_leaving_created_at_and_ref(tm
     assert edited.edited_at == clock.instant
     assert edited.created_at == created.item.created_at
     assert edited.ref == created.item.ref
+
+
+def test_an_empty_edit_stamps_edited_at_leaving_the_fields_unchanged(tmp_path: Path) -> None:
+    source, _, _, _, engine, clock = _source(tmp_path)
+    created = source.create(
+        title="title",
+        body="body",
+        author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
+        stated_priority=WorkItemPriority.HIGH,
+        graph=_graph(engine),
+    )
+    pointer = WorkRef(source="hub", ref=created.item.ref)
+    clock.advance(timedelta(days=1))
+
+    edited = source.edit(pointer, WorkItemEdit())
+
+    assert edited.edited_at == clock.instant
+    assert edited.title == "title"
+    assert edited.body == "body"
+    assert edited.stated_priority == "high"
+    assert edited.created_at == created.item.created_at
 
 
 def test_withdraw_sets_the_withdrawn_closure(tmp_path: Path) -> None:
@@ -815,6 +837,34 @@ def test_withdraw_racing_a_delivery_is_refused_naming_the_closure_that_won(tmp_p
         edits.withdraw(stale, by="operator")
 
     assert caught.value.closure is WorkItemClosure.DELIVERED
+    row = items.get("hub", created.ref)
+    assert row is not None and row.closure is WorkItemClosure.DELIVERED
+
+
+def test_withdraw_racing_a_delivery_past_an_unacquired_holder_is_refused_after_deleting_it(tmp_path: Path) -> None:
+    """The item reads open, then a delivery closes it before the cascade deletes the unacquired holder:
+    the deletion stands, but the withdrawal is refused naming the closure that won, carrying the deletion's facts."""
+    _, items, chunks, _, engine, clock = _source(tmp_path)
+    edits = _edits(items, chunks, clock)
+    created = seed_work_item(
+        items,
+        graph_id=_graph(engine).graph_id,
+        author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
+        at=_T0,
+    )
+    holder = f"ch_{created.ref}"
+    stale = items.get("hub", created.ref)
+    assert stale is not None and stale.closure is None
+    items.close("hub", created.ref, closure=WorkItemClosure.DELIVERED, at=_T0)
+
+    with pytest.raises(WorkItemNotEditable) as caught:
+        edits.withdraw(stale, by="operator")
+
+    assert caught.value.closure is WorkItemClosure.DELIVERED
+    assert isinstance(caught.value, WithdrawalLostToClosure)
+    assert caught.value.deletion.deleted_chunk_id == holder
+    assert caught.value.deletion.deleted_chunk_fact_id is not None
+    assert chunks.record.get(holder) is None
     row = items.get("hub", created.ref)
     assert row is not None and row.closure is WorkItemClosure.DELIVERED
 

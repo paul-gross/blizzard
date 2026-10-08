@@ -307,6 +307,23 @@ def test_delete_withdraws_only_open_hub_pointers_leaving_a_forge_pointer_untouch
     assert chunks.record.get(chunk_id) is None
 
 
+def test_delete_leaves_an_already_closed_hub_items_closure_and_closed_at_unchanged(tmp_path: Path) -> None:
+    """A delivery that closed the held item first stands: the delete's withdraw write is guarded to open items."""
+    chunks, items, delete, _ = _stores(tmp_path)
+    item = seed_work_item(items, graph_id="gr_1", author=WorkItemAuthor.user("u_1"), at=_T0)
+    items.close("hub", item.ref, closure=WorkItemClosure.DELIVERED, at=_T0)
+    chunk = chunks.record.get(f"ch_{item.ref}")
+    assert chunk is not None
+
+    delete.delete(chunk, by="operator")
+
+    row = items.get("hub", item.ref)
+    assert row is not None
+    assert row.closure is WorkItemClosure.DELIVERED
+    assert row.closed_at == _T0
+    assert chunks.record.get(chunk.chunk_id) is None
+
+
 # --- idempotent-by-guard: a repeated direct delete writes nothing a second time ----
 
 

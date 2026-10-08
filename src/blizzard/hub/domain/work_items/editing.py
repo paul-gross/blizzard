@@ -95,6 +95,16 @@ class WithdrawnWorkItem:
     deleted_chunk_fact_id: int | None = None
 
 
+class WithdrawalLostToClosure(WorkItemNotEditable):
+    """A withdrawal whose holder-chunk deletion committed, but a delivery closed the item
+    first — the refusal still carries the deletion's facts so the caller can publish it."""
+
+    def __init__(self, closed: HubWorkItem, deletion: WithdrawnWorkItem) -> None:
+        assert closed.closure is not None
+        super().__init__(closed.work_item_id, closed.closure)
+        self.deletion = deletion
+
+
 class WorkItemHeldByLiveChunk(Exception):
     """A withdrawal targeted a pointer a live (non-terminal) chunk still holds — mirrors
     ``IngestConflict`` (``src/blizzard/hub/domain/chunk/ingest.py``): withdrawing under a running chunk would
@@ -261,7 +271,9 @@ class WorkItemEditService:
         closed. An unacquired holder is deleted via
         :class:`~blizzard.hub.domain.operations.delete.DeleteService` instead of refusing;
         :class:`WorkItemHeldByLiveChunk` still raises for a runner- or human-held
-        one. Names the cascade-deleted chunk, if any, for the caller's own delete frame."""
+        one. Names the cascade-deleted chunk, if any, for the caller's own delete frame. A
+        delivery that closed the item first refuses with :class:`WithdrawalLostToClosure`
+        after the holder's deletion has committed, carrying the same deletion facts."""
         require_open_for(item, WorkItemVerb.WITHDRAW)
         holder = self._work_refs.find_live_holder(item.pointer)
         if holder is None:
@@ -281,9 +293,12 @@ class WorkItemEditService:
             raise WorkItemHeldByDependents(item.pointer, holder, exc.dependent_chunk_ids) from exc
         updated = self._items.get(item.source, item.ref)
         assert updated is not None
-        return WithdrawnWorkItem(
+        withdrawn = WithdrawnWorkItem(
             item=updated, deleted_chunk_id=holder, deleted_chunk_status=prev_status, deleted_chunk_fact_id=deleted_id
         )
+        if updated.closure is not WorkItemClosure.WITHDRAWN:
+            raise WithdrawalLostToClosure(updated, withdrawn)
+        return withdrawn
 
     def deliver(self, item: HubWorkItem) -> HubWorkItem:
         """Close ``item`` as delivered — the close-intent drainer's own write path. A
