@@ -67,7 +67,6 @@ _A, _N, _R = Transition.APPLY, Transition.NOOP, Transition.REFUSE
     [
         (WorkItemVerb.EDIT, _A, _R, _R),
         (WorkItemVerb.WITHDRAW, _A, _R, _R),
-        (WorkItemVerb.APPEND_EVIDENCE, _A, _R, _R),
         (WorkItemVerb.DELIVER, _A, _N, _N),
         (WorkItemVerb.READ, _A, _A, _R),
     ],

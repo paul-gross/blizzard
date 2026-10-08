@@ -88,7 +88,6 @@ def _seed_at_deliver(
         runner_id="r1",
         at=hub.clock.now(),
         artifacts=rows,
-        proposals=[],
         admission=__import__(
             "blizzard.hub.domain.chunk.ports.fence", fromlist=["EpochAdmission"]
         ).EpochAdmission.AT_OR_ABOVE,

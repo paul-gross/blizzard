@@ -302,27 +302,6 @@
       ]
     },
     {
-      "id": "work-item-proposal-materializes-at-delivery",
-      "statement": "A node-step's proposed work items ride its completion inertly through the graph; once the chunk actually delivers, the hub materializes every accumulated proposal of that chunk, best-effort and eventually convergent, never blocking the delivery itself \u2014 a create mints a fleet-authored hub item resting on its own fresh not_ready chunk, an update appends its evidence to an open item and stamps its last-edit instant, and an unresolvable proposal (its target closed, withdrawn, gone, or sourced somewhere with no editor) is recorded with its reason rather than retried forever.",
-      "owner": "blizzard-context:/domain/work/chunk.md#materialization",
-      "owner_kind": "domain",
-      "owner_assert": {
-        "quote": "best-effort, eventually convergent, and not atomic with the transition it keys on"
-      },
-      "markers": [
-        "materializes every accumulated proposal of a chunk",
-        "recorded with its reason rather than retried forever"
-      ],
-      "sites": [
-        {
-          "file": "docs/deployment/work-sources.md",
-          "symbol": "hub-owned-items",
-          "role": "allowed",
-          "reason": "Operator-facing surface description, the same structural cause as this registry's other docs/deployment/ survivors: an operator reading this section from outside the workspace cannot resolve a domain-doc path, so what a proposed work item becomes at delivery is restated plainly here rather than left as a bare pointer."
-        }
-      ]
-    },
-    {
       "id": "takeover-park-supersede-reclaims",
       "statement": "A hub-side supersede of an ordinary park leaves the chunk ready with no local requeue mark, so InterruptedClaims.reconcile falls to its reclaim arm and the held workdir goes to a fresh attempt rather than being skipped for the open takeover that had parked it.",
       "owner": "tests/test_runner_takeover.py#test_fill_reclaims_a_park_the_hub_superseded_even_under_an_open_takeover",

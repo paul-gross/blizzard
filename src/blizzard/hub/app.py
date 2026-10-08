@@ -105,9 +105,6 @@ from blizzard.wire.components import HUB_SCHEMA_COMPONENTS
 #: constant; its own change probe skips the pass when nothing changed.
 EVENT_DERIVATION_INTERVAL_SECONDS = 60
 
-#: The delivery-materialization sweep's own interval.
-WORK_ITEM_MATERIALIZATION_INTERVAL_SECONDS = 60
-
 #: The close-intent drain sweep's own interval.
 CLOSE_DRAIN_INTERVAL_SECONDS = 60
 
@@ -141,7 +138,7 @@ class Sweep:
     @classmethod
     def all(cls, app: FastAPI) -> Iterator[Sweep]:
         """The forge-status sweep, plus the always-on
-        event-derivation, delivery-materialization, and close-drain sweeps, plus the trace-export
+        event-derivation and close-drain sweeps, plus the trace-export
         sweep when tracing is enabled, plus the fact-egress sweep when a directory is configured — none on the
         store-free app. Each sweep's jitter is drawn uniformly from ``[0, interval_seconds)``
         here so their recurring cadence decorrelates from its second pass
@@ -166,14 +163,6 @@ class Sweep:
             app.state.shutdown,
             "blizzard.hub.transcript_events",
             jitter_seconds=random.uniform(0, EVENT_DERIVATION_INTERVAL_SECONDS),
-            tracer=tracer,
-        )
-        yield cls(
-            services.work_item_materialization,
-            WORK_ITEM_MATERIALIZATION_INTERVAL_SECONDS,
-            app.state.shutdown,
-            "blizzard.hub.work_item_materialization",
-            jitter_seconds=random.uniform(0, WORK_ITEM_MATERIALIZATION_INTERVAL_SECONDS),
             tracer=tracer,
         )
         yield cls(

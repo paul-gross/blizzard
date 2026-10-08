@@ -2614,12 +2614,6 @@
    "over_cap": 0,
    "total": 70
   },
-  "blizzard/hub/domain/chunk/proposals.py": {
-   "comments": 0,
-   "docstrings": 12,
-   "over_cap": 1,
-   "total": 62
-  },
   "blizzard/hub/domain/config/authoring.py": {
    "comments": 0,
    "docstrings": 0,
@@ -2685,12 +2679,6 @@
    "docstrings": 11,
    "over_cap": 0,
    "total": 49
-  },
-  "blizzard/hub/domain/execution/auth/proposals.py": {
-   "comments": 0,
-   "docstrings": 5,
-   "over_cap": 0,
-   "total": 26
   },
   "blizzard/hub/domain/execution/auth/route.py": {
    "comments": 0,
@@ -3304,23 +3292,11 @@
    "over_cap": 1,
    "total": 296
   },
-  "blizzard/hub/domain/work_items/materialization.py": {
-   "comments": 2,
-   "docstrings": 29,
-   "over_cap": 3,
-   "total": 162
-  },
   "blizzard/hub/domain/work_items/model.py": {
    "comments": 1,
    "docstrings": 35,
    "over_cap": 0,
    "total": 191
-  },
-  "blizzard/hub/domain/work_items/proposal_rules.py": {
-   "comments": 1,
-   "docstrings": 14,
-   "over_cap": 0,
-   "total": 99
   },
   "blizzard/hub/egress/__init__.py": {
    "comments": 0,
@@ -8460,12 +8436,6 @@
    "over_cap": 0,
    "total": 100
   },
-  "test_decision_strikes.py": {
-   "comments": 2,
-   "docstrings": 8,
-   "over_cap": 1,
-   "total": 215
-  },
   "test_decisions_api.py": {
    "comments": 10,
    "docstrings": 16,
@@ -11808,41 +11778,11 @@
    "over_cap": 0,
    "total": 197
   },
-  "test_work_item_materialization.py": {
-   "comments": 15,
-   "docstrings": 14,
-   "over_cap": 1,
-   "total": 346
-  },
-  "test_work_item_materialization_store.py": {
-   "comments": 15,
-   "docstrings": 12,
-   "over_cap": 0,
-   "total": 592
-  },
   "test_work_item_model.py": {
    "comments": 1,
    "docstrings": 2,
    "over_cap": 0,
    "total": 174
-  },
-  "test_work_item_proposal_rules.py": {
-   "comments": 0,
-   "docstrings": 2,
-   "over_cap": 0,
-   "total": 141
-  },
-  "test_work_item_proposals_apply.py": {
-   "comments": 16,
-   "docstrings": 19,
-   "over_cap": 0,
-   "total": 511
-  },
-  "test_work_item_proposals_wire.py": {
-   "comments": 2,
-   "docstrings": 4,
-   "over_cap": 0,
-   "total": 63
   },
   "test_work_item_run_store.py": {
    "comments": 1,

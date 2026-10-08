@@ -62,7 +62,6 @@ def _finish(store: ChunkStores) -> None:
         runner_id="r1",
         at=_T0,
         artifacts=[],
-        proposals=[],
         decision_id=None,
         admission=EpochAdmission.AT_OR_ABOVE,
     )

@@ -781,7 +781,6 @@ def test_a_chunk_reaching_the_terminal_with_no_landing_closes_no_ref(tmp_path: P
         runner_id="r1",
         at=hub.clock.now(),
         artifacts=[],
-        proposals=[],
         admission=EpochAdmission.AT_OR_ABOVE,
     )
 

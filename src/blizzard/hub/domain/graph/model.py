@@ -331,9 +331,9 @@ class NodeDoc(NodeShape[RunStepDoc]):
     checks_cwd: str | None = None
     # The per-check timeout, in seconds; a timeout is a red check.
     checks_timeout: int | None = None
-    # Whether this node's completion may carry proposed work items — legal only on a
-    # worker-judged runner node; ``False`` is the default, off.
-    proposes_work_items: bool = False
+    # The retired keys this node still declares — recorded, not refused, so validation
+    # can name each one.
+    retired_keys: tuple[str, ...] = ()
 
     @classmethod
     def of(cls, key: object, raw: object) -> NodeDoc:
@@ -368,7 +368,7 @@ class NodeDoc(NodeShape[RunStepDoc]):
             session_malformed=session.malformed,
             checks_cwd=checks_cwd,
             checks_timeout=checks_timeout,
-            proposes_work_items=bool(body.get("proposes_work_items", False)),
+            retired_keys=tuple(sorted(set(body.body) & RETIRED_NODE_KEYS)),
         )
 
     @staticmethod
@@ -403,6 +403,10 @@ class RotatePolicy:
             max_transcript_bytes=body.number("max_transcript_bytes"),
             max_invocations=body.number("max_invocations"),
         )
+
+
+# Node keys an earlier hub read and this one refuses at mint.
+RETIRED_NODE_KEYS = frozenset({"proposes_work_items"})
 
 
 # Every key this hub's session parser reads by name.
@@ -596,8 +600,6 @@ class Node(NodeShape[RunStep]):
     # See ``NodeDoc.checks_cwd`` / ``NodeDoc.checks_timeout``.
     checks_cwd: str | None = None
     checks_timeout: int | None = None
-    # See ``NodeDoc.proposes_work_items``.
-    proposes_work_items: bool = False
 
 
 @domain_model

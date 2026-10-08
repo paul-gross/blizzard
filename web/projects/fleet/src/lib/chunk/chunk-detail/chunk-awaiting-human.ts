@@ -7,7 +7,6 @@ import { KitTextInput } from '../../kit/kit-text-input';
 import { FleetWhen } from '../../core/when-display/fleet-when';
 import { runnerDisplayName } from '../../core/runner-display-name';
 import { ChunkEscalation } from './chunk-escalation';
-import { ChunkGateDocket } from './chunk-gate-docket';
 
 /** Emitted when the operator answers a chunk's open question from the dock. */
 export interface AnswerQuestionEvent {
@@ -16,13 +15,11 @@ export interface AnswerQuestionEvent {
   readonly chunkId: string;
 }
 
-/** Emitted when the operator resolves a chunk's open gate decision from the dock.
- * `struck` names the docket proposals toggled to refuse; empty passes every proposal. */
+/** Emitted when the operator resolves a chunk's open gate decision from the dock. */
 export interface ResolveDecisionEvent {
   readonly decisionId: string;
   readonly choice: string;
   readonly chunkId: string;
-  readonly struck: readonly string[];
 }
 
 /** How many recently answered questions the dock keeps a trail for. */
@@ -48,7 +45,7 @@ const ANSWERED_TRAIL_LIMIT = 3;
 @Component({
   selector: 'fleet-chunk-detail-awaiting-human',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ChunkEscalation, ChunkGateDocket, FleetWhen, KitButton, KitChips, KitTextInput],
+  imports: [ChunkEscalation, FleetWhen, KitButton, KitChips, KitTextInput],
   templateUrl: './chunk-awaiting-human.html',
   styleUrl: './chunk-awaiting-human.css',
 })
@@ -88,10 +85,6 @@ export class ChunkAwaitingHuman {
 
   /** Emitted when the operator resolves an open gate decision. */
   readonly resolveDecision = output<ResolveDecisionEvent>();
-
-  /** The docket's toggled ids, carried up via its `struckChange` output — read at
-   * resolve time rather than reaching back into the docket's own state. */
-  private readonly struckIds = signal<readonly string[]>([]);
 
   /** Each open question's in-progress answer, keyed by `question_id` — `KitTextInput`
    * is a controlled control, so
@@ -189,19 +182,12 @@ export class ChunkAwaitingHuman {
     });
   }
 
-  /** Emit a resolution for the open gate decision, carrying whatever the docket's
-   * toggle set currently holds. */
+  /** Emit a resolution for the open gate decision. */
   protected resolve(decisionId: string, choice: string): void {
     this.resolveDecision.emit({
       decisionId,
       choice,
       chunkId: this.detail().chunk_id,
-      struck: this.struckIds(),
     });
-  }
-
-  /** The docket's toggle set changed — record it for the next resolve. */
-  protected onDocketStruckChange(ids: readonly string[]): void {
-    this.struckIds.set(ids);
   }
 }

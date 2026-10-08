@@ -230,7 +230,6 @@ def test_record_migration_repins_releases_and_persists_artifacts_in_one_write(tm
         source=MigrationSource.AUTHORED_EDGE,
         at=hub.clock.now(),
         artifacts=[_artifact(chunk_id, node_id)],
-        proposals=[],
         admission=EpochAdmission.AT_OR_ABOVE,
     )
 
@@ -273,7 +272,6 @@ def test_record_migration_is_idempotent_on_replay(tmp_path: Path) -> None:
             source=MigrationSource.AUTHORED_EDGE,
             at=hub.clock.now(),
             artifacts=[_artifact(chunk_id, node_id)],
-            proposals=[],
             admission=EpochAdmission.AT_OR_ABOVE,
         )
 
@@ -324,7 +322,6 @@ def test_a_migration_landing_on_a_hub_node_derives_delivering_and_is_not_ready(t
         source=MigrationSource.AUTHORED_EDGE,
         at=hub.clock.now(),
         artifacts=[_artifact(chunk_id, node_id)],
-        proposals=[],
         admission=EpochAdmission.AT_OR_ABOVE,
     )
     assert wrote is not None
@@ -406,7 +403,6 @@ def test_record_migration_with_clear_intent_clears_the_intent_atomically(tmp_pat
         source=MigrationSource.AUTHORED_EDGE,
         at=hub.clock.now(),
         artifacts=[_artifact(chunk_id, node_id)],
-        proposals=[],
         clear_intent=True,
         admission=EpochAdmission.AT_OR_ABOVE,
     )
@@ -449,7 +445,6 @@ def test_record_migration_without_clear_intent_leaves_a_set_intent_untouched(tmp
         source=MigrationSource.AUTHORED_EDGE,
         at=hub.clock.now(),
         artifacts=[],
-        proposals=[],
         admission=EpochAdmission.AT_OR_ABOVE,
         # clear_intent defaults False — an ordinary #90 authored-choice migration,
         # which carries no intent of its own to clear.
@@ -501,7 +496,6 @@ def test_record_migration_with_clear_intent_on_a_hub_landing_retains_the_route(t
         source=MigrationSource.AUTHORED_EDGE,
         at=hub.clock.now(),
         artifacts=[],
-        proposals=[],
         release_route=False,
         clear_intent=True,
         admission=EpochAdmission.AT_OR_ABOVE,

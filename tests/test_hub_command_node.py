@@ -1341,7 +1341,6 @@ def test_serialization_barrier_two_chunks_never_run_hub_commands_concurrently(tm
             runner_id="r1",
             at=hub.clock.now(),
             artifacts=[],
-            proposals=[],
             admission=EpochAdmission.AT_OR_ABOVE,
         )
         return chunk, graph, merge_node
@@ -1459,7 +1458,6 @@ def test_boot_release_frees_a_dead_runs_live_slot_so_the_chunk_resumes(tmp_path:
         runner_id="r1",
         at=hub.clock.now(),
         artifacts=[],
-        proposals=[],
         admission=EpochAdmission.AT_OR_ABOVE,
     )
     assert hub.services.hub_node.run(chunk, graph, merge_node, epoch=1) is None

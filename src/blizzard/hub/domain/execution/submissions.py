@@ -9,7 +9,6 @@ from dataclasses import dataclass
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.roles import domain_model
-from blizzard.hub.domain.chunk.proposals import ItemProposal
 
 
 @domain_model
@@ -41,8 +40,8 @@ class CheckOutcome:
 @domain_model
 @dataclass(frozen=True)
 class Completion:
-    """A node-step's completion — the judgement's choice, the checks, the artifacts, and the
-    proposed work items, fenced by the executing lease's ``epoch``. ``decision_id`` names the
+    """A node-step's completion — the judgement's choice, the checks, and the artifacts,
+    fenced by the executing lease's ``epoch``. ``decision_id`` names the
     gate decision a resolving transition carries; ``route_token`` and ``lease_id`` are the
     optional route and owning-lease checks."""
 
@@ -52,7 +51,6 @@ class Completion:
     from_node_id: str
     check_results: Sequence[CheckOutcome] = ()
     artifacts: Sequence[CompletionArtifact] = ()
-    proposals: Sequence[ItemProposal] = ()
     decision_id: str | None = None
     route_token: str | None = None
     lease_id: str | None = None
@@ -62,12 +60,11 @@ class Completion:
 @dataclass(frozen=True)
 class GateSubmission:
     """A runner-configured gate: a decision submitted in place of a transition, carrying the
-    gated step's artifacts and proposed work items under the step's fencing ``epoch``."""
+    gated step's artifacts under the step's fencing ``epoch``."""
 
     from_node_id: str
     epoch: int
     runner_id: str
     artifacts: Sequence[CompletionArtifact] = ()
-    proposals: Sequence[ItemProposal] = ()
     route_token: str | None = None
     lease_id: str | None = None

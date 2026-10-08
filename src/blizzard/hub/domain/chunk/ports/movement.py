@@ -11,7 +11,6 @@ from blizzard.foundation.migration_source import MigrationSource
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
-from blizzard.hub.domain.chunk.proposals import StampedWorkItemProposal
 
 
 class IReadChunkMovementRepository(Protocol):
@@ -47,10 +46,9 @@ class IWriteChunkMovementRepository(IReadChunkMovementRepository, Protocol):
         runner_id: str,
         at: datetime,
         artifacts: list[StoredArtifact],
-        proposals: list[StampedWorkItemProposal],
         decision_id: str | None = None,
     ) -> FenceRefusal | None:
-        """One node-step's transition and its artifacts and proposals, written atomically
+        """One node-step's transition and its artifacts, written atomically
         behind the write fence (``bzh:epoch-fencing``) — a refusal writes nothing and is
         returned. ``decision_id`` is set only on a gate-resolving transition."""
         ...
@@ -71,7 +69,6 @@ class IWriteChunkMovementRepository(IReadChunkMovementRepository, Protocol):
         claimant: Claimant | None = None,
         at: datetime,
         artifacts: list[StoredArtifact],
-        proposals: list[StampedWorkItemProposal],
         source: MigrationSource,
         release_route: bool = True,
         clear_intent: bool = False,
@@ -79,8 +76,8 @@ class IWriteChunkMovementRepository(IReadChunkMovementRepository, Protocol):
     ) -> str | FenceRefusal | None:
         """Record a cross-graph migration atomically and idempotently, behind the write fence
         (``bzh:epoch-fencing``): the ``chunk_migrations`` fact, the ``chunks.graph_id`` re-pin,
-        the route release (unless ``release_route`` is ``False``), the step's ``artifacts`` and
-        ``proposals``, and — when ``clear_intent`` — the intent clear. Returns the
+        the route release (unless ``release_route`` is ``False``), the step's ``artifacts``, and
+        — when ``clear_intent`` — the intent clear. Returns the
         ``migration_id``, ``None`` on replay, or the :class:`FenceRefusal` that wrote nothing."""
         ...
 
@@ -99,7 +96,6 @@ class IWriteChunkMovementRepository(IReadChunkMovementRepository, Protocol):
         runner_id: str,
         at: datetime,
         artifacts: list[StoredArtifact],
-        proposals: list[StampedWorkItemProposal],
         decision_id: str | None = None,
     ) -> FenceRefusal | None:
         """:meth:`record_transition` on ``handle``'s already-locked connection (``bzh:store-exclusive-write``):
@@ -123,7 +119,6 @@ class IWriteChunkMovementRepository(IReadChunkMovementRepository, Protocol):
         claimant: Claimant | None = None,
         at: datetime,
         artifacts: list[StoredArtifact],
-        proposals: list[StampedWorkItemProposal],
         source: MigrationSource,
         release_route: bool = True,
         clear_intent: bool = False,

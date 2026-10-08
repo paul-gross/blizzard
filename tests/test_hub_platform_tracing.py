@@ -89,7 +89,7 @@ def test_a_sweep_pass_opens_its_own_root(tmp_path: Path) -> None:
     app = hub_app.build_hosted_app(config, platform_tracing=handle)
     app.state.shutdown = asyncio.Event()
     sweeps = list(hub_app.Sweep.all(app))
-    assert {sweep.name for sweep in sweeps} >= {"transcript_events", "work_closure", "work_item_materialization"}
+    assert {sweep.name for sweep in sweeps} >= {"transcript_events", "work_closure"}
     sweep = next(sweep for sweep in sweeps if sweep.name == "work_closure")
 
     async def one_pass() -> None:

@@ -1,7 +1,6 @@
 """The finding delta payload on the wire (unit tier).
 
-``FindingDelta.findings`` is a discriminated union on ``op`` (the
-``tests/test_work_item_proposals_wire.py`` shape): malformed input is refused at the
+``FindingDelta.findings`` is a discriminated union on ``op``: malformed input is refused at the
 wire edge, mechanically, before any delivery logic ever sees it."""
 
 from __future__ import annotations

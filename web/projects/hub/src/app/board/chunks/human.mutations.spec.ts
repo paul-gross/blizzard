@@ -28,7 +28,7 @@ describe('injectResolveDecisionMutation', () => {
   const keysAfter = async (): Promise<readonly unknown[]> => {
     const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
     const mutation = TestBed.runInInjectionContext(() => injectResolveDecisionMutation());
-    await mutation.mutateAsync({ decisionId: 'dc_1', choice: 'approve', chunkId: 'ch_1', struck: [] }).catch(() => undefined);
+    await mutation.mutateAsync({ decisionId: 'dc_1', choice: 'approve', chunkId: 'ch_1' }).catch(() => undefined);
     return invalidateSpy.mock.calls.map((call) => (call[0] as { queryKey: readonly unknown[] }).queryKey);
   };
 

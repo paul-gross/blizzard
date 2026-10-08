@@ -106,7 +106,6 @@ class _Fixture:
             runner_id="r1",
             at=_NOW,
             artifacts=[],
-            proposals=[],
             admission=EpochAdmission.AT_OR_ABOVE,
         )
         self.service = EventDerivationService(
@@ -126,7 +125,6 @@ class _Fixture:
             runner_id="r1",
             at=_NOW,
             artifacts=[],
-            proposals=[],
             admission=EpochAdmission.AT_OR_ABOVE,
         )
 

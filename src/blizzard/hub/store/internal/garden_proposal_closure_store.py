@@ -1,9 +1,8 @@
 """SQLAlchemy adapter for the garden-proposal closure repository seam.
 All ``sqlalchemy`` usage confined here (``bzh:dependency-inversion``). The
 accept-with-mint write lives in ``WorkItemStore.accept_create`` instead, reaching
-:func:`insert_garden_proposal_closure_row` as ``chunk_rows.insert_materialization_row``
-is reached from outside its own adapter — a deliberate two-adapter split, mirroring
-``work_item_materializations``."""
+:func:`insert_garden_proposal_closure_row` from outside its own adapter — a deliberate
+two-adapter split."""
 
 from __future__ import annotations
 
@@ -33,7 +32,7 @@ def insert_garden_proposal_closure_row(
     pointer: WorkRef | None,
 ) -> bool:
     """Insert one ``garden_proposal_closures`` row on a caller-supplied ``conn`` —
-    mirrors ``chunk_rows.insert_materialization_row``'s shared-connection shape, so a
+    mirrors ``chunk_rows.insert_chunk_rows``'s shared-connection shape, so a
     composite write can fold this into its own transaction. Idempotent per
     ``proposal_id``: returns ``False`` and writes nothing when a closure already exists.
     Locks the proposal's own row first with the same no-op ``UPDATE``

@@ -68,7 +68,6 @@ graph_nodes = Table(
     Column("poll_interval_seconds", Integer, nullable=True),
     Column("poll_timeout_seconds", Integer, nullable=True),
     # Null/false disallows proposed work items.
-    Column("proposes_work_items", Boolean, nullable=True),
 )
 Index("ix_graph_nodes_graph_id", graph_nodes.c.graph_id)
 
@@ -592,51 +591,6 @@ Index(
     garden_proposal_closures.c.source,
     garden_proposal_closures.c.ref,
     unique=True,
-)
-
-# --- Proposed work items (ride a node-step's completion, materialized at delivery) ----
-
-work_item_proposals = Table(
-    "work_item_proposals",
-    metadata,
-    Column("proposal_id", String, primary_key=True),  # wip_<ulid>
-    Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
-    Column("node_id", String, nullable=False),  # exact provenance
-    Column("node_name", String, nullable=False),
-    Column("epoch", Integer, nullable=False),
-    Column("ordinal", Integer, nullable=False),  # authored-submission order, `graph_artifacts`-shaped
-    Column("kind", String, nullable=False),  # create | update
-    Column("data", Text, nullable=False),  # JSON object, kind-shaped
-    Column("proposed_at", UtcDateTime, nullable=False),
-    # Null legacy proposer materializes as unresolved.
-    Column("runner_id", String, nullable=True),
-)
-Index("ix_work_item_proposals_chunk_id", work_item_proposals.c.chunk_id)
-
-# --- Proposal materialization outcomes (terminal, once per proposal) ---
-
-work_item_materializations = Table(
-    "work_item_materializations",
-    metadata,
-    Column("id", Integer, primary_key=True, autoincrement=True),
-    Column("proposal_id", String, ForeignKey("work_item_proposals.proposal_id"), nullable=False),
-    Column("outcome", String, nullable=False),  # created | updated | unresolved
-    Column("source", String, nullable=True),  # the resulting/targeted item's pointer; null when unresolved names none
-    Column("ref", String, nullable=True),
-    Column("reason", String, nullable=True),
-    Column("recorded_at", UtcDateTime, nullable=False),
-    UniqueConstraint("proposal_id", name="uq_work_item_materializations_proposal_id"),
-)
-
-# --- Proposal strikes (exclude from future materialization sweeps) ---
-
-work_item_strikes = Table(
-    "work_item_strikes",
-    metadata,
-    Column("proposal_id", String, ForeignKey("work_item_proposals.proposal_id"), primary_key=True),
-    Column("decision_id", String, ForeignKey("decisions.decision_id"), nullable=False),
-    Column("struck_by", String, nullable=False),
-    Column("struck_at", UtcDateTime, nullable=False),
 )
 
 # --- Lease facts (lease.minted, runner-reported) -------------------------------

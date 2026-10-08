@@ -24,7 +24,6 @@ from blizzard.foundation.node_steps import Executor
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.work_items import WorkItemClosure
 from blizzard.hub.domain.artifact.model import StoredArtifact
-from blizzard.hub.domain.chunk.proposals import StampedWorkItemProposal
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, Graph, Node
 from blizzard.hub.domain.runners.registration import RecordedPause
 
@@ -117,17 +116,6 @@ class WorkItemCloseOutcome(StrEnum):
     CLOSED = "closed"
     GONE = "gone"
     FAILED = "failed"
-
-
-class WorkItemMaterializationOutcome(StrEnum):
-    """One proposal's terminal judgment — recorded once in
-    ``work_item_materializations`` and never re-judged. A transient failure (a graph
-    retired out from under a ``create``, a store error) records nothing and is retried
-    on the next sweep, so no ``failed`` member exists here."""
-
-    CREATED = "created"
-    UPDATED = "updated"
-    UNRESOLVED = "unresolved"
 
 
 @domain_model
@@ -733,19 +721,6 @@ class DecisionChoice:
     description: str
 
 
-@domain_model
-@dataclass(frozen=True)
-class DocketEntry:
-    """One of a chunk's not-yet-materialized proposals, as it stands at a gate — a
-    :class:`~blizzard.hub.domain.chunk.proposals.StampedWorkItemProposal` plus whether an operator
-    has struck it. ``struck_by``/``struck_at`` are set only when :attr:`struck` is true."""
-
-    proposal: StampedWorkItemProposal
-    struck: bool = False
-    struck_by: str | None = None
-    struck_at: datetime | None = None
-
-
 class GateState(StrEnum):
     """Where a gate decision stands: awaiting its choice, decided, or closed with none made."""
 
@@ -779,9 +754,7 @@ class GateDecision:
     """A gate decision in full — the surfacing/read model.
 
     Resolution state is **derived**: ``resolved_choice`` is set once a resolution row
-    exists, and ``transitioned`` is true once a transition references this decision.
-    ``docket`` is the *chunk's* pending proposals, not just this decision's own — every
-    gate on the same chunk shares one strike record."""
+    exists, and ``transitioned`` is true once a transition references this decision."""
 
     decision_id: str
     chunk_id: str
@@ -794,7 +767,6 @@ class GateDecision:
     resolved_by: str | None = None
     resolved_at: datetime | None = None
     transitioned: bool = False
-    docket: list[DocketEntry] = field(default_factory=list)
     #: The runner whose configuration imposed this gate; ``None`` when the graph declared it.
     imposed_by_runner_id: str | None = None
 
@@ -832,11 +804,10 @@ class GateDecision:
     def _transitioned_undecided(self) -> bool:
         return not self.resolved and self.transitioned
 
-    def require_resolvable(self, *, choice: str, struck: Sequence[str], chunk_status: ChunkStatus) -> None:
+    def require_resolvable(self, *, choice: str, chunk_status: ChunkStatus) -> None:
         """Refuse a resolution this gate cannot take, in order: a ``choice`` outside the gate's
         own (:class:`NotADecisionChoice`); then, only while unresolved, a gate already closed —
-        undecided by a restart, or by its chunk ending (:class:`DecisionClosed`) — and a struck
-        id outside the chunk's pending, unstruck proposals (:class:`NotAPendingProposal`). Once
+        undecided by a restart, or by its chunk ending (:class:`DecisionClosed`). Once
         resolved every retry falls through, so the first-write-wins race names the winner."""
         if choice not in {c.name for c in self.choices}:
             valid = ", ".join(c.name for c in self.choices)
@@ -848,10 +819,6 @@ class GateDecision:
             raise DecisionClosed(f"decision {self.decision_id} was closed undecided by a restart")
         if not verb_legal_from(ChunkVerb.RESOLVE_DECISION, chunk_status):
             raise DecisionClosed(f"decision {self.decision_id} closed: chunk {self.chunk_id} is {chunk_status.value}")
-        strikeable = {e.proposal.proposal_id for e in self.docket if not e.struck}
-        unknown = set(struck) - strikeable
-        if unknown:
-            raise NotAPendingProposal(f"not a pending proposal of chunk {self.chunk_id}: {', '.join(sorted(unknown))}")
 
     def resolving_refusal(self, *, chunk_id: str, node_id: str, node_name: str, choice: str) -> str | None:
         """Why a resolving transition naming this gate cannot leave ``node_id``, or ``None``: the
@@ -867,10 +834,6 @@ class GateDecision:
 
 class NotADecisionChoice(ValueError):
     """A resolution named a choice the gate does not offer."""
-
-
-class NotAPendingProposal(ValueError):
-    """A resolution struck a proposal id that is not one of the chunk's pending, unstruck proposals."""
 
 
 class DecisionClosed(Exception):
@@ -1869,32 +1832,6 @@ class IWriteWorkItemRepository(IReadWorkItemRepository, Protocol):
         same chunk is left untouched. Returns the freshly-written ``chunk_deleted.id``."""
         ...
 
-    def materialize_create(
-        self,
-        *,
-        proposal_id: str,
-        pointer: WorkRef,
-        title: str,
-        body: str,
-        author: WorkItemAuthor,
-        stated_priority: str | None,
-        at: datetime,
-        chunk: Chunk,
-    ) -> bool:
-        """Mint the item, its resting ``not_ready`` chunk, and ``proposal_id``'s
-        ``created`` outcome fact, atomically in one transaction — mirrors
-        :meth:`create_with_chunk`, plus the outcome row. Returns ``False`` and writes
-        nothing when ``proposal_id`` was already judged (idempotent replay)."""
-        ...
-
-    def materialize_update(self, *, proposal_id: str, source: str, ref: str, evidence: str, at: datetime) -> bool:
-        """Append ``evidence`` to an open item's body, stamp ``edited_at``, and record
-        ``proposal_id``'s ``updated`` outcome fact, atomically in one transaction.
-        Returns ``False`` and writes nothing when ``proposal_id`` was already judged, or
-        when the item is no longer open (closed since the caller resolved it — left for
-        the next sweep to classify as unresolved)."""
-        ...
-
     def accept_create(
         self,
         *,
@@ -1910,7 +1847,7 @@ class IWriteWorkItemRepository(IReadWorkItemRepository, Protocol):
     ) -> HubWorkItem | None:
         """Mint the item and ``chunk``'s own rows, plus ``proposal_id``'s
         accepted-and-minted ``garden_proposal_closures`` row, atomically in one
-        transaction — mirrors :meth:`materialize_create`, the closure row
+        transaction — mirrors :meth:`create_with_chunk`, plus the closure row,
         written first as its idempotence guard. Returns ``None`` and writes nothing when
         ``proposal_id`` already carries a closure."""
         ...

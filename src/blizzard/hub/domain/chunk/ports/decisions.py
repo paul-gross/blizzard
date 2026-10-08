@@ -3,24 +3,22 @@ decision and its first-write-wins resolution."""
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.artifact.model import StoredArtifact
-from blizzard.hub.domain.chunk.model import DecisionChoice, DocketEntry, GateDecision
+from blizzard.hub.domain.chunk.model import DecisionChoice, GateDecision
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
-from blizzard.hub.domain.chunk.proposals import StampedWorkItemProposal
 
 
 @domain_model
 @dataclass(frozen=True)
 class LiveDecisionStatus:
-    """A live gate decision's identity and resolution — no choices, no
-    docket."""
+    """A live gate decision's identity and resolution — no choices."""
 
     decision_id: str
     node_id: str
@@ -49,12 +47,6 @@ class IReadChunkDecisionsRepository(Protocol):
         """Every unresolved decision across the fleet."""
         ...
 
-    def dockets_for_chunks(self, chunk_ids: Sequence[str]) -> dict[str, list[DocketEntry]]:
-        """Every requested chunk's docket, keyed by chunk id, as ``decision_for_chunk``
-        would carry it — a chunk with no pending proposals maps to an empty list, never
-        an absent key."""
-        ...
-
     def live_decisions_for(self, chunk_ids: Iterable[str]) -> dict[str, LiveDecisionStatus]:
         """Each given chunk's newest not-yet-transitioned decision, lean —
         the by-id-set bulk counterpart to :meth:`decision_for_chunk`, set-based
@@ -78,13 +70,12 @@ class IWriteChunkDecisionsRepository(IReadChunkDecisionsRepository, Protocol):
         choices: list[DecisionChoice],
         at: datetime,
         artifacts: list[StoredArtifact],
-        proposals: list[StampedWorkItemProposal],
         imposed_by_runner_id: str | None,
     ) -> FenceRefusal | None:
-        """Open a gate decision, committing any step artifacts and proposals atomically, behind
+        """Open a gate decision, committing any step artifacts atomically, behind
         the write fence (``bzh:epoch-fencing``) — a refusal writes nothing and is returned.
 
-        A graph gate passes neither artifacts nor proposals; a runner-config gate carries them
+        A graph gate passes no artifacts; a runner-config gate carries them
         here, with ``imposed_by_runner_id`` naming the runner — ``None`` for a graph gate."""
         ...
 
@@ -102,7 +93,6 @@ class IWriteChunkDecisionsRepository(IReadChunkDecisionsRepository, Protocol):
         choices: list[DecisionChoice],
         at: datetime,
         artifacts: list[StoredArtifact],
-        proposals: list[StampedWorkItemProposal],
         imposed_by_runner_id: str | None,
     ) -> bool | FenceRefusal:
         """:meth:`record_decision` on ``handle``'s already-locked connection
@@ -111,10 +101,7 @@ class IWriteChunkDecisionsRepository(IReadChunkDecisionsRepository, Protocol):
         lost-ack replay, nothing written; ``True`` is a fresh write; a refusal writes nothing."""
         ...
 
-    def record_decision_resolution(
-        self, decision_id: str, *, choice: str, resolved_by: str, at: datetime, struck: Sequence[str] = ()
-    ) -> bool:
-        """First-write-wins CAS: record the person's choice and ``struck``'s proposal
-        ids as a strike each, in one transaction, or return ``False`` if the decision
-        was already resolved (the loser is told who won — and writes no strike at all)."""
+    def record_decision_resolution(self, decision_id: str, *, choice: str, resolved_by: str, at: datetime) -> bool:
+        """First-write-wins CAS: record the person's choice, or return ``False`` if the
+        decision was already resolved (the loser is told who won)."""
         ...

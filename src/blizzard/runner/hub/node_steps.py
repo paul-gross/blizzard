@@ -77,7 +77,6 @@ def _node_of(wire: NodeConfig) -> EnvelopeNode:
         checks_cwd=wire.checks_cwd,
         checks_timeout=wire.checks_timeout,
         produces=[ProducesSpec(name=p.name, kind=p.kind) for p in wire.produces],
-        proposes_work_items=wire.proposes_work_items,
         retries_max=wire.retries_max,
         choices=[
             Choice(name=c.name, description=c.description, requires_checks=c.requires_checks) for c in wire.choices

@@ -29,6 +29,7 @@ from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.operations.delete import DeleteService
 from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.domain.work_items.editing import (
+    WithdrawalLostToClosure,
     WorkItemEditService,
     WorkItemHeldByDependents,
     WorkItemHeldByLiveChunk,
@@ -354,6 +355,27 @@ def test_edit_replaces_fields_and_stamps_edited_at_leaving_created_at_and_ref(tm
     assert edited.edited_at == clock.instant
     assert edited.created_at == created.item.created_at
     assert edited.ref == created.item.ref
+
+
+def test_an_empty_edit_stamps_edited_at_leaving_the_fields_unchanged(tmp_path: Path) -> None:
+    source, _, _, _, engine, clock = _source(tmp_path)
+    created = source.create(
+        title="title",
+        body="body",
+        author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
+        stated_priority=WorkItemPriority.HIGH,
+        graph=_graph(engine),
+    )
+    pointer = WorkRef(source="hub", ref=created.item.ref)
+    clock.advance(timedelta(days=1))
+
+    edited = source.edit(pointer, WorkItemEdit())
+
+    assert edited.edited_at == clock.instant
+    assert edited.title == "title"
+    assert edited.body == "body"
+    assert edited.stated_priority == "high"
+    assert edited.created_at == created.item.created_at
 
 
 def test_withdraw_sets_the_withdrawn_closure(tmp_path: Path) -> None:
@@ -819,6 +841,34 @@ def test_withdraw_racing_a_delivery_is_refused_naming_the_closure_that_won(tmp_p
     assert row is not None and row.closure is WorkItemClosure.DELIVERED
 
 
+def test_withdraw_racing_a_delivery_past_an_unacquired_holder_is_refused_after_deleting_it(tmp_path: Path) -> None:
+    """The item reads open, then a delivery closes it before the cascade deletes the unacquired holder:
+    the deletion stands, but the withdrawal is refused naming the closure that won, carrying the deletion's facts."""
+    _, items, chunks, _, engine, clock = _source(tmp_path)
+    edits = _edits(items, chunks, clock)
+    created = seed_work_item(
+        items,
+        graph_id=_graph(engine).graph_id,
+        author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
+        at=_T0,
+    )
+    holder = f"ch_{created.ref}"
+    stale = items.get("hub", created.ref)
+    assert stale is not None and stale.closure is None
+    items.close("hub", created.ref, closure=WorkItemClosure.DELIVERED, at=_T0)
+
+    with pytest.raises(WorkItemNotEditable) as caught:
+        edits.withdraw(stale, by="operator")
+
+    assert caught.value.closure is WorkItemClosure.DELIVERED
+    assert isinstance(caught.value, WithdrawalLostToClosure)
+    assert caught.value.deletion.deleted_chunk_id == holder
+    assert caught.value.deletion.deleted_chunk_fact_id is not None
+    assert chunks.record.get(holder) is None
+    row = items.get("hub", created.ref)
+    assert row is not None and row.closure is WorkItemClosure.DELIVERED
+
+
 def test_deliver_of_a_withdrawn_item_writes_nothing_and_keeps_it_withdrawn(tmp_path: Path) -> None:
     """Deliver from withdrawn is a declared no-op: the closure stands and no write is made."""
     _, items, chunks, _, engine, clock = _source(tmp_path)
@@ -839,8 +889,7 @@ def test_deliver_of_a_withdrawn_item_writes_nothing_and_keeps_it_withdrawn(tmp_p
 def test_every_minting_door_refuses_a_blank_title_or_body(
     tmp_path: Path, title: str, body: str, field_name: str
 ) -> None:
-    """The operator create, the fleet materialize-create, and the garden accept-create
-    all hold the item's non-blank text invariant, before any ref is allocated."""
+    """The operator create and the garden accept-create both hold the item's non-blank text invariant, before any ref is allocated."""
     _, items, chunks, _, engine, clock = _source(tmp_path)
     edits = _edits(items, chunks, clock)
     graph = _graph(engine)
@@ -848,12 +897,10 @@ def test_every_minting_door_refuses_a_blank_title_or_body(
 
     with pytest.raises(WorkItemFieldBlank) as created:
         edits.create(source="hub", title=title, body=body, author=author, stated_priority=None, graph=graph)
-    with pytest.raises(WorkItemFieldBlank) as materialized:
-        edits.materialize_create("p_1", title=title, body=body, author=author, stated_priority=None, graph=graph)
     with pytest.raises(WorkItemFieldBlank) as accepted:
         edits.accept_create(
             "gp_1", title=title, body=body, author=author, graph=graph, reason=None, closed_by="operator"
         )
 
-    assert {created.value.field_name, materialized.value.field_name, accepted.value.field_name} == {field_name}
+    assert {created.value.field_name, accepted.value.field_name} == {field_name}
     assert items.list("hub", limit=10) == []

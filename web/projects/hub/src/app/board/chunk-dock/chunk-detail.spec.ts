@@ -47,14 +47,6 @@ const GATE_DETAIL: ChunkDetailModel = {
       { name: 'reject', description: 'Send it back.' },
     ],
     transitioned: false,
-    docket: [
-      {
-        proposal_id: 'wip_01',
-        node_name: 'build',
-        kind: 'create',
-        payload: { kind: 'create', title: 'fix it', body: 'do it', stated_priority: 'normal' },
-      },
-    ],
   },
 };
 
@@ -261,22 +253,7 @@ describe('ChunkDetail container', () => {
 
     const calls = stub.forRoute('/api/decisions/de_42/resolutions', 'POST');
     expect(calls).toHaveLength(1);
-    expect(calls[0].body).toMatchObject({ choice: 'approve', struck: [] });
-  });
-
-  it('forwards the docket’s toggled proposal ids to the resolve-decision client call', async () => {
-    const fixture = TestBed.createComponent(ChunkDetail);
-    fixture.componentRef.setInput('chunkId', 'ch_gate');
-    await settle(fixture);
-    const el = fixture.nativeElement as HTMLElement;
-
-    el.querySelector<HTMLInputElement>('[data-testid="docket-strike"]')?.click();
-    el.querySelector<HTMLButtonElement>('[data-testid="decision-choice"]')?.click();
-    await settle(fixture);
-
-    const calls = stub.forRoute('/api/decisions/de_42/resolutions', 'POST');
-    expect(calls).toHaveLength(1);
-    expect(calls[0].body).toMatchObject({ choice: 'approve', struck: ['wip_01'] });
+    expect(calls[0].body).toMatchObject({ choice: 'approve' });
   });
 
   it('surfaces a resolve-decision failure rather than swallowing it', async () => {

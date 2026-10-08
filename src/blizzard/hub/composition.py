@@ -137,7 +137,6 @@ from blizzard.hub.domain.runners.enrollment import RunnerEnrollmentService
 from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, RetiredRunnerGuard
 from blizzard.hub.domain.work_items.closure import CloseIntentDrainer
 from blizzard.hub.domain.work_items.editing import WorkItemEditService
-from blizzard.hub.domain.work_items.materialization import WorkItemMaterializationReconciler
 from blizzard.hub.egress.factory import EgressUnavailable, build_egress_writer
 from blizzard.hub.egress.space import free_bytes
 from blizzard.hub.egress.writer import EgressWriterSettings, IEgressWriter, mint_process_token
@@ -264,9 +263,6 @@ class HubServices:
     egress_reset: EgressReset
     #: Writes a past window — always composed; it refuses while the export is off.
     egress_backfill: EgressBackfill
-    #: The delivery-materialization reconciler — built here for the same
-    #: reason: it needs the write-capable chunk and work-item repositories.
-    work_item_materialization: WorkItemMaterializationReconciler
     #: The session read repository — reads only (``bzh:controller-read-only``).
     sessions: IReadSessionRepository
     #: The identity-link read repository — a plain read, no domain service.
@@ -753,7 +749,6 @@ def build_services(
     # directory is passed; `None` otherwise.
     signing = SigningKeyService(signing_keys_dir) if signing_keys_dir is not None else None
     auth_throttle = IpThrottle(clock=clock)
-    materialization_edits = core.work_item_edits
     graph_mint = GraphMintService(graphs=graph_store, clock=clock)
     scope_store = ScopeStore(store_connections)
     scope_registry = ScopeRegistry(scopes=scope_store, clock=clock)
@@ -900,16 +895,6 @@ def build_services(
         egress_status=egress_status,
         egress_reset=egress_reset,
         egress_backfill=egress_backfill,
-        work_item_materialization=WorkItemMaterializationReconciler(
-            delivery=chunk_delivery,
-            items=work_item_store,
-            edits=materialization_edits,
-            work_sources=work_sources,
-            graph_mint=graph_mint,
-            default_graph_doc=PACKAGED.default.doc,
-            default_graph_yaml=PACKAGED.default.text,
-            clock=clock,
-        ),
         sessions=session_store,
         identities=identity_store,
         users=user_store,
@@ -964,7 +949,7 @@ def build_services(
         garden_proposal_closures=garden_proposal_closure_store,
         garden_proposal_closure=GardenProposalClosureService(
             closures=garden_proposal_closure_store,
-            items=materialization_edits,
+            items=core.work_item_edits,
             default_graph=lambda: graph_mint.ensure_default(
                 PACKAGED.default.doc, definition_yaml=PACKAGED.default.text
             ),

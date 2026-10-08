@@ -25,7 +25,6 @@ from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementReposito
 from blizzard.hub.domain.chunk.ports.route import IWriteChunkRouteRepository
 from blizzard.hub.domain.execution.auth.commit_pointer import CommitPointerPolicy
 from blizzard.hub.domain.execution.auth.produces import PRODUCES_WARN, Produces
-from blizzard.hub.domain.execution.auth.proposals import ProposalPolicy
 from blizzard.hub.domain.execution.auth.route import ROUTE_TOKEN_WARN, RouteToken
 from blizzard.hub.domain.execution.completion import (
     CompletionRefused,
@@ -33,7 +32,6 @@ from blizzard.hub.domain.execution.completion import (
     gate_refusal,
     refuse_hub_executed,
     refuse_incoherent_attempt,
-    stamped_proposals,
     stored_artifacts,
 )
 from blizzard.hub.domain.execution.submissions import CompletionArtifact, GateSubmission
@@ -113,7 +111,7 @@ class DecisionService:
         runner is refused with :class:`~blizzard.hub.domain.runners.registration.RunnerRetired` first.
 
         Order is behavior: retired → node → facts → route token → replay → hub-executed node →
-        attempt coherence → proposals → commit pointer → produces → record. Attempt coherence is re-derived under the
+        attempt coherence → commit pointer → produces → record. Attempt coherence is re-derived under the
         chunk's row lock, ahead of the write itself."""
         self._retired.refuse_if_retired(submission.runner_id, action="decision")
         try:
@@ -148,7 +146,6 @@ class DecisionService:
             # The same unconditional policies `ApplyService.apply` runs — a runner-config gate is a
             # dispatch fork too, and the step's artifacts land here, so the produces backstop runs.
             for rejection in (
-                ProposalPolicy(node, submission.proposals).rejection(),
                 CommitPointerPolicy(submission.artifacts).rejection(),
                 Produces(node, submission.artifacts).rejection(mode=produces_mode),
             ):
@@ -159,16 +156,7 @@ class DecisionService:
 
         decision_id = Id.mint(IdPrefix.DECISION, self._clock).value
         artifact_ids = [Id.mint(IdPrefix.ARTIFACT, self._clock).value for _ in submission.artifacts]
-        proposal_ids = [Id.mint(IdPrefix.WORK_ITEM_PROPOSAL, self._clock).value for _ in submission.proposals]
         artifact_rows = self._artifact_rows(chunk, node, submission.epoch, submission.artifacts, artifact_ids)
-        proposal_rows = stamped_proposals(
-            chunk.chunk_id,
-            node,
-            submission.epoch,
-            submission.proposals,
-            proposal_ids=proposal_ids,
-            runner_id=submission.runner_id,
-        )
         with self._exclusive.locked([chunk.chunk_id]) as handle:
             locked = handle.facts(chunk.chunk_id)
             if locked is None:
@@ -189,7 +177,6 @@ class DecisionService:
                 choices=decision_choices(node),
                 at=self._clock.now(),
                 artifacts=artifact_rows,
-                proposals=proposal_rows,
                 imposed_by_runner_id=submission.runner_id,
             )
         if isinstance(recorded, FenceRefusal):
@@ -203,22 +190,19 @@ class DecisionService:
     ) -> list[StoredArtifact]:
         return stored_artifacts(chunk.chunk_id, node, epoch, artifacts, artifact_ids=ids)
 
-    def resolve(
-        self, decision: GateDecision, *, choice: str, resolved_by: str, struck: Sequence[str] = ()
-    ) -> ResolutionResult:
-        """Record a choice, first-write-wins, striking ``struck``'s proposal ids in the same
-        write. Takes the already-resolved decision (``bzh:domain-takes-objects``), not a bare
-        ``decision_id``. :meth:`GateDecision.require_resolvable` decides the refusals; the
-        chunk's derived status is read here for it."""
+    def resolve(self, decision: GateDecision, *, choice: str, resolved_by: str) -> ResolutionResult:
+        """Record a choice, first-write-wins. Takes the already-resolved decision
+        (``bzh:domain-takes-objects``), not a bare ``decision_id``.
+        :meth:`GateDecision.require_resolvable` decides the refusals; the chunk's derived
+        status is read here for it."""
         facts = ChunkFacts.or_default(self._facts.load_facts(decision.chunk_id))
-        decision.require_resolvable(choice=choice, struck=struck, chunk_status=facts.status())
+        decision.require_resolvable(choice=choice, chunk_status=facts.status())
         won = self._decisions.record_decision_resolution(
-            decision.decision_id, choice=choice, resolved_by=resolved_by, at=self._clock.now(), struck=struck
+            decision.decision_id, choice=choice, resolved_by=resolved_by, at=self._clock.now()
         )
         if won:
             return ResolutionResult(resolved=True, choice=choice, resolved_by=resolved_by)
-        # Lost the CAS — report the winner so the loser is told who resolved. No strike
-        # was written either: the loser's whole write, not just the choice, applies nothing.
+        # Lost the CAS — report the winner so the loser is told who resolved.
         current = self._decisions.get_decision(decision.decision_id)
         assert current is not None and current.resolved_choice is not None
         return ResolutionResult(resolved=False, choice=current.resolved_choice, resolved_by=current.resolved_by or "")

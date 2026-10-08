@@ -71,7 +71,6 @@ class EnvelopeNode:
     checks_cwd: str | None = None
     checks_timeout: int | None = None
     produces: list[ProducesSpec] = field(default_factory=list)
-    proposes_work_items: bool = False
     retries_max: int | None = None
     choices: list[Choice] = field(default_factory=list)
 

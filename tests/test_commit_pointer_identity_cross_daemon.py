@@ -115,7 +115,6 @@ def _deliver_payload(tmp_path: Path, submitted: list[CompletionArtifact], *owner
         runner_id="r1",
         at=hub.clock.now(),
         artifacts=rows,
-        proposals=[],
         admission=EpochAdmission.AT_OR_ABOVE,
     )
     report_lease(hub, chunk_id, epoch=1, seq=1)

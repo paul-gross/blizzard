@@ -452,7 +452,6 @@ def test_a_stale_or_stopped_migration_is_refused_and_writes_nothing(tmp_path: Pa
             admission=EpochAdmission.CURRENT,
             at=hub.clock.now(),
             artifacts=[],
-            proposals=[],
             source=MigrationSource.AUTHORED_EDGE,
         )
 

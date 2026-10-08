@@ -118,7 +118,6 @@ def _seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None
         runner_id="r",
         at=_T0,
         artifacts=[],
-        proposals=[],
         admission=EpochAdmission.AT_OR_ABOVE,
     )
 
@@ -188,7 +187,6 @@ def _seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None
         runner_id="r",
         at=_T0,
         artifacts=[],
-        proposals=[],
         admission=EpochAdmission.AT_OR_ABOVE,
     )
 
@@ -207,7 +205,6 @@ def _seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None
         runner_id="r",
         at=_T0,
         artifacts=[],
-        proposals=[],
         admission=EpochAdmission.AT_OR_ABOVE,
     )
     store.movement.record_migration(
@@ -221,7 +218,6 @@ def _seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None
         epoch=2,
         at=_at(1),
         artifacts=[],
-        proposals=[],
         source=MigrationSource.AUTHORED_EDGE,
         admission=EpochAdmission.AT_OR_ABOVE,
     )
@@ -282,7 +278,6 @@ def _seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None
         choices=[DecisionChoice(name="ok", description="d")],
         at=_T0,
         artifacts=[],
-        proposals=[],
         admission=EpochAdmission.AT_OR_ABOVE,
     )
     store.decisions.record_decision_resolution("dec_1", choice="ok", resolved_by="op", at=_at(1))
@@ -579,7 +574,6 @@ def _seed_promoted_with_open_decision(store: ChunkStores, chunk_id: str) -> None
         choices=[DecisionChoice(name="ok", description="d")],
         at=_T0,
         artifacts=[],
-        proposals=[],
         admission=EpochAdmission.AT_OR_ABOVE,
     )
 

@@ -209,7 +209,6 @@ export class ChunkDetail {
         decisionId: event.decisionId,
         choice: event.choice,
         chunkId: event.chunkId,
-        struck: event.struck,
       },
       { onError: (error) => this.reportFailure(readDecisionFailure(error, new Date(this.clock()))) },
     );

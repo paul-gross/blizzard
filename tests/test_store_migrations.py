@@ -368,29 +368,6 @@ def test_work_items_tables_survive_migration_roundtrip(tmp_path: Path) -> None:
     assert _has_tables()
 
 
-def test_work_item_strikes_table_survives_migration_roundtrip(tmp_path: Path) -> None:
-    """``work_item_strikes`` — downgrades to this revision's own parent
-    by id, so the drop half is asserted rather than inferred from a revision marker a
-    no-op ``downgrade()`` would satisfy just as well."""
-    config = hub_runtime.init_environment(tmp_path)  # upgrades to head
-    runner = hub_runtime.migration_runner(config)
-
-    def _has_table() -> bool:
-        engine = create_engine_from_url(config.db_url)
-        try:
-            return "work_item_strikes" in sa.inspect(engine).get_table_names()
-        finally:
-            engine.dispose()
-
-    assert _has_table()
-
-    runner.downgrade("20260825_1250_hub_transitions_to_node_id")
-    assert not _has_table()
-
-    runner.upgrade("head")
-    assert _has_table()
-
-
 def test_scopes_and_routines_tables_survive_migration_roundtrip(tmp_path: Path) -> None:
     """``scopes``, ``scope_lifecycle_facts``, ``routines`` — one
     hand-written revision mints all three; downgrades to its own parent by id, so the
@@ -1418,9 +1395,9 @@ _HISTORICAL_RESHAPES: list[tuple[str, str, str, tuple[str, ...]] | tuple[str, st
     ("hub", "20260812_1200_hub_transcript_events", "transcript_events", ("subject", "tool")),
     ("hub", "20260817_0900_hub_graph_artifacts", "graph_sessions", ("compaction_window",)),
     ("hub", "20260819_0900_chunk_restarts", "chunk_restarts", ("from_graph_id",)),
-    ("hub", "20260825_1100_work_item_proposals", "work_item_proposals", ("runner_id",)),
     ("hub", "20260830_1835_work_item_runs", "garden_proposals", ("source_artifact_id", "ref")),
     ("hub", "20260906_1130_routine_scopes_join", "graph_nodes", ("mode",), "removed"),
+    ("hub", "20261006_1200_runner_minted_ids", "graph_nodes", ("proposes_work_items",), "removed"),
     ("hub", "20260907_1000_event_log_runner_id_nullable", "transcript_segments", ("content_digest",)),
     ("hub", "20260914_1000_hub_harness_provenance", "graph_sessions", ("harnesses",)),
     ("hub", "20260914_1000_hub_harness_provenance", "chunks", ("default_harnesses",)),

@@ -56,7 +56,6 @@ from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository
 from blizzard.hub.domain.chunk.ports.stores import ChunkReadStores, ChunkStores
 from blizzard.hub.domain.chunk.ports.usage import IReadChunkUsageRepository
 from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository
-from blizzard.hub.domain.chunk.proposals import StampedWorkItemProposal
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.carry_over import IReadConfigImports
 from blizzard.hub.domain.config.changes import ChangeContext, Door, IReadConfigChanges, RecordKind
@@ -1384,7 +1383,6 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         runner_id=HUB_RUNNER_ID,
         at=_ht(36),
         artifacts=[],
-        proposals=[],
         admission=EpochAdmission.AT_OR_ABOVE,
     )
     write.movement.record_transition(
@@ -1397,19 +1395,6 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         runner_id=HUB_RUNNER_ID,
         at=_ht(37),
         artifacts=[],
-        proposals=[
-            StampedWorkItemProposal(
-                proposal_id="wip_hub_1",
-                chunk_id=chunk_transition,
-                node_id=build_node.node_id,
-                node_name="build",
-                epoch=2,
-                ordinal=0,
-                kind="create",
-                data=json.dumps({"title": "proposed", "body": "b", "stated_priority": None}),
-                runner_id=HUB_RUNNER_ID,
-            )
-        ],
         admission=EpochAdmission.AT_OR_ABOVE,
     )
 
@@ -1427,7 +1412,6 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         epoch=1,
         at=_ht(41),
         artifacts=[],
-        proposals=[],
         source=MigrationSource.AUTHORED_EDGE,
         admission=EpochAdmission.AT_OR_ABOVE,
     )
@@ -1450,19 +1434,6 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         ],
         at=_ht(44),
         artifacts=[],
-        proposals=[
-            StampedWorkItemProposal(
-                proposal_id="wip_hub_2",
-                chunk_id=chunk_decision_1,
-                node_id=build_node.node_id,
-                node_name="build",
-                epoch=1,
-                ordinal=0,
-                kind="create",
-                data=json.dumps({"title": "another proposal", "body": "b", "stated_priority": "p1"}),
-                runner_id=HUB_RUNNER_ID,
-            )
-        ],
         admission=EpochAdmission.AT_OR_ABOVE,
     )
     write.decisions.record_decision(
@@ -1475,7 +1446,6 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         choices=[DecisionChoice(name="approve", description="do it")],
         at=_ht(45),
         artifacts=[],
-        proposals=[],
         admission=EpochAdmission.AT_OR_ABOVE,
     )
 
@@ -1932,9 +1902,6 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
         w.chunk_decision_1
     ),
     (IReadChunkDecisionsRepository, "list_open_decisions"): lambda w: w.read.decisions.list_open_decisions(),
-    (IReadChunkDecisionsRepository, "dockets_for_chunks"): lambda w: w.read.decisions.dockets_for_chunks(
-        [w.chunk_decision_1, w.chunk_decision_2]
-    ),
     (IReadChunkDecisionsRepository, "live_decisions_for"): lambda w: w.read.decisions.live_decisions_for(
         [w.chunk_decision_1, w.chunk_decision_2]
     ),
@@ -1943,7 +1910,6 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
         "acme/widget", _HUB_BASE
     ),
     (IReadChunkDeliveryRepository, "pending_close_intents"): lambda w: w.read.delivery.pending_close_intents(),
-    (IReadChunkDeliveryRepository, "unmaterialized_proposals"): lambda w: w.read.delivery.unmaterialized_proposals(),
     (IReadChunkDependenciesRepository, "list_standing_edges"): lambda w: w.read.dependencies.list_standing_edges(),
     (IReadChunkDependenciesRepository, "standing_edge"): lambda w: w.read.dependencies.standing_edge(
         w.chunk_dependency_dependent, w.chunk_dependency_prerequisite

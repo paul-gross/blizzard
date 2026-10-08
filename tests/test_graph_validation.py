@@ -317,45 +317,19 @@ def test_non_positive_checks_timeout_is_an_error() -> None:
     assert any("`checks_timeout` must be a positive number of seconds" in e for e in result.errors), result.errors
 
 
-# --- Proposed work items --------------------------------------------------
+# --- Retired node keys ------------------------------------------------------
 
 
-def test_proposes_work_items_on_a_worker_node_mints() -> None:
+@pytest.mark.parametrize("value", [True, False])
+def test_a_node_declaring_the_retired_proposes_work_items_key_is_refused_naming_it(value: bool) -> None:
     doc = _min_build_deliver()
-    doc["nodes"]["build"]["proposes_work_items"] = True  # type: ignore[index]
-    result = Validator.of(GraphDoc.of(doc)).result
-    assert result.ok, result.errors
-
-
-def test_proposes_work_items_on_a_hub_executed_node_is_an_error() -> None:
-    doc = _min_build_deliver()
-    doc["nodes"]["deliver"]["proposes_work_items"] = True  # type: ignore[index]
+    doc["nodes"]["build"]["proposes_work_items"] = value  # type: ignore[index]
     result = Validator.of(GraphDoc.of(doc)).result
     assert not result.ok
-    assert any(
-        "node `deliver`: `proposes_work_items` is only legal on a worker-judged runner node" in e for e in result.errors
-    ), result.errors
+    assert any("node `build`: retired key `proposes_work_items`" in e for e in result.errors), result.errors
 
 
-def test_proposes_work_items_on_a_human_judged_node_is_an_error() -> None:
-    doc = _min_build_deliver()
-    doc["nodes"]["gate"] = {
-        "executor": "runner",
-        "proposes_work_items": True,
-        "judgement": {
-            "by": "human",
-            "choices": {"approve": {"description": "ship", "to": "deliver"}},
-        },
-    }
-    doc["nodes"]["build"]["judgement"]["choices"]["pass"]["to"] = "gate"  # type: ignore[index]
-    result = Validator.of(GraphDoc.of(doc)).result
-    assert not result.ok
-    assert any(
-        "node `gate`: `proposes_work_items` is only legal on a worker-judged runner node" in e for e in result.errors
-    ), result.errors
-
-
-def test_no_proposes_work_items_declared_is_unchanged() -> None:
+def test_the_same_graph_without_the_retired_key_mints() -> None:
     result = Validator.of(GraphDoc.of(_min_build_deliver())).result
-    assert result.ok
+    assert result.ok, result.errors
     assert result.warnings == []

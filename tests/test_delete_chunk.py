@@ -20,11 +20,8 @@ from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.model import Chunk, PendingCloseIntent, WorkItemAuthor, WorkRef
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
-from blizzard.hub.domain.chunk.proposals import StampedWorkItemProposal
-from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.domain.operations.delete import ChunkHasDependents, ChunkNotDeletable, DeleteService
 from blizzard.hub.domain.runners.route import Route
-from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import record_grouped_row_conn
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from tests.support import (
@@ -118,43 +115,6 @@ def test_a_grouped_chunk_is_excluded_from_pending_close_intents(tmp_path: Path) 
         record_grouped_row_conn(conn, "ch_2", grouped_into="ch_1", at=_at(1))
 
     assert chunks.delivery.pending_close_intents() == []
-
-
-def test_a_deleted_chunk_is_excluded_from_unmaterialized_proposals(tmp_path: Path) -> None:
-    chunks, _, _, engine = _stores(tmp_path)
-    _mint(chunks, "ch_1")
-    chunks.movement.record_transition(
-        transition_id="tr_1",
-        chunk_id="ch_1",
-        from_node_id="nd_1",
-        to_node_id=RESERVED_TERMINAL,
-        choice_name="pass",
-        epoch=1,
-        runner_id="r1",
-        at=_T0,
-        artifacts=[],
-        proposals=[
-            StampedWorkItemProposal(
-                proposal_id="wip_1",
-                chunk_id="ch_1",
-                node_id="nd_1",
-                node_name="build",
-                epoch=1,
-                ordinal=0,
-                kind="create",
-                data="{}",
-                runner_id="r1",
-            )
-        ],
-        admission=EpochAdmission.AT_OR_ABOVE,
-    )
-    assert [r.proposal_id for r in chunks.delivery.unmaterialized_proposals()] == ["wip_1"]
-
-    # A delivered chunk is past `DeleteService`'s reach, so the deleted fact is seeded directly.
-    with engine.begin() as conn:
-        conn.execute(s.chunk_deleted.insert().values(chunk_id="ch_1", deleted_at=_T0, deleted_by="operator"))
-
-    assert chunks.delivery.unmaterialized_proposals() == []
 
 
 # --- refusal at every status outside PRE_CLAIM_STATUSES, success at both members ---
@@ -305,6 +265,23 @@ def test_delete_withdraws_only_open_hub_pointers_leaving_a_forge_pointer_untouch
     assert closed is not None and closed.closure == WorkItemClosure.WITHDRAWN
     assert items.get("forge", "99") is None  # never a work_items row — untouched, not erroneously closed
     assert chunks.record.get(chunk_id) is None
+
+
+def test_delete_leaves_an_already_closed_hub_items_closure_and_closed_at_unchanged(tmp_path: Path) -> None:
+    """A delivery that closed the held item first stands: the delete's withdraw write is guarded to open items."""
+    chunks, items, delete, _ = _stores(tmp_path)
+    item = seed_work_item(items, graph_id="gr_1", author=WorkItemAuthor.user("u_1"), at=_T0)
+    items.close("hub", item.ref, closure=WorkItemClosure.DELIVERED, at=_T0)
+    chunk = chunks.record.get(f"ch_{item.ref}")
+    assert chunk is not None
+
+    delete.delete(chunk, by="operator")
+
+    row = items.get("hub", item.ref)
+    assert row is not None
+    assert row.closure is WorkItemClosure.DELIVERED
+    assert row.closed_at == _T0
+    assert chunks.record.get(chunk.chunk_id) is None
 
 
 # --- idempotent-by-guard: a repeated direct delete writes nothing a second time ----

@@ -16,7 +16,6 @@ from blizzard.hub.app import create_app_for_export as create_hub_app_for_export
 from blizzard.runner.app import create_app_for_export
 from blizzard.wire.attachments import AttachmentRequest
 from blizzard.wire.chunk import ChunkDetail, ChunkIngestRequest
-from blizzard.wire.decision import DecisionResolutionRequest
 from blizzard.wire.git_commits import GitCommitDeclarationRequest
 from blizzard.wire.graph import GraphPolicyRequest
 from blizzard.wire.history import ChunkHistoryView
@@ -117,13 +116,6 @@ def test_tool_call_segment_view_defaults_a_missing_input_truncated_to_false() ->
         "output_truncated": False,
     }
     assert ToolCallSegmentView.model_validate(without_field).input_truncated is False
-
-
-def test_decision_resolution_request_struck_defaults_empty() -> None:
-    """A resolution naming no ``struck`` ids passes every proposal — the field must
-    default to ``[]``, not be required, or a caller unaware of striking would fail
-    every resolve."""
-    assert DecisionResolutionRequest(choice="go").struck == []
 
 
 def test_the_runner_spec_carries_both_escalation_views_under_distinct_names() -> None:
