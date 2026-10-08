@@ -48,7 +48,7 @@ from blizzard.hub.store.internal.chunk_events_store import (
 )
 from blizzard.hub.store.internal.transcript_event_store import _visible_segment_ids_stmt
 
-from .support import seed_chunk, seed_graph
+from .support import hub_store_connections, seed_chunk, seed_graph
 
 pytestmark = pytest.mark.component
 
@@ -293,7 +293,7 @@ _ACTIVITY_FEED_SOURCES = (
     ),
     (
         "chunk_grouped",
-        lambda d: _chunk_grouped_stmt(),
+        lambda stmts, d: _chunk_grouped_stmt(stmts),
         s.chunk_grouped.c.grouped_at,
         s.chunk_grouped.c.id,
         "ix_chunk_grouped_grouped_at_id",
@@ -349,7 +349,7 @@ _ACTIVITY_FEED_SOURCES = (
     ),
     (
         "chunk_deleted",
-        lambda d: _chunk_deleted_activity_stmt(),
+        lambda stmts, d: _chunk_deleted_activity_stmt(stmts),
         s.chunk_deleted.c.deleted_at,
         s.chunk_deleted.c.id,
         "ix_chunk_deleted_deleted_at_id",
@@ -364,8 +364,11 @@ def test_activity_feed_source_bounded_read_plans_as_an_index_search_with_no_sort
     tmp_path: Path, table: str, stmt_fn: Any, ts_col: Any, pk_col: Any, index_name: str
 ) -> None:
     engine = _engine(tmp_path)
+    stmts = hub_store_connections(engine)
     since = datetime(2020, 1, 1, tzinfo=UTC)
-    stmt = _bounded_stmt(stmt_fn(_deleted_chunk_ids_stmt()), ts_col=ts_col, pk_col=pk_col, since=since, limit=50)
+    stmt = _bounded_stmt(
+        stmt_fn(stmts, _deleted_chunk_ids_stmt(stmts)), ts_col=ts_col, pk_col=pk_col, since=since, limit=50
+    )
     compiled = str(stmt.compile(dialect=sqlite.dialect(), compile_kwargs={"literal_binds": True}))
     with engine.connect() as conn:
         plan = conn.execute(sa.text(f"EXPLAIN QUERY PLAN {compiled}")).all()
