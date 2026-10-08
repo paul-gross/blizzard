@@ -6,13 +6,9 @@ import type { ChunkSummary } from 'fleet';
 import { BoardShell } from './board-shell';
 
 /**
- * A long current-node name must truncate inside its card rather than widen its lane:
- * a real layout claim jsdom cannot make, since it never lays out the lane grid. Every
- * lane has to keep its equal width inside a 1440px viewport, and the full name stays readable from the card's
- * `title`.
- *
- * Excluded from the default `ng test` run like every `*.shell-sweep.spec.ts` — run it
- * via `npm run shell-sweep`.
+ * A long current-node name truncates inside its card rather than widening its lane: every
+ * lane keeps its equal width inside a 1440px viewport, and the full name stays readable
+ * from the card's `title`. Under a real browser — see `blizzard-context:/verification/blizzard/commands/web/shell-sweep.md` §web:shell-sweep.
  */
 const LONG_NODE = 'n'.repeat(120);
 

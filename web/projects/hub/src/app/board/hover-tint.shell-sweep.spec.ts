@@ -9,18 +9,12 @@ import { BoardCardComponent } from './board-card/board-card';
 import { ChunkArtifacts } from './chunk-dock/chunk-artifacts';
 
 /**
- * The shared hover-tint proof behind `--tint-hover`/`--tint-selected`
- * (`blizzard-context:/verification/blizzard.md` `bzh:web-shell-sweep`) — a real-Chromium
- * proof of a computed-style claim jsdom cannot make: jsdom parses a `:hover` rule
- * without ever evaluating it, so `web:unit-test` cannot see a hovered row distinguished
- * from a resting or a selected one. Each case below drives a real pointer
- * (`userEvent.hover`, backed by Playwright) rather than dispatching a synthetic
- * `mouseenter`, since only a real pointer state changes which CSS actually matches, and
- * waits a frame after every hover/unhover — a real browser's style recalculation is not
- * guaranteed synchronous with the pointer move settling.
+ * The shared hover tint (`--tint-hover`/`--tint-selected`) distinguishes a hovered row from a
+ * resting and a selected one, under a real browser — see `blizzard-context:/verification/blizzard/commands/web/shell-sweep.md` §web:shell-sweep.
  *
- * Excluded from the default `ng test` run the same way every other `*.shell-sweep.spec.ts`
- * is — run it via `npm run shell-sweep` (`web/scripts/shell-sweep.js`).
+ * Each case drives a real pointer (`userEvent.hover`) rather than a synthetic `mouseenter`,
+ * since only a real pointer state changes which CSS matches, and waits a frame after every
+ * hover/unhover because style recalculation is not guaranteed synchronous with the move.
  */
 async function nextFrame(): Promise<void> {
   await new Promise((resolve) => requestAnimationFrame(resolve));

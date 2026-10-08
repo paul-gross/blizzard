@@ -6,11 +6,10 @@ import { type RunnerRegistryView, listRunnersApiRunnersGet, LIVE_COVERED_POLL_BA
  * Hub `GET /api/runners` read — the fleet registry with each runner's derived
  * liveness (`online` vs the 5-min staleness threshold) and `paused` state,
  * through TanStack Query and the generated hub client (bzh:generated-client).
- * The live-update service re-reads this on `runner-changed`; the poll is a backstop,
- * not the primary freshness path.
+ * Freshness: `EVENT_INVALIDATION_REGISTRY` (`web/projects/fleet/src/lib/sse/fleet-live.ts`).
  *
  * Retired runners are excluded unless `includeRetired()` is true. The include-retired read keys
- * under {@link hubRunnersKey}, so a `runner-changed` invalidation re-reads both.
+ * under {@link hubRunnersKey}, so an invalidation of that key re-reads both.
  */
 export function injectHubRunnersQuery(includeRetired: () => boolean = () => false) {
   return injectQuery(() => ({
@@ -23,8 +22,6 @@ export function injectHubRunnersQuery(includeRetired: () => boolean = () => fals
       if (error) throw error;
       return data?.runners ?? [];
     },
-    // Covered by runner-changed (EVENT_INVALIDATION_REGISTRY, sse/fleet-live.ts).
-    // See LIVE_COVERED_POLL_BACKSTOP_MS.
     refetchInterval: LIVE_COVERED_POLL_BACKSTOP_MS,
   }));
 }

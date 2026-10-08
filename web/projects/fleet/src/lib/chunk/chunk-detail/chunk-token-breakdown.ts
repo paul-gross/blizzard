@@ -16,24 +16,11 @@ const ZERO_USAGE_TOTAL: ChunkUsageTotalView = {
 };
 
 /**
- * The chunk's cost + token-usage breakdown — its own labelled table, separate from
- * {@link ChunkFacts}'s chunk-identity table above it: derived usage/cost is a
- * different kind of information from Status/Node/Runner/Attempts/Graph, so it
- * reads as its own thing rather than folding into that table as extra rows. The
- * derived total cost is visibly marked PARTIAL whenever `cost_partial` is set (never
- * silently understated). A subscription invocation's runner-reported estimate, when
- * the total carries one, folds into that same cost row rather than rendering as a
- * row of its own — {@link formatCost}'s leading `~` is the only mark it leaves. The
- * chunk's token counts render one labelled row per class — Input, Output, Cache Read,
- * and Cache Creation, the human-readable names for the wire's own
- * `input_tokens`/`output_tokens`/`cache_read_tokens`/`cache_create_tokens`
- * (`ChunkUsageTotalView`) — always visible inline, no expand
- * toggle standing between the operator and any of the five figures.
+ * The chunk's cost and token-usage table: one cost row, marked partial whenever
+ * `cost_partial` is set, and one row per token class, all visible inline.
  *
- * Styled to match {@link ChunkFacts}, whose `[token-breakdown]` slot projects it:
- * label/value column widths come from the inherited `--kv-label-col`. Angular's emulated style encapsulation does not reach across a component
- * boundary, so this table keeps its own copy of the shared `.kv` shape and its
- * `dt`/`dd` rules rather than relying on `ChunkFacts`'s.
+ * Emulated style encapsulation does not cross a component boundary, so this table
+ * keeps its own copy of the `.kv` shape rather than inheriting one.
  */
 @Component({
   selector: 'fleet-chunk-detail-token-breakdown',
@@ -50,12 +37,7 @@ export class ChunkTokenBreakdown {
   protected readonly formatCost = formatCost;
   protected readonly formatTokens = formatTokens;
 
-  /** The chunk's derived usage/cost total — never absent: the hub API always
-   * populates `cost`, and {@link ZERO_USAGE_TOTAL} is the default before a
-   * real read. Every field here is a required, never-null integer
-   * (`ChunkUsageTotalView`) — a usage fact's cost can be absent
-   * (`cost_partial`), but its token counts cannot, so the four rows below never need
-   * their own null handling. */
+  /** The chunk's derived usage/cost total, or {@link ZERO_USAGE_TOTAL} before a real read. */
   protected readonly cost = computed<ChunkUsageTotalView>(() => this.detail().cost ?? ZERO_USAGE_TOTAL);
 
   /** The usage table's rows — a method, not a stored computed, since each row's

@@ -45,8 +45,7 @@ describe('ChunkPageHeader', () => {
 
     const ref = el.querySelector('[data-testid="mobile-chunk-ref"]');
     expect(ref?.textContent?.trim()).toBe(CHUNK_ID);
-    // The old short form this header used to render, so a regression back to
-    // it fails loudly rather than by omission.
+    // Pins that the compactRef short form is absent, not merely that the full id is present.
     expect(ref?.textContent).not.toContain('C-3YJ9');
   });
 

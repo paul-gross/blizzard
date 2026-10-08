@@ -6,11 +6,9 @@ import type { ChunkDetail } from 'fleet';
 import { ChunkDetailHeader } from './chunk-detail-header';
 
 /**
- * The chunk detail dock header's `⋯` overflow menu — its own panel contents
- * (Detach, Complete, Delete: rendering, gating, confirm-emit). `KitMenuPanel` renders into a CDK
- * overlay attached to `document.body`, not the fixture's own DOM subtree
- * (`kit-menu.spec.ts`'s own convention) — a genuinely different harness shape
- * from the non-menu header tests. Pause/Resume are not in the menu.
+ * The chunk detail dock header's `⋯` overflow menu — Detach, Complete, Delete: rendering,
+ * gating, confirm-emit. The menu panel renders under `document.body`, not the fixture's
+ * own DOM subtree, so these tests query there.
  */
 
 const ISSUE_DETAIL: ChunkDetail = {

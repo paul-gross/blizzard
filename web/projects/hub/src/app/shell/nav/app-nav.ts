@@ -15,11 +15,9 @@ import { KitTab, KitTabStrip } from 'fleet/shell';
  * renders at all; the admin page itself is #94's.
  *
  * The tab row holds **only** the route tabs — `Log out` and the
- * viewport override used to live here behind a standalone button and a quiet
- * {@link KitMenu}; both moved into the top header's profile menu
+ * viewport override live in the top header's profile menu
  * ({@link AppNavMenu}, `./app-nav-menu.ts`), projected through
- * {@link BoardHeader}'s `[header-trailing]` slot in `App` (`../app.ts`)
- * rather than sitting in this row.
+ * {@link BoardHeader}'s `[header-trailing]` slot in `App` (`../app.ts`).
  */
 @Component({
   selector: 'app-nav',

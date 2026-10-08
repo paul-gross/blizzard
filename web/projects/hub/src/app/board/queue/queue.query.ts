@@ -10,8 +10,7 @@ import { DRAIN_LIMIT, drainPages } from '../../core/paginated-read';
  * refs so the board can render and reshape the queue. The read is keyset-paginated
  * on the hub; {@link drainPages} follows `next_cursor` to exhaustion,
  * so each entry's `position` still reads as its absolute index in the whole order.
- * The live-update service re-reads this on `queue-changed`/`chunk-changed`; the poll
- * is a backstop, not the primary freshness path.
+ * Freshness: `EVENT_INVALIDATION_REGISTRY` (`web/projects/fleet/src/lib/sse/fleet-live.ts`).
  */
 export function injectHubQueueQuery() {
   return injectQuery(() => ({
@@ -21,8 +20,6 @@ export function injectHubQueueQuery() {
         (cursor) => getQueueApiQueueGet({ query: { cursor, limit: DRAIN_LIMIT }, throwOnError: false }),
         (page) => page.entries,
       ),
-    // Covered by queue-changed and chunk-changed (EVENT_INVALIDATION_REGISTRY,
-    // sse/fleet-live.ts). See LIVE_COVERED_POLL_BACKSTOP_MS.
     refetchInterval: LIVE_COVERED_POLL_BACKSTOP_MS,
   }));
 }
@@ -38,9 +35,7 @@ export function injectHubQueueQuery() {
  * Each entry carries its `position`, `graph_id`, and work refs so the board can
  * render and reshape the backlog. The read is keyset-paginated on the hub;
  * {@link drainPages} follows `next_cursor` to exhaustion, the same
- * as {@link injectHubQueueQuery}. The live-update service re-reads this on
- * `queue-changed`; the poll is a backstop, not the primary
- * freshness path.
+ * as {@link injectHubQueueQuery}. Freshness: `EVENT_INVALIDATION_REGISTRY` (`web/projects/fleet/src/lib/sse/fleet-live.ts`).
  */
 export function injectHubBacklogQuery(canReorder: () => boolean) {
   return injectQuery(() => ({
@@ -51,8 +46,6 @@ export function injectHubBacklogQuery(canReorder: () => boolean) {
         (cursor) => getBacklogApiBacklogGet({ query: { cursor, limit: DRAIN_LIMIT }, throwOnError: false }),
         (page) => page.entries,
       ),
-    // Covered by queue-changed (EVENT_INVALIDATION_REGISTRY, sse/fleet-live.ts).
-    // See LIVE_COVERED_POLL_BACKSTOP_MS.
     refetchInterval: LIVE_COVERED_POLL_BACKSTOP_MS,
   }));
 }

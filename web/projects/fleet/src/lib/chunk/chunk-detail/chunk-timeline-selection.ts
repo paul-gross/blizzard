@@ -9,7 +9,7 @@ import { deriveActiveRow, deriveHistoryRows, deriveMultiGraph, type HistoryRow, 
 
 /**
  * The node history tab's own Selection list — the interactive,
- * URL-selectable half of what {@link ChunkTimeline} used to render alone: one three-line
+ * URL-selectable counterpart of {@link ChunkTimeline}: one three-line
  * card per judged node (identity; result and date; tokens and cost), the in-flight node
  * capping it, always activatable and always selectable. Both apps' Node history tabs
  * (`hub`'s and the runner's `chunk-node-history-tab.ts`) mount this component; every

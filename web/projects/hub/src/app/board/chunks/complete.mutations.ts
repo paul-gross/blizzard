@@ -4,21 +4,15 @@ import { QueryClient, injectMutation } from '@tanstack/angular-query-experimenta
 import { completeChunkApiChunksChunkIdCompletePost, hubChunkKey, hubChunksKey, hubQueueKey } from 'fleet';
 import { chunkCompleteMutationKey } from '../../core/mutation-keys';
 
-/** Manually complete a chunk — the board's counterpart of `blizzard hub chunk done`.
- * Reachable from any non-`done` status, including `stopped`: unlike Stop,
- * there is no un-complete verb. */
+/** The chunk to complete by hand. */
 export interface CompleteVars {
   readonly chunkId: string;
 }
 
 /**
- * `POST /api/chunks/{id}/complete` — record the chunk's `chunk_completed` fact, through
- * the generated client (bzh:generated-client). Idempotent: completing an already-`done`
- * chunk is a harmless no-op, never a thrown error; a 404 for an unknown chunk still
- * surfaces for the caller to report. On success it re-reads the fleet list, the ready
- * queue, and the chunk detail; the endpoint's `chunk_changed`/`queue_changed` SSE frames
- * corroborate for every other open view. `by` is fixed to `operator` here — the board
- * has no per-identity `by` field to send.
+ * `POST /api/chunks/{id}/complete` as `operator`, through the generated client
+ * (bzh:generated-client). A refusal throws; it settles by re-reading the fleet list,
+ * the ready queue, and the chunk detail.
  */
 export function injectCompleteChunkMutation() {
   const queryClient = inject(QueryClient);

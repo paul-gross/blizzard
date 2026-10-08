@@ -9,18 +9,7 @@ import { page } from 'vitest/browser';
 
 import { HUB_CHUNK_PAGE_PROVIDERS } from './hub-chunk-actions';
 
-/**
- * The chunk detail page's General tab two-column arrangement half of
- * `web:shell-sweep` (`blizzard-context:/verification/blizzard.md`
- * bzh:web-shell-sweep) — a real, headless-Chromium proof of the
- * `@media (min-width: 720px)` grid `chunk-general-tab.ts` declares: jsdom
- * parses that query without ever evaluating it, so `web:unit-test` cannot see
- * the two-column split or its collapse.
- *
- * Excluded from the default `ng test hub` run (`angular.json`'s
- * `test.exclude`) because it needs `--browsers=ChromiumHeadless`, not jsdom —
- * run it via `npm run shell-sweep` (`web/scripts/shell-sweep.js`).
- */
+/** The chunk page's layout under a real browser — see `blizzard-context:/verification/blizzard/commands/web/shell-sweep.md` §web:shell-sweep. */
 const DETAIL: hubApi.ChunkDetail = {
   chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
   graph_id: 'gr_1',
@@ -421,26 +410,14 @@ describe('chunk page Transcripts tab layout shell sweep (web:shell-sweep)', () =
 
 /**
  * The Transcripts tab's real composed chain — `ChunkPage` → `ChunkTranscriptsContainer` →
- * `ChunkTranscriptsTab` — under a real browser (round-2 review G11/G12). The case above
- * mounts `ChunkTranscriptsTab` standalone via `TestBed.createComponent`, which never
- * assembles `ChunkTranscriptsContainer`'s own box into the chain, so it could not have
- * caught either round-2 regression: the styleless container breaking the flex/height
- * chain down to the segment view's scroll container (`.tx-view`, the kit's detail slot element), and the tab's own four top-level
- * `KitAsyncState` states centering on the browser viewport for want of a positioned
- * ancestor. Driven through a real router the way `chunk-page.spec.ts` drives it, so
- * the container is genuinely mounted, not stood in for.
+ * `ChunkTranscriptsTab` — mounted through a real router, so the container's own box is in
+ * the flex/height chain down to the scroll container (`.tx-view`).
  */
 /**
- * Pump change detection until `ready()` holds, without `settle()`'s `whenStable()`.
- *
- * This case's read is **second-order**: the segment-content query is enabled only once the
- * *index* query has resolved and named the segment's finality, so its fetch starts well
- * after the app has already reported stable once. A query enabled that late registers a
- * pending task Angular's zoneless stability never retires, so `whenStable()` — and with it
- * `settle()` — waits forever, even though change detection itself has gone quiet and the
- * DOM renders correctly (proven by pinning the same case with the gate removed: it passes).
- * Nothing about the layout claims below is relaxed by waiting this way; only the mechanism
- * for knowing the content has arrived changes, and it fails loudly if it never does.
+ * Pump change detection until `ready()` holds, without `settle()`'s `whenStable()`: a
+ * query enabled only once an earlier one resolves registers a pending task zoneless
+ * stability never retires, so `whenStable()` would wait forever. Fails loudly if `ready()`
+ * never holds.
  */
 async function pumpUntil(fixture: ComponentFixture<unknown>, ready: () => boolean, tries = 60): Promise<void> {
   for (let i = 0; i < tries; i += 1) {

@@ -18,13 +18,10 @@ import { MobileTitlebar } from './nav/mobile-titlebar';
  * The app header — {@link AppHeader} (desktop) or {@link MobileTitlebar}
  * (mobile) — is app-root chrome now, persisting across `/board`,
  * `/events`, and `/board/chunk/:chunkId` exactly the way the hub's own
- * `BoardHeader`/`MobileTitlebar` pair does. It used to live *inside*
- * `LocalPanelLayout`/`LocalPanelMobile`, below the `<router-outlet>` anchor —
- * so it rendered under the `Board`/`Events` tab strip on `/board` and not at
- * all on the other two routes. The shared {@link AppShell} (`fleet`) is what
- * enforces the fix by construction: header above nav above routed content,
- * the same fixed slot order the hub app root composes it in, so the two apps
- * cannot independently drift into different orderings again.
+ * `BoardHeader`/`MobileTitlebar` pair does. The shared {@link AppShell}
+ * (`fleet`) enforces the order by construction: header above nav above routed
+ * content, the same fixed slot order the hub app root composes it in, so the
+ * two apps cannot drift into different orderings.
  *
  * Routed tab shell: a top {@link AppNav} strip (desktop) or a
  * persistent bottom {@link MobileTabBar} (mobile) frames the routed content

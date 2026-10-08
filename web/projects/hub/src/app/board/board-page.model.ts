@@ -33,10 +33,8 @@ export function withPendingBoardChanges(
 }
 
 /**
- * A pending reposition's requested placement, replayed over a copy of `order` — `move.chunkId`
- * lands immediately after `move.afterChunkId`, or at the very top when that is `null`, mirroring
- * the anchor semantics `BoardColumn.dropped` computes when it emits a `BoardReposition`. `order`
- * itself is left untouched.
+ * A pending reposition's requested placement, replayed over a copy of `order` per {@link LaneMove}.
+ * `order` itself is left untouched.
  */
 function withRequestedPosition(order: readonly string[], move: LaneMove): string[] {
   const withoutMoved = order.filter((id) => id !== move.chunkId);

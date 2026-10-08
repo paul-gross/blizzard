@@ -5,7 +5,8 @@ scope: text
 nonword: true
 tokens:
   - '\b[Ss]plit (?:out of|off|from)\b'
-  - '\b[Mm]oved (?:here|verbatim) from\b'
+  - '\b[Mm]oved (?:here (?:verbatim )?|verbatim )from\b'
+  - '\b[Uu]sed to (?:live|be|sit|carry|render|show|hold)\b'
   - '\b[Ff]ormerly\b'
   - '\b[Oo]nce did\b'
   - '\b[Bb]efore this (?:change|phase)\b'

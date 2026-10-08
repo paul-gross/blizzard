@@ -83,8 +83,8 @@ export class GraphDiagramDetail {
     ];
   }
 
-  /** The selected edge's choice as an aligned fact grid — `Target`'s own `testid`
-   * carries forward the one the hand-rolled `<dd>` used to carry directly. */
+  /** The selected edge's choice as an aligned fact grid — `Target` carries a
+   * `testid` so specs can read the resolved target directly. */
   protected edgeFactRows(choice: ResolvedChoiceSelection): readonly KitFact[] {
     return [
       { label: 'Choice', value: choice.name },

@@ -6,6 +6,7 @@ import type { BoardCard } from '../board-card/board-card';
 import type { Lane } from 'fleet';
 import { BoardColumn } from './board-column';
 
+/** The board column's layout under a real browser — see `blizzard-context:/verification/blizzard/commands/web/shell-sweep.md` §web:shell-sweep. */
 const CARD: BoardCard = {
   chunkId: 'ch_01grip0000000000000000000',
   shortId: 'C-GRIP',

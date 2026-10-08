@@ -3,12 +3,10 @@ import type { runnerApi } from 'fleet';
 
 import { readRunnerSession, runnerLogoutInFlight } from './auth.query';
 
-/** `sessionStorage` key marking that a bounce was already attempted this cycle —
- * the backstop `handle` checks across the full-page navigation
- * it drives: a no-session `401` classified while this is still set did not get
- * fixed by the last attempt, so the seam surfaces {@link SessionRecovery.recovering}
- * instead of navigating again. Cleared only by a session read that resolves a
- * username — the one proof the bounce actually worked. */
+/** `sessionStorage` key marking that a bounce was already attempted this cycle. It
+ * survives the navigation, so a no-session `401` classified while it is set sets
+ * {@link SessionRecovery.recovering} instead of navigating again. Cleared only by a
+ * session read that resolves a username. */
 const RENEWAL_MARK_KEY = 'blizzard.runner.session-renewal-attempted';
 
 const SESSION_PATH = '/api/auth/session';
@@ -37,35 +35,23 @@ function loginUrl(): string {
 }
 
 /**
- * {@link SessionRecovery.recoverFromUnauthenticated}'s classification outcome —
- * lets a caller with no `Response`/`Request` of its own, namely
- * {@link "./runner-live-updates".RunnerLiveUpdates}'s stream channel, tell "the session
- * read itself failed" (`read-failed`) apart from every case where the read succeeded
- * and answered the `401` definitively. Only `read-failed` is worth retrying — `skipped`
- * is an in-flight guard suppressing a concurrent caller, `not-applicable` is a `401`
- * this seam does not own, and `bounced`/`already-recovering` are a no-session `401`
- * this seam already answered, by navigating or by setting {@link SessionRecovery.recovering}.
+ * {@link SessionRecovery.recoverFromUnauthenticated}'s classification outcome. Only
+ * `read-failed` — the session read itself failed — is worth retrying: `skipped` is
+ * the in-flight guard, `not-applicable` is a `401` this seam does not own, and
+ * `bounced`/`already-recovering` are a no-session `401` already answered.
  */
 export type RecoveryOutcome = 'skipped' | 'not-applicable' | 'read-failed' | 'bounced' | 'already-recovering';
 
 /**
- * The runner webapp's session-recovery seam — the response interceptor
- * body `provideSessionRecovery` (`session-recovery.provider.ts`) registers on
- * `runnerClient`, and {@link "./runner-live-updates".RunnerLiveUpdates}'s stream
- * auth-failure channel. Classifies every `401` either caller sees and drives the
+ * The runner webapp's session-recovery seam. Classifies a `401` and drives the
  * federation bounce for the one case it can fix: a gated surface whose runner
- * session has expired. Every other `401` — an upstream rejection with a resolved
- * username, or an authless surface — passes through untouched, left to degrade in
- * its own region exactly as it does today (`chunk-title.query.ts` et al.).
+ * session has expired. Every other `401` passes through untouched.
  *
  * Two guards keep a session drop from looping: an in-memory single-flight flag
- * coalesces the burst of `401`s the panel's concurrent polls — and the stream's
- * own terminal auth failure — produce into one classification, and the
- * `sessionStorage` mark above survives the navigation itself — a further no-session
- * `401` arriving while it is still set sets {@link recovering} instead of firing a
- * second bounce. A logout already in flight ({@link runnerLogoutInFlight}) suspends
- * the seam entirely: that flow clears the session deliberately and drives its own
- * navigation once it settles.
+ * coalesces a burst of `401`s into one classification, and the `sessionStorage`
+ * mark above survives the navigation, so a repeat sets {@link recovering} instead
+ * of bouncing again. A logout in flight ({@link runnerLogoutInFlight}) suspends
+ * the seam entirely.
  */
 @Injectable({ providedIn: 'root' })
 export class SessionRecovery {
@@ -95,19 +81,11 @@ export class SessionRecovery {
   }
 
   /**
-   * Classify a `401` — from the interceptor's `handle` above, or from
-   * {@link "./runner-live-updates".RunnerLiveUpdates}'s stream on `SseService`'s `authFailed` — by
-   * re-reading `GET /api/auth/session`, and drive the federation bounce for the one
-   * case it can fix: a no-session `401` while the surface is gated. Callable without
-   * a `Response`/`Request` of its own — the stream's transport produces neither — and
-   * lands in the same {@link recovering} state on a repeat. A logout in flight suspends the
-   * seam, and the in-memory flag coalesces overlapping callers (a burst of `401`s,
-   * or one racing the stream's own auth failure) into one classification.
-   *
-   * Returns its {@link RecoveryOutcome} so a caller that cannot render
-   * {@link recovering} directly — the stream channel — can tell a transient failure
-   * of the session read itself apart from a definitive answer, and act only on that
-   * one case.
+   * Classify a `401` by re-reading `GET /api/auth/session`, and drive the federation
+   * bounce for a no-session `401` while the surface is gated. Needs no
+   * `Response`/`Request`, and returns its {@link RecoveryOutcome} so a caller that
+   * cannot render {@link recovering} can tell a failed session read apart from a
+   * definitive answer.
    */
   async recoverFromUnauthenticated(): Promise<RecoveryOutcome> {
     if (runnerLogoutInFlight() || this.inFlight) return 'skipped';
@@ -139,8 +117,7 @@ export class SessionRecovery {
     this.navigate(loginUrl());
   }
 
-  /** Full-page navigation to the federation bounce — factored out so specs can
-   * spy it, the way `app-identity.spec.ts` spies `reload`. */
+  /** Full-page navigation to the federation bounce — a method of its own so specs can spy it. */
   protected navigate(url: string): void {
     globalThis.location.assign(url);
   }

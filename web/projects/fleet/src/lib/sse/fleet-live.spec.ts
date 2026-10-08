@@ -113,6 +113,23 @@ describe('FleetLiveUpdates', () => {
     expect(keys).not.toContainEqual(['hub', 'decisions']);
   });
 
+  it.each([
+    ['deleted', true],
+    ['node-completed', false],
+  ])('invalidates the activity backfill only on a chunk-changed frame that deletes the chunk (%s)', (cause, stales) => {
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
+
+    const source = FakeEventSource.instances[0];
+    source.open();
+    source.emitNamed('chunk-changed', JSON.stringify({ chunk_id: 'ch_live', status: 'stopped', cause }), '1');
+    vi.advanceTimersByTime(INVALIDATION_COALESCE_WINDOW_MS);
+
+    const keys = invalidate.mock.calls.map((call) => call[0]?.queryKey);
+    if (stales) expect(keys).toContainEqual(['hub', 'activity']);
+    else expect(keys).not.toContainEqual(['hub', 'activity']);
+  });
+
   it('collapses duplicate keys from multiple frames in one window into a single invalidation (issue #310)', () => {
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
     TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());

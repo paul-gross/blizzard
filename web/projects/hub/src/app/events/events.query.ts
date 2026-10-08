@@ -24,8 +24,7 @@ export interface HubEventsFilters {
  * distinct filter combination rides in the query key, so it caches as its own
  * entry — same idiom as {@link injectHubFleetSpendQuery}'s `since` window.
  *
- * Kept fresh by the live-update service (`fleet-live.ts`); the poll is a
- * backstop, not the primary freshness path.
+ * Freshness: `EVENT_INVALIDATION_REGISTRY` (`web/projects/fleet/src/lib/sse/fleet-live.ts`).
  */
 export function injectHubEventsQuery(filters: () => HubEventsFilters = () => ({})) {
   return injectQuery(() => {
@@ -44,8 +43,6 @@ export function injectHubEventsQuery(filters: () => HubEventsFilters = () => ({}
         if (error) throw error;
         return data?.events ?? [];
       },
-      // Covered by event-logged and an escalation-bearing chunk-changed
-      // (EVENT_INVALIDATION_REGISTRY, sse/fleet-live.ts). See LIVE_COVERED_POLL_BACKSTOP_MS.
       refetchInterval: LIVE_COVERED_POLL_BACKSTOP_MS,
     };
   });

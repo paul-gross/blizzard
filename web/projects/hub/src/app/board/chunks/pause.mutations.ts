@@ -4,19 +4,16 @@ import { QueryClient, injectMutation } from '@tanstack/angular-query-experimenta
 import { pauseChunkApiChunksChunkIdPausePost, resumeChunkApiChunksChunkIdResumePost, hubChunkKey, hubChunksKey, hubQueueKey } from 'fleet';
 import { chunkPauseMutationKey } from '../../core/mutation-keys';
 
-/** Toggle a chunk's operator pause brake: pausing holds the claim, kills
- * the active worker, and takes it off the ready queue; resuming clears the brake. */
+/** The chunk whose operator pause brake to set, and the desired state. */
 export interface ChunkPauseVars {
   readonly chunkId: string;
   readonly paused: boolean;
 }
 
 /**
- * `POST /api/chunks/{id}/pause|resume` — routed to the pause or resume verb by the
- * desired `paused` state, through the generated client (bzh:generated-client).
- * Server-refused for `{done, stopped, delivering}` (`PauseService`) — a refusal
- * reaches the caller as a thrown error, nothing here swallows it. On success it
- * re-reads the fleet list, the ready queue, and the chunk detail. `by` defaults to `operator` server-side.
+ * `POST /api/chunks/{id}/pause|resume`, chosen by the desired `paused` state, through
+ * the generated client (bzh:generated-client). A refusal throws; it settles by
+ * re-reading the fleet list, the ready queue, and the chunk detail.
  */
 export function injectChunkPauseMutation() {
   const queryClient = inject(QueryClient);

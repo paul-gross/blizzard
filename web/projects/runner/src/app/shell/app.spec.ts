@@ -96,12 +96,10 @@ describe('runner App', () => {
     expect(el.querySelector('app-panel')).toBeNull();
   });
 
-  describe('the app-root header/nav/content order (issue #325)', () => {
-    // The bug this shell exists to fix: the header used to render *inside*
-    // the routed layout, below the tab strip on /board and not at all on
-    // /events. `AppShell` makes the header app-root chrome instead, so it
-    // now precedes the nav strip in DOM order and persists across both
-    // routes, matching the hub.
+  describe('the app-root header/nav/content order', () => {
+    // Pins the header as app-root chrome via `AppShell`: it precedes the nav
+    // strip in DOM order on /board and stays mounted on /events, matching the
+    // hub.
     it('renders the header above the tab strip on /board, not the other way around', async () => {
       const router = TestBed.inject(Router);
       const fixture = TestBed.createComponent(App);
@@ -118,7 +116,7 @@ describe('runner App', () => {
       ).toBe(true);
     });
 
-    it('keeps the header mounted on /events, where it used to be entirely absent', async () => {
+    it('keeps the header mounted on /events, outside the board route', async () => {
       const router = TestBed.inject(Router);
       const fixture = TestBed.createComponent(App);
       await router.navigateByUrl('/events');

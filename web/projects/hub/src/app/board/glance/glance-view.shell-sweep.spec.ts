@@ -19,9 +19,8 @@ const VITALS: Vitals = {
  * section sequence is load-bearing: attention comes first, then motion, the
  * queue's next dispatches, and only then completed work.
  *
- * Excluded from the default `ng test hub` run (`angular.json`'s `test.exclude`)
- * because it needs `--browsers=ChromiumHeadless`, not jsdom — run it through
- * `npm run shell-sweep` (`web/scripts/shell-sweep.js`).
+ * See `blizzard-context:/verification/blizzard/commands/web/shell-sweep.md`
+ * §web:shell-sweep.
  */
 describe('glance board layout shell sweep (web:shell-sweep)', () => {
   it('keeps its mobile sections ordered and overflow-free at phone widths', async () => {

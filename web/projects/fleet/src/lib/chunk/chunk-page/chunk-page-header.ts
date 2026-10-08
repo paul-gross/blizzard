@@ -18,7 +18,7 @@ import type { Tone } from '../../kit/tone';
  * (`compact-ref.ts`) — a board card or a rail row still wants the compact
  * ref for a dense list, but a page whose whole job is naming *this one*
  * chunk reads better in full. That id is a single unbroken token far wider
- * than the short ref this header used to carry, so `.cid` allows a mid-token
+ * than a compact ref, so `.cid` allows a mid-token
  * break (`overflow-wrap: anywhere`, with `min-width: 0` so the flex item can
  * actually shrink to less than its content's width) rather than pushing a
  * phone-width page wider than its viewport — the shell sweeps

@@ -6,17 +6,9 @@ import type { BoardCard } from './board-card';
 import { BoardCardComponent } from './board-card';
 
 /**
- * The card's right-hand meta group at its fullest — a done-lane card carrying its
- * completion stamp and its one combined cost figure side by side, each
- * `white-space: nowrap` — a real layout claim jsdom cannot make: it never lays out
- * `board-card.css`'s flex row, so `web:unit-test` cannot see the two figures overlap
- * one another, wrap off their shared line, or push past the card's own edge. Swept at
- * 800px (wider than any real board column) and at 390px/320px
- * (`bzh:narrow-viewport-tier-rule`).
- *
- * Excluded from the default `ng test` run the same way every other
- * `*.shell-sweep.spec.ts` is — run it via `npm run shell-sweep`
- * (`web/scripts/shell-sweep.js`).
+ * The card's right-hand meta group at its fullest — a done-lane card's completion stamp and
+ * cost figure side by side — never overlaps, wraps, or overflows the card, at 800px and at
+ * 390px/320px (`bzh:narrow-viewport-tier-rule`). Under a real browser — see `blizzard-context:/verification/blizzard/commands/web/shell-sweep.md` §web:shell-sweep.
  */
 const CARD: BoardCard = {
   chunkId: 'ch_01costcard00000000000000000',

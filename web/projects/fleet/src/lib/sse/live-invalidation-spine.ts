@@ -4,12 +4,10 @@ import type { Subscription } from 'rxjs';
 
 import { type SseHandle, type SseStatus, SseService } from './sse.service';
 
-/** {@link LiveInvalidationSpine}'s construction parameters — everything a daemon's own
- * live-update service already injects, plus what makes the spine *its* instance: the
- * stream to open, the event union it carries, and the registry mapping each kind to
- * the query keys it stales. `onFrame`/`onAuthFailed` are the two hooks a daemon's own
- * service still owns directly — invoked on every frame or auth failure, with no
- * interpretation by the spine itself. */
+/** {@link LiveInvalidationSpine}'s construction parameters: the stream to open, the
+ * event kinds it carries, and the registry mapping each kind to the query keys it
+ * stales. `onFrame`/`onAuthFailed` are invoked on every frame or auth failure,
+ * uninterpreted. */
 export interface LiveInvalidationSpineOptions<TPayload extends object, TType extends string> {
   sse: SseService;
   queryClient: QueryClient;
@@ -24,11 +22,9 @@ export interface LiveInvalidationSpineOptions<TPayload extends object, TType ext
 }
 
 /**
- * The registry-driven coalescing/reconnect machinery both daemons' live-update
- * services drive (`bzh:frontend-disjoint-diffs` — the machinery
- * lifted here is kind-agnostic, unlike each daemon's own registry, which stays put).
- * One SSE subscription, dispatched through the caller's registry into a coalesced
- * `invalidateQueries` pass, plus reconnect-then-re-GET gap recovery.
+ * Kind-agnostic, registry-driven live invalidation: one SSE subscription,
+ * dispatched through the caller's registry into a coalesced `invalidateQueries`
+ * pass, plus reconnect-then-re-GET gap recovery.
  */
 export class LiveInvalidationSpine<TPayload extends object, TType extends string> {
   private handle: SseHandle<TPayload> | null = null;
@@ -70,9 +66,8 @@ export class LiveInvalidationSpine<TPayload extends object, TType extends string
   }
 
   /**
-   * Tear down the current stream and open a fresh one — for a caller that declined
-   * session recovery and wants another shot at the stream, never
-   * for `SseService`'s own reconnect, which already retries under the hood. Leaves
+   * Tear down the current stream and open a fresh one. Not needed for transport
+   * reconnects, which the stream handle retries itself. Leaves
    * exactly one subscription, effect pair, and destroy teardown live afterward, same
    * as a single {@link start} would — {@link open} registers the teardown once, ever,
    * regardless of how many times {@link start}/{@link restart} run it.

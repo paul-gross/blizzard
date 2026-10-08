@@ -6,35 +6,15 @@ const { ChunkChangeCause } = hubApi;
 export interface ChunkChangeSummary {
   /** Line 1 — the chunk shortname and its transition, e.g. `C-1RJ1 review → failed → build`. */
   readonly transition: string;
-  /** Line 2 — the runner's display name, e.g. `R-ABF3.r-claude`, when the frame names one.
-   * Falls back to the deleting actor (`data.by`) when the frame carries no runner and
-   * its `cause` is `'deleted'`: an unacquired chunk has no runner to
-   * name, but who deleted it is still worth the same line. Omitted on every other
-   * unclaimed transition (a promote, a stop past the point the route released) — `by`
-   * rides only the `deleted` cause today. */
+  /** Line 2 — who acted: the runner's display name, e.g. `R-ABF3.r-claude`, or, on a
+   * runnerless deletion, the deleting actor; omitted otherwise. */
   readonly runner?: string;
 }
 
 /**
- * Shape a `chunk-changed` frame into the block row's two lines.
- *
- * `transition` joins the chunk ref, the previous node, the status, and the next node
- * with the panel's existing `→` vocabulary — each absent segment (and its adjacent
- * arrow) is dropped rather than rendered as placeholder junk — `status` included, since
- * a backfilled row (`ActivityView`) can structurally carry no status — so a frame carrying neither node
- * degrades to `C-1NWW → running`, and a frame carrying a node but no
- * status renders e.g. `C-1RJ1 review → build` rather than `C-1RJ1 review → — →
- * build`. `runner` is the runner's display name when the frame names one, else omitted —
- * an unclaimed transition (e.g. a promote or a stop past the point the route
- * released) renders no runner line at all rather than an empty one.
- *
- * `graph_id` is deliberately never read here — it rides the wire but is not
- * part of the rendered row.
- *
- * `runner` prefers `runner_id` when the frame names one; failing that, a `deleted`-cause
- * frame's `by` fills the same line — Delete's actor, not a runner, but
- * the same "who did this" line 2 the block already renders for a claimed transition.
- * Every other unclaimed transition omits line 2 entirely.
+ * Shape a `chunk-changed` frame into the block row's two lines. Each absent segment of
+ * `transition` is dropped along with its arrow, so a frame carrying neither node reads
+ * `C-1NWW → running`. The rendered shapes are pinned by `chunk-change-summary.spec.ts`.
  */
 export function summarizeChunkChange(data: LoggedEvent['data']): ChunkChangeSummary {
   if (data.cause === ChunkChangeCause.CLAIMED) {

@@ -239,8 +239,7 @@ describe('ChunkDetailPanel', () => {
   });
 
   it('emits editGraph from the facts column', async () => {
-    // A chunk only moves once claimed, so a `not_ready` one stands on no node, and the hub
-    // calls its graph editable.
+    // A not_ready chunk on no node, its graph editable.
     const notReady: ChunkDetail = {
       ...ROUTED_DETAIL,
       status: 'not_ready',

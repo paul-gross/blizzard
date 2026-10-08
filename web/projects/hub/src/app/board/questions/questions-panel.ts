@@ -13,8 +13,7 @@ import { injectHubQuestionsQuery } from './questions.query';
  *
  * A container: it owns the fleet-wide questions query through the
  * generated hub client (bzh:generated-client), and renders the presentational
- * {@link QuestionsPanelView}. The live-update service re-reads it on
- * `question-asked` / `question-answered`.
+ * {@link QuestionsPanelView}. Freshness: `EVENT_INVALIDATION_REGISTRY` (`web/projects/fleet/src/lib/sse/fleet-live.ts`).
  */
 @Component({
   selector: 'app-questions-panel',

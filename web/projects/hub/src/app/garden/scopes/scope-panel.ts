@@ -38,11 +38,9 @@ export interface ScopePanelVm {
  * The gardening scope panel's single-scope detail — the description (in-place
  * editable when `canEdit`, else plain text), retire/re-enable, and the routines
  * related to this scope, each marked whether it defaults here. Presentational
- * only: it renders exactly the view model it is handed and injects no query
- * (`FleetRoutinePanel`'s own shape).
+ * only: it renders exactly the view model it is handed and injects no query.
  *
- * Retire/enable confirm before emitting — `FleetScopeList`'s own confirm-then-emit
- * pattern, carried over onto this panel now that the list is selection-only.
+ * Retire and re-enable confirm, then emit.
  */
 @Component({
   selector: 'app-scope-panel',
@@ -104,7 +102,7 @@ export class FleetScopePanel {
     this.editDescription.emit({ slug, description: trimmed });
   }
 
-  /** Open a confirmation before emitting `retire` once the operator confirms. */
+  /** Open a confirmation, and emit `retire` once the operator confirms. */
   protected onRetire(): void {
     const slug = this.vm()?.slug;
     if (slug === undefined) return;
@@ -117,7 +115,7 @@ export class FleetScopePanel {
     });
   }
 
-  /** Open a confirmation before emitting `enable` once the operator confirms. */
+  /** Open a confirmation, and emit `enable` once the operator confirms. */
   protected onEnable(): void {
     const slug = this.vm()?.slug;
     if (slug === undefined) return;

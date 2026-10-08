@@ -17,6 +17,7 @@ import {
   type RunnerChangedPayload,
 } from '../api/hub';
 import {
+  hubActivityKey,
   hubBacklogKey,
   hubChunkKey,
   hubChunksKey,
@@ -155,7 +156,8 @@ function chunkDetailKeys(data: HubEventPayload): readonly (readonly unknown[])[]
  * derive from it — the prefix key closes every cached window. It also stales the
  * Events tab's feed: an escalation surfaces as a `chunk-changed` frame (status flips
  * to `needs_human`), and the feed unifies open escalations with logged events, so a
- * status flip that carries an escalation must re-read it too. */
+ * status flip that carries an escalation must re-read it too. A deletion also stales
+ * the Activity backfill, which drops the deleted chunk's facts. */
 function chunkChangedKeys(data: HubEventPayload): readonly (readonly unknown[])[] {
   return [
     hubChunksKey,
@@ -164,6 +166,7 @@ function chunkChangedKeys(data: HubEventPayload): readonly (readonly unknown[])[
     hubFleetSpendKey,
     hubEventsKey,
     ...(chunkEnded(data) ? [hubQuestionsKey, hubDecisionsKey] : []),
+    ...(chunkDeleted(data) ? [hubActivityKey] : []),
   ];
 }
 
@@ -173,6 +176,11 @@ function chunkChangedKeys(data: HubEventPayload): readonly (readonly unknown[])[
 function chunkEnded(data: HubEventPayload): boolean {
   const status = 'status' in data ? data.status : undefined;
   return status === ChunkStatus.STOPPED || status === ChunkStatus.DONE;
+}
+
+/** Whether a chunk-changed frame reports the chunk deleted. */
+function chunkDeleted(data: HubEventPayload): boolean {
+  return 'cause' in data && data.cause === ActivityChunkChangeCause.DELETED;
 }
 
 /** A question-asked/-answered frame invalidates the fleet-wide ask list (the right
@@ -197,6 +205,9 @@ function chunkDecisionKeys(data: HubEventPayload): readonly (readonly unknown[])
  * over {@link HubEventType} (a compile-time guard, same intent as `STATUS_LANE`): a
  * new event type added to the generated vocabulary is then a compile error here until
  * it is given a row, instead of silently dispatching to nothing.
+ *
+ * The live-update service re-reads a query on the events its row names; the poll is a
+ * backstop for a dropped frame, never the primary freshness path.
  */
 const EVENT_INVALIDATION_REGISTRY: Record<HubEventType, (data: HubEventPayload) => readonly (readonly unknown[])[]> = {
   [HubEventType.CHUNK_CHANGED]: chunkChangedKeys,

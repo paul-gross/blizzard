@@ -261,9 +261,8 @@ def _daemon_named_strings(root: Path, forbidden_prefixes: tuple[str, ...]) -> li
 
 
 def test_foundation_names_neither_daemon_in_a_string_literal() -> None:
-    """A-C only see imports; a module path threaded as a string is invisible to them —
-    ``foundation/crash.py`` used to hold exactly that shape. This file's first non-import
-    check, one bespoke walker like its siblings."""
+    """A-C only see imports; a module path threaded as a string is invisible to them,
+    so this walker catches a daemon named by string inside foundation."""
     violations = _daemon_named_strings(_FOUNDATION_DIR, ("blizzard.hub.", "blizzard.runner."))
     assert not violations, f"N — foundation must not name either daemon, even as a string: {violations}"
 

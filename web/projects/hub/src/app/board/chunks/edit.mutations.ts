@@ -11,12 +11,9 @@ export interface ChunkGraphEditVars {
 }
 
 /**
- * `PATCH /api/chunks/{id}` with `{ graph_id }` — through the generated client
- * (bzh:generated-client) — the unified all-or-nothing PATCH. Server-refused 404 for an
- * unknown chunk or target graph, and 409 once the chunk is claimed or has moved
- * (`EditService`): a refusal reaches the caller as a thrown error, nothing here
- * swallows it. On success it re-reads the fleet list and the chunk detail; the
- * endpoint's `chunk-changed` SSE frame corroborates for every other open view.
+ * `PATCH /api/chunks/{id}` with `{ graph_id }`, through the generated client
+ * (bzh:generated-client). A refusal throws; it settles by re-reading the fleet list and
+ * the chunk detail.
  */
 export function injectSetChunkGraphMutation() {
   const queryClient = inject(QueryClient);

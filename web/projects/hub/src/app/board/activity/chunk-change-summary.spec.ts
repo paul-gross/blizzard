@@ -34,7 +34,7 @@ describe('summarizeChunkChange', () => {
     expect(summarizeChunkChange(data).runner).toBeUndefined();
   });
 
-  it('degrades a frame with neither node to the pre-#212 one-line shape', () => {
+  it('degrades a frame with neither node to a one-line transition', () => {
     const data: ChunkChangedData = { chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9', status: 'running' };
     expect(summarizeChunkChange(data).transition).toBe('C-3YJ9 → running');
   });

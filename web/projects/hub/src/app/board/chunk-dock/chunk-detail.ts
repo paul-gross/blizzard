@@ -29,28 +29,13 @@ import { openDetail, openWorkItems, pendingQuestionIds, pendingStatusOverride } 
 import { ChunkDetailPanel } from './chunk-detail-panel';
 
 /**
- * The chunk detail **container** — owns the reactive detail query and the
- * human-loop mutations (answer a question, resolve a gate decision),
- * and renders the presentational {@link ChunkDetailPanel} over them. It stays
- * mounted in the bottom dock and shows a rest state until a card is selected; the
- * panel stays presentational and every server call goes through the generated
- * client (bzh:generated-client).
+ * The chunk detail **container** (`bzh:frontend-container-presentational`) — owns the
+ * detail query and the operator-action mutations, and renders {@link ChunkDetailPanel}
+ * over them, or a rest state while no chunk is open.
  *
- * Reactive over the selected `chunkId`: the query re-keys and disables itself while
- * nothing is open, so no request fires for the empty board. Answering, resolving,
- * detaching, pausing/resuming, completing, or editing the graph invalidates the
- * chunk and the fleet list, and the SSE stream corroborates. Every operator action's
- * 404/409 is read off its mutation's `onError` and held in the
- * shared `actionError` for the panel to show — report, don't swallow — and clears on
- * the next attempt or the moment a different chunk opens. Answering and resolving have a **second** channel alongside it,
- * `actionOutcome`: a lost first-write-wins race is not a failure to retry
- * but news — someone else's answer or choice landed — so it reads as an outcome naming the winner.
- * Both clear together in `beginAction`.
- *
- * **Delete** breaks that shape: it makes the chunk cease to exist, so
- * `onDelete` doesn't just fold a failure into `actionError` — on success it emits
- * `dismiss` too, the same event the header's close button fires, so the dock closes
- * instead of sitting on a chunk id its own detail query would otherwise re-read into a 404.
+ * Every action reports through two channels: `actionError` for a failure, and
+ * `actionOutcome` for a non-failure result that still needs saying (a lost answer race,
+ * naming the winner). Both clear on the next attempt and whenever a different chunk opens.
  */
 @Component({
   selector: 'app-chunk-detail',
@@ -63,10 +48,8 @@ export class ChunkDetail {
   /** The selected chunk id, or `null` when the dock is closed. */
   readonly chunkId = input<string | null>(null);
 
-  /** The graphs view's own path segments, forwarded straight to
-   * {@link ChunkDetailPanel.graphLinkBase} — `null` (the default) withholds the
-   * dock's graph links, since this container is mountable from any host and must
-   * not hardcode a hub-only route itself. */
+  /** The graphs view's path segments, forwarded to {@link ChunkDetailPanel.graphLinkBase};
+   * `null` withholds the graph links. */
   readonly graphLinkBase = input<readonly string[] | null>(null);
 
   /** Emitted when the operator dismisses the dock. */
@@ -86,9 +69,7 @@ export class ChunkDetail {
   private readonly clock = inject(FLEET_CLOCK);
 
   /** Whether the current identity may pause/resume/detach or set the chunk's graph
-   * (`chunk:control`). Withholds those controls in the panel below so a
-   * `guest` never sees a write it cannot make; `null`/pending resolves to `false`
-   * (hidden until confirmed). */
+   * (`chunk:control`); `null`/pending resolves to `false`. */
   protected readonly canControl = computed(() => hasPermission(this.meQuery.data(), 'chunk:control'));
 
   /** Whether the current identity may answer an open question (`question:answer`). */
@@ -110,27 +91,24 @@ export class ChunkDetail {
   /** The same, for Set graph. */
   private readonly pendingGraphEdits = injectPendingMutationVariables<ChunkGraphEditVars>(chunkSetGraphMutationKey);
 
-  /** Whether a Pause/Resume is in flight for the open chunk, threaded to the header's
-   * Pause/Resume button. Scoped to `chunkId` because the dock stays mounted across a
-   * selection change: a pause fired on one chunk must not disable another's controls,
+  /** Whether a Pause/Resume is in flight for the open chunk. Scoped to `chunkId` because
+   * this container stays mounted across a selection change: a pause fired on one chunk must not disable another's controls,
    * and must still disable its own when that chunk is re-selected. */
   protected readonly pausePending = computed(() =>
     isPendingFor(this.pendingChunkPauses(), (v) => v.chunkId === this.chunkId()),
   );
 
-  /** Whether a Detach is in flight for the open chunk, threaded to the header's Detach menu item. */
+  /** Whether a Detach is in flight for the open chunk. */
   protected readonly detachPending = computed(() =>
     isPendingFor(this.pendingChunkDetaches(), (v) => v.chunkId === this.chunkId()),
   );
 
-  /** Whether a Complete is in flight for the open chunk, threaded to the header's
-   * Complete menu item (combined there with {@link ChunkDetailHeader.completable}). */
+  /** Whether a Complete is in flight for the open chunk. */
   protected readonly completePending = computed(() =>
     isPendingFor(this.pendingChunkCompletes(), (v) => v.chunkId === this.chunkId()),
   );
 
-  /** Whether a Delete is in flight for the open chunk, threaded to the header's
-   * Delete menu item (combined there with {@link ChunkDetailHeader.deleteDisabled}). */
+  /** Whether a Delete is in flight for the open chunk. */
   protected readonly deletePending = computed(() =>
     isPendingFor(this.pendingChunkDeletes(), (v) => v.chunkId === this.chunkId()),
   );
@@ -140,55 +118,33 @@ export class ChunkDetail {
     isPendingFor(this.pendingGraphEdits(), (v) => v.chunkId === this.chunkId()),
   );
 
-  /** Every chunk id a Pause/Resume mutation is currently pending for, and its own
-   * variables — read through the shared helper (`bzh:frontend-pending-override`), so
-   * the override below reads the fired *direction* (`paused: true` vs. `false`). */
+  /** Every chunk id a Pause/Resume mutation is currently pending for, with its variables
+   * (`bzh:frontend-pending-override`). */
   private readonly pendingChunkPauses = injectPendingMutationVariables<ChunkPauseVars>(chunkPauseMutationKey);
 
   /** The same, for Complete. */
   private readonly pendingChunkCompletes = injectPendingMutationVariables<CompleteVars>(chunkCompleteMutationKey);
 
-  /**
-   * The chunk's status as it will read once a currently pending Pause or Complete
-   * settles, when that outcome is total over the rendered status
-   * (`bzh:frontend-pending-override`) — `null` while nothing overrides
-   * `detail().status`. Complete always predicts `done`; Pause predicts `paused` only
-   * where the pause is total over the current status (`chunk-detail.model.ts`); Resume and Detach predict nothing.
-   * Pinned by `chunk-detail.spec.ts`'s "renders the paused override while pending on a
-   * chunk below the human-gated states, reverting to the real status on rejection",
-   * "renders no status override while Pause is pending on a chunk already
-   * waiting_on_human/needs_human — the human-gated status wins", "renders the done
-   * override while Complete is pending, reverting to the real status on rejection",
-   * "renders no status override while Resume is pending — the pause overlay hides what
-   * status it would revert to" and "renders no status override while Detach is pending — the outcome
-   * depends on facts detach never touches".
-   */
+  /** The pending Pause or Complete status override, or `null` — {@link pendingStatusOverride}. */
   protected readonly overrideStatus = computed<ChunkStatus | null>(() =>
     pendingStatusOverride(this.detail(), this.pendingChunkCompletes(), this.pendingChunkPauses()),
   );
 
-  /** The chunk's status as the header's status chip renders it — {@link overrideStatus}
-   * while it names one for this chunk, else the real `detail.status`
-   * (`bzh:frontend-pending-override`'s container-applies-overrides rule: the header
-   * receives only this already-merged result, never the raw override to reconcile
-   * itself). */
+  /** The chunk's rendered status — {@link overrideStatus} while it names one, else the
+   * real `detail.status` (`bzh:frontend-pending-override`). */
   protected renderedStatus(detail: ChunkDetailAggregate): ChunkStatus {
     return this.overrideStatus() ?? detail.status;
   }
 
-  /** Whether a resolve-decision is in flight for the open chunk, threaded to the
-   * awaiting-human gate's choice chips. */
+  /** Whether a resolve-decision is in flight for the open chunk. */
   protected readonly resolvePending = computed(() =>
     isPendingFor(this.pendingResolves(), (v) => v.chunkId === this.chunkId()),
   );
 
-  /** The ids of the questions an answer mutation is in flight for, threaded to the
-   * awaiting-human gate's option chips and Answer buttons. */
+  /** The ids of the questions an answer mutation is in flight for. */
   protected readonly pendingAnswerQuestionIds = computed(() => pendingQuestionIds(this.pendingAnswers()));
 
-  /** The open chunk's last operator-action failure, or `null`. Reset on every new
-   * attempt and whenever a different chunk opens. Shared by every action
-   * in the dock — detach, pause, resume, complete. */
+  /** The open chunk's last operator-action failure, or `null`. */
   protected readonly actionError = signal<string | null>(null);
 
   /** The open chunk's last operator-action **outcome** — a non-failure result that still
@@ -204,11 +160,8 @@ export class ChunkDetail {
     });
   }
 
-  /** Clear both report channels — every action in the dock starts here, and so does
-   * opening a different chunk. One method rather than a reset per handler because the
-   * two channels have to move together: leaving a stale outcome up while a *different*
-   * action reports a failure renders the cyan "alice answered first" and a red notice
-   * side by side, reading as though the two are about the same thing. */
+  /** Clear both report channels together — every action starts here, and so does
+   * opening a different chunk. */
   private beginAction(): void {
     this.actionError.set(null);
     this.actionOutcome.set(null);
@@ -218,14 +171,9 @@ export class ChunkDetail {
   protected readonly detail = computed(() => openDetail(this.chunkId(), this.detailQuery.data()));
 
   /**
-   * The detail read's async state — consulted only once the template's
-   * own "nothing selected" branch has already ruled that case out. This
-   * matters because the query is `enabled: false` while `chunkId()` is
-   * `null` (`bzh:frontend-container-presentational`'s conditional-query
-   * shape), and a disabled query reports `isPending()` as permanently `true`
-   * — reading this triad before that branch would render the rest state as
-   * an endless spinner instead. Never `'empty'`: a single chunk aggregate
-   * either resolves or the read errors.
+   * The detail read's async state. Read only once a chunk is open: the query is
+   * disabled while `chunkId()` is `null`, and a disabled query reports `isPending()`
+   * forever. Never `'empty'`: a single aggregate either resolves or errors.
    */
   protected readonly state = computed<KitAsyncStateValue>(() => asyncState(this.detailQuery, false));
 
@@ -233,11 +181,7 @@ export class ChunkDetail {
    * read (unreachable hub / no work-source) becomes `error` so the tab shows a visible notice. */
   protected readonly workItems = computed<WorkItemsState>(() => openWorkItems(this.chunkId(), this.workItemsQuery));
 
-  /** Answer an open question. A lost first-write-wins race comes back as a 409 whose body
-   * is the *winning* answer, so it is reported as an outcome naming the winner rather than
-   * folded through `errorMessage()` into a generic failure; any other failure
-   * stays on the error channel. Either way the mutation re-reads the chunk, so the dock
-   * settles showing the question answered with its trail. */
+  /** Answer an open question; a lost race reports as an outcome ({@link readAnswerFailure}). */
   protected onAnswer(event: AnswerQuestionEvent): void {
     this.beginAction();
     this.answerMutation.mutate(
@@ -303,13 +247,8 @@ export class ChunkDetail {
     );
   }
 
-  /** Delete an unacquired chunk — withdraws its hub item(s); there is
-   * no undo. Unlike every other action here, success dismisses the dock: the chunk this
-   * query is keyed to no longer exists, and the delete's invalidation would have an open
-   * dock re-read straight into a 404. Emitting `dismiss` before that re-read can render
-   * lets the host clear its selection (`chunkId()` flows to `null`), which disables the
-   * detail query for this component's next render — the same `enabled: false` gate the
-   * empty-dock rest state leans on — rather than reacting to the now-orphaned response. */
+  /** Delete an unacquired chunk; there is no undo. Success dismisses the dock — the order
+   * is pinned by `chunk-detail.spec.ts`'s "dismisses the dock on a successful delete" case. */
   protected onDelete(chunkId: string): void {
     this.beginAction();
     this.deleteMutation.mutate(

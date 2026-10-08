@@ -6,35 +6,14 @@ import { injectLocalPauseMutation, injectRunnerDashboardQuery, type LocalPauseVa
 import { pendingLocalPause } from './app-pause-control.model';
 
 /**
- * The runner top bar's pause/unpause control — the local brake's
- * only mutation surface anywhere in the web UI; the CLI (`blizzard runner
- * pause`/`start`) is the other writer. Rendered in the shared
- * {@link BoardHeader}'s `[header-trailing]` slot beside {@link LocalIdentity}
- * and the header menu — the same composable region `app-panel-layout.ts`
- * already hosts a self-fetching mini-container in.
+ * The runner's pause/unpause control. The toggle flips only the **local** brake
+ * (`PATCH /api/runner`); the hub's brake (`hub_paused`) is shown as a badge when
+ * set, regardless of the local toggle. Reads the `pause` triad off
+ * {@link injectRunnerDashboardQuery}, and its own mutation invalidates that read
+ * directly.
  *
- * Reads `GET /api/runner`'s `pause` triad off the same
- * {@link injectRunnerDashboardQuery} every other rail on this panel already
- * polls — no second read. A flip from another session or the spend ceiling
- * reaches this control through `RUNNER_EVENT_INVALIDATION_REGISTRY`'s dashboard
- * invalidation; this control's own mutation additionally invalidates that key itself,
- * a same-client shortcut past the stream path's coalesce window.
- *
- * The toggle button flips only the **local** brake (`PATCH /api/runner`,
- * through the generated client — `bzh:generated-client`). The hub's own
- * brake (`hub_paused`, cleared by `blizzard hub runner resume`) is out of scope
- * here: when `hub_paused` is set, a badge says so, regardless of the local
- * toggle. The badge's tone is pinned by `app-pause-control.spec.ts`'s
- * "renders the paused-by-hub badge with the shared "waiting" tone, not "needs"
- * — the same tone the board gives every other paused status".
- *
- * A failed PATCH is surfaced, not swallowed — the same "report, don't
- * swallow" convention `chunk-detail.ts`'s pause/resume/detach mutations
- * follow (`bzh:generated-client`'s `onError` + a shared `errorMessage`
- * fold): {@link error} holds the last flip's failure and clears on the next
- * `toggle()`, so an operator whose only mutation surface on this panel
- * fails does not see the toggle silently re-enable with nothing to show
- * for it.
+ * A failed flip is surfaced, not swallowed: {@link error} holds the last flip's
+ * failure and clears on the next `toggle()`.
  */
 @Component({
   selector: 'app-pause-control',
@@ -47,18 +26,12 @@ export class LocalPauseControl {
   private readonly dashboardQuery = injectRunnerDashboardQuery();
   private readonly pauseMutation = injectLocalPauseMutation();
 
-  /** This runner's own id — the pause target {@link overridePaused} scopes to,
-   * read off the same dashboard read `chunk-detail.ts`'s own `runnerName` reads.
-   * `''` before the first read resolves; harmless, since the PATCH itself never
-   * carries this id on the wire (only {@link LocalPauseVars}'s local scoping
-   * does) and every mutation this component ever fires is scoped identically. */
+  /** This runner's own id — the pause target {@link overridePaused} scopes to;
+   * `''` before the first read resolves. */
   private readonly runnerId = computed<string>(() => this.dashboardQuery.data()?.runner?.runner_id ?? '');
 
-  /** Every runner id a local-pause mutation is currently pending for, and its own
-   * variables — read through the shared helper (`bzh:frontend-pending-override`)
-   * rather than this mutation's own `.isPending()`/`.variables()` alone, the pattern
-   * every override site is held to (mirrors `graph-detail.ts`'s
-   * `pendingGraphLifecycles`, scoped by `graphId` there and by {@link runnerId} here). */
+  /** Every runner id a local-pause mutation is currently pending for, with its
+   * variables (`bzh:frontend-pending-override`). */
   private readonly pendingLocalPauses = injectPendingMutationVariables<LocalPauseVars>(localPauseMutationKey);
 
   /** This runner's brake as it will read once a currently pending flip settles for
@@ -71,10 +44,9 @@ export class LocalPauseControl {
     pendingLocalPause(this.pendingLocalPauses(), this.runnerId()),
   );
 
-  /** This runner's own brake — "I won't try". `false` before the first read
-   * resolves or on a malformed body, matching {@link LocalInfo}'s guard.
-   * {@link overridePaused} while a pending flip names one, else the real
-   * `pause.local`. */
+  /** This runner's own brake — "I won't try". {@link overridePaused} while a pending
+   * flip names one, else the real `pause.local`; `false` before the first read
+   * resolves or on a malformed body. */
   protected readonly localPaused = computed<boolean>(() => {
     return this.overridePaused() ?? (this.dashboardQuery.data()?.runner?.pause?.local ?? false);
   });

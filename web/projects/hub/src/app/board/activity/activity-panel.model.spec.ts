@@ -62,6 +62,19 @@ describe('mergeActivityFeeds', () => {
     const live = [event(1, 20), event(2, 40)];
     expect(mergeActivityFeeds(backfill, live, 3).map((e) => e.seq)).toEqual([1, -1, 2]);
   });
+
+  it('drops a deleted chunk\'s other rows from both sources before the cap, keeping its deletion row, other chunks\' rows and chunkless rows', () => {
+    const changed = (seq: number, at: number, chunk_id: string, cause: string): LoggedEvent =>
+      event(seq, at, { type: HubEventType.CHUNK_CHANGED, data: { chunk_id, cause } });
+    const backfill = [
+      changed(-1, 10, 'ch_gone', 'claimed'),
+      event(-2, 20, { type: HubEventType.QUESTION_ASKED, data: { chunk_id: 'ch_gone' } }),
+      changed(-3, 30, 'ch_kept', 'claimed'),
+      event(-4, 40),
+    ];
+    const live = [changed(1, 50, 'ch_gone', 'node-completed'), changed(2, 60, 'ch_gone', 'deleted')];
+    expect(mergeActivityFeeds(backfill, live, 3).map((e) => e.seq)).toEqual([-3, -4, 2]);
+  });
 });
 
 describe('activityRows', () => {

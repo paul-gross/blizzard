@@ -2,12 +2,10 @@ import { type ActivityView, asyncState, type AsyncStateQuery, compactRef, format
 import { type ActivityRow } from './activity-view';
 import { summarizeChunkChange } from './chunk-change-summary';
 
-const { HubEventType, RunnerChangeKind: Kind } = hubApi;
+const { ActivityChunkChangeCause, HubEventType, RunnerChangeKind: Kind } = hubApi;
 
 /** The verb a `runner-changed` kind reads as, where the kind alone does not already read
- * as one. Only the add, pause and retirement families need an entry: the registration and heartbeat kinds
- * never reach the feed (`FleetLiveUpdates` mutes them), and the fallback below
- * renders any kind absent here — including one from a newer hub — as itself. */
+ * as one; {@link summarizeRunnerChange} renders any kind absent here as itself. */
 const RUNNER_CHANGE_VERB: ReadonlyMap<string, string> = new Map<RunnerChangeKind, string>([
   [Kind.ADDED, 'added to the fleet'],
   [Kind.PAUSED, 'paused'],
@@ -42,9 +40,9 @@ interface RowSummary {
 }
 
 /**
- * A human-readable summary of a hub event ("a legible summary"; widened to a two-line
- * block for `chunk-changed`). Maps the generated `HubEventType` vocabulary onto plain
- * phrasing; an unknown type degrades to its raw name rather than dropping the row.
+ * A human-readable summary of a hub event, two lines for `chunk-changed`. Maps the
+ * generated `HubEventType` vocabulary onto plain phrasing; an unknown type degrades to
+ * its raw name rather than dropping the row.
  */
 function summarize(event: LoggedEvent): RowSummary {
   const chunk = event.data.chunk_id ? compactRef(event.data.chunk_id) : '';
@@ -74,13 +72,9 @@ function summarize(event: LoggedEvent): RowSummary {
   }
 }
 
-/** Shape one `GET /api/activity` row into the same {@link LoggedEvent} shape the live
- * SSE tee produces, so {@link summarize} (and {@link summarizeChunkChange}) run
- * unchanged over either source. `seq` is caller-assigned (negative, so it can never
- * collide with the live spine's own positive, monotonic counter) — it exists only so
- * the view has a stable `track` key, not for ordering (that's `at`). `at` is parsed
- * from the wire's ISO instant into the ms epoch {@link LoggedEvent.at} expects. The
- * row less its envelope is already {@link LoggedEvent.data}'s shape. */
+/** Shape one activity row into a {@link LoggedEvent}, so {@link summarize} runs unchanged
+ * over backfilled and live frames. `seq` is caller-assigned and serves only as a stable
+ * `track` key, never for ordering (that's `at`). */
 function fromActivity(row: ActivityView, seq: number): LoggedEvent {
   const { at, type, ...data } = row;
   return { seq, type, data, at: Date.parse(at), key: row.key };
@@ -92,9 +86,15 @@ export function backfillEvents(rows: readonly ActivityView[] | undefined): reado
   return (rows ?? []).map((row, i) => fromActivity(row, -1 - i));
 }
 
+/** Whether a frame reports its chunk deleted. */
+function isChunkDeletion(event: LoggedEvent): boolean {
+  return event.type === HubEventType.CHUNK_CHANGED && event.data.cause === ActivityChunkChangeCause.DELETED;
+}
+
 /** The backfill and live feeds merged and deduped by `key` — a backfilled row whose `key`
- * also names a live frame is dropped, a keyless row always stays — sorted oldest → newest
- * on `at` and capped to the newest `limit`. */
+ * also names a live frame is dropped, a keyless row always stays — with a deleted chunk's
+ * facts suppressed per `blizzard-context:/domain/operations.md` §The activity feed, sorted
+ * oldest → newest on `at` and capped to the newest `limit`. */
 export function mergeActivityFeeds(
   backfill: readonly LoggedEvent[],
   live: readonly LoggedEvent[],
@@ -109,7 +109,10 @@ export function mergeActivityFeeds(
     const at = event.key ? backfillTimes.get(event.key) : undefined;
     return at === undefined ? event : { ...event, at };
   });
-  const combined = [...backfillOnly, ...liveTimed].sort((a, b) => a.at - b.at);
+  const deleted = new Set([...backfill, ...live].flatMap((event) => (isChunkDeletion(event) && event.data.chunk_id ? [event.data.chunk_id] : [])));
+  const combined = [...backfillOnly, ...liveTimed]
+    .filter((event) => !event.data.chunk_id || !deleted.has(event.data.chunk_id) || isChunkDeletion(event))
+    .sort((a, b) => a.at - b.at);
   return combined.length > limit ? combined.slice(combined.length - limit) : combined;
 }
 

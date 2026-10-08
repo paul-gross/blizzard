@@ -16,7 +16,7 @@ structural gate, generated-client drift), and the Vale prose lint (`gate / proce
 against `.vale.ini`). The
 `mise run process-ref-lint` command covers Markdown, configured Python and `src/` YAML, and web TypeScript/CSS;
 generated API clients are excluded and `.html` templates are outside Vale's configured extensions. The change-history
-rule flags crisp provenance phrases in prose; regression fixture explanations using “used to” are not flagged. Every
+rule flags the change-history phrases its own token list names, which is the one statement of what it catches. Every
 gate check is seams-mocked and token-free, needing no real forge, no tokens, and no network beyond package installs.
 
 The pytest tier runs as four parallel shard jobs, and the service tier below as three.

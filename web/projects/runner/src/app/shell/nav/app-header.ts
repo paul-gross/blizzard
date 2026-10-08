@@ -10,19 +10,14 @@ import { headerConnectionLabel, headerStatCells } from './app-header.model';
 
 /**
  * The runner's desktop app header — the shared 48px
- * {@link BoardHeader} chrome, hoisted out of `LocalPanelLayout` (its old home)
- * up to the app root (`../app.ts`), the same shelf the hub's own header sits
- * on. It used to live *inside* the routed board layout, below the
- * `<router-outlet>` anchor — so it rendered under the tab strip on `/board`
- * and not at all on `/events` or `/board/chunk/:chunkId`. Mounted here,
- * `AppShell` (`fleet`) enforces header-above-nav-above-content by
+ * {@link BoardHeader} chrome, mounted at the app root (`../app.ts`), the same
+ * shelf the hub's own header sits on. Mounted there, `AppShell` (`fleet`) enforces header-above-nav-above-content by
  * construction and the header persists across every route, matching the hub.
  *
  * A small container, not a presentational component: it injects
  * {@link injectRunnerDashboardQuery} itself for {@link connection} and
- * {@link headerStats} — moved here verbatim from `LocalPanel`
- * (`runner/src/app/board/app-panel.ts`), which no longer needs either now
- * that it renders no header of its own. TanStack dedupes query-key
+ * {@link headerStats}; `LocalPanel` (`runner/src/app/board/app-panel.ts`)
+ * renders no header and reads neither. TanStack dedupes query-key
  * injections, so this component injecting the same dashboard query
  * `LocalPanel` (and several of its rails) also injects costs no extra
  * network request — one poll for the whole app, not two. It also injects
