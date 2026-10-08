@@ -1,7 +1,10 @@
 """The tenants revision creates the tenant record and the hub-level tables beside it, and carries
 every existing row into one first tenant: a fresh ``ten_`` id named ``default``, created by ``migration``.
 The tenant_id backfill then keys every table outside the global list and stamps each existing row with
-that tenant.
+that tenant. Carried on through the tightened keys, every row keeps its tenant, which is now required and points
+at ``tenants``; every link still names the row it named, through its rescoped key; the hub source numbers on
+from where it stood; and the store downgrades back to the backfill only once a single tenant remains, then
+exactly.
 
 Seeded with literal SQL, or with rows built from the store's reflected shape at the pinned revision,
 rather than importing ``src/blizzard/hub/store/schema.py``, whose tables keep changing shape after
@@ -29,13 +32,18 @@ from blizzard.hub import runtime as hub_runtime
 from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import Migrations, migration_runner
 from blizzard.hub.store import MIGRATIONS_DIR
+from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.store.schema import GLOBAL_TABLES
+from tests.support import hub_store_connections
+from tests.test_store_migrations import _schema_snapshot
 
 pytestmark = pytest.mark.component
 
 _BEFORE = "20261008_1000_drop_work_item_proposals"
 _TENANTS = "20261008_1100_tenants"
 _BACKFILL = "20261008_1200_tenant_id_backfill"
+_SURROGATE = "20261008_1500_scope_surrogate"
+_SECOND_TENANT = "ten_01J9Z3M0P8QK7V2S4W6X8Y0A1C"
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 _ADDED = {"tenants", "tenant_deletions", "invitations", "invitation_facts", "hub_event_log"}
 
@@ -411,8 +419,212 @@ def test_a_carried_over_store_reaches_head_with_every_row_in_the_first_tenant(tm
         assert seeded == set(before) - GLOBAL_TABLES
         assert {table: _row_counts(engine)[table] for table in seeded} == {table: before[table] for table in seeded}
         assert {table: set(_tenants_of(engine, table)) for table in seeded} == {table: {tenant_id} for table in seeded}
+        assert _tenant_keys(engine) == {
+            table: (False, f"fk_{table}_tenant_id") for table in _tables(engine) - GLOBAL_TABLES
+        }
+        assert _foreign_key_violations(engine) == []
     finally:
         engine.dispose()
+
+
+def _tenant_keys(engine: sa.Engine) -> dict[str, tuple[bool, str | None]]:
+    """Every table outside the global list: whether its ``tenant_id`` admits null, and the name of the foreign key
+    that points it at ``tenants``."""
+    inspector = sa.inspect(engine)
+    return {
+        table: (
+            next(c["nullable"] for c in inspector.get_columns(table) if c["name"] == "tenant_id"),
+            next(
+                (
+                    fk["name"]
+                    for fk in inspector.get_foreign_keys(table)
+                    if (fk["constrained_columns"], fk["referred_table"]) == (["tenant_id"], "tenants")
+                ),
+                None,
+            ),
+        )
+        for table in _tables(engine) - GLOBAL_TABLES
+    }
+
+
+def _foreign_key_violations(engine: sa.Engine) -> list[tuple[object, ...]]:
+    """Every row whose foreign key names no row of its parent, as SQLite's own check reports it."""
+    with engine.connect() as conn:
+        return [tuple(row) for row in conn.exec_driver_sql("PRAGMA foreign_key_check")]
+
+
+# Rows added to the one-row-per-table seed, each a copy of that table's seeded row with these columns changed: a second
+# scope holding children of every kind beside the first's, a second secret with its own referrers, a second question
+# with a delivery and no answer, locks in two namespaces, and the hub source's counter part way along.
+_LINKED_SEED: tuple[tuple[str, dict[str, object]], ...] = (
+    ("scopes", {"slug": "beta"}),
+    ("scope_lifecycle_facts", {"id": 2, "slug": "beta"}),
+    ("routines", {"routine_id": "rt_2", "name": "name-2", "default_scope_slug": "beta"}),
+    ("routine_scopes", {"scope_slug": "beta"}),
+    ("routine_scopes", {"routine_id": "rt_2", "scope_slug": "beta"}),
+    ("work_items", {"work_item_id": "wi_2", "source": "hub", "ref": "41"}),
+    ("work_item_runs", {"work_item_id": "wi_2", "scope_slug": "beta"}),
+    ("findings", {"finding_id": "fd_2", "scope_slug": "beta"}),
+    ("secrets", {"name": "forge-token"}),
+    ("secret_lifecycle_facts", {"id": 2, "name": "forge-token"}),
+    ("work_sources", {"name": "tracker", "locator": "locator-2", "secret_name": "forge-token"}),
+    ("questions", {"question_id": "qn_2"}),
+    ("answer_deliveries", {"id": 2, "question_id": "qn_2"}),
+    ("answer_deliveries", {"id": 3}),
+    ("keyed_locks", {"key": "key-2"}),
+    ("keyed_locks", {"namespace": "chunk", "key": "key-1"}),
+    ("work_item_sequence", {"source": "hub", "next_ref": 42}),
+)
+
+# Each link the carried-over rows hold, as (row, the parent's natural key) — read the way the pre-tenant store keys it,
+# and the way the store at head does: through its rescoped key, within the row's own tenant.
+_LINKS_BEFORE = {
+    "scope_lifecycle_facts": "SELECT id, slug FROM scope_lifecycle_facts",
+    "routines": "SELECT routine_id, default_scope_slug FROM routines",
+    "routine_scopes": "SELECT routine_id, scope_slug FROM routine_scopes",
+    "work_item_runs": "SELECT work_item_id, scope_slug FROM work_item_runs",
+    "findings": "SELECT finding_id, scope_slug FROM findings",
+    "finding_sets": "SELECT finding_set_id, scope_slug FROM finding_sets",
+    "secret_lifecycle_facts": "SELECT id, name FROM secret_lifecycle_facts",
+    "work_sources": "SELECT name, secret_name FROM work_sources",
+    "repositories": "SELECT name, secret_name FROM repositories",
+    "question_answers": "SELECT question_id, answer FROM question_answers",
+    "answer_deliveries": "SELECT id, question_id FROM answer_deliveries",
+    "keyed_locks": "SELECT namespace, key FROM keyed_locks",
+    "work_item_sequence": "SELECT source, next_ref FROM work_item_sequence",
+    "work_items": "SELECT source, ref FROM work_items",
+}
+_LINKS_AT_HEAD = {
+    **{
+        table: f"SELECT c.{key}, s.slug FROM {table} c"
+        f" JOIN scopes s ON s.tenant_id = c.tenant_id AND s.scope_id = c.{scope_id}"
+        for table, key, scope_id in (
+            ("scope_lifecycle_facts", "id", "scope_id"),
+            ("routines", "routine_id", "default_scope_id"),
+            ("routine_scopes", "routine_id", "scope_id"),
+            ("work_item_runs", "work_item_id", "scope_id"),
+            ("findings", "finding_id", "scope_id"),
+            ("finding_sets", "finding_set_id", "scope_id"),
+        )
+    },
+    **{
+        table: f"SELECT c.{key}, s.name FROM {table} c"
+        f" JOIN secrets s ON s.tenant_id = c.tenant_id AND s.name = c.{name}"
+        for table, key, name in (
+            ("secret_lifecycle_facts", "id", "name"),
+            ("work_sources", "name", "secret_name"),
+            ("repositories", "name", "secret_name"),
+        )
+    },
+    "question_answers": "SELECT q.question_id, a.answer FROM question_answers a"
+    " JOIN questions q ON q.tenant_id = a.tenant_id AND q.question_id = a.question_id",
+    "answer_deliveries": "SELECT d.id, q.question_id FROM answer_deliveries d"
+    " JOIN questions q ON q.tenant_id = d.tenant_id AND q.question_id = d.question_id",
+    "keyed_locks": "SELECT namespace, key FROM keyed_locks",
+    "work_item_sequence": "SELECT source, next_ref FROM work_item_sequence",
+    "work_items": "SELECT source, ref FROM work_items",
+}
+
+
+def _seed_linked_rows(engine: sa.Engine) -> None:
+    """Over the one-row-per-table seed, the rows of ``_LINKED_SEED``."""
+    with engine.begin() as conn:
+        for table, changes in _LINKED_SEED:
+            columns = [f'"{c["name"]}"' for c in sa.inspect(conn).get_columns(table)]
+            values = [
+                f":{c['name']}" if c["name"] in changes else f'"{c["name"]}"'
+                for c in sa.inspect(conn).get_columns(table)
+            ]
+            conn.execute(
+                sa.text(
+                    f"INSERT INTO {table} ({', '.join(columns)})"
+                    f" SELECT {', '.join(values)} FROM {table} ORDER BY rowid LIMIT 1"
+                ),
+                changes,
+            )
+
+
+def _links(engine: sa.Engine, reads: dict[str, str]) -> dict[str, list[tuple[object, ...]]]:
+    with engine.connect() as conn:
+        return {table: sorted(tuple(row) for row in conn.execute(sa.text(read))) for table, read in reads.items()}
+
+
+def _carried_over_with_links(tmp_path: Path, revision: str) -> tuple[MigrationRunner, sa.Engine]:
+    """A pre-tenant store holding a row in every tenant-owned table and the links of ``_LINKED_SEED``, migrated to
+    ``revision``."""
+    db_url, engine = _store(tmp_path)
+    runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
+    runner.upgrade(_BEFORE)
+    _seed_every_tenant_owned_table(engine)
+    _seed_linked_rows(engine)
+    runner.upgrade(revision)
+    return runner, engine
+
+
+def test_a_carried_over_store_keeps_every_link_through_the_rescoped_keys(tmp_path: Path) -> None:
+    runner, engine = _carried_over_with_links(tmp_path, _BEFORE)
+    try:
+        links = _links(engine, _LINKS_BEFORE)
+        assert {slug for _, slug in links["routine_scopes"]} == {"slug-1", "beta"}
+        assert {secret for _, secret in links["work_sources"]} == {"name-1", "forge-token"}
+
+        runner.upgrade("head")
+
+        assert _links(engine, _LINKS_AT_HEAD) == links
+        assert _foreign_key_violations(engine) == []
+        [(tenant_id, *_)] = _tenant_rows(engine)
+        with engine.connect() as conn:
+            assert conn.execute(
+                sa.text("SELECT tenant_id, next_ref FROM work_item_sequence WHERE source = 'hub'")
+            ).one() == (tenant_id, 42)
+        assert WorkItemStore(hub_store_connections(engine)).allocate_ref("hub") == "42"
+    finally:
+        engine.dispose()
+
+
+def test_the_tightened_keys_downgrade_to_the_backfill_only_once_one_tenant_remains_and_then_exactly(
+    tmp_path: Path,
+) -> None:
+    runner, engine = _carried_over_with_links(tmp_path, _BACKFILL)
+    try:
+        [first] = [tenant_id for tenant_id, *_ in _tenant_rows(engine)]
+        backfilled = _schema_snapshot(engine, exemptions={}, name_exemptions={}), _rows_by_column(engine)
+        runner.upgrade(_SURROGATE)
+        with engine.begin() as conn:
+            conn.execute(
+                sa.text("INSERT INTO tenants VALUES (:tenant, 'second', :at, 'migration')"),
+                {"tenant": _SECOND_TENANT, "at": _T0},
+            )
+        tightened = _schema_snapshot(engine, exemptions={}, name_exemptions={}), _rows_by_column(engine)
+
+        with pytest.raises(RuntimeError, match="delete every tenant but one before downgrading") as refused:
+            runner.downgrade(_BACKFILL)
+
+        assert first in str(refused.value) and _SECOND_TENANT in str(refused.value)
+        assert runner.current_revision() == _SURROGATE
+        assert (_schema_snapshot(engine, exemptions={}, name_exemptions={}), _rows_by_column(engine)) == tightened
+
+        with engine.begin() as conn:
+            conn.execute(sa.text("DELETE FROM tenants WHERE tenant_id = :tenant"), {"tenant": _SECOND_TENANT})
+        runner.downgrade(_BACKFILL)
+
+        assert runner.current_revision() == _BACKFILL
+        assert (_schema_snapshot(engine, exemptions={}, name_exemptions={}), _rows_by_column(engine)) == backfilled
+    finally:
+        engine.dispose()
+
+
+def _rows_by_column(engine: sa.Engine) -> dict[str, list[str]]:
+    """Every row of every table as its columns by name, in a stable order — a rebuilt table's column order is not
+    compared."""
+    with engine.connect() as conn:
+        return {
+            table: sorted(
+                repr(sorted(row._mapping.items()))
+                for row in conn.execute(sa.select(sa.text("*")).select_from(sa.table(table)))
+            )
+            for table in _tables(engine)
+        }
 
 
 def test_a_rerun_of_the_backfill_over_a_partly_keyed_store_finishes(tmp_path: Path) -> None:
