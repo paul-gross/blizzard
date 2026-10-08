@@ -11,10 +11,15 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from contextlib import contextmanager
+from typing import TYPE_CHECKING
 
 import structlog
 from sqlalchemy import Connection, Engine
 from sqlalchemy.exc import SQLAlchemyError
+
+if TYPE_CHECKING:
+    from blizzard.hub.store.scoped import ScopedConnections
+    from blizzard.hub.tenancy import StoreScope
 
 
 class HubStoreError(Exception):
@@ -55,6 +60,13 @@ class HubStoreConnections:
     def __init__(self, engine: Engine, errors: HubStoreErrorFactory) -> None:
         self._engine = engine
         self._errors = errors
+
+    def scoped(self, scope: StoreScope) -> ScopedConnections:
+        """These connections confined to ``scope``'s tenant — the only connections object an
+        adapter over a tenant-owned table holds (``bzh:tenant-scoped-store``)."""
+        from blizzard.hub.store.scoped import ScopedConnections  # the scoped module builds on this one
+
+        return ScopedConnections(self._engine, self._errors, scope)
 
     @contextmanager
     def read(self, operation: str) -> Iterator[Connection]:
