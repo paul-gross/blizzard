@@ -20,8 +20,8 @@ from blizzard.hub.domain.work_items.closure import TERMINAL_CLOSE_OUTCOMES
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import (
     enqueue_close_intents,
-    ephemeral_ids_select,
     graph_id_of,
+    hub_wide_ephemeral_ids_select,
     lock_chunk_row,
     next_route_seq,
     record_hub_lease,
@@ -77,7 +77,7 @@ class ChunkDeliveryStore:
                 )
                 .select_from(s.close_intents.outerjoin(attempts, attempts.c.intent_id == s.close_intents.c.id))
                 .where(s.close_intents.c.retired_at.is_(None))
-                .where(s.close_intents.c.chunk_id.not_in(ephemeral_ids_select()))
+                .where(s.close_intents.c.chunk_id.not_in(hub_wide_ephemeral_ids_select()))
                 .order_by(s.close_intents.c.id)  # An explicit total order (`bzh:sql-portable`)
             ).all()
         return [

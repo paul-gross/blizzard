@@ -211,11 +211,11 @@ class ChunkFactsStore:
         the settled-terminal chunks are counted in SQL (:func:`settled_stopped`,
         :func:`settled_done`) without loading a fact row; only the :func:`maybe_live`
         candidates :meth:`load_live_statuses` already hydrates are derived per chunk."""
-        not_ephemeral = s.chunks.c.chunk_id.not_in(ephemeral_ids_select())
+        not_ephemeral = s.chunks.c.chunk_id.not_in(ephemeral_ids_select(self._store))
         with self._store.read("status_counts") as conn:
             stopped, done = (
                 conn.execute(select(func.count()).select_from(s.chunks).where(not_ephemeral, settled)).scalar_one()
-                for settled in (settled_stopped(), settled_done())
+                for settled in (settled_stopped(self._store), settled_done(self._store))
             )
             counts = Counter(self._maybe_live_statuses(conn).values())
         counts[ChunkStatus.STOPPED] += stopped
@@ -229,7 +229,9 @@ class ChunkFactsStore:
         candidate_ids = [
             r.chunk_id
             for r in conn.execute(
-                select(s.chunks.c.chunk_id).where(maybe_live(), s.chunks.c.chunk_id.not_in(ephemeral_ids_select()))
+                select(s.chunks.c.chunk_id).where(
+                    maybe_live(self._store), s.chunks.c.chunk_id.not_in(ephemeral_ids_select(self._store))
+                )
             )
         ]
         facts_by_id = self._load(conn, candidate_ids, families=_STATUS_FAMILIES)

@@ -8,19 +8,26 @@ row under any dialect (static proof, no live postgres), and sqlite never duplica
 from __future__ import annotations
 
 import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from sqlalchemy import insert
+from sqlalchemy import Connection, create_engine, insert
 from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.sql.dml import Update
+from structlog import get_logger
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.errors import HubStoreErrorFactory
 from blizzard.hub.store.internal.chunk_rows import lock_chunk_row, next_route_seq
+from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.tenancy import StoreScope, TenantId
+from tests.support import hub_store_connections
 
 pytestmark = pytest.mark.unit
 
@@ -32,8 +39,9 @@ class _CapturingConn:
     of running it, so the allocator's real statements can be compiled against a dialect
     that never touches this process (postgres)."""
 
-    def __init__(self) -> None:
+    def __init__(self, scoped: Connection) -> None:
         self.statements: list[object] = []
+        self.get_execution_options = scoped.get_execution_options
 
     def execute(self, stmt: object):  # type: ignore[no-untyped-def]
         self.statements.append(stmt)
@@ -45,10 +53,22 @@ class _FakeResult:
         return None
 
 
-def test_next_route_seq_locks_the_chunk_row_for_update() -> None:
-    conn = _CapturingConn()
+@contextmanager
+def _scoped_connection() -> Iterator[Connection]:
+    """A connection a scoped read yields over an empty in-memory store — what the allocator's
+    statements recover their scope from; nothing runs on it."""
+    connections = ScopedConnections(
+        create_engine("sqlite://"), HubStoreErrorFactory(get_logger("test")), StoreScope(TenantId("ten_test"))
+    )
+    with connections.read("capture") as conn:
+        yield conn
 
-    next_route_seq(conn, "ch_1")  # type: ignore[arg-type]
+
+def test_next_route_seq_locks_the_chunk_row_for_update() -> None:
+    with _scoped_connection() as scoped:
+        conn = _CapturingConn(scoped)
+
+        next_route_seq(conn, "ch_1")  # type: ignore[arg-type]
 
     assert len(conn.statements) == 4  # the lock, then the three per-table max reads
     lock_stmt = conn.statements[0]
@@ -63,9 +83,10 @@ def test_lock_chunk_row_compiles_to_the_same_row_scoped_statement_on_both_dialec
     """``bzh:store-exclusive-write``'s shared primitive — every locked writer besides
     ``next_route_seq`` calls this directly, so its own compiled shape is pinned here
     too, not only by way of the allocator's own statement-count assertion above."""
-    conn = _CapturingConn()
+    with _scoped_connection() as scoped:
+        conn = _CapturingConn(scoped)
 
-    lock_chunk_row(conn, "ch_1")  # type: ignore[arg-type]
+        lock_chunk_row(conn, "ch_1")  # type: ignore[arg-type]
 
     assert len(conn.statements) == 1
     lock_stmt = conn.statements[0]
@@ -89,7 +110,7 @@ def test_concurrent_seq_allocation_on_sqlite_never_duplicates(tmp_path: Path) ->
     def allocate(route_id: str) -> None:
         try:
             barrier.wait(timeout=5)
-            with engine.begin() as conn:
+            with hub_store_connections(engine).write("seed") as conn:
                 seq = next_route_seq(conn, "ch_1")
                 conn.execute(
                     insert(s.route_created).values(

@@ -154,7 +154,7 @@ class ChunkEscalationsStore:
         hold an open escalation, so it is excluded in the query rather than loaded and
         dropped by the fold."""
         live_chunk_ids = select(s.chunks.c.chunk_id).where(
-            maybe_live(), s.chunks.c.chunk_id.not_in(ephemeral_ids_select())
+            maybe_live(self._store), s.chunks.c.chunk_id.not_in(ephemeral_ids_select(self._store))
         )
         with self._store.read("_newest_escalation_per_chunk") as conn:
             newer = s.escalations.alias("newer")

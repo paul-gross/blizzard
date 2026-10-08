@@ -111,7 +111,7 @@ def test_a_grouped_chunk_is_excluded_from_pending_close_intents(tmp_path: Path) 
     )
     assert chunks.delivery.pending_close_intents() == [PendingCloseIntent(chunk_id="ch_2", ref=pointer)]
 
-    with engine.begin() as conn:
+    with hub_store_connections(engine).write("seed") as conn:
         record_grouped_row_conn(conn, "ch_2", grouped_into="ch_1", at=_at(1))
 
     assert chunks.delivery.pending_close_intents() == []
@@ -236,7 +236,7 @@ def test_activity_feed_leaves_a_grouped_chunks_history_showing(tmp_path: Path) -
     chunks, _, _, engine = _stores(tmp_path)
     _mint(chunks, "ch_1")
     _mint(chunks, "ch_2")
-    with engine.begin() as conn:
+    with hub_store_connections(engine).write("seed") as conn:
         record_grouped_row_conn(conn, "ch_2", grouped_into="ch_1", at=_at(1))
 
     rows = [r for r in chunks.events.activity_facts_since(_T0, limit=50) if r.chunk_id == "ch_2"]

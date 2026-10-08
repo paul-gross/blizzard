@@ -225,11 +225,11 @@ def _seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None
     # AC4: grouped-away and deleted chunks are ephemeral — excluded from every read.
     _mint(store, "ch_grouped")
     store.queue.record_promote("ch_grouped", at=_T0)
-    with engine.begin() as conn:
+    with hub_store_connections(engine).write("seed") as conn:
         record_grouped_row_conn(conn, "ch_grouped", grouped_into="ch_ready", at=_T0)
 
     _mint(store, "ch_deleted")
-    with engine.begin() as conn:
+    with hub_store_connections(engine).write("seed") as conn:
         record_deleted_row(conn, "ch_deleted", by="op", at=_T0)
 
     # A kitchen-sink chunk exercising every remaining fact family ``load_facts`` reads,

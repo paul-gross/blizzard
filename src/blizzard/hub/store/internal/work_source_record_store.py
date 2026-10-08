@@ -27,14 +27,14 @@ from blizzard.hub.store.internal.config_change_store import append_change
 from blizzard.hub.store.internal.newest_fact import newest_retired_select
 from blizzard.hub.store.internal.secret_store import secret_unavailable
 from blizzard.hub.store.schema import work_source_lifecycle_facts, work_sources
-from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.store.scoped import ScopedConnections, statements_of
 
 
 def _retired_names(conn: Connection, names: list[str] | None = None) -> set[str]:
     facts = work_source_lifecycle_facts
     found: set[str] = set()
     for batch in id_batches(names) if names is not None else [None]:
-        found.update(conn.execute(newest_retired_select(facts, facts.c.name, batch)).scalars())
+        found.update(conn.execute(newest_retired_select(statements_of(conn), facts, facts.c.name, batch)).scalars())
     return found
 
 

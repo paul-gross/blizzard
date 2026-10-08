@@ -10,12 +10,15 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from sqlalchemy import Engine, insert
+from sqlalchemy import Boolean, Column, Engine, Integer, MetaData, String, Table, create_engine, insert
+from structlog import get_logger
 
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.errors import HubStoreErrorFactory
 from blizzard.hub.store.internal.chunk_queue_store import ChunkQueueStore
 from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.graph_store import GraphStore
+from blizzard.hub.store.internal.newest_fact import newest_fact_select, newest_retired_select
 from blizzard.hub.store.internal.repository_record_store import _retirements
 from blizzard.hub.store.internal.routine_store import RoutineStore
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
@@ -23,6 +26,8 @@ from blizzard.hub.store.internal.scope_store import ScopeStore
 from blizzard.hub.store.internal.secret_store import SecretStore
 from blizzard.hub.store.internal.trace_store import TraceStore
 from blizzard.hub.store.internal.work_source_record_store import _retired_names
+from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.tenancy import StoreScope, TenantId
 from tests.support import build_hub, count_rows_read, hub_store_connections, stamp
 
 pytestmark = pytest.mark.component
@@ -186,3 +191,45 @@ def test_newest_failure_reads_keep_the_old_failure_after_a_recovery(tmp_path: Pa
     assert egress is not None and egress.message == "m0"
     assert export is not None and export.message == "m2"
     assert count_rows_read(engine, lambda: EgressStore(store).newest_egress_failure()) <= 1
+
+
+# --- the newest-fact read is confined to its scope, inner group-by included -----------------------
+
+_TEN_A = TenantId("ten_A")
+_TEN_B = TenantId("ten_B")
+_md = MetaData()
+# A stand-in lifecycle fact table carrying the tenant key the live schema does not have yet.
+_facts = Table(
+    "secret_lifecycle_facts",
+    _md,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("tenant_id", String, nullable=False),
+    Column("name", String, nullable=False),
+    Column("retired", Boolean, nullable=False),
+)
+
+
+def _two_tenant_facts(tmp_path: Path) -> Engine:
+    """Two tenants sharing the key ``k``: A retired it then restored it; B's newer fact retires it.
+    A group-by left hub-wide would pick B's id, and A's own newest fact would vanish."""
+    engine = create_engine(f"sqlite:///{tmp_path / 'facts.db'}")
+    _md.create_all(engine)
+    with engine.begin() as conn:
+        for tenant, retired in ((_TEN_A, True), (_TEN_A, False), (_TEN_B, False), (_TEN_B, True)):
+            conn.execute(insert(_facts).values(tenant_id=tenant, name="k", retired=retired))
+        conn.execute(insert(_facts).values(tenant_id=_TEN_B, name="b_only", retired=True))
+    return engine
+
+
+@pytest.mark.parametrize("keys", [None, ["k", "b_only"]], ids=["every_key", "bounded"])
+def test_the_newest_fact_read_answers_only_from_its_scope_facts(tmp_path: Path, keys: list[str] | None) -> None:
+    engine = _two_tenant_facts(tmp_path)
+    errors = HubStoreErrorFactory(get_logger("test"))
+    a = ScopedConnections(engine, errors, StoreScope(_TEN_A))
+    b = ScopedConnections(engine, errors, StoreScope(_TEN_B))
+    with a.read("test") as conn:
+        newest_a = conn.execute(newest_fact_select(a, _facts, _facts.c.name, keys, _facts.c.name, _facts.c.retired))
+        assert [tuple(r) for r in newest_a] == [("k", False)]
+        assert set(conn.execute(newest_retired_select(a, _facts, _facts.c.name, keys)).scalars()) == set()
+    with b.read("test") as conn:
+        assert set(conn.execute(newest_retired_select(b, _facts, _facts.c.name, keys)).scalars()) == {"k", "b_only"}

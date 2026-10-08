@@ -138,7 +138,9 @@ class SecretStore:
     def retired_names(self) -> set[str]:
         with self._store.read("retired_names") as conn:
             return set(
-                conn.execute(newest_retired_select(secret_lifecycle_facts, secret_lifecycle_facts.c.name)).scalars()
+                conn.execute(
+                    newest_retired_select(self._store, secret_lifecycle_facts, secret_lifecycle_facts.c.name)
+                ).scalars()
             )
 
     def key_ids_in_use(self) -> set[str]:

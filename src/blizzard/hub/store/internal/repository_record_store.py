@@ -27,7 +27,7 @@ from blizzard.hub.store.internal.config_change_store import append_change
 from blizzard.hub.store.internal.newest_fact import newest_retired_select
 from blizzard.hub.store.internal.secret_store import secret_unavailable
 from blizzard.hub.store.schema import repositories, repository_lifecycle_facts
-from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.store.scoped import ScopedConnections, statements_of
 
 
 def _retirements(conn: Connection, names: list[str] | None = None) -> dict[str, datetime]:
@@ -35,7 +35,7 @@ def _retirements(conn: Connection, names: list[str] | None = None) -> dict[str, 
     facts = repository_lifecycle_facts
     found: dict[str, datetime] = {}
     for batch in id_batches(names) if names is not None else [None]:
-        for row in conn.execute(newest_retired_select(facts, facts.c.name, batch, facts.c.set_at)):
+        for row in conn.execute(newest_retired_select(statements_of(conn), facts, facts.c.name, batch, facts.c.set_at)):
             found[row.name] = row.set_at
     return found
 

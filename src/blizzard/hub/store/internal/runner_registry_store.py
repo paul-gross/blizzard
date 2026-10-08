@@ -29,7 +29,7 @@ from blizzard.hub.domain.runners.registration import (
 )
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.newest_fact import newest_fact_select
-from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.store.scoped import ScopedConnections, statements_of
 
 
 def locked_token_hash(conn: Connection, runner_id: str) -> str | None:
@@ -439,6 +439,7 @@ class RunnerRegistryStore:
         for batch in id_batches(runner_ids):
             rows = conn.execute(
                 newest_fact_select(
+                    statements_of(conn),
                     s.runner_pause_facts,
                     s.runner_pause_facts.c.runner_id,
                     batch,
@@ -469,6 +470,7 @@ class RunnerRegistryStore:
         for batch in id_batches(runner_ids):
             rows = conn.execute(
                 newest_fact_select(
+                    statements_of(conn),
                     s.runner_lifecycle_facts,
                     s.runner_lifecycle_facts.c.runner_id,
                     batch,
@@ -504,6 +506,7 @@ class RunnerRegistryStore:
         for batch in id_batches(runner_ids):
             rows = conn.execute(
                 newest_fact_select(
+                    statements_of(conn),
                     s.runner_local_pause_facts,
                     s.runner_local_pause_facts.c.runner_id,
                     batch,

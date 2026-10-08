@@ -26,7 +26,7 @@ from blizzard.hub.store.internal.config_change_store import append_change
 from blizzard.hub.store.internal.newest_fact import newest_retired_select
 from blizzard.hub.store.internal.scope_store import ensure_scope
 from blizzard.hub.store.schema import routine_lifecycle_facts, routine_scopes, routines
-from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.store.scoped import ScopedConnections, statements_of
 
 
 @adapter_model
@@ -253,7 +253,9 @@ def _retired_ids(conn: Connection, routine_ids: Sequence[str] | None = None) -> 
     for batch in id_batches(routine_ids) if routine_ids is not None else [None]:
         found.update(
             conn.execute(
-                newest_retired_select(routine_lifecycle_facts, routine_lifecycle_facts.c.routine_id, batch)
+                newest_retired_select(
+                    statements_of(conn), routine_lifecycle_facts, routine_lifecycle_facts.c.routine_id, batch
+                )
             ).scalars()
         )
     return found

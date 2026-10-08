@@ -11,7 +11,7 @@ import pytest
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.store.internal.chunk_rows import record_deleted_row, record_grouped_row_conn
-from tests.support import chunk_stores, migrate_to, seed_chunk, seed_graph
+from tests.support import chunk_stores, hub_store_connections, migrate_to, seed_chunk, seed_graph
 
 pytestmark = pytest.mark.component
 
@@ -30,7 +30,7 @@ def test_is_ephemeral_is_false_for_a_live_chunk(tmp_path: Path) -> None:
 
 def test_is_ephemeral_is_true_for_a_grouped_away_chunk(tmp_path: Path) -> None:
     _, engine = migrate_to(tmp_path, "head")
-    with engine.begin() as conn:
+    with hub_store_connections(engine).write("seed") as conn:
         seed_graph(conn, "gr_1", at=_NOW)
         seed_chunk(conn, "ch_survivor", graph_id="gr_1", at=_NOW)
         seed_chunk(conn, "ch_grouped", graph_id="gr_1", at=_NOW)
@@ -42,7 +42,7 @@ def test_is_ephemeral_is_true_for_a_grouped_away_chunk(tmp_path: Path) -> None:
 
 def test_is_ephemeral_is_true_for_a_deleted_chunk(tmp_path: Path) -> None:
     _, engine = migrate_to(tmp_path, "head")
-    with engine.begin() as conn:
+    with hub_store_connections(engine).write("seed") as conn:
         seed_graph(conn, "gr_1", at=_NOW)
         seed_chunk(conn, "ch_deleted", graph_id="gr_1", at=_NOW)
         record_deleted_row(conn, "ch_deleted", by="operator", at=_NOW)

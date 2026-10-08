@@ -19,7 +19,7 @@ from blizzard.hub.domain.garden.scopes import IWriteScopeRepository, Scope, Scop
 from blizzard.hub.store.internal.config_change_store import append_change
 from blizzard.hub.store.internal.newest_fact import newest_retired_select
 from blizzard.hub.store.schema import scope_lifecycle_facts, scopes
-from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.store.scoped import ScopedConnections, statements_of
 
 
 def ensure_scope(conn: Connection, mint: ScopeMint) -> bool:
@@ -64,7 +64,11 @@ def _is_retired(conn: Connection, slug: str) -> bool:
 
 
 def _retired_slugs(conn: Connection) -> set[str]:
-    return set(conn.execute(newest_retired_select(scope_lifecycle_facts, scope_lifecycle_facts.c.slug)).scalars())
+    return set(
+        conn.execute(
+            newest_retired_select(statements_of(conn), scope_lifecycle_facts, scope_lifecycle_facts.c.slug)
+        ).scalars()
+    )
 
 
 def update_scope(conn: Connection, record: Scope, from_revision: int, change: ConfigChange) -> None:

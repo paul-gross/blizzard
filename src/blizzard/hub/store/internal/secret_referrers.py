@@ -17,7 +17,7 @@ from blizzard.hub.store.schema import (
     work_source_lifecycle_facts,
     work_sources,
 )
-from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.store.scoped import ScopedConnections, statements_of
 
 #: Each referring kind: its record table and its lifecycle-fact table.
 _REFERRING: tuple[tuple[RecordKind, Table, Table], ...] = (
@@ -31,11 +31,13 @@ def active_referrers(conn: Connection, secret_names: list[str]) -> dict[str, lis
     found: dict[str, list[RecordRef]] = {name: [] for name in secret_names}
     if not secret_names:
         return found
+    stmts = statements_of(conn)
     for kind, table, facts in _REFERRING:
         rows = conn.execute(
             select(table.c.secret_name, table.c.name)
             .where(
-                table.c.secret_name.in_(secret_names), table.c.name.not_in(newest_retired_select(facts, facts.c.name))
+                table.c.secret_name.in_(secret_names),
+                table.c.name.not_in(newest_retired_select(stmts, facts, facts.c.name)),
             )
             .order_by(table.c.name)
         ).all()

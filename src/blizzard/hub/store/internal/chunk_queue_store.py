@@ -36,6 +36,7 @@ class ChunkQueueStore:
             for batch in id_batches(chunk_ids):
                 rows = conn.execute(
                     newest_fact_select(
+                        self._store,
                         s.queue_positions,
                         s.queue_positions.c.chunk_id,
                         batch,

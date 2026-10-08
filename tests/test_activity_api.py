@@ -15,7 +15,7 @@ import pytest
 from blizzard.foundation.event_log import EventLogSeverity
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.store.internal.chunk_rows import record_deleted_row
-from tests.support import build_hub, chunk_stores, seed_chunk, seed_graph
+from tests.support import build_hub, chunk_stores, hub_store_connections, seed_chunk, seed_graph
 from tests.test_fleet_auth import _bearer, _seed_enrolled
 
 pytestmark = pytest.mark.component
@@ -173,7 +173,7 @@ def test_deleted_chunks_events_are_excluded_but_runner_scoped_events_survive(tmp
         detail=None,
         at=t0 + timedelta(seconds=2),
     )
-    with hub.engine.begin() as conn:
+    with hub_store_connections(hub.engine).write("seed") as conn:
         record_deleted_row(conn, "ch_deleted", by="alice", at=t0 + timedelta(seconds=3))
 
     rows = _activity(hub)

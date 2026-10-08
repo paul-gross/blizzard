@@ -24,9 +24,9 @@ from blizzard.hub.domain.chunk.ports.work_refs import (
 )
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore, status_family_tables
-from blizzard.hub.store.internal.chunk_rows import conn_of, ephemeral_ids, ephemeral_ids_in
+from blizzard.hub.store.internal.chunk_rows import conn_of, ephemeral_ids_in, hub_wide_ephemeral_ids
 from blizzard.hub.store.internal.chunk_terminal_predicates import maybe_live
-from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.store.scoped import ScopedConnections, statements_of
 
 
 class ChunkWorkRefsStore:
@@ -46,7 +46,7 @@ class ChunkWorkRefsStore:
         excluded."""
         statuses = self._facts.load_live_statuses()
         with self._store.read("live_work_refs") as conn:
-            ephemeral = ephemeral_ids(conn)
+            ephemeral = hub_wide_ephemeral_ids(conn)
             rows = conn.execute(
                 select(s.chunk_work_refs.c.chunk_id, s.chunk_work_refs.c.source, s.chunk_work_refs.c.ref)
             ).all()
@@ -133,7 +133,7 @@ class ChunkWorkRefsStore:
             chunk_id
             for batch in id_batches([c for c in held_ids if c not in ephemeral])
             for chunk_id in conn.execute(
-                select(s.chunks.c.chunk_id).where(s.chunks.c.chunk_id.in_(batch), maybe_live())
+                select(s.chunks.c.chunk_id).where(s.chunks.c.chunk_id.in_(batch), maybe_live(statements_of(conn)))
             ).scalars()
         }
         return pairs, maybe_live_ids

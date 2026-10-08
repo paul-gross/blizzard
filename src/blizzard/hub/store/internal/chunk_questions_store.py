@@ -31,7 +31,9 @@ class ChunkQuestionsStore:
 
     def get_question(self, question_id: str) -> NodeQuestion | None:
         with self._store.read("get_question") as conn:
-            row = conn.execute(QUESTIONS.select.where(s.questions.c.question_id == question_id)).one_or_none()
+            row = conn.execute(
+                QUESTIONS.select(self._store).where(s.questions.c.question_id == question_id)
+            ).one_or_none()
             return QUESTIONS.of(row) if row is not None else None
 
     def list_open_questions(self) -> list[NodeQuestion]:
@@ -39,17 +41,19 @@ class ChunkQuestionsStore:
         :meth:`NodeQuestion.require_answerable`, pinned by ``tests/test_open_questions_closure.py``."""
         with self._store.read("list_open_questions") as conn:
             rows = conn.execute(
-                QUESTIONS.select.where(
+                QUESTIONS.select(self._store)
+                .where(
                     s.questions.c.question_id.not_in(select(s.question_answers.c.question_id))
-                    & ~chunk_is_terminal(s.questions.c.chunk_id)
-                ).order_by(s.questions.c.asked_at)
+                    & ~chunk_is_terminal(self._store, s.questions.c.chunk_id)
+                )
+                .order_by(s.questions.c.asked_at)
             ).all()
             return [QUESTIONS.of(row) for row in rows]
 
     def load_questions(self, chunk_id: str) -> list[NodeQuestion]:
         with self._store.read("load_questions") as conn:
             rows = conn.execute(
-                QUESTIONS.select.where(s.questions.c.chunk_id == chunk_id).order_by(s.questions.c.asked_at)
+                QUESTIONS.select(self._store).where(s.questions.c.chunk_id == chunk_id).order_by(s.questions.c.asked_at)
             ).all()
             return [QUESTIONS.of(row) for row in rows]
 

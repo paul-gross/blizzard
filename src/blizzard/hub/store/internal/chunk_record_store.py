@@ -37,7 +37,7 @@ from blizzard.hub.store.internal.chunk_rows import (
     work_ref_conn_of,
 )
 from blizzard.hub.store.internal.chunk_terminal_predicates import settled_done
-from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements
 
 #: `(minted_at, chunk_id)` — the tiebreak `minted_at desc` alone lacks.
 _CURSOR_ARITY = 2
@@ -58,10 +58,12 @@ def _decode_chunk_cursor(cursor: str) -> tuple[datetime, str]:
     return minted_at, parts[1]
 
 
-def _chunk_page_stmt(after: tuple[datetime, str] | None, limit: int, done_since: datetime | None) -> Select[Any]:
+def _chunk_page_stmt(
+    stmts: ScopedStatements, after: tuple[datetime, str] | None, limit: int, done_since: datetime | None
+) -> Select[Any]:
     stmt = select(s.chunks)
     if done_since is not None:
-        stmt = stmt.where(~settled_done(finished_before=done_since))
+        stmt = stmt.where(~settled_done(stmts, finished_before=done_since))
     if after is not None:
         minted_at, chunk_id = after
         c = s.chunks.c
@@ -183,7 +185,7 @@ class ChunkRecordStore:
         fetch = limit + 1
         with self._store.read("list_page") as conn:
             while True:
-                rows = conn.execute(_chunk_page_stmt(after, fetch, done_since)).all()
+                rows = conn.execute(_chunk_page_stmt(self._store, after, fetch, done_since)).all()
                 ephemeral: set[str] = set()
                 for batch in id_batches([r.chunk_id for r in rows]):
                     ephemeral |= ephemeral_ids_in(conn, batch)

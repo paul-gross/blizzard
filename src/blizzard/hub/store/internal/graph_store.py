@@ -378,7 +378,7 @@ class GraphStore:
         facts = graph_lifecycle_facts
         retired: set[str] = set()
         for batch in id_batches(graph_ids):
-            retired.update(conn.execute(newest_retired_select(facts, facts.c.graph_id, batch)).scalars())
+            retired.update(conn.execute(newest_retired_select(self._store, facts, facts.c.graph_id, batch)).scalars())
         return retired
 
     def get_many(self, graph_ids: Sequence[str]) -> dict[str, Graph]:
@@ -539,7 +539,9 @@ class GraphStore:
         """Every ``graph_id`` whose newest lifecycle fact reads retired."""
         with self._store.read("retired_graph_ids") as conn:
             return set(
-                conn.execute(newest_retired_select(graph_lifecycle_facts, graph_lifecycle_facts.c.graph_id)).scalars()
+                conn.execute(
+                    newest_retired_select(self._store, graph_lifecycle_facts, graph_lifecycle_facts.c.graph_id)
+                ).scalars()
             )
 
     def record_lifecycle(self, graph_id: str, *, retired: bool, at: datetime, by: str) -> None:
