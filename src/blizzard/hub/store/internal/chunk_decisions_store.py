@@ -10,7 +10,7 @@ import json
 from collections.abc import Iterable, Sequence
 from datetime import datetime
 
-from sqlalchemy import Connection, and_, select
+from sqlalchemy import ColumnElement, Connection, and_
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.store.batching import id_batches
@@ -29,7 +29,7 @@ from blizzard.hub.store.internal.chunk_rows import (
     next_artifact_seq,
 )
 from blizzard.hub.store.internal.chunk_terminal_predicates import chunk_is_terminal
-from blizzard.hub.store.scoped import ScopedConnections, statements_of
+from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements, statements_of
 
 #: Every fact table whose ``decision_id`` column closes a decision — the resolving
 #: transition, the migration (#90), the unresolvable-target escalation (#110), or the
@@ -70,19 +70,20 @@ class ChunkDecisionsStore:
         hydrated."""
         with self._store.read("decision_for_chunk") as conn:
             row = conn.execute(
-                select(s.decisions)
-                .where(s.decisions.c.chunk_id == chunk_id, self._not_closed_clause())
+                self._store.select(s.decisions)
+                .where(s.decisions.c.chunk_id == chunk_id, self._not_closed_clause(self._store))
                 .order_by(s.decisions.c.submitted_at.desc(), s.decisions.c.decision_id.desc())
                 .limit(1)
             ).one_or_none()
             return self._decision_row(conn, row) if row is not None else None
 
     @staticmethod
-    def _not_closed_clause():  # type: ignore[no-untyped-def]
-        """True when the decision is still live: no closure table holds a row for its id, ANDed across every table."""
+    def _not_closed_clause(stmts: ScopedStatements) -> ColumnElement[bool]:
+        """True when the decision is still live: no closure table holds a row for its id, ANDed across
+        every table — each ``NOT EXISTS`` built through ``stmts``, so it reads only the scope's facts."""
         return and_(
             *(
-                ~select(table.c.decision_id).where(table.c.decision_id == s.decisions.c.decision_id).exists()
+                ~stmts.exists(table, table.c.decision_id == s.decisions.c.decision_id)
                 for table in _DECISION_CLOSURE_TABLES
             )
         )
@@ -144,14 +145,12 @@ class ChunkDecisionsStore:
         The SQL drops resolved gates and gates whose chunk has ended — a read optimization mirroring
         :meth:`GateDecision.require_resolvable`, pinned by ``tests/test_open_decisions_closure.py`` —
         and :attr:`GateDecision.is_open` drops the ones a transition closed undecided."""
-        not_resolved = ~(
-            select(s.decision_resolutions.c.decision_id)
-            .where(s.decision_resolutions.c.decision_id == s.decisions.c.decision_id)
-            .exists()
+        not_resolved = ~self._store.exists(
+            s.decision_resolutions, s.decision_resolutions.c.decision_id == s.decisions.c.decision_id
         )
         with self._store.read("list_open_decisions") as conn:
             rows = conn.execute(
-                select(s.decisions)
+                self._store.select(s.decisions)
                 .where(not_resolved & ~chunk_is_terminal(self._store, s.decisions.c.chunk_id))
                 .order_by(s.decisions.c.submitted_at, s.decisions.c.decision_id)
             ).all()
@@ -376,12 +375,13 @@ def decision_closure_ids(conn: Connection, decision_ids: Sequence[str]) -> set[s
     closure read (the live decision, the bulk status read, the chunk facts) shares one rule."""
     if not decision_ids:
         return set()
+    stmts = statements_of(conn)
     closed: set[str] = set()
     for batch in id_batches(decision_ids):
         rows = conn.execute(
-            statements_of(conn)
-            .select(s.decisions, s.decisions.c.decision_id)
-            .where(s.decisions.c.decision_id.in_(batch), ~ChunkDecisionsStore._not_closed_clause())
+            stmts.select(s.decisions, s.decisions.c.decision_id).where(
+                s.decisions.c.decision_id.in_(batch), ~ChunkDecisionsStore._not_closed_clause(stmts)
+            )
         ).all()
         closed |= {r.decision_id for r in rows}
     return closed

@@ -9,7 +9,6 @@ from __future__ import annotations
 import json
 from datetime import datetime
 
-from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.clock import IClock
@@ -38,12 +37,16 @@ class ChunkQuestionsStore:
 
     def list_open_questions(self) -> list[NodeQuestion]:
         """The unanswered questions whose chunk has not ended — the SQL mirror of
-        :meth:`NodeQuestion.require_answerable`, pinned by ``tests/test_open_questions_closure.py``."""
+        :meth:`NodeQuestion.require_answerable`, pinned by ``tests/test_open_questions_closure.py``.
+        Question ids are runner-minted, so the answered set is read within the scope too: another
+        tenant's answer under the same id never hides this tenant's question."""
         with self._store.read("list_open_questions") as conn:
             rows = conn.execute(
                 QUESTIONS.select(self._store)
                 .where(
-                    s.questions.c.question_id.not_in(select(s.question_answers.c.question_id))
+                    s.questions.c.question_id.not_in(
+                        self._store.select(s.question_answers, s.question_answers.c.question_id)
+                    )
                     & ~chunk_is_terminal(self._store, s.questions.c.chunk_id)
                 )
                 .order_by(s.questions.c.asked_at)

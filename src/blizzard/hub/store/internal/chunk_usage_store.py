@@ -9,21 +9,21 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Select, select
+from sqlalchemy import Select
 
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.model import UsageTotal
 from blizzard.hub.domain.chunk.ports.usage import IWriteChunkUsageRepository
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.usage_aggregate import usage_aggregate_columns
-from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements
 
 
-def _usage_total_stmt(since: datetime, until: datetime | None) -> Select[Any]:
-    """The fold ``usage_total_since`` executes — one row of aggregates,
+def _usage_total_stmt(stmts: ScopedStatements, since: datetime, until: datetime | None) -> Select[Any]:
+    """The fold ``usage_total_since`` executes within ``stmts``' scope — one row of aggregates,
     modeled on ``src/blizzard/hub/store/internal/analytics_operational_store.py``'s ``_spend_group_stmt``."""
     u = s.usage_facts
-    stmt = select(*usage_aggregate_columns()).where(u.c.recorded_at >= since)
+    stmt = stmts.select(u, *usage_aggregate_columns()).where(u.c.recorded_at >= since)
     if until is not None:
         stmt = stmt.where(u.c.recorded_at < until)
     return stmt
@@ -38,7 +38,7 @@ class ChunkUsageStore:
 
     def usage_total_since(self, since: datetime, *, until: datetime | None = None) -> UsageTotal:
         with self._store.read("usage_total_since") as conn:
-            row = conn.execute(_usage_total_stmt(since, until)).one()
+            row = conn.execute(_usage_total_stmt(self._store, since, until)).one()
             return UsageTotal.of_grouped_sums(
                 input_tokens=row.input_tokens,
                 output_tokens=row.output_tokens,

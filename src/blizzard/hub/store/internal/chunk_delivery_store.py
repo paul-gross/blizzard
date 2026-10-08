@@ -49,15 +49,18 @@ class ChunkDeliveryStore:
     def count_landed_since(self, repo: str, since: datetime) -> int:
         with self._store.read("count_landed_since") as conn:
             return conn.execute(
-                select(func.count())
-                .select_from(s.delivery_repo_landed)
-                .where(s.delivery_repo_landed.c.repo == repo, s.delivery_repo_landed.c.landed_at > since)
+                self._store.select(s.delivery_repo_landed, func.count()).where(
+                    s.delivery_repo_landed.c.repo == repo, s.delivery_repo_landed.c.landed_at > since
+                )
             ).scalar_one()
 
     def pending_close_intents(self) -> list[PendingCloseIntent]:
         """Every pending, non-ephemeral intent's own backoff history in one flat, outer-
         joined, already-aggregated read — never one query per intent. Due-ness is not decided
-        here: the drainer applies ``close_intent_is_due`` to the history each row carries."""
+        here: the drainer applies ``close_intent_is_due`` to the history each row carries.
+
+        The close-drain sweep's corpus, read across every tenant by design — unscoped, unlike
+        every other read here."""
         attempts = (
             select(
                 s.close_intent_attempts.c.intent_id,

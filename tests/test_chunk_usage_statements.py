@@ -20,6 +20,8 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.internal import chunk_usage_store as store_module
+from blizzard.hub.store.scoped import ScopedStatements
+from blizzard.hub.tenancy import StoreScope, TenantId
 
 from .support import seed_chunk, seed_graph
 
@@ -27,18 +29,19 @@ pytestmark = pytest.mark.unit
 
 _SINCE = datetime(2026, 8, 12, tzinfo=UTC)
 _UNTIL = datetime(2026, 8, 13, tzinfo=UTC)
+_STMTS = ScopedStatements(StoreScope(TenantId("ten_usage")))
 
 
 def test_usage_total_stmt_compiles_under_both_dialects() -> None:
     for until in (None, _UNTIL):
-        stmt = store_module._usage_total_stmt(_SINCE, until)
+        stmt = store_module._usage_total_stmt(_STMTS, _SINCE, until)
         for dialect in (postgresql.dialect(), sqlite.dialect()):
             assert str(stmt.compile(dialect=dialect))
 
 
 def test_usage_total_stmt_leaves_no_raw_text_on_the_portable_surface() -> None:
     for until in (None, _UNTIL):
-        stmt = store_module._usage_total_stmt(_SINCE, until)
+        stmt = store_module._usage_total_stmt(_STMTS, _SINCE, until)
         assert type(stmt).__module__.startswith("sqlalchemy.sql.")
         assert not [e for e in visitors.iterate(stmt) if isinstance(e, TextClause)]
 
@@ -47,7 +50,7 @@ def test_usage_total_stmt_selects_only_ungrouped_aggregates() -> None:
     """No ``GROUP BY`` and every selected column is a `func.*` aggregate — so the
     statement returns exactly one row regardless of how many facts match, and
     ``usage_total_since`` builds no per-row `UsageFact` object."""
-    stmt = store_module._usage_total_stmt(_SINCE, None)
+    stmt = store_module._usage_total_stmt(_STMTS, _SINCE, None)
     assert not stmt._group_by_clauses  # type: ignore[attr-defined]
     for column in stmt.selected_columns:
         element = column.element if isinstance(column, sa.Label) else column
@@ -67,7 +70,7 @@ def test_spend_range_query_plans_as_an_index_search(tmp_path: Path) -> None:
         seed_graph(conn, "g1", at=_SINCE)
         seed_chunk(conn, "ch_1", graph_id="g1", at=_SINCE)
     compiled = str(
-        store_module._usage_total_stmt(_SINCE, None).compile(
+        store_module._usage_total_stmt(_STMTS, _SINCE, None).compile(
             dialect=sqlite.dialect(), compile_kwargs={"literal_binds": True}
         )
     )

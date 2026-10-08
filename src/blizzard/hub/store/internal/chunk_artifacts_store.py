@@ -10,7 +10,7 @@ from collections import defaultdict
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import or_, select, tuple_
+from sqlalchemy import or_, tuple_
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import IClock
@@ -139,18 +139,15 @@ class ChunkArtifactsStore:
                 # The winner is the row no newer row of the same (chunk, name) beats, in
                 # `latest_artifact`'s own order — one statement, so a superseded blob is never read.
                 newer = s.artifacts.alias("newer")
-                beaten = (
-                    select(newer.c.artifact_id)
-                    .where(
-                        newer.c.chunk_id == s.artifacts.c.chunk_id,
-                        newer.c.name == s.artifacts.c.name,
-                        tuple_(newer.c.epoch, newer.c.produced_at, newer.c.artifact_id)
-                        > tuple_(s.artifacts.c.epoch, s.artifacts.c.produced_at, s.artifacts.c.artifact_id),
-                    )
-                    .exists()
+                beaten = self._store.exists(
+                    newer,
+                    newer.c.chunk_id == s.artifacts.c.chunk_id,
+                    newer.c.name == s.artifacts.c.name,
+                    tuple_(newer.c.epoch, newer.c.produced_at, newer.c.artifact_id)
+                    > tuple_(s.artifacts.c.epoch, s.artifacts.c.produced_at, s.artifacts.c.artifact_id),
                 )
                 for a in conn.execute(
-                    select(s.artifacts).where(
+                    self._store.select(s.artifacts).where(
                         (s.artifacts.c.chunk_id == chunk_id) & s.artifacts.c.name.in_(batch), ~beaten
                     )
                 ).all():

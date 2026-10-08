@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import select, tuple_
+from sqlalchemy import tuple_
 
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.model import EscalationOpen
@@ -153,21 +153,18 @@ class ChunkEscalationsStore:
         live — a chunk a terminal fact settles, or one grouped away or deleted, can never
         hold an open escalation, so it is excluded in the query rather than loaded and
         dropped by the fold."""
-        live_chunk_ids = select(s.chunks.c.chunk_id).where(
+        live_chunk_ids = self._store.select(s.chunks, s.chunks.c.chunk_id).where(
             maybe_live(self._store), s.chunks.c.chunk_id.not_in(ephemeral_ids_select(self._store))
         )
         with self._store.read("_newest_escalation_per_chunk") as conn:
             newer = s.escalations.alias("newer")
-            beaten = (
-                select(newer.c.id)
-                .where(
-                    newer.c.chunk_id == s.escalations.c.chunk_id,
-                    tuple_(newer.c.recorded_at, newer.c.id) > tuple_(s.escalations.c.recorded_at, s.escalations.c.id),
-                )
-                .exists()
+            beaten = self._store.exists(
+                newer,
+                newer.c.chunk_id == s.escalations.c.chunk_id,
+                tuple_(newer.c.recorded_at, newer.c.id) > tuple_(s.escalations.c.recorded_at, s.escalations.c.id),
             )
             rows = conn.execute(
-                select(s.escalations).where(s.escalations.c.chunk_id.in_(live_chunk_ids), ~beaten)
+                self._store.select(s.escalations).where(s.escalations.c.chunk_id.in_(live_chunk_ids), ~beaten)
             ).all()
             return {e.chunk_id: e for e in rows}
 
