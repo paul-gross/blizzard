@@ -26,7 +26,7 @@ class RunnerIdentity:
 
 
 class IReadRunnerIdentityRepository(Protocol):
-    """Read the runner store's single identity row (held by read-path edges)."""
+    """Read the runner store's single identity row."""
 
     def runner_identity(self) -> RunnerIdentity | None:
         """The identity of the latest successful registration, or ``None`` when the runner has

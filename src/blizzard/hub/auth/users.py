@@ -32,7 +32,7 @@ class IReadUserRepository(Protocol):
 
 
 class IWriteUserRepository(IReadUserRepository, Protocol):
-    """Read-write user access — only the domain layer depends on this variant."""
+    """Adds the user writes."""
 
     def create(self, user: User) -> None: ...
 

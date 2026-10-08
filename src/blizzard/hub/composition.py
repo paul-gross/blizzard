@@ -241,13 +241,12 @@ class HubServices:
     #: stays fresh (``bzh:system-scope-reads-live``); injected rather than a module singleton.
     system_artifacts: PackagedSystemArtifacts
     work_sources: IWorkSourceRegistry
-    #: Renders a work ref's source-native token — the one rule fleet spans and envelopes share.
+    #: Renders a work ref's source-native token.
     work_ref_label: WorkRefLabel
     #: The close-intent drain sweep — built here because it needs the
     #: write-capable chunk repository, which only the composition root holds.
     close_drain: CloseIntentDrainer
-    #: The fleet-trace export sweep — ``None`` unless a trace exporter was wired, which
-    #: happens only when OpenTelemetry's own configuration enables tracing.
+    #: The fleet-trace export sweep — ``None`` when no trace exporter is wired.
     trace_export: TraceExportSweep | None
     #: The operator's read of fleet tracing — always composed, so status answers with tracing off.
     trace_status: TraceStatusReader
@@ -315,7 +314,7 @@ class HubServices:
     secret_references: ISecretReferences
     #: The one writer of configured records — work sources, repositories and secrets, each write with its change row.
     config_authoring: ConfigAuthoring
-    #: Stored work-source records (the read half; ``work_sources`` reads through them on every call).
+    #: Stored work-source records (the read half).
     work_source_records: IReadWorkSourceRepository
     #: Stored repository records (the read half).
     repository_records: IReadRepositoryRecordRepository
@@ -375,15 +374,15 @@ class HubServices:
     garden_sweeps: GardenSweepsService
     #: A routine's runs are readable — the run list and one run's own delta.
     garden_run: GardenRunService
-    #: The forge-status annotation reconciler, always built; ``None`` only on a store-free double.
+    #: The forge-status annotation reconciler.
     annotation: AnnotationReconciler | None
 
 
 @dataclass(frozen=True)
 class HubCore:
-    """The process-scoped collaborators every other hub wiring shares, each built once by
-    :func:`build_hub_core`: the stores and leaf services the work-source registry and
-    :func:`build_services` both consume, so neither builds its own copy."""
+    """The process-scoped stores and leaf services, each built once by :func:`build_hub_core`.
+    Every other hub wiring takes these instances from the core rather than building its own
+    copy (pinned by ``tests/test_hub_core_sharing.py``)."""
 
     store_connections: HubStoreConnections
     auth_errors: RepoErrorFactory
@@ -443,15 +442,12 @@ def build_config_authoring(core: HubCore, *, secret_keys: IHubKeyProvider) -> Co
 
 
 def build_process_core(engine: Engine) -> HubCore:
-    """:func:`build_hub_core` on the one process clock — the hosted app and the offline
-    verbs build their core through here."""
+    """:func:`build_hub_core` on the system clock."""
     return build_hub_core(engine, clock=SystemClock())
 
 
 def build_hub_core(engine: Engine, *, clock: IClock) -> HubCore:
-    """Build the hub's shared stores and leaf services once. The order is a DAG — core,
-    then the work-source registry, then :func:`build_services` — so nothing here reads
-    the registry."""
+    """Build the :class:`HubCore`."""
     store_connections = HubStoreConnections(engine, HubStoreErrorFactory(get_logger("blizzard.hub.store")))
     auth_errors = RepoErrorFactory(get_logger("blizzard.hub.auth"))
     registry = RunnerRegistryStore(store_connections)
@@ -569,10 +565,9 @@ def build_services(
     annotation_interval_seconds: int = 120,
 ) -> HubServices:
     """Construct and wire every fleet service over the shared :class:`HubCore`.
-    ``hub_command_runner``/``hub_workdir`` are the hub command node's mechanism seams
-    (#65), left ``None`` for real adapters; an explicit ``oauth_registry`` wins over
-    ``oauth_providers``. Every store and leaf service the core holds is taken from it,
-    never rebuilt, so the work-source registry and every service here share one instance."""
+    ``hub_command_runner``/``hub_workdir`` are the hub command node's mechanism seams,
+    left ``None`` for real adapters; an explicit ``oauth_registry`` wins over
+    ``oauth_providers``."""
     clock = core.clock
     store_connections = core.store_connections
     chunk_stores = core.chunk_stores

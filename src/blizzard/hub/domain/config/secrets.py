@@ -1,10 +1,8 @@
 """Secret domain model — a named credential written once, sealed at rest, never returned.
 
-A value enters through ``ConfigAuthoring``, is sealed under the hub key by an
-:class:`ISecretCipher`, and leaves only through :class:`ISecretReader` as a
-:class:`SecretValue` whose ``repr``/``str`` are redacted (``bzh:secret-write-only``).
-Writes go through ``ConfigAuthoring``. Retire/enable is a newest-fact-wins brake,
-a scope's shape (``bzh:facts-not-status``)."""
+A value is sealed under the hub key by an :class:`ISecretCipher`, and leaves only through
+:class:`ISecretReader` as a :class:`SecretValue` whose ``repr``/``str`` are redacted
+(``bzh:secret-write-only``). Retire/enable is a newest-fact-wins brake (``bzh:facts-not-status``)."""
 
 from __future__ import annotations
 
@@ -113,8 +111,7 @@ class SecretValue:
 
     @classmethod
     def entered(cls, raw: str) -> SecretValue:
-        """A value entering through a create or replace — :class:`SecretValueBlank` when blank.
-        A stored value opens through the constructor, so one sealed before the rule still reveals."""
+        """A value entering through a create or replace — :class:`SecretValueBlank` when blank."""
         if not raw.strip():
             raise SecretValueBlank()
         return cls(raw)
@@ -200,8 +197,7 @@ class SealedSecret:
 
 
 class ISecretCatalog(Protocol):
-    """Secret metadata. Controllers depend on this variant; it never yields a
-    ciphertext or nonce."""
+    """Read-only secret metadata; it never yields a ciphertext or nonce."""
 
     def get(self, name: str) -> SecretMetadata | None: ...
 
@@ -223,7 +219,7 @@ class ISecretCatalog(Protocol):
 
 
 class ISealedSecretRepository(Protocol):
-    """Sealed rows. Held by the reader, key rotation, and nothing on the request plane."""
+    """Read-only access to a secret's sealed row — its ciphertext and nonce."""
 
     def get_sealed(self, name: str) -> SealedSecret | None: ...
 
@@ -240,7 +236,7 @@ class Reseal:
 
 
 class IResealSecretRepository(ISealedSecretRepository, Protocol):
-    """Whole-store re-sealing for key rotation — held by the rotation verb alone."""
+    """Adds whole-store re-sealing under another key generation."""
 
     def list_sealed(self) -> list[SealedSecret]: ...
 
@@ -252,7 +248,7 @@ class IResealSecretRepository(ISealedSecretRepository, Protocol):
 
 
 class IWriteSecretRepository(ISecretCatalog, Protocol):
-    """Secret writes. Only the domain services below depend on this variant."""
+    """Adds the secret writes."""
 
     def create(self, name: str, *, sealed: SealedValue, at: datetime, by: str, change: ConfigChange) -> SecretMetadata:
         """Insert at revision 1 and commit ``change`` with it;

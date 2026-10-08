@@ -1,6 +1,5 @@
 """A garden run's finding bucket — the one owner of which findings a routine run is shown
-and may cite. The worker-facing read and delivery validation both take it from
-here, so the set a run sees and the set its delivery may cite are the same by construction."""
+and may cite."""
 
 from __future__ import annotations
 
@@ -35,9 +34,7 @@ class FindingBucket:
 
 class FindingBucketReader:
     """Reads a run's :class:`FindingBucket`: its routine's own findings across every
-    scope, plus review-sourced findings on the run's own scope. Unpaged by design — a run
-    must see everything it may cite, so no page can bound the read; it stays two bulk
-    reads however many findings the bucket holds."""
+    scope, plus review-sourced findings on the run's own scope."""
 
     def __init__(self, findings: IReadFindingRepository) -> None:
         self._findings = findings

@@ -37,7 +37,7 @@ class IReadAuthFactsRepository(Protocol):
 
 
 class IWriteAuthFactsRepository(IReadAuthFactsRepository, Protocol):
-    """Read-write auth-fact access — only the domain layer depends on this variant."""
+    """Adds the auth-fact writes."""
 
     def create(self, fact: AuthFact) -> None: ...
 

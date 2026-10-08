@@ -7,7 +7,7 @@ from pathlib import Path
 
 from blizzard.foundation.roles import domain_model
 
-#: The environment variables that configured forge delivery before repositories were records.
+#: The forge variables a file-configured hub sets; each one set is a legacy key.
 ENV_FORGE_URL = "BZ_FORGE_URL"
 ENV_FORGE_OWNER = "BZ_FORGE_OWNER"
 ENV_FORGE_BASE_BRANCH = "BZ_FORGE_BASE_BRANCH"
@@ -39,7 +39,7 @@ class LegacyKeys:
     """The legacy keys a hub still carries: its file's ``[[work_source]]`` blocks and the
     names of the legacy variables set in its environment — the forge variables and every
     variable a block's ``token_env`` names. Read from the parsed file, so a commented-out
-    block never counts. Holds names only; a value is read by the import alone."""
+    block never counts. Holds names only, never a value."""
 
     config_path: Path
     sources: tuple[WorkSourceConfig, ...]

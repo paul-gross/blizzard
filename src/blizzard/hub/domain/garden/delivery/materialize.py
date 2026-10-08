@@ -1,9 +1,8 @@
 """Delivery materialization — turning a :class:`ValidatedDelivery`
 into the rows a passing delivery mints, written in one transaction
-(blizzard-product:/delivered/garden/machinery.md §Delivery). Sibling to ``validation.py``
-rather than folded into it so that module stays pure validation with no I/O; this one
-mints ids, resolves a proposal's submission-local ref citations against them, and hands
-a ready-to-insert plan to the store, trusting that validation rather than repeating it."""
+(blizzard-product:/delivered/garden/machinery.md §Delivery). Mints ids, resolves a
+proposal's submission-local ref citations against them, and builds a ready-to-insert
+plan, trusting the validation rather than repeating it."""
 
 from __future__ import annotations
 
@@ -31,10 +30,9 @@ class DeliveryOutcome(Enum):
 
     RECORDED = "recorded"  # this call minted every row
     ALREADY_RECORDED = "already_recorded"  # a prior call's marker was found; nothing minted
-    FENCED = "fenced"  # the chunk is terminal or the delivery's epoch is stale; nothing minted
+    FENCED = "fenced"
     #: A finding the plan's facts name moved off the state validation judged it in; nothing minted,
-    #: not even the marker. Only the store returns it and only `GardenDeliveryRecorder` consumes it —
-    #: the recorder re-validates against fresh state, so it never leaves the recorder.
+    #: not even the marker.
     GUARD_LOST = "guard_lost"
 
 
@@ -169,8 +167,8 @@ def build_delivery_plan(
     at: datetime,
 ) -> DeliveryPlan:
     """The rows a passing delivery mints, every id minted at `at`: one finding set per delta, one finding
-    and `add` fact per `add` op, an `observed` fact per `observed` op; a run's `gone` settles an already
-    `delivered` finding to `resolved`, else records `gone`. A non-`fin_` proposal citation resolves against
+    and `add` fact per `add` op, an `observed` fact per `observed` op, and per `gone` op the fact its finding's
+    :meth:`Finding.run_gone` names. A non-`fin_` proposal citation resolves against
     the id its `add` op minted. The artifact-id lists parallel `validated.deltas`/`validated.proposals`."""
     chunk_id = chunk.chunk_id
     node_id = node.node_id
@@ -218,7 +216,6 @@ def build_delivery_plan(
                 )
             else:
                 assert isinstance(op, FindingGoneOp)
-                # A delivered finding's gone completes its exit rather than flagging it.
                 kind, actor = validated.gone_settlements.get(op.id, ("gone", None))
                 facts.append(
                     NewFindingFact(

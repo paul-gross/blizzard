@@ -233,7 +233,7 @@ class LandRun:
         env = env or ScriptEnv()
         # Required vars are read in table order, so the first one missing is the one named.
         commits: list[dict[str, str]] = env.require_json(_ENV_GIT_COMMITS)
-        # No commit pointer resolves to no repository, so no forge variable is injected; there is nothing to land.
+        # No commits, nothing to land; forge vars are not required (``bzh:hub-node-env-contract``).
         forge_url = env.require(_ENV_FORGE_URL).rstrip("/") if commits else ""
         base_branch = env.require(_ENV_BASE_BRANCH) if commits else ""
         return cls(
@@ -478,8 +478,7 @@ class PullRequest:
     def _record(cls, pull: PullRequest) -> PullRequest:
         """Persist the PR identity before a script can wait, reject or merge it.
 
-        The hub marker callback is idempotent per PR within an epoch; a retry
-        records the same reference, while a replacement PR gets its own marker.
+        One marker per PR; write semantics are ``HubNodeExecutor.record_marker``'s.
         """
         pull.run.markers.post(
             f"{_PR_MARKER_PREFIX}{pull.bare_repo}/{pull.number}",

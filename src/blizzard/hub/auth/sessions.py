@@ -19,7 +19,7 @@ class IReadSessionRepository(Protocol):
 
 
 class IWriteSessionRepository(IReadSessionRepository, Protocol):
-    """Read-write session access — only the domain layer depends on this variant."""
+    """Adds the session writes."""
 
     def create(self, session: Session) -> None: ...
 

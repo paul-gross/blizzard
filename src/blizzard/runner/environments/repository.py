@@ -102,7 +102,7 @@ def group_bindings_by_chunk(bindings: Sequence[EnvBinding]) -> dict[str, list[En
 
 
 class IReadEnvironmentRepository(Protocol):
-    """Read-only environment-binding queries (held by read-path edges)."""
+    """Read-only environment-binding queries."""
 
     def held_environment_ids(self) -> list[str]:
         """Every env id whose binding has no release fact (the provider's ``held_ids``)."""

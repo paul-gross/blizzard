@@ -1767,9 +1767,7 @@ class AnswerOutcome:
 
 
 class IReadWorkItemRepository(Protocol):
-    """Read-only hub-owned work item access. :class:`HubWorkSource
-    <blizzard.hub.work_sources.internal.hub_work_source.HubWorkSource>` depends on this
-    variant only."""
+    """Read-only hub-owned work item operations."""
 
     def get(self, source: str, ref: str) -> HubWorkItem | None:
         """The item at ``(source, ref)``, open or closed, or ``None`` when no such

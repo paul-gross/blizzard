@@ -59,8 +59,7 @@ class GardenDeliveryRecorder:
     ) -> DeliveryOutcome:
         """Deliver `delta_names`/`proposal_names` for `(chunk, node, epoch)` under `run`.
         The artifacts are selected before the replay check, so a replay whose delta is
-        gone is still refused; a replay is otherwise ``ALREADY_RECORDED`` without
-        re-validating against state that may have drifted since the original attempt."""
+        gone is still refused."""
         deltas = select_delta_artifacts(delta_names, self._artifacts.latest_artifacts(chunk.chunk_id, delta_names))
         proposals = select_proposal_artifacts(
             proposal_names, self._artifacts.latest_artifacts(chunk.chunk_id, proposal_names)

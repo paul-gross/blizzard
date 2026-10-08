@@ -17,7 +17,7 @@ class IReadSuperuserBootstrapRepository(Protocol):
 
 
 class IWriteSuperuserBootstrapRepository(IReadSuperuserBootstrapRepository, Protocol):
-    """Read-write bootstrap access — only the domain layer depends on this variant."""
+    """Adds the bootstrap writes."""
 
     def upsert(self, bootstrap: SuperuserBootstrap) -> None:
         """Replace the singleton row with ``bootstrap`` (there is ever at most one)."""

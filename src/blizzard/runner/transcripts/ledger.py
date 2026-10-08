@@ -254,7 +254,7 @@ class TranscriptBackfillLease:
 
 
 class IReadTranscriptLedgerRepository(Protocol):
-    """Read-only transcript segment ledger queries (held by read-path edges)."""
+    """Read-only transcript segment ledger queries."""
 
     def transcript_segment(self, segment_id: str) -> TranscriptSegmentState | None:
         """The segment by id, or ``None``."""

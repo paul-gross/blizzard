@@ -886,7 +886,7 @@ class IReadManyGraphs(Protocol):
 
 
 class IReadGraphRepository(IReadManyGraphs, Protocol):
-    """Read-only graph access. Controllers at the edges depend on this variant."""
+    """Read-only graph access."""
 
     def get(self, graph_id: str) -> Graph | None: ...
     def get_enabled_by_name(self, name: str) -> Graph | None:
@@ -973,7 +973,7 @@ class ILockedGraphNameRead(Protocol):
 
 
 class IWriteGraphRepository(IReadGraphRepository, Protocol):
-    """Read-write graph access. Only the domain layer depends on this variant."""
+    """Adds the graph writes."""
 
     def mint(self, graph: Graph, *, definition_yaml: str, at: datetime) -> None:
         """Persist a reified, immutable graph and its source YAML."""

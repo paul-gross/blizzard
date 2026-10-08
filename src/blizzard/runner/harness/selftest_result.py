@@ -49,8 +49,7 @@ def selftest_failed(latest: LatestSelfTestResult | None) -> bool | None:
 
 
 class IReadSelfTestResultRepository(Protocol):
-    """Read-only selftest-result queries (held by the harness-health evaluator's own
-    evidence-gathering seam)."""
+    """Read-only selftest-result queries."""
 
     def latest_selftest_result(self, harness_id: str) -> LatestSelfTestResult | None:
         """``harness_id``'s most recently recorded selftest result, or ``None`` when it has

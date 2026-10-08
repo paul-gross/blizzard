@@ -2,7 +2,7 @@
 #
 # Every chunk ingested without an explicit graph pin lands here: `ensure_default`
 # (POST /chunks) resolves the packaged doc by NAME, which is why the graph keeps the
-# name `default-delivery` even though it no longer delivers — the name is the ingest
+# name `default-delivery` even though it does not deliver — the name is the ingest
 # default pin's resolution key, and superseded mints of it stay in the store for the
 # chunks already pinned to them. This graph is the fleet's front door: one `triage`
 # node reads the chunk's work items, verifies their premise against the environment's
@@ -32,7 +32,7 @@
 name: default-delivery
 entry: triage
 
-# One named pool: the routing call is the only judgement this graph
+# A single named pool: the routing call is the only judgement this graph
 # makes, and getting it wrong mis-lanes the whole chunk — so triage runs on the
 # advanced tier, falling back to frontier (resolution is left-to-right; the tiers are
 # unordered roles, so the fallback is author-written, never implicit). The node is

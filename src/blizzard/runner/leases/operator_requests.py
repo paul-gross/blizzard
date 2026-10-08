@@ -17,7 +17,7 @@ __all__ = [
 
 
 class IReadRequeueRepository(Protocol):
-    """Read-only requeue queries (held by read-path edges)."""
+    """Read-only requeue queries."""
 
     def pending_requeue_chunk_ids(self) -> set[str]:
         """Every chunk id carrying a requeue mark not yet consumed by a later lease mint.
@@ -40,7 +40,7 @@ class IWriteRequeueRepository(IReadRequeueRepository, Protocol):
 
 
 class IReadAttachmentRepository(Protocol):
-    """Read-only attachment queries (held by read-path edges)."""
+    """Read-only attachment queries."""
 
     def attachments_for_lease(self, lease_id: str) -> dict[str, str]:
         """The lease's explicit artifact submissions, newest content per ``name``.

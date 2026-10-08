@@ -1,8 +1,6 @@
 """The change-log vocabulary: who changed which record, through which door, and how.
 
-A :class:`ConfigChange` is decided by a record's model and handed by :class:`ConfigAuthoring` to the write
-repository, which commits it in the same transaction as the record write
-(``bzh:configured-record``). No value of a secret ever appears in a diff."""
+No value of a secret ever appears in a diff."""
 
 from __future__ import annotations
 

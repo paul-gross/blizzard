@@ -46,7 +46,7 @@
 name: bas-dwf
 entry: build
 
-# Named session pools. Three lineages:
+# Named session pools:
 #
 #   code   the mechanical build lineage, on the basic tier and BOUNDED — it is the one
 #          that can accumulate indefinitely across a review-fail loop.
@@ -54,14 +54,10 @@ entry: build
 #          ever reached through `fresh:gate`, so its head is minted every entry and
 #          rotation never applies.
 #   retro  the closing retrospective, on the basic tier and fresh every entry, so no
-#          `rotate:` block either. A bare `resume` declares no model, so a retrospective
-#          that minted instead of resuming ran on whatever the harness defaulted to; this
-#          pool pins the tier every entry instead.
+#          `rotate:` block either. The pool pins the tier every entry.
 #
-# A re-EXPRESSION of the lineages these nodes already had, not a re-shaping: `--resume
-# <sid>` reuses the session id in place, so the members already share one session and
-# every prior spelling resolved to the same value. What the pool adds is the bound and
-# the tier pin. Declared here rather than inherited — a graph referencing a pool it does
+# `--resume <sid>` reuses the session id in place, so a pool's members share one
+# session; the pool adds the bound and the tier pin. Declared here rather than inherited — a graph referencing a pool it does
 # not declare is rejected at mint, and `graph_sync` would go red on first boot.
 sessions:
   code:
@@ -90,7 +86,7 @@ nodes:
       # The refutation channel (see prompts/build.from-review.md): review findings the
       # build declines rather than fixes, with the argument. A `review` re-visit re-checks
       # every prior finding, so without this it re-raises a deliberately declined finding
-      # forever; it now must accept or reject each refutation explicitly.
+      # forever; it must accept or reject each refutation explicitly.
       - review-finding-refutes
       - {name: commit, kind: git_commit}  # the pushed branch(es); kind-matched, not name-matched
     judgement:

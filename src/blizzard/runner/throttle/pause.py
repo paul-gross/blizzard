@@ -212,7 +212,7 @@ class PausePark:
 
 
 class IReadPauseRepository(Protocol):
-    """Read-only pause-brake and daemon-liveness queries (held by read-path edges)."""
+    """Read-only pause-brake and daemon-liveness queries."""
 
     def hub_contact_at(self) -> datetime | None:
         """The instant of the last successful hub contact, or ``None`` if never.

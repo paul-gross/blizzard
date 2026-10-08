@@ -135,7 +135,7 @@ def backoff_delay(streak_ordinal: int) -> timedelta:
 
 
 class IReadOverloadRepository(Protocol):
-    """Read-only overload-backoff queries (held by read-path edges)."""
+    """Read-only overload-backoff queries."""
 
     def overload_streak(self, lease_id: str, epoch: int) -> int:
         """Overload rows recorded since the latest reset on this (lease, epoch) — read

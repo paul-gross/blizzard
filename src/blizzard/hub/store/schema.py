@@ -393,7 +393,7 @@ Index("ix_transitions_chunk_id_epoch", transitions.c.chunk_id, transitions.c.epo
 # Newest-first bounded reads on the high-volume transition table.
 Index("ix_transitions_recorded_at_transition_id", transitions.c.recorded_at, transitions.c.transition_id)
 
-# Delivery-materialization candidates target the terminal node.
+# Transitions into a given node.
 Index("ix_transitions_to_node_id", transitions.c.to_node_id)
 
 # --- Cross-graph migration record (chunk_migrations) ---------------
@@ -469,7 +469,7 @@ findings = Table(
 
 Index("ix_findings_routine_scope", findings.c.routine_name, findings.c.scope_slug)
 Index("ix_findings_routine_class", findings.c.routine_name, findings.c.class_)
-# Scope/source index includes review-sourced findings in garden reads.
+# Findings by (scope_slug, source), across routines.
 Index("ix_findings_scope_source", findings.c.scope_slug, findings.c.source)
 
 # Append-only finding changes; first/last seen and counts derive here.
@@ -501,7 +501,7 @@ finding_facts = Table(
 
 Index("ix_finding_facts_finding_id_id", finding_facts.c.finding_id, finding_facts.c.id)
 
-# Run detail reads facts by delivered set.
+# Facts by finding_set_id.
 Index("ix_finding_facts_finding_set_id", finding_facts.c.finding_set_id)
 
 # One delivered set per artifact, holding scope, revisions and measurement.
@@ -586,7 +586,7 @@ garden_proposal_closures = Table(
     UniqueConstraint("proposal_id", name="uq_garden_proposal_closures_proposal_id"),
 )
 
-# Unique reverse item lookup for `find_by_item`.
+# Unique (source, ref): at most one closure per work item.
 Index(
     "ix_garden_proposal_closures_source_ref",
     garden_proposal_closures.c.source,
@@ -653,7 +653,7 @@ lease_facts = Table(
 )
 # Leading chunk_id also serves chunk-only filters.
 Index("ix_lease_facts_chunk_id_epoch", lease_facts.c.chunk_id, lease_facts.c.epoch)
-# The events backfill's epochs-minted-in-a-window read.
+# Lease facts by minted_at range.
 Index("ix_lease_facts_minted_at", lease_facts.c.minted_at)
 
 # --- Epoch owners (first owner wins; null runner_id means hub) -----
@@ -667,7 +667,7 @@ epoch_owners = Table(
     Column("recorded_at", UtcDateTime, nullable=False),
     UniqueConstraint("chunk_id", "epoch", name="uq_epoch_owners_chunk_id_epoch"),
 )
-# (recorded_at, id) for the trace sweep's closing-fact read since a timestamp.
+# (recorded_at, id) for ordered reads since a timestamp.
 Index("ix_epoch_owners_recorded_at_id", epoch_owners.c.recorded_at, epoch_owners.c.id)
 
 # --- Routes (route.created / route.released) ----------------------------------
@@ -685,7 +685,7 @@ route_created = Table(
     Column("seq", Integer, nullable=False),
 )
 Index("ix_route_created_chunk_id", route_created.c.chunk_id)
-# A runner's held routes — retirement's by-runner holdings read.
+# Routes by runner_id.
 Index("ix_route_created_runner_id", route_created.c.runner_id)
 # (created_at, route_id) for newest-first bounded reads since a timestamp.
 Index("ix_route_created_created_at_route_id", route_created.c.created_at, route_created.c.route_id)
@@ -962,7 +962,7 @@ usage_facts = Table(
 Index("ix_usage_facts_chunk_id", usage_facts.c.chunk_id)
 # The analytics spend-by-node grouping — otherwise a temp B-tree.
 Index("ix_usage_facts_node_id", usage_facts.c.node_id)
-# The spend read's range predicate, and the egress sweep's read of usage past a cursor position —
+# (recorded_at, id) for recorded_at ranges and reads past a (recorded_at, id) position —
 # one composite whose leading column serves both, so a second single-column index never competes.
 Index("ix_usage_facts_recorded_at_id", usage_facts.c.recorded_at, usage_facts.c.id)
 
@@ -1574,7 +1574,7 @@ transcript_event_derivations = Table(
     # declared, never silently indistinguishable from a session that read nothing.
     Column("complete", Boolean, nullable=False),
 )
-# The events egress's markers-past-a-position read, in its cursor order.
+# (derived_at, segment_id, extractor_version) for ordered reads past a position.
 Index(
     "ix_transcript_event_derivations_derived_at_segment_id_extractor_version",
     transcript_event_derivations.c.derived_at,
@@ -1603,7 +1603,7 @@ Index(
     transcript_event_drops.c.dropped_at,
     transcript_event_drops.c.segment_id,
 )
-# The events backfill's drops-of-these-epochs read.
+# Drops by (chunk_id, epoch).
 Index("ix_transcript_event_drops_chunk_id_epoch", transcript_event_drops.c.chunk_id, transcript_event_drops.c.epoch)
 
 # --- Work items (hub-owned work items) ---------------------------

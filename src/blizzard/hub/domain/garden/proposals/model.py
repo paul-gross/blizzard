@@ -337,7 +337,7 @@ class GardenProposalPage:
 
 
 class IReadGardenProposalRepository(Protocol):
-    """Read-only garden-proposal access. Controllers at the edges depend on this variant."""
+    """Read-only garden-proposal access."""
 
     def get(self, proposal_id: str) -> GardenProposal | None: ...
 
@@ -381,7 +381,7 @@ class IReadGardenProposalRepository(Protocol):
 
 
 class IWriteGardenProposalRepository(IReadGardenProposalRepository, Protocol):
-    """Read-write garden-proposal access. Only the domain layer depends on this variant."""
+    """Adds the garden-proposal writes."""
 
     def create(
         self,
@@ -510,8 +510,7 @@ class GardenProposalAuthoring:
         return updated
 
     def attach(self, proposal: GardenProposal, findings: Sequence[Finding]) -> GardenProposal:
-        """Link `findings` to `proposal` (:meth:`GardenProposal.attachable`); the store
-        re-makes the already-linked check under its row lock."""
+        """Link `findings` to `proposal` (:meth:`GardenProposal.attachable`)."""
         finding_ids = proposal.attachable(findings, closure=self._closures.get(proposal.proposal_id))
         updated = self._proposals.attach(proposal.proposal_id, finding_ids)
         if updated is None:
@@ -546,8 +545,6 @@ class RoutineGardenProposalReader:
     def list_for_routine(
         self, routine_name: str, state: RoutineProposalState = RoutineProposalState.OPEN
     ) -> list[tuple[GardenProposal, GardenProposalClosure | None]]:
-        # Reconciliation needs every open proposal, without an arbitrary limit.
-        # Closed/all are explicit history reads for comparing previously declined ideas.
         proposals = self._proposals.list_for_routine(routine_name, state=state)
         if state is RoutineProposalState.OPEN:
             return pair_with_closures(proposals, {}, state)

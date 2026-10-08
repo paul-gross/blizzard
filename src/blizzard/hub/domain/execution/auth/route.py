@@ -2,7 +2,7 @@
 fact hold the chunk's **currently-live** acquisition?
 
 A value over already-loaded values (``bzh:domain-takes-objects``), not a service. ``route_token_mode``
-is this check's own rollout brake; the runner's bearer token, checked first, has none. Comparison is
+is this check's own rollout brake. Comparison is
 constant-time against the sha256 hex digest :class:`TokenHash` produces, the same one the mint uses."""
 
 from __future__ import annotations
@@ -18,8 +18,6 @@ from blizzard.hub.domain.chunk.model import ChunkFacts, RouteHistory
 _log = get_logger("blizzard.hub.route_auth")
 
 # The route-capability-token rollout brake — `warn` proceeds; `enforce` rejects before the fence.
-# A runner's bearer token has no brake: a fleet call without one the hub issued is always refused,
-# and a toml that still sets `runner_auth_mode` boots with the key ignored.
 ROUTE_TOKEN_WARN = "warn"
 ROUTE_TOKEN_ENFORCE = "enforce"
 

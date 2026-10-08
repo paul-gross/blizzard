@@ -1,8 +1,8 @@
 """``ConfigAuthoring`` — the one writer of configured records.
 
 Every verb takes the record the edge resolved (``bzh:domain-takes-objects``), asks the record's model for the change,
-and hands the write repository the record write with the :class:`ConfigChange` it commits in the same transaction
-(``bzh:configured-record``). A write that changes nothing writes nothing. Secrets route through here too."""
+and hands it to the write repository with the record write. A write that changes nothing writes nothing. Secrets
+route through here too."""
 
 from __future__ import annotations
 

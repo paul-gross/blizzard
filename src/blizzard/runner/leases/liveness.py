@@ -33,8 +33,7 @@ class LeaseLivenessFacts:
 
 
 class IReadLeaseLivenessRepository(Protocol):
-    """Read-only heartbeat and spawn queries backing the lease-liveness staleness baseline
-    (held by read-path edges)."""
+    """Read-only heartbeat and spawn queries backing the lease-liveness staleness baseline."""
 
     def latest_heartbeat(self, lease_id: str) -> datetime | None:
         """The lease's most recent heartbeat stamp, or ``None`` if it never beat.

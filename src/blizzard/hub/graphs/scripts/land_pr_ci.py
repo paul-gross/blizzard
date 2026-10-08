@@ -39,13 +39,13 @@ _INHERITED_FAILURE = "inherited-failure"
 
 # The marker name a terminal-CI-failure or a substantive wait writes its findings under.
 _FINDINGS_NAME = "delivery-findings"
-# The hub keeps the first write per name, so this survives an earlier wait's findings.
+# A distinct name from `_FINDINGS_NAME` (write semantics: `HubNodeExecutor.record_marker`).
 _FOREIGN_FINDINGS_NAME = f"{_FINDINGS_NAME}/foreign-head"
 
 # The re-run signature marker's name prefix: one per (repo, check name, head sha) a
 # base-inherited failure was re-requested under, so a re-entry to `deliver` can tell
 # "already re-run once at this head" from "seeing this for the first time" without any
-# state but the marker names `BZ_HUB_ARTIFACT_NAMES` carries in.
+# state but the marker names (``bzh:hub-node-env-contract``).
 _RERUN_MARKER_PREFIX = "ci-rerun/"
 
 # Pure routing decisions (what to do with one repo after reading its live PR).

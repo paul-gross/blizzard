@@ -1,5 +1,5 @@
 """The retired brake scopes and routines share — a reversible, append-only,
-newest-fact-wins lifecycle (``bzh:facts-not-status``), the shape a graph's brake has.
+newest-fact-wins lifecycle (``bzh:facts-not-status``).
 
 A concept under this brake is in exactly one :class:`BrakeState`, read from its newest lifecycle fact
 (no fact reads enabled). Each concept declares its own verbs' legality; this module owns only the two
@@ -29,8 +29,7 @@ ENABLED_ONLY: frozenset[BrakeState] = frozenset({BrakeState.ENABLED})
 
 
 class BrakeVerb(StrEnum):
-    """The two acts over the brake. Each is legal from either state: a repeat appends
-    another identical fact, which newest-fact-wins reads as no change."""
+    """The two acts over the brake."""
 
     RETIRE = "retire"
     ENABLE = "enable"

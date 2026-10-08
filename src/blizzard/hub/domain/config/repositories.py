@@ -1,7 +1,6 @@
 """Repository records: the stored shape, validation, sparse merge, and the seams.
 
-Every field is required, so an edit carrying ``None`` on any field is refused naming it.
-A hub step resolves its chunk's commit pointers against them (:func:`resolve_chunk_repositories`)."""
+Every field is required, so an edit carrying ``None`` on any field is refused naming it."""
 
 from __future__ import annotations
 
@@ -142,8 +141,8 @@ class RepositoryEdit:
 @domain_model
 @dataclass(frozen=True)
 class ResolvedRepository:
-    """The one repository record a chunk's commits resolved to — the forge, owner, base branch
-    and secret every delivery variable is filled from."""
+    """The one repository record a chunk's commits resolved to — its forge, owner, base branch
+    and secret."""
 
     forge_api_url: str
     owner: str
@@ -300,7 +299,7 @@ def diff(old: RepositoryFields | None, new: RepositoryFields) -> tuple[FieldChan
 
 
 class IReadRepositoryRecordRepository(Protocol):
-    """Repository-record reads. Controllers depend on this variant."""
+    """Read-only repository-record operations."""
 
     def get(self, name: str) -> ConfiguredRepository | None: ...
 
@@ -314,8 +313,8 @@ class IReadRepositoryRecordRepository(Protocol):
 
 
 class IWriteRepositoryRecordRepository(IReadRepositoryRecordRepository, Protocol):
-    """Repository-record writes. Only :class:`ConfigAuthoring` depends on this variant; each
-    method commits ``change`` in the same transaction as the record write."""
+    """Adds the repository-record writes; each method commits ``change`` in the same
+    transaction as the record write."""
 
     def create(self, record: ConfiguredRepository, *, change: ConfigChange) -> ConfiguredRepository:
         """Insert. :class:`RepositoryNameTaken` / :class:`RepositoryCoordinateTaken` on a

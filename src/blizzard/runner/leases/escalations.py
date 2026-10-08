@@ -101,7 +101,7 @@ def resume_workdir(session: SessionReference | None, bindings: Sequence[EnvBindi
 
 
 class IReadEscalationRepository(Protocol):
-    """Read-only escalation queries (held by read-path edges)."""
+    """Read-only escalation queries."""
 
     def open_escalations(self) -> list[ParkedEscalation]:
         """Every escalated chunk still unsuperseded.

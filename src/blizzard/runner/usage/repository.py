@@ -280,7 +280,7 @@ class IWriteCredentialRenewalRepository(IReadCredentialRenewalRepository, Protoc
 
 
 class IReadUsageRepository(IReadCredentialRenewalRepository, Protocol):
-    """Read-only usage/context-sample queries (held by read-path edges)."""
+    """Read-only usage/context-sample queries."""
 
     def session_cost_basis(self, lease_id: str) -> SessionCostBasis | None:
         """What ``lease_id``'s session has banked; ``None`` without an identified session.

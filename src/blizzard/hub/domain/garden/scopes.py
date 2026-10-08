@@ -171,7 +171,7 @@ ScopeMint = tuple[Scope, ConfigChange]
 
 
 class IReadScopeRepository(Protocol):
-    """Read-only scope access. Controllers at the edges depend on this variant."""
+    """Read-only scope access."""
 
     def get(self, slug: str) -> Scope | None: ...
 
@@ -192,8 +192,8 @@ class IReadScopeRepository(Protocol):
 
 
 class IWriteScopeRepository(IReadScopeRepository, Protocol):
-    """Read-write scope access. Only the domain layer depends on this variant; each write
-    commits its ``change`` in the same transaction as the record write."""
+    """Adds the scope writes; each write commits its ``change`` in the same transaction as the
+    record write."""
 
     def ensure(self, record: Scope, *, change: ConfigChange) -> Scope:
         """Insert ``record`` with its ``create`` change if its slug is unseen; otherwise read

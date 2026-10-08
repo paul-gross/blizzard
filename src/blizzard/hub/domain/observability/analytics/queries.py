@@ -3,7 +3,7 @@ counts, over the projection :mod:`extraction` and :mod:`derivation` populate.
 
 New, not an extension of :mod:`events` (``bzh:controller-read-only``): that module's
 ``IReadTranscriptEvents`` carries derivation bookkeeping alone, never an event query.
-The routes depend on this Protocol only; no write repository backs them."""
+Read-only; no write variant exists."""
 
 from __future__ import annotations
 

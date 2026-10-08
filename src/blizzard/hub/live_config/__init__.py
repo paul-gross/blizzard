@@ -38,10 +38,9 @@ class CacheKey:
 
 
 class ConfigObjectCache:
-    """Process-local; one per process, built in the composition root and shared by every
-    store-backed reader. A replaced or vanished entry's object is closed when it has a ``close`` —
-    one replacement later, not at once, so a caller still mid-request on the object it was handed
-    is not cut off by an edit landing under it."""
+    """Process-local built objects keyed by record revision. A replaced or vanished entry's
+    object is closed when it has a ``close`` — one replacement later, not at once, so a caller
+    still mid-request on the object it was handed is not cut off by an edit landing under it."""
 
     def __init__(self, revisions: IReadConfigRevisions) -> None:
         self._revisions = revisions
