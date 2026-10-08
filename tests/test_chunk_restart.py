@@ -16,7 +16,10 @@ from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.hub_exec import IWriteChunkHubExecRepository
 from blizzard.hub.domain.chunk.ports.record import IWriteChunkRecordRepository
 from blizzard.hub.domain.operations.restart import SUPERSEDED_ANSWER, RestartGraphPinChanged
+from blizzard.runner.hub.internal.http_hub import _chunk_state
+from blizzard.runner.lifecycle.model import HeldChunkMove, held_chunk_move
 from blizzard.tools.invariants import HubInvariants
+from blizzard.wire.chunk import ChunkStatusView
 from tests.support import assert_all_timestamps_utc, build_hub, chunk_stores, emitted_events, ingest, report_lease
 
 pytestmark = pytest.mark.component
@@ -293,6 +296,34 @@ def test_restart_closes_an_open_gate_decision(tmp_path) -> None:  # type: ignore
     assert detail["status"] == "running"
     assert detail["decision"] is None  # nothing is left for the runner to act on
     assert detail["restarts"][0]["decision_id"] is not None
+
+
+def test_restart_closes_a_resolved_decision_the_runner_has_not_acted_on(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """A resolved-but-unconsumed gate decision is closed by the restart, so the runner cannot resolve it later."""
+    hub = build_hub(tmp_path)
+    chunk_id = _mint(hub, _GATE_YAML)
+    build_node = _detail(hub, chunk_id)["current_node_id"]
+    parked = hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/completions",
+        json={"choice": "pass", "epoch": 1, "runner_id": "r1", "from_node_id": build_node, "artifacts": []},
+    )
+    assert parked.json()["outcome"] == "parked_at_gate", parked.text
+    decision_id = _detail(hub, chunk_id)["decision"]["decision_id"]
+    resolved = hub.client.post(f"/api/decisions/{decision_id}/resolutions", json={"choice": "approve"})
+    assert resolved.status_code < 300, resolved.text
+
+    assert _restart(hub, chunk_id, node="build").status_code == 202
+
+    detail = _detail(hub, chunk_id)
+    assert detail["restarts"][0]["decision_id"] == decision_id
+    assert detail["decision"] is None
+    open_ids = [d["decision_id"] for d in hub.client.get("/api/decisions").json()["decisions"]]
+    assert decision_id not in open_ids
+    statuses = hub.client.get("/api/fleet/chunk-statuses", params={"chunk_id": [chunk_id]})
+    view = _chunk_state(ChunkStatusView.model_validate(statuses.json()[0]))
+    assert view.decision is None
+    move = held_chunk_move(view, runner_id="r1", local_latest_epoch=1, taken_over=False)
+    assert move == HeldChunkMove.SPAWN_ADVANCED
 
 
 def test_restart_supersedes_an_open_escalation(tmp_path) -> None:  # type: ignore[no-untyped-def]

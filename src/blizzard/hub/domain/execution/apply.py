@@ -41,6 +41,7 @@ from blizzard.hub.domain.execution.completion import (
     ReplayedMigration,
     UnresolvableTarget,
     decision_choices,
+    re_escalates,
     refuse_hub_executed,
     refuse_incoherent_attempt,
     replayed_migration,
@@ -258,7 +259,18 @@ class ApplyService:
 
         try:
             refuse_hub_executed(from_node)
-            refuse_incoherent_attempt(facts, graph, from_node=from_node, epoch=submission.epoch)
+            refuse_incoherent_attempt(
+                facts,
+                graph,
+                from_node=from_node,
+                epoch=submission.epoch,
+                re_escalating=re_escalates(
+                    facts,
+                    graph.edge_for_choice(from_node.node_id, submission.choice),
+                    targets,
+                    epoch=submission.epoch,
+                ),
+            )
             # Unconditional and ahead of every dispatch fork, so none carries a proposal past a
             # node that never declared the policy, nor a `git_commit` missing a repo, branch, or hash.
             for policy_rejection in (
@@ -369,25 +381,26 @@ class ApplyService:
     ) -> ApplyResult:
         """Take a cross-graph edge — land on its resolved target, or escalate once per epoch. An
         unresolved target answers ``PARKED_AT_GATE``: ``FAILURE`` would requeue and supersede it."""
+        if re_escalates(facts, edge, targets, epoch=submission.epoch):
+            return ApplyResult.escalated(edge.target_graph)
         if targets.cross_graph is not None:
             landing = Landing.authored(edge, targets.cross_graph, from_node)
             return self._land_migration(chunk, graph, from_node, submission, landing, artifacts, proposals)
-        if not facts.escalated_at(submission.epoch):
-            draft = UnresolvableTarget.of(edge)
-            # Hub-authored: no runner runtime dir to compose a wrapped takeover command from.
-            escalated = self._escalations.record_escalation(
-                chunk.chunk_id,
-                epoch=submission.epoch,
-                admission=EpochAdmission.CURRENT,
-                claimant=Claimant(submission.runner_id, submission.lease_id),
-                takeover_command=draft.takeover_command,
-                at=self._clock.now(),
-                decision_id=submission.decision_id,
-                cause=draft.cause,
-                detail=draft.detail,
-            )
-            if isinstance(escalated, FenceRefusal):
-                return ApplyResult.failure(escalated.detail)
+        draft = UnresolvableTarget.of(edge)
+        # Hub-authored: no runner runtime dir to compose a wrapped takeover command from.
+        escalated = self._escalations.record_escalation(
+            chunk.chunk_id,
+            epoch=submission.epoch,
+            admission=EpochAdmission.CURRENT,
+            claimant=Claimant(submission.runner_id, submission.lease_id),
+            takeover_command=draft.takeover_command,
+            at=self._clock.now(),
+            decision_id=submission.decision_id,
+            cause=draft.cause,
+            detail=draft.detail,
+        )
+        if isinstance(escalated, FenceRefusal):
+            return ApplyResult.failure(escalated.detail)
         return ApplyResult.escalated(edge.target_graph)
 
     def _land_migration(

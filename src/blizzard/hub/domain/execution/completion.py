@@ -66,12 +66,15 @@ class GateResolutionUnapplied(CompletionRefused):
     only the resolving transition, naming the decision, moves on — to the resolved choice."""
 
 
-def refuse_incoherent_attempt(facts: ChunkFacts, graph: Graph, *, from_node: Node, epoch: int) -> None:
+def refuse_incoherent_attempt(
+    facts: ChunkFacts, graph: Graph, *, from_node: Node, epoch: int, re_escalating: bool = False
+) -> None:
     """Refuse a report the attempt at ``epoch`` cannot make — one epoch is one node-step attempt.
     At the current epoch the report must come from the current node (:class:`CompletionNotAtCurrentNode`);
     an attempt whose own escalation is open (:class:`ChunkEscalated`) or whose own question is unanswered
-    (:class:`OpenQuestion`) is parked, but the hub's own migration-target escalation parks none. A report
-    at another epoch is left to the write fence."""
+    (:class:`OpenQuestion`) is parked. The hub's own migration-target escalation parks only a report
+    that would record a write: one that would re-escalate (``re_escalating``, see :func:`re_escalates`)
+    passes, to be answered with no write. A report at another epoch is left to the write fence."""
     if epoch == facts.epoch_floor():
         current = facts.current_node(graph)
         if current is not None and current.node_id != from_node.node_id:
@@ -79,11 +82,22 @@ def refuse_incoherent_attempt(facts: ChunkFacts, graph: Graph, *, from_node: Nod
                 f"node `{from_node.name}` is not the chunk's current node `{current.name}` at epoch {epoch}"
             )
     escalation = facts.open_escalation_at(epoch)
-    if escalation is not None and escalation.cause != EscalationCause.MIGRATION_TARGET_UNRESOLVABLE:
+    if escalation is not None and not (
+        re_escalating and escalation.cause == EscalationCause.MIGRATION_TARGET_UNRESOLVABLE
+    ):
         raise ChunkEscalated(f"the attempt at epoch {epoch} escalated — requeue the chunk before it moves on")
     asked = facts.open_questions_at(epoch)
     if asked:
         raise OpenQuestion(f"question {asked[0].question_id} is open — answer it before the chunk moves on")
+
+
+def re_escalates(facts: ChunkFacts, edge: Edge | None, targets: MigrationTargets, *, epoch: int) -> bool:
+    """Whether taking ``edge`` at ``epoch`` would only re-escalate: it crosses graphs, its target
+    still names no enabled graph, and the attempt at ``epoch`` already escalated — answered
+    ``escalated`` with nothing written."""
+    return (
+        edge is not None and edge.target_graph is not None and targets.cross_graph is None and facts.escalated_at(epoch)
+    )
 
 
 def refuse_hub_executed(from_node: Node) -> None:

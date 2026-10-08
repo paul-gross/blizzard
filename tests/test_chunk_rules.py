@@ -58,11 +58,6 @@ def test_declaring_a_dependency_is_legal_only_pre_claim() -> None:
         assert verb_legal_from(ChunkVerb.DECLARE_DEPENDENCY, status) is (status in PRE_CLAIM_STATUSES)
 
 
-@pytest.mark.parametrize("verb", [ChunkVerb.NAME_AS_PREREQUISITE, ChunkVerb.RELEASE_DEPENDENCY])
-def test_naming_a_prerequisite_and_releasing_an_edge_have_no_status_window(verb: ChunkVerb) -> None:
-    assert all(verb_legal_from(verb, status) for status in ChunkStatus)
-
-
 def test_a_held_work_ref_is_ingestable_again_only_once_its_holder_is_terminal() -> None:
     for status in ChunkStatus:
         assert verb_legal_from(ChunkVerb.INGEST_HELD_WORK_REF, status) is (status in TERMINAL_STATUSES)
@@ -73,7 +68,6 @@ def test_facts_admit_a_verb_by_their_derived_status() -> None:
     running = ChunkFacts(minted=True, promoted=True, routes_created=[RouteCreatedFact(created_at=_T0)])
     assert ChunkFacts(minted=True).admits(ChunkVerb.DECLARE_DEPENDENCY)
     assert not running.admits(ChunkVerb.DECLARE_DEPENDENCY)
-    assert running.admits(ChunkVerb.RELEASE_DEPENDENCY)
 
 
 # --- Derivations the routes read ---------------------------------------------

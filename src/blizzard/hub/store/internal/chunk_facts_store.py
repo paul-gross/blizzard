@@ -42,6 +42,7 @@ from blizzard.hub.domain.chunk.model import (
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
+from blizzard.hub.store.internal.chunk_decisions_store import decision_closure_ids
 from blizzard.hub.store.internal.chunk_rows import ephemeral_ids_select, graph_id_of_batch
 from blizzard.hub.store.internal.chunk_terminal_predicates import maybe_live, settled_done, settled_stopped
 
@@ -368,10 +369,14 @@ class ChunkFactsStore:
                 resolved_ids = self._resolved_ids(conn, decision_ids) | {
                     r.decision_id for r in restart_rows if r.decision_id is not None
                 }
+            closed_ids = decision_closure_ids(conn, [d.decision_id for d in decision_rows])
             for d in decision_rows:
                 decisions[d.chunk_id].append(
                     DecisionFact(
-                        decision_id=d.decision_id, submitted_at=d.submitted_at, resolved=d.decision_id in resolved_ids
+                        decision_id=d.decision_id,
+                        submitted_at=d.submitted_at,
+                        resolved=d.decision_id in resolved_ids,
+                        closed=d.decision_id in closed_ids,
                     )
                 )
 

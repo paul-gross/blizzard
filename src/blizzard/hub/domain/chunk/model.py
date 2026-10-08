@@ -360,11 +360,14 @@ class DecisionFact:
     """A gate's ``decision.submitted`` row and whether anything has closed it. An **open**
     decision — carrying neither its own resolution row nor a restart that superseded it
     (#370) — is what ``waiting_on_human`` derives from. ``resolved`` is computed by the
-    hydrating repository so the derivation reads a plain boolean."""
+    hydrating repository so the derivation reads a plain boolean. ``closed`` is a second,
+    later state: a fact consumed the decision — a transition, a migration, an escalation or a
+    restart — so a decision can be resolved yet not closed while the runner has not moved on."""
 
     decision_id: str
     submitted_at: datetime
     resolved: bool = False
+    closed: bool = False
 
 
 @domain_model
@@ -885,15 +888,11 @@ def holds_claim(status: ChunkStatus) -> bool:
 class ChunkVerb(StrEnum):
     """A verb that reads a chunk's derived status to decide whether it is legal — the rows of
     :data:`CHUNK_VERB_LEGALITY`. A verb names the chunk's role when it acts on one end of a
-    relation (``DECLARE_DEPENDENCY`` is the dependent's, ``NAME_AS_PREREQUISITE`` the prerequisite's).
+    relation (``DECLARE_DEPENDENCY`` is the dependent's).
     An ephemeral (grouped-away or deleted) chunk has no status: every verb reads it as unknown."""
 
     #: Declare a dependency, as the dependent.
     DECLARE_DEPENDENCY = "declare-dependency"
-    #: Be named as the prerequisite of a declared dependency.
-    NAME_AS_PREREQUISITE = "name-as-prerequisite"
-    #: Release a standing dependency, as its dependent — the lever that keeps blocked a held state.
-    RELEASE_DEPENDENCY = "release-dependency"
     #: Let a new ingest mint over a work ref this chunk holds: only once the holder is finished.
     INGEST_HELD_WORK_REF = "ingest-held-work-ref"
     #: The operator's promote; on an already-promoted chunk, a replay that writes nothing whatever the status.
@@ -944,8 +943,6 @@ _NON_TERMINAL: frozenset[ChunkStatus] = _EVERY_STATUS - TERMINAL_STATUSES
 CHUNK_VERB_LEGALITY: Mapping[ChunkVerb, frozenset[ChunkStatus]] = MappingProxyType(
     {
         ChunkVerb.DECLARE_DEPENDENCY: PRE_CLAIM_STATUSES,
-        ChunkVerb.NAME_AS_PREREQUISITE: _EVERY_STATUS,
-        ChunkVerb.RELEASE_DEPENDENCY: _EVERY_STATUS,
         ChunkVerb.INGEST_HELD_WORK_REF: TERMINAL_STATUSES,
         ChunkVerb.PROMOTE: _NON_TERMINAL,
         ChunkVerb.PAUSE: _NON_TERMINAL - {ChunkStatus.DELIVERING},
@@ -1331,6 +1328,17 @@ class ChunkFacts:
         if not unresolved:
             return None
         return max(unresolved, key=lambda d: d.submitted_at)
+
+    def unclosed_decision(self) -> DecisionFact | None:
+        """The newest gate decision no fact has consumed yet, resolved or not, or ``None``.
+
+        What a move that consumes the gate closes: a person's resolution ends the wait
+        (:meth:`open_decision`) but leaves the decision for the runner to act on until a
+        transition, migration, escalation or restart closes it."""
+        unclosed = [d for d in self.decisions if not d.closed]
+        if not unclosed:
+            return None
+        return max(unclosed, key=lambda d: d.submitted_at)
 
     def has_open_decision(self) -> bool:
         """True iff a gate's decision is unresolved — no resolution flips it off."""

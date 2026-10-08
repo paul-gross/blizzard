@@ -14,8 +14,9 @@ from sqlalchemy import select
 
 from blizzard.hub.domain.chunk.dependencies import NoStandingDependencyToRelease, PrerequisiteIsEphemeral
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
+from blizzard.hub.domain.chunk.model import DependencyEdge
 from blizzard.hub.store import schema as s
-from tests.support import HubHarness, build_hub, ingest
+from tests.support import HubHarness, build_hub, claim_route, ingest
 
 pytestmark = pytest.mark.component
 
@@ -56,6 +57,49 @@ def test_an_edge_onto_a_done_prerequisite_is_accepted_with_no_satisfaction_state
         "released_at",
         "released_by",
     }
+
+
+def test_declaring_against_a_stopped_prerequisite_is_accepted(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    dependent_id = ingest(hub, [{"source": "default", "ref": "dependent"}], promote=False)
+    prerequisite_id = ingest(hub, [{"source": "default", "ref": "prereq"}], promote=False)
+    hub.services.stop.stop(_resolve(hub, prerequisite_id), by="operator")
+    prerequisite_facts = hub.services.chunks.facts.load_facts(prerequisite_id)
+    assert prerequisite_facts is not None
+    assert prerequisite_facts.status().value == "stopped"
+
+    edge = hub.services.dependencies.declare(
+        _resolve(hub, dependent_id), _resolve(hub, prerequisite_id), by="user:alice"
+    )
+
+    assert edge.standing is True
+    assert [e.dependency_id for e in hub.services.chunks.dependencies.list_standing_edges()] == [edge.dependency_id]
+
+
+def _claimed_dependent_with_a_standing_edge(hub: HubHarness) -> tuple[str, DependencyEdge]:
+    """A dependent claimed past a declared (met) edge onto a done prerequisite — running, edge standing."""
+    dependent_id = ingest(hub, [{"source": "default", "ref": "dependent"}], promote=False)
+    prerequisite_id = ingest(hub, [{"source": "default", "ref": "prereq"}], promote=False)
+    hub.services.complete.complete(_resolve(hub, prerequisite_id), by="operator")
+    edge = hub.services.dependencies.declare(_resolve(hub, dependent_id), _resolve(hub, prerequisite_id), by="operator")
+    claim_route(hub, dependent_id)
+    return dependent_id, edge
+
+
+@pytest.mark.parametrize("paused", [False, True], ids=["running", "paused"])
+def test_releasing_an_edge_has_no_status_window_on_the_dependent(tmp_path: Path, paused: bool) -> None:
+    hub = build_hub(tmp_path)
+    dependent_id, edge = _claimed_dependent_with_a_standing_edge(hub)
+    if paused:
+        assert hub.client.post(f"/api/fleet/chunks/{dependent_id}/pause").status_code == 202
+    facts = hub.services.chunks.facts.load_facts(dependent_id)
+    assert facts is not None
+    assert facts.status().value == ("paused" if paused else "running")
+
+    released = hub.services.dependencies.release(edge, by="operator")
+
+    assert released.released_by == "operator"
+    assert hub.services.chunks.dependencies.list_standing_edges() == []
 
 
 def test_a_second_release_of_the_same_pair_is_refused_and_the_first_release_stands(tmp_path: Path) -> None:
