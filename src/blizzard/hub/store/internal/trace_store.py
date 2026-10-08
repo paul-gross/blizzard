@@ -2,7 +2,8 @@
 
 Reads the cursor and its latch, and appends the cursor's fact rows (``bzh:facts-not-status``). The
 closing-fact candidates and whole-chunk :class:`StepFacts` span every tenant, so they come from the
-sweep corpus (:class:`IReadStepCorpus`); this store adds the graphs and runner names they name."""
+sweep corpus (:class:`IReadStepCorpus`); this store keeps its own tenant's chunks and adds the graphs
+and runner names they name."""
 
 from __future__ import annotations
 
@@ -61,9 +62,14 @@ class TraceStore:
         return self._corpus.closing_candidates(since, until, limit)
 
     def step_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, StepFacts]:
-        """The corpus's step facts, each with the graphs and runner names its facts reference — read
-        through this store's own graph and registry reads."""
-        built = self._corpus.step_facts_for(chunk_ids, self._label)
+        """The corpus's step facts of this store's own tenant — the one its event log, graph and
+        registry reads are scoped to — each with the graphs and runner names its facts reference.
+        Another tenant's chunk is left out, since its graphs, runner names and work-ref labels are not
+        this store's to read: a window or page holding it exports none of its rows, and the cursor
+        still passes its closing facts."""
+        tenant = self._events.scope.tenant
+        corpus = self._corpus.step_facts_for(chunk_ids, self._label)
+        built = {chunk_id: facts for chunk_id, facts in corpus.items() if facts.tenant == tenant}
         graphs = self._graphs.get_many(sorted({g for facts in built.values() for g in _graph_ids(facts)}))
         names = self._names.names_for(sorted({r for facts in built.values() for r in _runner_ids(facts)}))
         return {chunk_id: _with_reads(facts, graphs, names) for chunk_id, facts in built.items()}

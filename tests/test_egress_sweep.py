@@ -55,7 +55,7 @@ from tests.support import (
     ingest,
     seed_runner,
 )
-from tests.trace_hub import claim, label, pass_build, trace_hub
+from tests.trace_hub import claim, label, pass_build, seed_open_tenant_chunk, trace_hub
 
 pytestmark = pytest.mark.component
 
@@ -239,6 +239,29 @@ def test_a_pass_writes_steps_and_invocations_and_advances_each_cursor_after_its_
     assert (
         invocations.usage == UsagePosition(hub.clock.now() - timedelta(seconds=0), 2) or invocations.usage.usage_id == 2
     )
+
+
+def test_another_open_tenants_rows_are_not_exported_and_every_cursor_moves_past_them(tmp_path: Path) -> None:
+    hub, graph = _hub(tmp_path)
+    writer = InMemoryEgressWriter()
+    _anchored(hub, writer)
+    chunk_id = _closed_step(hub, graph, 1)
+    closed = hub.clock.now()
+    seed_open_tenant_chunk(hub, "ten_other", "ch_other", closed)
+    hub.clock.advance(timedelta(seconds=3))
+
+    _sweep(hub, writer).sweep()
+
+    assert [r["chunk_id"] for r in _rows(writer, "steps")] == [chunk_id]
+    assert [r["chunk_id"] for r in _rows(writer, "invocations")] == [chunk_id]
+    assert _rows(writer, "events") == []
+    steps, invocations, events = (_store(hub).newest_cursor(d) for d in ("steps", "invocations", "events"))
+    assert steps is not None and steps.step is not None
+    assert invocations is not None
+    assert events is not None and events.events is not None
+    other_step_closed = closed + timedelta(seconds=1)
+    assert steps.step.at > closed + timedelta(seconds=2)
+    assert steps.usage.recorded_at == invocations.usage.recorded_at == events.events.at == other_step_closed
 
 
 def test_rows_land_in_the_partition_of_their_own_time(tmp_path: Path) -> None:

@@ -23,7 +23,7 @@ from blizzard.hub.store.internal.trace_store import TraceStore
 from tests.support import HubHarness, InMemoryEgressWriter, hub_level_connections, hub_store_connections
 from tests.test_egress_events_sweep import _OLD_VERSION, _Events
 from tests.test_egress_sweep import _SETTLED, _closed_step, _cursor_rows, _hub, _kinds, _rows, _store, _sweep
-from tests.trace_hub import label
+from tests.trace_hub import label, seed_open_tenant_chunk
 
 pytestmark = pytest.mark.component
 
@@ -92,6 +92,22 @@ def test_the_backfill_writes_the_live_sweeps_rows_for_the_same_window(tmp_path: 
     assert _without_export_time(_rows(written, "invocations")) == _without_export_time(_rows(live, "invocations"))
     assert [(c.dataset, c.rows) for c in result.datasets] == [("steps", 2), ("invocations", 3), ("events", 0)]
     assert all(p.backfill for p, _ in written.manifests)
+
+
+def test_the_backfill_leaves_out_another_open_tenants_rows_and_writes_its_own(tmp_path: Path) -> None:
+    hub, graph = _hub(tmp_path, _SETTLED)
+    since = hub.clock.now()
+    chunk_id = _closed_step(hub, graph, 1)
+    seed_open_tenant_chunk(hub, "ten_other", "ch_other", hub.clock.now())
+    until = hub.clock.now() + timedelta(seconds=5)
+    hub.clock.advance(timedelta(seconds=6))
+    written = InMemoryEgressWriter()
+
+    result = _service(hub, _SETTLED, written).backfill(since, until, dataset=None, dry_run=False)
+
+    assert [r["chunk_id"] for r in _rows(written, "steps")] == [chunk_id]
+    assert [r["chunk_id"] for r in _rows(written, "invocations")] == [chunk_id]
+    assert [(c.dataset, c.rows) for c in result.datasets] == [("steps", 1), ("invocations", 1), ("events", 0)]
 
 
 def test_the_window_is_half_open(tmp_path: Path) -> None:

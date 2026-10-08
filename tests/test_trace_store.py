@@ -34,7 +34,7 @@ from tests.support import (
     hub_store_connections,
     seed_runner,
 )
-from tests.trace_hub import label, stop, trace_hub, transitioned_and_stopped
+from tests.trace_hub import label, seed_open_tenant_chunk, stop, trace_hub, transitioned_and_stopped
 
 pytestmark = pytest.mark.component
 
@@ -167,6 +167,28 @@ def test_until_holds_back_steps_closing_after_it(tmp_path: Path) -> None:
     )
 
     assert window.closed_steps() == ()
+
+
+_OTHER = "ten_other"
+_OTHER_CHUNK = "ch_other"
+
+
+@pytest.mark.parametrize("limit", [1, 50])
+def test_another_open_tenants_chunks_are_left_out_and_the_window_moves_past_them(tmp_path: Path, limit: int) -> None:
+    hub, graph = trace_hub(tmp_path)
+    moved, stopped = transitioned_and_stopped(hub, graph, 1)
+    tie = hub.clock.now()
+    seed_open_tenant_chunk(hub, _OTHER, _OTHER_CHUNK, tie)
+    store = _store(hub)
+
+    hydrated = store.step_facts_for([moved, _OTHER_CHUNK])
+    since = CursorKey.opening(tie - timedelta(seconds=1))
+    told = _drain(store, since, tie + timedelta(hours=1), limit)
+    position = read_window(store, since, tie + timedelta(hours=1), 50).position
+
+    assert set(hydrated) == {moved}
+    assert told == sorted([CursorKey(tie, moved, 1), CursorKey(tie, stopped, 1)])
+    assert position.at > tie + timedelta(seconds=2)
 
 
 def _fleet(tmp_path: Path, pairs: int) -> HubHarness:
