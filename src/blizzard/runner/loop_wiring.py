@@ -109,10 +109,8 @@ class LoopWiring:
         the caller owns the ``httpx.Client`` behind ``hub``, and the returned context's own
         ``usage_http_client`` — closed the same way, once the caller is done with the context.
 
-        ``sweep_worker_scratch`` runs the per-lease scratch directory's one-shot orphan sweep —
-        ``True`` only from :class:`PeriodicDriver`'s own daemon-start build, ahead of its first
-        tick, when no spawn can race it; every other caller (``tick_once`` and siblings, a build
-        wired only to inspect it) leaves it off. ``tracer`` is the tick's span seam — only the daemon passes one."""
+        ``sweep_worker_scratch`` runs the per-lease scratch directory's one-shot orphan sweep — safe
+        only when no spawn can race it, so off by default. ``tracer`` is the tick's span seam, absent by default."""
         config = self.config
         stores, provider, harnesses, clock = graph.stores, graph.provider, graph.harnesses, graph.clock
         # A startup guard: this composition's transcripts lane requires the default
@@ -256,10 +254,10 @@ class LoopWiring:
                 graph.close()
 
     def tick_once(self, *, process: RunnerProcess | None = None) -> None:
-        """Run one synchronous reconciliation tick — the CLI verb and e2e driver.
+        """Run one synchronous reconciliation tick.
 
-        ``process`` runs the tick over one caller-owned graph, so a driver of repeated ticks shares the
-        graph's platform tracing with the runner's local API instead of building a graph per tick."""
+        ``process`` runs the tick over a caller-owned graph, which this call neither builds nor closes;
+        without one, the tick builds and closes its own."""
         self._with_context(tick, process=process)
 
     def backfill_transcripts(self, *, dry_run: bool, limit: int | None = None) -> TranscriptBackfillReport:

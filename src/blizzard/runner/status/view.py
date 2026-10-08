@@ -288,10 +288,7 @@ class RunnerStatusService:
         )
 
     def environments(self) -> list[EnvironmentSlot]:
-        """The full configured pool, joined against the held binding facts.
-        A bound environment never silently vanishes: a binding whose id has fallen out of
-        the pool still surfaces, and — since ``env_bindings`` has no unique constraint on
-        ``environment_id`` — so does every extra binding past the first on one id."""
+        """The full configured pool, joined against the held binding facts: ``EnvironmentSlot.pool_view``."""
         return EnvironmentSlot.pool_view(self._env_pool, self._environments.held_bindings())
 
     def open_asks(self) -> list[OpenAsk]:

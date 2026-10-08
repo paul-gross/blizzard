@@ -1,10 +1,8 @@
 """The runner's own local session — a signed, stateless ``HttpOnly`` cookie.
 
-A small JSON payload HMAC-signed with the runner's session secret (``bzh:injected-clock`` for
-the timestamps), so it costs no store schema. The secret is read from the env var the config
-names, so a session survives a restart until its TTL; with none configured the daemon mints a
-fresh per-process secret and a restart invalidates every live session (pinned by
-``tests/test_pin_runner_misc.py``). Each runner needs its own secret."""
+A small JSON payload HMAC-signed with a caller-supplied secret (``bzh:injected-clock`` for
+the timestamps), so it costs no store schema. A session verifies only under the secret that
+signed it, until its TTL."""
 
 from __future__ import annotations
 
@@ -26,7 +24,7 @@ _COOKIE_NAME_UNSAFE = re.compile(r"[^A-Za-z0-9!#$%&'*+.^_`|~-]")
 #: through the hub, so a short TTL costs nothing but an invisible round trip.
 SESSION_TTL = timedelta(hours=8)
 #: The federation callback route, owned here so the registered URI set and the URL the bounce
-#: presents cannot drift; the runner config and the federation router both import it.
+#: presents cannot drift.
 CALLBACK_PATH = "/api/auth/callback"
 
 

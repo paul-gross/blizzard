@@ -34,7 +34,7 @@ class LeaseTraceExportFailure:
 class IReadLeaseTraceFacts(Protocol):
     def lease_trace_facts(self, lease_id: str) -> LeaseTraceFacts | None:
         """The lease's facts, or ``None`` when it is unknown or has no closure yet — and for every
-        lease while the runner has never registered, since its spans would carry no runner id."""
+        lease while the runner has never registered."""
         ...
 
     def lease_trace_facts_for(self, lease_ids: Collection[str]) -> dict[str, LeaseTraceFacts]:

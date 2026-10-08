@@ -48,7 +48,7 @@ _LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 class FederationSettings:
     """What the bounce and its callback read off this runner's config: the declared browser
     origins, the hub it federates with, its own identity there, and the role policy a federated
-    identity resolves against. The composition root wires it onto the app."""
+    identity resolves against."""
 
     public_origins: PublicOrigins
     hub_url: str

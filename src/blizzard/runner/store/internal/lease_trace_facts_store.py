@@ -291,8 +291,7 @@ def _closed_leases(conn: Connection, ids: Sequence[str]) -> list[Row[Any]]:
 
 
 def _registered_runner(conn: Connection) -> RunnerFact | None:
-    """The id and name of the runner's latest registration, which a lease's spans carry, never one stamped
-    at mint — ``None`` while the runner has never registered, so it has nothing to tell."""
+    """The newest ``runner_identity`` row's id and name, or ``None`` when there is none."""
     c = runner_identity.c
     row = conn.execute(select(c.runner_id, c.runner_name).order_by(c.id.desc()).limit(1)).first()
     return None if row is None else RunnerFact(runner_id=str(row.runner_id), runner_name=str(row.runner_name))

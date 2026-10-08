@@ -313,14 +313,14 @@ def create_app(
         transport=httpx.MockTransport(lambda _request: httpx.Response(404)),
         base_url="http://runner-hub-proxy-client-hermetic-default.invalid",
     )
-    # A test binds a `ManualMonotonicClock` here to prove the retry schedule without sleeping.
+    # The monotonic clock the hub retry schedule reads — the system clock unless one is injected.
     app.state.hub_retry_clock = hub_retry_clock or SystemMonotonicClock()
     app.state.jti_cache = jti_cache
     # The reverse-proxy trust set, empty by default — so
     # `X-Forwarded-Proto` is ignored from every peer.
     app.state.trusted_proxies = TrustedProxies.parse(config.trusted_proxies)
     # The configured secret keeps sessions alive across a restart; without one, a fresh
-    # per-process secret means a restart invalidates every live session — see `runner/auth/session.py`.
+    # per-process secret means a restart invalidates every live session.
     if config.session_secret:
         app.state.session_secret = config.session_secret
     else:

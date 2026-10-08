@@ -3,7 +3,7 @@ provider-selected** external-system seam (``bzh:pluggable-seams``), selected bes
 declared subscription's sampler binding at composition. Renewal is delegated to the
 vendor CLI: blizzard never opens a credential file for writing — a binding asks the
 vendor's own tooling to refresh it, and reports only whether that ask worked. A read-only due
-check and the vendor call are separate, so the caller records its claim between them."""
+check and the vendor call are separate."""
 
 from __future__ import annotations
 

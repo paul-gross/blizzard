@@ -1,6 +1,5 @@
 """A chunk's state as the hub reports it to the runner working its node-steps — its status, route,
-pause, epochs, spend, and open gate decision. The hub client maps the wire's status view to it
-(``bzh:data-roles``)."""
+pause, epochs, spend, and open gate decision."""
 
 from __future__ import annotations
 

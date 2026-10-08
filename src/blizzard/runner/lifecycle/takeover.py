@@ -1,9 +1,9 @@
-"""The operator takeover — ``blizzard runner takeover <chunk-id>``.
+"""The operator takeover of a chunk this runner holds.
 
 A chunk is **takeable** while this runner holds it and carries no running attempt; anything else
-raises a refusal the edge maps to ``409``. The **fact-before-command** ordering holds regardless
-of ``force`` (``bzh:crash-correctness``): the takeover fact, which makes the chunk unreachable to
-every loop step, lands first — and a forced kill writes no attempt fact, so it consumes no retry."""
+raises a ``TakeoverError`` refusal. The **fact-before-command** ordering holds regardless of
+``force`` (``bzh:crash-correctness``): the open-takeover fact lands first — and a forced kill
+writes no attempt fact, so it consumes no retry."""
 
 from __future__ import annotations
 
@@ -397,8 +397,8 @@ def bounded_takeover_env(full_env: Mapping[str, str]) -> dict[str, str]:
 
 
 def takeover_closing(scope: TakeoverCloseScope, takeover_id: str) -> OpenTakeover | None:
-    """The open takeover ending ``takeover_id`` closes, or ``None`` when none is open — ending one
-    already ended is the desired state. Another takeover holding the chunk refuses."""
+    """The open takeover ending ``takeover_id`` closes, or ``None`` when there is nothing to close;
+    ``TAKEOVER_TRANSITIONS`` decides."""
     record = scope.open_takeover
     verb = TakeoverVerb.END_OWN if record is None or record.takeover_id == takeover_id else TakeoverVerb.END_OTHER
     verdict = TAKEOVER_TRANSITIONS[_state(record)][verb]
@@ -497,8 +497,8 @@ class TakeoverService:
         takeover_id = Id.mint(IdPrefix.TAKEOVER, self._clock).value
         fence_epoch = admission.fence_epoch
 
-        # Fact-before-command (bzh:crash-correctness): recorded — and so reachable by
-        # every loop step's open-takeover skip — before anything is killed or returned.
+        # Fact-before-command (bzh:crash-correctness): the open takeover is recorded
+        # before anything is killed or returned.
         self._takeover.record_takeover(
             takeover_id=takeover_id,
             chunk_id=chunk_id,
@@ -529,9 +529,8 @@ class TakeoverService:
             kill_owned_process(
                 self._process, pid=active.pid, process_start_time=active.process_start_time, pgid=active.pgid
             )
-            # A taken-over chunk's lease is skipped by every loop step from here on (Advance,
-            # Reap alike), so an in-flight elicitation would otherwise leak forever uncollected
-            # and unkilled — killed here, the one path that closes it out.
+            # A taken-over chunk's lease is never driven again, so an in-flight elicitation
+            # is killed here or never.
             elicitation = self._elicitations.in_flight_elicitation(active.lease_id, active.epoch)
             if elicitation is not None:
                 kill_owned_process(

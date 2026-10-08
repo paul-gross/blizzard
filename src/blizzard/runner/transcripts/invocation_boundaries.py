@@ -32,7 +32,7 @@ __all__ = [
 #: The four invocation kinds a boundary ever names — a nudge's own, distinct from ``resume``.
 InvocationBoundaryKind = Literal["spawn", "resume", "judge", "nudge"]
 
-#: Worker-starting kinds, tried in order (``"judge"`` excluded) — shared with the invariant checker.
+#: Worker-starting kinds, tried in order (``"judge"`` excluded).
 WORKER_STARTING_KINDS: tuple[InvocationBoundaryKind, ...] = ("spawn", "resume", "nudge")
 
 #: Where one ``(lease, generation, kind)`` marker stands: never opened, open, or closed.
@@ -169,9 +169,6 @@ class IWriteInvocationBoundaryRepository(IReadInvocationBoundaryRepository, Prot
         ...
 
     def close_boundaries_for_lease(self, lease_id: str, *, reason: str, at: datetime) -> None:
-        """Close every one of this lease's still-open boundaries (``bzh:open-facts-declare-closure``)
-        — called once, from the one funnel every lease closure path shares
-        (:meth:`~blizzard.runner.lifecycle.attempt.Attempt.close`), so a hub-terminal chunk's
-        boundaries close the same way a locally-driven one's do. An UPDATE over ``closed_at
-        IS NULL``, naturally idempotent under a crash-and-retry of the closure path itself."""
+        """Close every one of this lease's still-open boundaries (``bzh:open-facts-declare-closure``),
+        stamped ``at`` with ``reason``. Idempotent: an already-closed boundary keeps its closure."""
         ...

@@ -1,9 +1,9 @@
 """The worker ask/park repository seam.
 
 :meth:`IReadAskRepository.parked_lease_ids` unions the leases parked on an unanswered question or an
-operator pause. :func:`check_askable` accepts an ask against the active lease whatever it is doing, and
-a newer unforwarded ask supersedes the older (:func:`unshadowed`); an ask against an open takeover's
-closed reference lease is refused (:class:`AskOnClosedLease`), as nothing would ever forward it."""
+operator pause. :func:`check_askable` accepts an ask against the active lease whatever it is doing;
+an ask against an open takeover's closed reference lease is refused (:class:`AskOnClosedLease`), as
+nothing would ever forward it. Which asks stay open: :func:`ask_states`."""
 
 from __future__ import annotations
 
@@ -159,10 +159,8 @@ class IReadAskRepository(Protocol):
         ...
 
     def parked_lease_ids(self) -> set[str]:
-        """Leases dormant on a question **or an operator pause** — the union of
-        :meth:`ask_parked_lease_ids` and :mod:`~blizzard.runner.throttle.pause`'s own
-        ``pause_parked_lease_ids``. A parked lease has no live worker, so
-        it is exempt from staleness reclamation ([ask-answer.md])."""
+        """Leases dormant on a question **or an operator pause**, with no live worker
+        ([ask-answer.md]). The pause half: ``src/blizzard/runner/throttle/pause.py``."""
         ...
 
     def ask_parked_lease_ids(self) -> set[str]:
@@ -176,10 +174,7 @@ class IReadAskRepository(Protocol):
         ...
 
     def open_asks(self) -> list[OpenAsk]:
-        """Every ask with no answer yet — forwarded-and-parked or still unforwarded — newest first.
-
-        An ask is open while its ``question_id`` carries no :meth:`~IWriteAskRepository.record_park_resume`,
-        except an unforwarded ask a newer unforwarded ask on its lease supersedes (:func:`unshadowed`)."""
+        """Every open ask (:func:`open_asks_of`), newest first."""
         ...
 
 

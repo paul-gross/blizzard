@@ -476,7 +476,7 @@ class RunnerConfig:
     hub_url: str = DEFAULT_HUB_URL
     #: This runner's display name at the hub — not unique, and never its identity.
     name: str = DEFAULT_RUNNER_NAME
-    #: A legacy ``runner_id`` key the toml declares beside ``name``, which wins; ``host`` warns about it.
+    #: A legacy ``runner_id`` key the toml declares beside ``name``, which wins.
     shadowed_runner_id: str | None = None
     workspace_id: str = DEFAULT_WORKSPACE_ID
     #: Names the env var carrying the hub bearer token; :attr:`hub_token` is the resolved secret —
@@ -484,7 +484,7 @@ class RunnerConfig:
     token_env: str = DEFAULT_TOKEN_ENV
     hub_token: str = ""
     #: Names the env var carrying the session-signing secret; :attr:`session_secret` is the
-    #: resolved bytes, empty meaning a fresh random secret per process.
+    #: resolved bytes, empty when the variable is unset.
     session_secret_env: str = DEFAULT_SESSION_SECRET_ENV
     session_secret: bytes = field(default=b"", repr=False)
     workspace_root: str = ""  # the winter workspace the provider drives; required to FILL
@@ -598,7 +598,7 @@ class RunnerConfig:
     def dropped_otel_passthrough(self) -> tuple[str, ...]:  # ast-grep-ignore: bzh:property-delegates
         """The ``OTEL_*`` and ``WINTER_OTEL_*`` names in ``[worker] env_passthrough`` that are withheld from every
         worker while tracing is on — a worker must never inherit the runner's exporter configuration or
-        credentials. ``host``'s own startup warning names them."""
+        credentials."""
         if not TracingSettings.of(os.environ).enabled():
             return ()
         return tuple(name for name in self.worker_env_passthrough if name.startswith(("OTEL_", _WINTER_OTEL_PREFIX)))
@@ -621,7 +621,7 @@ class RunnerConfig:
 
     @property
     def role_policy(self) -> RolePolicy:
-        """The ``[auth]`` role precedence, as the federation callback resolves a local role by it."""
+        """The ``[auth]`` role precedence: superuser, per-user roles, then the hub-role default."""
         return RolePolicy(
             superuser=self.auth_superuser, users=self.auth_users, hub_role_default=self.auth_hub_role_default
         )
@@ -660,7 +660,7 @@ class RunnerConfig:
 
     @property
     def workspace_settings(self) -> WorkspaceSettings:
-        """The workspace binding's inputs, as the provider factory builds a provider from them."""
+        """The workspace binding's inputs: provider name, runner root, and declared and effective workspace roots."""
         return WorkspaceSettings(
             provider=self.workspace_provider,
             root=self.root,
@@ -766,8 +766,7 @@ class RunnerConfig:
         """The outbound ``Authorization`` header every runner->hub call carries.
 
         One credential path for every outbound call rather than a header built per call
-        site. Empty when :attr:`hub_token` is unset — a runner no hub has added yet, which
-        every fleet call refuses until ``runner init`` adds it."""
+        site. Empty when :attr:`hub_token` is unset."""
         if not self.hub_token:
             return {}
         return {"Authorization": f"Bearer {self.hub_token}"}

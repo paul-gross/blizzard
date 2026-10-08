@@ -227,12 +227,12 @@ class SpanRouting:
 
     @property
     def kept(self) -> int:
-        """Every span kept, both families — what the lease's span rate is charged."""
+        """Every span kept, both families."""
         return len(self.harness.kept) + self.accepted
 
     @property
     def refused(self) -> int:
-        """Every span refused, both families — what the export response names."""
+        """Every span refused, both families."""
         return self.harness.dropped + self.dropped
 
 

@@ -141,9 +141,7 @@ class UsageStore:
         return value
 
     def latest_external_usage_windows(self, slug: str) -> tuple[ExternalSubscriptionUsageWindow, ...]:
-        # A NULL-payload row is a recorded failed-sample attempt — excluded here so a
-        # sampler miss never hides an older still-valid 100%-utilized window behind it,
-        # which would silently drop the fallback reset time.
+        # Only rows with a non-NULL payload.
         stmt = (
             select(external_usage_samples.c.payload)
             .where(and_(external_usage_samples.c.slug == slug, external_usage_samples.c.payload.is_not(None)))
@@ -157,7 +155,7 @@ class UsageStore:
     def latest_external_usage_windows_by_slug(
         self, slugs: Sequence[str]
     ) -> dict[str, tuple[ExternalSubscriptionUsageWindow, ...]]:
-        # Same rule as the singular: a NULL-payload row is a failed attempt and never hides an older window.
+        # Only rows with a non-NULL payload.
         newest = self._newest_rows_by_slug(slugs, external_usage_samples.c.payload.is_not(None))
         return {slug: windows for slug, row in newest.items() if (windows := _decode_windows(row.payload))}
 
@@ -277,8 +275,7 @@ class UsageStore:
                 )
             ).one_or_none()
             if existing is not None:
-                # A replay of the exact same invocation — the row is already durable;
-                # write nothing a second time.
+                # Row already present; insert nothing.
                 return None
             conn.execute(
                 usage_facts.insert().values(

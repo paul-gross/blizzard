@@ -43,8 +43,7 @@ class IWriteRunnerIdentityRepository(IReadRunnerIdentityRepository, Protocol):
 
 
 class ICurrentRunnerIdentity(Protocol):
-    """The process's current identity — for the loop's steps and every consumer outside them: a span
-    exporter, the status view, the federation audience."""
+    """The process's current runner identity."""
 
     def current(self) -> RunnerIdentity | None:
         """The identity of the latest successful registration this process knows, or ``None``
@@ -53,8 +52,8 @@ class ICurrentRunnerIdentity(Protocol):
 
 
 class RunnerIdentityHolder:
-    """The process-lifetime :class:`ICurrentRunnerIdentity`: built at boot from the store's identity
-    row, and handed each new identity by the registration step once the row records it."""
+    """The process-lifetime :class:`ICurrentRunnerIdentity`: seeded with an initial identity, and
+    answering each newer one it is handed."""
 
     def __init__(self, identity: RunnerIdentity | None = None) -> None:
         self._identity = identity

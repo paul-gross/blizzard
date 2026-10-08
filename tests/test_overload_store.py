@@ -1,6 +1,6 @@
 """The runner-side provider-overload backoff store.
 
-``record_overload`` is check-then-insert, mirroring ``nudge_facts``; ``open_overload_facts``
+``record_overload`` is check-then-insert; ``open_overload_facts``
 must read only the newest, un-reset fact per (lease, epoch) — a superseded or fallen-through
 one is not a backing-off candidate. Driven directly against a real (tmp sqlite) store, no
 loop context."""

@@ -69,8 +69,7 @@ class ContextSampleState:
 @domain_model
 @dataclass(frozen=True)
 class ExternalUsageAttemptSummary:
-    """This ``slug``'s own newest sampling attempt — what the probe, ``runner
-    status``, and ``GET /api/subscriptions`` all show. ``miss_reason`` is a
+    """This ``slug``'s own newest sampling attempt. ``miss_reason`` is a
     :class:`~blizzard.runner.subscriptions.subscription_sampler.SampleMissReason` value or
     ``None`` on success."""
 
@@ -300,9 +299,8 @@ class IReadUsageRepository(IReadCredentialRenewalRepository, Protocol):
     def context_sample_state(self, lease_id: str) -> ContextSampleState | None:
         """What this lease's context samples already establish, or ``None`` if none exist.
 
-        One read answering both of the sampler's questions — when it last sampled (the
-        cadence anchor) and the highest context it has seen (whether the warn line has
-        already been crossed, so the warning fires once rather than every sample)."""
+        One read answering both — when the lease was last sampled and the highest context
+        sampled for it."""
         ...
 
     def context_sample_states(self, lease_ids: Sequence[str]) -> dict[str, ContextSampleState]:
@@ -320,9 +318,7 @@ class IReadUsageRepository(IReadCredentialRenewalRepository, Protocol):
 
     def latest_external_usage_windows(self, slug: str) -> tuple[ExternalSubscriptionUsageWindow, ...]:
         """This ``slug``'s own newest sampled snapshot's windows, decoded from the stored
-        payload — empty when never sampled, or when the newest attempt recorded none.
-        The usage-limit reset-time fallback's own read: no
-        harness-to-subscription mapping, just the newest windows this slug reported."""
+        payload — empty when never sampled, or when the newest attempt recorded none."""
         ...
 
     def latest_external_usage_windows_by_slug(
@@ -335,8 +331,7 @@ class IReadUsageRepository(IReadCredentialRenewalRepository, Protocol):
         ...
 
     def latest_external_usage_attempt(self, slug: str) -> ExternalUsageAttemptSummary | None:
-        """This ``slug``'s own newest attempt row, or ``None`` when never attempted —
-        the runner-local diagnostics' read."""
+        """This ``slug``'s own newest attempt row, or ``None`` when never attempted."""
         ...
 
     def latest_external_usage_attempts_by_slug(self, slugs: Sequence[str]) -> dict[str, ExternalUsageAttemptSummary]:

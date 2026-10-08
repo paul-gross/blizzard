@@ -68,7 +68,7 @@ class Turn:
     truncated: bool
 
 
-#: Keep only the most recent this-many top-level turns — one cap for both the local and the archived read.
+#: Keep only the most recent this-many top-level turns.
 MAX_TURNS = 1000
 
 

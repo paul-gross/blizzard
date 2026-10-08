@@ -1,8 +1,6 @@
 """SQLAlchemy adapter for the ask/park repository seam (package-private).
 
-:meth:`AskStore.parked_lease_ids` takes the pause-park half of its answer from the shared
-``base.PAUSE_PARKED_LEASE_IDS`` query, never from the pause adapter, so this adapter holds no
-sibling-adapter edge."""
+Pause-park lease ids come from the shared ``base.PAUSE_PARKED_LEASE_IDS`` query."""
 
 from __future__ import annotations
 

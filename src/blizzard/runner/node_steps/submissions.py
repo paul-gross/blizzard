@@ -1,6 +1,5 @@
 """What the runner submits at the end of a node-step — its completion, or a runner-configured gate
-in place of one — and what the hub's apply answers. The hub client maps each to and from the wire
-(``bzh:data-roles``)."""
+in place of one — and what the hub's apply answers."""
 
 from __future__ import annotations
 

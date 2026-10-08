@@ -18,8 +18,8 @@ from blizzard.runner.environments.provider import IWorkspaceProvider, WorkspaceR
 @dataclass(frozen=True)
 class WorkspaceSettings:
     """What a workspace binding is built from: the ``provider`` name, the runner ``root``, the
-    authored and the resolved workspace roots, the basic binding's ``repos`` and
-    ``max_environments``, the shared ``base_branch``, and the winter binding's ``env_pool``."""
+    authored and the resolved workspace roots, the ``repos`` an environment holds, the
+    ``max_environments`` cap, the ``base_branch``, and the ``env_pool`` of named environments."""
 
     provider: str
     root: Path

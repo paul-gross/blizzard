@@ -87,8 +87,7 @@ class OverloadStore:
         observed_at: datetime,
         resume_after: datetime | None,
     ) -> OverloadExit | None:
-        # Check-then-insert, mirroring `nudge_facts` (`bzh:sql-portable`): re-classifying
-        # the same exit on a later pass writes nothing and answers the exit already standing.
+        # Check-then-insert (`bzh:sql-portable`).
         with self._store.begin() as conn:
             existing = conn.execute(
                 select(overload_facts).where(

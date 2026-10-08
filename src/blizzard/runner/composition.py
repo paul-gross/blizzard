@@ -120,9 +120,9 @@ class RunnerProcess:
     executor: ThreadPoolExecutor
     #: Whether OpenTelemetry's own variables enable lease tracing, read once for this process.
     trace_settings: TracingSettings
-    #: The lease-trace sweep — ``None`` unless tracing is enabled. Only ``runner host`` drives it.
+    #: The lease-trace sweep — ``None`` unless tracing is enabled.
     trace_sweep: LeaseTraceSweep | None
-    #: The operator's replay over the same assembly and exporter — dry-run only while tracing is off.
+    #: The operator's replay over the same assembly and exporter.
     trace_replay: LeaseTraceReplay
     #: The span receiver's per-lease rate bound and its received/dropped tally, one of each per process.
     span_limiter: SpanRateLimiter
@@ -134,18 +134,18 @@ class RunnerProcess:
     log_bounds: ReceiverBounds
     #: Who this runner is at its hub; seeded from the store at boot and refreshed by every registration.
     identity: RunnerIdentityHolder
-    #: The worker telemetry receiver over this process's limiters, tallies, export and identity — the one
-    #: the OTLP routes use, so the trace-status reader and the routes read and write the same counters.
+    #: The worker telemetry receiver over this process's limiters, tallies, export and identity — one per
+    #: process, so every reader and writer of those counters shares them.
     telemetry_receiver: TelemetryReceiver
-    #: Platform spans — off unless the host passed a handle; every collaborator opens spans through it.
+    #: Platform spans — disabled unless a handle is supplied; every collaborator opens spans through it.
     platform_tracing: IPlatformTracing = field(default_factory=DisabledPlatformTracing)
-    #: Where admitted metrics and logs leave — off unless the host passed a handle.
+    #: Where admitted metrics and logs leave — disabled unless a handle is supplied.
     received_telemetry: IReceivedTelemetryExport = field(default_factory=DisabledReceivedTelemetryExport)
     #: What the enabled bindings together do with each of a worker's telemetry signals, derived once at startup.
     harness_telemetry: HarnessTelemetryPlan = field(default_factory=HarnessTelemetryPlan)
     #: What every declared binding's telemetry arrives under, which the receiver admits and routes by.
     harness_telemetry_names: tuple[HarnessTelemetryNames, ...] = ()
-    #: The credential-renewal pass, ``None`` when no provider binds a renewer; only ``runner host`` drives it.
+    #: The credential-renewal pass, ``None`` when no provider binds a renewer.
     credential_renewal: CredentialRenewalPass | None = None
 
     def close(self) -> None:
@@ -188,7 +188,7 @@ def build_runner_platform_tracing(
 ) -> IPlatformTracing:
     """The handle ``[tracing]`` and the OTLP environment decide for this runner; every span it records
     carries the id and name ``identity`` answers as it starts, and none is exported before the runner's
-    first registration. Only the ``host`` daemon builds one."""
+    first registration."""
     env = os.environ if environ is None else environ
     return build_platform_tracing(
         config.tracing,

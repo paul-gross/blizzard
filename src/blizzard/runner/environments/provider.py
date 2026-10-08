@@ -14,7 +14,7 @@ from blizzard.foundation.roles import domain_model
 @domain_model
 @dataclass(frozen=True)
 class WorkspaceRepo:
-    """A repository cloned into a basic workspace's shared projects directory."""
+    """A repository a workspace holds: its name and clone URL."""
 
     name: str
     url: str
@@ -87,8 +87,7 @@ class IWorkspaceProvider(Protocol):
 
     def spawn_root(self) -> str:
         """The directory every worker spawns in, or ``""`` when each worker spawns in
-        its own environment's workdir. Every later operation on a session — resume,
-        takeover, transcript lookup — runs from the same answer."""
+        its own environment's workdir. Stable for the provider's life."""
         ...
 
     def capacity(self) -> int:

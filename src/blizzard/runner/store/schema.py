@@ -34,7 +34,7 @@ leases = Table(
     Column("chunk_id", String, nullable=False),  # the chunk this lease attempt is for
     Column("epoch", Integer, nullable=False),  # incrementing fence, reported to the hub
     Column("pid", Integer, nullable=True),  # filled at spawn-return (phase one of a two-phase spawn)
-    Column("process_start_time", String, nullable=True),  # stable across pid reuse; REAP keys on it
+    Column("process_start_time", String, nullable=True),  # stable across pid reuse
     Column("session_id", String, nullable=True),  # harness-assigned, recorded once identified (phase two)
     Column("harness_id", String, nullable=True),  # owner of session_id; together they identify a concrete session
     Column("pgid", Integer, nullable=True),  # the current generation's owned process group
@@ -310,7 +310,7 @@ session_ends = Table(
     Column("ended_at", UtcDateTime, nullable=False),  # injected-clock stamp of the session's exit
 )
 
-# --- Hub control mirror (the declarative pause brake read on PULL) -----------
+# --- Hub control mirror (the declarative pause brake) ------------------------
 # A singleton row, mirrored so the last-known directive holds while the hub is unreachable.
 
 hub_control = Table(
@@ -439,8 +439,8 @@ usage_facts = Table(
     Column("cache_create_tokens", Integer, nullable=False),
     Column("cost_usd", Float, nullable=True),  # None = no envelope for this invocation — never fabricated
     Column("reported_cost_usd", Float, nullable=True),  # the harness's own figure, verbatim, as audit
-    # The zero-cost steps' estimate, the same value the outbound fact carries; never summed into
-    # cost_usd. Nullable and un-backfilled: NULL is no estimate, or a row from before it was kept.
+    # The zero-cost steps' estimate; never summed into cost_usd. Nullable and un-backfilled:
+    # NULL is no estimate, or a row from before it was kept.
     Column("estimated_cost_usd", Float, nullable=True),
     # False = a pre-reading row, whose cost_usd is the harness's figure rather than a share.
     Column("cost_is_share", Boolean, nullable=False, server_default=false()),
@@ -667,7 +667,6 @@ external_usage_samples = Table(
 Index("ix_external_usage_samples_slug_sampled_at", external_usage_samples.c.slug, external_usage_samples.c.sampled_at)
 
 # --- Credential renewals: append-only claim, then outcome (IWriteCredentialRenewalRepository) ---
-# A claim lands before the vendor CLI fires and is never updated; an outcome lands after it returns.
 
 credential_renewal_claims = Table(
     "credential_renewal_claims",

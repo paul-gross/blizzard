@@ -467,11 +467,8 @@ class Judgement:
         verdict = Verdict.of(harness.parse_verdict(output), self.envelope.node.choices)
         selected = verdict.selected
         if selected is None:
-            # Ask-during-judgement: the worker escalated instead of returning a verdict. The
-            # pre-elicitation check in `_advance_exited_worker` cannot see this one — it was
-            # recorded during the elicitation just above — so park on it here instead of
-            # burning a retry on a verdict that was never coming. A choice the node does not
-            # declare is verdict-less the same way, never buffered for the hub to refuse.
+            # An ask recorded during the elicitation just above is visible only here. A choice
+            # the node does not declare is verdict-less the same way, never buffered.
             ask = self.ctx.stores.asks.unforwarded_ask(lease.lease_id)
             if verdict.without_choice(ask) is VerdictOutcome.PARK_ON_ASK and ask is not None:
                 DormantSession(self.ctx, lease).park_on_ask(ask)

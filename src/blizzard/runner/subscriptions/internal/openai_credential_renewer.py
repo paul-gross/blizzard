@@ -43,7 +43,7 @@ _ACCOUNT_READ_ID = 2
 
 class OpenAICredentialRenewer:
     """Reports a ChatGPT plan's credential due once it is at or near expiry, and asks
-    ``codex app-server`` to proactively refresh it. Never raises, never writes the credential file."""
+    ``codex app-server`` to proactively refresh it."""
 
     def __init__(
         self,
@@ -60,8 +60,6 @@ class OpenAICredentialRenewer:
 
     def renewal_due(self) -> bool:
         expires_at = self._read_access_token_expiry()
-        # An unreadable, malformed, or missing token is never due — the sampler's own next
-        # attempt reports why; this binding has nothing due to ask for.
         return expires_at is not None and renewal_due(expires_at, self._clock.now(), _RENEWAL_LEAD_WINDOW)
 
     def renew(self) -> RenewalOutcome:

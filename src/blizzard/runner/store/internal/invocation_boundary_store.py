@@ -61,8 +61,7 @@ class InvocationBoundaryStore:
         opened_at: datetime,
         start_unreadable: bool = False,
     ) -> None:
-        # Check-then-insert in one transaction, mirroring `record_usage` (`bzh:sql-portable`); the marker's
-        # transition table decides, so an open or closed marker takes no second open.
+        # Check-then-insert in one transaction (`bzh:sql-portable`), gated by `boundary_transition_applies`.
         with self._store.begin() as conn:
             existing = conn.execute(
                 select(invocation_boundaries).where(
@@ -105,8 +104,7 @@ class InvocationBoundaryStore:
         advanced_at: datetime,
         start_unreadable: bool = False,
     ) -> None:
-        # Check-then-insert in one transaction, mirroring `record_boundary_open`; the marker's transition
-        # table decides, so an absent or closed marker takes no advance.
+        # Check-then-insert in one transaction (`bzh:sql-portable`), gated by `boundary_transition_applies`.
         with self._store.begin() as conn:
             marker = conn.execute(
                 select(invocation_boundaries).where(
@@ -176,7 +174,7 @@ class InvocationBoundaryStore:
         )
 
     def close_boundaries_for_lease(self, lease_id: str, *, reason: str, at: datetime) -> None:
-        # An UPDATE over `closed_at IS NULL`, so a retried call is a no-op.
+        # An UPDATE over `closed_at IS NULL`.
         with self._store.begin() as conn:
             conn.execute(
                 invocation_boundaries.update()
