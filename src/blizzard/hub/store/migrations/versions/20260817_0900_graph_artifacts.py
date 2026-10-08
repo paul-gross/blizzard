@@ -9,16 +9,32 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+import sqlalchemy as sa
 from alembic import op
-
-from blizzard.hub.store.schema import graph_artifacts
 
 revision: str = "20260817_0900_hub_graph_artifacts"
 down_revision: str | None = "20260812_1300_hub_transcript_events_subject_tool"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-_TABLES = (graph_artifacts,)
+# Frozen (``bzh:frozen-revisions``): ``graph_artifacts`` is a local literal of the hub store's declared shape.
+# ``graphs`` is an FK-resolution stub: never created, never dropped.
+_frozen_metadata = sa.MetaData()
+sa.Table(
+    "graphs",
+    _frozen_metadata,
+    sa.Column("graph_id", sa.String, primary_key=True),
+)
+_graph_artifacts = sa.Table(
+    "graph_artifacts",
+    _frozen_metadata,
+    sa.Column("graph_id", sa.String, sa.ForeignKey("graphs.graph_id"), primary_key=True),
+    sa.Column("name", sa.String, primary_key=True),
+    sa.Column("ordinal", sa.Integer, nullable=False),
+    sa.Column("content", sa.Text, nullable=False),
+)
+
+_TABLES = (_graph_artifacts,)
 
 
 def upgrade() -> None:

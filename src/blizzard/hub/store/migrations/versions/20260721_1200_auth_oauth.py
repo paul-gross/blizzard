@@ -13,7 +13,6 @@ import sqlalchemy as sa
 from alembic import op
 
 from blizzard.foundation.store.utc import UtcDateTime
-from blizzard.hub.store.schema import auth_facts
 
 revision: str = "20260721_1200_hub_auth_oauth"
 down_revision: str | None = "20260721_1100_hub_auth_identity_spine"
@@ -34,7 +33,19 @@ _auth_state = sa.Table(
     sa.Column("expires_at", UtcDateTime, nullable=False),
 )
 
-_TABLES = [_auth_state, auth_facts]
+# Frozen (``bzh:frozen-revisions``): ``auth_facts`` is a local literal of the hub store's declared shape.
+_auth_facts = sa.Table(
+    "auth_facts",
+    _frozen_metadata,
+    sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
+    sa.Column("kind", sa.String, nullable=False),
+    sa.Column("actor", sa.String, nullable=False),
+    sa.Column("subject", sa.String, nullable=False),
+    sa.Column("detail", sa.Text, nullable=False),
+    sa.Column("recorded_at", UtcDateTime, nullable=False),
+)
+
+_TABLES = [_auth_state, _auth_facts]
 
 
 def upgrade() -> None:

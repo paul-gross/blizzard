@@ -13,7 +13,6 @@ import sqlalchemy as sa
 from alembic import op
 
 from blizzard.foundation.store.utc import UtcDateTime
-from blizzard.hub.store.schema import runner_pause_facts
 
 revision: str = "20260713_1947_hub_runner_registry"
 down_revision: str | None = "20260713_1946_hub_queue_shaping"
@@ -32,7 +31,19 @@ _runner_registrations = sa.Table(
     sa.Column("last_seen_at", UtcDateTime, nullable=False),
 )
 
-_TABLES = [_runner_registrations, runner_pause_facts]
+# Frozen (``bzh:frozen-revisions``): ``runner_pause_facts`` is a local literal of the hub store's declared
+# shape.
+_runner_pause_facts = sa.Table(
+    "runner_pause_facts",
+    _frozen_metadata,
+    sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
+    sa.Column("runner_id", sa.String, sa.ForeignKey("runner_registrations.runner_id"), nullable=False),
+    sa.Column("paused", sa.Boolean, nullable=False),
+    sa.Column("set_at", UtcDateTime, nullable=False),
+    sa.Column("set_by", sa.String, nullable=False),
+)
+
+_TABLES = [_runner_registrations, _runner_pause_facts]
 
 
 def upgrade() -> None:
