@@ -50,11 +50,6 @@
           <fleet-kit-chips class="decision-chips" [options]="decisionOptions(d.choices ?? [])" [action]="true"
             [disabled]="resolvePending()" (choose)="resolve(d.decision_id, $event)" />
         }
-        <fleet-chunk-detail-gate-docket
-          [entries]="d.docket ?? []"
-          [canResolve]="canResolve()"
-          (struckChange)="onDocketStruckChange($event)"
-        />
       </div>
     }
     @if (resolvedDecision(); as d) {

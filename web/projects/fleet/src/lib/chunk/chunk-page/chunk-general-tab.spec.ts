@@ -180,7 +180,7 @@ describe('ChunkGeneralTab', () => {
     const fixture = TestBed.createComponent(ChunkGeneralTab);
     fixture.componentRef.setInput('detail', waiting);
     fixture.componentRef.setInput('canResolve', true);
-    let emitted: { decisionId: string; choice: string; chunkId: string; struck: readonly string[] } | undefined;
+    let emitted: { decisionId: string; choice: string; chunkId: string } | undefined;
     fixture.componentInstance.resolveDecision.subscribe((event) => (emitted = event));
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
@@ -188,7 +188,7 @@ describe('ChunkGeneralTab', () => {
     const buttons = el.querySelectorAll<HTMLButtonElement>('[data-testid="decision-choice"]');
     buttons[1].click(); // reject
 
-    expect(emitted).toEqual({ decisionId: 'de_01', choice: 'reject', chunkId: DETAIL.chunk_id, struck: [] });
+    expect(emitted).toEqual({ decisionId: 'de_01', choice: 'reject', chunkId: DETAIL.chunk_id });
   });
 
   it('emits pickStep when a row in the node-history summary is activated', async () => {
