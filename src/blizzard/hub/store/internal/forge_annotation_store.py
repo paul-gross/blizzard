@@ -8,9 +8,8 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import func, select
-
 from blizzard.hub.domain.observability.forge_status import IWriteAnnotatedSources
+from blizzard.hub.store.internal.newest_fact import newest_fact_select
 from blizzard.hub.store.schema import forge_annotation_facts
 from blizzard.hub.store.scoped import ScopedConnections
 
@@ -23,8 +22,9 @@ class ForgeAnnotationStore:
 
     def annotated_sources(self) -> frozenset[str]:
         table = forge_annotation_facts
-        newest = select(func.max(table.c.id).label("id")).group_by(table.c.source_name).subquery()
-        query = select(table.c.source_name).join(newest, table.c.id == newest.c.id).where(table.c.annotating)
+        query = newest_fact_select(self._store, table, table.c.source_name, None, table.c.source_name).where(
+            table.c.annotating
+        )
         with self._store.read("annotated_sources") as conn:
             return frozenset(conn.execute(query).scalars().all())
 

@@ -35,13 +35,17 @@ from blizzard.hub.store.scoped import ScopedConnections, statements_of
 def locked_token_hash(conn: Connection, runner_id: str) -> str | None:
     """The runner's current token hash, read under its registration row's write lock — a no-op
     ``UPDATE`` as the transaction's first statement, then the read (``bzh:store-exclusive-write``;
-    ``FOR UPDATE`` renders nothing on SQLite)."""
+    ``FOR UPDATE`` renders nothing on SQLite). ``conn`` is one a scoped ``write`` yielded, whose
+    tenant both statements are confined to."""
+    stmts = statements_of(conn)
     registrations = s.runner_registrations
     conn.execute(
-        registrations.update().where(registrations.c.runner_id == runner_id).values(runner_id=registrations.c.runner_id)
+        stmts.update(registrations)
+        .where(registrations.c.runner_id == runner_id)
+        .values(runner_id=registrations.c.runner_id)
     )
     return conn.execute(
-        select(registrations.c.token_hash).where(registrations.c.runner_id == runner_id)
+        stmts.select(registrations, registrations.c.token_hash).where(registrations.c.runner_id == runner_id)
     ).scalar_one_or_none()
 
 

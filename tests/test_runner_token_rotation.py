@@ -57,11 +57,12 @@ def test_a_guarded_token_read_holds_the_writer_lock_until_its_transaction_ends(t
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
     engine = create_engine_from_url(db_url)
-    store = RunnerRegistryStore(hub_store_connections(engine))
+    connections = hub_store_connections(engine)
+    store = RunnerRegistryStore(connections)
     now = datetime(2026, 7, 16, tzinfo=UTC)
     store.add(RunnerAddition(runner_id="runner-a", name="a", token_hash="old", at=now, by="op"))
 
-    with engine.connect() as winner, engine.connect() as loser:
+    with connections.read("winner") as winner, connections.read("loser") as loser:
         assert locked_token_hash(winner, "runner-a") == "old"
         loser.exec_driver_sql("PRAGMA busy_timeout=0")
         with pytest.raises(OperationalError, match="locked"):
@@ -69,7 +70,7 @@ def test_a_guarded_token_read_holds_the_writer_lock_until_its_transaction_ends(t
         loser.rollback()
         winner.commit()
 
-    with engine.connect() as late:
+    with connections.read("late") as late:
         assert locked_token_hash(late, "runner-a") == "old"
 
 
