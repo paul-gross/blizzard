@@ -131,8 +131,9 @@ describe('UsersTable', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     const guestRow = el.querySelector('[data-user-id="usr_guest"]');
-    const options = guestRow?.querySelectorAll<HTMLOptionElement>('option');
-    expect(Array.from(options ?? []).map((o) => o.value)).toEqual(['pending', 'guest', 'contributor', 'admin']);
+    guestRow?.querySelector<HTMLButtonElement>('[data-testid="users-table-role-select"]')?.click();
+    await fixture.whenStable();
+    expect(Array.from(document.querySelectorAll('[role="listbox"] [role="option"]')).map((o) => o.textContent?.trim())).toEqual(['pending', 'guest', 'contributor', 'admin']);
   });
 
   it("selects the row's current role by default, for every assignable role", async () => {
@@ -141,11 +142,11 @@ describe('UsersTable', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     const guestSelect = el.querySelector<HTMLSelectElement>('[data-user-id="usr_guest"] [data-testid="users-table-role-select"]');
-    expect(guestSelect?.value).toBe('guest');
+    expect(guestSelect?.getAttribute('aria-label')).toBe('Role for grace: guest');
     const pendingSelect = el.querySelector<HTMLSelectElement>(
       '[data-user-id="usr_pending"] [data-testid="users-table-role-select"]',
     );
-    expect(pendingSelect?.value).toBe('pending');
+    expect(pendingSelect?.getAttribute('aria-label')).toBe('Role for newcomer: pending');
   });
 
   it("disables only the selector of a row whose own assignment is in flight", async () => {
@@ -154,8 +155,8 @@ describe('UsersTable', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector<HTMLSelectElement>('[data-user-id="usr_pending"] select')?.disabled).toBe(true);
-    const others = Array.from(el.querySelectorAll<HTMLSelectElement>('[data-testid="users-table-role-select"]')).filter(
+    expect(el.querySelector<HTMLButtonElement>('[data-user-id="usr_pending"] [data-testid="users-table-role-select"]')?.disabled).toBe(true);
+    const others = Array.from(el.querySelectorAll<HTMLButtonElement>('[data-testid="users-table-role-select"]')).filter(
       (select) => select.closest('tr')?.getAttribute('data-user-id') !== 'usr_pending',
     );
     expect(others.length).toBeGreaterThan(0);
@@ -173,8 +174,9 @@ describe('UsersTable', () => {
     expect(select?.disabled).toBe(false);
     expect(pendingRow?.querySelector('[data-testid="users-table-role-static"]')).toBeNull();
 
-    const adminOption = pendingRow?.querySelector<HTMLOptionElement>('option[value="admin"]');
-    expect(adminOption?.disabled).toBe(false);
+    select?.click();
+    await fixture.whenStable();
+    expect(document.querySelector('[role="listbox"] [role="option"][title="admin"]')?.getAttribute('aria-disabled')).not.toBe('true');
   });
 
   it('disables the admin option a row does not offer the actor', async () => {
@@ -183,8 +185,9 @@ describe('UsersTable', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     const guestRow = el.querySelector('[data-user-id="usr_guest"]');
-    const adminOption = guestRow?.querySelector<HTMLOptionElement>('option[value="admin"]');
-    expect(adminOption?.disabled).toBe(true);
+    guestRow?.querySelector<HTMLButtonElement>('[data-testid="users-table-role-select"]')?.click();
+    await fixture.whenStable();
+    expect(document.querySelector('[role="listbox"] [role="option"][title="admin"]')?.getAttribute('aria-disabled')).toBe('true');
   });
 
   it('enables the admin option for a superuser actor', async () => {
@@ -193,8 +196,9 @@ describe('UsersTable', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     const guestRow = el.querySelector('[data-user-id="usr_guest"]');
-    const adminOption = guestRow?.querySelector<HTMLOptionElement>('option[value="admin"]');
-    expect(adminOption?.disabled).toBe(false);
+    guestRow?.querySelector<HTMLButtonElement>('[data-testid="users-table-role-select"]')?.click();
+    await fixture.whenStable();
+    expect(document.querySelector('[role="listbox"] [role="option"][title="admin"]')?.getAttribute('aria-disabled')).not.toBe('true');
   });
 
   it('disables the whole selector on a row that offers the actor no role', async () => {
@@ -217,8 +221,9 @@ describe('UsersTable', () => {
     const guestRow = el.querySelector('[data-user-id="usr_guest"]');
     const select = guestRow?.querySelector<HTMLSelectElement>('[data-testid="users-table-role-select"]');
     expect(select).toBeTruthy();
-    select!.value = 'contributor';
-    select!.dispatchEvent(new Event('change'));
+    select!.click();
+    await fixture.whenStable();
+    document.querySelector<HTMLElement>('[role="listbox"] [role="option"][title="contributor"]')?.click();
     await fixture.whenStable();
 
     expect(emitted).toEqual([{ userId: 'usr_guest', role: 'contributor' }]);

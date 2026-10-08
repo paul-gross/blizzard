@@ -32,9 +32,7 @@
   font-size: var(--fs-label);
   letter-spacing: 0.1em;
 }
-/* The chunks list's slim show-all filter bar — a plain
-   checkbox row above the list, not a kit component: this is the one
-   input the panel needs, not a chip/pill choice set. */
+/* The chunks list's slim show-all filter bar. */
 .chunk-filter-bar {
   flex: none;
   display: flex;

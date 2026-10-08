@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { Router, provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient } from 'fleet';
+import { hubClient, ViewportService } from 'fleet';
 import { vi } from 'vitest';
 
 import { EventsPage } from './events-page';
@@ -25,9 +25,10 @@ describe('EventsPage', () => {
 
   afterEach(() => {
     hubClient.setConfig({ baseUrl: '', fetch: undefined });
+    TestBed.inject(ViewportService).setOverride('auto');
   });
 
-  async function mount() {
+  async function mount(mode: 'desktop' | 'mobile' = 'desktop') {
     await TestBed.configureTestingModule({
       imports: [EventsPage],
       providers: [
@@ -36,6 +37,7 @@ describe('EventsPage', () => {
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
       ],
     }).compileComponents();
+    TestBed.inject(ViewportService).setOverride(mode);
     const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
     const fixture = TestBed.createComponent(EventsPage);
     await fixture.whenStable();
@@ -49,7 +51,7 @@ describe('EventsPage', () => {
     expect(el.querySelector('app-events-panel')).toBeTruthy();
   });
 
-  it('deep-links the emitted chunk onto the board, selected (issue #162)', async () => {
+  it('opens the selected chunk in the desktop board dock', async () => {
     const { fixture, navigate } = await mount();
 
     const panel = fixture.debugElement.query(By.css('app-events-panel'));
@@ -59,5 +61,13 @@ describe('EventsPage', () => {
     // The row's chunk id rides along as the `chunk` param `BoardPage` selects from —
     // it is not dropped on the way to the board.
     expect(navigate).toHaveBeenCalledWith(['/board'], { queryParams: { chunk: 'ch_live' } });
+  });
+
+  it('opens the chunk detail route from the mobile events page', async () => {
+    const { fixture, navigate } = await mount('mobile');
+    fixture.debugElement.query(By.css('app-events-panel')).componentInstance.selectChunk.emit('ch_live');
+    await fixture.whenStable();
+
+    expect(navigate).toHaveBeenCalledWith(['/board', 'chunk', 'ch_live']);
   });
 });

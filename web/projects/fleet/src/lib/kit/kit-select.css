@@ -23,6 +23,10 @@
 .trigger[aria-expanded='true'] {
   border-color: var(--cyan);
 }
+.trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
 .prefix {
   color: var(--label);
   flex: none;
@@ -69,4 +73,8 @@
 }
 .option[aria-selected='true'] {
   color: var(--amber-hi);
+}
+.option[aria-disabled='true'] {
+  cursor: not-allowed;
+  opacity: 0.5;
 }

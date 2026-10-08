@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
-import { KitAsyncState, type KitAsyncStateValue, KitBackBar, KitPanel, KitPanelHeader, type runnerApi } from 'fleet';
+import { KitAsyncState, type KitAsyncStateValue, KitBackBar, KitButton, KitPanel, KitPanelHeader, type runnerApi } from 'fleet';
 
 import { AgentRow } from '../machine/agent-row';
 import { ChunkCard } from './chunk-list/chunk-card';
@@ -46,6 +46,7 @@ import { LocalSubscriptions } from '../status/app-subscriptions';
     ChunkCard,
     KitAsyncState,
     KitBackBar,
+    KitButton,
     KitPanel,
     KitPanelHeader,
     LocalAsks,

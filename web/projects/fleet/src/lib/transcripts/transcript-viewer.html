@@ -23,14 +23,12 @@
               <div class="tc-out">{{ turn.tool?.output ?? 'running…' }}</div>
               @if (turn.sidechain; as sidechain) {
                 <div class="sidechain" data-testid="transcript-sidechain-nested">
-                  <button
-                    type="button"
-                    class="sc-head sc-open"
-                    data-testid="transcript-sidechain-open"
+                  <fleet-kit-button
+                    testid="transcript-sidechain-open"
                     (click)="emitOpenStandalone(turn)"
                   >
                     {{ sidechainLabel(sidechain) }} · open standalone
-                  </button>
+                  </fleet-kit-button>
                   <fleet-transcript-viewer [turns]="sidechain.turns" (openStandalone)="forwardOpenStandalone(turn, $event)" />
                 </div>
               }
@@ -49,14 +47,12 @@
           @case ('sidechain') {
             @if (turn.sidechain; as sidechain) {
               <div class="sidechain" data-testid="transcript-sidechain-standalone">
-                <button
-                  type="button"
-                  class="sc-head sc-open"
-                  data-testid="transcript-sidechain-open"
+                <fleet-kit-button
+                  testid="transcript-sidechain-open"
                   (click)="emitOpenStandalone(turn)"
                 >
                   {{ sidechainLabel(sidechain) }} · open standalone
-                </button>
+                </fleet-kit-button>
                 <fleet-transcript-viewer [turns]="sidechain.turns" (openStandalone)="forwardOpenStandalone(turn, $event)" />
               </div>
             }

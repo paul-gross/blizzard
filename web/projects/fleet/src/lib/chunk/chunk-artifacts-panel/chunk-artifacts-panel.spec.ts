@@ -43,7 +43,7 @@ describe('ChunkArtifactsPanel', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     const rows = Array.from(el.querySelectorAll<HTMLElement>('[data-testid="artifacts-panel-nav-item"]'));
-    expect(rows.map((r) => r.getAttribute('data-artifact-key'))).toEqual([OLDER.key, NEWER.key]);
+    expect(rows.map((r) => r.closest('fleet-kit-select-row')?.getAttribute('data-artifact-key'))).toEqual([OLDER.key, NEWER.key]);
   });
 
   it('emits pickArtifact with a clicked row’s key', async () => {
@@ -54,7 +54,7 @@ describe('ChunkArtifactsPanel', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    el.querySelector<HTMLButtonElement>(`[data-artifact-key="${OLDER.key}"]`)?.click();
+    el.querySelector<HTMLButtonElement>(`[data-artifact-key="${OLDER.key}"] button`)?.click();
     expect(selected).toBe(OLDER.key);
   });
 
@@ -65,8 +65,8 @@ describe('ChunkArtifactsPanel', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="artifacts-panel-artifact"]')?.textContent).toContain('THE FINDINGS BODY');
-    const active = el.querySelector('[data-testid="artifacts-panel-nav-item"].active');
-    expect(active?.getAttribute('data-artifact-key')).toBe(NEWER.key);
+    const active = el.querySelector('[data-testid="artifacts-panel-nav-item"].selected');
+    expect(active?.closest('fleet-kit-select-row')?.getAttribute('data-artifact-key')).toBe(NEWER.key);
   });
 
   it('opts into phone drill-down as a list without a selection and a detail with one', async () => {

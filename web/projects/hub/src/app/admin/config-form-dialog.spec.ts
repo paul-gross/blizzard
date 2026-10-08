@@ -76,6 +76,22 @@ describe('ConfigFormDialog', () => {
     expect(input.getAttribute('type')).toBe('password');
   });
 
+  it('toggles a flag through the kit chip and submits its boolean value', async () => {
+    const fixture = await mount('create');
+    fixture.componentRef.setInput('fields', [{ key: 'annotate', label: 'Annotates', kind: 'checkbox' }]);
+    await fixture.whenStable();
+    const flag = el(fixture, 'dlg-field-annotate') as HTMLButtonElement;
+    const emitted: ConfigFormValues[] = [];
+    fixture.componentInstance.submitted.subscribe((values) => emitted.push(values));
+
+    expect(flag.getAttribute('aria-pressed')).toBe('false');
+    flag.click();
+    await fixture.whenStable();
+    expect(flag.getAttribute('aria-pressed')).toBe('true');
+    (el(fixture, 'dlg-submit') as HTMLButtonElement).click();
+    expect(emitted).toEqual([{ annotate: true }]);
+  });
+
   it('shows the failed write inline', async () => {
     const fixture = await mount('edit', 'stale revision');
     expect(el(fixture, 'dlg-submit-error')!.textContent).toContain('stale revision');

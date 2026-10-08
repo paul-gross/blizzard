@@ -76,6 +76,8 @@ describe('ChunkGeneralTab', () => {
 
     const input = el.querySelector<HTMLInputElement>('[data-testid="graph-input"]')!;
     input.value = 'gr_alt';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    await fixture.whenStable();
     el.querySelector<HTMLButtonElement>('[data-testid="graph-submit"]')?.click();
 
     expect(emitted).toEqual({ chunkId: DETAIL.chunk_id, graphId: 'gr_alt' });

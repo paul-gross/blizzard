@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, input, signal } from '@angular/core';
+import { KitButton } from '../../kit/kit-button';
 
 /**
  * The shell a structurally-rendered artifact sits in: the structured reading, with
@@ -23,6 +24,7 @@ import { ChangeDetectionStrategy, Component, input, signal } from '@angular/core
 @Component({
   selector: 'fleet-chunk-artifact-raw-disclosure',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [KitButton],
   templateUrl: './chunk-artifact-raw-disclosure.html',
   styleUrl: './chunk-artifact-raw-disclosure.css',
 })

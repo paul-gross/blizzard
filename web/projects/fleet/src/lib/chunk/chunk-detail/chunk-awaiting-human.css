@@ -91,32 +91,13 @@
   color: var(--cyan);
 }
 .chips {
+  display: block;
+}
+.decision-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-}
-/* The ask/gate chips carry a distinct engraved look (uppercase, letter-spaced)
-   the shared kit's plain chip/button do not — a local, deliberate variant. */
-.chip {
-  font-family: inherit;
-  background: var(--overlay-30);
-  border: 1px solid var(--line);
-  color: var(--text);
-  cursor: pointer;
-  padding: 3px 8px;
-  font-size: var(--fs-xs);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-.chip:hover {
-  border-color: var(--cyan);
-}
-.chip:focus-visible {
-  outline: 1px solid var(--cyan);
-  outline-offset: 1px;
-}
-.chip.primary {
-  color: var(--cyan);
+  --text: var(--cyan);
 }
 .answer-row {
   display: flex;

@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import { type EventView, hubApi, compactRef, runnerDisplayName, runnerTitle, KitAsyncState, type KitAsyncStateValue, KitBadge, KitChips, type KitChipOption, KitSelect, KitPanel, type Tone, FleetWhen } from 'fleet';
+import { type EventView, hubApi, compactRef, runnerDisplayName, runnerTitle, KitAsyncState, type KitAsyncStateValue, KitBadge, KitButton, KitChips, type KitChipOption, KitSelect, KitPanel, type Tone, FleetWhen } from 'fleet';
 
 /** The severity filter row's options — `''` reads as "no filter" (every event). A
  * fixed closed set (unlike the runner/chunk axes, whose values are open and so are
@@ -57,7 +57,7 @@ const SEVERITY_TONE: Readonly<Record<EventView['severity'], Tone>> = {
 @Component({
   selector: 'app-events-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitPanel, KitBadge, KitChips, KitSelect, FleetWhen],
+  imports: [KitAsyncState, KitPanel, KitBadge, KitButton, KitChips, KitSelect, FleetWhen],
   templateUrl: './events-view.html',
   styleUrl: './events-view.css',
 })

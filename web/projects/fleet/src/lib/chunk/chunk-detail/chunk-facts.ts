@@ -1,10 +1,11 @@
-import { ChangeDetectionStrategy, Component, TemplateRef, computed, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, TemplateRef, computed, input, output, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
 import type { ChunkDetail, ChunkNeighborView, RouteView } from '../../api/hub';
 import { compactRef } from '../../core/compact-ref';
 import { runnerDisplayName } from '../../core/runner-display-name';
 import { KitButton } from '../../kit/kit-button';
+import { KitTextInput } from '../../kit/kit-text-input';
 import { KitFactList, type KitFact } from '../../kit/kit-fact-list';
 import { formatUtcYmd } from '../../core/when';
 
@@ -30,11 +31,12 @@ export interface EditGraphEvent {
 @Component({
   selector: 'fleet-chunk-detail-facts',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitButton, KitFactList, RouterLink],
+  imports: [KitButton, KitFactList, KitTextInput, RouterLink],
   templateUrl: './chunk-facts.html',
   styleUrl: './chunk-facts.css',
 })
 export class ChunkFacts {
+  protected readonly graphDraft = signal('');
   /** The chunk aggregate to render (status, node, route, epoch, graph). */
   readonly detail = input.required<ChunkDetail>();
 
@@ -132,6 +134,7 @@ export class ChunkFacts {
     const trimmed = graphId.trim();
     if (!trimmed) return;
     this.editGraph.emit({ chunkId: this.detail().chunk_id, graphId: trimmed });
+    this.graphDraft.set('');
   }
 
   /** The node fact's rendered value — the current node's name, falling back to its

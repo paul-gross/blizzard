@@ -2,8 +2,11 @@
   @for (option of options(); track option.value) {
     <fleet-kit-chip
       [selected]="option.value === selectedValue()"
+      [action]="action()"
+      [disabled]="disabled() || !!option.disabled"
+      [title]="option.title ?? null"
       [testid]="option.testid ?? null"
-      (click)="choose.emit(option.value)"
+      (click)="pick(option)"
     >
       {{ option.label }}
     </fleet-kit-chip>

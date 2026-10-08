@@ -351,7 +351,7 @@ describe('Mobile chunk drill-down', () => {
     const el = await open(`/board/chunk/${CHUNK_ID}?tab=artifacts`);
 
     const rows = Array.from(el.querySelectorAll<HTMLButtonElement>('[data-testid="artifacts-tab-nav-item"]'));
-    expect(rows.map((r) => r.getAttribute('data-artifact-key'))).toEqual(['build.branch.1', 'review.findings.2']);
+    expect(rows.map((r) => r.closest('fleet-kit-select-row')?.getAttribute('data-artifact-key'))).toEqual(['build.branch.1', 'review.findings.2']);
     // review.findings.2 (11:30) is the more recent of the two (build.branch.1 is 11:10).
     expect(el.querySelector('[data-testid="artifacts-tab-artifact"]')?.textContent).toContain('THE FINDINGS BODY');
   });
@@ -359,8 +359,8 @@ describe('Mobile chunk drill-down', () => {
   it('deep-links a specific artifact pre-selected — the dock link’s own contract', async () => {
     const el = await open(`/board/chunk/${CHUNK_ID}?tab=artifacts&artifact=build.branch.1`);
 
-    const active = el.querySelector('[data-testid="artifacts-tab-nav-item"].active');
-    expect(active?.getAttribute('data-artifact-key')).toBe('build.branch.1');
+    const active = el.querySelector('[data-testid="artifacts-tab-nav-item"].selected');
+    expect(active?.closest('fleet-kit-select-row')?.getAttribute('data-artifact-key')).toBe('build.branch.1');
     expect(el.querySelector('[data-testid="artifacts-tab-artifact"]')?.textContent).toContain('paul-gross/blizzard');
     expect(el.querySelector('[data-testid="artifacts-tab-artifact"]')?.textContent).not.toContain('THE FINDINGS BODY');
   });
@@ -372,7 +372,7 @@ describe('Mobile chunk drill-down', () => {
     let el = harness.fixture.nativeElement as HTMLElement;
     expect(el.querySelector('[data-testid="artifacts-tab-artifact"]')?.textContent).toContain('THE FINDINGS BODY');
 
-    el.querySelector<HTMLButtonElement>('[data-testid="artifacts-tab-nav-item"][data-artifact-key="build.branch.1"]')?.click();
+    el.querySelector<HTMLButtonElement>('[data-artifact-key="build.branch.1"] [data-testid="artifacts-tab-nav-item"]')?.click();
     await settle(harness.fixture);
     el = harness.fixture.nativeElement as HTMLElement;
 
@@ -413,7 +413,7 @@ describe('Mobile chunk drill-down', () => {
     await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}?tab=artifacts`);
     await settle(harness.fixture);
     let el = harness.fixture.nativeElement as HTMLElement;
-    const row = el.querySelector<HTMLButtonElement>('[data-artifact-key="build.branch.1"]')!;
+    const row = el.querySelector<HTMLButtonElement>('[data-artifact-key="build.branch.1"] button')!;
     row.focus();
     row.click();
     await settle(harness.fixture);
@@ -422,7 +422,7 @@ describe('Mobile chunk drill-down', () => {
 
     el.querySelector<HTMLButtonElement>('[data-testid="artifacts-tab-back"]')?.click();
     await settle(harness.fixture);
-    expect(document.activeElement).toBe(el.querySelector('[data-artifact-key="build.branch.1"]'));
+    expect(document.activeElement).toBe(el.querySelector('[data-artifact-key="build.branch.1"] button'));
   });
 
   it('opens one asset artifact in full, one level deeper', async () => {

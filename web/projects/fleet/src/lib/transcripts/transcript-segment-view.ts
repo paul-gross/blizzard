@@ -3,6 +3,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
 import type { TranscriptSegmentIndexEntry } from '../api/hub';
 import { harnessName } from '../core/harness-name';
 import { KitBadge } from '../kit/kit-badge';
+import { KitButton } from '../kit/kit-button';
 import type { SidechainOpenEvent } from './transcript-viewer';
 import { TranscriptViewer } from './transcript-viewer';
 import type { TranscriptTurn } from './transcript-turn';
@@ -26,7 +27,7 @@ const MAX_RENDERED_TURNS = 1000;
 @Component({
   selector: 'fleet-transcript-segment-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitBadge, TranscriptViewer],
+  imports: [KitBadge, KitButton, TranscriptViewer],
   templateUrl: './transcript-segment-view.html',
   styleUrl: './transcript-segment-view.css',
 })

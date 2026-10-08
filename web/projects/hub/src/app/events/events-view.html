@@ -43,15 +43,14 @@
           <div class="ev" data-testid="events-row" [attr.data-severity]="ev.severity">
             <fleet-when class="time" data-testid="events-time" [iso]="ev.recorded_at" />
             @if (ev.chunk_id; as chunkId) {
-              <button
-                type="button"
+              <fleet-kit-button
                 class="chunk"
                 data-testid="events-chunk"
-                [attr.aria-label]="'Open chunk ' + shortId(chunkId)"
+                [ariaLabel]="'Open chunk ' + shortId(chunkId)"
                 (click)="selectChunk.emit(chunkId)"
               >
                 {{ shortId(chunkId) }}
-              </button>
+              </fleet-kit-button>
             } @else {
               <span class="chunk-none" aria-hidden="true">—</span>
             }

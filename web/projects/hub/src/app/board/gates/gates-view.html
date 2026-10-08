@@ -17,12 +17,10 @@
       emptyTestid="gates-empty"
     >
       @for (gate of gates(); track gate.decision_id) {
-        <button
-          type="button"
+        <fleet-kit-select-row
           class="gg"
           data-testid="rail-gate"
           [attr.data-chunk]="gate.chunk_id"
-          [attr.aria-label]="'Open chunk ' + shortId(gate.chunk_id) + ' to resolve its gate'"
           (click)="selectChunk.emit(gate.chunk_id)"
         >
           <span class="h">
@@ -33,7 +31,7 @@
           @if (choices(gate); as choiceLine) {
             <span class="opts" data-testid="rail-gate-choices">{{ choiceLine }}</span>
           }
-        </button>
+        </fleet-kit-select-row>
       }
     </fleet-kit-async-state>
 </fleet-kit-panel>

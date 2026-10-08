@@ -36,16 +36,6 @@
 .edit-input {
   flex: 1;
   min-width: 0;
-  font-family: inherit;
-  font-size: var(--fs-xs);
-  background: var(--overlay-35);
-  border: 1px solid var(--line);
-  color: var(--text);
-  padding: 2px 4px;
-}
-.edit-input:focus-visible {
-  outline: 1px solid var(--cyan);
-  outline-offset: 0;
 }
 /* One edge per line inside its fact cell — a wrapped run of chips made two neighbors
    read as one string of text. */

@@ -4,6 +4,8 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
 export interface KitChipOption {
   readonly value: string;
   readonly label: string;
+  readonly disabled?: boolean;
+  readonly title?: string;
   /** Optional per-chip test hook, forwarded to the rendered {@link KitChip}. */
   readonly testid?: string;
 }
@@ -27,6 +29,10 @@ export interface KitChipOption {
 })
 export class KitChip {
   readonly selected = input(false);
+  /** One-shot action chrome omits toggle semantics. */
+  readonly action = input(false);
+  readonly disabled = input(false);
+  readonly title = input<string | null>(null);
   readonly testid = input<string | null>(null);
 }
 
@@ -51,7 +57,13 @@ export class KitChip {
 export class KitChips {
   readonly options = input.required<readonly KitChipOption[]>();
   readonly selectedValue = input<string | null>(null);
+  readonly action = input(false);
+  readonly disabled = input(false);
 
   /** Emits the clicked option's `value`. */
   readonly choose = output<string>();
+
+  protected pick(option: KitChipOption): void {
+    if (!this.disabled() && !option.disabled) this.choose.emit(option.value);
+  }
 }

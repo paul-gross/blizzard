@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
 
 import { injectNowSignal } from '../core/now-signal';
 import { formatAbsolute, formatLocalClockWithDay, type LocalClockWithDay } from '../core/when';
+import { KitButton } from '../kit/kit-button';
 import type { TranscriptSidechain, TranscriptTool, TranscriptTurn } from './transcript-turn';
 
 /** The `<summary>` line's own cap — clamps visually via CSS too
@@ -60,7 +61,7 @@ export interface SidechainOpenEvent {
 @Component({
   selector: 'fleet-transcript-viewer',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [],
+  imports: [KitButton],
   templateUrl: './transcript-viewer.html',
   styleUrl: './transcript-viewer.css',
 })

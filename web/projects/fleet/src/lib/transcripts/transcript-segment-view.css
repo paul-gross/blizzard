@@ -14,17 +14,3 @@
   background: var(--overlay-25);
   margin: 0 0 6px;
 }
-.seam {
-  display: block;
-  width: 100%;
-  text-align: left;
-  background: transparent;
-  border: none;
-  border-bottom: 1px solid var(--line);
-  color: var(--cyan);
-  font-family: inherit;
-  font-size: var(--fs-xs);
-  cursor: pointer;
-  padding: 4px 0;
-  margin-bottom: 4px;
-}

@@ -6,19 +6,9 @@
         <p class="ask-q" data-testid="question-text">{{ q.question }}</p>
         @if (canAnswer()) {
           @if (q.options && q.options.length > 0) {
-            <div class="chips">
-              @for (opt of q.options; track opt) {
-                <button
-                  type="button"
-                  class="chip"
-                  data-testid="question-option"
-                  [disabled]="pendingAnswerQuestionIds().includes(q.question_id)"
-                  (click)="submitAnswer(q.question_id, opt)"
-                >
-                  {{ opt }}
-                </button>
-              }
-            </div>
+            <fleet-kit-chips class="chips" [options]="questionOptions(q.options)" [action]="true"
+              [disabled]="pendingAnswerQuestionIds().includes(q.question_id)"
+              (choose)="submitAnswer(q.question_id, $event)" />
           }
           <div class="answer-row">
             <fleet-kit-text-input
@@ -57,20 +47,8 @@
           }
         </p>
         @if (canResolve()) {
-          <div class="chips">
-            @for (c of d.choices ?? []; track c.name) {
-              <button
-                type="button"
-                class="chip primary"
-                data-testid="decision-choice"
-                [title]="c.description"
-                [disabled]="resolvePending()"
-                (click)="resolve(d.decision_id, c.name)"
-              >
-                {{ c.name }}
-              </button>
-            }
-          </div>
+          <fleet-kit-chips class="decision-chips" [options]="decisionOptions(d.choices ?? [])" [action]="true"
+            [disabled]="resolvePending()" (choose)="resolve(d.decision_id, $event)" />
         }
         <fleet-chunk-detail-gate-docket
           [entries]="d.docket ?? []"

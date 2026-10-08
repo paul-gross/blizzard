@@ -17,12 +17,10 @@
       emptyTestid="questions-empty"
     >
       @for (q of questions(); track q.question_id) {
-        <button
-          type="button"
+        <fleet-kit-select-row
           class="qq"
           data-testid="rail-question"
           [attr.data-chunk]="q.chunk_id"
-          [attr.aria-label]="'Open chunk ' + shortId(q.chunk_id) + ' to answer its question'"
           (click)="selectChunk.emit(q.chunk_id)"
         >
           <span class="h">
@@ -33,7 +31,7 @@
           @if (q.options && q.options.length > 0) {
             <span class="opts" data-testid="rail-question-options">{{ q.options.join(' · ') }}</span>
           }
-        </button>
+        </fleet-kit-select-row>
       }
     </fleet-kit-async-state>
 </fleet-kit-panel>

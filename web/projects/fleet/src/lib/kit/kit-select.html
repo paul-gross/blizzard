@@ -9,6 +9,7 @@
   [attr.aria-controls]="open() ? listboxId : null"
   [attr.aria-label]="triggerName()"
   [attr.data-testid]="testid()"
+  [disabled]="disabled()"
   (click)="toggle()"
 >
   @if (label(); as prefix) {
@@ -41,6 +42,7 @@
         class="option"
         tabindex="-1"
         [cdkOption]="option.value"
+        [cdkOptionDisabled]="!!option.disabled"
         [attr.data-testid]="option.testid ?? null"
         [title]="option.label"
         (click)="pick(option.value)"

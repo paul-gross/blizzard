@@ -195,7 +195,10 @@ describe('MachineDetail header', () => {
     let dismissed = false;
     fixture.componentInstance.dismiss.subscribe(() => (dismissed = true));
 
-    el.querySelector<HTMLElement>('[data-testid="detail-close"]')?.click();
+    const close = el.querySelector<HTMLButtonElement>('[data-testid="detail-close"]');
+    expect(close?.tagName).toBe('BUTTON');
+    expect(close?.getAttribute('aria-label')).toBe('Close');
+    close?.click();
 
     expect(dismissed).toBe(true);
   });

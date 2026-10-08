@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output, signal } from '@angular/core';
 
-import { KitAsyncState, type KitAsyncStateValue, KitBadge, KitButton, KitConfirmDialog } from 'fleet';
+import { KitAsyncState, type KitAsyncStateValue, KitBadge, KitButton, KitConfirmDialog, KitTextInput } from 'fleet';
 
 import { lifecycleTone } from '../../core/lifecycle-tone';
 import type { ScopeDescriptionEditEvent } from './scope-list';
@@ -47,7 +47,7 @@ export interface ScopePanelVm {
 @Component({
   selector: 'app-scope-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitBadge, KitButton, KitConfirmDialog],
+  imports: [KitAsyncState, KitBadge, KitButton, KitConfirmDialog, KitTextInput],
   templateUrl: './scope-panel.html',
   styleUrl: './scope-panel.css',
 })
@@ -75,6 +75,17 @@ export class FleetScopePanel {
 
   /** The lifecycle badge's tone, from the hub's one lifecycle owner. */
   protected readonly lifecycleTone = lifecycleTone;
+
+  protected readonly descriptionDraft = signal<{ slug: string; original: string; value: string } | null>(null);
+
+  protected descriptionValue(panel: ScopePanelVm): string {
+    const draft = this.descriptionDraft();
+    return draft?.slug === panel.slug && draft.original === panel.description ? draft.value : panel.description;
+  }
+
+  protected updateDescription(panel: ScopePanelVm, value: string): void {
+    this.descriptionDraft.set({ slug: panel.slug, original: panel.description, value });
+  }
 
   protected readonly pendingConfirm = signal<{
     readonly heading: string;

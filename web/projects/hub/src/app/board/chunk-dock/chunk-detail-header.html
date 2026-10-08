@@ -98,9 +98,9 @@
       <span class="claimed" data-testid="route-info" [attr.title]="claimantTitle()">Claimed by {{ claimant() }}</span>
     }
     <span class="nd" data-testid="detail-node" [attr.title]="detail().current_node_id">{{ currentNodeName() }}</span>
-    <button type="button" class="close" data-testid="detail-close" aria-label="Close" (click)="dismiss.emit()">
+    <fleet-kit-button class="close" testid="detail-close" ariaLabel="Close" (click)="dismiss.emit()">
       ✕
-    </button>
+    </fleet-kit-button>
   </div>
 </header>
 

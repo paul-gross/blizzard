@@ -290,7 +290,7 @@ describe('mobile Fleet screen layout shell sweep (web:shell-sweep)', () => {
       const never = agingCard.querySelector<HTMLElement>(
         '[data-subscription-slug="never"] [data-testid="subscription-pace-group-no-sample"]',
       )!;
-      expect(never.textContent).toContain('this endpoint could not be reached');
+      expect(never.textContent?.trim()).toBe('NO SAMPLE YET — endpoint_unreachable');
       expect(never.getBoundingClientRect().right).toBeLessThanOrEqual(agingCard.getBoundingClientRect().right + 1);
 
       expect(

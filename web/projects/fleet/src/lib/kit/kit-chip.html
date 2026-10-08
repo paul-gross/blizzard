@@ -1,8 +1,10 @@
 <button
   type="button"
   class="chip"
-  [class.selected]="selected()"
-  [attr.aria-pressed]="selected()"
+  [class.selected]="!action() && selected()"
+  [attr.aria-pressed]="action() ? null : selected()"
+  [disabled]="disabled()"
+  [attr.title]="title()"
   [attr.data-testid]="testid()"
 >
   <ng-content />
