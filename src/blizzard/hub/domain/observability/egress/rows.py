@@ -30,6 +30,8 @@ class ExportedStep:
     step_key: str
     trace_id: str
     step_kind: str
+    tenant_id: str | None
+    tenant_name: str | None
     chunk_id: str
     work_refs: tuple[str, ...]
     sources: tuple[str, ...]
@@ -94,6 +96,8 @@ class ExportedInvocation:
     usage_id: int
     step_key: str
     trace_id: str
+    tenant_id: str | None
+    tenant_name: str | None
     chunk_id: str
     epoch: int
     graph_id: str
@@ -126,11 +130,14 @@ def trace_id_text(key: StepKey) -> str:
 
 
 def step_row(summary: StepSummary, exported_at: datetime) -> ExportedStep:
-    """The ``steps`` row of a closed step. ``runner_id`` and ``runner_name`` name the holder of a runner step only."""
+    """The ``steps`` row of a closed step. ``runner_id`` and ``runner_name`` name the holder of a runner step only;
+    ``tenant_id`` and ``tenant_name`` name the chunk's tenant as the summary's facts were read."""
     return ExportedStep(
         step_key=summary.step_key.text(),
         trace_id=trace_id_text(summary.step_key),
         step_kind=summary.kind.value,
+        tenant_id=summary.tenant,
+        tenant_name=summary.tenant_name,
         chunk_id=summary.chunk_id,
         work_refs=summary.work_refs,
         sources=summary.work_sources,
@@ -178,7 +185,7 @@ def invocation_row(
     facts: StepFacts, step: NodeStep, usage: AttributedUsage, exported_at: datetime
 ) -> ExportedInvocation:
     """The ``invocations`` row of one usage row, positioned by ``step`` — the runner step holding its epoch,
-    open or closed; its runner's name is ``facts``' owner of the usage's epoch."""
+    open or closed; its runner's name is ``facts``' owner of the usage's epoch, and its tenant ``facts``' tenant."""
     if usage.chunk_id != facts.chunk_id:
         raise ValueError(f"usage {usage.usage_id} belongs to {usage.chunk_id}, not {facts.chunk_id}")
     fact = usage.fact
@@ -186,6 +193,8 @@ def invocation_row(
         usage_id=usage.usage_id,
         step_key=step.key.text(),
         trace_id=trace_id_text(step.key),
+        tenant_id=facts.tenant,
+        tenant_name=facts.tenant_name,
         chunk_id=usage.chunk_id,
         epoch=fact.epoch,
         graph_id=step.position.graph_id,

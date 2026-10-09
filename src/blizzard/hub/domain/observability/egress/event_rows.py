@@ -137,6 +137,8 @@ class ExportedEventsEntry:
     step_key: str
     trace_id: str
     step_started_at: datetime
+    tenant_id: str | None
+    tenant_name: str | None
     chunk_id: str
     epoch: int
     spawn_generation: int
@@ -163,7 +165,7 @@ def derivation_id(segment_id: str, extractor_version: str, derived_at: datetime)
 def _anchored(
     record_type: str, segment_id: str, facts: StepFacts, chunk_id: str, epoch: int, spawn_generation: int, at: datetime
 ) -> ExportedEventsEntry:
-    """A row of ``record_type`` carrying only the columns every record has: the segment's step, position and
+    """A row of ``record_type`` carrying only the columns every record has: the segment's step, position, tenant and
     ``exported_at``."""
     if chunk_id != facts.chunk_id:
         raise ValueError(f"segment {segment_id} belongs to {chunk_id}, not {facts.chunk_id}")
@@ -190,6 +192,8 @@ def _anchored(
         step_key=step.key.text(),
         trace_id=trace_id_text(step.key),
         step_started_at=step.start,
+        tenant_id=facts.tenant,
+        tenant_name=facts.tenant_name,
         chunk_id=chunk_id,
         epoch=epoch,
         spawn_generation=spawn_generation,

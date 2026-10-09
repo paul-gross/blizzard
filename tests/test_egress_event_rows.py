@@ -26,6 +26,7 @@ from blizzard.hub.domain.observability.egress.rows import step_row
 from blizzard.hub.domain.observability.tracing.facts import StepFacts
 from blizzard.hub.domain.observability.tracing.steps import identify_steps
 from blizzard.hub.domain.observability.tracing.summary import summarize_step
+from blizzard.hub.tenancy import TenantId
 from tests import trace_fixtures as fx
 
 pytestmark = pytest.mark.unit
@@ -39,8 +40,8 @@ PLANTED = "SENTINEL-do-not-leak"
 EVENT_COLUMNS = [
     "record_type", "segment_id", "extractor_version", "derivation_id", "derived_at", "complete", "event_count",
     "dropped_at", "kind", "subject", "tool", "turn_path", "occurrence", "occurred_at", "depth", "agent_type",
-    "step_key", "trace_id", "step_started_at", "chunk_id", "epoch", "spawn_generation", "graph_id", "graph_name",
-    "node_id", "node_name", "harness_id", "harness_version", "model", "effort", "exported_at",
+    "step_key", "trace_id", "step_started_at", "tenant_id", "tenant_name", "chunk_id", "epoch", "spawn_generation",
+    "graph_id", "graph_name", "node_id", "node_name", "harness_id", "harness_version", "model", "effort", "exported_at",
 ]  # fmt: skip
 
 RELATIVE = FilePathPolicy("relative", KEY)
@@ -139,6 +140,7 @@ def test_every_row_carries_its_step_chunk_and_graph() -> None:
     for row in _rows(_event()):
         assert (row.step_key, row.step_started_at) == (step.key.text(), step.start)
         assert len(row.trace_id) == 32
+        assert (row.tenant_id, row.tenant_name) == (None, None)
         assert (row.chunk_id, row.epoch, row.spawn_generation) == ("ch_1", 1, 3)
         assert (row.graph_id, row.graph_name, row.node_id, row.node_name) == ("g1", "flow", "g1-build", "build")
         assert row.exported_at == EXPORTED
@@ -179,13 +181,16 @@ def test_a_drop_gives_one_dropped_row_carrying_its_step() -> None:
 def _release_facts() -> StepFacts:
     """A chunk whose every identifying value differs from the fixtures' defaults."""
     graph = replace(fx.graph("g5", "plan", "ship"), name="release-flow")
-    return fx.make_facts(chunk_id="ch_7", graphs={"g5": graph}, pin_graph_id="g5", **fx.runner_epoch(2, 40, "r-x"))
+    facts = fx.make_facts(chunk_id="ch_7", graphs={"g5": graph}, pin_graph_id="g5", **fx.runner_epoch(2, 40, "r-x"))
+    return replace(facts, tenant=TenantId("ten_release"), tenant_name="release")
 
 
 _RELEASE_STEP = {
     "step_key": "ch_7/2",
     "trace_id": "f3e010092ca8029cd2d02a1a497f5ece",
     "step_started_at": datetime(2026, 1, 1, 0, 0, 40, tzinfo=UTC),
+    "tenant_id": "ten_release",
+    "tenant_name": "release",
     "chunk_id": "ch_7",
     "epoch": 2,
     "spawn_generation": 4,

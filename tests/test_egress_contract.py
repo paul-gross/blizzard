@@ -64,6 +64,7 @@ from blizzard.hub.egress.writer import (
     PlacedFile,
     rfc3339_utc,
 )
+from blizzard.hub.tenancy import TenantId
 from tests import trace_fixtures as fx
 from tests.egress_recipes import COST_BY_NODE_BY_DAY, SLOWEST_STATION_OF_THE_WEEK, recipe
 from tests.repo_files import repo_root
@@ -84,6 +85,8 @@ _END = "<!-- egress-dictionary:end -->"
 _TOKEN = "gold"
 _FIRST_PASS = datetime(2026, 1, 2, 0, 0, tzinfo=UTC)
 _RUNNER_NAMES = {"r-1": "runner-one", "r-9": "runner-nine"}
+_TENANT, _TENANT_NAME, _RENAMED = TenantId("ten_01GOLDENACME"), "acme", "acme-renamed"
+_EVENTS_TENANT, _EVENTS_TENANT_NAME = TenantId("ten_01GOLDENGLOBEX"), "globex"
 _SECOND_PASS = datetime(2026, 1, 3, 0, 0, tzinfo=UTC)
 _SETTINGS = EgressWriterSettings(max_rows_per_file=1000, min_free_bytes=0)
 _CODE_SCHEMAS = {"steps": STEPS_SCHEMA, "invocations": INVOCATIONS_SCHEMA, "events": EVENTS_SCHEMA}
@@ -135,7 +138,9 @@ def _scenario_rows() -> tuple[list[tuple[ExportedStep, CursorKey]], list[Exporte
     invocations: list[ExportedInvocation] = []
     usage_id = 0
     for name, scenario in fx.scenarios().items():
-        facts = replace(scenario, chunk_id=f"ch_{name}", runner_names=_RUNNER_NAMES)
+        facts = replace(
+            scenario, chunk_id=f"ch_{name}", runner_names=_RUNNER_NAMES, tenant=_TENANT, tenant_name=_TENANT_NAME
+        )
         found = identify_steps(facts)
         for step in found:
             if step.close is None:
@@ -157,13 +162,19 @@ def _rewritten(
     steps: list[tuple[ExportedStep, CursorKey]], invocations: list[ExportedInvocation]
 ) -> tuple[list[tuple[ExportedStep, CursorKey]], list[ExportedInvocation]]:
     """The second pass: one step and one invocation exported again, newer and with changed values, as a late-usage
-    rewrite produces."""
+    rewrite produces — after their tenant was renamed, so the newer copies carry the new name."""
     step, key = next((s, k) for s, k in steps if s.invocations > 0)
     again = replace(
-        step, input_tokens=step.input_tokens + 7, invocations=step.invocations + 1, exported_at=_SECOND_PASS
+        step,
+        input_tokens=step.input_tokens + 7,
+        invocations=step.invocations + 1,
+        tenant_name=_RENAMED,
+        exported_at=_SECOND_PASS,
     )
     invocation = invocations[0]
-    later = replace(invocation, output_tokens=invocation.output_tokens + 3, exported_at=_SECOND_PASS)
+    later = replace(
+        invocation, output_tokens=invocation.output_tokens + 3, tenant_name=_RENAMED, exported_at=_SECOND_PASS
+    )
     return [(again, key)], [later]
 
 
@@ -242,7 +253,9 @@ _EVENTS_SECOND_DROPS = [_DROPS["seg-dropped"], _DROPS["seg-revived"]]
 
 
 def _events_facts() -> Any:
-    return replace(fx.scenarios()["runner-step"], chunk_id=_EVENTS_CHUNK)
+    return replace(
+        fx.scenarios()["runner-step"], chunk_id=_EVENTS_CHUNK, tenant=_EVENTS_TENANT, tenant_name=_EVENTS_TENANT_NAME
+    )
 
 
 def _events_pass_rows(

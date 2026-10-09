@@ -49,6 +49,7 @@ from tests.support import (
     added_runner,
     count_queries,
     count_rows_read,
+    default_tenant,
     hub_level_connections,
     hub_scoped,
     hub_store_connections,
@@ -153,6 +154,14 @@ def _rows(writer: InMemoryEgressWriter, dataset: str) -> list[dict[str, object]]
     return [dict(row.values) for b in writer.batches if b.schema.name == dataset for row in b.rows]
 
 
+def _tenant_name(hub: HubHarness) -> str | None:
+    return hub.hub_services.tenants.open_tenants.name(default_tenant(hub.engine))
+
+
+def _tenant_of(row: dict[str, object]) -> tuple[object, object]:
+    return (row["tenant_id"], row["tenant_name"])
+
+
 def _anchored(hub: HubHarness, writer: IEgressWriter, config: EgressConfig = _SETTLED) -> None:
     _sweep(hub, writer, config).sweep()
 
@@ -249,6 +258,10 @@ def test_each_open_tenants_rows_are_exported_hydrated_in_their_own_tenant(tmp_pa
     ]
     assert [r["chunk_id"] for r in _rows(writer, "invocations")] == [chunk_id, "ch_other"]
     assert [r["chunk_id"] for r in _rows(writer, "events")] == ["ch_other"]
+    home = (default_tenant(hub.engine), _tenant_name(hub))
+    assert [_tenant_of(r) for r in _rows(writer, "steps")] == [home, ("ten_other", "ten_other")]
+    assert [_tenant_of(r) for r in _rows(writer, "invocations")] == [home, ("ten_other", "ten_other")]
+    assert [_tenant_of(r) for r in _rows(writer, "events")] == [("ten_other", "ten_other")]
     steps, invocations, events = (_store(hub).newest_cursor(d) for d in ("steps", "invocations", "events"))
     assert steps is not None and steps.step is not None
     assert invocations is not None
@@ -353,6 +366,48 @@ def test_rows_name_their_runner_as_it_last_registered_and_a_later_copy_follows_a
     named = [("r1", "night-runner"), ("r1", "day-runner")]
     assert [(r["runner_id"], r["runner_name"]) for r in _rows(writer, "steps")] == named
     assert [(r["runner_id"], r["runner_name"]) for r in _rows(writer, "invocations")] == named
+
+
+def test_rows_name_their_tenant_as_named_when_written_and_a_later_copy_follows_a_rename(tmp_path: Path) -> None:
+    hub, graph = _hub(tmp_path)
+    writer = InMemoryEgressWriter()
+    _anchored(hub, writer)
+    tenant, before = default_tenant(hub.engine), _tenant_name(hub)
+    chunk_id = _closed_step(hub, graph, 1)
+    _sweep(hub, writer).sweep()
+
+    with hub.engine.begin() as conn:
+        conn.execute(sa.update(schema.tenants).where(schema.tenants.c.tenant_id == tenant).values(name="renamed"))
+    hub.hub_services.tenants.open_tenants.refresh()
+    hub.clock.advance(timedelta(hours=3))
+    _push_usage(hub, chunk_id, _node_id(graph))
+    _sweep(hub, writer).sweep()
+
+    named = [(tenant, before), (tenant, "renamed")]
+    assert [_tenant_of(r) for r in _rows(writer, "steps")] == named
+    assert [_tenant_of(r) for r in _rows(writer, "invocations")] == named
+
+
+def test_the_exports_failure_and_recovery_reach_the_hub_log_and_no_tenants_log(tmp_path: Path) -> None:
+    hub, graph = _hub(tmp_path)
+    writer = InMemoryEgressWriter()
+    sweep = _sweep(hub, writer)
+    sweep.sweep()
+    _closed_step(hub, graph, 1)
+    seed_open_tenant_chunk(hub, "ten_other", "ch_other", hub.clock.now())
+    hub.clock.advance(timedelta(seconds=3))
+    writer.fail = _IO
+    sweep.sweep()
+    writer.fail = None
+    hub.clock.advance(timedelta(seconds=61))
+
+    sweep.sweep()
+
+    assert [r["chunk_id"] for r in _rows(writer, "steps")][-1] == "ch_other"
+    assert _kinds(hub) == ["egress-write-failed", "egress-write-recovered"]
+    with hub.engine.connect() as conn:
+        tenant_kinds = conn.execute(hub_scoped(sa.select(schema.event_log.c.kind))).scalars().all()
+    assert [kind for kind in tenant_kinds if kind.startswith("egress-")] == []
 
 
 def test_usage_for_a_step_that_is_still_open_only_moves_the_position(tmp_path: Path) -> None:

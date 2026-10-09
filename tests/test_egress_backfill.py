@@ -19,7 +19,7 @@ from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.event_rows import FilePathPolicy
 from blizzard.hub.egress.writer import EgressFailure, EgressFailureCause
 from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
-from tests.support import HubHarness, InMemoryEgressWriter, hub_level_connections
+from tests.support import HubHarness, InMemoryEgressWriter, default_tenant, hub_level_connections
 from tests.test_egress_events_sweep import _OLD_VERSION, _Events
 from tests.test_egress_sweep import _SETTLED, _closed_step, _cursor_rows, _hub, _kinds, _rows, _store, _sweep
 from tests.trace_hub import seed_open_tenant_chunk, trace_store
@@ -99,6 +99,12 @@ def test_the_backfill_writes_each_open_tenants_rows(tmp_path: Path) -> None:
     assert [r["chunk_id"] for r in _rows(written, "steps")] == [chunk_id, "ch_other"]
     assert [r["chunk_id"] for r in _rows(written, "invocations")] == [chunk_id, "ch_other"]
     assert [(c.dataset, c.rows) for c in result.datasets] == [("steps", 2), ("invocations", 2), ("events", 1)]
+    home = (default_tenant(hub.engine), hub.hub_services.tenants.open_tenants.name(default_tenant(hub.engine)))
+    other = ("ten_other", "ten_other")
+    tenants = {
+        d: [(r["tenant_id"], r["tenant_name"]) for r in _rows(written, d)] for d in ("steps", "invocations", "events")
+    }
+    assert tenants == {"steps": [home, other], "invocations": [home, other], "events": [other]}
 
 
 def test_the_window_is_half_open(tmp_path: Path) -> None:

@@ -117,6 +117,18 @@
       "meaning": "When that step started; the row's partition and backfill time"
     },
     {
+      "name": "tenant_id",
+      "type": "string",
+      "nullable": true,
+      "meaning": "The tenant the row belongs to; null in a file written before the upgrade to tenants, every row of which belongs to the tenant the upgrade carried the hub's data into"
+    },
+    {
+      "name": "tenant_name",
+      "type": "string",
+      "nullable": true,
+      "meaning": "That tenant's name when the row was written, so a later copy follows a rename; null where tenant_id is"
+    },
+    {
       "name": "chunk_id",
       "type": "string",
       "nullable": false,
