@@ -1,9 +1,12 @@
 """The hub event log move: the hub's own export occurrences leave the tenant's ``event_log`` for ``hub_event_log`` with
 their ids, a runner's report of its own export and every tenant occurrence staying; a re-run over a stopped move copies
-nothing twice; the move pages in bounded batches; and the downgrade, with one tenant only, moves them back exactly."""
+nothing twice, while an event whose id the hub log gives another event takes a fresh one; the move pages in bounded
+batches; the downgrade, with one tenant only, moves them back exactly; and a downgrade then upgrade keeps every export
+event once."""
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
@@ -94,6 +97,21 @@ def _rows(engine: sa.Engine, table: str) -> list[tuple[Any, ...]]:
         return [tuple(row) for row in conn.execute(sa.text(f"SELECT {columns} FROM {table} ORDER BY id"))]
 
 
+def _hub_event(row_id: int | None, kind: str, message: str) -> dict[str, Any]:
+    return {"id": row_id, "at": _T0 + timedelta(minutes=1), "kind": kind, "message": message}
+
+
+_HUB_INSERT = sa.text(
+    "INSERT INTO hub_event_log (id, recorded_at, severity, kind, message, detail)"
+    " VALUES (:id, :at, 'info', :kind, :message, NULL)"
+)
+
+
+def _messages_by_kind(engine: sa.Engine, table: str) -> list[tuple[str, str]]:
+    with engine.connect() as conn:
+        return sorted((row.kind, row.message) for row in conn.execute(sa.text(f"SELECT kind, message FROM {table}")))
+
+
 def _event_log(engine: sa.Engine) -> list[tuple[Any, ...]]:
     with engine.connect() as conn:
         return [tuple(row) for row in conn.execute(sa.text("SELECT * FROM event_log ORDER BY id"))]
@@ -158,6 +176,71 @@ def test_a_rerun_over_a_stopped_move_copies_nothing_twice(tmp_path: Path) -> Non
 
         assert _rows(engine, "hub_event_log") == [before[row_id] for row_id in sorted(moving)]
         assert _ids(engine, "event_log") == staying
+    finally:
+        engine.dispose()
+
+
+def test_a_rerun_copies_an_event_whose_id_the_hub_log_gives_another_event_under_a_fresh_id(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    runner, engine, tenant = _at_the_surrogate(tmp_path)
+    try:
+        moving, _ = _seed(engine, tenant)
+        before = {row[0]: row for row in _rows(engine, "event_log")}
+        with engine.begin() as conn:
+            conn.execute(
+                sa.text(
+                    "INSERT INTO hub_event_log (id, recorded_at, severity, kind, message, detail)"
+                    " SELECT id, recorded_at, severity, kind, message, detail FROM event_log WHERE id = 1"
+                )
+            )
+            conn.execute(_HUB_INSERT, _hub_event(2, "hub-started", "started"))
+        caplog.set_level(logging.INFO, logger="alembic.runtime.migration")
+
+        runner.upgrade(_MOVE)
+
+        rows = _rows(engine, "hub_event_log")
+        assert [row for row in rows if row[0] in moving - {2}] == [before[row_id] for row_id in sorted(moving - {2})]
+        assert [row[3] for row in rows if row[0] == 2] == ["hub-started"]
+        [reissued] = [row for row in rows if row[4] == "m2"]
+        assert reissued[0] not in moving and reissued[1:] == before[2][1:]
+        assert "1 hub export events took fresh hub_event_log ids" in caplog.text
+    finally:
+        engine.dispose()
+
+
+def test_a_downgrade_then_upgrade_keeps_every_export_event_once(tmp_path: Path) -> None:
+    runner, engine, tenant = _at_the_surrogate(tmp_path)
+
+    def unnumbered(n: int, kind: str, **names: str) -> dict[str, Any]:
+        return {**_event(n, kind, **names), "id": None, "tenant": tenant}
+
+    try:
+        with engine.begin() as conn:
+            conn.execute(_INSERT, [unnumbered(n, "attempt-failed", runner_id="run_1") for n in (1, 2)])
+            conn.execute(_INSERT, [unnumbered(n, "trace-export-failed") for n in (3, 4, 5)])
+        runner.upgrade(_MOVE)
+        # At head the hub records its own occurrences, and the tenant's log reuses the moved events' ids, so the
+        # downgrade gives two of them fresh ids — the ids the hub's own occurrences hold.
+        with engine.begin() as conn:
+            conn.execute(
+                _HUB_INSERT, [_hub_event(None, "hub-migrated", "migrated"), _hub_event(None, "hub-started", "s")]
+            )
+            conn.execute(_INSERT, [unnumbered(n, "attempt-failed", runner_id="run_1") for n in (6, 7)])
+        runner.downgrade(_SURROGATE)
+        # Below the move the hub records one more export into the tenant's log.
+        with engine.begin() as conn:
+            conn.execute(_INSERT, unnumbered(8, "egress-write-failed"))
+
+        runner.upgrade(_MOVE)
+
+        assert _messages_by_kind(engine, "hub_event_log") == [
+            ("egress-write-failed", "m8"),
+            ("hub-migrated", "migrated"),
+            ("hub-started", "s"),
+            *(("trace-export-failed", f"m{n}") for n in (3, 4, 5)),
+        ]
+        assert _messages_by_kind(engine, "event_log") == [("attempt-failed", f"m{n}") for n in (1, 2, 6, 7)]
     finally:
         engine.dispose()
 

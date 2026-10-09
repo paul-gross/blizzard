@@ -3,14 +3,17 @@
 Every ``event_log`` row of one of the eight export kinds that names no runner, chunk, lease or node — the occurrences
 of the hub's own trace and egress exports, which concern no tenant — moves to ``hub_event_log`` with its ``id``,
 ``recorded_at``, ``severity``, ``kind``, ``message`` and ``detail``. A runner's report of its own trace export names
-its runner and stays in its tenant's log. The move pages along ``event_log.id`` in bounded batches: each page copies
-the rows ``hub_event_log`` does not yet hold, then deletes the page from ``event_log``, so a re-run after a stop part
-way copies nothing twice. ``hub_event_log`` then gains ``ix_hub_event_log_kind_recorded_at`` for the exports'
-newest-of-a-kind reads.
+its runner and stays in its tenant's log. The move pages along ``event_log.id`` in bounded batches, then deletes each
+page from ``event_log``. A row whose id ``hub_event_log`` holds with the same ``kind``, ``recorded_at`` and ``message``
+was copied by a run stopped part way and is not copied again; one whose id ``hub_event_log`` gives another event — a
+hub occurrence written after an earlier upgrade the downgrade left behind — is copied under a fresh id, and the count
+logged; every other row keeps its id. ``hub_event_log`` then gains ``ix_hub_event_log_kind_recorded_at`` for the
+exports' newest-of-a-kind reads.
 
 The downgrade refuses while more than one tenant exists, naming them; with one it moves every row of the eight kinds
 back into ``event_log``, stamped with that tenant and naming no runner, chunk, lease or node, under its own id when
-``event_log`` holds none by it and a fresh one otherwise; rows of the hub's other kinds stay. It drops the index.
+``event_log`` holds none by it and a fresh one otherwise; rows of the hub's other kinds stay. It drops the index. Each
+direction leaves the Postgres id sequence of the log it copied into past every id copied in under its own.
 Revision ID: 20261008_1600_hub_event_log_move
 Revises: 20261008_1500_scope_surrogate
 """
@@ -111,16 +114,38 @@ def _sync_id_sequence(bind: sa.Connection, table: sa.TableClause) -> None:
     bind.execute(sa.select(sa.func.setval(sa.func.pg_get_serial_sequence(table.name, "id"), newest, False)))
 
 
+def _already_copied(bind: sa.Connection, page: list[int]) -> set[int]:
+    """The ids of ``page`` whose ``hub_event_log`` row is the same event — one a run stopped part way copied — rather
+    than another event under the same id."""
+    e, h = _event_log.c, _hub_event_log.c
+    same = sa.and_(h.id == e.id, h.kind == e.kind, h.recorded_at == e.recorded_at, h.message == e.message)
+    return set(
+        bind.execute(sa.select(e.id).select_from(_event_log.join(_hub_event_log, same)).where(e.id.in_(page))).scalars()
+    )
+
+
 def _move_up(bind: sa.Connection) -> int:
     e = _event_log.c
     moving = (e.kind.in_(_EXPORT_KINDS), *(e[name].is_(None) for name in _UNNAMED))
-    moved = 0
+    moved = reissued = 0
     for page in _pages(bind, _event_log, *moving):
-        held = _held(bind, _hub_event_log, page)
-        copied = sa.select(*(e[name] for name in _CARRIED)).where(e.id.in_(page), e.id.not_in(held))
-        bind.execute(sa.insert(_hub_event_log).from_select(list(_CARRIED), copied))
+        taken = _held(bind, _hub_event_log, page)
+        colliding = sorted(set(taken) - _already_copied(bind, page))
+        kept = sa.select(*(e[name] for name in _CARRIED)).where(e.id.in_(page), e.id.not_in(taken))
+        bind.execute(sa.insert(_hub_event_log).from_select(list(_CARRIED), kept))
+        if colliding:
+            _sync_id_sequence(bind, _hub_event_log)
+            fresh = [name for name in _CARRIED if name != "id"]
+            bind.execute(
+                sa.insert(_hub_event_log).from_select(
+                    fresh, sa.select(*(e[name] for name in fresh)).where(e.id.in_(colliding)).order_by(e.id)
+                )
+            )
+            reissued += len(colliding)
         bind.execute(sa.delete(_event_log).where(e.id.in_(page)))
         moved += len(page)
+    if reissued:
+        _log.info("%d hub export events took fresh hub_event_log ids; their own were taken", reissued)
     _sync_id_sequence(bind, _hub_event_log)
     return moved
 
@@ -148,6 +173,8 @@ def _move_down(bind: sa.Connection, tenant_id: str | None) -> None:
                 [*_CARRIED, "tenant_id"], sa.select(*kept).where(h.id.in_(page), h.id.not_in(taken))
             )
         )
+        if taken:
+            _sync_id_sequence(bind, _event_log)
         reissued = bind.execute(
             sa.insert(_event_log).from_select(
                 [name for name in _CARRIED if name != "id"] + ["tenant_id"],
@@ -157,6 +184,7 @@ def _move_down(bind: sa.Connection, tenant_id: str | None) -> None:
         if reissued:
             _log.info("%d hub export events took fresh event_log ids; their own were taken", reissued)
         bind.execute(sa.delete(_hub_event_log).where(h.id.in_(page)))
+    _sync_id_sequence(bind, _event_log)
 
 
 def downgrade() -> None:
