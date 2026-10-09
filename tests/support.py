@@ -1942,3 +1942,76 @@ class InMemoryEgressWriter:
 
 def _conforms_in_memory_egress_writer(x: InMemoryEgressWriter) -> IEgressWriter:
     return x
+
+
+def seed_drainable_history(
+    conn: sa.Connection, tenant: TenantId, *, graph_id: str, node_id: str, at: datetime, open_refs: int = 1
+) -> None:
+    """Give ``tenant`` a whole chunk history whose tables a deletion drains apart, every hub invariant holding over it
+    while it is whole. Chunk ``ch_ran`` was claimed by runner ``r1`` (its route, token and lease at an epoch the runner
+    owns), migrated by that runner's landing — which released the route — restarted at a hub-owned epoch, and completed
+    with one work ref whose close was enqueued and retired; chunk ``ch_open`` holds ``open_refs`` work refs and nothing
+    else. Both chunks pin ``graph_id``, the tenant's own, whose ``node_id`` a runner executes.
+    Partway through a drain the epoch owners, route facts and close intents are gone while the restart, the migration,
+    the completion and some work refs are not. Chunk ids are global: one store holds one such history."""
+    later = at + timedelta(seconds=1)
+    rows: list[tuple[sa.Table, dict[str, Any]]] = [
+        (schema.chunks, {"chunk_id": "ch_ran", "graph_id": graph_id, "minted_at": at, "model": "m"}),
+        (schema.chunks, {"chunk_id": "ch_open", "graph_id": graph_id, "minted_at": at, "model": "m"}),
+        (schema.epoch_owners, {"chunk_id": "ch_ran", "epoch": 1, "runner_id": "r1", "recorded_at": at}),
+        (
+            schema.route_created,
+            {
+                "route_id": "rt_ran",
+                "chunk_id": "ch_ran",
+                "runner_id": "r1",
+                "workspace_id": "w",
+                "created_at": at,
+                "seq": 1,
+            },
+        ),
+        (schema.route_token_minted, {"chunk_id": "ch_ran", "token_hash": "h", "seq": 2, "minted_at": at}),
+        (schema.lease_facts, {"chunk_id": "ch_ran", "epoch": 1, "runner_id": "r1", "minted_at": at}),
+        (
+            schema.chunk_migrations,
+            {
+                "migration_id": "mg_ran",
+                "chunk_id": "ch_ran",
+                "from_node_id": node_id,
+                "from_graph_id": graph_id,
+                "to_graph_id": graph_id,
+                "landed_node_id": node_id,
+                "epoch": 1,
+                "recorded_at": at,
+            },
+        ),
+        (schema.route_released, {"chunk_id": "ch_ran", "released_at": later, "seq": 3}),
+        (schema.epoch_owners, {"chunk_id": "ch_ran", "epoch": 2, "runner_id": None, "recorded_at": later}),
+        (
+            schema.chunk_restarts,
+            {
+                "chunk_id": "ch_ran",
+                "graph_id": graph_id,
+                "to_node_id": node_id,
+                "epoch": 2,
+                "restarted_by": "op",
+                "recorded_at": later,
+            },
+        ),
+        (schema.chunk_completed, {"chunk_id": "ch_ran", "completed_at": later, "completed_by": "op"}),
+        (schema.chunk_work_refs, {"chunk_id": "ch_ran", "source": "github", "ref": "1"}),
+        (
+            schema.close_intents,
+            {"chunk_id": "ch_ran", "source": "github", "ref": "1", "enqueued_at": later, "retired_at": later},
+        ),
+    ]
+    for table, values in rows:
+        conn.execute(hub_scoped(sa.insert(table)).values(tenant_id=tenant, **values))
+    if open_refs:
+        conn.execute(
+            hub_scoped(sa.insert(schema.chunk_work_refs)),
+            [
+                {"tenant_id": tenant, "chunk_id": "ch_open", "source": "github", "ref": f"o{n}"}
+                for n in range(open_refs)
+            ],
+        )

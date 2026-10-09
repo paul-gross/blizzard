@@ -15,14 +15,29 @@ import pytest
 import sqlalchemy as sa
 from sqlalchemy import insert
 
+from blizzard.auth_core import Role
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.runtime import init_environment as init_hub
 from blizzard.hub.store import schema as hub
+from blizzard.hub.store.internal.tenant_teardown_store import TenantTeardownStore
+from blizzard.hub.store.scoped import is_tenant_owned
+from blizzard.hub.tenancy import TenantId
 from blizzard.runner.runtime import init_environment as init_runner
 from blizzard.runner.store import schema as runner
 from blizzard.tools.invariants import HubInvariants, RunnerInvariants
 from tests.runner_fakes import FakeProbe
-from tests.support import add_tenant, close_tenant, hub_scoped, migrate_to, seed_chunk, seed_graph, stamp
+from tests.support import (
+    add_tenant,
+    close_tenant,
+    hub_level_connections,
+    hub_scoped,
+    migrate_to,
+    seed_chunk,
+    seed_drainable_history,
+    seed_graph,
+    seed_membership,
+    stamp,
+)
 
 pytestmark = pytest.mark.component
 
@@ -1935,6 +1950,74 @@ def test_a_closed_tenants_chunks_are_not_facts_checked(tmp_path: Path) -> None:
     close_tenant(engine, second)
 
     assert [v for v in HubInvariants(engine).run() if v.invariant == "hub:merge-queue-single-state"] == []
+
+
+def _drained_tables(engine: sa.Engine, tenant: TenantId) -> set[str]:
+    """The tables still holding a row of ``tenant``."""
+    with engine.connect() as conn:
+        return {
+            table.name
+            for table in hub.metadata.sorted_tables
+            if is_tenant_owned(table)
+            and conn.execute(
+                hub_scoped(sa.select(sa.func.count()).select_from(table).where(table.c.tenant_id == tenant))
+            ).scalar_one()
+        }
+
+
+def test_a_closed_tenant_mid_drain_breaks_no_check(tmp_path: Path) -> None:
+    """A deletion drains a closed tenant's tables one after another, so partway through a restart outlives its epoch's
+    owner and a runner landing's migration outlives the route release it carried. Neither is a breach: a closed
+    tenant is checked only for what its deletion leaves behind."""
+    engine = _hub_engine(tmp_path)
+    second = add_tenant(engine, "second")
+    with engine.begin() as conn:
+        conn.execute(
+            insert(hub.graphs).values(
+                tenant_id=second, graph_id="gr_2", name="g", entry_node_id="nd_2", definition_yaml="", created_at=_NOW
+            )
+        )
+        conn.execute(
+            insert(hub.graph_nodes).values(
+                tenant_id=second,
+                node_id="nd_2",
+                graph_id="gr_2",
+                name="build",
+                executor="runner",
+                session="fresh",
+                judged_by="worker",
+            )
+        )
+        seed_drainable_history(conn, second, graph_id="gr_2", node_id="nd_2", at=_NOW, open_refs=3)
+    assert HubInvariants(engine).run() == []
+    close_tenant(engine, second)
+    teardown = TenantTeardownStore(hub_level_connections(engine))
+
+    half_drained: list[set[str]] = []
+    while teardown.drain_batch(second, 1):
+        assert HubInvariants(engine).run() == [], f"after draining down to {sorted(_drained_tables(engine, second))}"
+        left = _drained_tables(engine, second)
+        if "epoch_owners" not in left and {"chunk_restarts", "chunk_migrations", "chunk_completed"} <= left:
+            half_drained.append(left)
+
+    assert half_drained, "no batch boundary left a restart without its owner and a migration without its release"
+    assert _drained_tables(engine, second) == set()
+
+
+def test_a_membership_naming_a_tenant_absent_from_tenants_is_a_violation(tmp_path: Path) -> None:
+    """A deletion removes the tenant's memberships with the tenant itself; one left behind is a leftover row too."""
+    engine = _hub_engine(tmp_path)
+    second = add_tenant(engine, "second")
+    seed_membership(engine, second, "u_1", Role.CONTRIBUTOR)
+    assert HubInvariants(engine).run() == []
+    with engine.begin() as conn:
+        conn.execute(hub_scoped(sa.delete(hub.tenants).where(hub.tenants.c.tenant_id == second)))
+
+    breaches = [v for v in HubInvariants(engine).run() if v.invariant == "hub:no-row-of-a-deleted-tenant"]
+
+    assert [v.detail for v in breaches] == [
+        f"membership_facts holds 1 row(s) of tenant {second}, which is not in tenants"
+    ]
 
 
 def test_a_row_naming_a_tenant_absent_from_tenants_is_a_violation(tmp_path: Path) -> None:

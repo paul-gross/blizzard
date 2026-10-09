@@ -22,6 +22,7 @@ import httpx
 import pytest
 from sqlalchemy import Engine, Row, insert, select
 
+from blizzard.foundation.node_steps import Executor
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.tokens import TokenHash
 from blizzard.hub.app import CLOSE_DRAIN_INTERVAL_SECONDS
@@ -29,6 +30,7 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.tenancy.teardown import DRAIN_BATCH_ROWS
 from blizzard.hub.store import schema as hub_schema
 from blizzard.hub.store.scoped import is_tenant_owned
+from blizzard.hub.tenancy import TenantId
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.internal.winter_cli import SubprocessWinterCli
 from blizzard.runner.harness.identity import OPENCODE_HARNESS_ID
@@ -70,7 +72,7 @@ from tests.crash.support import (
 from tests.crash_points import discover_crash_points
 from tests.otlp_sink import OtlpSink, otlp_sink
 from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
-from tests.support import create_repositories, fixture_repository, free_port, hub_scoped
+from tests.support import create_repositories, fixture_repository, free_port, hub_scoped, seed_drainable_history
 
 pytestmark = pytest.mark.crash_sweep
 
@@ -3614,9 +3616,11 @@ def test_kill9_at_lease_trace_crash_point(crash_env: CrashEnv, tmp_path: Path, p
 
 # --- Tenant deletion — the hub drains a closed tenant in batches and the sweep finishes what a kill cut short ---
 
-#: Rows the doomed tenant holds beyond its packaged graphs: past one drain batch, so the drain commits a batch and has
-#: a next one to begin.
+#: Work refs the doomed tenant holds beyond its packaged graphs and its chunk history: past one drain batch, so the
+#: drain commits a batch and has a next one to begin, and that batch ends among the work refs — the restart and the
+#: migration drained after them outlive the epoch owner and the route release drained before them.
 _DOOMED_FILLER_ROWS = DRAIN_BATCH_ROWS + 500
+_TEARDOWN_HISTORY_AT = datetime(2026, 7, 20, 12, 0, 0, tzinfo=UTC)
 _BYSTANDER_FILLER_ROWS = 50
 
 #: The rows each point's kill leaves the deletion fact counting, given the rows the drain removes in all.
@@ -3642,6 +3646,32 @@ def _fill_keyed_locks(hub_dir: Path, tenant: str, count: int) -> None:
             conn.execute(
                 hub_scoped(insert(hub_schema.keyed_locks)),
                 [{"tenant_id": tenant, "namespace": "crash-teardown", "key": f"k{n}"} for n in range(count)],
+            )
+    finally:
+        engine.dispose()
+
+
+def _seed_doomed_history(hub_dir: Path, tenant: str) -> None:
+    """Give ``tenant`` a chunk history, pinned to one of its packaged graphs, that its drain takes apart table by table."""
+    engine = create_engine_from_url(HubConfig.load(hub_dir).db_url)
+    try:
+        with engine.begin() as conn:
+            nodes = hub_schema.graph_nodes.c
+            graph_id, node_id = conn.execute(
+                hub_scoped(
+                    select(nodes.graph_id, nodes.node_id)
+                    .where(nodes.tenant_id == tenant, nodes.executor == Executor.RUNNER.value)
+                    .order_by(nodes.node_id)
+                    .limit(1)
+                )
+            ).one()
+            seed_drainable_history(
+                conn,
+                TenantId(tenant),
+                graph_id=graph_id,
+                node_id=node_id,
+                at=_TEARDOWN_HISTORY_AT,
+                open_refs=_DOOMED_FILLER_ROWS,
             )
     finally:
         engine.dispose()
@@ -3709,7 +3739,7 @@ def test_kill9_at_teardown_crash_point(crash_env: CrashEnv, tmp_path: Path, poin
         [bystander] = [t["tenant_id"] for t in listed.json() if t["tenant_id"] != doomed]
         terminate(hub_proc)
 
-        _fill_keyed_locks(hub_dir, doomed, _DOOMED_FILLER_ROWS)
+        _seed_doomed_history(hub_dir, doomed)
         _fill_keyed_locks(hub_dir, bystander, _BYSTANDER_FILLER_ROWS)
         doomed_before, bystander_before = _tenant_rows(hub_dir, doomed), _tenant_rows(hub_dir, bystander)
         total = _drained_rows(doomed_before)
@@ -3731,6 +3761,11 @@ def test_kill9_at_teardown_crash_point(crash_env: CrashEnv, tmp_path: Path, poin
         assert _drained_rows(_tenant_rows(hub_dir, doomed)) == total - killed.rows_removed, (
             f"{point}: the rows left and the rows counted removed disagree — a batch and its count split"
         )
+        if point == "teardown.after-batch.before-next":
+            left = _tenant_rows(hub_dir, doomed)
+            assert "epoch_owners" not in left and {"chunk_restarts", "chunk_migrations"} <= left.keys(), (
+                f"the kill's batch boundary leaves no half-drained history: {sorted(left)}"
+            )
         _assert_hub_invariants(hub_dir, when=f"immediately after kill at {point}")
 
         # Restart unarmed: the sweep's first pass finds the deletion underway and finishes it.
