@@ -7,6 +7,8 @@ seeded with the same shape of records under names that never repeat across them;
 - a listing in either tenant names none of the other's records;
 - a request in one tenant naming the other's record — by path or in its body — answers as for a record that does
   not exist, and changes nothing the other tenant reads;
+- the same request sent by the record's own tenant answers otherwise than one naming a record never minted, so no
+  such probe is blind to a leak;
 - a write in one tenant lands in that tenant only: the other tenant's every read answers byte for byte as before;
 - each tenant's live stream replays its own events only;
 - a runner-minted id posted in both tenants is two rows, each answered on its own (MT-STORE-18);
@@ -115,8 +117,11 @@ class _Probe:
     - ``stream``: the live stream — each tenant's replay tail holds its own events only.
     - ``global``: serves no tenant's state — the same answer in every tenant.
 
-    Every ``foreign`` and ``own`` request runs between two snapshots of the first tenant's reads, which must agree.
-    ``reason`` says why a probe answers other than the plain ``404`` (``foreign``) or ``2xx`` (``own``).
+    Every ``foreign`` and ``own`` request runs between two snapshots of the first tenant's reads, which must agree;
+    and each ``foreign`` request, sent by the record's own tenant, answers otherwise than one naming records never
+    minted — a probe whose record cannot tell itself from a ghost could never see a leak.
+    ``reason`` says why a probe answers other than the plain ``404`` (``foreign``) or ``2xx`` (``own``); ``ids``
+    names the seeded record a path parameter or body placeholder takes when it is not the one of the same name.
     """
 
     kind: Kind
@@ -124,14 +129,22 @@ class _Probe:
     status: int = 404
     params: dict[str, str] | None = None
     reason: str = ""
+    ids: dict[str, str] | None = None
 
 
-def _f(body: object = None, *, status: int = 404, params: dict[str, str] | None = None, reason: str = "") -> _Probe:
-    return _Probe("foreign", body, status, params, reason)
+def _f(
+    body: object = None,
+    *,
+    status: int = 404,
+    params: dict[str, str] | None = None,
+    reason: str = "",
+    ids: dict[str, str] | None = None,
+) -> _Probe:
+    return _Probe("foreign", body, status, params, reason, ids)
 
 
-def _own(body: object = None, *, status: int = 200, reason: str = "") -> _Probe:
-    return _Probe("own", body, status, None, reason)
+def _own(body: object = None, *, status: int = 200, reason: str = "", ids: dict[str, str] | None = None) -> _Probe:
+    return _Probe("own", body, status, None, reason, ids)
 
 
 def _list(**params: str) -> _Probe:
@@ -142,9 +155,18 @@ def _list(**params: str) -> _Probe:
 _MARKER = {"node_id": "nd_x", "epoch": "1"}
 _WINDOW = {"since": "2026-01-01T00:00:00Z", "until": "2026-12-31T00:00:00Z"}
 _SINCE = {"since": "2026-01-01T00:00:00Z"}
-_SEGMENT = {"node_id": "nd_x", "epoch": "1"}
+_SEGMENT = {"node_id": "{node_id}", "epoch": "1"}
 _NOT_THE_BEARER = "a runner acts as itself: a path naming any other runner is refused before it is looked up"
 _UNLISTED = "a list edit names chunk ids: a chunk outside this tenant's list answers as one that is in no list"
+#: A routine run's chunk: the run-context reads answer only for one.
+_RUN = {"chunk_id": "run_chunk_id"}
+#: A resting chunk: the backlog's list edits name one.
+_BACKLOG = {"chunk_id": "spare_chunk_id"}
+#: The chunk an accepted garden proposal minted: the answered-findings reads answer only for one. It is promoted, so
+#: the queue's list edits name it too.
+_GARDEN = {"chunk_id": "garden_chunk_id"}
+#: The built-in ``hub`` source — the only one with an editor — and an item at a ref the other tenant never allocated.
+_ITEMS = {"source": "hub_source"}
 _LIST = _Probe("listing")
 _EXIT = {"finding_ids": ["{finding_id}"], "note": "n"}
 
@@ -171,14 +193,14 @@ _PROBES: dict[tuple[str, str], _Probe] = {
     ("GET", "/api/spend"): _list(**_SINCE),
     # -- backlog and queue -----------------------------------------------------------------------------------
     ("GET", "/api/backlog"): _LIST,
-    ("PUT", "/api/backlog"): _f({"chunk_ids": ["{chunk_id}"]}, status=409, reason=_UNLISTED),
+    ("PUT", "/api/backlog"): _f({"chunk_ids": ["{chunk_id}"]}, status=409, reason=_UNLISTED, ids=_BACKLOG),
     ("POST", "/api/backlog/position"): _f(
-        {"chunk_id": "{chunk_id}", "after_chunk_id": None}, status=409, reason=_UNLISTED
+        {"chunk_id": "{chunk_id}", "after_chunk_id": None}, status=409, reason=_UNLISTED, ids=_BACKLOG
     ),
     ("GET", "/api/queue"): _LIST,
-    ("PUT", "/api/queue"): _f({"chunk_ids": ["{chunk_id}"]}, status=409, reason=_UNLISTED),
+    ("PUT", "/api/queue"): _f({"chunk_ids": ["{chunk_id}"]}, status=409, reason=_UNLISTED, ids=_GARDEN),
     ("POST", "/api/queue/position"): _f(
-        {"chunk_id": "{chunk_id}", "after_chunk_id": None}, status=409, reason=_UNLISTED
+        {"chunk_id": "{chunk_id}", "after_chunk_id": None}, status=409, reason=_UNLISTED, ids=_GARDEN
     ),
     ("GET", "/api/chunk-counts"): _LIST,
     # -- chunks ----------------------------------------------------------------------------------------------
@@ -210,7 +232,7 @@ _PROBES: dict[tuple[str, str], _Probe] = {
     ("GET", "/api/chunks/{chunk_id}/transcripts/{segment_id}"): _f(),
     ("GET", "/api/chunks/{chunk_id}/work-items"): _f(),
     ("GET", "/api/runs"): _LIST,
-    ("GET", "/api/runs/{chunk_id}"): _f(),
+    ("GET", "/api/runs/{chunk_id}"): _f(ids=_RUN),
     # -- configuration ---------------------------------------------------------------------------------------
     ("POST", "/api/config/apply"): _own(),
     ("GET", "/api/config/changes"): _LIST,
@@ -301,11 +323,11 @@ _PROBES: dict[tuple[str, str], _Probe] = {
     ("PATCH", "/api/work-sources/{source}"): _f({}),
     ("POST", "/api/work-sources/{source}/enable"): _f(),
     ("POST", "/api/work-sources/{source}/retire"): _f(),
-    ("GET", "/api/work-sources/{source}/items"): _f(),
-    ("POST", "/api/work-sources/{source}/items"): _f({"title": "t", "body": "b"}),
-    ("GET", "/api/work-sources/{source}/items/{ref}"): _f(),
-    ("PATCH", "/api/work-sources/{source}/items/{ref}"): _f({}),
-    ("DELETE", "/api/work-sources/{source}/items/{ref}"): _f(),
+    ("GET", "/api/work-sources/{source}/items"): _Probe("listing", ids=_ITEMS),
+    ("POST", "/api/work-sources/{source}/items"): _own({"title": "beta-extra", "body": "b"}, status=201, ids=_ITEMS),
+    ("GET", "/api/work-sources/{source}/items/{ref}"): _f(ids=_ITEMS),
+    ("PATCH", "/api/work-sources/{source}/items/{ref}"): _f({}, ids=_ITEMS),
+    ("DELETE", "/api/work-sources/{source}/items/{ref}"): _f(ids=_ITEMS),
     # -- routines and scopes ---------------------------------------------------------------------------------
     ("POST", "/api/routines"): _f(
         {"name": "beta-extra", "graph_name": "{graph_name}", "default_scope_slug": "s"},
@@ -351,12 +373,12 @@ _PROBES: dict[tuple[str, str], _Probe] = {
         reason="answers the statuses of the named chunks it holds: another tenant's chunk is left out as unknown",
     ),
     ("GET", "/api/fleet/chunks/{chunk_id}"): _f(),
-    ("GET", "/api/fleet/chunks/{chunk_id}/analytics/counts/agent-types"): _f(params=_SINCE),
-    ("GET", "/api/fleet/chunks/{chunk_id}/analytics/counts/files"): _f(params=_SINCE),
-    ("GET", "/api/fleet/chunks/{chunk_id}/analytics/counts/nodes"): _f(params=_SINCE),
-    ("GET", "/api/fleet/chunks/{chunk_id}/analytics/counts/skills"): _f(params=_SINCE),
-    ("GET", "/api/fleet/chunks/{chunk_id}/analytics/spend/graphs"): _f(params=_SINCE),
-    ("GET", "/api/fleet/chunks/{chunk_id}/analytics/spend/nodes"): _f(params=_SINCE),
+    ("GET", "/api/fleet/chunks/{chunk_id}/analytics/counts/agent-types"): _f(params=_SINCE, ids=_RUN),
+    ("GET", "/api/fleet/chunks/{chunk_id}/analytics/counts/files"): _f(params=_SINCE, ids=_RUN),
+    ("GET", "/api/fleet/chunks/{chunk_id}/analytics/counts/nodes"): _f(params=_SINCE, ids=_RUN),
+    ("GET", "/api/fleet/chunks/{chunk_id}/analytics/counts/skills"): _f(params=_SINCE, ids=_RUN),
+    ("GET", "/api/fleet/chunks/{chunk_id}/analytics/spend/graphs"): _f(params=_SINCE, ids=_RUN),
+    ("GET", "/api/fleet/chunks/{chunk_id}/analytics/spend/nodes"): _f(params=_SINCE, ids=_RUN),
     ("POST", "/api/fleet/chunks/{chunk_id}/completions"): _f(
         {"choice": "pass", "epoch": 1, "from_node_id": "build", "route_token": "{route_token}"}
     ),
@@ -364,10 +386,10 @@ _PROBES: dict[tuple[str, str], _Probe] = {
         {"from_node_id": "build", "epoch": 1, "route_token": "{route_token}"}
     ),
     ("GET", "/api/fleet/chunks/{chunk_id}/envelope"): _f(),
-    ("GET", "/api/fleet/chunks/{chunk_id}/findings"): _f(),
-    ("GET", "/api/fleet/chunks/{chunk_id}/findings/{finding_id}"): _f(),
-    ("GET", "/api/fleet/chunks/{chunk_id}/garden/findings"): _f(),
-    ("GET", "/api/fleet/chunks/{chunk_id}/garden/proposals"): _f(),
+    ("GET", "/api/fleet/chunks/{chunk_id}/findings"): _f(ids=_GARDEN),
+    ("GET", "/api/fleet/chunks/{chunk_id}/findings/{finding_id}"): _f(ids=_GARDEN),
+    ("GET", "/api/fleet/chunks/{chunk_id}/garden/findings"): _f(ids=_RUN),
+    ("GET", "/api/fleet/chunks/{chunk_id}/garden/proposals"): _f(ids=_RUN),
     ("POST", "/api/fleet/chunks/{chunk_id}/hub-advance"): _f(),
     ("POST", "/api/fleet/chunks/{chunk_id}/pause"): _f(),
     ("GET", "/api/fleet/chunks/{chunk_id}/pm-items"): _f(),
@@ -459,6 +481,8 @@ def _seed(hub: HubHarness, harness: TenantHarness, label: str) -> _Tenant:
     t.markers.add(f"{label}-item")
     spare = _ok(c.post("/api/work-sources/hub/items", json={"title": f"{label}-spare", "body": "b"}), 201)
     t.ids["spare_token"] = f"hub:{spare['ref']}"
+    t.keep("spare_chunk_id", spare["chunk_id"])
+    t.ids["hub_source"] = "hub"
     chunk = t.keep("chunk_id", item["chunk_id"])
     node = _ok(c.get(f"/api/chunks/{chunk}"), 200)["current_node_id"]
     _ok(c.post(f"/api/chunks/{chunk}/promote"), 202)
@@ -470,6 +494,7 @@ def _seed(hub: HubHarness, harness: TenantHarness, label: str) -> _Tenant:
         201,
     )
     t.ids["route_token"] = claim["route_token"]
+    t.ids["node_id"] = node
     t.ids["runner"] = t.runner()
     t.ids["seq"] = "900"
     lease = {"chunk_id": chunk, "epoch": 1, "route_token": claim["route_token"]}
@@ -526,6 +551,8 @@ def _seed(hub: HubHarness, harness: TenantHarness, label: str) -> _Tenant:
     )
     t.keep("routine_id", routine["routine_id"])
     t.keep("routine_name", f"{label}-routine")
+    run = t.keep("run_chunk_id", _ok(c.post(f"/api/routines/{routine['routine_id']}/run", json={}), 201)["chunk_id"])
+    _ok(c.post(f"/api/chunks/{run}/promote"), 202)
     t.keep("secret", _ok(c.post("/api/secrets", json={"name": f"{label}-secret", "value": "v"}), 201)["name"])
     repository = {
         "name": f"{label}-repo",
@@ -553,6 +580,16 @@ def _seed(hub: HubHarness, harness: TenantHarness, label: str) -> _Tenant:
         201,
     )
     t.keep("proposal_id", proposal["proposal_id"])
+    answered = _ok(
+        c.post(
+            "/api/garden-proposals",
+            json={"class": "c", "title": f"{label}-answered", "body": "b", "findings": [f"fin_{label}"]},
+        ),
+        201,
+    )
+    accepted = _ok(c.post(f"/api/garden-proposals/{answered['proposal_id']}/accept", json={}), 200)
+    t.keep("garden_chunk_id", accepted["chunk_id"])
+    t.markers.add(f"{label}-answered")
     invitation = _ok(c.post("/api/invitations", json={"email": f"{label}@example.com", "role": "guest"}), 201)
     t.keep("invitation_id", invitation["invitation"]["invitation_id"])
     added = _ok(c.post("/api/runners", json={"name": f"{label}-added"}), 201)
@@ -560,7 +597,19 @@ def _seed(hub: HubHarness, harness: TenantHarness, label: str) -> _Tenant:
     member = seed_user(hub, username=f"{label}-member", role=Role.PENDING)
     seed_membership(hub.engine, harness.tenant, member.user_id, Role.GUEST)
     t.keep("user_id", member.user_id)
-    t.ids["decision_id"] = f"dec_{label}"
+    _ok(c.post(f"/api/chunks/{accepted['chunk_id']}/promote"), 202)
+    # The decision parks the routine run's chunk: the first chunk's open questions refuse a decision there.
+    gated = {"chunk_id": run, "runner_id": t.runner(), "workspace_id": "w1", "environment_ids": ["env-b"]}
+    run_token = _ok(c.post("/api/fleet/routes", json=gated), 201)["route_token"]
+    lease = {"chunk_id": run, "epoch": 1, "route_token": run_token}
+    minted = [{"seq": 4, "kind": "lease.minted", "payload": lease}]
+    assert not _ok(c.post("/api/fleet/events", json={"runner_id": t.runner(), "facts": minted}), 200).get("rejected")
+    at = _ok(c.get(f"/api/chunks/{run}"), 200)["current_node_id"]
+    gate = {"runner_id": t.runner(), "from_node_id": at, "epoch": 1, "route_token": run_token}
+    parked = _ok(c.post(f"/api/fleet/chunks/{run}/decisions", json=gate), 200)
+    decisions = _ok(c.get("/api/decisions"), 200)["decisions"]
+    assert len(decisions) == 1, parked
+    t.keep("decision_id", decisions[0]["decision_id"])
     return t
 
 
@@ -591,7 +640,12 @@ def _seeded(hub: HubHarness, *labels: str) -> list[_Tenant]:
 @pytest.fixture
 def two(tmp_path: Path) -> _Two:
     hub = build_hub(tmp_path, auth_mode="oauth")
-    return _Two(hub, *_seeded(hub, "alpha", "beta"))
+    first, second = _seeded(hub, "alpha", "beta")
+    # Hub item refs count per tenant: the first tenant's probed item sits at a ref the second never allocated.
+    item = _ok(first.client.post("/api/work-sources/hub/items", json={"title": "alpha-last", "body": "b"}), 201)
+    first.ids["ref"] = str(item["ref"])
+    first.markers.add("alpha-last")
+    return _Two(hub, first, second)
 
 
 # --- probing ------------------------------------------------------------------------------------------------------
@@ -609,42 +663,47 @@ def _ghost(value: str) -> str:
     return f"{value}-ghost"
 
 
+#: Seeded names every tenant holds alike — the built-in ``hub`` source — which a never-minted record sits beside.
+_BUILT_IN = frozenset({"hub_source"})
+
+
 def _ghost_of(tenant: _Tenant) -> _Tenant:
     """``tenant`` with every id it seeded replaced by one never minted."""
     ghost = _Tenant(tenant.harness, f"{tenant.label}-ghost")
-    ghost.ids = {key: _ghost(value) for key, value in tenant.ids.items()}
+    ghost.ids = {key: value if key in _BUILT_IN else _ghost(value) for key, value in tenant.ids.items()}
     ghost.markers = set(ghost.ids.values())
     return ghost
 
 
-def _url(path: str, tenant: _Tenant) -> str:
+def _url(path: str, tenant: _Tenant, ids: dict[str, str]) -> str:
     def value(match: re.Match[str]) -> str:
         name = match.group(1)
         if name == "name":
             return tenant.ids["repository" if path.startswith("/api/repositories") else "secret"]
         if name == "runner_id" and path.startswith("/api/fleet/"):
             return tenant.ids["runner"]
-        return tenant.ids[name]
+        return tenant.ids[ids.get(name, name)]
 
     return _PARAM.sub(value, path)
 
 
-def _fill(body: object, tenant: _Tenant) -> object:
+def _fill(body: object, tenant: _Tenant, ids: dict[str, str]) -> object:
     if body == "{seq}":
         return int(tenant.ids["seq"])
     if isinstance(body, str):
-        return re.sub(r"\{(\w+)\}", lambda m: tenant.ids[m.group(1)], body)
+        return re.sub(r"\{(\w+)\}", lambda m: tenant.ids[ids.get(m.group(1), m.group(1))], body)
     if isinstance(body, list):
-        return [_fill(item, tenant) for item in body]
+        return [_fill(item, tenant, ids) for item in body]
     if isinstance(body, dict):
-        return {key: _fill(value, tenant) for key, value in body.items()}
+        return {key: _fill(value, tenant, ids) for key, value in body.items()}
     return body
 
 
 def _send(sender: _Tenant, owner: _Tenant, method: str, path: str, probe: _Probe) -> httpx.Response:
     """``method path`` from ``sender``, its path and body naming ``owner``'s records. A fleet call presents the
     sender's runner token and names the sender's runner; the configuration apply sends the sender's own export."""
-    url, body, params = _url(path, owner), _fill(probe.body, owner), _fill(probe.params, owner)
+    ids = probe.ids or {}
+    url, body, params = _url(path, owner, ids), _fill(probe.body, owner, ids), _fill(probe.params, owner, ids)
     if path == "/api/config/apply":
         export = sender.client.get("/api/config/export")
         content_type = export.headers["content-type"]
@@ -721,6 +780,40 @@ def test_naming_the_other_tenants_record_answers_as_a_never_minted_one_and_chang
             wrong[f"{method} {path}"] = f"{foreign.text[:160]} -- never minted: {unknown.text[:160]}"
     assert not wrong, "\n".join(f"{route}: {answer}" for route, answer in wrong.items())
     assert _reads(owner) == before
+
+
+def _blind(owner: _Tenant, method: str, path: str, probe: _Probe) -> str:
+    """What ``owner`` answers naming its own records, when that is what it answers naming records never minted;
+    ``""`` when the two differ."""
+    ghost = _ghost_of(owner)
+    unknown = _send(owner, ghost, method, path, probe)
+    own = _send(owner, owner, method, path, probe)
+    same = (own.status_code, own.text) == (unknown.status_code, _unghosted(unknown.text, ghost, owner))
+    return f"{own.status_code} {own.text[:160]}" if same else ""
+
+
+def _fresh_tenant(tmp_path: Path) -> _Tenant:
+    tmp_path.mkdir()
+    (owner,) = _seeded(build_hub(tmp_path, auth_mode="oauth"), "alpha")
+    return owner
+
+
+def test_each_foreign_probe_answers_its_records_own_tenant_otherwise_than_a_never_minted_record(
+    tmp_path: Path,
+) -> None:
+    """A foreign probe can see a leak only if its record, named by its own tenant, answers otherwise than a record
+    never minted. The probes take turns on one seeded tenant — reads first, removals last — and one whose record an
+    earlier probe used up is asked again of a tenant seeded afresh."""
+    shared = _fresh_tenant(tmp_path / "shared")
+    foreign = [(route, probe) for route, probe in _PROBES.items() if probe.kind == "foreign"]
+    foreign.sort(key=lambda entry: (entry[0][0] != "GET", entry[0][0] == "DELETE" or entry[0][1].endswith("/retire")))
+    blind: dict[str, str] = {}
+    for turn, ((method, path), probe) in enumerate(foreign):
+        if _blind(shared, method, path, probe) and (
+            answer := _blind(_fresh_tenant(tmp_path / f"turn-{turn}"), method, path, probe)
+        ):
+            blind[f"{method} {path}"] = answer
+    assert not blind, "\n".join(f"{route}: {answer}" for route, answer in blind.items())
 
 
 def test_a_write_in_one_tenant_changes_nothing_the_other_reads(two: _Two) -> None:
