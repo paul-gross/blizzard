@@ -29,7 +29,7 @@ from blizzard.hub.store.tenant_guard import (
     install_tenant_guard,
 )
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION, StoreScope, TenantId
-from tests.support import default_tenant, migrate_to
+from tests.support import close_tenant, default_tenant, migrate_to
 
 pytestmark = pytest.mark.component
 
@@ -66,11 +66,6 @@ def _services(core: HubCore) -> HubServices:
         return core.open(StoreScope(tenant)).registry
 
     return cast(HubServices, SimpleNamespace(hub_scoped_reads=core.hub_scoped_reads, tenant_registry=tenant_registry))
-
-
-def _close(engine: Engine, tenant: TenantId) -> None:
-    with engine.begin() as conn:
-        conn.execute(sa.insert(schema.tenant_deletions).values(tenant_id=tenant, name="second", deleted_by="t"))
 
 
 def test_a_runner_token_resolves_to_its_own_tenants_runner(tmp_path: Path) -> None:
@@ -112,7 +107,7 @@ def test_a_sign_in_reads_the_runner_in_its_own_tenant_and_none_in_a_closed_one(t
     assert (signing_in.registration.runner_id, signing_in.registration.name) == ("rn_b", "bravo")
 
     # Closing a tenant evicts its cached stores; a cached tenant is answered from memory.
-    _close(engine, _SECOND)
+    close_tenant(engine, _SECOND)
     core.tenants.evict(_SECOND)
     assert runner_signing_in(services, "rn_b") is None
     assert runner_signing_in(services, "rn_a") is not None

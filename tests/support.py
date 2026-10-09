@@ -156,6 +156,16 @@ def add_tenant(engine: Engine, name: str) -> TenantId:
     return tenant
 
 
+def close_tenant(engine: Engine, tenant: TenantId, *, by: str = "test") -> None:
+    """Close ``tenant`` as a deletion's first step records it — one ``tenant_deletions`` row naming the tenant
+    under its current name and ``by`` as its deleter — so its scoped writes are refused from then on."""
+    tenants, deletions = schema.tenants, schema.tenant_deletions
+    named = sa.select(tenants.c.tenant_id, tenants.c.name, sa.literal(by)).where(tenants.c.tenant_id == tenant)
+    with hub_level_connections(engine).write("close_tenant") as conn:
+        closed = conn.execute(sa.insert(deletions).from_select(["tenant_id", "name", "deleted_by"], named))
+    assert closed.rowcount == 1, f"close_tenant needs {tenant} among the store's tenants"
+
+
 def default_tenant(engine: Engine) -> TenantId:
     """The store's only tenant — the one its first migration carried over — read once per engine.
 

@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import Annotated, Any
 
 import pytest
-import sqlalchemy as sa
 from fastapi import APIRouter, Depends
 
 from blizzard.auth_core import Permission, Role
@@ -27,9 +26,8 @@ from blizzard.hub.api.auth_session import (
 )
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.config import AUTH_MODE_OAUTH
-from blizzard.hub.store import schema
 from blizzard.hub.tenancy import TenantId
-from tests.support import HubHarness, build_hub, default_tenant, seed_hub_admin, seed_session, seed_user
+from tests.support import HubHarness, build_hub, close_tenant, default_tenant, seed_hub_admin, seed_session, seed_user
 
 pytestmark = pytest.mark.component
 
@@ -117,10 +115,7 @@ def test_the_admitted_permission_is_the_only_one_the_admitted_person_holds(hub: 
 
 def _closed_tenant(hub: _Hub) -> TenantId:
     closed = hub.harness.add_tenant("gone")
-    with hub.harness.engine.begin() as conn:
-        conn.execute(
-            sa.insert(schema.tenant_deletions).values(tenant_id=closed.tenant, name=closed.name, deleted_by="test")
-        )
+    close_tenant(hub.harness.engine, closed.tenant)
     hub.harness.hub_services.tenants.open_tenants.refresh()
     return closed.tenant
 

@@ -30,6 +30,7 @@ from blizzard.hub.store.scoped import (
     statements_of,
 )
 from blizzard.hub.tenancy import StoreScope, TenantClosed, TenantId, UnknownTenant
+from tests.support import close_tenant
 
 pytestmark = pytest.mark.component
 
@@ -430,16 +431,11 @@ def test_an_unscoped_connection_yields_no_builders(hub: HubStoreConnections, sco
 # --- A closed tenant ---------------------------------------------------------------------
 
 
-def _close(hub: HubStoreConnections, tenant: TenantId) -> None:
-    with hub.write("test") as conn:
-        conn.execute(sa.insert(s.tenant_deletions).values(tenant_id=tenant, name=tenant, deleted_by="usr_test"))
-
-
 def test_a_write_on_a_closed_tenant_is_refused_inside_its_transaction(
-    hub: HubStoreConnections, scoped: ScopedConnections
+    engine: Engine, hub: HubStoreConnections, scoped: ScopedConnections
 ) -> None:
     before = _all_notes(hub)
-    _close(hub, TEN_A)
+    close_tenant(engine, TEN_A)
     reached = False
     with pytest.raises(TenantClosed) as refused, scoped.write("test") as conn:
         reached = True
@@ -455,9 +451,11 @@ def test_a_write_on_a_closed_tenant_is_refused_inside_its_transaction(
     assert _all_notes(hub)[-1] == (TEN_B, "b-later")
 
 
-def test_a_write_on_a_drained_tenant_is_refused(hub: HubStoreConnections, scoped: ScopedConnections) -> None:
+def test_a_write_on_a_drained_tenant_is_refused(
+    engine: Engine, hub: HubStoreConnections, scoped: ScopedConnections
+) -> None:
     # A finished teardown leaves the deletion fact and no tenant row.
-    _close(hub, TEN_A)
+    close_tenant(engine, TEN_A)
     with hub.write("test") as conn:
         conn.execute(sa.delete(s.tenants).where(s.tenants.c.tenant_id == TEN_A))
     with pytest.raises(TenantClosed), scoped.write("test"):

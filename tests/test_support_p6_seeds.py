@@ -14,10 +14,13 @@ import sqlalchemy as sa
 from blizzard.auth_core import Role
 from blizzard.hub.auth.internal.hub_admin_repository import HubAdminRepository
 from blizzard.hub.store import schema
+from blizzard.hub.tenancy import TenantClosed
 from tests.support import (
     build_hub,
+    close_tenant,
     default_tenant,
     hub_level_connections,
+    scoped_connections,
     seed_hub_admin,
     seed_invitation,
     seed_membership,
@@ -89,3 +92,20 @@ def test_an_added_tenant_leaves_a_headerless_call_naming_no_tenant(tmp_path: Pat
 
     assert response.status_code == 409
     assert response.json()["detail"]["code"] == "tenant_required"
+
+
+def test_a_closed_tenant_is_recorded_under_its_name_and_refuses_its_scoped_writes(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    tenant = default_tenant(hub.engine)
+    other = hub.add_tenant("beta")
+
+    close_tenant(hub.engine, other.tenant, by="usr_closer")
+
+    deletions = schema.tenant_deletions
+    with hub.engine.connect() as conn:
+        rows = conn.execute(sa.select(deletions.c.tenant_id, deletions.c.name, deletions.c.deleted_by)).all()
+    assert [tuple(row) for row in rows] == [(other.tenant, "beta", "usr_closer")]
+    with pytest.raises(TenantClosed), scoped_connections(hub.engine, other.tenant).write("test"):
+        pass
+    with scoped_connections(hub.engine, tenant).write("test"):
+        pass

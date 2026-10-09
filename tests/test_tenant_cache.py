@@ -33,7 +33,7 @@ from blizzard.hub.secrets import hub_key_provider
 from blizzard.hub.store import schema
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION, StoreScope, TenantClosed, TenantId, UnknownTenant
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
-from tests.support import WorkSourceRegistry, add_tenant, count_queries, default_tenant, migrate_to
+from tests.support import WorkSourceRegistry, add_tenant, close_tenant, count_queries, default_tenant, migrate_to
 
 pytestmark = pytest.mark.component
 
@@ -49,11 +49,6 @@ def _core(tmp_path: Path) -> tuple[HubCore, Engine]:
 def _add_tenant(engine: Engine, tenant: TenantId) -> None:
     with engine.begin() as conn:
         conn.execute(sa.insert(schema.tenants).values(tenant_id=tenant, name=tenant, created_at=_AT, created_by="test"))
-
-
-def _close_tenant(engine: Engine, tenant: TenantId) -> None:
-    with engine.begin() as conn:
-        conn.execute(sa.insert(schema.tenant_deletions).values(tenant_id=tenant, name=tenant, deleted_by="test"))
 
 
 def _reopen_tenant(engine: Engine, tenant: TenantId) -> None:
@@ -117,7 +112,7 @@ def test_a_closed_tenant_is_refused_once_evicted_and_its_cached_stores_dropped(t
     _add_tenant(engine, _SECOND)
     cached = core.open(StoreScope(_SECOND))
 
-    _close_tenant(engine, _SECOND)
+    close_tenant(engine, _SECOND)
     core.tenants.evict(_SECOND)
 
     with pytest.raises(TenantClosed):
@@ -129,7 +124,7 @@ def test_a_closed_tenant_is_refused_once_evicted_and_its_cached_stores_dropped(t
 def test_a_tenant_whose_deletion_has_finished_is_refused_as_closed(tmp_path: Path) -> None:
     core, engine = _core(tmp_path)
     _add_tenant(engine, _SECOND)
-    _close_tenant(engine, _SECOND)
+    close_tenant(engine, _SECOND)
 
     _finish_deleting(engine, _SECOND)
 
@@ -153,7 +148,7 @@ def test_a_tenant_closed_while_its_stores_are_being_opened_is_dropped_by_its_evi
         # cache's lock, which the open holds until its entry is cached.
         confirm_open(tenant)
         if not evicting:
-            _close_tenant(engine, tenant)
+            close_tenant(engine, tenant)
             evicting.append(threading.Thread(target=cache.evict, args=(tenant,)))
             evicting[0].start()
 
