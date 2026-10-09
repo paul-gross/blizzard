@@ -1,6 +1,6 @@
-"""Fact-egress operator-plane routes. Never ``/api/fleet/...``; a runner principal is refused. Status gates on
-:attr:`~blizzard.auth_core.Permission.FLEET_VIEW` — it holds export state and a directory path, nothing a fleet viewer
-cannot already see — and the writes on :attr:`~blizzard.auth_core.Permission.ANALYTICS_ADMIN`."""
+"""Fact-egress operator-plane routes. Never ``/api/fleet/...``; a runner principal is refused. The export is
+hub-wide, shared by every tenant, so status and the writes alike gate on the hub-level
+:attr:`~blizzard.auth_core.Permission.EXPORT_ADMIN`."""
 
 from __future__ import annotations
 

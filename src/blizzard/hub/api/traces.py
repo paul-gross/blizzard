@@ -1,6 +1,6 @@
 """Fleet-trace operator-plane routes: the status read and the replay. Never ``/api/fleet/...``; a runner
-principal is refused. Status gates on :attr:`~blizzard.auth_core.Permission.FLEET_VIEW` — it is redacted, so it
-holds nothing beyond fleet state — and replay on :attr:`~blizzard.auth_core.Permission.ANALYTICS_ADMIN`."""
+principal is refused. The trace export is hub-wide, shared by every tenant, so status and replay alike gate on the
+hub-level :attr:`~blizzard.auth_core.Permission.EXPORT_ADMIN`."""
 
 from __future__ import annotations
 

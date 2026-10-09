@@ -313,6 +313,6 @@ def cli_token(request: Request, body: CliTokenRequest) -> CliTokenResponse:
 )
 def rotate_signing_key(request: Request) -> Response:
     """Mint a fresh current signing key, demoting the old current to previous.
-    Human-plane, gated on ``user:manage`` and closed to a runner bearer token."""
+    Human-plane, gated on the hub-level ``hub-admin:grant`` and closed to a runner bearer token."""
     IdpSurface.of(request).signing.rotate()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
