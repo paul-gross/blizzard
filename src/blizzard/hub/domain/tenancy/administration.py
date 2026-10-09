@@ -3,9 +3,10 @@
 
 A tenant is created in one write transaction: its ``tenants`` row, the packaged graphs minted into it, its built-in
 ``hub`` work source's sequence, and — when one is named — its first admin's membership. Nothing of a tenant whose
-creation failed survives, and a tenant is usable the moment its creation commits. A tenant's name is a label: it is
-never refused for being taken, and never stands in for the tenant's id. The concrete store lives at
-``src/blizzard/hub/store/internal/tenant_admin_store.py`` (``bzh:dependency-inversion``)."""
+creation failed survives, and a tenant is usable the moment its creation commits. A tenant's name is a label of 1 to 64
+characters with no leading or trailing whitespace: it is never refused for being taken, and never stands in for the
+tenant's id. The concrete store lives at ``src/blizzard/hub/store/internal/tenant_admin_store.py``
+(``bzh:dependency-inversion``)."""
 
 from __future__ import annotations
 
@@ -42,6 +43,30 @@ class Tenant:
     created_by: str
     state: TenantState
     closed_at: datetime | None = None
+
+
+#: The most characters a tenant's name holds (``blizzard-product:/plans/multi-tenancy/hub/spec/store.md`` §The tenant
+#: record).
+TENANT_NAME_MAX_LENGTH = 64
+
+
+class TenantNameRefused(ValueError):
+    """Raised when a tenant's name is not 1 to 64 characters with no leading or trailing whitespace; nothing is
+    written."""
+
+    def __init__(self, name: str) -> None:
+        super().__init__(
+            f"a tenant's name is 1 to {TENANT_NAME_MAX_LENGTH} characters with no leading or trailing whitespace"
+        )
+        self.name = name
+
+
+def tenant_name(name: str) -> str:
+    """``name``, when it has a tenant name's shape — 1 to 64 characters, no leading or trailing whitespace; else
+    :class:`TenantNameRefused`. Inner whitespace is kept, and two tenants may share a name."""
+    if not name or len(name) > TENANT_NAME_MAX_LENGTH or name != name.strip():
+        raise TenantNameRefused(name)
+    return name
 
 
 class TenantAdminUnknown(LookupError):
@@ -114,7 +139,9 @@ class TenantAdministration:
 
     def create(self, name: str, *, admin_user_id: str | None, by: str) -> Tenant:
         """Create a tenant named ``name`` in one transaction, ``admin_user_id`` its first admin when named. The
-        creator is granted nothing they did not name themselves for."""
+        creator is granted nothing they did not name themselves for. :class:`TenantNameRefused` when ``name`` is not a
+        tenant name's shape — nothing is created."""
+        name = tenant_name(name)
         at = self._clock.now()
         tenant = TenantId(Id.mint(IdPrefix.TENANT, self._clock).value)
         with self._tenants.create(tenant, name=name, at=at, by=by) as creation:
@@ -126,8 +153,9 @@ class TenantAdministration:
         return Tenant(tenant_id=tenant, name=name, created_at=at, created_by=by, state=TenantState.OPEN)
 
     def rename(self, tenant: TenantId, name: str) -> Tenant:
-        """Rename an open tenant; :class:`UnknownTenant` when no open tenant has the id."""
-        renamed = self._tenants.rename(tenant, name)
+        """Rename an open tenant; :class:`UnknownTenant` when no open tenant has the id, :class:`TenantNameRefused` when
+        ``name`` is not a tenant name's shape — nothing is renamed."""
+        renamed = self._tenants.rename(tenant, tenant_name(name))
         if renamed is None:
             raise UnknownTenant(tenant)
         self._changed()
@@ -138,11 +166,14 @@ class TenantAdministration:
 
 
 __all__ = [
+    "TENANT_NAME_MAX_LENGTH",
     "IReadTenantDirectory",
     "ITenantCreation",
     "IWriteTenantDirectory",
     "Tenant",
     "TenantAdminUnknown",
     "TenantAdministration",
+    "TenantNameRefused",
     "TenantState",
+    "tenant_name",
 ]

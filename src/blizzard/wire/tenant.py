@@ -3,25 +3,29 @@ administrator calls."""
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, StringConstraints
 
 from blizzard.wire.graph import GraphSyncEntry
+
+#: A tenant's name: 1 to 64 characters, no leading or trailing whitespace; inner whitespace, line breaks included, is
+#: kept. The pattern stays ECMAScript-compatible, since the OpenAPI carries it.
+TenantName = Annotated[str, StringConstraints(min_length=1, max_length=64, pattern=r"^\S(?:[\s\S]*\S)?$")]
 
 
 class TenantCreateRequest(BaseModel):
     """``POST /api/admin/tenants``: the new tenant's name — a label, never refused for being taken — and, optionally,
     the user to make its first admin."""
 
-    name: str = Field(min_length=1)
+    name: TenantName
     admin_user_id: str | None = None
 
 
 class TenantRenameRequest(BaseModel):
     """``PATCH /api/admin/tenants/{tenant_id}``: the tenant's new name."""
 
-    name: str = Field(min_length=1)
+    name: TenantName
 
 
 class TenantView(BaseModel):

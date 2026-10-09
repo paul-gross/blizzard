@@ -14,7 +14,7 @@ from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require_hub
 from blizzard.hub.api.hub_level import Hub
 from blizzard.hub.auth.models import ResolvedIdentity
-from blizzard.hub.domain.tenancy.administration import Tenant, TenantAdminUnknown
+from blizzard.hub.domain.tenancy.administration import Tenant, TenantAdminUnknown, TenantNameRefused
 from blizzard.hub.domain.tenancy.teardown import DeletionState, LastTenant, TenantAlreadyDeleted
 from blizzard.hub.graph_sync import GraphReconciliation, GraphSyncStatus, reconcile_open_tenants
 from blizzard.hub.tenancy import StoreScope, TenantId, UnknownTenant
@@ -47,9 +47,12 @@ def _view(tenant: Tenant) -> TenantView:
 @router.post("/tenants", response_model=TenantView, status_code=status.HTTP_201_CREATED)
 def create_tenant(body: TenantCreateRequest, actor: TenantAdmin, services: Hub) -> TenantView:
     """Create a tenant in one transaction, its packaged graphs minted and, when named, its first admin granted; it is
-    usable the moment this answers. ``404`` when ``admin_user_id`` names no user — nothing is created."""
+    usable the moment this answers. ``404`` when ``admin_user_id`` names no user, ``422`` when the name is not a tenant
+    name's shape — nothing is created."""
     try:
         tenant = services.tenant_admin.create(body.name, admin_user_id=body.admin_user_id, by=actor.user_id)
+    except TenantNameRefused as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     except TenantAdminUnknown as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="no such user") from exc
     return _view(tenant)
@@ -67,9 +70,12 @@ def list_tenants(services: Hub) -> list[TenantView]:
     dependencies=[Depends(require_hub(Permission.TENANT_ADMIN))],
 )
 def rename_tenant(tenant_id: str, body: TenantRenameRequest, services: Hub) -> TenantView:
-    """Rename an open tenant; ``404`` when no open tenant has the id."""
+    """Rename an open tenant; ``404`` when no open tenant has the id, ``422`` when the name is not a tenant name's
+    shape."""
     try:
         return _view(services.tenant_admin.rename(TenantId(tenant_id), body.name))
+    except TenantNameRefused as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     except UnknownTenant as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="no such tenant") from exc
 

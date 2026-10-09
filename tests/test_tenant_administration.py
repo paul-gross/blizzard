@@ -1,7 +1,7 @@
 """Tenant administration driven through the hub's wired service: a tenant is created whole in one transaction — its
 row, the packaged graphs, its ``hub`` sequence and its first admin — or not at all; it is usable, and the hub's
-in-memory set of open tenants knows it, the moment its creation commits; names are labels; a rename reaches the
-in-memory set; the list shows every tenant with its state."""
+in-memory set of open tenants knows it, the moment its creation commits; names are labels of 1 to 64 characters with no
+leading or trailing whitespace; a rename reaches the in-memory set; the list shows every tenant with its state."""
 
 from __future__ import annotations
 
@@ -16,7 +16,12 @@ from blizzard.foundation.store.utc import as_utc
 from blizzard.hub.auth.errors import RepoErrorFactory
 from blizzard.hub.auth.internal.identity_transaction import IdentityTransactions
 from blizzard.hub.domain.graph.model import IWriteGraphRepository
-from blizzard.hub.domain.tenancy.administration import TenantAdministration, TenantAdminUnknown, TenantState
+from blizzard.hub.domain.tenancy.administration import (
+    TenantAdministration,
+    TenantAdminUnknown,
+    TenantNameRefused,
+    TenantState,
+)
 from blizzard.hub.graph_sync import packaged_minter
 from blizzard.hub.graphs import PACKAGED, GraphFile
 from blizzard.hub.store import schema
@@ -128,6 +133,49 @@ def test_names_are_labels_never_refused_for_being_taken(hub: HubHarness) -> None
     assert first.tenant_id != second.tenant_id
     assert [t.name for t in listed] == ["default", "default", "default"]
     assert {t.tenant_id for t in listed} == {default_tenant(hub.engine), first.tenant_id, second.tenant_id}
+
+
+_MISSHAPEN_NAMES = pytest.mark.parametrize(
+    "name",
+    ["", "   ", "\n", " acme", "acme ", "acme\t", "x" * 65],
+    ids=["blank", "whitespace-only", "a-line-break", "leading", "trailing", "trailing-tab", "65-characters"],
+)
+
+
+@_MISSHAPEN_NAMES
+def test_a_name_without_a_tenant_names_shape_is_refused_and_nothing_is_created(hub: HubHarness, name: str) -> None:
+    before = _row_counts(hub)
+
+    with pytest.raises(TenantNameRefused):
+        hub.hub_services.tenant_admin.create(name, admin_user_id=None, by="usr_creator")
+
+    assert _row_counts(hub) == before
+    assert [t.name for t in hub.hub_services.tenant_admin.list_tenants()] == ["default"]
+
+
+@_MISSHAPEN_NAMES
+def test_a_rename_to_a_name_without_a_tenant_names_shape_is_refused_and_renames_nothing(
+    hub: HubHarness, name: str
+) -> None:
+    admin = hub.hub_services.tenant_admin
+    created = admin.create("acme", admin_user_id=None, by="usr_creator")
+
+    with pytest.raises(TenantNameRefused):
+        admin.rename(created.tenant_id, name)
+
+    assert {t.tenant_id: t.name for t in admin.list_tenants()}[created.tenant_id] == "acme"
+    assert hub.hub_services.tenants.open_tenants.name(created.tenant_id) == "acme"
+
+
+@pytest.mark.parametrize("name", ["x" * 64, "acme corp", "a"], ids=["64-characters", "an-inner-space", "one-character"])
+def test_a_name_of_up_to_64_characters_with_inner_whitespace_is_kept_as_given(hub: HubHarness, name: str) -> None:
+    admin = hub.hub_services.tenant_admin
+
+    created = admin.create(name, admin_user_id=None, by="usr_creator")
+    renamed = admin.rename(created.tenant_id, name)
+
+    assert (created.name, renamed.name) == (name, name)
+    assert {t.tenant_id: t.name for t in admin.list_tenants()}[created.tenant_id] == name
 
 
 def test_a_created_tenant_is_usable_and_known_in_memory_the_moment_its_creation_commits(hub: HubHarness) -> None:

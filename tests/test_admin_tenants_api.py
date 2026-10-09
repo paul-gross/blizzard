@@ -1,6 +1,6 @@
 """The tenant administration routes over the hub app with sign-in on: only a hub administrator creates, lists, renames
-and deletes tenants and syncs the packaged graphs into every open tenant; a tenant's own admin is refused all of it; a
-rename reaches a runner's next registration; the tenant-scoped graph sync stays, deprecated, under ``GRAPH_EDIT``."""
+and deletes tenants and syncs the packaged graphs into every open tenant; a name without a tenant name's shape answers
+``422``; a tenant's own admin is refused all of it; a rename reaches a runner's next registration; the tenant-scoped graph sync stays, deprecated, under ``GRAPH_EDIT``."""
 
 from __future__ import annotations
 
@@ -77,6 +77,37 @@ def test_creating_with_an_unknown_admin_answers_404_and_creates_nothing(hub: Hub
 
     assert resp.status_code == 404 and resp.json() == {"detail": "no such user"}
     assert [t["name"] for t in hub.client.get("/api/admin/tenants", headers=_bearer(session)).json()] == ["default"]
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["", "   ", "\n", " acme", "acme ", "x" * 65, "\x1cacme"],
+    ids=["blank", "whitespace-only", "a-line-break", "leading", "trailing", "65-characters", "leading-separator"],
+)
+def test_a_name_without_a_tenant_names_shape_answers_422_on_create_and_rename(hub: HubHarness, name: str) -> None:
+    session = _hub_admin(hub)
+    created = _create(hub, session, "acme")
+
+    create = hub.client.post("/api/admin/tenants", json={"name": name}, headers=_bearer(session))
+    rename = hub.client.patch(
+        f"/api/admin/tenants/{created['tenant_id']}", json={"name": name}, headers=_bearer(session)
+    )
+    listed = hub.client.get("/api/admin/tenants", headers=_bearer(session)).json()
+
+    assert (create.status_code, rename.status_code) == (422, 422)
+    assert sorted(t["name"] for t in listed) == ["acme", "default"]
+
+
+def test_a_name_of_64_characters_or_with_an_inner_space_is_accepted(hub: HubHarness) -> None:
+    session = _hub_admin(hub)
+
+    longest = _create(hub, session, "x" * 64)
+    renamed = hub.client.patch(
+        f"/api/admin/tenants/{longest['tenant_id']}", json={"name": "acme corp"}, headers=_bearer(session)
+    )
+
+    assert longest["name"] == "x" * 64
+    assert renamed.status_code == 200 and renamed.json()["name"] == "acme corp"
 
 
 def test_renaming_a_tenant_that_does_not_exist_answers_404(hub: HubHarness) -> None:
