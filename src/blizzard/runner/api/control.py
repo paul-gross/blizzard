@@ -76,6 +76,8 @@ def _runner_status_view(service: RunnerStatusService) -> RunnerStatusView:
     return RunnerStatusView(
         runner_id=summary.runner_id,
         runner_name=summary.runner_name,
+        tenant_id=summary.tenant_id,
+        tenant_name=summary.tenant_name,
         workspace_id=summary.workspace_id,
         pause=PauseStateView(
             local=summary.pause.local,

@@ -28,6 +28,7 @@ from blizzard.runner.hub.identity import (
     ICurrentRunnerIdentity,
     IdentityState,
     IdentityVerdictHolder,
+    RunnerIdentity,
     RunnerIdentityHolder,
 )
 from blizzard.runner.leases.model import NewLease
@@ -119,7 +120,21 @@ def test_summary_defaults_on_an_empty_store(tmp_path: Path) -> None:
     assert body["last_tick_at"] is None
     assert body["gates"] == []
     assert body["identity"] is None
+    assert (body["tenant_id"], body["tenant_name"]) == (None, None)
     assert_all_timestamps_utc(body)
+
+
+@pytest.mark.component
+def test_summary_carries_the_tenant_beside_the_runners_id_and_name(tmp_path: Path) -> None:
+    identity = RunnerIdentity(
+        runner_id="rn_status", runner_name="r-bravo", registered_at=_NOW, tenant_id="tn_bravo", tenant_name="bravo"
+    )
+    app, _store = _app_with_status(tmp_path, identity=RunnerIdentityHolder(identity))
+    with TestClient(app) as client:
+        body = client.get("/api/runner").json()
+
+    assert (body["runner_id"], body["runner_name"]) == ("rn_status", "r-bravo")
+    assert (body["tenant_id"], body["tenant_name"]) == ("tn_bravo", "bravo")
 
 
 @pytest.mark.component

@@ -66,6 +66,10 @@ class RunnerStatusView(BaseModel):
     runner_id: str | None
     #: The runner's name — its latest registered one, or its configured one before it first registers.
     runner_name: str | None = None
+    #: The id of the tenant the runner serves, as its hub last answered; ``None`` until a hub that names it answers.
+    tenant_id: str | None = None
+    #: That tenant's name, as of the same answer.
+    tenant_name: str | None = None
     workspace_id: str
     pause: PauseStateView
     capacities: CapacitiesView

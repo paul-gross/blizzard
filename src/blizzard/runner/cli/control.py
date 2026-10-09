@@ -56,6 +56,15 @@ def _hub_pause_note(stance: str, runner_id: str | None) -> str:
     return f"note: it {stance} paused at the hub — clear that with `blizzard hub runner resume {runner_id}`"
 
 
+def _tenant_part(view: dict) -> str:
+    """The tenant clause of the status headline — ``"  tenant=acme (tn_1)"`` — or empty until a hub that
+    names the runner's tenant has answered."""
+    tenant_id = view.get("tenant_id")
+    if tenant_id is None:
+        return ""
+    return f"  tenant={view.get('tenant_name') or tenant_id} ({tenant_id})"
+
+
 @dto
 @dataclass(frozen=True)
 class SessionLabel:
@@ -115,7 +124,8 @@ def status(ctx: click.Context, directory: str, runner_url: str | None) -> None:
         traces_resp = daemon.send("get", "/api/traces/status")
 
     click.echo(
-        f"runner {view['runner_name']} ({view.get('runner_id') or 'not registered'})  workspace={view['workspace_id']}"
+        f"runner {view['runner_name']} ({view.get('runner_id') or 'not registered'}){_tenant_part(view)}"
+        f"  workspace={view['workspace_id']}"
     )
     identity = view.get("identity")
     if identity is not None and identity["state"] == "mismatched":

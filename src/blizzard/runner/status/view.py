@@ -134,6 +134,10 @@ class RunnerStatusSummary:
     gates: tuple[str, ...] = ()
     #: Whether the token resolves to the store's runner; ``None`` where no loop checks it.
     identity: IdentityVerdict | None = None
+    #: The tenant the runner serves, as its hub last answered; ``None`` until a hub that names it answers.
+    tenant_id: str | None = None
+    #: That tenant's name, as of the same answer.
+    tenant_name: str | None = None
 
 
 @domain_model
@@ -290,6 +294,8 @@ class RunnerStatusService:
             last_tick_at=self._pause.last_daemon_liveness(),
             gates=self._gates,
             identity=self._identity_verdict.verdict() if self._identity_verdict is not None else None,
+            tenant_id=identity.tenant_id if identity is not None else None,
+            tenant_name=identity.tenant_name if identity is not None else None,
         )
 
     def environments(self) -> list[EnvironmentSlot]:
