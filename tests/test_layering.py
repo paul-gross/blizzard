@@ -2836,6 +2836,11 @@ class _RoleScan:
         if name in self.ports or name.endswith("Clock"):
             return True
         declared = self.declared(name, path)
+        if not declared and (targets := self.aliases.get(name)):
+            return all(
+                isinstance(t, ast.Name) and id(t) not in seen and self._is_collaborator(t.id, path, seen | {id(t)})
+                for t in targets
+            )
         orchestration = bool(declared) and all(id(site.node) in self.orchestration for site in declared)
         if orchestration or (bool(declared) and all("collaborator" in site.markers for site in declared)):
             return True
