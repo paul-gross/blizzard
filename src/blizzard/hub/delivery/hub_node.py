@@ -88,7 +88,7 @@ _CP_HUBNODE_AFTER_MARKER_BEFORE_NEXT = crashpoint(
 # A kill leaves the slot live; the stale bound reclaims it, with pending derived from the poll fact.
 _CP_HUBNODE_AFTER_POLL_BEFORE_SLOT_RELEASE = crashpoint(
     "hubnode.after-poll.before-slot-release",
-    "the poll-attempt fact is durable; the fleet-wide slot is not yet released",
+    "the poll-attempt fact is durable; the tenant's slot is not yet released",
 )
 # Fires after marker and intents are durable in one transaction, before drain.
 _CP_CLOSE_AFTER_ENQUEUE_BEFORE_DRAIN = crashpoint(
@@ -480,7 +480,7 @@ class HubNodeExecutor:
         facts = self._facts.load_facts(chunk.chunk_id)
         poll_history = facts.hub_node_poll_history(node_id=node.node_id, epoch=epoch) if facts is not None else []
         if poll_history and now - poll_history[-1].polled_at < PollPolicy.of(node).interval:
-            return None  # not yet due — never touches the fleet-wide slot
+            return None  # not yet due — never touches the tenant's slot
         slot_id = self._hub_exec.acquire_hub_exec_slot(
             chunk.chunk_id, node_id=node.node_id, at=now, stale_after=self._slot_stale_after
         )
@@ -497,10 +497,10 @@ class HubNodeExecutor:
             self._hub_exec.release_hub_exec_slot(slot_id, at=self._clock.now())
 
     def release_orphaned_slots(self) -> int:
-        """Release every live hub-execution slot — a boot step, not a per-request one: a live row
-        when the hub starts belongs to a run the previous process died in, so the chunk resumes on
-        its next request rather than after ``slot_stale_after``. Sound while one hub process serves
-        the store; only the daemon's startup calls it."""
+        """Release every live hub-execution slot of this executor's tenant — a boot step, not a
+        per-request one: a live row when the hub starts belongs to a run the previous process died
+        in, so the chunk resumes on its next request rather than after ``slot_stale_after``. Sound
+        while one hub process serves the store; only the daemon's startup calls it."""
         return self._hub_exec.release_live_hub_exec_slots(at=self._clock.now())
 
     def _run_acquired(

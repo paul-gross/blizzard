@@ -777,16 +777,26 @@ class NoUnenqueuedClosableRef(QueryCheck):
 
 
 class OneLiveExecSlot(QueryCheck):
-    """At most one hub_exec_slot row is live (``released_at IS NULL``) at a time (#65;
-    pinned by tests/test_pin_foundation.py)."""
+    """At most one hub_exec_slot row per tenant is live (``released_at IS NULL``) at a time
+    (pinned by tests/test_pin_foundation.py). Each tenant holds its own slot, so two
+    tenants' live slots at once are legal."""
 
     def run(self) -> list[Violation]:
-        live_slots = self.conn.execute(
-            select(func.count()).select_from(hub.hub_exec_slot).where(hub.hub_exec_slot.c.released_at.is_(None))
-        ).scalar()
-        if (live_slots or 0) > 1:
-            return [Violation("hub:one-live-exec-slot", f"{live_slots} hub-execution slots are live at once")]
-        return []
+        slot = hub.hub_exec_slot
+        live = func.count()
+        crowded = self.conn.execute(
+            select(slot.c.tenant_id, live)
+            .where(slot.c.released_at.is_(None))
+            .group_by(slot.c.tenant_id)
+            .having(live > 1)
+            .order_by(slot.c.tenant_id)
+        ).all()
+        return [
+            Violation(
+                "hub:one-live-exec-slot", f"tenant {row.tenant_id}: {row[1]} hub-execution slots are live at once"
+            )
+            for row in crowded
+        ]
 
 
 class MigrationsAtomic(QueryCheck):

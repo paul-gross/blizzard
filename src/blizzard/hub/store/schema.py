@@ -1065,8 +1065,8 @@ Index(
     "ix_chunk_bounces_tenant_chunk_id_epoch", chunk_bounces.c.tenant_id, chunk_bounces.c.chunk_id, chunk_bounces.c.epoch
 )
 
-# --- The fleet-wide hub-execution serialization slot (#65) -------------------
-# A live slot has ``released_at IS NULL``; one at a time, reclaimable past its TTL.
+# --- The hub-execution serialization slot, one per tenant --------------------
+# A live slot has ``released_at IS NULL``; one at a time per tenant, reclaimable past its TTL.
 
 hub_exec_slot = Table(
     "hub_exec_slot",

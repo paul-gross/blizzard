@@ -51,14 +51,14 @@ class ChunkHubExecStore:
             )
 
     def acquire_hub_exec_slot(self, chunk_id: str, *, node_id: str, at: datetime, stale_after: timedelta) -> str | None:
-        """Acquire the fleet-wide hub-execution slot, **atomically** (crash-derivable
+        """Acquire this tenant's hub-execution slot, **atomically** (crash-derivable
         fact, ``bzh:facts-not-status`` — never an in-process lock, so the invariant
-        checker can assert at most one live slot and a ``kill -9`` mid-run leaves a
-        stale, reclaimable row rather than a wedged fleet)."""
+        checker can assert at most one live slot per tenant and a ``kill -9`` mid-run
+        leaves a stale, reclaimable row rather than a wedged tenant). The scoped write
+        opens on the tenant row's lock (``bzh:store-exclusive-write``), so two acquires
+        in one tenant serialize before the read-then-insert below, while another
+        tenant's acquire never waits on this one's slot."""
         with self._store.write("acquire_hub_exec_slot") as conn:
-            # Force sqlite's single-writer lock BEFORE the read-then-insert below,
-            # closing the race a bare SELECT leaves open (see ``next_route_seq``).
-            conn.execute(self._store.update(s.hub_exec_slot).values(node_id=s.hub_exec_slot.c.node_id))
             live_rows = conn.execute(
                 self._store.select(s.hub_exec_slot).where(s.hub_exec_slot.c.released_at.is_(None))
             ).all()

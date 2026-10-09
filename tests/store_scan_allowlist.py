@@ -277,11 +277,13 @@ _FLEET_CONFIG_REASON = (
     "across the whole fleet's lifetime, not by chunk/work-item volume."
 )
 
-# A declared singleton (superuser_bootstrap) or the fleet-wide hub-exec serialization slot (#65, hub_exec_slot).
-_SINGLETON_REASON = (
-    "a declared singleton (superuser_bootstrap) or the fleet-wide single hub-exec "
-    "serialization slot (#65, hub_exec_slot) — at most one live row plus a short "
-    "release history."
+# A declared singleton (superuser_bootstrap).
+_SINGLETON_REASON = "a declared singleton (superuser_bootstrap) — at most one live row plus a short history."
+
+# Each tenant's hub-exec serialization slot (hub_exec_slot).
+_HUB_EXEC_SLOT_REASON = (
+    "one tenant's hub-exec serialization slot: the tenant-scoped read sees at most one live row "
+    "plus that tenant's release history, never another tenant's slots."
 )
 
 HUB_ALLOWED_SCANS: list[Allowance] = [
@@ -306,7 +308,7 @@ HUB_ALLOWED_SCANS: list[Allowance] = [
     TableWideAllowance("auth_facts", 200, _FLEET_CONFIG_REASON),
     # --- singletons/near-singletons ------------------------------------------------------
     TableWideAllowance("superuser_bootstrap", 50, _SINGLETON_REASON),
-    TableWideAllowance("hub_exec_slot", 50, _SINGLETON_REASON),
+    TableWideAllowance("hub_exec_slot", 50, _HUB_EXEC_SLOT_REASON),
     # --- operator-created fleet entities and their lifecycle facts --------------------
     TableWideAllowance("graph_lifecycle_facts", 200, _FLEET_CONFIG_REASON),
     TableWideAllowance("graph_policy_facts", 200, _FLEET_CONFIG_REASON),
