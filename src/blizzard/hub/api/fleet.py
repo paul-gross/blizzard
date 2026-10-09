@@ -126,12 +126,13 @@ claim_router = APIRouter(
 @dataclass(frozen=True)
 class FleetRequest:
     """One fleet-router call: the runner its bearer token names, the hub policy it is judged under,
-    and the tenant that runner was added in — with that tenant's services, the only ones the call
+    and the tenant that runner was added in — its name, and its services, the only ones the call
     reaches."""
 
     principal: RunnerPrincipal
     config: HubConfig
     scope: StoreScope
+    tenant_name: str
     services: TenantServices
 
     @classmethod
@@ -141,7 +142,7 @@ class FleetRequest:
         principal: Annotated[RunnerPrincipal, Depends(require_runner_principal)],
         tenant: Annotated[TenantRequest, Depends(resolve_tenant)],
     ) -> FleetRequest:
-        return cls(principal, request.app.state.config, tenant.scope, tenant.services)
+        return cls(principal, request.app.state.config, tenant.scope, tenant.name, tenant.services)
 
     @classmethod
     def of_even_if_retired(
@@ -150,7 +151,7 @@ class FleetRequest:
         principal: Annotated[RunnerPrincipal, Depends(require_runner_principal_even_if_retired)],
         tenant: Annotated[TenantRequest, Depends(resolve_tenant)],
     ) -> FleetRequest:
-        return cls(principal, request.app.state.config, tenant.scope, tenant.services)
+        return cls(principal, request.app.state.config, tenant.scope, tenant.name, tenant.services)
 
     @property
     def route_token_mode(self) -> str:
@@ -830,8 +831,9 @@ def register_runner(
     """Register the calling runner — the one its bearer token names — with its workspace binding
     and the name it declares; idempotent.
 
-    The hub never rejects a registration over its roster — it doubles as the heartbeat every tick.
-    A body ``runner_id`` from an older runner is ignored. A retired runner is refused 403."""
+    The hub never rejects a registration over its roster — it doubles as the heartbeat every tick,
+    so the tenant it answers, named as the hub holds it now, carries a rename on the next tick. A
+    body ``runner_id`` from an older runner is ignored. A retired runner is refused 403."""
     runner_id = fleet.caller_id()
     registration = services.registry.get_runner(runner_id)
     if registration is None:
@@ -864,7 +866,11 @@ def register_runner(
     )
     services.events.publish_runner_changed(runner_id, kind="registered", runner_name=registered.name)
     return RunnerRegistrationResponse(
-        runner_id=runner_id, runner_name=registered.name, first_registration=registered.first
+        runner_id=runner_id,
+        runner_name=registered.name,
+        first_registration=registered.first,
+        tenant_id=fleet.scope.tenant,
+        tenant_name=fleet.tenant_name,
     )
 
 

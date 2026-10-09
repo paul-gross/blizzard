@@ -19,7 +19,7 @@ _PRINCIPAL = RunnerPrincipal(runner_id="runner-a", runner_name="r-claude", works
 
 def _fleet(principal: RunnerPrincipal) -> FleetRequest:
     # No config and no services: `assert_owns` reads only the principal.
-    return FleetRequest(principal, config=None, scope=StoreScope(_TENANT), services=None)  # type: ignore[arg-type]
+    return FleetRequest(principal, config=None, scope=StoreScope(_TENANT), tenant_name="acme", services=None)  # type: ignore[arg-type]
 
 
 def test_the_callers_own_runner_id_is_never_a_mismatch() -> None:

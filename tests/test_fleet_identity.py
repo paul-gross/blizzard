@@ -18,7 +18,8 @@ from blizzard.hub import runtime as hub_runtime
 from blizzard.hub.config import HubConfig
 from blizzard.hub.secrets import ENV_SECRET_KEY
 from blizzard.hub.store import schema as s
-from tests.support import HubHarness, build_hub, hub_scoped, seed_runner
+from blizzard.hub.tenancy import TenantId
+from tests.support import HubHarness, add_tenant, build_hub, default_tenant, hub_scoped, seed_runner
 
 pytestmark = pytest.mark.component
 
@@ -34,6 +35,15 @@ def _identity(hub: HubHarness, token: str | None) -> tuple[int, dict[str, object
     return resp.status_code, resp.json()
 
 
+def _tenant(hub: HubHarness, tenant: TenantId | None = None) -> dict[str, str]:
+    """The tenant fields the route answers for a runner of ``tenant`` (default: the store's only
+    tenant), named as the store holds it now."""
+    named = tenant if tenant is not None else default_tenant(hub.engine)
+    with hub.engine.connect() as conn:
+        name = conn.execute(sa.select(s.tenants.c.name).where(s.tenants.c.tenant_id == named)).scalar_one()
+    return {"tenant_id": named, "tenant_name": name}
+
+
 def _event_rows(hub: HubHarness) -> int:
     with hub.engine.connect() as conn:
         return int(conn.execute(hub_scoped(sa.select(sa.func.count()).select_from(s.event_log))).scalar_one())
@@ -43,7 +53,10 @@ def test_a_token_names_its_added_runner_before_it_ever_registers(tmp_path: Path)
     hub = build_hub(tmp_path)
     added = hub.services.enrollment.add("r-claude", by="op")
 
-    assert _identity(hub, added.token) == (200, {"runner_id": added.runner_id, "runner_name": "r-claude"})
+    assert _identity(hub, added.token) == (
+        200,
+        {"runner_id": added.runner_id, "runner_name": "r-claude", **_tenant(hub)},
+    )
 
 
 def test_a_registered_runners_token_names_it_with_its_latest_name(tmp_path: Path) -> None:
@@ -56,7 +69,20 @@ def test_a_registered_runners_token_names_it_with_its_latest_name(tmp_path: Path
     )
     assert registered.status_code == 201, registered.text
 
-    assert _identity(hub, token) == (200, {"runner_id": "runner-a", "runner_name": "r-new"})
+    assert _identity(hub, token) == (200, {"runner_id": "runner-a", "runner_name": "r-new", **_tenant(hub)})
+
+
+def test_a_token_names_the_tenant_its_runner_was_added_in(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    bravo = add_tenant(hub.engine, "bravo")
+    token = seed_runner(hub.open_services(bravo), "rn-bravo-1", name="r-bravo", register=False)
+    home = seed_runner(hub, "runner-a")
+
+    assert _identity(hub, token) == (
+        200,
+        {"runner_id": "rn-bravo-1", "runner_name": "r-bravo", "tenant_id": bravo, "tenant_name": "bravo"},
+    )
+    assert _identity(hub, home)[1]["tenant_id"] == default_tenant(hub.engine)
 
 
 def test_no_token_is_refused_as_missing(tmp_path: Path) -> None:

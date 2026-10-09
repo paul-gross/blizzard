@@ -63,13 +63,19 @@ class RunnerRegistrationRequest(BaseModel):
 
 
 class RunnerRegistrationResponse(BaseModel):
-    """The registered runner's hub-minted id and current name, and whether this call was its
-    first registration since it was added."""
+    """The registered runner's hub-minted id and current name, whether this call was its first
+    registration since it was added, and the tenant it serves. Registration doubles as the
+    heartbeat, so a renamed tenant reaches the runner on its next tick."""
 
     runner_id: str
     #: The name the registry now holds for this runner.
     runner_name: str | None = None
     first_registration: bool
+    #: The tenant the runner was added in — the one its bearer token resolves to. The hub always
+    #: fills both; ``None`` only from a hub that predates tenants.
+    tenant_id: str | None = None
+    #: That tenant's current name.
+    tenant_name: str | None = None
 
 
 class RunnerEnrollmentResponse(BaseModel):
@@ -102,11 +108,16 @@ class RunnerAddResponse(BaseModel):
 
 
 class RunnerIdentityView(BaseModel):
-    """Who the presented runner bearer token belongs to — its hub-minted id and current name.
-    Answering records nothing: no registration, no liveness."""
+    """Who the presented runner bearer token belongs to — its hub-minted id and current name, and
+    the tenant it was added in. Answering records nothing: no registration, no liveness."""
 
     runner_id: str
     runner_name: str
+    #: The runner's tenant, read as registration reads it. The hub always fills both; ``None``
+    #: only from a hub that predates tenants.
+    tenant_id: str | None = None
+    #: That tenant's current name.
+    tenant_name: str | None = None
 
 
 class RunnerIdentityRefusal(BaseModel):

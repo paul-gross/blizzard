@@ -1,5 +1,6 @@
 """A runner's identity at registration (component tier): the hub adds a runner under a minted id,
-its token names that id at every registration, and the name is whatever the runner last declared.
+its token names that id at every registration, the name is whatever the runner last declared, and
+the tenant is the one the runner was added in, under the name that tenant holds now.
 
 Registrations go through a plain ``TestClient`` presenting the token ``add`` minted, as a runner
 does with the token in its ``.env``."""
@@ -10,15 +11,34 @@ from pathlib import Path
 
 import httpx
 import pytest
+import sqlalchemy as sa
 from fastapi.testclient import TestClient
 
-from tests.support import HubHarness, build_hub
+from blizzard.hub.store import schema
+from blizzard.hub.tenancy import TenantId
+from tests.support import HubHarness, add_tenant, build_hub, default_tenant, seed_runner
 
 pytestmark = pytest.mark.component
 
 
 def _bearer(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
+
+
+def _tenant(hub: HubHarness, tenant: TenantId | None = None) -> dict[str, str]:
+    """The tenant fields a registration answers for a runner of ``tenant`` (default: the store's
+    only tenant), named as the store holds it now."""
+    named = tenant if tenant is not None else default_tenant(hub.engine)
+    with hub.engine.connect() as conn:
+        name = conn.execute(sa.select(schema.tenants.c.name).where(schema.tenants.c.tenant_id == named)).scalar_one()
+    return {"tenant_id": named, "tenant_name": name}
+
+
+def _rename(hub: HubHarness, tenant: TenantId, name: str) -> None:
+    """Rename ``tenant`` in the store and refresh the hub's open tenants, as renaming a tenant does."""
+    with hub.engine.begin() as conn:
+        conn.execute(sa.update(schema.tenants).where(schema.tenants.c.tenant_id == tenant).values(name=name))
+    hub.hub_services.tenants.open_tenants.refresh()
 
 
 def _register(hub: HubHarness, token: str, *, name: str | None = None, workspace_id: str = "w1") -> httpx.Response:
@@ -41,7 +61,12 @@ def test_an_added_runner_first_registers_under_its_minted_id(tmp_path: Path) -> 
     again = _register(hub, added.token, name="r-claude")
 
     assert first.status_code == 201, first.text
-    assert first.json() == {"runner_id": added.runner_id, "runner_name": "r-claude", "first_registration": True}
+    assert first.json() == {
+        "runner_id": added.runner_id,
+        "runner_name": "r-claude",
+        "first_registration": True,
+        **_tenant(hub),
+    }
     assert again.json()["first_registration"] is False
     registered = hub.services.registry.get_runner(added.runner_id)
     assert registered is not None and not registered.never_connected()
@@ -71,7 +96,12 @@ def test_a_restart_under_a_new_name_renames_the_runner_and_changes_nothing_else(
 
     renamed = _register(hub, added.token, name="r-new")
 
-    assert renamed.json() == {"runner_id": added.runner_id, "runner_name": "r-new", "first_registration": False}
+    assert renamed.json() == {
+        "runner_id": added.runner_id,
+        "runner_name": "r-new",
+        "first_registration": False,
+        **_tenant(hub),
+    }
     after = hub.services.registry.get_runner(added.runner_id)
     assert before is not None and after is not None
     assert after.name == "r-new"
@@ -111,3 +141,33 @@ def test_the_fleet_read_of_a_runner_that_never_registered_is_409(tmp_path: Path)
 
     assert resp.status_code == 409
     assert resp.json() == {"detail": f"runner {added.runner_id} has not registered"}
+
+
+def test_a_runner_added_in_another_tenant_registers_naming_that_tenant(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    bravo = add_tenant(hub.engine, "bravo")
+    token = seed_runner(hub.open_services(bravo), "rn-bravo-1", register=False)
+
+    first = _register(hub, token, name="r-bravo")
+
+    assert first.status_code == 201, first.text
+    assert first.json() == {
+        "runner_id": "rn-bravo-1",
+        "runner_name": "r-bravo",
+        "first_registration": True,
+        "tenant_id": bravo,
+        "tenant_name": "bravo",
+    }
+
+
+def test_a_renamed_tenant_reaches_its_runner_on_the_next_registration(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    bravo = add_tenant(hub.engine, "bravo")
+    token = seed_runner(hub.open_services(bravo), "rn-bravo-1")
+    before = _register(hub, token)
+
+    _rename(hub, bravo, "bravo-renamed")
+    after = _register(hub, token)
+
+    assert (before.json()["tenant_name"], after.json()["tenant_name"]) == ("bravo", "bravo-renamed")
+    assert after.json()["tenant_id"] == bravo

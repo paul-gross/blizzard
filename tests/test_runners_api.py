@@ -149,7 +149,7 @@ def test_add_mints_an_id_and_token_and_the_runner_shows_never_connected(tmp_path
     assert added["runner_id"].startswith("rn_")
     assert added["runner_name"] == "r-claude"
     identity = hub.client.get("/api/fleet/identity", headers=_bearer(added["token"]))
-    assert identity.json() == {"runner_id": added["runner_id"], "runner_name": "r-claude"}
+    assert (identity.json()["runner_id"], identity.json()["runner_name"]) == (added["runner_id"], "r-claude")
     shown = hub.client.get(f"/api/runners/{added['runner_id']}")
     assert shown.status_code == 200, shown.text
     assert "token" not in shown.json()
