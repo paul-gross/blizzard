@@ -1,0 +1,16 @@
+:host {
+  display: contents;
+}
+.name {
+  display: inline-block;
+  vertical-align: bottom;
+  overflow: hidden;
+  max-width: 28ch;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.id {
+  margin-left: 8px;
+  color: var(--label);
+  font-size: var(--fs-xs);
+}

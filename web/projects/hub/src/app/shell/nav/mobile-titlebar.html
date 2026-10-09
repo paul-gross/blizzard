@@ -1,10 +1,23 @@
-<fleet-mobile-titlebar [live]="live()" [menu]="shellMenu" />
+<fleet-mobile-titlebar [live]="live()" [caption]="tenants.current()?.name ?? ''" [menu]="shellMenu" />
 <ng-template #shellMenu>
   <fleet-kit-menu-panel testid="mobile-titlebar-menu-panel">
+    @if (tenants.switchable()) {
+      <fleet-kit-menu-item testid="mobile-titlebar-tenant" submenu [cdkMenuTriggerFor]="tenantMenu">
+        Switch tenant
+      </fleet-kit-menu-item>
+    }
     <fleet-kit-menu-item testid="mobile-titlebar-appearance" submenu [cdkMenuTriggerFor]="appearanceMenu">
       Appearance
     </fleet-kit-menu-item>
   </fleet-kit-menu-panel>
+</ng-template>
+<ng-template #tenantMenu>
+  <app-tenant-menu
+    testid="mobile-titlebar-tenant-panel"
+    [tenants]="tenants.memberships()"
+    [current]="tenants.current()?.tenant_id ?? null"
+    (choose)="tenants.switchTo($event)"
+  />
 </ng-template>
 <ng-template #appearanceMenu>
   <fleet-viewport-menu testid="mobile-titlebar-appearance-panel" />

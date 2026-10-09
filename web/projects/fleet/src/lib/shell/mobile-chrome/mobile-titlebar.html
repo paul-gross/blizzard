@@ -1,6 +1,9 @@
 <header class="mt-appbar" [attr.data-testid]="testid()">
   <fleet-brand-mark [size]="22" />
   <span class="word">blizzard</span>
+  @if (caption()) {
+    <span class="caption" [attr.title]="caption()" [attr.data-testid]="captionTestid()">{{ caption() }}</span>
+  }
   <span class="spacer"></span>
   <span
     class="livedot"

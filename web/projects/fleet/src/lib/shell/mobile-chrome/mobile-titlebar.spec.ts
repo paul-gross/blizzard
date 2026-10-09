@@ -10,7 +10,7 @@ import { MobileTitlebar } from './mobile-titlebar';
   selector: 'fleet-test-host',
   imports: [KitMenuItem, KitMenuPanel, MobileTitlebar],
   template: `
-    <fleet-mobile-titlebar [live]="live()" [testid]="testid()" [menu]="shellMenu" />
+    <fleet-mobile-titlebar [live]="live()" [testid]="testid()" [caption]="caption()" [menu]="shellMenu" />
     <ng-template #shellMenu>
       <fleet-kit-menu-panel [testid]="testid() + '-menu-panel'">
         <fleet-kit-menu-item testid="shell-item">Appearance</fleet-kit-menu-item>
@@ -21,6 +21,7 @@ import { MobileTitlebar } from './mobile-titlebar';
 class TestHost {
   readonly live = signal(true);
   readonly testid = signal('mobile-titlebar');
+  readonly caption = signal('');
 }
 
 describe('MobileTitlebar', () => {
@@ -72,5 +73,16 @@ describe('MobileTitlebar', () => {
     expect(el.querySelector('[data-testid="runner-mobile-titlebar-livedot"]')).not.toBeNull();
     expect(el.querySelector('[data-testid="runner-mobile-titlebar-menu"]')).not.toBeNull();
     expect(el.querySelector('[data-testid="mobile-titlebar"]')).toBeNull();
+  });
+
+  it('renders no caption until one is given, then names it beside the wordmark with its full text on hover', async () => {
+    expect(el.querySelector('[data-testid="mobile-titlebar-caption"]')).toBeNull();
+
+    fixture.componentInstance.caption.set('Acme Robotics');
+    await fixture.whenStable();
+
+    const caption = el.querySelector('[data-testid="mobile-titlebar-caption"]');
+    expect(caption?.textContent?.trim()).toBe('Acme Robotics');
+    expect(caption?.getAttribute('title')).toBe('Acme Robotics');
   });
 });

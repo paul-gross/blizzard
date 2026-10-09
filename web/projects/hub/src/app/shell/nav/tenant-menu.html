@@ -1,0 +1,12 @@
+<fleet-kit-menu-panel [testid]="testid()">
+  @for (tenant of tenants(); track tenant.tenant_id) {
+    <fleet-kit-menu-item-radio
+      [checked]="tenant.tenant_id === current()"
+      [testid]="testid() + '-' + tenant.tenant_id"
+      (triggered)="choose.emit(tenant.tenant_id)"
+    >
+      <span class="name">{{ tenant.name }}</span>
+      <span class="id">{{ tenant.tenant_id }}</span>
+    </fleet-kit-menu-item-radio>
+  }
+</fleet-kit-menu-panel>
