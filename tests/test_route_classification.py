@@ -4,7 +4,8 @@ Every mounted route is asserted human (gated by ``require(<permission>)``, or by
 ``require_hub(<permission>)`` when it serves no tenant), fleet (mounted under ``/api/fleet/*``,
 gated at router level), or public (no gate at all). Human tenant routes and fleet routes resolve
 their tenant at router level; hub-level and public routes resolve none. The table is exhaustive
-both ways: every live route must appear, every entry must resolve.
+both ways: every live route must appear, every entry must resolve. A tenant route that admits a
+hub-level permission without a membership is named, with that permission, in :data:`_ADMITTING`.
 """
 
 from __future__ import annotations
@@ -13,10 +14,11 @@ import sys
 from pathlib import Path
 
 import pytest
-from fastapi import FastAPI
+from fastapi import APIRouter, Depends, FastAPI
 from fastapi.routing import APIRoute, _IncludedRouter
 
 from blizzard.auth_core import Permission
+from blizzard.hub.api.auth_session import TenantBoundAdmitting, require_either
 from tests.support import build_hub
 
 pytestmark = pytest.mark.unit
@@ -289,6 +291,11 @@ _FLEET: set[tuple[str, str]] = {
     ("GET", "/api/fleet/system-artifacts/{name:path}"),
 }
 
+#: The tenant routes whose router admits a person holding the named hub-level permission into a tenant they
+#: hold no membership in (``TenantBoundAdmitting``) — each gated by ``require_either``, the admitted
+#: permission its alternative. Every other tenant route answers a non-member ``404``.
+_ADMITTING: dict[tuple[str, str], Permission] = {}
+
 #: The claim route is gated by the principal without the retirement refusal: a retired runner's claim is
 #: refused in-domain with the paused-denial body older runners parse.
 _FLEET_CLAIM: tuple[str, str] = ("POST", "/api/fleet/routes")
@@ -337,11 +344,16 @@ def _live_routes(app: FastAPI) -> set[tuple[str, str]]:
 
 
 def _dependency_names(route: APIRoute) -> set[str]:
-    """The ``__name__`` of every dependency callable resolved for ``route`` — both
+    """The ``__name__`` of every dependency callable resolved for ``route`` (a callable instance's class
+    name) — both
     route-level (``dependencies=[...]``) and router-level (attached at
     ``APIRouter(dependencies=[...])``, e.g. ``reject_runner_principal``/
     ``require_runner_principal``), so a single check covers both attachment shapes."""
-    return {dep.call.__name__ for dep in route.dependant.dependencies if dep.call is not None}
+    return {
+        getattr(dep.call, "__name__", type(dep.call).__name__)
+        for dep in route.dependant.dependencies
+        if dep.call is not None
+    }
 
 
 def _permission_of(call: object) -> Permission | None:
@@ -362,6 +374,31 @@ def _permission_of(call: object) -> Permission | None:
         module = sys.modules.get(getattr(call, "__module__", None))  # type: ignore[arg-type]
         fallback = getattr(module, "_require_chunk_control", None)
         return _permission_of(fallback) if fallback is not None else None
+    return None
+
+
+def _closed_over(call: object, name: str) -> object | None:
+    """The value ``call`` closes over as ``name``, or ``None`` when it closes over none by that name."""
+    freevars = getattr(getattr(call, "__code__", None), "co_freevars", ())
+    closure = getattr(call, "__closure__", None) or ()
+    return next((cell.cell_contents for var, cell in zip(freevars, closure, strict=True) if var == name), None)
+
+
+def _admitted_permission(route: APIRoute) -> Permission | None:
+    """The hub-level permission ``route``'s router admits a non-member under, or ``None`` on a plain router."""
+    for dep in route.dependant.dependencies:
+        if isinstance(dep.call, TenantBoundAdmitting):
+            return dep.call.permission
+    return None
+
+
+def _gate_alternative(route: APIRoute) -> Permission | None:
+    """The permission ``route``'s ``require_either`` gate admits in place of its own, or ``None``."""
+    for dep in route.dependant.dependencies:
+        if getattr(dep.call, "__name__", None) == "_dependency":
+            alternative = _closed_over(dep.call, "alternative")
+            if isinstance(alternative, Permission):
+                return alternative
     return None
 
 
@@ -442,16 +479,48 @@ def test_fleet_routes_carry_the_runner_principal_gate_not_a_permission(tmp_path:
 
 
 def test_human_routes_resolve_their_tenant_unless_hub_level(tmp_path: Path) -> None:
-    """A tenant route resolves its tenant at router level (``tenant_bound``) and gates on a
-    permission in it (``require``); a hub-level route resolves none and gates on a hub permission
-    (``require_hub``)."""
+    """A tenant route resolves its tenant at router level (``tenant_bound``, or
+    ``TenantBoundAdmitting`` for a route in :data:`_ADMITTING`) and gates on a permission in it
+    (``require``); a hub-level route resolves none and gates on a hub permission (``require_hub``)."""
     by_key = _routes_by_key(build_hub(tmp_path).client.app)
     for key in _HUMAN:
         names = _dependency_names(by_key[key])
+        resolvers = names & {"tenant_bound", "TenantBoundAdmitting"}
         if key in _HUB_LEVEL:
-            assert "tenant_bound" not in names and "_hub_dependency" in names, key
+            assert not resolvers and "_hub_dependency" in names, key
         else:
-            assert "tenant_bound" in names and "_hub_dependency" not in names, key
+            expected = "TenantBoundAdmitting" if key in _ADMITTING else "tenant_bound"
+            assert resolvers == {expected} and "_hub_dependency" not in names, key
+
+
+def test_only_the_named_routes_admit_a_hub_permission_without_a_membership(tmp_path: Path) -> None:
+    """Exhaustive both ways: a live route's router admits a non-member exactly when the route is in
+    :data:`_ADMITTING`, under exactly the permission named there, which its gate takes as the
+    alternative to its tenant permission."""
+    by_key = _routes_by_key(build_hub(tmp_path).client.app)
+    assert set(_ADMITTING) <= set(_HUMAN) - _HUB_LEVEL
+    for key, route in by_key.items():
+        assert _admitted_permission(route) == _ADMITTING.get(key), key
+    for key, admitted in _ADMITTING.items():
+        assert _gate_alternative(by_key[key]) == admitted, key
+
+
+def test_the_admission_introspection_reads_an_admitting_route() -> None:
+    """The introspection the admission table is checked by recognizes an admitting router and its gate."""
+    router = APIRouter(dependencies=[Depends(TenantBoundAdmitting(Permission.MEMBERSHIP_GRANT_ANY))])
+
+    @router.get(
+        "/scratch", dependencies=[Depends(require_either(Permission.USER_MANAGE, Permission.MEMBERSHIP_GRANT_ANY))]
+    )
+    def scratch() -> None: ...
+
+    app = FastAPI()
+    app.include_router(router)
+    (route,) = _api_routes(app)
+
+    assert _admitted_permission(route) is Permission.MEMBERSHIP_GRANT_ANY
+    assert _gate_alternative(route) is Permission.MEMBERSHIP_GRANT_ANY
+    assert _required_permission(route) is Permission.USER_MANAGE
 
 
 def test_fleet_routes_resolve_their_tenant_and_public_routes_none(tmp_path: Path) -> None:

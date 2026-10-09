@@ -10,7 +10,11 @@ applies: a machine credential (a runner bearer token, a marker token) decides; e
 ``X-Blizzard-Tenant`` header names it, checked against the caller's memberships; else the caller's
 one membership settles it; else the request answers ``409 tenant_required``. Every people and fleet
 router depends on it through :func:`tenant_bound`; :func:`require` checks a permission in the
-resolved tenant and :func:`require_hub` one that is the hub's own."""
+resolved tenant and :func:`require_hub` one that is the hub's own.
+
+A person names a tenant they hold no membership in and is answered ``404`` — except on a router
+bound by :class:`TenantBoundAdmitting`, which admits a person holding its one hub-level permission
+into any open tenant they name, acting there with that permission alone and no role."""
 
 from __future__ import annotations
 
@@ -20,9 +24,11 @@ from typing import Annotated
 
 import structlog
 from fastapi import Depends, HTTPException, Request, status
+from fastapi.routing import APIRoute
 
-from blizzard.auth_core import Permission, Role, permissions_for
+from blizzard.auth_core import HUB_PERMISSIONS, Permission, Role, permissions_for
 from blizzard.foundation.platform_tracing.attributes import Caller, annotate_caller, annotate_tenant
+from blizzard.foundation.roles import collaborator
 from blizzard.hub.api.auth import RunnerAuth, RunnerPrincipal
 from blizzard.hub.api.bearer import presented_bearer
 from blizzard.hub.api.hub_level import Hub, hub_services
@@ -179,7 +185,7 @@ def resolve_tenant(request: Request, hub: Hub) -> TenantRequest:
     if named is not None:
         role = hub.memberships.role_in(named, identity.user_id)
         if role is None:
-            raise _no_such_tenant()
+            return _served(hub, named, _admitted(request, identity, named))
         return _served(hub, named, in_tenant(identity, named, role))
     memberships = hub.memberships.memberships_for(identity.user_id)
     if not memberships:
@@ -196,6 +202,59 @@ async def tenant_bound(tenant: Annotated[TenantRequest, Depends(resolve_tenant)]
     a worker thread's copy of it."""
     structlog.contextvars.bind_contextvars(tenant_id=tenant.scope.tenant)
     annotate_tenant(tenant.scope.tenant, tenant.name)
+
+
+@collaborator
+@dataclass(frozen=True)
+class TenantBoundAdmitting:
+    """A router dependency standing where :func:`tenant_bound` would: the request's tenant resolves
+    as :func:`resolve_tenant` resolves it, except that a person naming a tenant they hold no
+    membership in is admitted when they hold the hub-level ``permission`` — acting there with that
+    one permission and no role. A tenant that does not exist or is closed, a person without
+    ``permission``, and every other caller answer exactly as on a plain tenant router.
+
+    :func:`resolve_tenant` finds it among the matched route's dependencies, so it admits on exactly
+    the routes of the router that lists it; a route there gates with :func:`require_either`, naming
+    ``permission`` as the alternative to its tenant permission."""
+
+    permission: Permission
+
+    def __post_init__(self) -> None:
+        if self.permission not in HUB_PERMISSIONS:
+            raise ValueError(f"{self.permission!r} is no hub-level permission; only one of those admits a non-member")
+
+    async def __call__(self, tenant: Annotated[TenantRequest, Depends(resolve_tenant)]) -> None:
+        await tenant_bound(tenant)
+
+
+def _route_admission(request: Request) -> Permission | None:
+    """The hub-level permission the matched route's router admits a non-member under
+    (:class:`TenantBoundAdmitting`), or ``None`` on a plain router."""
+    route = request.scope.get("route")
+    if not isinstance(route, APIRoute):
+        return None
+    for dependency in route.dependant.dependencies:
+        if isinstance(dependency.call, TenantBoundAdmitting):
+            return dependency.call.permission
+    return None
+
+
+def _admitted(request: Request, identity: ResolvedIdentity, tenant: TenantId) -> ResolvedIdentity:
+    """``identity``, a person with no membership in ``tenant``, acting there under the hub-level
+    permission the request's router admits — when they hold it; anyone else answers the ``404`` an
+    unknown tenant does."""
+    admitted = _route_admission(request)
+    if admitted is None or admitted not in identity.permissions:
+        raise _no_such_tenant()
+    return ResolvedIdentity(
+        user_id=identity.user_id,
+        username=identity.username,
+        display_name=identity.display_name,
+        tenant=tenant,
+        role=None,
+        permissions=frozenset({admitted}),
+        hub_admin=identity.hub_admin,
+    )
 
 
 def _named_tenant(request: Request) -> TenantId | None:
@@ -271,6 +330,19 @@ def require(permission: Permission) -> Callable[..., ResolvedIdentity]:
     membership there lacks ``permission``."""
 
     def _dependency(request: Request, tenant: Annotated[TenantRequest, Depends(resolve_tenant)]) -> ResolvedIdentity:
+        return granted(request, tenant, permission)
+
+    return _dependency
+
+
+def require_either(permission: Permission, alternative: Permission) -> Callable[..., ResolvedIdentity]:
+    """:func:`require` admitting ``alternative`` in place of ``permission`` — the gate of a route on a
+    :class:`TenantBoundAdmitting` router, whose admitted person holds the hub-level ``alternative``
+    and no tenant permission."""
+
+    def _dependency(request: Request, tenant: Annotated[TenantRequest, Depends(resolve_tenant)]) -> ResolvedIdentity:
+        if isinstance(tenant.identity, ResolvedIdentity) and alternative in tenant.identity.permissions:
+            return granted(request, tenant, alternative)
         return granted(request, tenant, permission)
 
     return _dependency
