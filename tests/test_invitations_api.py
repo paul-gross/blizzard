@@ -96,11 +96,21 @@ def test_an_invitation_may_live_as_long_as_30_days(tmp_path: Path) -> None:
     assert datetime.fromisoformat(view["expires_at"]) - datetime.fromisoformat(view["created_at"]) == timedelta(days=30)
 
 
-@pytest.mark.parametrize("role", ["pending", "superuser", "owner"])
+@pytest.mark.parametrize("role", ["pending", "superuser"])
 def test_a_role_no_membership_holds_is_refused(tmp_path: Path, role: str) -> None:
     hub = build_hub(tmp_path, auth_mode="oauth")
 
     refused = _invite(hub, _admin(hub), role=role)
+
+    assert refused.status_code == 422, refused.text
+    assert refused.json() == {"detail": f"{role} is not a membership role"}
+    assert _stored(hub) == []
+
+
+def test_a_role_the_hub_does_not_know_is_refused(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, auth_mode="oauth")
+
+    refused = _invite(hub, _admin(hub), role="owner")
 
     assert refused.status_code == 422, refused.text
     assert _stored(hub) == []

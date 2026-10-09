@@ -22,6 +22,7 @@ from blizzard.hub.auth.invitations import (
     InvitationOutcomeKind,
     InvitationRecord,
 )
+from blizzard.hub.auth.memberships import MembershipRoleRefused
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.wire.invitation import (
     InvitationCreateRequest,
@@ -67,9 +68,12 @@ def create_invitation(
     request: InvitationCreateRequest, services: Services, identity: Manager
 ) -> InvitationCreateResponse:
     """Invite ``email`` into the tenant as ``role``. The link's token is returned this once; only its hash is kept."""
-    issued = services.invitations.issue(
-        email=request.email, role=request.role, lifetime_days=request.expires_in, by=identity.user_id
-    )
+    try:
+        issued = services.invitations.issue(
+            email=request.email, role=request.role, lifetime_days=request.expires_in, by=identity.user_id
+        )
+    except MembershipRoleRefused as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     return InvitationCreateResponse(invitation=invitation_view(issued.record, services), token=issued.token.plaintext)
 
 

@@ -7,9 +7,9 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from pydantic import BaseModel, Field, StringConstraints, field_validator
+from pydantic import BaseModel, Field, StringConstraints
 
-from blizzard.auth_core import MEMBERSHIP_ROLES, Role
+from blizzard.auth_core import Role
 from blizzard.foundation.invitations import (
     DEFAULT_LIFETIME_DAYS,
     MAX_LIFETIME_DAYS,
@@ -27,13 +27,6 @@ class InvitationCreateRequest(BaseModel):
     role: Role
     #: Whole days the invitation stays live.
     expires_in: Annotated[int, Field(strict=True, ge=MIN_LIFETIME_DAYS, le=MAX_LIFETIME_DAYS)] = DEFAULT_LIFETIME_DAYS
-
-    @field_validator("role")
-    @classmethod
-    def _membership_role(cls, role: Role) -> Role:
-        if role not in MEMBERSHIP_ROLES:
-            raise ValueError(f"{role.value} is not a membership role")
-        return role
 
 
 class InvitationView(BaseModel):
