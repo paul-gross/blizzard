@@ -7047,6 +7047,27 @@ export type TenantCreateRequest = {
 };
 
 /**
+ * TenantDeletionResponse
+ *
+ * ``DELETE /api/admin/tenants/{tenant_id}``: ``deleted`` with the rows its deletion removed (``200``), or
+ * ``deleting`` while the ``tenant_teardown`` sweep carries it on (``202``).
+ */
+export type TenantDeletionResponse = {
+    /**
+     * Rows Removed
+     */
+    rows_removed?: number | null;
+    /**
+     * State
+     */
+    state: 'deleted' | 'deleting';
+    /**
+     * Tenant Id
+     */
+    tenant_id: string;
+};
+
+/**
  * TenantGraphSync
  *
  * One tenant's packaged-graph reconciliation: ``ok`` is false iff any of its entries failed.
@@ -7085,9 +7106,14 @@ export type TenantRenameRequest = {
 /**
  * TenantView
  *
- * One tenant: its id, its name, when and by whom it was created, and whether it is ``open`` or ``deleting``.
+ * One tenant: its id, its name, when and by whom it was created, whether it is ``open`` or ``deleting``, and —
+ * while it is ``deleting`` — when its deletion began.
  */
 export type TenantView = {
+    /**
+     * Closed At
+     */
+    closed_at?: string | null;
     /**
      * Created At
      */
@@ -8530,6 +8556,52 @@ export type CreateTenantApiAdminTenantsPostResponses = {
 };
 
 export type CreateTenantApiAdminTenantsPostResponse = CreateTenantApiAdminTenantsPostResponses[keyof CreateTenantApiAdminTenantsPostResponses];
+
+export type DeleteTenantApiAdminTenantsTenantIdDeleteData = {
+    body?: never;
+    path: {
+        /**
+         * Tenant Id
+         */
+        tenant_id: string;
+    };
+    query?: never;
+    url: '/api/admin/tenants/{tenant_id}';
+};
+
+export type DeleteTenantApiAdminTenantsTenantIdDeleteErrors = {
+    /**
+     * No tenant has the id.
+     */
+    404: unknown;
+    /**
+     * The tenant is the hub's only open tenant.
+     */
+    409: unknown;
+    /**
+     * The tenant was deleted.
+     */
+    410: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeleteTenantApiAdminTenantsTenantIdDeleteError = DeleteTenantApiAdminTenantsTenantIdDeleteErrors[keyof DeleteTenantApiAdminTenantsTenantIdDeleteErrors];
+
+export type DeleteTenantApiAdminTenantsTenantIdDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    200: TenantDeletionResponse;
+    /**
+     * The deletion is underway.
+     */
+    202: TenantDeletionResponse;
+};
+
+export type DeleteTenantApiAdminTenantsTenantIdDeleteResponse = DeleteTenantApiAdminTenantsTenantIdDeleteResponses[keyof DeleteTenantApiAdminTenantsTenantIdDeleteResponses];
 
 export type RenameTenantApiAdminTenantsTenantIdPatchData = {
     body: TenantRenameRequest;

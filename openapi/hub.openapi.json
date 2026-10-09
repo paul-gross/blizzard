@@ -10752,7 +10752,9 @@
             "title": "Admin User Id"
           },
           "name": {
+            "maxLength": 64,
             "minLength": 1,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$",
             "title": "Name",
             "type": "string"
           }
@@ -10761,6 +10763,40 @@
           "name"
         ],
         "title": "TenantCreateRequest",
+        "type": "object"
+      },
+      "TenantDeletionResponse": {
+        "description": "``DELETE /api/admin/tenants/{tenant_id}``: ``deleted`` with the rows its deletion removed (``200``), or\n``deleting`` while the ``tenant_teardown`` sweep carries it on (``202``).",
+        "properties": {
+          "rows_removed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rows Removed"
+          },
+          "state": {
+            "enum": [
+              "deleted",
+              "deleting"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "state"
+        ],
+        "title": "TenantDeletionResponse",
         "type": "object"
       },
       "TenantGraphSync": {
@@ -10799,7 +10835,9 @@
         "description": "``PATCH /api/admin/tenants/{tenant_id}``: the tenant's new name.",
         "properties": {
           "name": {
+            "maxLength": 64,
             "minLength": 1,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$",
             "title": "Name",
             "type": "string"
           }
@@ -10811,8 +10849,19 @@
         "type": "object"
       },
       "TenantView": {
-        "description": "One tenant: its id, its name, when and by whom it was created, and whether it is ``open`` or ``deleting``.",
+        "description": "One tenant: its id, its name, when and by whom it was created, whether it is ``open`` or ``deleting``, and \u2014\nwhile it is ``deleting`` \u2014 when its deletion began.",
         "properties": {
+          "closed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed At"
+          },
           "created_at": {
             "title": "Created At",
             "type": "string"
@@ -13113,7 +13162,7 @@
         ]
       },
       "post": {
-        "description": "Create a tenant in one transaction, its packaged graphs minted and, when named, its first admin granted; it is\nusable the moment this answers. ``404`` when ``admin_user_id`` names no user \u2014 nothing is created.",
+        "description": "Create a tenant in one transaction, its packaged graphs minted and, when named, its first admin granted; it is\nusable the moment this answers. ``404`` when ``admin_user_id`` names no user, ``422`` when the name is not a tenant\nname's shape \u2014 nothing is created.",
         "operationId": "create_tenant_api_admin_tenants_post",
         "requestBody": {
           "content": {
@@ -13154,8 +13203,68 @@
       }
     },
     "/api/admin/tenants/{tenant_id}": {
+      "delete": {
+        "description": "Close a tenant and drain it inline under a row budget: ``200`` with the rows removed when the drain finishes\ninside it, else ``202`` while the ``tenant_teardown`` sweep carries on. A tenant whose deletion is underway answers\n``202`` and is left as it is; one already deleted answers ``410``; the hub's only open tenant is refused ``409``.",
+        "operationId": "delete_tenant_api_admin_tenants__tenant_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenant_id",
+            "required": true,
+            "schema": {
+              "title": "Tenant Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantDeletionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantDeletionResponse"
+                }
+              }
+            },
+            "description": "The deletion is underway."
+          },
+          "404": {
+            "description": "No tenant has the id."
+          },
+          "409": {
+            "description": "The tenant is the hub's only open tenant."
+          },
+          "410": {
+            "description": "The tenant was deleted."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Tenant",
+        "tags": [
+          "admin"
+        ]
+      },
       "patch": {
-        "description": "Rename an open tenant; ``404`` when no open tenant has the id.",
+        "description": "Rename an open tenant; ``404`` when no open tenant has the id, ``422`` when the name is not a tenant name's\nshape.",
         "operationId": "rename_tenant_api_admin_tenants__tenant_id__patch",
         "parameters": [
           {
