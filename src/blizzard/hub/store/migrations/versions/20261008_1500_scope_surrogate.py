@@ -2,17 +2,21 @@
 
 ``scopes`` gains ``scope_id``, minted for each scope as a prefixed ULID: its timestamp the scope's ``created_at``, its
 random bits drawn from the scope's tenant and slug, so re-running the upgrade mints the same ids. Each of the six tables
-naming a scope by slug gains the id beside it, filled from the scope its own tenant holds under that slug; while a row
-names a slug its tenant holds no scope under, the upgrade refuses, naming the table, before any table is touched. Then,
-in the order every dialect accepts: each child drops its foreign key onto ``scopes.slug`` and, except ``findings`` and
-``finding_sets`` (which keep ``scope_slug`` as their label), the slug column, its id becoming required; ``scopes`` is
-rekeyed — ``pk_scopes (scope_id)``, ``uq_scopes_tenant_slug (tenant_id, slug)``, no ``ix_scopes_tenant_id`` (the unique
+naming a scope by slug gains the id beside it, filled from the scope its own tenant holds under that slug. A slug a row
+names but no scope of the row's tenant holds — the hub never enforced its foreign keys on SQLite — gets a stand-in
+scope, minted as the hub mints a scope a routine names unseen: no description, revision 1; its ``created_at`` the epoch
+and its id drawn from a namespace no other scope's id is, so the id alone marks it. The stand-ins are staged in
+``scope_stand_ins`` until ``scopes`` is rekeyed, then added to it and their count logged. Then, in the order every
+dialect accepts: each child drops its foreign key onto ``scopes.slug`` and, except ``findings`` and ``finding_sets``
+(which keep ``scope_slug`` as their label), the slug column, its id becoming required; ``scopes`` is rekeyed —
+``pk_scopes (scope_id)``, ``uq_scopes_tenant_slug (tenant_id, slug)``, no ``ix_scopes_tenant_id`` (the unique
 constraint leads with ``tenant_id``); each child gains ``fk_<child>_scopes`` onto the id. ``routine_scopes`` is keyed
 ``pk_routine_scopes (routine_id, scope_id)`` with ``ix_routine_scopes_scope_id``. Backfills page along a key in bounded
 batches; every step inspects first and skips what a stopped run already did.
 
-The downgrade refuses while more than one tenant exists, naming them; with one it restores the slug links, the
-unnamed slug keys and foreign keys, and the indexes those tables had before, and drops every ``scope_id``.
+The downgrade refuses while more than one tenant exists, naming them; with one it restores the slug links, deletes the
+stand-in scopes, restores the unnamed slug keys and foreign keys and the indexes those tables had before, and drops
+every ``scope_id``.
 Revision ID: 20261008_1500_scope_surrogate
 Revises: 20261008_1400_tenant_tighten
 """
@@ -20,6 +24,7 @@ Revises: 20261008_1400_tenant_tighten
 from __future__ import annotations
 
 import hashlib
+import logging
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 
@@ -38,6 +43,11 @@ _TENANT_COLUMN = "tenant_id"
 _PRIMARY_KEY = "pk_scopes"
 _TENANT_SLUG = "uq_scopes_tenant_slug"
 _TENANT_INDEX = "ix_scopes_tenant_id"
+_STAND_INS = "scope_stand_ins"
+_STAND_INS_KEY = "pk_scope_stand_ins"
+_STAND_IN_NAMESPACE = "stand-in"
+
+_log = logging.getLogger("alembic.runtime.migration")
 
 # The prefixed-ULID mint, restated rather than imported (``bzh:frozen-revisions``): a type tag, an underscore, then 48
 # bits of millisecond timestamp and 80 further bits in Crockford base32.
@@ -76,7 +86,12 @@ _scopes = sa.table(
     sa.column(_SCOPE_ID, sa.String),
     sa.column("slug", sa.String),
     sa.column(_TENANT_COLUMN, sa.String),
+    sa.column("description", sa.Text),
     sa.column("created_at", sa.DateTime),
+    sa.column("revision", sa.Integer),
+)
+_stand_ins = sa.table(
+    _STAND_INS, sa.column(_TENANT_COLUMN, sa.String), sa.column("slug", sa.String), sa.column(_SCOPE_ID, sa.String)
 )
 
 
@@ -150,12 +165,22 @@ def _encode(value: int) -> str:
     return "".join(reversed(chars))
 
 
+def _drawn(key: str) -> int:
+    """``_RANDOM_BITS`` bits drawn from ``key`` — the same on every run."""
+    return int.from_bytes(hashlib.sha256(key.encode()).digest()[: _RANDOM_BITS // 8], "big")
+
+
 def _minted(tenant_id: str, slug: str, created_at: datetime) -> str:
     """The id of the scope ``tenant_id`` holds under ``slug``: timestamped at its creation, the same on every run."""
     at = created_at if created_at.tzinfo is not None else created_at.replace(tzinfo=UTC)
     millis = (at - _EPOCH) // timedelta(milliseconds=1)
-    randomness = int.from_bytes(hashlib.sha256(f"{tenant_id}/{slug}".encode()).digest()[: _RANDOM_BITS // 8], "big")
-    return f"{_SCOPE_PREFIX}_{_encode((millis << _RANDOM_BITS) | randomness)}"
+    return f"{_SCOPE_PREFIX}_{_encode((millis << _RANDOM_BITS) | _drawn(f'{tenant_id}/{slug}'))}"
+
+
+def _stand_in_id(tenant_id: str, slug: str) -> str:
+    """The id of the stand-in scope for ``slug`` in ``tenant_id``: timestamped at the epoch, its random bits drawn from
+    the stand-in namespace, which no held scope's key falls in (a slug holds no ``/``)."""
+    return f"{_SCOPE_PREFIX}_{_encode(_drawn(f'{_STAND_IN_NAMESPACE}/{tenant_id}/{slug}'))}"
 
 
 def _mint_scope_ids(bind: sa.Connection) -> None:
@@ -199,32 +224,82 @@ def _carry_ids(bind: sa.Connection, link: _Link) -> None:
     if slug not in _columns(bind, table):
         return
     child = _child(link, slug)
-    resolved = (
+    held = (
         sa.select(_scopes.c.scope_id)
         .where(_scopes.c.tenant_id == child.c.tenant_id, _scopes.c.slug == child.c[slug])
         .correlate(child)
         .scalar_subquery()
     )
+    stand_in = (
+        sa.select(_stand_ins.c.scope_id)
+        .where(_stand_ins.c.tenant_id == child.c.tenant_id, _stand_ins.c.slug == child.c[slug])
+        .correlate(child)
+        .scalar_subquery()
+    )
     page_key = (*key, slug) if key_name else key
-    _fill(bind, child, page_key, id_column, resolved)
+    _fill(bind, child, page_key, id_column, sa.func.coalesce(held, stand_in))
 
 
-def _refuse_unlinked(bind: sa.Connection) -> None:
-    """Refuse while a row names a slug its own tenant holds no scope under, before any table is touched."""
-    unlinked = []
+def _stage_stand_ins(bind: sa.Connection) -> None:
+    """Stage a stand-in for each ``(tenant_id, slug)`` a row names but no scope of its tenant holds, a page at a time
+    along that pair per linked table, before any linked table is touched."""
+    if not sa.inspect(bind).has_table(_STAND_INS):
+        op.create_table(
+            _STAND_INS,
+            sa.Column(_TENANT_COLUMN, sa.String(), nullable=False),
+            sa.Column("slug", sa.String(), nullable=False),
+            sa.Column(_SCOPE_ID, sa.String(), nullable=False),
+            sa.PrimaryKeyConstraint(_TENANT_COLUMN, "slug", name=_STAND_INS_KEY),
+        )
     for link in _LINKS:
         table, slug, *_ = link
         if slug not in _columns(bind, table):
             continue
         child = _child(link, slug)
+        named = (child.c.tenant_id, child.c[slug])
         held = sa.exists().where(_scopes.c.tenant_id == child.c.tenant_id, _scopes.c.slug == child.c[slug])
-        if bind.execute(sa.select(sa.literal(1)).select_from(child).where(~held).limit(1)).first():
-            unlinked.append(f"{table}.{slug}")
-    if unlinked:
-        raise RuntimeError(
-            f"{', '.join(unlinked)} name scopes their own tenant does not hold; each row must name a scope of its"
-            " tenant before scopes are keyed by id"
+        staged = sa.exists().where(_stand_ins.c.tenant_id == child.c.tenant_id, _stand_ins.c.slug == child.c[slug])
+        page = sa.select(*named).distinct().where(~held, ~staged).order_by(*named).limit(_BATCH_ROWS)
+        after: sa.ColumnElement[bool] = sa.true()
+        while rows := bind.execute(page.where(after)).all():
+            bind.execute(
+                sa.insert(_stand_ins),
+                [
+                    {_TENANT_COLUMN: tenant_id, "slug": name, _SCOPE_ID: _stand_in_id(tenant_id, name)}
+                    for tenant_id, name in rows
+                ],
+            )
+            after = sa.tuple_(*named) > (rows[-1][0], rows[-1][1])
+
+
+def _seat_stand_ins(bind: sa.Connection) -> None:
+    """Add every staged stand-in ``scopes`` does not hold yet, log how many, and drop the staging table."""
+    if not sa.inspect(bind).has_table(_STAND_INS):
+        return
+    staged = (_stand_ins.c.tenant_id, _stand_ins.c.slug)
+    held = sa.exists().where(_scopes.c.tenant_id == _stand_ins.c.tenant_id, _scopes.c.slug == _stand_ins.c.slug)
+    page = sa.select(*staged, _stand_ins.c.scope_id).where(~held).order_by(*staged).limit(_BATCH_ROWS)
+    seated = 0
+    after: sa.ColumnElement[bool] = sa.true()
+    while rows := bind.execute(page.where(after)).all():
+        bind.execute(
+            sa.insert(_scopes),
+            [
+                {
+                    _SCOPE_ID: scope_id,
+                    "slug": slug,
+                    _TENANT_COLUMN: tenant_id,
+                    "description": "",
+                    "created_at": _EPOCH,
+                    "revision": 1,
+                }
+                for tenant_id, slug, scope_id in rows
+            ],
         )
+        seated += len(rows)
+        after = sa.tuple_(*staged) > (rows[-1][0], rows[-1][1])
+    _log.info("minted %d stand-in scopes for slugs rows named but no scope of their tenant held", seated)
+    op.drop_table(_STAND_INS)
 
 
 def _scope_foreign_keys(bind: sa.Connection, table: str, column: str, parent_column: str) -> list[str | None]:
@@ -330,13 +405,14 @@ def _attach(bind: sa.Connection, link: _Link) -> None:
 
 def upgrade() -> None:
     bind = op.get_bind()
-    _refuse_unlinked(bind)
+    _stage_stand_ins(bind)
     _mint_scope_ids(bind)
     for link in _LINKS:
         _carry_ids(bind, link)
     for link in _LINKS:
         _detach(bind, link)
     _rekey_scopes(bind)
+    _seat_stand_ins(bind)
     for link in _LINKS:
         _attach(bind, link)
 
@@ -366,6 +442,29 @@ def _carry_slugs(bind: sa.Connection, link: _Link) -> None:
     )
     page_key = (*key, id_column) if key_name else key
     _fill(bind, child, page_key, slug, resolved)
+
+
+def _unseat_stand_ins(bind: sa.Connection) -> None:
+    """Delete every stand-in scope — each one whose id is the stand-in id of its tenant and slug — a page at a time
+    along the id, among the ids timestamped at the epoch."""
+    if _SCOPE_ID not in _columns(bind, _SCOPES):
+        return
+    at_the_epoch = _scopes.c.scope_id.startswith(f"{_SCOPE_PREFIX}_{_encode(0)[:10]}", autoescape=True)
+    page = (
+        sa.select(_scopes.c.scope_id, _scopes.c.tenant_id, _scopes.c.slug)
+        .where(at_the_epoch)
+        .order_by(_scopes.c.scope_id)
+        .limit(_BATCH_ROWS)
+    )
+    unseated = 0
+    after: sa.ColumnElement[bool] = sa.true()
+    while rows := bind.execute(page.where(after)).all():
+        stand_ins = [scope_id for scope_id, tenant_id, slug in rows if scope_id == _stand_in_id(tenant_id, slug)]
+        if stand_ins:
+            bind.execute(sa.delete(_scopes).where(_scopes.c.scope_id.in_(stand_ins)))
+        unseated += len(stand_ins)
+        after = _scopes.c.scope_id > rows[-1][0]
+    _log.info("deleted %d stand-in scopes", unseated)
 
 
 def _unkey_scopes(bind: sa.Connection) -> None:
@@ -437,6 +536,7 @@ def downgrade() -> None:
         _unattach(bind, link)
     for link in _LINKS:
         _carry_slugs(bind, link)
+    _unseat_stand_ins(bind)
     _unkey_scopes(bind)
     for link in _LINKS:
         _reattach(bind, link)

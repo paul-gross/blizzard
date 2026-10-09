@@ -1,16 +1,18 @@
 """The scope surrogate revision keys ``scopes`` by a minted ``scp_`` id with the slug unique within its tenant, and
 links each of its six children by that id to the scope its own tenant holds under the slug the row named. Every row
-and link survives; a run that stopped part way finishes; a row naming a slug its tenant holds no scope under is
-refused; the downgrade refuses while two tenants exist and otherwise restores the store exactly.
+and link survives; a slug a row names but no scope of its tenant holds gets a stand-in scope; a run that stopped part
+way finishes; the downgrade refuses while two tenants exist and otherwise restores the store exactly, stand-ins gone.
 
 Seeded from the store's reflected shape at the pinned revisions rather than ``src/blizzard/hub/store/schema.py``, whose
 tables keep changing shape after this revision."""
 
 from __future__ import annotations
 
+import logging
 import re
 import warnings
-from datetime import timedelta
+from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import ModuleType
 
@@ -114,6 +116,32 @@ def _scope_ids(engine: sa.Engine) -> dict[tuple[str, str], str]:
         return {(tenant, slug): scope_id for tenant, slug, scope_id in rows}
 
 
+def _name_lost_slugs(engine: sa.Engine, tenant: str) -> dict[str, str]:
+    """Point every row ``tenant`` holds in each child at a slug no scope holds, one per child; each child to its slug."""
+    lost = {table: f"lost-{n}" for n, (table, _, _) in enumerate(_CHILDREN)}
+    with engine.begin() as conn:
+        for table, column, _ in _CHILDREN:
+            conn.execute(
+                sa.text(f"UPDATE {table} SET {column} = :slug WHERE tenant_id = :tenant"),
+                {"slug": lost[table], "tenant": tenant},
+            )
+    return lost
+
+
+def _named(engine: sa.Engine, table: str, column: str) -> list[tuple[str, str]]:
+    """Each row of ``table`` as its tenant and the slug ``column`` names, ``column`` reaching ``scopes`` when it holds
+    the id."""
+    with engine.connect() as conn:
+        if column in {"slug", "scope_slug", "default_scope_slug"}:
+            query = f"SELECT tenant_id, {column} FROM {table}"
+        else:
+            query = (
+                f"SELECT c.tenant_id, s.slug FROM {table} c LEFT JOIN scopes s"
+                f" ON s.tenant_id = c.tenant_id AND s.scope_id = c.{column}"
+            )
+        return sorted(tuple(row) for row in conn.execute(sa.text(query)))
+
+
 def test_the_upgrade_links_every_row_to_its_own_tenants_scope_by_a_minted_id(tmp_path: Path) -> None:
     db_url, engine = _seeded_at_the_tighten(tmp_path)
     try:
@@ -205,31 +233,62 @@ def _rows_in_any_tenant(engine: sa.Engine) -> dict[str, list[str]]:
     return rows
 
 
-def test_a_rerun_over_a_store_relinked_part_way_finishes_with_the_same_ids(tmp_path: Path) -> None:
-    """Re-entry: ids already minted and carried are kept, a child already taken off the slug is skipped, the copy a
-    stopped batch left behind is cleared, and the store ends as a single run leaves it."""
+def _relinked_part_way(module: ModuleType, conn: sa.Connection) -> None:
+    """Stand-ins staged, ids minted, two children carried and one of them taken off the slug."""
+    links = {link[0]: link for link in module._LINKS}
+    module._stage_stand_ins(conn)
+    module._mint_scope_ids(conn)
+    module._carry_ids(conn, links["findings"])
+    module._carry_ids(conn, links["routine_scopes"])
+    module._detach(conn, links["findings"])
+
+
+def _seated_part_way(module: ModuleType, conn: sa.Connection) -> None:
+    """Every step through the stand-ins seated in the rekeyed ``scopes``, one child attached by its id."""
+    module._stage_stand_ins(conn)
+    module._mint_scope_ids(conn)
+    for link in module._LINKS:
+        module._carry_ids(conn, link)
+    for link in module._LINKS:
+        module._detach(conn, link)
+    module._rekey_scopes(conn)
+    module._seat_stand_ins(conn)
+    module._attach(conn, module._LINKS[0])
+
+
+@pytest.mark.parametrize(
+    ("stopped", "copying"),
+    [(_relinked_part_way, "scopes"), (_seated_part_way, "finding_sets")],
+    ids=["relinked", "seated"],
+)
+def test_a_rerun_over_a_store_relinked_part_way_finishes_with_the_same_ids(
+    tmp_path: Path, stopped: Callable[[ModuleType, sa.Connection], None], copying: str
+) -> None:
+    """Re-entry: ids already minted and carried are kept, stand-ins already staged or seated are neither lost nor
+    doubled, a child already taken off the slug is skipped, the copy a stopped batch left behind is cleared, and the
+    store ends as a single run leaves it."""
     db_url, engine = _seeded_at_the_tighten(tmp_path)
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     try:
-        module = _revision_module()
-        links = {link[0]: link for link in module._LINKS}
+        [tenant] = _tenant_ids(engine)
+        _name_lost_slugs(engine, tenant)
         with engine.begin() as conn, Operations.context(MigrationContext.configure(conn)):
-            module._mint_scope_ids(conn)
-            module._carry_ids(conn, links["findings"])
-            module._carry_ids(conn, links["routine_scopes"])
-            module._detach(conn, links["findings"])
+            stopped(_revision_module(), conn)
         minted = _scope_ids(engine)
         with engine.begin() as conn:
-            conn.execute(sa.text("CREATE TABLE _alembic_tmp_scopes (slug VARCHAR)"))  # a stopped copy's leftover
+            # the leftover of a stopped copy of a table the rerun still reshapes
+            conn.execute(sa.text(f"CREATE TABLE _alembic_tmp_{copying} (slug VARCHAR)"))
         assert runner.current_revision() == _TIGHTEN
 
         runner.upgrade(_SURROGATE)
 
         assert runner.current_revision() == _SURROGATE
-        assert _scope_ids(engine) == minted
+        assert {key: _scope_ids(engine)[key] for key in minted} == minted
         (tmp_path / "reference").mkdir()
         reference_url, reference = _seeded_at_the_tighten(tmp_path / "reference")
         try:
+            [reference_tenant] = _tenant_ids(reference)
+            _name_lost_slugs(reference, reference_tenant)
             migration_runner(HubConfig(root=tmp_path / "reference", db_url=reference_url)).upgrade(_SURROGATE)
             assert _snapshot(engine) == _snapshot(reference)
             assert _rows_in_any_tenant(engine) == _rows_in_any_tenant(reference)
@@ -289,22 +348,69 @@ def test_the_upgrade_mints_and_carries_ids_in_bounded_batches_across_more_than_o
         engine.dispose()
 
 
-def test_the_upgrade_refuses_a_row_naming_a_scope_only_another_tenant_holds_and_changes_nothing(
-    tmp_path: Path,
+def test_the_upgrade_mints_a_stand_in_scope_for_every_slug_a_row_names_but_its_tenant_does_not_hold(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     db_url, engine = _seeded_at_the_tighten(tmp_path)
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     try:
+        [first] = _tenant_ids(engine)
         with engine.connect() as conn:
             slug = conn.execute(sa.text("SELECT slug FROM scopes")).scalar_one()
         _add_second_tenant(engine)
         _copy_scope_into_second_tenant(engine, "second-slug", named=slug)
-        snapshot, rows = _snapshot(engine), _rows(engine)
+        lost = _name_lost_slugs(engine, first)
+        named = {table: _named(engine, table, column) for table, column, _ in _CHILDREN}
+        counts = {table: len(rows) for table, rows in _rows(engine).items()}
 
-        with pytest.raises(RuntimeError, match="name scopes their own tenant does not hold") as refused:
+        with warnings.catch_warnings(), caplog.at_level(logging.INFO, logger="alembic.runtime.migration"):
+            warnings.simplefilter("error", SAWarning)
             runner.upgrade(_SURROGATE)
 
-        assert all(f"{table}.{column}" in str(refused.value) for table, column, _ in _CHILDREN)
+        assert runner.current_revision() == _SURROGATE
+        stand_ins = {(first, name) for name in lost.values()} | {(_SECOND_TENANT, slug)}
+        assert "minted 7 stand-in scopes" in caplog.text
+        assert {table: len(rows) for table, rows in _rows(engine).items()} == {
+            **counts,
+            "scopes": counts["scopes"] + len(stand_ins),
+        }
+        assert not sa.inspect(engine).has_table("scope_stand_ins")
+        ids = _scope_ids(engine)
+        assert set(ids) == {(first, slug), (_SECOND_TENANT, "second-slug"), *stand_ins}
+        with engine.connect() as conn:
+            minted = conn.execute(
+                sa.text("SELECT tenant_id, slug, scope_id, description, created_at, revision FROM scopes")
+            ).all()
+        for tenant, name, scope_id, description, created_at, revision in minted:
+            if (tenant, name) not in stand_ins:
+                continue
+            parsed = Id.parse(scope_id)
+            assert (
+                parsed is not None and parsed.prefix == "scp" and parsed.minted_at == datetime(1970, 1, 1, tzinfo=UTC)
+            )
+            assert (description, revision) == ("", 1)
+            assert datetime.fromisoformat(str(created_at)).replace(tzinfo=UTC) == datetime(1970, 1, 1, tzinfo=UTC)
+        assert len(set(ids.values())) == len(ids)
+        for table, _, id_column in _CHILDREN:
+            assert _named(engine, table, id_column) == named[table], table
+    finally:
+        engine.dispose()
+
+
+def test_with_one_tenant_the_downgrade_deletes_the_stand_ins_and_restores_the_store_exactly(tmp_path: Path) -> None:
+    db_url, engine = _seeded_at_the_tighten(tmp_path)
+    runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
+    try:
+        [tenant] = _tenant_ids(engine)
+        lost = _name_lost_slugs(engine, tenant)
+        snapshot, rows = _snapshot(engine), _rows(engine)
+
+        runner.upgrade(_SURROGATE)
+        assert {(tenant, name) for name in lost.values()} <= set(_scope_ids(engine))
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", SAWarning)
+            runner.downgrade(_TIGHTEN)
+
         assert runner.current_revision() == _TIGHTEN
         assert _snapshot(engine) == snapshot
         assert _rows(engine) == rows
