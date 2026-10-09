@@ -9,10 +9,12 @@ from __future__ import annotations
 from typing import Any
 
 from sqlalchemy import Row, Select
+from sqlalchemy.exc import IntegrityError
 
 from blizzard.auth_core import Role
 from blizzard.hub.auth.invitations import (
     Invitation,
+    InvitationAlreadyResolved,
     InvitationOutcome,
     InvitationOutcomeKind,
     InvitationRecord,
@@ -58,15 +60,24 @@ class InvitationStore:
             )
 
     def record(self, outcome: InvitationOutcome) -> None:
-        with self._store.write("record invitation outcome") as conn:
-            conn.execute(
-                self._store.insert(invitation_facts).values(
-                    invitation_id=outcome.invitation_id,
-                    kind=outcome.kind.value,
-                    actor_user_id=outcome.actor_user_id,
-                    recorded_at=outcome.recorded_at,
+        try:
+            with self._store.write("record invitation outcome", expect=(IntegrityError,)) as conn, conn.begin_nested():
+                conn.execute(
+                    self._store.insert(invitation_facts).values(
+                        invitation_id=outcome.invitation_id,
+                        kind=outcome.kind.value,
+                        actor_user_id=outcome.actor_user_id,
+                        recorded_at=outcome.recorded_at,
+                    )
                 )
-            )
+        except IntegrityError as exc:
+            # The post-write re-check: an outcome another writer recorded since this one's caller read the invitation
+            # wins on the one-fact-per-invitation index. The insert ran in its own savepoint, so a transaction this
+            # write joined stays usable for the re-read and decides itself whether to roll back.
+            winner = self.get(outcome.invitation_id)
+            if winner is None or winner.outcome is None:
+                raise
+            raise InvitationAlreadyResolved(winner) from exc
 
     # --- helpers --------------------------------------------------------
 

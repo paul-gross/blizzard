@@ -33,6 +33,7 @@ from blizzard.hub.auth.hub_admins import HubAdminFact, IReadHubAdminRepository
 from blizzard.hub.auth.identities import IWriteIdentityRepository
 from blizzard.hub.auth.identity_transaction import IdentityWrites, IIdentityTransactions
 from blizzard.hub.auth.invitations import (
+    InvitationAlreadyResolved,
     InvitationOutcome,
     InvitationOutcomeKind,
     IWriteInvitationRepository,
@@ -445,22 +446,26 @@ class AuthService:
         configured, still-unclaimed ``auth.superuser`` whose email it holds.
 
         A refusal, writing nothing, when the invitation is no longer live (``INVITATION_UNUSABLE``) or ``identity``
-        carries no address the invitation admits (``INVITATION_EMAIL_MISMATCH`` — it stays live)."""
+        carries no address the invitation admits (``INVITATION_EMAIL_MISMATCH`` — it stays live). An invitation
+        revoked or accepted elsewhere after this unit read it live is no longer live either: the unit rolls back."""
         now = self._clock.now()
-        with self._transactions.begin() as writes:
-            invitations = self._invitations(writes.tenant_connections(StoreScope(invitation.tenant)))
-            record = invitations.get(invitation.invitation_id)
-            if record is None or record.state(now) is not InvitationState.LIVE:
-                return SignInRefusal.INVITATION_UNUSABLE
-            if not record.invitation.admits(identity):
-                return SignInRefusal.INVITATION_EMAIL_MISMATCH
-            user = self._resolve_user(identity, provider_name, users=writes.users, identities=writes.identities)
-            if writes.memberships.role_in(invitation.tenant, user.user_id) is None:
-                self._grant(record.invitation.role, user=user, invitation=invitation, at=now, writes=writes)
-            invitations.record(
-                InvitationOutcome(invitation.invitation_id, InvitationOutcomeKind.ACCEPTED, user.user_id, now)
-            )
-            plaintext, _session = self._open_session(user, writes.sessions)
+        try:
+            with self._transactions.begin() as writes:
+                invitations = self._invitations(writes.tenant_connections(StoreScope(invitation.tenant)))
+                record = invitations.get(invitation.invitation_id)
+                if record is None or record.state(now) is not InvitationState.LIVE:
+                    return SignInRefusal.INVITATION_UNUSABLE
+                if not record.invitation.admits(identity):
+                    return SignInRefusal.INVITATION_EMAIL_MISMATCH
+                user = self._resolve_user(identity, provider_name, users=writes.users, identities=writes.identities)
+                if writes.memberships.role_in(invitation.tenant, user.user_id) is None:
+                    self._grant(record.invitation.role, user=user, invitation=invitation, at=now, writes=writes)
+                invitations.record(
+                    InvitationOutcome(invitation.invitation_id, InvitationOutcomeKind.ACCEPTED, user.user_id, now)
+                )
+                plaintext, _session = self._open_session(user, writes.sessions)
+        except InvitationAlreadyResolved:
+            return SignInRefusal.INVITATION_UNUSABLE
         _log.info("invitation accepted", user_id=user.user_id, invitation_id=invitation.invitation_id)
         return InvitationAccepted(self._claim_superuser(user), plaintext, invitation.tenant)
 

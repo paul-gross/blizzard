@@ -27,6 +27,7 @@ from tests.support import (
     seed_session,
     seed_user,
 )
+from tests.test_invitation_acceptance import resolved_after_first_read
 
 pytestmark = pytest.mark.component
 
@@ -148,6 +149,26 @@ def test_revoking_ends_a_live_invitation_once(tmp_path: Path) -> None:
     assert again.status_code == 409, again.text
     unknown = hub.client.post("/api/invitations/inv_unknown/revocations", headers=admin)
     assert unknown.status_code == 404, unknown.text
+
+
+def test_two_revocations_racing_answer_201_and_409(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    hub = build_hub(tmp_path, auth_mode="oauth")
+    admin = _admin(hub)
+    invitation_id = _invite(hub, admin).json()["invitation"]["invitation_id"]
+    revocations = f"/api/invitations/{invitation_id}/revocations"
+    first: list[int] = []
+    resolved_after_first_read(
+        monkeypatch, lambda: first.append(hub.client.post(revocations, headers=admin).status_code)
+    )
+
+    second = hub.client.post(revocations, headers=admin)
+
+    assert first == [201]
+    assert second.status_code == 409, second.text
+    assert second.json()["detail"] == f"invitation {invitation_id} was already revoked"
+    with hub.engine.connect() as conn:
+        facts = conn.execute(hub_scoped(sa.select(schema.invitation_facts.c.kind))).scalars().all()
+    assert facts == ["revoked"]
 
 
 def test_an_expired_invitation_lists_as_expired(tmp_path: Path) -> None:

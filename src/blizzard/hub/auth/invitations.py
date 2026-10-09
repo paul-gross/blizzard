@@ -131,7 +131,8 @@ class IWriteInvitationRepository(IReadInvitationRepository, Protocol):
     def create(self, invitation: Invitation) -> None: ...
 
     def record(self, outcome: InvitationOutcome) -> None:
-        """Record ``outcome``; an invitation holds at most one, so a second raises."""
+        """Record ``outcome``. An invitation holds at most one, so the first recorded wins: a later one raises
+        :class:`InvitationAlreadyResolved` carrying the invitation as it then stands, and writes nothing."""
         ...
 
 
@@ -206,7 +207,8 @@ class InvitationService:
 
     def revoke(self, invitation_id: str, *, by: str) -> InvitationRecord:
         """Record that the user ``by`` revoked the invitation. Raises :class:`InvitationNotFound` for an unknown id and
-        :class:`InvitationAlreadyResolved` for one already accepted or revoked."""
+        :class:`InvitationAlreadyResolved` for one already accepted or revoked — also when that outcome was recorded
+        between this read and its write."""
         record = self._invitations.get(invitation_id)
         if record is None:
             raise InvitationNotFound(invitation_id)

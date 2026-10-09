@@ -4,10 +4,13 @@ membership the invitation grants unless they already hold one there, the ``accep
 lands them in the invited tenant. A provider that does not vouch for every address it reports, an account carrying no
 invited address, and an invitation no longer live or naming nothing admit nobody, write nothing and land on the login
 page naming why — the invitation stays live when only the address was wrong; a failure part way leaves nothing behind.
-A person already signed in who opens an invitation goes through the same check."""
+An invitation accepted or revoked between a reader's check and its write goes to whichever outcome was recorded first:
+the acceptance that loses is refused as no longer usable, the revocation that loses answers 409. A person already
+signed in who opens an invitation goes through the same check."""
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
@@ -17,10 +20,11 @@ import pytest
 import sqlalchemy as sa
 
 from blizzard.auth_core import Role
-from blizzard.hub.auth.invitations import InvitationToken, TenantInvitation
+from blizzard.hub.auth.invitations import InvitationRecord, InvitationToken, TenantInvitation
 from blizzard.hub.auth.models import ProviderIdentity
 from blizzard.hub.auth.service import SignInRefusal
 from blizzard.hub.store import schema
+from blizzard.hub.store.internal.invitation_store import InvitationStore
 from blizzard.hub.tenancy import TenantClosed, TenantId
 from tests.support import (
     HubHarness,
@@ -29,6 +33,7 @@ from tests.support import (
     default_tenant,
     hub_scoped,
     seed_invitation,
+    seed_session,
     seed_user,
 )
 from tests.test_auth_login_api import FakeOAuthProvider, _state_from_redirect
@@ -267,6 +272,58 @@ def test_an_invitation_is_accepted_at_most_once(tmp_path: Path) -> None:
 
     assert again is SignInRefusal.INVITATION_UNUSABLE
     assert _written(hub) == after_first
+
+
+def resolved_after_first_read(monkeypatch: pytest.MonkeyPatch, rival: Callable[[], object]) -> None:
+    """Interleave ``rival`` between the next invitation read and its reader's write: that read answers the invitation
+    as it stood before any outcome was recorded — live — and ``rival`` runs right after it; every later read is real."""
+    real_get = InvitationStore.get
+    reads = 0
+
+    def get(store: InvitationStore, invitation_id: str) -> InvitationRecord | None:
+        nonlocal reads
+        reads += 1
+        record = real_get(store, invitation_id)
+        if reads > 1 or record is None:
+            return record
+        rival()
+        return InvitationRecord(record.invitation, None)
+
+    monkeypatch.setattr(InvitationStore, "get", get)
+
+
+def test_a_revocation_that_loses_to_an_acceptance_answers_409(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    hub, _github = _hub(tmp_path, _ada())
+    tenant = default_tenant(hub.engine)
+    admin = {"Cookie": f"bz_session={seed_session(hub, seed_user(hub, username='admin', role=Role.ADMIN))}"}
+    invitation_id, token = seed_invitation(hub.engine, tenant, _WORK, Role.GUEST)
+
+    def accepted() -> None:
+        assert urlsplit(_sign_in(hub, token).headers["location"]).path == "/invite/accepted"
+
+    resolved_after_first_read(monkeypatch, accepted)
+
+    revoked = hub.client.post(f"/api/invitations/{invitation_id}/revocations", headers=admin)
+
+    assert revoked.status_code == 409, revoked.text
+    assert revoked.json()["detail"] == f"invitation {invitation_id} was already accepted"
+    assert [row.kind for row in _rows(hub, schema.invitation_facts)] == ["accepted"]
+
+
+def test_an_acceptance_that_loses_to_a_revocation_writes_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    hub, _github = _hub(tmp_path, _ada())
+    token = _revoked(hub, default_tenant(hub.engine))
+    before = _written(hub)
+    read_live: list[bool] = []
+    resolved_after_first_read(monkeypatch, lambda: read_live.append(True))
+
+    _refused(_sign_in(hub, token), SignInRefusal.INVITATION_UNUSABLE)
+
+    assert read_live == [True]
+    assert _written(hub) == before
+    assert [row.kind for row in _rows(hub, schema.invitation_facts)] == ["revoked"]
 
 
 def test_a_failure_part_way_leaves_nothing_behind(tmp_path: Path) -> None:
