@@ -4,7 +4,15 @@ from __future__ import annotations
 
 import pytest
 
-from blizzard.auth_core import ROLE_PERMISSIONS, Permission, Role, expand
+from blizzard.auth_core import (
+    HUB_PERMISSIONS,
+    MEMBERSHIP_ROLES,
+    ROLE_PERMISSIONS,
+    Permission,
+    Role,
+    expand,
+    permissions_for,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -136,3 +144,39 @@ def test_config_edit_is_admin_and_above() -> None:
         assert Permission.CONFIG_EDIT in expand(role)
     for role in (Role.PENDING, Role.GUEST, Role.CONTRIBUTOR):
         assert Permission.CONFIG_EDIT not in expand(role)
+
+
+def test_hub_permissions_are_the_four_hub_level_grants() -> None:
+    assert {
+        Permission.TENANT_ADMIN,
+        Permission.MEMBERSHIP_GRANT_ANY,
+        Permission.HUB_ADMIN_GRANT,
+        Permission.EXPORT_ADMIN,
+    } == HUB_PERMISSIONS
+
+
+@pytest.mark.parametrize("role", list(Role))
+def test_no_role_bundle_expands_to_a_hub_permission(role: Role) -> None:
+    assert expand(role).isdisjoint(HUB_PERMISSIONS)
+
+
+def test_a_membership_carries_guest_contributor_or_admin_only() -> None:
+    assert MEMBERSHIP_ROLES == (Role.GUEST, Role.CONTRIBUTOR, Role.ADMIN)
+    assert Role.PENDING not in MEMBERSHIP_ROLES
+    assert Role.SUPERUSER not in MEMBERSHIP_ROLES
+
+
+@pytest.mark.parametrize("role", [*MEMBERSHIP_ROLES, None])
+def test_permissions_for_a_non_hub_admin_is_the_role_bundle_alone(role: Role | None) -> None:
+    expected = frozenset() if role is None else expand(role)
+    assert permissions_for(role, hub_admin=False) == expected
+
+
+@pytest.mark.parametrize("role", [*MEMBERSHIP_ROLES, None])
+def test_permissions_for_a_hub_admin_adds_the_hub_permissions(role: Role | None) -> None:
+    bundle = frozenset() if role is None else expand(role)
+    assert permissions_for(role, hub_admin=True) == bundle | HUB_PERMISSIONS
+
+
+def test_a_hub_admin_without_a_membership_holds_no_tenant_permission() -> None:
+    assert permissions_for(None, hub_admin=True) == HUB_PERMISSIONS

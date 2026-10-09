@@ -57,6 +57,14 @@ class Permission(StrEnum):
     ANALYTICS_ADMIN = "analytics:admin"
     #: Write a configured record — today the secret store. Held by ``admin``+.
     CONFIG_EDIT = "config:edit"
+    #: Create, list, rename, and delete tenants. Hub-level (:data:`HUB_PERMISSIONS`).
+    TENANT_ADMIN = "tenant:admin"
+    #: Grant or revoke a membership, and its invitations, in any tenant. Hub-level.
+    MEMBERSHIP_GRANT_ANY = "membership:grant-any"
+    #: Grant and revoke the hub administrator role. Hub-level.
+    HUB_ADMIN_GRANT = "hub-admin:grant"
+    #: Operate the hub-wide exports every tenant shares — status, replay, cursor moves. Hub-level.
+    EXPORT_ADMIN = "export:admin"
 
 
 #: ``guest`` — read everything, mutate nothing.
@@ -88,8 +96,7 @@ _ADMIN_PERMISSIONS: frozenset[Permission] = _CONTRIBUTOR_PERMISSIONS | frozenset
     }
 )
 
-#: ``superuser`` holds every permission that exists — in #91 that is exactly the
-#: ``admin`` bundle (see :attr:`Permission.USER_MANAGE`'s note on the grant-admin rule).
+#: ``superuser`` holds exactly the ``admin`` bundle; no role bundle holds a hub-level permission.
 _SUPERUSER_PERMISSIONS: frozenset[Permission] = _ADMIN_PERMISSIONS
 
 #: The static role -> permission-bundle map (``bzh:domain-core``) — code, never DB.
@@ -106,3 +113,24 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
 def expand(role: Role) -> frozenset[Permission]:
     """The full, expanded permission set a ``role`` carries — computed in exactly one place."""
     return ROLE_PERMISSIONS[role]
+
+
+#: The permissions only a hub administrator holds, never expanded from a role (:func:`permissions_for`).
+HUB_PERMISSIONS: frozenset[Permission] = frozenset(
+    {
+        Permission.TENANT_ADMIN,
+        Permission.MEMBERSHIP_GRANT_ANY,
+        Permission.HUB_ADMIN_GRANT,
+        Permission.EXPORT_ADMIN,
+    }
+)
+
+#: The roles a tenant membership may carry — ``pending`` and ``superuser`` are never one.
+MEMBERSHIP_ROLES: tuple[Role, ...] = (Role.GUEST, Role.CONTRIBUTOR, Role.ADMIN)
+
+
+def permissions_for(role: Role | None, hub_admin: bool) -> frozenset[Permission]:
+    """Every permission a principal holds: ``role``'s bundle (none without a role), plus
+    :data:`HUB_PERMISSIONS` when ``hub_admin`` is true."""
+    held: frozenset[Permission] = frozenset() if role is None else expand(role)
+    return (held | HUB_PERMISSIONS) if hub_admin else held
