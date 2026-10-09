@@ -41,6 +41,10 @@ _COMMANDS = {
     "events": f"{_CLI}.events:events",
     "traces": f"{_CLI}.traces:traces_group",
     "egress": f"{_CLI}.egress:egress_group",
+    "tenant": f"{_CLI}.tenant:tenant_group",
+    "member": f"{_CLI}.member:member_group",
+    "invite": f"{_CLI}.invite:invite_group",
+    "admin": f"{_CLI}.admin:admin_group",
 }
 
 

@@ -13,7 +13,7 @@ from blizzard.cli.window import refuse_future_until, since_option, until_option,
 from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.roles import dto
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.hub.cli.command import FleetCommand
+from blizzard.hub.cli.command import AdminCommand
 from blizzard.hub.cli.context import CliContext
 
 #: A backfill runs inside the request, and a week-long window outlasts the default client timeout.
@@ -58,7 +58,7 @@ def egress_group() -> None:
     """Operator verbs over the fact-egress export."""
 
 
-@egress_group.command("status", cls=FleetCommand)
+@egress_group.command("status", cls=AdminCommand)
 def egress_status(cli: CliContext) -> None:
     """Whether the export is on, its directory and format, each dataset's cursor and lag, the last pass and
     file, the last error, and the free space."""
@@ -66,7 +66,7 @@ def egress_status(cli: CliContext) -> None:
     cli.show(status, StatusView(status))
 
 
-@egress_group.command("reset", cls=FleetCommand)
+@egress_group.command("reset", cls=AdminCommand)
 @click.option("--dataset", required=True, help="The dataset whose cursor moves: steps, invocations or events.")
 @click.option(
     "--to",
@@ -89,7 +89,7 @@ def egress_reset(cli: CliContext, dataset: str, to: datetime) -> None:
     )
 
 
-@egress_group.command("backfill", cls=FleetCommand)
+@egress_group.command("backfill", cls=AdminCommand)
 @since_option(required=True)
 @until_option(required=True)
 @click.option(
