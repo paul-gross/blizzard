@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
@@ -10,8 +10,10 @@ from typing import Protocol
 from blizzard.foundation.event_log import HubEventKind
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.model import WorkRefLabel
+from blizzard.hub.domain.graph.model import IReadManyGraphs
 from blizzard.hub.domain.observability.tracing.cursor import CursorKey
 from blizzard.hub.domain.observability.tracing.facts import StepFacts
+from blizzard.hub.tenancy import TenantId
 
 
 @domain_model
@@ -46,6 +48,16 @@ class IReadRunnerNames(Protocol):
         ...
 
 
+@dataclass(frozen=True)
+class StepHydration:
+    """One tenant's reads a chunk's step facts are completed through: the graphs and runner names
+    the facts name, and how the tenant renders a work ref."""
+
+    graphs: IReadManyGraphs
+    names: IReadRunnerNames
+    label: WorkRefLabel
+
+
 @domain_model
 @dataclass(frozen=True)
 class TraceExportFailure:
@@ -62,9 +74,12 @@ class IReadStepCorpus(Protocol):
         """As :meth:`IReadTraceSteps.closing_candidates`, over every open tenant's closing facts."""
         ...
 
-    def step_facts_for(self, chunk_ids: Sequence[str], label: WorkRefLabel) -> dict[str, StepFacts]:
+    def step_facts_for(
+        self, chunk_ids: Sequence[str], label: Callable[[TenantId], WorkRefLabel]
+    ) -> dict[str, StepFacts]:
         """Each existing chunk of an open tenant's :class:`StepFacts`, tagged with that tenant and its work
-        refs rendered through ``label``, keyed by chunk id; ``graphs`` and ``runner_names`` are left unread."""
+        refs rendered through ``label`` of that tenant, keyed by chunk id; ``graphs`` and ``runner_names``
+        are left unread."""
         ...
 
 

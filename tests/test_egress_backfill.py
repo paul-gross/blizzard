@@ -19,12 +19,10 @@ from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.event_rows import FilePathPolicy
 from blizzard.hub.egress.writer import EgressFailure, EgressFailureCause
 from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
-from blizzard.hub.store.internal.trace_store import TraceStore
-from tests.hub_event_rows import hub_events_of
-from tests.support import HubHarness, InMemoryEgressWriter, default_tenant, hub_level_connections, hub_store_connections
+from tests.support import HubHarness, InMemoryEgressWriter, hub_level_connections
 from tests.test_egress_events_sweep import _OLD_VERSION, _Events
 from tests.test_egress_sweep import _SETTLED, _closed_step, _cursor_rows, _hub, _kinds, _rows, _store, _sweep
-from tests.trace_hub import label, seed_open_tenant_chunk
+from tests.trace_hub import seed_open_tenant_chunk, trace_store
 
 pytestmark = pytest.mark.component
 
@@ -42,18 +40,9 @@ def _backfill(hub: HubHarness, since: datetime, until: datetime, **extra: object
 
 
 def _service(hub: HubHarness, config: EgressConfig, writer: InMemoryEgressWriter) -> EgressBackfill:
-    connections = hub_store_connections(hub.engine)
     corpus = build_hub_scoped_reads(hub_level_connections(hub.engine)).corpus
     return EgressBackfill(
-        steps=TraceStore(
-            connections,
-            hub_events=hub_events_of(hub.engine),
-            tenant=lambda: default_tenant(hub.engine),
-            corpus=corpus,
-            graphs=hub.services.graphs,
-            names=hub.services.registry,
-            label=label,
-        ),
+        steps=trace_store(hub),
         egress=_store(hub),
         event_reads=corpus,
         paths=FilePathPolicy("absolute"),
@@ -96,7 +85,7 @@ def test_the_backfill_writes_the_live_sweeps_rows_for_the_same_window(tmp_path: 
     assert all(p.backfill for p, _ in written.manifests)
 
 
-def test_the_backfill_leaves_out_another_open_tenants_rows_and_writes_its_own(tmp_path: Path) -> None:
+def test_the_backfill_writes_each_open_tenants_rows(tmp_path: Path) -> None:
     hub, graph = _hub(tmp_path, _SETTLED)
     since = hub.clock.now()
     chunk_id = _closed_step(hub, graph, 1)
@@ -107,9 +96,9 @@ def test_the_backfill_leaves_out_another_open_tenants_rows_and_writes_its_own(tm
 
     result = _service(hub, _SETTLED, written).backfill(since, until, dataset=None, dry_run=False)
 
-    assert [r["chunk_id"] for r in _rows(written, "steps")] == [chunk_id]
-    assert [r["chunk_id"] for r in _rows(written, "invocations")] == [chunk_id]
-    assert [(c.dataset, c.rows) for c in result.datasets] == [("steps", 1), ("invocations", 1), ("events", 0)]
+    assert [r["chunk_id"] for r in _rows(written, "steps")] == [chunk_id, "ch_other"]
+    assert [r["chunk_id"] for r in _rows(written, "invocations")] == [chunk_id, "ch_other"]
+    assert [(c.dataset, c.rows) for c in result.datasets] == [("steps", 2), ("invocations", 2), ("events", 1)]
 
 
 def test_the_window_is_half_open(tmp_path: Path) -> None:

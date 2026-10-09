@@ -20,7 +20,7 @@ from blizzard.hub import app as hub_app
 from blizzard.hub import runtime as hub_runtime
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.chunk.model import WorkRef
-from blizzard.hub.domain.observability.forge_status import AnnotationReconciler
+from blizzard.hub.domain.observability.forge_status import AnnotationReconciler, TenantAnnotation
 from blizzard.hub.store.internal.forge_annotation_store import ForgeAnnotationStore
 from blizzard.hub.store.internal.hub_scoped_corpus import SweepCorpusReads
 from blizzard.hub.store.internal.hub_scoped_reads import hub_scoped_read
@@ -133,7 +133,7 @@ def test_live_work_refs_statement_count_does_not_grow_with_work_ref_count(tmp_pa
     assert few_count == many_count
 
 
-# --- AnnotationReconciler.sweep() — real store, FakeAnnotator standing in for the forge ---
+# --- AnnotationReconciler.sweep() over one tenant — real store, FakeAnnotator standing in for the forge ---
 
 
 _FLOOR = timedelta(minutes=10)
@@ -141,12 +141,16 @@ _FLOOR = timedelta(minutes=10)
 
 def _reconciler(hub: HubHarness, work_sources: WorkSourceRegistry) -> AnnotationReconciler:
     """A reconciler over ``hub``'s own store — a fresh one per call, as a restart builds."""
-    return AnnotationReconciler(
-        corpus=SweepCorpusReads(partial(hub_scoped_read, hub_level_connections(hub.engine))),
+    tenant = TenantAnnotation(
         facts=hub.services.chunks.facts,
-        tenant=partial(default_tenant, hub.engine),
         work_sources=work_sources,
         memory=ForgeAnnotationStore(hub_store_connections(hub.engine)),
+        clock=hub.clock,
+    )
+    return AnnotationReconciler(
+        corpus=SweepCorpusReads(partial(hub_scoped_read, hub_level_connections(hub.engine))),
+        tenants=lambda: [default_tenant(hub.engine)],
+        tenant=lambda _tenant: tenant,
         clock=hub.clock,
         full_pass_floor=_FLOOR,
     )

@@ -17,7 +17,7 @@ from sqlalchemy import event
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
-from blizzard.hub.domain.chunk.model import WorkRef
+from blizzard.hub.domain.chunk.model import WorkRef, WorkRefLabel
 from blizzard.hub.domain.observability.egress.events_window import EventsItem, position_of
 from blizzard.hub.domain.observability.egress.repository import EpochKey, EventsPosition, UsagePosition
 from blizzard.hub.runtime import migration_runner
@@ -25,7 +25,7 @@ from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.hub_scoped_corpus import SweepCorpusReads
 from blizzard.hub.store.internal.hub_scoped_reads import hub_scoped_read
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION, TenantId
-from tests.support import default_tenant, hub_level_connections, hub_scoped
+from tests.support import close_tenant, default_tenant, hub_level_connections, hub_scoped
 
 pytestmark = pytest.mark.component
 
@@ -48,9 +48,6 @@ class _World:
             self.insert(s.tenants, tenant_id=tenant, name=tenant, created_at=_AT, created_by="test")
         for tenant in (self.carried, _OPEN, _CLOSED):
             self._seed_tenant(tenant)
-
-    def close(self, tenant: TenantId) -> None:
-        self.insert(s.tenant_deletions, tenant_id=tenant, name=tenant, deleted_by="test")
 
     def insert(self, table: sa.Table, **values: Any) -> None:
         with self.engine.begin() as conn:
@@ -162,7 +159,7 @@ def _segment(tenant: str) -> str:
 @pytest.fixture
 def world(tmp_path: Path) -> _World:
     built = _World(tmp_path)
-    built.close(_CLOSED)
+    close_tenant(built.engine, _CLOSED)
     return built
 
 
@@ -198,13 +195,21 @@ def test_closing_candidates_are_the_open_tenants_chunks(world: _World) -> None:
     assert set(candidates.chunk_ids) == {_live(world.carried), _live(_OPEN)}
 
 
-def test_step_facts_are_the_open_tenants_chunks_each_tagged_with_its_tenant(world: _World) -> None:
-    facts = world.corpus.step_facts_for([_live(t) for t in (world.carried, _OPEN, _CLOSED)], lambda ref: ref.ref)
+def _tenant_label(tenant: TenantId) -> WorkRefLabel:
+    """A label that names the tenant it was asked for beside the ref, so a test sees whose rendered it."""
+    return lambda ref: f"{tenant}:{ref.ref}"
+
+
+def test_step_facts_are_the_open_tenants_chunks_each_tagged_and_labelled_in_its_tenant(world: _World) -> None:
+    facts = world.corpus.step_facts_for([_live(t) for t in (world.carried, _OPEN, _CLOSED)], _tenant_label)
     assert {chunk_id: f.tenant for chunk_id, f in facts.items()} == {
         _live(world.carried): world.carried,
         _live(_OPEN): _OPEN,
     }
-    assert facts[_live(_OPEN)].work_refs == (_live(_OPEN),)
+    assert {chunk_id: f.work_refs for chunk_id, f in facts.items()} == {
+        _live(world.carried): (f"{world.carried}:{_live(world.carried)}",),
+        _live(_OPEN): (f"{_OPEN}:{_live(_OPEN)}",),
+    }
 
 
 def test_usage_pages_are_the_open_tenants_rows_each_with_its_tenant(world: _World) -> None:
@@ -300,7 +305,7 @@ def test_the_probes_count_every_tenant_and_a_close_moves_the_work_refs_probe(tmp
     world = _World(tmp_path)
     before = world.corpus.live_work_refs_signature()
     assert world.corpus.derivation_signature().segment_count == 3
-    world.close(_CLOSED)
+    close_tenant(world.engine, _CLOSED)
     assert world.corpus.live_work_refs_signature() != before
     assert world.corpus.derivation_signature().segment_count == 3
 
@@ -320,7 +325,7 @@ def test_every_corpus_statement_carries_the_hub_scoped_marker(world: _World) -> 
         world.corpus.candidacy(_EXTRACTOR)
         world.corpus.derived_segment_ids()
         world.corpus.closing_candidates(_BEFORE, _AFTER, 50)
-        world.corpus.step_facts_for([_live(_OPEN)], lambda ref: ref.ref)
+        world.corpus.step_facts_for([_live(_OPEN)], _tenant_label)
         world.corpus.usage_after(UsagePosition(_BEFORE), _AFTER, 50)
         markers = world.corpus.markers_after(EventsPosition(_BEFORE), _AFTER, 50, extractor_version=None)
         world.corpus.drops_after(EventsPosition(_BEFORE), _AFTER, 50)

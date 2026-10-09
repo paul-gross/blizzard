@@ -33,7 +33,6 @@ from tests.hub_event_rows import hub_events_of
 from tests.support import (
     build_hub,
     count_rows_read,
-    default_tenant,
     hub_level_connections,
     hub_store_connections,
     stamp,
@@ -200,11 +199,9 @@ def test_newest_failure_reads_keep_the_old_failure_after_a_recovery(tmp_path: Pa
     export = TraceStore(
         store,
         hub_events=events,
-        tenant=lambda: default_tenant(engine),
         corpus=corpus,
-        graphs=None,  # type: ignore[arg-type]
-        names=None,  # type: ignore[arg-type]
-        label=None,  # type: ignore[arg-type]
+        hydration=None,  # type: ignore[arg-type]
+        tenant_name=None,  # type: ignore[arg-type]
     ).newest_export_failure()
 
     assert egress is not None and egress.message == "m0"

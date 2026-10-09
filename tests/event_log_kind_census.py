@@ -56,14 +56,14 @@ EVENT_LOG_KIND_CENSUS: dict[str, Disposition] = {
     "repositories-disagree": Recorded("hub/delivery/hub_node.py:HubNodeExecutor._record_refusal_event", "critical"),
     "attempt-failed": Recorded("runner/lifecycle/attempt.py:Attempt.fail", "warning"),
     "command-failed": Recorded("runner/hub/outbound.py:OutboundFacts.command_failed", "warning"),
-    "work-item-close-failed": Recorded("hub/domain/work_items/closure.py:CloseIntentDrainer.sweep", "warning"),
+    "work-item-close-failed": Recorded("hub/domain/work_items/closure.py:CloseIntentDrainer.drain", "warning"),
     "transcript-truncated": Recorded("runner/hub/outbound.py:OutboundFacts.transcript_truncated", "warning"),
     "transcript-sidechain-dropped": Recorded(
         "runner/transcripts/transcript_pump.py:TranscriptPump._warn_sidechains_dropped", "warning"
     ),
     "worker-context-warned": Recorded("runner/loop/steps.py:ContextSample._event", "warning"),
     "attempt-abandoned": Recorded("runner/lifecycle/attempt.py:Attempt.fail", "info"),
-    "work-item-closed": Recorded("hub/domain/work_items/closure.py:CloseIntentDrainer.sweep", "info"),
+    "work-item-closed": Recorded("hub/domain/work_items/closure.py:CloseIntentDrainer.drain", "info"),
     "trace-export-failed": Recorded("runner/tracing/sweep.py:LeaseTraceSweep._failed", "warning"),
     "trace-export-recovered": Recorded("runner/tracing/sweep.py:LeaseTraceSweep._recovered", "info"),
     "trace-window-skipped": Recorded("runner/tracing/sweep.py:LeaseTraceSweep._jump", "warning"),

@@ -42,7 +42,6 @@ from blizzard.hub.egress.writer import (
 from blizzard.hub.store import schema
 from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
-from blizzard.hub.store.internal.trace_store import TraceStore
 from tests.hub_event_rows import hub_event_detail, hub_event_kinds, hub_event_log_of, hub_event_rows, hub_events_of
 from tests.support import (
     HubHarness,
@@ -50,14 +49,13 @@ from tests.support import (
     added_runner,
     count_queries,
     count_rows_read,
-    default_tenant,
     hub_level_connections,
     hub_scoped,
     hub_store_connections,
     ingest,
     seed_runner,
 )
-from tests.trace_hub import claim, label, pass_build, seed_open_tenant_chunk, trace_hub
+from tests.trace_hub import claim, pass_build, seed_open_tenant_chunk, trace_hub, trace_store
 
 pytestmark = pytest.mark.component
 
@@ -96,15 +94,7 @@ def _sweep(
     connections = hub_store_connections(hub.engine)
     corpus = build_hub_scoped_reads(hub_level_connections(hub.engine)).corpus
     return EgressSweep(
-        steps=TraceStore(
-            connections,
-            hub_events=hub_events_of(hub.engine),
-            tenant=lambda: default_tenant(hub.engine),
-            corpus=corpus,
-            graphs=hub.services.graphs,
-            names=hub.services.registry,
-            label=label,
-        ),
+        steps=trace_store(hub),
         egress=store or EgressStore(connections, hub_events=hub_events_of(hub.engine), usage=corpus),
         event_reads=corpus,
         paths=_PATHS,
@@ -242,7 +232,7 @@ def test_a_pass_writes_steps_and_invocations_and_advances_each_cursor_after_its_
     )
 
 
-def test_another_open_tenants_rows_are_not_exported_and_every_cursor_moves_past_them(tmp_path: Path) -> None:
+def test_each_open_tenants_rows_are_exported_hydrated_in_their_own_tenant(tmp_path: Path) -> None:
     hub, graph = _hub(tmp_path)
     writer = InMemoryEgressWriter()
     _anchored(hub, writer)
@@ -253,9 +243,12 @@ def test_another_open_tenants_rows_are_not_exported_and_every_cursor_moves_past_
 
     _sweep(hub, writer).sweep()
 
-    assert [r["chunk_id"] for r in _rows(writer, "steps")] == [chunk_id]
-    assert [r["chunk_id"] for r in _rows(writer, "invocations")] == [chunk_id]
-    assert _rows(writer, "events") == []
+    assert [(r["chunk_id"], r["graph_id"]) for r in _rows(writer, "steps")] == [
+        (chunk_id, graph.graph_id),
+        ("ch_other", "gr_ten_other"),
+    ]
+    assert [r["chunk_id"] for r in _rows(writer, "invocations")] == [chunk_id, "ch_other"]
+    assert [r["chunk_id"] for r in _rows(writer, "events")] == ["ch_other"]
     steps, invocations, events = (_store(hub).newest_cursor(d) for d in ("steps", "invocations", "events"))
     assert steps is not None and steps.step is not None
     assert invocations is not None

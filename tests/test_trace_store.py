@@ -23,34 +23,19 @@ from blizzard.hub.domain.observability.tracing.facts import (
 from blizzard.hub.domain.observability.tracing.repository import TraceCheckpoint
 from blizzard.hub.domain.observability.tracing.steps import StepOutcome, identify_steps
 from blizzard.hub.domain.observability.tracing.window import read_window
-from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
 from blizzard.hub.store.internal.trace_store import TraceStore
-from tests.hub_event_rows import hub_event_log_of, hub_events_of
+from tests.hub_event_rows import hub_event_log_of
 from tests.support import (
     SEEDED_CAPABILITIES,
     HubHarness,
     added_runner,
     count_queries,
     default_tenant,
-    hub_level_connections,
-    hub_store_connections,
     seed_runner,
 )
-from tests.trace_hub import label, seed_open_tenant_chunk, stop, trace_hub, transitioned_and_stopped
+from tests.trace_hub import seed_open_tenant_chunk, stop, trace_hub, trace_store, transitioned_and_stopped
 
 pytestmark = pytest.mark.component
-
-
-def _store(hub: HubHarness) -> TraceStore:
-    return TraceStore(
-        hub_store_connections(hub.engine),
-        hub_events=hub_events_of(hub.engine),
-        tenant=lambda: default_tenant(hub.engine),
-        corpus=build_hub_scoped_reads(hub_level_connections(hub.engine)).corpus,
-        graphs=hub.services.graphs,
-        names=hub.services.registry,
-        label=label,
-    )
 
 
 def test_hydrated_facts_identify_the_same_steps_as_a_hand_built_fixture(tmp_path: Path) -> None:
@@ -61,7 +46,7 @@ def test_hydrated_facts_identify_the_same_steps_as_a_hand_built_fixture(tmp_path
     build = next(n for n in graph.nodes if n.name == "build")
     review = next(n for n in graph.nodes if n.name == "review")
 
-    hydrated = _store(hub).step_facts_for([moved, stopped, "ch_missing"])
+    hydrated = trace_store(hub).step_facts_for([moved, stopped, "ch_missing"])
 
     assert set(hydrated) == {moved, stopped}
     graphs = {graph.graph_id: graph}
@@ -108,7 +93,7 @@ def test_a_step_names_its_runner_by_id_and_latest_registered_name_and_a_rename_b
     hub, graph = trace_hub(tmp_path)
     seed_runner(hub, _RN, name="r-claude")
     moved, _ = transitioned_and_stopped(hub, graph, 1, runner_id=_RN)
-    store = _store(hub)
+    store = trace_store(hub)
 
     def first_step_root() -> tuple[object, object]:
         facts = store.step_facts_for([moved])[moved]
@@ -144,7 +129,7 @@ def test_ties_across_tables_and_ambient_closers_are_told_exactly_once(tmp_path: 
     hub.clock.advance(timedelta(seconds=10))
     stop(hub, moved)
 
-    told = _drain(_store(hub), CursorKey.opening(tie - timedelta(seconds=1)), tie + timedelta(hours=1), limit)
+    told = _drain(trace_store(hub), CursorKey.opening(tie - timedelta(seconds=1)), tie + timedelta(hours=1), limit)
 
     # The later stop closes nothing new: the moved chunk's only step closed at the tie.
     assert told == sorted([CursorKey(tie, moved, 1), CursorKey(tie, stopped, 1)])
@@ -155,7 +140,7 @@ def test_a_window_reading_from_a_tie_tells_only_what_sorts_after_the_cursor(tmp_
     moved, stopped = transitioned_and_stopped(hub, graph, 1)
     first, second = sorted([CursorKey(hub.clock.now(), moved, 1), CursorKey(hub.clock.now(), stopped, 1)])
 
-    window = read_window(_store(hub), first, hub.clock.now() + timedelta(hours=1), 50)
+    window = read_window(trace_store(hub), first, hub.clock.now() + timedelta(hours=1), 50)
 
     assert [c.key for c in window.closed_steps()] == [second]
 
@@ -166,7 +151,7 @@ def test_until_holds_back_steps_closing_after_it(tmp_path: Path) -> None:
     now = hub.clock.now()
 
     window = read_window(
-        _store(hub), CursorKey.opening(now - timedelta(seconds=1)), now - timedelta(microseconds=1), 50
+        trace_store(hub), CursorKey.opening(now - timedelta(seconds=1)), now - timedelta(microseconds=1), 50
     )
 
     assert window.closed_steps() == ()
@@ -177,21 +162,27 @@ _OTHER_CHUNK = "ch_other"
 
 
 @pytest.mark.parametrize("limit", [1, 50])
-def test_another_open_tenants_chunks_are_left_out_and_the_window_moves_past_them(tmp_path: Path, limit: int) -> None:
+def test_each_open_tenants_chunks_are_hydrated_in_their_own_tenant_and_told(tmp_path: Path, limit: int) -> None:
     hub, graph = trace_hub(tmp_path)
     moved, stopped = transitioned_and_stopped(hub, graph, 1)
     tie = hub.clock.now()
     seed_open_tenant_chunk(hub, _OTHER, _OTHER_CHUNK, tie)
-    store = _store(hub)
+    store = trace_store(hub)
 
     hydrated = store.step_facts_for([moved, _OTHER_CHUNK])
     since = CursorKey.opening(tie - timedelta(seconds=1))
     told = _drain(store, since, tie + timedelta(hours=1), limit)
-    position = read_window(store, since, tie + timedelta(hours=1), 50).position
 
-    assert set(hydrated) == {moved}
-    assert told == sorted([CursorKey(tie, moved, 1), CursorKey(tie, stopped, 1)])
-    assert position.at > tie + timedelta(seconds=2)
+    carried = default_tenant(hub.engine)
+    assert {chunk_id: (f.tenant, f.tenant_name) for chunk_id, f in hydrated.items()} == {
+        moved: (carried, hub.hub_services.tenants.open_tenants.name(carried)),
+        _OTHER_CHUNK: (_OTHER, _OTHER),
+    }
+    assert set(hydrated[_OTHER_CHUNK].graphs) == {f"gr_{_OTHER}"}
+    assert set(hydrated[moved].graphs) == {graph.graph_id}
+    assert told == sorted(
+        [CursorKey(tie, moved, 1), CursorKey(tie, stopped, 1), CursorKey(tie + timedelta(seconds=1), _OTHER_CHUNK, 1)]
+    )
 
 
 def _fleet(tmp_path: Path, pairs: int) -> HubHarness:
@@ -208,7 +199,7 @@ def test_statement_count_is_flat_as_the_window_grows(tmp_path: Path) -> None:
     counts: dict[str, int] = {}
     sizes: dict[str, int] = {}
     for name, hub in (("small", small), ("large", large)):
-        store = _store(hub)
+        store = trace_store(hub)
         since = CursorKey.opening(hub.clock.now() - timedelta(hours=1))
 
         def call(store: TraceStore = store, since: CursorKey = since, name: str = name) -> None:
@@ -221,7 +212,7 @@ def test_statement_count_is_flat_as_the_window_grows(tmp_path: Path) -> None:
 
 def test_cursor_rows_append_and_the_newest_is_the_position(tmp_path: Path) -> None:
     hub, _graph = trace_hub(tmp_path)
-    store = _store(hub)
+    store = trace_store(hub)
     now = hub.clock.now()
     assert store.newest_cursor() is None
 
@@ -235,7 +226,7 @@ def test_cursor_rows_append_and_the_newest_is_the_position(tmp_path: Path) -> No
 
 def test_the_export_latch_reads_the_newer_of_the_two_kinds(tmp_path: Path) -> None:
     hub, _graph = trace_hub(tmp_path)
-    store = _store(hub)
+    store = trace_store(hub)
     assert store.newest_export_latch() is None
 
     def record(kind: HubEventKind, seconds: int) -> None:

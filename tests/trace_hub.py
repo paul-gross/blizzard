@@ -8,10 +8,26 @@ from typing import Any
 
 import sqlalchemy as sa
 
+from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.hub.domain.chunk.model import WorkRef
-from blizzard.hub.domain.graph.model import Graph
+from blizzard.hub.domain.graph.model import Graph, Node
+from blizzard.hub.domain.observability.tracing.repository import StepHydration
 from blizzard.hub.store import schema as s
-from tests.support import HubHarness, build_hub, hub_scoped, ingest, report_lease
+from blizzard.hub.store.internal.graph_store import GraphStore
+from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
+from blizzard.hub.store.internal.trace_store import TraceStore
+from blizzard.hub.tenancy import StoreScope, TenantId
+from tests.hub_event_rows import hub_events_of
+from tests.support import (
+    HubHarness,
+    build_hub,
+    hub_level_connections,
+    hub_scoped,
+    hub_store_connections,
+    ingest,
+    make_graph,
+    report_lease,
+)
 
 GRAPH_YAML = """
 name: default-delivery
@@ -50,6 +66,23 @@ nodes:
 
 def label(ref: WorkRef) -> str | None:
     return f"{ref.source}#{ref.ref}"
+
+
+def trace_store(hub: HubHarness) -> TraceStore:
+    """A trace store over ``hub`` that completes each chunk's facts in the chunk's own tenant, through
+    that tenant's services, rendering every work ref with :func:`label`."""
+
+    def hydration(tenant: TenantId) -> StepHydration:
+        services = hub.open_services(tenant)
+        return StepHydration(graphs=services.graphs, names=services.registry, label=label)
+
+    return TraceStore(
+        hub_store_connections(hub.engine),
+        hub_events=hub_events_of(hub.engine),
+        corpus=build_hub_scoped_reads(hub_level_connections(hub.engine)).corpus,
+        hydration=hydration,
+        tenant_name=hub.hub_services.tenants.open_tenants.name,
+    )
 
 
 def trace_hub(tmp_path: Path, **build: Any) -> tuple[HubHarness, Graph]:
@@ -94,9 +127,26 @@ def transitioned_and_stopped(hub: HubHarness, graph: Graph, ref: int, *, runner_
     return moved, stopped
 
 
+def _node(graph_id: str, node_id: str, name: str) -> Node:
+    return Node(
+        node_id=node_id,
+        graph_id=graph_id,
+        name=name,
+        executor=Executor.RUNNER,
+        prompt="p",
+        checks=[],
+        produces=[],
+        session=SessionMode.FRESH,
+        judged_by=JudgedBy.WORKER,
+        retries_max=None,
+        retries_exhausted=None,
+    )
+
+
 def seed_open_tenant_chunk(hub: HubHarness, tenant: str, chunk_id: str, at: datetime) -> None:
-    """A second open tenant ``tenant`` whose chunk, on a graph of its own, closes a step one second
-    after ``at`` with usage billed and a transcript segment dropped, then completes a second later."""
+    """A second open tenant ``tenant``, named as its id, whose chunk, on a graph of its own minted in that
+    tenant, closes a step one second after ``at`` with usage billed and a transcript segment dropped, then
+    completes a second later."""
 
     def insert(table: sa.Table, **values: Any) -> None:
         with hub.engine.begin() as conn:
@@ -107,7 +157,11 @@ def seed_open_tenant_chunk(hub: HubHarness, tenant: str, chunk_id: str, at: date
         conn.execute(
             hub_scoped(sa.insert(s.tenants).values(tenant_id=tenant, name=tenant, created_at=at, created_by="test"))
         )
-    insert(s.graphs, graph_id=graph_id, name="g", entry_node_id="nd_1", definition_yaml="", created_at=at)
+    nodes = [_node(graph_id, node_id, name) for node_id, name in (("nd_1", "build"), ("nd_2", "review"))]
+    graph = make_graph(graph_id, "g", entry_node_id="nd_1", nodes=nodes, created_at=at)
+    GraphStore(hub_level_connections(hub.engine).scoped(StoreScope(TenantId(tenant)))).mint(
+        graph, definition_yaml="", at=at
+    )
     insert(s.chunks, chunk_id=chunk_id, graph_id=graph_id, minted_at=at, model="")
     insert(s.lease_facts, chunk_id=chunk_id, epoch=1, runner_id="r1", minted_at=at)
     insert(s.epoch_owners, chunk_id=chunk_id, epoch=1, runner_id="r1", recorded_at=at)

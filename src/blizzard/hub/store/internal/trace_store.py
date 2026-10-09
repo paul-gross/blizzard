@@ -2,8 +2,9 @@
 
 Reads the cursor and its latch, and appends the cursor's fact rows (``bzh:facts-not-status``). The
 closing-fact candidates and whole-chunk :class:`StepFacts` span every tenant, so they come from the
-sweep corpus (:class:`IReadStepCorpus`); this store keeps its own tenant's chunks and adds the graphs
-and runner names they name."""
+sweep corpus (:class:`IReadStepCorpus`); this store completes each chunk's facts in the chunk's own
+tenant — its work refs rendered, the graphs and runner names they name read, and the tenant's name
+beside them."""
 
 from __future__ import annotations
 
@@ -14,23 +15,23 @@ from datetime import datetime
 from sqlalchemy import insert, select
 
 from blizzard.foundation.event_log import HubEventKind
-from blizzard.hub.domain.chunk.model import WorkRefLabel
-from blizzard.hub.domain.graph.model import Graph, IReadManyGraphs
+from blizzard.hub.domain.chunk.model import WorkRef, WorkRefLabel
+from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.observability.hub_events import IReadHubEventLog
 from blizzard.hub.domain.observability.tracing.cursor import CursorKey
 from blizzard.hub.domain.observability.tracing.facts import StepFacts
 from blizzard.hub.domain.observability.tracing.repository import (
     ClosingCandidates,
-    IReadRunnerNames,
     IReadStepCorpus,
     IReadTraceStatus,
     IWriteTraceCursor,
+    StepHydration,
     TraceCheckpoint,
     TraceExportFailure,
 )
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
-from blizzard.hub.tenancy import TenantId
+from blizzard.hub.tenancy import TenantClosed, TenantId, UnknownTenant
 
 _FAILED: HubEventKind = "trace-export-failed"
 _LATCH_KINDS: tuple[HubEventKind, ...] = (_FAILED, "trace-export-recovered")
@@ -38,27 +39,23 @@ _LATCH_KINDS: tuple[HubEventKind, ...] = (_FAILED, "trace-export-recovered")
 
 class TraceStore:
     """The trace export's reads and its cursor's appends. The cursor is hub-level, and so are the export's failure and
-    recovery events, read from ``hub_events``, the hub's own event log its sweep records them in. ``tenant`` names the
-    tenant whose chunks this store hydrates."""
+    recovery events, read from ``hub_events``, the hub's own event log its sweep records them in. ``hydration`` opens a
+    tenant's reads a chunk's facts are completed through, and ``tenant_name`` names an open tenant."""
 
     def __init__(
         self,
         store: HubStoreConnections,
         *,
         hub_events: IReadHubEventLog,
-        tenant: Callable[[], TenantId],
         corpus: IReadStepCorpus,
-        graphs: IReadManyGraphs,
-        names: IReadRunnerNames,
-        label: WorkRefLabel,
+        hydration: Callable[[TenantId], StepHydration],
+        tenant_name: Callable[[TenantId], str | None],
     ) -> None:
         self._store = store
         self._hub_events = hub_events
-        self._tenant = tenant
         self._corpus = corpus
-        self._graphs = graphs
-        self._names = names
-        self._label = label
+        self._hydration = hydration
+        self._tenant_name = tenant_name
 
     # --- candidates and hydration ---------------------------------------------------
 
@@ -66,17 +63,28 @@ class TraceStore:
         return self._corpus.closing_candidates(since, until, limit)
 
     def step_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, StepFacts]:
-        """The corpus's step facts of this store's own tenant — the one its graph and registry reads are
-        scoped to — each with the graphs and runner names its facts reference.
-        Another tenant's chunk is left out, since its graphs, runner names and work-ref labels are not
-        this store's to read: a window or page holding it exports none of its rows, and the cursor
-        still passes its closing facts."""
-        tenant = self._tenant()
-        corpus = self._corpus.step_facts_for(chunk_ids, self._label)
-        built = {chunk_id: facts for chunk_id, facts in corpus.items() if facts.tenant == tenant}
-        graphs = self._graphs.get_many(sorted({g for facts in built.values() for g in _graph_ids(facts)}))
-        names = self._names.names_for(sorted({r for facts in built.values() for r in _runner_ids(facts)}))
-        return {chunk_id: _with_reads(facts, graphs, names) for chunk_id, facts in built.items()}
+        """The corpus's step facts, each completed in its chunk's own tenant: its work refs rendered by that
+        tenant's label, the graphs and runner names its facts reference read through that tenant's reads, and
+        the tenant's current name beside them. A chunk of a tenant closed since the corpus read is left out:
+        a window or page holding it exports none of its rows, and the cursor still passes its closing facts."""
+        opened = _Opened(self._hydration)
+        corpus = self._corpus.step_facts_for(chunk_ids, opened.label)
+        by_tenant: dict[TenantId, dict[str, StepFacts]] = {}
+        for chunk_id, facts in corpus.items():
+            if facts.tenant is not None:
+                by_tenant.setdefault(facts.tenant, {})[chunk_id] = facts
+        built: dict[str, StepFacts] = {}
+        for tenant, tenant_facts in by_tenant.items():
+            reads = opened.reads(tenant)
+            if reads is None:
+                continue
+            graphs = reads.graphs.get_many(sorted({g for facts in tenant_facts.values() for g in _graph_ids(facts)}))
+            names = reads.names.names_for(sorted({r for facts in tenant_facts.values() for r in _runner_ids(facts)}))
+            name = self._tenant_name(tenant)
+            built.update(
+                (chunk_id, _with_reads(facts, graphs, names, name)) for chunk_id, facts in tenant_facts.items()
+            )
+        return {chunk_id: built[chunk_id] for chunk_id in corpus if chunk_id in built}
 
     # --- cursor and latch -----------------------------------------------------------
 
@@ -140,12 +148,40 @@ def _runner_ids(facts: StepFacts) -> set[str]:
     return ids | {d.imposed_by_runner_id for d in facts.decisions if d.imposed_by_runner_id is not None}
 
 
-def _with_reads(facts: StepFacts, graphs: dict[str, Graph], names: dict[str, str]) -> StepFacts:
+def _with_reads(
+    facts: StepFacts, graphs: dict[str, Graph], names: dict[str, str], tenant_name: str | None
+) -> StepFacts:
     return replace(
         facts,
         graphs={g: graphs[g] for g in _graph_ids(facts) if g in graphs},
         runner_names={r: names[r] for r in _runner_ids(facts) if r in names},
+        tenant_name=tenant_name,
     )
+
+
+class _Opened:
+    """One read's tenants' hydration reads, each opened once; ``None`` for a tenant closed since the corpus read."""
+
+    def __init__(self, hydration: Callable[[TenantId], StepHydration]) -> None:
+        self._hydration = hydration
+        self._opened: dict[TenantId, StepHydration | None] = {}
+
+    def reads(self, tenant: TenantId) -> StepHydration | None:
+        if tenant not in self._opened:
+            try:
+                self._opened[tenant] = self._hydration(tenant)
+            except (TenantClosed, UnknownTenant):
+                self._opened[tenant] = None
+        return self._opened[tenant]
+
+    def label(self, tenant: TenantId) -> WorkRefLabel:
+        reads = self.reads(tenant)
+        return reads.label if reads is not None else _unrendered
+
+
+def _unrendered(ref: WorkRef) -> str | None:
+    """A closed tenant's label: renders nothing — its chunks are left out anyway."""
+    return None
 
 
 def _conforms_trace_store(x: TraceStore) -> tuple[IWriteTraceCursor, IReadTraceStatus]:

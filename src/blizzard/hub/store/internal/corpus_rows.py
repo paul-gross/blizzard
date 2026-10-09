@@ -14,6 +14,7 @@ from __future__ import annotations
 import itertools
 from collections import defaultdict
 from collections.abc import Sequence
+from dataclasses import replace
 from datetime import datetime
 from typing import Any
 
@@ -129,13 +130,26 @@ def _closing_rows(  # type: ignore[no-untyped-def]
 # --- step facts ----------------------------------------------------------------------
 
 
-def step_facts_for(conn: Connection, chunk_ids: Sequence[str], label: WorkRefLabel) -> dict[str, StepFacts]:
-    """Each existing chunk of an open tenant's :class:`StepFacts`, tagged with its tenant; ``graphs`` and
-    ``runner_names`` are left unread."""
-    built: dict[str, StepFacts] = {}
+def step_facts_for(conn: Connection, chunk_ids: Sequence[str]) -> dict[str, tuple[TenantId, StepFacts, list[WorkRef]]]:
+    """Each existing chunk of an open tenant's :class:`StepFacts`, tagged with its tenant, beside that
+    tenant and the work refs the chunk holds in ref order. ``graphs``, ``runner_names`` and the rendered
+    work refs are left unread: a ref is rendered in its chunk's tenant (:func:`with_work_refs`), outside
+    the read."""
+    built: dict[str, tuple[TenantId, StepFacts, list[WorkRef]]] = {}
     for batch in id_batches(list(chunk_ids)):
-        built.update(_hydrate(conn, batch, label))
+        built.update(_hydrate(conn, batch))
     return built
+
+
+def with_work_refs(facts: StepFacts, refs: Sequence[WorkRef], label: WorkRefLabel) -> StepFacts:
+    """``facts`` with ``refs`` rendered through ``label`` — the chunk's tenant's — and the sources behind the
+    refs it renders."""
+    labelled = [(ref, label(ref)) for ref in refs]
+    return replace(
+        facts,
+        work_refs=tuple(rendered for _, rendered in labelled if rendered is not None),
+        work_sources=tuple(dict.fromkeys(ref.source for ref, rendered in labelled if rendered is not None)),
+    )
 
 
 def _by_chunk(conn: Connection, table: Table, batch: Sequence[str], *order: Column) -> dict[str, list]:  # type: ignore[type-arg]
@@ -146,7 +160,7 @@ def _by_chunk(conn: Connection, table: Table, batch: Sequence[str], *order: Colu
     return grouped
 
 
-def _hydrate(conn: Connection, batch: Sequence[str], label: WorkRefLabel) -> dict[str, StepFacts]:
+def _hydrate(conn: Connection, batch: Sequence[str]) -> dict[str, tuple[TenantId, StepFacts, list[WorkRef]]]:
     chunk_stmt = select(s.chunks).where(open_tenant(s.chunks), s.chunks.c.chunk_id.in_(batch))
     chunk_rows = {r.chunk_id: r for r in conn.execute(chunk_stmt)}
     if not chunk_rows:
@@ -175,51 +189,44 @@ def _hydrate(conn: Connection, batch: Sequence[str], label: WorkRefLabel) -> dic
     usage = _by_chunk(conn, s.usage_facts, ids, s.usage_facts.c.id)
     met = _prerequisites_met(conn, ids)
     return {
-        chunk_id: StepFacts(
-            chunk_id=chunk_id,
-            tenant=TenantId(chunk.tenant_id),
-            pin_graph_id=chunk.graph_id,
-            minted_at=chunk.minted_at,
-            lease_facts=tuple(TracedLease(r.epoch, r.minted_at) for r in leases[chunk_id]),
-            epoch_owners=tuple(TracedEpochOwner(r.epoch, r.runner_id, r.recorded_at) for r in owners[chunk_id]),
-            transitions=tuple(_transition(r) for r in transitions[chunk_id]),
-            migrations=tuple(_migration(r) for r in migrations[chunk_id]),
-            restarts=tuple(_restart(r) for r in restarts[chunk_id]),
-            escalations=tuple(TracedEscalation(r.epoch, r.recorded_at, r.decision_id) for r in escalations[chunk_id]),
-            decisions=tuple(
-                TracedDecision(r.decision_id, r.node_id, r.epoch, r.submitted_at, r.imposed_by_runner_id)
-                for r in decisions[chunk_id]
+        chunk_id: (
+            TenantId(chunk.tenant_id),
+            StepFacts(
+                chunk_id=chunk_id,
+                tenant=TenantId(chunk.tenant_id),
+                pin_graph_id=chunk.graph_id,
+                minted_at=chunk.minted_at,
+                lease_facts=tuple(TracedLease(r.epoch, r.minted_at) for r in leases[chunk_id]),
+                epoch_owners=tuple(TracedEpochOwner(r.epoch, r.runner_id, r.recorded_at) for r in owners[chunk_id]),
+                transitions=tuple(_transition(r) for r in transitions[chunk_id]),
+                migrations=tuple(_migration(r) for r in migrations[chunk_id]),
+                restarts=tuple(_restart(r) for r in restarts[chunk_id]),
+                escalations=tuple(
+                    TracedEscalation(r.epoch, r.recorded_at, r.decision_id) for r in escalations[chunk_id]
+                ),
+                decisions=tuple(
+                    TracedDecision(r.decision_id, r.node_id, r.epoch, r.submitted_at, r.imposed_by_runner_id)
+                    for r in decisions[chunk_id]
+                ),
+                decision_resolutions=tuple(resolutions[chunk_id]),
+                requeues=tuple(TracedRequeue(r.requeued_at) for r in requeues[chunk_id]),
+                route_released=tuple(TracedRouteRelease(r.released_at) for r in released[chunk_id]),
+                chunk_stopped=tuple(TracedChunkStop(r.stopped_at) for r in stopped[chunk_id]),
+                chunk_completed=tuple(TracedChunkCompletion(r.completed_at) for r in completed[chunk_id]),
+                questions=tuple(questions[chunk_id]),
+                pauses=tuple(TracedPause(str(r.id), r.paused, r.set_at) for r in pauses[chunk_id]),
+                hub_exec_slots=tuple(slots[chunk_id]),
+                hub_polls=tuple(TracedHubPoll(str(r.id), r.node_id, r.epoch, r.polled_at) for r in polls[chunk_id]),
+                bounces=tuple(TracedBounce(r.epoch, r.cause, r.recorded_at) for r in bounces[chunk_id]),
+                routes_created=tuple(TracedRouteCreation(r.created_at) for r in created[chunk_id]),
+                promotions=tuple(TracedPromotion(r.promoted_at) for r in promoted[chunk_id]),
+                prerequisites_met=tuple(met[chunk_id]),
+                usage=tuple(_usage(r) for r in usage[chunk_id]),
             ),
-            decision_resolutions=tuple(resolutions[chunk_id]),
-            requeues=tuple(TracedRequeue(r.requeued_at) for r in requeues[chunk_id]),
-            route_released=tuple(TracedRouteRelease(r.released_at) for r in released[chunk_id]),
-            chunk_stopped=tuple(TracedChunkStop(r.stopped_at) for r in stopped[chunk_id]),
-            chunk_completed=tuple(TracedChunkCompletion(r.completed_at) for r in completed[chunk_id]),
-            questions=tuple(questions[chunk_id]),
-            pauses=tuple(TracedPause(str(r.id), r.paused, r.set_at) for r in pauses[chunk_id]),
-            hub_exec_slots=tuple(slots[chunk_id]),
-            hub_polls=tuple(TracedHubPoll(str(r.id), r.node_id, r.epoch, r.polled_at) for r in polls[chunk_id]),
-            bounces=tuple(TracedBounce(r.epoch, r.cause, r.recorded_at) for r in bounces[chunk_id]),
-            routes_created=tuple(TracedRouteCreation(r.created_at) for r in created[chunk_id]),
-            promotions=tuple(TracedPromotion(r.promoted_at) for r in promoted[chunk_id]),
-            prerequisites_met=tuple(met[chunk_id]),
-            usage=tuple(_usage(r) for r in usage[chunk_id]),
-            work_refs=_rendered(work_refs[chunk_id], label),
-            work_sources=_sources(work_refs[chunk_id], label),
+            [WorkRef(source=r.source, ref=r.ref) for r in work_refs[chunk_id]],
         )
         for chunk_id, chunk in chunk_rows.items()
     }
-
-
-def _rendered(rows: list, label: WorkRefLabel) -> tuple[str, ...]:  # type: ignore[type-arg]
-    labels = (label(WorkRef(source=r.source, ref=r.ref)) for r in rows)
-    return tuple(rendered for rendered in labels if rendered is not None)
-
-
-def _sources(rows: list, label: WorkRefLabel) -> tuple[str, ...]:  # type: ignore[type-arg]
-    """The distinct sources of the rows :func:`_rendered` keeps, in ref order."""
-    kept = (r.source for r in rows if label(WorkRef(source=r.source, ref=r.ref)) is not None)
-    return tuple(dict.fromkeys(kept))
 
 
 def _resolutions(conn: Connection, ids: Sequence[str]) -> dict[str, list[TracedDecisionResolution]]:

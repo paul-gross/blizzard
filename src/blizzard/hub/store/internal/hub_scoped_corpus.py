@@ -258,11 +258,18 @@ class SweepCorpusReads:
         with self._read("corpus closing candidates") as conn:
             return corpus_rows.closing_candidates(conn, since, until, limit)
 
-    def step_facts_for(self, chunk_ids: Sequence[str], label: WorkRefLabel) -> dict[str, StepFacts]:
+    def step_facts_for(
+        self, chunk_ids: Sequence[str], label: Callable[[TenantId], WorkRefLabel]
+    ) -> dict[str, StepFacts]:
+        """Each chunk's facts, its work refs rendered by its own tenant's ``label`` once the read is done."""
         if not chunk_ids:
             return {}
         with self._read("corpus step facts") as conn:
-            return corpus_rows.step_facts_for(conn, chunk_ids, label)
+            read = corpus_rows.step_facts_for(conn, chunk_ids)
+        return {
+            chunk_id: corpus_rows.with_work_refs(facts, refs, label(tenant))
+            for chunk_id, (tenant, facts, refs) in read.items()
+        }
 
     def usage_after(self, position: UsagePosition, until: datetime, limit: int) -> list[AttributedUsage]:
         with self._read("corpus usage after") as conn:

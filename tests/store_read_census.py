@@ -107,6 +107,7 @@ from blizzard.hub.domain.observability.tracing.repository import (
     IReadStepCorpus,
     IReadTraceStatus,
     IReadTraceSteps,
+    StepHydration,
     TraceCheckpoint,
 )
 from blizzard.hub.domain.observability.transcripts import IReadTranscriptSegments
@@ -890,11 +891,9 @@ def _trace_store_of(connections: ScopedConnections, hub: HubHarness) -> TraceSto
     return TraceStore(
         connections,
         hub_events=_hub_events_of(hub),
-        tenant=lambda: connections.scope.tenant,
         corpus=hub.hub_services.hub_scoped_reads.corpus,
-        graphs=hub.services.graphs,
-        names=hub.services.registry,
-        label=_label,
+        hydration=lambda _tenant: StepHydration(graphs=hub.services.graphs, names=hub.services.registry, label=_label),
+        tenant_name=hub.hub_services.tenants.open_tenants.name,
     )
 
 
@@ -2237,7 +2236,7 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
         _HUB_BASE, _ht(10_000), 50
     ),
     (IReadStepCorpus, "step_facts_for"): lambda w: w.hub.hub_services.hub_scoped_reads.corpus.step_facts_for(
-        [w.chunk_transition, w.chunk_question, w.chunk_dependency_dependent], _label
+        [w.chunk_transition, w.chunk_question, w.chunk_dependency_dependent], lambda _tenant: _label
     ),
     (IReadUsageCorpus, "usage_after"): lambda w: w.hub.hub_services.hub_scoped_reads.corpus.usage_after(
         UsagePosition(_HUB_BASE), _HUB_UNTIL, 50

@@ -23,7 +23,7 @@ from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.chunk.model import PendingCloseIntent, WorkItemCloseOutcome, WorkRef
 from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.delivery import IWriteChunkDeliveryRepository
-from blizzard.hub.tenancy import TenantId
+from blizzard.hub.tenancy import TenantClosed, TenantId, UnknownTenant
 from blizzard.hub.work_sources.closer import WorkCloseError, WorkItemGoneError
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
 
@@ -130,16 +130,13 @@ class IReadCloseIntentCorpus(Protocol):
 
 
 class CloseIntentDrainer:
-    """Per pending close intent: retire it through its ref's own source binding,
-    recording the attempt's outcome. ``corpus`` names every open tenant's intents; the drainer
-    acts on those of ``tenant``, the tenant its ``delivery``, ``artifacts`` and ``events`` serve, named
-    when a pass runs."""
+    """One tenant's half of the close drain: retires the due intents a pass hands it through each
+    ref's own source binding, recording each attempt's outcome. Its ``delivery``, ``artifacts``,
+    ``events`` and ``work_sources`` all serve that one tenant."""
 
     def __init__(
         self,
         *,
-        corpus: IReadCloseIntentCorpus,
-        tenant: Callable[[], TenantId],
         delivery: IWriteChunkDeliveryRepository,
         artifacts: IReadChunkArtifactsRepository,
         events: EventLogService,
@@ -147,8 +144,6 @@ class CloseIntentDrainer:
         clock: IClock,
         public_url: str | None = None,
     ) -> None:
-        self._corpus = corpus
-        self._tenant = tenant
         self._delivery = delivery
         self._artifacts = artifacts
         self._public_url = public_url
@@ -157,7 +152,7 @@ class CloseIntentDrainer:
         self._clock = clock
 
     def _traces(self, chunk_ids: set[str]) -> dict[str, DeliveryTrace | None]:
-        """One batched delivery read for the whole pass (``bzh:bulk-reconstitution``)."""
+        """One batched delivery read for the tenant's share of the pass (``bzh:bulk-reconstitution``)."""
         if not chunk_ids:
             return {}
         sources = self._artifacts.delivery_sources_for(sorted(chunk_ids))
@@ -170,26 +165,15 @@ class CloseIntentDrainer:
             for chunk_id in chunk_ids
         }
 
-    def sweep(self) -> None:
-        """One complete drain pass over up to ``CLOSE_DRAIN_PASS_LIMIT`` due intents. A per-ref failure is caught
-        and counted rather than raised — a ``gone`` or ``failed`` outcome is itself an
-        informative result. One aggregate INFO summary per pass (``bzh:structlog-logging``)."""
-        closed = gone = failed = skipped = 0
-        now = self._clock.now()
-        tenant = self._tenant()
-        due = [
-            row.intent
-            for row in self._corpus.pending_close_intents()
-            if row.tenant == tenant
-            and close_intent_is_due(
-                now, attempt_count=row.intent.attempt_count, last_attempt_at=row.intent.last_attempt_at
-            )
-        ][:CLOSE_DRAIN_PASS_LIMIT]
+    def drain(self, due: Sequence[PendingCloseIntent], tally: CloseDrainTally) -> None:
+        """Attempt each of ``due`` — this tenant's due intents, in intent order — counting each
+        outcome into ``tally``. A per-ref failure is caught and counted rather than raised: a
+        ``gone`` or ``failed`` outcome is itself an informative result."""
         traces = self._traces({intent.chunk_id for intent in due})
         for intent in due:
             closer = self._work_sources.closer(intent.ref.source)
             if closer is None:
-                skipped += 1
+                tally.skipped += 1
                 # No closer bound for this source today — stays pending, ticking the
                 # backoff clock so it isn't reconsidered every sweep.
                 self._delivery.record_close_attempt_skipped(intent.intent_id, at=self._clock.now())
@@ -202,12 +186,7 @@ class CloseIntentDrainer:
                 outcome, reason = WorkItemCloseOutcome.GONE, str(exc)
             except WorkCloseError as exc:
                 outcome, reason = WorkItemCloseOutcome.FAILED, str(exc)
-            if outcome is WorkItemCloseOutcome.CLOSED:
-                closed += 1
-            elif outcome is WorkItemCloseOutcome.GONE:
-                gone += 1
-            else:
-                failed += 1
+            tally.count(outcome)
             _CP_CLOSE_AFTER_CLOSE_BEFORE_RECORD.reached()
             wrote = self._delivery.record_work_item_closure(
                 intent.chunk_id, pointer=intent.ref, outcome=outcome, reason=reason, at=at
@@ -225,4 +204,69 @@ class CloseIntentDrainer:
                 detail=event.detail,
                 at=at,
             )
-        _log.info("close intent drain sweep completed", closed=closed, gone=gone, failed=failed, skipped=skipped)
+
+
+@domain_model
+@dataclass
+class CloseDrainTally:
+    """One drain pass's outcome counts, across every tenant it acted in."""
+
+    closed: int = 0
+    gone: int = 0
+    failed: int = 0
+    skipped: int = 0
+
+    def count(self, outcome: WorkItemCloseOutcome) -> None:
+        if outcome is WorkItemCloseOutcome.CLOSED:
+            self.closed += 1
+        elif outcome is WorkItemCloseOutcome.GONE:
+            self.gone += 1
+        else:
+            self.failed += 1
+
+
+class CloseDrainSweep:
+    """The close drain's one pass per hub: reads every open tenant's pending intents once, keeps the
+    due ones up to ``CLOSE_DRAIN_PASS_LIMIT`` in intent order, and hands each tenant its own share
+    through ``tenant`` — that tenant's :class:`CloseIntentDrainer`, opened for the rows' tenant — so
+    no tenant's intent is ever acted on in another tenant's scope."""
+
+    def __init__(
+        self,
+        *,
+        corpus: IReadCloseIntentCorpus,
+        tenant: Callable[[TenantId], CloseIntentDrainer],
+        clock: IClock,
+    ) -> None:
+        self._corpus = corpus
+        self._tenant = tenant
+        self._clock = clock
+
+    def sweep(self) -> None:
+        """One complete drain pass over up to ``CLOSE_DRAIN_PASS_LIMIT`` due intents. A tenant closed
+        since the corpus read is skipped, its intents left to its teardown. One aggregate INFO
+        summary per pass (``bzh:structlog-logging``)."""
+        now = self._clock.now()
+        due = [
+            row
+            for row in self._corpus.pending_close_intents()
+            if close_intent_is_due(
+                now, attempt_count=row.intent.attempt_count, last_attempt_at=row.intent.last_attempt_at
+            )
+        ][:CLOSE_DRAIN_PASS_LIMIT]
+        by_tenant: dict[TenantId, list[PendingCloseIntent]] = {}
+        for row in due:
+            by_tenant.setdefault(row.tenant, []).append(row.intent)
+        tally = CloseDrainTally()
+        for tenant, intents in by_tenant.items():
+            try:
+                self._tenant(tenant).drain(intents, tally)
+            except (TenantClosed, UnknownTenant):
+                _log.info("close intent drain skipped a closed tenant", tenant=tenant, intents=len(intents))
+        _log.info(
+            "close intent drain sweep completed",
+            closed=tally.closed,
+            gone=tally.gone,
+            failed=tally.failed,
+            skipped=tally.skipped,
+        )

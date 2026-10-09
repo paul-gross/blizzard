@@ -244,3 +244,6 @@ class StepFacts:
     #: The tenant the row was read in — carried beside it, not part of its identity: equality, order and
     #: hashing stay on the fields above. ``None`` where no tenant was read.
     tenant: TenantId | None = field(default=None, compare=False)
+    #: The tenant's name when the row was read — carried beside it like ``tenant``, outside its identity.
+    #: ``None`` where no tenant, or no name for it, was read.
+    tenant_name: str | None = field(default=None, compare=False)
