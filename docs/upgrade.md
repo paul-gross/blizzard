@@ -101,6 +101,30 @@ upgraded.
 **Getting back.** A rollback across this boundary is lossy for runner ids;
 [`docs/rollback.md`](./rollback.md#what-a-rollback-does-not-undo) names what does not come back.
 
+### Tenants boundary
+
+One release holds the hub's fleets as tenants ([tenants.md](./deployment/tenants.md)). From that release on:
+
+- **The store migrates into one tenant.** The hub's migration creates the tenant `default` and carries every existing
+  row into it. Each person's role becomes a membership there: `guest`, `contributor` and `admin` keep theirs, the
+  claimed superuser becomes an `admin` member and a hub administrator, and a `pending` person gets no membership.
+  Sessions survive, so nobody signs in again.
+- **Sign-in is invite-only.** Existing people keep their memberships and sign in as before. A person the hub does not
+  know needs an invitation, and the configured `[auth].superuser` still signs in uninvited
+  ([human-auth.md](./deployment/human-auth.md#who-may-sign-in)). Issue invitations for anyone you expect to join.
+- **Roles are managed per tenant.** `blizzard hub member` and `/api/members` manage a tenant's members;
+  `GET /api/users` and `POST /api/users/{id}/role` still answer, over the request's tenant's members only.
+- **Exports are a hub administrator's.** Egress and trace status, backfill, reset and replay take `export:admin`, which
+  no tenant role holds. Egress rows gain `tenant_id` and `tenant_name`
+  ([egress.md](./deployment/egress.md#upgrading-to-tenants)).
+- **Runners need nothing.** The hub↔runner wire change is additive, so the usual skew window holds: each runner keeps
+  its id and token, serves `default`, and learns its tenant from its next registration.
+
+**Order.** Take a hub store backup ([`docs/backup.md`](./backup.md)), then upgrade the hub, which migrates on boot.
+
+**Getting back.** The migration's downgrade refuses while the hub holds more than one tenant, or while a tenant's
+deletion is underway, naming them; a rollback is possible only from a hub that holds `default` alone.
+
 ## Pull and recreate
 
 From `packaging/docker/`, pull the tag:

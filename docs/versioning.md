@@ -83,6 +83,10 @@ runner, knowing itself only by the id its config declares, cannot follow. Across
 and every runner after it, each staying stopped until it runs the new release. [`docs/upgrade.md`](./upgrade.md) owns
 the operator-facing ordering and recovery detail of both boundaries.
 
+The release that holds the hub's fleets as tenants takes no exception. The registration and identity answers gain
+optional `tenant_id` and `tenant_name` fields, which a previous-minor runner ignores, so a runner keeps working across
+it while it lags.
+
 Most string-valued wire fields stay open strings, so a value the receiver does not recognize round-trips instead of
 failing. `TurnSegmentView.kind` (`src/blizzard/wire/transcript_segment.py`) is the exception: it is typed as a closed
 `TurnKind` literal because a transcript viewer branches its rendering on it turn by turn. Closing it costs on both

@@ -483,7 +483,9 @@ decimal with scale nine.
 
 ## Backfill and reset
 
-`blizzard hub egress status` reports whether the export is on, its directory and format, each dataset's cursor and lag,
+Operating the export takes `export:admin`, a hub administrator's permission
+([tenants.md](./tenants.md#hub-administrators)): it is one export for every tenant. `blizzard hub egress status` reports
+whether the export is on, its directory and format, each dataset's cursor and lag,
 the last pass and file, the last error and the free space. Run it first, and again after either verb below.
 
 - **Backfill** writes the rows of a window again without moving a cursor, narrowed with `--dataset`:

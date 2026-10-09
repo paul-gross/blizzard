@@ -48,13 +48,19 @@ On the runner machine, `init` adds the runner and installs its token in one step
 blizzard-runner init /var/lib/blizzard/runner --hub https://hub.example.net
 ```
 
+A runner belongs to one tenant for as long as it exists ([tenants.md](./deployment/tenants.md#a-runner-belongs-to-one-tenant)).
+When you may enter several tenants at that hub, name the runner's with `--tenant <tenant_id>`, by id; init stops and
+lists them otherwise.
+
 On a hub with `auth.mode = "oauth"`, that add runs under your `blizzard hub login --hub-url …` session on the runner
 machine, so it takes an operator holding `runner:add`. Where you would rather not sign in there, add the runner from any
 operator machine instead:
 
 ```bash
-blizzard hub runner add anna-laptop --hub-url https://hub.example.net
+blizzard hub runner add anna-laptop --hub-url https://hub.example.net --tenant <tenant_id>
 ```
+
+`--tenant` is needed only when you belong to several tenants.
 
 Operator verbs take the hub by URL — `--hub-url` on each call, or `BZ_HUB_URL` in the shell — and on a hub with
 `auth.mode = "oauth"`, `blizzard hub login --hub-url …` comes first.
@@ -88,7 +94,10 @@ blizzard hub runner list --hub-url https://hub.example.net
 ```
 
 The runner's row shows its id and name. It reads `never-connected` until the runner's first registration and `online`
-after it (`--json` carries `last_seen_at`), and the board's fleet column agrees.
+after it (`--json` carries `last_seen_at`), and the board's fleet column agrees. On the runner machine,
+`blizzard-runner status` names the runner's tenant beside its id. A runner whose token names another runner than its
+store refuses to work until that is put right; [runner-auth.md](./deployment/runner-auth.md#a-token-that-names-another-runner)
+owns the fix.
 
 ## What distance changes
 

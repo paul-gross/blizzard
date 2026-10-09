@@ -28,7 +28,8 @@ names them; retire or repoint those records first. A record that is itself retir
 
 Every create, replace, retire, and enable is also recorded in the [change log](./config-changes.md), without the value.
 
-Writes need the `config:edit` permission, held by `admin` and `superuser`; reads need `fleet:view`.
+Writes need the `config:edit` permission, held by a tenant's `admin`; reads need `fleet:view`. A secret belongs to
+the tenant the call acts in ([tenants.md](./tenants.md#naming-the-tenant-a-call-acts-in)).
 
 The board's Admin page lists secrets with the records that use each one. On a desktop, a user with `config:edit` can
 create a secret, replace its value, retire it, and enable it there; Retire is unavailable while a record uses the

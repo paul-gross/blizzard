@@ -609,7 +609,9 @@ configures, with no daemon in between.
 
 ## Checking on tracing
 
-`blizzard hub traces status` reads `GET /api/traces/status`, open to anyone who can view the fleet. It reports:
+One trace export serves every tenant, so operating it takes `export:admin`, a hub administrator's permission
+([tenants.md](./tenants.md#hub-administrators)). `blizzard hub traces status` reads `GET /api/traces/status`. It
+reports:
 
 - **State.** Tracing is on, off, or rejected. A rejected setting is one the hub cannot honor, such as a protocol other
   than `http/protobuf`; status names the setting and its value, and the fix is to point the hub at an OpenTelemetry
@@ -636,7 +638,7 @@ memory, so they reset on a restart; `blizzard hub traces status` has no such lin
 
 `blizzard hub traces replay --since <t> --until <t>` tells every step that closed and every chunk that finished in the
 window again. It is how a window the sweep skipped, or a backend that lost spans, is filled in. A `trace-window-skipped`
-event's `since` and `until` paste straight in.
+event's `since` and `until` paste straight in. Replay takes `export:admin` too.
 
 - **Same ids as the live sweep.** A replay assembles spans the way the sweep does, so a span's trace and span ids are
   the ones it was told under before. A backend that dedupes on those ids sees no duplicates.
