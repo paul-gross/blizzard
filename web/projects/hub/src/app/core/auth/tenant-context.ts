@@ -99,6 +99,29 @@ export class TenantContext {
     this.reload();
   }
 
+  /** Leaves `tenant`, which the caller's memberships no longer name — deleted, or the membership revoked: neither
+   * store remembers it any more, the calls stop naming it, and the page reloads into the resolution a fresh start
+   * makes (the only membership left, the picker, or the no-access screen), so nothing read in it survives. */
+  leave(tenant: string): void {
+    forget(globalThis.sessionStorage, TAB_TENANT_KEY, tenant);
+    forget(globalThis.localStorage, LAST_TENANT_KEY, tenant);
+    if (this.lastChoice() === tenant) this.lastChoice.set(null);
+    if (this.held() === tenant) this.held.set(null);
+    this.reload();
+  }
+
+  /** Forgets this tab's tenant and the browser's last choice — for a resolution that settled on neither, so no stale
+   * id is remembered or named. */
+  forgetSelection(): void {
+    for (const tenant of new Set([this.held(), this.lastChoice()])) {
+      if (tenant === null) continue;
+      forget(globalThis.sessionStorage, TAB_TENANT_KEY, tenant);
+      forget(globalThis.localStorage, LAST_TENANT_KEY, tenant);
+    }
+    this.lastChoice.set(null);
+    this.held.set(null);
+  }
+
   private remember(tenant: string): void {
     write(globalThis.sessionStorage, TAB_TENANT_KEY, tenant);
     write(globalThis.localStorage, LAST_TENANT_KEY, tenant);
@@ -111,6 +134,15 @@ function read(storage: Storage | undefined, key: string): string | null {
     return storage?.getItem(key) ?? null;
   } catch {
     return null;
+  }
+}
+
+/** Removes `key` while it still names `tenant` — another tab may have stored a different choice since. */
+function forget(storage: Storage | undefined, key: string, tenant: string): void {
+  try {
+    if (storage?.getItem(key) === tenant) storage.removeItem(key);
+  } catch {
+    // A browser refusing storage has nothing stored to forget.
   }
 }
 

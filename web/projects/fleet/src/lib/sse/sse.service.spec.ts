@@ -233,4 +233,17 @@ describe('FetchEventSource', () => {
 
     expect([...seen[0].keys()]).toEqual(['accept']);
   });
+
+  it("hands every response's status to onResponse before failing the stream", async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(null, { status: 404 })));
+    const statuses: number[] = [];
+    let failed = false;
+
+    const source = new FetchEventSource('/api/events/stream', {}, (status) => statuses.push(status));
+    source.onerror = () => (failed = true);
+    await vi.waitFor(() => expect(failed).toBe(true));
+    source.close();
+
+    expect(statuses).toEqual([404]);
+  });
 });

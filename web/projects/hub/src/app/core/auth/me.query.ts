@@ -27,16 +27,21 @@ export function injectMeQuery() {
     const resolve = tenant.resolver();
     return {
       queryKey: hubMeKey,
-      queryFn: async (): Promise<MeResponse | null> => {
-        const { data, error, response } = await meApiMeGet({ throwOnError: false });
-        if (response?.status === 401) return null;
-        if (error) throw error;
-        return data ?? null;
-      },
+      queryFn: readMe,
       select: (me: MeResponse | null) => (me === null ? null : inSelectedTenant(me, resolve(me.tenants ?? []))),
       retry: false,
     };
   });
+}
+
+/** One read of `GET /api/me`, as the hub answered it — `null` for no session (a 401), a thrown error for any other
+ * failure. {@link injectMeQuery}'s fetch, and a caller's that must see the memberships as they are now, outside the
+ * query cache. */
+export async function readMe(): Promise<MeResponse | null> {
+  const { data, error, response } = await meApiMeGet({ throwOnError: false });
+  if (response?.status === 401) return null;
+  if (error) throw error;
+  return data ?? null;
 }
 
 /** One permission `/api/me` can carry — the generated `Permission` vocabulary. */
