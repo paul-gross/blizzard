@@ -2,8 +2,9 @@
 
 Exercises the lifecycle against a real migrated store: boot records the configured
 target unclaimed and reports it while it stays so, promotes nobody — the user holding the
-email claims it at sign-in — leaves a claimed target alone, and never revokes anyone when
-the configured email changes or is unset.
+email claims it at sign-in — leaves a claimed target alone, cancels a target nobody has
+claimed once the email is unset, and never revokes anyone when the configured email changes
+or is unset.
 """
 
 from __future__ import annotations
@@ -18,7 +19,8 @@ from sqlalchemy import insert, select
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub import app as hub_app
 from blizzard.hub import runtime as hub_runtime
-from blizzard.hub.auth.models import ProviderIdentity
+from blizzard.hub.auth.internal.identity_transaction import IdentityTransactions
+from blizzard.hub.auth.models import ProviderIdentity, User
 from blizzard.hub.config import AuthConfig
 from blizzard.hub.store import schema as s
 
@@ -127,7 +129,33 @@ def test_changing_auth_superuser_records_a_new_target_and_revokes_nobody(tmp_pat
     assert _hub_admins(config) == ["usr_alice"]
 
 
-def test_unsetting_auth_superuser_does_nothing(tmp_path: Path) -> None:
+def _sign_in(services, *, handle: str) -> User:  # type: ignore[no-untyped-def]
+    return services.auth.link_or_mint(
+        ProviderIdentity(subject=f"gh-{handle}", handle=handle, email=f"{handle}@example.com", email_verified=True),
+        provider_name="github",
+    )
+
+
+def _admin_memberships(config) -> list[str]:  # type: ignore[no-untyped-def]
+    engine = create_engine_from_url(config.db_url)
+    with engine.connect() as conn:
+        rows = conn.execute(select(s.membership_facts.c.user_id).where(s.membership_facts.c.role == "admin"))
+        return list(rows.scalars())
+
+
+def test_unsetting_auth_superuser_before_any_claim_cancels_the_intent(tmp_path: Path) -> None:
+    config = _with_superuser(hub_runtime.init_environment(tmp_path / "hub"), "alice@example.com")
+    hub_app.build_hosted_app(config)
+
+    services = hub_app.build_hosted_app(_with_superuser(config, None)).state.services
+    _sign_in(services, handle="alice")
+
+    assert services.auth.get_superuser_bootstrap() is None
+    assert _hub_admins(config) == []
+    assert _admin_memberships(config) == []
+
+
+def test_unsetting_auth_superuser_after_the_claim_keeps_the_administrator(tmp_path: Path) -> None:
     config = hub_runtime.init_environment(tmp_path / "hub")
     _seed_user(config, user_id="usr_alice", email="alice@example.com")
     _claimed(config, user_id="usr_alice", email="alice@example.com")
@@ -136,8 +164,67 @@ def test_unsetting_auth_superuser_does_nothing(tmp_path: Path) -> None:
 
     bootstrap = app.state.services.auth.get_superuser_bootstrap()
     assert bootstrap is not None
-    assert bootstrap.claimed_user_id == "usr_alice"
+    assert (bootstrap.email, bootstrap.claimed_user_id) == ("alice@example.com", "usr_alice")
     assert _hub_admins(config) == ["usr_alice"]
+
+
+def test_unsetting_a_changed_target_before_it_signs_in_grants_it_nothing(tmp_path: Path) -> None:
+    """The first claimant stays a hub administrator; the newer target, unset before signing in, gains nothing."""
+    config = hub_runtime.init_environment(tmp_path / "hub")
+    _seed_user(config, user_id="usr_alice", email="alice@example.com")
+    _claimed(config, user_id="usr_alice", email="alice@example.com")
+    hub_app.build_hosted_app(_with_superuser(config, "bob@example.com"))
+
+    services = hub_app.build_hosted_app(_with_superuser(config, None)).state.services
+    _sign_in(services, handle="bob")
+
+    assert services.auth.get_superuser_bootstrap() is None
+    assert _hub_admins(config) == ["usr_alice"]
+    assert _admin_memberships(config) == []
+
+
+def _before_the_claims_unit(monkeypatch: pytest.MonkeyPatch, step) -> None:  # type: ignore[no-untyped-def]
+    """Run ``step`` once, after the claim's unlocked check and before its unit of work takes the identity lock."""
+    begin = IdentityTransactions.begin
+
+    def begin_after_step(self: IdentityTransactions):  # type: ignore[no-untyped-def]
+        monkeypatch.setattr(IdentityTransactions, "begin", begin)
+        step()
+        return begin(self)
+
+    monkeypatch.setattr(IdentityTransactions, "begin", begin_after_step)
+
+
+def test_a_claim_finds_nothing_once_the_intent_is_cancelled_ahead_of_its_unit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = _with_superuser(hub_runtime.init_environment(tmp_path / "hub"), "alice@example.com")
+    services = hub_app.build_hosted_app(config).state.services
+    _before_the_claims_unit(monkeypatch, services.auth.cancel_unclaimed_superuser_bootstrap)
+
+    _sign_in(services, handle="alice")
+
+    assert services.auth.get_superuser_bootstrap() is None
+    assert _hub_admins(config) == []
+    assert _admin_memberships(config) == []
+
+
+def test_a_claim_never_takes_an_intent_superseded_ahead_of_its_unit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = _with_superuser(hub_runtime.init_environment(tmp_path / "hub"), "alice@example.com")
+    services = hub_app.build_hosted_app(config).state.services
+    _before_the_claims_unit(
+        monkeypatch, lambda: services.auth.record_superuser_bootstrap(email="bob@example.com", claimed_user_id=None)
+    )
+
+    _sign_in(services, handle="alice")
+
+    bootstrap = services.auth.get_superuser_bootstrap()
+    assert bootstrap is not None
+    assert (bootstrap.email, bootstrap.claimed_user_id) == ("bob@example.com", None)
+    assert _hub_admins(config) == []
+    assert _admin_memberships(config) == []
 
 
 def test_boot_with_no_superuser_configured_does_nothing(tmp_path: Path) -> None:

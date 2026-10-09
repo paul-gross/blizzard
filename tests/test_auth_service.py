@@ -825,6 +825,17 @@ def test_record_and_get_superuser_bootstrap_round_trips() -> None:
     assert bootstrap.updated_at == _T0
 
 
+@pytest.mark.parametrize("claimed_user_id", [None, "usr_alice"], ids=["unclaimed", "claimed"])
+def test_cancelling_the_superuser_bootstrap_removes_only_an_unclaimed_row(claimed_user_id: str | None) -> None:
+    service, _, _, _, superuser_bootstrap, _ = _service(FixedClock(_T0))
+    service.record_superuser_bootstrap(email="alice@example.com", claimed_user_id=claimed_user_id)
+
+    service.cancel_unclaimed_superuser_bootstrap()
+
+    kept = SuperuserBootstrap(email="alice@example.com", claimed_user_id=claimed_user_id, updated_at=_T0)
+    assert superuser_bootstrap.get() == (None if claimed_user_id is None else kept)
+
+
 def _alice() -> ProviderIdentity:
     return _provider_identity(subject="gh-alice", handle="alice", email="alice@example.com", verified=True)
 

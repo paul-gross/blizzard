@@ -421,10 +421,22 @@ class AuthService:
         return self._superuser_bootstrap.get()
 
     def record_superuser_bootstrap(self, *, email: str, claimed_user_id: str | None) -> None:
-        """Replace the singleton bootstrap row, stamped from the injected clock."""
-        self._superuser_bootstrap.upsert(
-            SuperuserBootstrap(email=email, claimed_user_id=claimed_user_id, updated_at=self._clock.now())
-        )
+        """Replace the singleton bootstrap row, stamped from the injected clock, in an identity unit of work — a
+        claim either commits before the replacement or reads the new row, never claiming the one it supersedes."""
+        with self._transactions.begin() as writes:
+            writes.bootstrap.upsert(
+                SuperuserBootstrap(email=email, claimed_user_id=claimed_user_id, updated_at=self._clock.now())
+            )
+
+    def cancel_unclaimed_superuser_bootstrap(self) -> None:
+        """Delete the bootstrap row while nobody has claimed it — an intent no person holds ends when
+        ``auth.superuser`` stops naming it. A claimed row stays, and no hub administrator or membership is touched:
+        configuration never revokes anyone. Read and delete share one identity unit of work, so a claim either
+        commits first and keeps its row, or finds no row to claim."""
+        with self._transactions.begin() as writes:
+            current = writes.bootstrap.get()
+            if current is not None and current.claimed_user_id is None:
+                writes.bootstrap.clear()
 
     def report_superuser_bootstrap_unclaimed(self, *, email: str) -> None:
         """Surface a still-unclaimed bootstrap target — never a silent dead end."""
