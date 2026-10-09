@@ -156,13 +156,17 @@ def add_tenant(engine: Engine, name: str) -> TenantId:
     return tenant
 
 
-def close_tenant(engine: Engine, tenant: TenantId, *, by: str = "test") -> None:
+def close_tenant(engine: Engine, tenant: TenantId, *, by: str = "test", at: datetime = _GRAPH_T0) -> None:
     """Close ``tenant`` as a deletion's first step records it — one ``tenant_deletions`` row naming the tenant
-    under its current name and ``by`` as its deleter — so its scoped writes are refused from then on."""
+    under its current name, ``by`` as its deleter and ``at`` as when it closed — so its scoped writes are refused
+    from then on. Nothing else a close does in a running hub happens: a test closing a tenant a hub has cached
+    refreshes what it needs, or closes through ``hub_services.tenant_teardown``."""
     tenants, deletions = schema.tenants, schema.tenant_deletions
-    named = sa.select(tenants.c.tenant_id, tenants.c.name, sa.literal(by)).where(tenants.c.tenant_id == tenant)
+    named = sa.select(
+        tenants.c.tenant_id, tenants.c.name, sa.literal(by), sa.literal(at, type_=deletions.c.closed_at.type)
+    ).where(tenants.c.tenant_id == tenant)
     with hub_level_connections(engine).write("close_tenant") as conn:
-        closed = conn.execute(sa.insert(deletions).from_select(["tenant_id", "name", "deleted_by"], named))
+        closed = conn.execute(sa.insert(deletions).from_select(["tenant_id", "name", "deleted_by", "closed_at"], named))
     assert closed.rowcount == 1, f"close_tenant needs {tenant} among the store's tenants"
 
 

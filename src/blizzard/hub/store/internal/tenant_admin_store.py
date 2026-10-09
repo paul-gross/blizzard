@@ -37,6 +37,10 @@ from blizzard.hub.tenancy import StoreScope, TenantId
 _t = s.tenants.c
 #: Whether a deletion fact names the tenant a ``tenants`` row describes.
 _DELETING = exists().where(s.tenant_deletions.c.tenant_id == _t.tenant_id)
+#: When the tenant a ``tenants`` row describes closed — null while it is open.
+_CLOSED_AT = (
+    select(s.tenant_deletions.c.closed_at).where(s.tenant_deletions.c.tenant_id == _t.tenant_id).scalar_subquery()
+)
 
 
 def _tenant(row: Any) -> Tenant:
@@ -45,7 +49,8 @@ def _tenant(row: Any) -> Tenant:
         name=row.name,
         created_at=row.created_at,
         created_by=row.created_by,
-        state=TenantState.DELETING if row.deleting else TenantState.OPEN,
+        state=TenantState.OPEN if row.closed_at is None else TenantState.DELETING,
+        closed_at=row.closed_at,
     )
 
 
@@ -85,10 +90,11 @@ class TenantAdministrationStore:
         self._identity = identity
 
     def list_tenants(self) -> list[Tenant]:
-        """Every ``tenants`` row, by id — a ``ten_`` id is a ULID, so that is creation order to the millisecond."""
+        """Every ``tenants`` row with its deletion's ``closed_at``, by id — a ``ten_`` id is a ULID, so that is
+        creation order to the millisecond."""
         with self._store.read("list_tenants") as conn:
             rows = conn.execute(
-                select(_t.tenant_id, _t.name, _t.created_at, _t.created_by, _DELETING.label("deleting")).order_by(
+                select(_t.tenant_id, _t.name, _t.created_at, _t.created_by, _CLOSED_AT.label("closed_at")).order_by(
                     _t.tenant_id
                 )
             ).all()

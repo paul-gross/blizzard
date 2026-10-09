@@ -118,6 +118,9 @@ EVENT_DERIVATION_INTERVAL_SECONDS = 60
 #: The close-intent drain sweep's own interval.
 CLOSE_DRAIN_INTERVAL_SECONDS = 60
 
+#: The tenant-teardown sweep's own interval — each pass drains every deletion underway by one bounded pass.
+TENANT_TEARDOWN_INTERVAL_SECONDS = 30
+
 #: How long the hub's shutdown waits for buffered platform spans to leave.
 PLATFORM_TRACING_SHUTDOWN_SECONDS = 3.0
 
@@ -148,7 +151,7 @@ class Sweep:
     @classmethod
     def all(cls, app: FastAPI) -> Iterator[Sweep]:
         """The forge-status sweep, plus the always-on
-        event-derivation and close-drain sweeps, plus the trace-export
+        event-derivation, close-drain and tenant-teardown sweeps, plus the trace-export
         sweep when tracing is enabled, plus the fact-egress sweep when a directory is configured — none on the
         store-free app. Each sweep's jitter is drawn uniformly from ``[0, interval_seconds)``
         here so their recurring cadence decorrelates from its second pass
@@ -181,6 +184,14 @@ class Sweep:
             app.state.shutdown,
             "blizzard.hub.work_closure",
             jitter_seconds=random.uniform(0, CLOSE_DRAIN_INTERVAL_SECONDS),
+            tracer=tracer,
+        )
+        yield cls(
+            services.tenant_teardown_sweep,
+            TENANT_TEARDOWN_INTERVAL_SECONDS,
+            app.state.shutdown,
+            "blizzard.hub.tenant_teardown",
+            jitter_seconds=random.uniform(0, TENANT_TEARDOWN_INTERVAL_SECONDS),
             tracer=tracer,
         )
         if services.trace_export is not None:

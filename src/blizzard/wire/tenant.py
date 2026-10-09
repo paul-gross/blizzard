@@ -25,13 +25,24 @@ class TenantRenameRequest(BaseModel):
 
 
 class TenantView(BaseModel):
-    """One tenant: its id, its name, when and by whom it was created, and whether it is ``open`` or ``deleting``."""
+    """One tenant: its id, its name, when and by whom it was created, whether it is ``open`` or ``deleting``, and —
+    while it is ``deleting`` — when its deletion began."""
 
     tenant_id: str
     name: str
     created_at: str
     created_by: str
     state: Literal["open", "deleting"]
+    closed_at: str | None = None
+
+
+class TenantDeletionResponse(BaseModel):
+    """``DELETE /api/admin/tenants/{tenant_id}``: ``deleted`` with the rows its deletion removed (``200``), or
+    ``deleting`` while the ``tenant_teardown`` sweep carries it on (``202``)."""
+
+    tenant_id: str
+    state: Literal["deleted", "deleting"]
+    rows_removed: int | None = None
 
 
 class TenantGraphSync(BaseModel):

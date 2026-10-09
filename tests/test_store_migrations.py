@@ -1495,6 +1495,7 @@ _HISTORICAL_RESHAPES: list[tuple[str, str, str, tuple[str, ...]] | tuple[str, st
     ("hub", "20261003_1300_hub_transcript_segment_spawn_cwd", "escalations", ("cause", "detail")),
     ("hub", "20261006_0900_config_import_facts", "runner_registrations", ("name", "added_at", "added_by")),
     ("hub", "20261008_1700_tenant_identity_move", "auth_state", ("invitation_token_hash",)),
+    ("hub", "20261008_1710_auth_state_invitation", "tenant_deletions", ("closed_at",)),
     # runner tree — instance 6
     (
         "runner",

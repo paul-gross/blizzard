@@ -476,7 +476,9 @@ def test_a_close_cannot_commit_while_an_open_write_is_in_flight(
     # drain. The writer's opening statement holds the store's write lock, so a close from
     # another connection waits for the writer's commit — here, with no busy wait, it fails.
     closer = sqlite3.connect(str(engine.url.database), timeout=0, isolation_level=None)
-    close = "INSERT INTO tenant_deletions (tenant_id, name, deleted_by) VALUES (?, ?, 'usr_test')"
+    close = (
+        "INSERT INTO tenant_deletions (tenant_id, name, closed_at, deleted_by) VALUES (?, ?, '2026-01-01', 'usr_test')"
+    )
     try:
         with scoped.write("test") as conn:
             with pytest.raises(sqlite3.OperationalError, match="locked"):

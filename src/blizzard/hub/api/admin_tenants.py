@@ -1,12 +1,12 @@
-"""Tenant administration routes — hub-level, under ``TENANT_ADMIN``: create, list and rename the hub's tenants, and
-reconcile the packaged graphs into every open tenant. A runner principal is refused; no route resolves a request
+"""Tenant administration routes — hub-level, under ``TENANT_ADMIN``: create, list, rename and delete the hub's tenants,
+and reconcile the packaged graphs into every open tenant. A runner principal is refused; no route resolves a request
 tenant, since each names the tenants it acts on itself."""
 
 from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 
 from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import iso_utc
@@ -15,12 +15,14 @@ from blizzard.hub.api.auth_session import require_hub
 from blizzard.hub.api.hub_level import Hub
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.domain.tenancy.administration import Tenant, TenantAdminUnknown
+from blizzard.hub.domain.tenancy.teardown import DeletionState, LastTenant, TenantAlreadyDeleted
 from blizzard.hub.graph_sync import GraphReconciliation, GraphSyncStatus, reconcile_open_tenants
 from blizzard.hub.tenancy import StoreScope, TenantId, UnknownTenant
 from blizzard.wire.graph import GraphSyncEntry
 from blizzard.wire.tenant import (
     AdminGraphSyncResponse,
     TenantCreateRequest,
+    TenantDeletionResponse,
     TenantGraphSync,
     TenantRenameRequest,
     TenantView,
@@ -38,6 +40,7 @@ def _view(tenant: Tenant) -> TenantView:
         created_at=iso_utc(tenant.created_at),
         created_by=tenant.created_by,
         state=tenant.state.value,
+        closed_at=iso_utc(tenant.closed_at) if tenant.closed_at is not None else None,
     )
 
 
@@ -69,6 +72,37 @@ def rename_tenant(tenant_id: str, body: TenantRenameRequest, services: Hub) -> T
         return _view(services.tenant_admin.rename(TenantId(tenant_id), body.name))
     except UnknownTenant as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="no such tenant") from exc
+
+
+@router.delete(
+    "/tenants/{tenant_id}",
+    response_model=TenantDeletionResponse,
+    responses={
+        status.HTTP_202_ACCEPTED: {"model": TenantDeletionResponse, "description": "The deletion is underway."},
+        status.HTTP_404_NOT_FOUND: {"description": "No tenant has the id."},
+        status.HTTP_409_CONFLICT: {"description": "The tenant is the hub's only open tenant."},
+        status.HTTP_410_GONE: {"description": "The tenant was deleted."},
+    },
+)
+def delete_tenant(tenant_id: str, actor: TenantAdmin, services: Hub, response: Response) -> TenantDeletionResponse:
+    """Close a tenant and drain it inline under a row budget: ``200`` with the rows removed when the drain finishes
+    inside it, else ``202`` while the ``tenant_teardown`` sweep carries on. A tenant whose deletion is underway answers
+    ``202`` and is left as it is; one already deleted answers ``410``; the hub's only open tenant is refused ``409``."""
+    tenant = TenantId(tenant_id)
+    try:
+        progress = services.tenant_teardown.delete(tenant, by=actor.user_id)
+    except UnknownTenant as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="no such tenant") from exc
+    except LastTenant as exc:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail={"code": "last_tenant", "message": "the hub's only open tenant cannot be deleted"},
+        ) from exc
+    except TenantAlreadyDeleted as exc:
+        raise HTTPException(status.HTTP_410_GONE, detail="tenant deleted") from exc
+    if progress.state is DeletionState.DELETING:
+        response.status_code = status.HTTP_202_ACCEPTED
+    return TenantDeletionResponse(tenant_id=tenant, state=progress.state.value, rows_removed=progress.rows_removed)
 
 
 @router.post(

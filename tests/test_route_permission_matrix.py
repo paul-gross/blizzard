@@ -141,12 +141,13 @@ def _mutations(ids: dict[str, str]) -> list[tuple[str, str, dict[str, object]]]:
             "/api/traces/replay",
             {"since": "2026-07-13T00:00:00+00:00", "until": "2026-07-13T01:00:00+00:00"},
         ),  # ANALYTICS_ADMIN
+        ("DELETE", "/api/admin/tenants/ten_matrix_missing", {}),  # TENANT_ADMIN
     ]
 
 
 def _hub_level(path: str) -> bool:
-    """A hub-level export route, gated on a hub permission no membership role holds."""
-    return path.startswith(("/api/traces/", "/api/egress/"))
+    """A hub-level export or administration route, gated on a hub permission no membership role holds."""
+    return path.startswith(("/api/traces/", "/api/egress/", "/api/admin/"))
 
 
 def _pending_refusal(path: str) -> int:

@@ -153,6 +153,7 @@ from blizzard.hub.domain.operations.stop import StopService
 from blizzard.hub.domain.runners.enrollment import RunnerEnrollmentService
 from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, RetiredRunnerGuard
 from blizzard.hub.domain.tenancy.administration import TenantAdministration
+from blizzard.hub.domain.tenancy.teardown import TenantTeardown, TenantTeardownSweep
 from blizzard.hub.domain.work_items.closure import CloseDrainSweep, CloseIntentDrainer
 from blizzard.hub.domain.work_items.editing import WorkItemEditService
 from blizzard.hub.egress.factory import EgressUnavailable, build_egress_writer
@@ -199,6 +200,7 @@ from blizzard.hub.store.internal.secret_referrers import SecretReferrersStore
 from blizzard.hub.store.internal.secret_store import SecretStore
 from blizzard.hub.store.internal.sole_tenant import SoleTenantConnections, SoleTenantUnresolved
 from blizzard.hub.store.internal.tenant_admin_store import TenantAdministrationStore
+from blizzard.hub.store.internal.tenant_teardown_store import TenantTeardownStore
 from blizzard.hub.store.internal.trace_store import TraceStore
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
@@ -381,6 +383,10 @@ class HubServices:
     hub_events: IReadHubEventLog
     #: Creates, renames and lists the hub's tenants.
     tenant_admin: TenantAdministration
+    #: Deletes tenants — closes, drains and completes them.
+    tenant_teardown: TenantTeardown
+    #: The ``tenant_teardown`` sweep, which carries on every deletion underway.
+    tenant_teardown_sweep: TenantTeardownSweep
     clock: IClock
     #: The published ``ArtifactScope.SYSTEM`` set — the loader itself, so a read through it
     #: stays fresh (``bzh:system-scope-reads-live``); injected rather than a module singleton.
@@ -1370,6 +1376,15 @@ def build_services(
         changed=open_tenants.refresh,
         clock=clock,
     )
+
+    def forget_closed(tenant: TenantId) -> None:
+        # A closed tenant's cached stores and services, and its broker, go first; the in-memory open set is read
+        # again after, so a request resolving the tenant meanwhile misses the cache and is refused by the store.
+        core.tenants.evict(tenant)
+        open_tenants.refresh()
+
+    teardown_store = TenantTeardownStore(store_connections)
+    tenant_teardown = TenantTeardown(teardowns=teardown_store, closed=forget_closed, events=hub_event_log, clock=clock)
     # The provider-login seam — one registry entry per configured
     # ``[[auth.oauth.provider]]``, empty when no providers are configured.
     oauth_registry = oauth_registry or ProviderEntry.registry(oauth_providers, http_client=oauth_http_client)
@@ -1390,6 +1405,8 @@ def build_services(
         hub_event_log=hub_event_log,
         hub_events=hub_events,
         tenant_admin=tenant_admin,
+        tenant_teardown=tenant_teardown,
+        tenant_teardown_sweep=TenantTeardownSweep(teardown=tenant_teardown, teardowns=teardown_store),
         clock=clock,
         system_artifacts=system_artifacts,
         close_drain=CloseDrainSweep(

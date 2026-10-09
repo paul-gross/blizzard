@@ -39,7 +39,9 @@ it — and raises :class:`TenantClosed` when the tenant is closed (:class:`Unkno
 tenant has the id). On SQLite that statement is the transaction's first write, so the driver's
 deferred ``BEGIN`` precedes it and the read runs under the single writer lock: a close either
 committed before it, and is seen, or waits for the writer's commit. The one write that cannot lock its
-tenant's row is the one that creates it: ``founding`` opens by inserting that row instead."""
+tenant's row is the one that creates it: ``founding`` opens by inserting that row instead. The writes a closed
+tenant still takes — its deletion's drain and completion — open with ``teardown``, which locks the tenant's
+deletion fact instead, on the condition that the deletion is still underway."""
 
 from __future__ import annotations
 
@@ -64,6 +66,15 @@ _SCOPE_OPTION = "blizzard_store_scope"
 
 class UnscopedConnection(RuntimeError):
     """Raised when scoped builders are asked of a ``Connection`` no scoped seam yielded."""
+
+
+class TeardownNotUnderway(LookupError):
+    """Raised when a teardown write opens on a tenant with no deletion underway: never closed, or its deletion
+    already completed."""
+
+    def __init__(self, tenant: str) -> None:
+        super().__init__(f"no deletion of tenant {tenant} is underway")
+        self.tenant = tenant
 
 
 class TenantKeySupplied(ValueError):
@@ -265,6 +276,23 @@ class ScopedConnections(HubStoreConnections, ScopedStatements):
                     tenant_id=self.scope.tenant, name=name, created_at=created_at, created_by=created_by
                 )
             )
+            yield self._bind(conn)
+
+    @contextmanager
+    def teardown(self, operation: str) -> Iterator[Connection]:
+        """Like :meth:`write`, opened by locking the scope's ``tenant_deletions`` row on the condition that its
+        deletion is underway, instead of the tenant row on the condition that the tenant is open: the one write a
+        closed tenant takes, which removes its rows. Concurrent teardowns of one tenant serialize on that row; a
+        teardown that opens after the deletion completed raises :class:`TeardownNotUnderway`."""
+        with super().write(operation, expect=(TeardownNotUnderway,)) as conn:
+            deletions = s.tenant_deletions
+            locked = conn.execute(
+                sa.update(deletions)
+                .where(deletions.c.tenant_id == self.scope.tenant, deletions.c.deleted_at.is_(None))
+                .values(rows_removed=deletions.c.rows_removed)
+            )
+            if locked.rowcount != 1:
+                raise TeardownNotUnderway(self.scope.tenant)
             yield self._bind(conn)
 
     def _lock_open_tenant(self, conn: Connection) -> None:

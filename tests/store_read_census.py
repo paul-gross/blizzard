@@ -114,6 +114,7 @@ from blizzard.hub.domain.observability.transcripts import IReadTranscriptSegment
 from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
 from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.domain.tenancy.administration import IReadTenantDirectory
+from blizzard.hub.domain.tenancy.teardown import IReadTenantTeardowns
 from blizzard.hub.domain.work_items.closure import IReadCloseIntentCorpus
 from blizzard.hub.secrets import hub_key_provider, secret_cipher
 from blizzard.hub.store.internal.chunk_rows import MARKER_PREFIX
@@ -133,11 +134,13 @@ from blizzard.hub.store.internal.hub_scoped_invitations import InvitationReads
 from blizzard.hub.store.internal.invitation_store import InvitationStore
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
 from blizzard.hub.store.internal.secret_store import SecretStore
+from blizzard.hub.store.internal.tenant_teardown_store import TenantTeardownStore
 from blizzard.hub.store.internal.trace_store import TraceStore
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
 from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.tenancy import TenantId
 from blizzard.runner.auth.tokens import IReadTokenRepository
 from blizzard.runner.composition import build_stores
 from blizzard.runner.environments.repository import IReadEnvironmentRepository
@@ -903,6 +906,10 @@ def _egress_store_of(connections: ScopedConnections, hub: HubHarness) -> EgressS
 
 def _hub_events_of(hub: HubHarness) -> HubEventLogStore:
     return HubEventLogStore(hub_level_connections(hub.engine))
+
+
+def _teardowns_of(hub: HubHarness) -> TenantTeardownStore:
+    return TenantTeardownStore(hub_level_connections(hub.engine))
 
 
 def _memberships_of(hub: HubHarness) -> MembershipRepository:
@@ -2274,6 +2281,8 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
         ("egress-write-failed", "trace-export-failed")
     ),
     (IReadHubEventLog, "recent"): lambda w: _hub_events_of(w.hub).recent(50),
+    (IReadTenantTeardowns, "underway"): lambda w: _teardowns_of(w.hub).underway(),
+    (IReadTenantTeardowns, "deletion"): lambda w: _teardowns_of(w.hub).deletion(TenantId("ten_census_missing")),
     (IReadTenantDirectory, "list_tenants"): lambda w: w.hub.hub_services.tenant_admin.list_tenants(),
     (IReadEgressEvents, "markers_after"): lambda w: w.hub.hub_services.hub_scoped_reads.corpus.markers_after(
         EventsPosition(_HUB_BASE), _HUB_UNTIL, 50, extractor_version=EXTRACTOR_VERSION

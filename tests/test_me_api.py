@@ -8,18 +8,17 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-import sqlalchemy as sa
 
 from blizzard.auth_core import HUB_PERMISSIONS, Role, expand
 from blizzard.hub.api.auth_session import TENANT_HEADER
 from blizzard.hub.auth.models import User
 from blizzard.hub.config import AUTH_MODE_NONE
-from blizzard.hub.store import schema
 from blizzard.hub.tenancy import TenantId
 from tests.support import (
     HubHarness,
     add_tenant,
     build_hub,
+    close_tenant,
     default_tenant,
     seed_hub_admin,
     seed_membership,
@@ -136,8 +135,7 @@ def test_a_closed_tenants_membership_is_neither_listed_nor_resolved(tmp_path: Pa
     hub, alpha, bravo = _two_tenants(tmp_path)
     ada = seed_user(hub, username="ada", role=Role.GUEST)
     seed_membership(hub.engine, bravo, ada.user_id, Role.ADMIN)
-    with hub.engine.begin() as conn:
-        conn.execute(sa.insert(schema.tenant_deletions).values(tenant_id=bravo, name="bravo", deleted_by="test"))
+    close_tenant(hub.engine, bravo)
     hub.hub_services.tenants.open_tenants.refresh()
     cookie = _cookie(hub, ada)
 

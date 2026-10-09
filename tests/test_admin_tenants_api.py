@@ -1,5 +1,5 @@
-"""The tenant administration routes over the hub app with sign-in on: only a hub administrator creates, lists and
-renames tenants and syncs the packaged graphs into every open tenant; a tenant's own admin is refused all of it; a
+"""The tenant administration routes over the hub app with sign-in on: only a hub administrator creates, lists, renames
+and deletes tenants and syncs the packaged graphs into every open tenant; a tenant's own admin is refused all of it; a
 rename reaches a runner's next registration; the tenant-scoped graph sync stays, deprecated, under ``GRAPH_EDIT``."""
 
 from __future__ import annotations
@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 from blizzard.auth_core import Role
 from blizzard.hub.api.auth_session import TENANT_HEADER
 from blizzard.hub.config import AUTH_MODE_OAUTH
+from blizzard.hub.domain.tenancy import teardown
 from blizzard.hub.graphs import PACKAGED, GraphFile
 from blizzard.hub.tenancy import TenantId
 from tests.support import HubHarness, build_hub, default_tenant, seed_hub_admin, seed_runner, seed_session, seed_user
@@ -90,6 +91,7 @@ def test_renaming_a_tenant_that_does_not_exist_answers_404(hub: HubHarness) -> N
         ("POST", "/api/admin/tenants", {"name": "acme"}),
         ("GET", "/api/admin/tenants", None),
         ("PATCH", "/api/admin/tenants/{tenant}", {"name": "acme"}),
+        ("DELETE", "/api/admin/tenants/{tenant}", None),
         ("POST", "/api/admin/graphs/sync", None),
     ],
 )
@@ -152,3 +154,48 @@ def test_the_tenant_scoped_graph_sync_stays_deprecated_under_graph_edit(hub: Hub
     assert sorted(e["name"] for e in synced.json()["entries"]) == _PACKAGED_NAMES
     assert refused.status_code == 403
     assert operation["deprecated"] is True
+
+
+def test_deleting_a_tenant_answers_200_with_the_rows_it_removed_and_410_after(hub: HubHarness) -> None:
+    session = _hub_admin(hub)
+    created = _create(hub, session, "acme")
+
+    deleted = hub.client.delete(f"/api/admin/tenants/{created['tenant_id']}", headers=_bearer(session))
+    again = hub.client.delete(f"/api/admin/tenants/{created['tenant_id']}", headers=_bearer(session))
+    listed = hub.client.get("/api/admin/tenants", headers=_bearer(session))
+
+    assert deleted.status_code == 200, deleted.text
+    body = deleted.json()
+    assert (body["tenant_id"], body["state"]) == (created["tenant_id"], "deleted")
+    assert body["rows_removed"] > len(_PACKAGED_NAMES)
+    assert again.status_code == 410
+    assert [t["tenant_id"] for t in listed.json()] == [default_tenant(hub.engine)]
+
+
+def test_a_delete_cut_off_by_its_budget_answers_202_and_the_list_shows_it_deleting(
+    hub: HubHarness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    session = _hub_admin(hub)
+    created = _create(hub, session, "acme")
+    monkeypatch.setattr(teardown, "DRAIN_PASS_ROWS", 1)
+
+    first = hub.client.delete(f"/api/admin/tenants/{created['tenant_id']}", headers=_bearer(session))
+    again = hub.client.delete(f"/api/admin/tenants/{created['tenant_id']}", headers=_bearer(session))
+    listed = {t["tenant_id"]: t for t in hub.client.get("/api/admin/tenants", headers=_bearer(session)).json()}
+
+    assert first.status_code == 202 and first.json()["state"] == "deleting"
+    assert first.json()["rows_removed"] is None
+    assert again.status_code == 202
+    assert listed[created["tenant_id"]]["state"] == "deleting"
+    assert listed[created["tenant_id"]]["closed_at"] is not None
+    assert listed[default_tenant(hub.engine)]["closed_at"] is None
+
+
+def test_deleting_the_only_tenant_answers_409_and_an_unknown_one_404(hub: HubHarness) -> None:
+    session = _hub_admin(hub)
+
+    only = hub.client.delete(f"/api/admin/tenants/{default_tenant(hub.engine)}", headers=_bearer(session))
+    unknown = hub.client.delete("/api/admin/tenants/ten_nobody", headers=_bearer(session))
+
+    assert only.status_code == 409 and only.json()["detail"]["code"] == "last_tenant"
+    assert unknown.status_code == 404 and unknown.json() == {"detail": "no such tenant"}

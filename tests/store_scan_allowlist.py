@@ -286,6 +286,12 @@ _HUB_EXEC_SLOT_REASON = (
     "plus that tenant's release history, never another tenant's slots."
 )
 
+# The hub's tenant deletion facts (tenant_deletions), read for the deletions still underway.
+_TENANT_DELETIONS_REASON = (
+    "one fact per tenant the hub ever deleted, read whole by the tenant-teardown sweep for the deletions still "
+    "underway — bounded by the tenants hub administrators created, never by a tenant's own volume."
+)
+
 HUB_ALLOWED_SCANS: list[Allowance] = [
     # --- the one-shot legacy-config import ----------------------------------------------
     TableWideAllowance("config_import_facts", 50, _RARE_OPERATOR_EVENT_REASON),
@@ -309,6 +315,7 @@ HUB_ALLOWED_SCANS: list[Allowance] = [
     # --- singletons/near-singletons ------------------------------------------------------
     TableWideAllowance("superuser_bootstrap", 50, _SINGLETON_REASON),
     TableWideAllowance("hub_exec_slot", 50, _HUB_EXEC_SLOT_REASON),
+    TableWideAllowance("tenant_deletions", 200, _TENANT_DELETIONS_REASON),
     # --- operator-created fleet entities and their lifecycle facts --------------------
     TableWideAllowance("graph_lifecycle_facts", 200, _FLEET_CONFIG_REASON),
     TableWideAllowance("graph_policy_facts", 200, _FLEET_CONFIG_REASON),

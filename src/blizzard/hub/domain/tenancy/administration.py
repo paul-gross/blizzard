@@ -33,13 +33,15 @@ class TenantState(StrEnum):
 @domain_model
 @dataclass(frozen=True)
 class Tenant:
-    """One tenant as its administrators see it: its id, its name, when and by whom it was created, and its state."""
+    """One tenant as its administrators see it: its id, its name, when and by whom it was created, its state, and —
+    while its deletion is underway — when it closed."""
 
     tenant_id: TenantId
     name: str
     created_at: datetime
     created_by: str
     state: TenantState
+    closed_at: datetime | None = None
 
 
 class TenantAdminUnknown(LookupError):
@@ -54,8 +56,8 @@ class IReadTenantDirectory(Protocol):
     """The hub's tenants, read hub-wide."""
 
     def list_tenants(self) -> list[Tenant]:
-        """Every tenant the hub holds — open, or with its deletion underway — by id, which is creation order to the
-        millisecond."""
+        """Every tenant the hub holds — open, or with its deletion underway and the time it closed — by id, which is
+        creation order to the millisecond."""
         ...
 
 

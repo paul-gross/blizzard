@@ -22,7 +22,7 @@ from blizzard.hub.graphs import PACKAGED, GraphFile
 from blizzard.hub.store import schema
 from blizzard.hub.store.internal.tenant_admin_store import TenantAdministrationStore
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION, StoreScope, TenantId, UnknownTenant
-from tests.support import HubHarness, build_hub, default_tenant, hub_level_connections, seed_user
+from tests.support import HubHarness, build_hub, close_tenant, default_tenant, hub_level_connections, seed_user
 
 pytestmark = pytest.mark.component
 
@@ -164,14 +164,14 @@ def test_a_rename_reaches_the_in_memory_set_and_refuses_a_tenant_that_is_not_ope
 def test_the_list_shows_a_tenant_whose_deletion_is_underway_as_deleting(hub: HubHarness) -> None:
     admin = hub.hub_services.tenant_admin
     created = admin.create("acme", admin_user_id=None, by="usr_creator")
-    with hub.engine.begin() as conn:
-        conn.execute(
-            sa.insert(schema.tenant_deletions).values(tenant_id=created.tenant_id, name="acme", deleted_by="usr_x")
-        )
+    close_tenant(hub.engine, created.tenant_id, by="usr_x", at=created.created_at)
 
     listed = {t.tenant_id: t for t in admin.list_tenants()}
 
     assert listed[created.tenant_id].state is TenantState.DELETING
+    closed_at = listed[created.tenant_id].closed_at
+    assert closed_at is not None and as_utc(closed_at) == created.created_at
+    assert listed[default_tenant(hub.engine)].closed_at is None
     assert as_utc(listed[created.tenant_id].created_at) == created.created_at
     assert listed[default_tenant(hub.engine)].state is TenantState.OPEN
     with pytest.raises(UnknownTenant):

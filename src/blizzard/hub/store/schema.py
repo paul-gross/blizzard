@@ -70,21 +70,22 @@ tenants = Table(
     Column("created_by", String, nullable=False),
 )
 
-# The audit of one tenant's teardown, written when the tenant closes; ``deleted_at`` and
-# ``rows_removed`` are recorded when the drain completes. It outlives the tenant it names, so
-# ``tenant_id`` carries no foreign key.
+# The audit of one tenant's teardown, written when the tenant closes (``closed_at``); ``rows_removed``
+# counts up as the drain removes rows, and ``deleted_at`` is recorded when the deletion completes —
+# unset while it is underway. One per tenant: the row a drain locks, and the answer to a repeated
+# delete. It outlives the tenant it names, so ``tenant_id`` carries no foreign key.
 tenant_deletions = Table(
     "tenant_deletions",
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("tenant_id", String, nullable=False),
     Column("name", String, nullable=False),
+    Column("closed_at", UtcDateTime, nullable=False),
     Column("deleted_at", UtcDateTime, nullable=True),
     Column("deleted_by", String, nullable=False),
     Column("rows_removed", Integer, nullable=True),
+    UniqueConstraint("tenant_id", name="uq_tenant_deletions_tenant_id"),
 )
-
-Index("ix_tenant_deletions_tenant_id", tenant_deletions.c.tenant_id)
 
 # --- Workflow graphs (immutable definitions, reified) -------------------------
 

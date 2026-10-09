@@ -1,0 +1,289 @@
+"""Tenant deletion driven through the hub's wired teardown: a close records the deletion fact and drops what the hub
+holds for the tenant at once — its people answer 404, its runners' tokens 401, its writes are refused — the drain
+removes every row of the tenant children first in bounded batches and nothing of another tenant, the completion
+removes the tenant itself and records the count, and the ``tenant_teardown`` sweep finishes a drain a budget cut off."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+import sqlalchemy as sa
+from fastapi.testclient import TestClient
+
+from blizzard.auth_core import Role
+from blizzard.foundation.store.utc import as_utc
+from blizzard.hub.config import AUTH_MODE_OAUTH
+from blizzard.hub.domain.tenancy import teardown
+from blizzard.hub.domain.tenancy.teardown import (
+    CloseOutcome,
+    DeletionState,
+    LastTenant,
+    TenantAlreadyDeleted,
+    TenantTeardown,
+    TenantTeardownSweep,
+)
+from blizzard.hub.store import schema
+from blizzard.hub.store.internal.tenant_teardown_store import DRAIN_ORDER, TenantTeardownStore
+from blizzard.hub.store.scoped import is_tenant_owned
+from blizzard.hub.tenancy import HUB_SCOPED_OPTION, TenantClosed, TenantId, UnknownTenant
+from tests.support import (
+    HubHarness,
+    added_runner,
+    build_hub,
+    default_tenant,
+    hub_level_connections,
+    scoped_connections,
+    seed_membership,
+    seed_runner,
+    seed_session,
+    seed_user,
+)
+
+pytestmark = pytest.mark.component
+
+
+@pytest.fixture
+def hub(tmp_path: Path) -> HubHarness:
+    hub = build_hub(tmp_path, auth_mode=AUTH_MODE_OAUTH)
+    default_tenant(hub.engine)
+    return hub
+
+
+def _created(hub: HubHarness, name: str = "acme") -> TenantId:
+    """A tenant created as a hub administrator creates one — its packaged graphs and ``hub`` sequence minted."""
+    return hub.hub_services.tenant_admin.create(name, admin_user_id=None, by="usr_creator").tenant_id
+
+
+def _rows_of(hub: HubHarness, tenant: TenantId) -> dict[str, int]:
+    """The tenant's rows in each tenant-owned table, and in ``tenants`` and ``membership_facts``."""
+    tables = [t for t in schema.metadata.sorted_tables if is_tenant_owned(t)]
+    tables += [schema.tenants, schema.membership_facts]
+    with hub.engine.connect() as conn:
+        conn = conn.execution_options(**{HUB_SCOPED_OPTION: True})
+        counts = {
+            t.name: conn.execute(sa.select(sa.func.count()).select_from(t).where(t.c.tenant_id == tenant)).scalar_one()
+            for t in tables
+        }
+    return {name: n for name, n in counts.items() if n}
+
+
+def _deletions(hub: HubHarness) -> list[sa.Row]:
+    with hub.engine.connect() as conn:
+        return list(conn.execute(sa.select(schema.tenant_deletions)).all())
+
+
+def _hub_events(hub: HubHarness) -> list[tuple[str, dict | None]]:  # type: ignore[type-arg]
+    return [(e.kind, e.detail) for e in reversed(hub.hub_services.hub_events.recent(50)) if e.kind.startswith("tenant")]
+
+
+def _small_teardown(hub: HubHarness, *, batch_rows: int) -> tuple[TenantTeardown, TenantTeardownStore]:
+    store = TenantTeardownStore(hub_level_connections(hub.engine))
+    services = hub.hub_services
+    torn = TenantTeardown(
+        teardowns=store,
+        closed=lambda _tenant: services.tenants.open_tenants.refresh(),
+        events=services.hub_event_log,
+        clock=services.clock,
+        batch_rows=batch_rows,
+    )
+    return torn, store
+
+
+def test_the_drain_order_is_every_tenant_owned_table_children_before_parents() -> None:
+    owned = [t for t in schema.metadata.sorted_tables if is_tenant_owned(t)]
+    position = {t.name: i for i, t in enumerate(DRAIN_ORDER)}
+
+    assert sorted(position) == sorted(t.name for t in owned)
+    for table in DRAIN_ORDER:
+        for fk in table.foreign_keys:
+            parent = fk.column.table
+            if parent is not table and parent.name in position:
+                assert position[table.name] < position[parent.name], (table.name, parent.name)
+
+
+def test_a_close_records_the_fact_and_drops_the_tenant_from_memory(hub: HubHarness) -> None:
+    tenant = _created(hub)
+    assert hub.open_services(tenant) is hub.open_services(tenant)
+
+    outcome = hub.hub_services.tenant_teardown.close(tenant, by="usr_closer")
+
+    assert outcome is CloseOutcome.CLOSED
+    [fact] = _deletions(hub)
+    assert (fact.tenant_id, fact.name, fact.deleted_by, fact.deleted_at, fact.rows_removed) == (
+        tenant,
+        "acme",
+        "usr_closer",
+        None,
+        0,
+    )
+    assert as_utc(fact.closed_at) == hub.hub_services.clock.now()
+    assert tenant not in hub.hub_services.tenants.open_tenants.every()
+    with pytest.raises(TenantClosed):
+        hub.open_services(tenant)
+    with pytest.raises(TenantClosed), scoped_connections(hub.engine, tenant).write("test"):
+        pass
+    assert _hub_events(hub) == [("tenant-closed", {"tenant_id": tenant, "by": "usr_closer"})]
+
+
+def test_after_a_close_the_tenants_people_get_404_and_its_runners_401(hub: HubHarness) -> None:
+    tenant = _created(hub)
+    member = seed_user(hub, username="mia", role=Role.PENDING)
+    seed_membership(hub.engine, tenant, member.user_id, Role.ADMIN)
+    session = seed_session(hub, member)
+    token = seed_runner(hub.open_services(tenant), "rn-acme-1", register=False)
+    assert hub.app is not None
+    client = TestClient(hub.app)
+    person = {"Authorization": f"Bearer {session}", "X-Blizzard-Tenant": tenant}
+    runner = {"Authorization": f"Bearer {token}"}
+    registration = {"workspace_id": "w1", "name": "r-acme"}
+    assert client.get("/api/chunks", headers=person).status_code == 200
+    assert client.post("/api/fleet/runners", json=registration, headers=runner).status_code == 201
+
+    hub.hub_services.tenant_teardown.close(tenant, by="usr_closer")
+
+    assert client.get("/api/chunks", headers=person).status_code == 404
+    assert client.post("/api/fleet/runners", json=registration, headers=runner).status_code == 401
+
+
+def test_after_a_close_a_member_signing_in_to_its_runner_is_answered_as_an_unknown_client(hub: HubHarness) -> None:
+    tenant = _created(hub)
+    member = seed_user(hub, username="mia", role=Role.PENDING)
+    seed_membership(hub.engine, tenant, member.user_id, Role.ADMIN)
+    services = hub.open_services(tenant)
+    seed_runner(services, "rn-acme-1", register=False)
+    callback = "https://rn-acme-1.example/api/auth/callback"
+    services.fleet.register(
+        added_runner(services, "rn-acme-1"), "w1", public_url="https://rn-acme-1.example", redirect_uris=(callback,)
+    )
+    assert hub.app is not None
+    client = TestClient(hub.app)
+
+    def sign_in(runner: str) -> tuple[int, str]:
+        resp = client.get(
+            "/api/auth/authorize",
+            params={"client": runner, "redirect_uri": callback, "state": "s"},
+            headers={"Cookie": f"bz_session={seed_session(hub, member)}"},
+            follow_redirects=False,
+        )
+        return resp.status_code, resp.text
+
+    assert sign_in("rn-acme-1")[0] == 200
+
+    hub.hub_services.tenant_teardown.close(tenant, by="usr_closer")
+
+    unknown = sign_in("no-such-runner")
+    assert unknown[0] == 400
+    assert sign_in("rn-acme-1") == unknown
+
+
+def test_a_delete_removes_every_row_of_the_tenant_and_nothing_of_another(hub: HubHarness) -> None:
+    tenant = _created(hub)
+    other = _created(hub, "bystander")
+    member = seed_user(hub, username="mia", role=Role.PENDING)
+    seed_membership(hub.engine, tenant, member.user_id, Role.ADMIN)
+    seed_runner(hub.open_services(tenant), "rn-acme-1")
+    before = _rows_of(hub, tenant)
+    others_before = _rows_of(hub, other)
+    carried_before = _rows_of(hub, default_tenant(hub.engine))
+
+    progress = hub.hub_services.tenant_teardown.delete(tenant, by="usr_closer")
+
+    assert progress.state is DeletionState.DELETED
+    assert progress.rows_removed == sum(before.values())
+    assert _rows_of(hub, tenant) == {}
+    assert _rows_of(hub, other) == others_before
+    assert _rows_of(hub, default_tenant(hub.engine)) == carried_before
+    [fact] = _deletions(hub)
+    assert fact.deleted_at is not None and fact.rows_removed == progress.rows_removed
+    assert [kind for kind, _ in _hub_events(hub)] == ["tenant-closed", "tenant-deleted"]
+    assert _hub_events(hub)[-1][1] == {"tenant_id": tenant, "rows_removed": progress.rows_removed}
+
+
+def test_a_budget_cut_short_leaves_the_deletion_underway_for_the_sweep_to_finish(hub: HubHarness) -> None:
+    tenant = _created(hub)
+    total = sum(_rows_of(hub, tenant).values())
+    torn, store = _small_teardown(hub, batch_rows=2)
+
+    progress = torn.delete(tenant, by="usr_closer", budget=3)
+
+    assert (progress.state, progress.rows_removed) == (DeletionState.DELETING, None)
+    assert sum(_rows_of(hub, tenant).values()) == total - 3
+    assert store.underway() == [tenant]
+    sweep = TenantTeardownSweep(teardown=torn, teardowns=store, budget=4)
+    sweep.sweep()
+    assert sum(_rows_of(hub, tenant).values()) == total - 7
+    while store.underway():
+        sweep.sweep()
+    assert _rows_of(hub, tenant) == {}
+    deletion = store.deletion(tenant)
+    assert deletion is not None and deletion.deleted_at is not None and deletion.rows_removed == total
+
+
+def test_each_drain_transaction_removes_at_most_its_batch(hub: HubHarness) -> None:
+    tenant = _created(hub)
+    _, store = _small_teardown(hub, batch_rows=5)
+    store.close(tenant, by="usr_closer", at=hub.hub_services.clock.now())
+
+    removed = [store.drain_batch(tenant, 5) for _ in range(3)]
+
+    assert removed == [5, 5, 5]
+    deletion = store.deletion(tenant)
+    assert deletion is not None and deletion.rows_removed == 15
+
+
+def test_a_repeated_delete_changes_nothing_while_underway_and_is_gone_after(
+    hub: HubHarness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    tenant = _created(hub)
+    torn = hub.hub_services.tenant_teardown
+    monkeypatch.setattr(teardown, "DRAIN_PASS_ROWS", 1)
+    assert torn.delete(tenant, by="usr_closer").state is DeletionState.DELETING
+    rows = _rows_of(hub, tenant)
+
+    again = torn.delete(tenant, by="usr_other")
+
+    assert (again.state, again.rows_removed) == (DeletionState.DELETING, None)
+    assert _rows_of(hub, tenant) == rows
+    monkeypatch.undo()
+    hub.hub_services.tenant_teardown_sweep.sweep()
+    with pytest.raises(TenantAlreadyDeleted) as gone:
+        torn.delete(tenant, by="usr_other")
+    assert gone.value.deletion.deleted_by == "usr_closer"
+    assert [kind for kind, _ in _hub_events(hub)] == ["tenant-closed", "tenant-deleted"]
+
+
+def test_the_only_open_tenant_and_an_unknown_one_are_refused_and_nothing_is_written(hub: HubHarness) -> None:
+    torn = hub.hub_services.tenant_teardown
+
+    with pytest.raises(LastTenant):
+        torn.delete(default_tenant(hub.engine), by="usr_closer")
+    with pytest.raises(UnknownTenant):
+        torn.delete(TenantId("ten_00000000000000000000000000"), by="usr_closer")
+
+    assert _deletions(hub) == []
+    assert _hub_events(hub) == []
+
+
+def test_the_last_open_tenant_stays_refused_while_another_deletion_is_underway(
+    hub: HubHarness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    tenant = _created(hub)
+    monkeypatch.setattr(teardown, "DRAIN_PASS_ROWS", 1)
+    hub.hub_services.tenant_teardown.delete(tenant, by="usr_closer")
+
+    with pytest.raises(LastTenant):
+        hub.hub_services.tenant_teardown.delete(default_tenant(hub.engine), by="usr_closer")
+
+
+def test_a_deletion_never_touches_a_written_export_file(hub: HubHarness, tmp_path: Path) -> None:
+    tenant = _created(hub)
+    written = tmp_path / "egress" / "steps" / "part-0001.ndjson"
+    written.parent.mkdir(parents=True)
+    written.write_text(f'{{"tenant_id": "{tenant}"}}\n')
+
+    hub.hub_services.tenant_teardown.delete(tenant, by="usr_closer")
+
+    assert written.read_text() == f'{{"tenant_id": "{tenant}"}}\n'
+    [fact] = _deletions(hub)
+    assert fact.tenant_id == tenant
