@@ -886,9 +886,22 @@ class HubHarness:
     #: address — the forwarded-header trust tests need a concrete IP peer.
     app: FastAPI | None = None
 
+    @property
+    def hub_services(self) -> HubServices:
+        """The hub-level services — identity, sessions, signing, exports and sweeps; the name every
+        test reads a hub-level field through, as ``services`` is the name for a tenant field."""
+        return self.services
+
     def promote(self, chunk_id: str) -> None:
         """Promote ``chunk_id`` through the real ``POST /api/chunks/{id}/promote`` path."""
         assert self.client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
+
+
+def tenant_services_of(app: FastAPI) -> HubServices:
+    """The default tenant's services of a wired ``app`` — the name every test reads a tenant field
+    of an app through; a hub-level field is read off ``app.state.services`` itself."""
+    services: HubServices = app.state.services
+    return services
 
 
 _hub_prototype_lock = threading.Lock()
