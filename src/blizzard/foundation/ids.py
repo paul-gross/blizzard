@@ -54,6 +54,7 @@ class IdPrefix(StrEnum):
     RUNNER = "rn"  # a runner — minted with its bearer token when the runner is added; never changes
     TENANT = "ten"  # a tenant — minted once, never reused; its name never stands in for it
     INVITATION = "inv"  # an invitation into one tenant
+    PROJECT = "proj"  # a project — its slug and name never stand in for it
 
 
 @domain_model

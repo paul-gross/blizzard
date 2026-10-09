@@ -309,3 +309,26 @@ def test_a_redundant_secret_retire_or_enable_writes_nothing(retired: bool) -> No
 )
 def test_a_client_may_claim_only_the_cli_or_board_door(raw: str | None, door: Door) -> None:
     assert Door.claimed(raw) is door
+
+
+# --- Change rows ------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("wire", "kind"),
+    [
+        ("project", RecordKind.PROJECT),
+        ("project_source_link", RecordKind.PROJECT_SOURCE_LINK),
+        ("project_repository_link", RecordKind.PROJECT_REPOSITORY_LINK),
+    ],
+)
+def test_a_project_and_its_links_are_change_log_kinds_stored_by_their_wire_name(wire: str, kind: RecordKind) -> None:
+    assert RecordKind(wire) is kind
+
+
+def test_a_change_row_names_a_project_only_when_its_record_belongs_to_one() -> None:
+    tenant_wide = ConfigChange.of(_CTX, RecordKind.WORK_SOURCE, "gh", 1, ChangeOp.CREATE, (), _AT)
+    scoped = ConfigChange.of(_CTX, RecordKind.SCOPE, "core", 1, ChangeOp.CREATE, (), _AT, project_id="proj_A")
+
+    assert tenant_wide.project_id is None
+    assert scoped.project_id == "proj_A"
