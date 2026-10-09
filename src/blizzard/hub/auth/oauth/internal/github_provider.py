@@ -1,5 +1,5 @@
 """The ``github`` conformer — plain OAuth2 code flow, ``GET /user`` + ``GET /user/emails`` for the
-verified primary email (package-private).
+primary email and every verified address on the account (package-private).
 
 All ``httpx`` usage is confined here (``bzh:dependency-inversion``). ``web_base``/``api_base`` default
 to real GitHub's split hosts but are overridable to point at a stub IdP."""
@@ -21,10 +21,14 @@ _DEFAULT_API_BASE = "https://api.github.com"
 
 
 class GithubProvider:
-    """A GitHub-style OAuth2 provider — code flow, numeric ``id`` as subject, the
-    verified primary email via the ``user:email`` scope."""
+    """A GitHub-style OAuth2 provider — code flow, numeric ``id`` as subject, the primary
+    email and every verified address via the ``user:email`` scope.
+
+    GitHub reports an address as verified only once its owner has proven it, so its
+    verified addresses are authoritative."""
 
     type = "github"
+    emails_authoritative = True
 
     def __init__(
         self,
@@ -72,7 +76,7 @@ class GithubProvider:
             user_resp = self._http.get(f"{self._api_base}/user", headers=headers)
             user_resp.raise_for_status()
             user = user_resp.json()
-            email, email_verified = self._primary_verified_email(headers)
+            emails = self._emails(headers)
         except (httpx.HTTPError, KeyError) as exc:
             _log.warning("github exchange failed", provider=self.name, detail=str(exc))
             raise OAuthExchangeError(f"github exchange failed for provider {self.name!r}") from exc
@@ -80,12 +84,21 @@ class GithubProvider:
         if subject is None:
             raise OAuthExchangeError(f"github /user response for provider {self.name!r} carries no 'id'")
         handle = user.get("login") or str(subject)
-        return ProviderIdentity(subject=str(subject), handle=str(handle), email=email, email_verified=email_verified)
+        primary = next((entry for entry in emails if entry.get("primary")), {})
+        primary_email = primary.get("email")
+        return ProviderIdentity(
+            subject=str(subject),
+            handle=str(handle),
+            email=str(primary_email) if primary_email is not None else None,
+            email_verified=bool(primary.get("verified", False)),
+            verified_emails=tuple(
+                str(entry["email"]) for entry in emails if entry.get("verified") is True and entry.get("email")
+            ),
+            emails_authoritative=self.emails_authoritative,
+        )
 
-    def _primary_verified_email(self, headers: dict[str, str]) -> tuple[str | None, bool]:
+    def _emails(self, headers: dict[str, str]) -> list[dict[str, object]]:
+        """Every entry of ``/user/emails`` — the primary and each secondary address alike."""
         resp = self._http.get(f"{self._api_base}/user/emails", headers=headers)
         resp.raise_for_status()
-        for entry in resp.json():
-            if entry.get("primary"):
-                return entry.get("email"), bool(entry.get("verified", False))
-        return None, False
+        return resp.json()

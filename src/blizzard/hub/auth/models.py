@@ -62,8 +62,16 @@ class ProviderIdentity:
 
     subject: str
     handle: str
+    #: The account's primary address — the one a new user's row keeps and the email-merge
+    #: rule matches on.
     email: str | None
     email_verified: bool
+    #: Every address the provider reports as verified on the account, the primary among them.
+    verified_emails: tuple[str, ...] = ()
+    #: Whether the provider vouches for every address in ``verified_emails`` — only then may
+    #: one of them admit the account through an email invitation. A provider that cannot say
+    #: (a client's own directory, say) reports ``False``.
+    emails_authoritative: bool = False
 
 
 @domain_model

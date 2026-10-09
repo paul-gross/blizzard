@@ -22,7 +22,11 @@ _log = get_logger("blizzard.hub.auth.oauth")
 
 class OidcProvider:
     """A generic OIDC provider — discovery + authorization-code flow + ``id_token``
-    signature verification against the issuer's published JWKS."""
+    signature verification against the issuer's published JWKS.
+
+    An issuer's ``email_verified`` claim is only as trustworthy as the issuer's own
+    directory, so its addresses are authoritative only when the hub administrator
+    configures them so (``emails_authoritative``)."""
 
     type = "oidc"
 
@@ -35,9 +39,11 @@ class OidcProvider:
         client_id: str,
         client_secret: str,
         http_client: httpx.Client,
+        emails_authoritative: bool = False,
     ) -> None:
         self.name = name
         self.display_name = display_name
+        self.emails_authoritative = emails_authoritative
         self._issuer = issuer.rstrip("/")
         self._client_id = client_id
         self._client_secret = client_secret
@@ -87,12 +93,15 @@ class OidcProvider:
         if not subject:
             raise OAuthExchangeError(f"oidc id_token for provider {self.name!r} carries no 'sub' claim")
         handle = claims.get("preferred_username") or claims.get("name") or str(subject)
-        email = claims.get("email")
+        email = str(claims["email"]) if claims.get("email") is not None else None
+        email_verified = bool(claims.get("email_verified", False))
         return ProviderIdentity(
             subject=str(subject),
             handle=str(handle),
-            email=str(email) if email is not None else None,
-            email_verified=bool(claims.get("email_verified", False)),
+            email=email,
+            email_verified=email_verified,
+            verified_emails=(email,) if email and email_verified else (),
+            emails_authoritative=self.emails_authoritative,
         )
 
     def _verify_id_token(self, id_token: str, jwks_uri: str) -> dict[str, object]:
