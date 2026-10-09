@@ -140,6 +140,20 @@ describe('AppNavMenu', () => {
     expect(globex?.getAttribute('aria-checked')).toBe('false');
   });
 
+  it.each([
+    ['Enter', 13],
+    ['ArrowRight', 39],
+  ])('opens the switcher from the keyboard with %s, as every kit submenu does', async (key, keyCode) => {
+    const fixture = await openIn(TWO_TENANTS);
+    const trigger = inOverlay('[data-testid="nav-tenant"]');
+    trigger?.focus();
+    trigger?.dispatchEvent(new KeyboardEvent('keydown', { key, keyCode, bubbles: true }));
+    await settle(fixture);
+
+    expect(inOverlay('[data-testid="nav-tenant-panel"]')).not.toBeNull();
+    expect(trigger?.getAttribute('aria-expanded')).toBe('true');
+  });
+
   it('switching sets the tab tenant and the last choice, then reloads the view, with no sign-in', async () => {
     const fixture = await openIn(TWO_TENANTS);
     inOverlay('[data-testid="nav-tenant"]')?.click();

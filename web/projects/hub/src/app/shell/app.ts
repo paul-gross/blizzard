@@ -86,8 +86,9 @@ import {
  *   and `injectMeQuery` hands every permission check that membership's role and
  *   permissions. The header carries the tenant's name.
  *
- * The SSE spine only starts once `ready` (a stream before the tenant is settled
- * would name no tenant, or the wrong one), and its {@link FleetLiveUpdates.authFailed}
+ * The SSE spine, and the header's own tenant-scoped reads, only start once the
+ * board has entered the selected tenant (a call before it would name no tenant,
+ * or the wrong one), and the SSE spine's {@link FleetLiveUpdates.authFailed}
  * channel — a session that expired mid-stream — routes back to `/login` the same way
  * the interceptor does, within the one reconnect cycle that surfaces it.
  */
@@ -110,7 +111,6 @@ import {
 })
 export class App {
   private readonly health = injectHubHealthQuery();
-  private readonly countsQuery = injectHubChunkCountsQuery();
   private readonly live = inject(FleetLiveUpdates);
   private readonly viewport = inject(ViewportService);
   private readonly router = inject(Router);
@@ -130,26 +130,6 @@ export class App {
    */
   private readonly demoConfig = readDemoConfig(globalThis.location?.search ?? '');
 
-  /** The minute tick the spend windows are cut from — reading it inside the query
-   * options makes the key reactive, yet it changes only when the local day does, so a
-   * tick within the day leaves the key equal and refetches nothing. */
-  private readonly now = injectNowSignal(60_000);
-
-  /** The fleet's spend-today read — `since` is local start-of-day off {@link now},
-   * so the window rolls forward at local midnight without a reload. */
-  protected readonly spendToday = injectHubFleetSpendQuery(() => startOfLocalDayIso(this.now()));
-
-  /** The fleet's spend-yesterday read — `[startOfPreviousLocalDayIso(now),
-   * startOfLocalDayIso(now))`, both derived from the one local-day boundary helper so
-   * the window rolls over with today by construction and never includes today's
-   * own spend. A second, independent `injectHubFleetSpendQuery` entry — distinct
-   * from {@link spendToday}'s in both `since` and `until`, so it is its own cache
-   * entry rather than colliding on one. */
-  protected readonly spendYesterday = injectHubFleetSpendQuery(
-    () => startOfPreviousLocalDayIso(this.now()),
-    () => startOfLocalDayIso(this.now()),
-  );
-
   /** The app-root-level shell fork (`../docs/designs/mobile/README.md`'s
    * "adaptive shells over shared guts") — picked once here, mirroring the
    * `board` route's own guard-based fork in `app.routes.ts`. */
@@ -163,6 +143,41 @@ export class App {
 
   /** The top-level session gate — see the class docstring. */
   protected readonly authState = computed<AuthState>(() => authState(this.meQuery.isPending(), this.tenancy()));
+
+  /** Whether the board has entered the tenant it settled on — every call names it from here. The header's
+   * tenant-scoped reads below wait on it: before it, a read would name no tenant or a stale one. */
+  private readonly ready = computed(() => {
+    const tenancy = this.tenancy();
+    return tenancy?.kind === 'selected' && this.tenant.current() === tenancy.tenant.tenant_id;
+  });
+
+  /** The fleet's chunk counts for the header, in the selected tenant. */
+  private readonly countsQuery = injectHubChunkCountsQuery(() => this.ready());
+
+  /** The minute tick the spend windows are cut from — reading it inside the query
+   * options makes the key reactive, yet it changes only when the local day does, so a
+   * tick within the day leaves the key equal and refetches nothing. */
+  private readonly now = injectNowSignal(60_000);
+
+  /** The fleet's spend-today read — `since` is local start-of-day off {@link now},
+   * so the window rolls forward at local midnight without a reload. */
+  protected readonly spendToday = injectHubFleetSpendQuery(
+    () => startOfLocalDayIso(this.now()),
+    undefined,
+    () => this.ready(),
+  );
+
+  /** The fleet's spend-yesterday read — `[startOfPreviousLocalDayIso(now),
+   * startOfLocalDayIso(now))`, both derived from the one local-day boundary helper so
+   * the window rolls over with today by construction and never includes today's
+   * own spend. A second, independent `injectHubFleetSpendQuery` entry — distinct
+   * from {@link spendToday}'s in both `since` and `until`, so it is its own cache
+   * entry rather than colliding on one. */
+  protected readonly spendYesterday = injectHubFleetSpendQuery(
+    () => startOfPreviousLocalDayIso(this.now()),
+    () => startOfLocalDayIso(this.now()),
+    () => this.ready(),
+  );
 
   /** The identity's memberships — what the tenant picker offers. */
   protected readonly memberships = computed(() => this.me()?.tenants ?? []);
@@ -203,6 +218,9 @@ export class App {
     effect(() => {
       const tenancy = this.tenancy();
       if (tenancy?.kind === 'selected') untracked(() => this.tenant.enter(tenancy.tenant.tenant_id));
+      // Settled on none — no membership, or a choice to make — so whatever this tab or browser remembered is no
+      // membership any more: forget it rather than keep naming it.
+      else if (tenancy !== null) untracked(() => this.tenant.forgetSelection());
     });
 
     // Open the SSE stream and wire it to the query cache once authenticated with at
@@ -212,7 +230,7 @@ export class App {
     // `FleetLiveUpdates.start()` is itself safe to call from a reactive context — it
     // wraps its own internal `effect()` call in `untracked` (fleet-live.ts).
     afterRenderEffect(() => {
-      if (this.authState() === 'ready') this.live.start();
+      if (this.ready()) this.live.start();
     });
 
     // Demo mode (`?demo=true`) — the unattended kiosk tour, gated on the same
@@ -225,7 +243,7 @@ export class App {
     // import is only reached when `?demo` actually asked, and `start()` is
     // idempotent, so this effect re-running on an auth settle is a no-op.
     afterRenderEffect(() => {
-      if (this.authState() !== 'ready' || !this.demoConfig.enabled) return;
+      if (!this.ready() || !this.demoConfig.enabled) return;
       void import('../demo/demo-director').then(({ DemoDirector }) =>
         this.injector.get(DemoDirector).start(this.demoConfig),
       );

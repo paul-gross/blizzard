@@ -14,7 +14,7 @@ import {
   type ProviderSummary,
 } from 'fleet';
 import { provideAuthInterceptor } from '../core/auth/auth.interceptor';
-import { LAST_TENANT_KEY, TAB_TENANT_KEY } from '../core/auth/tenant-context';
+import { LAST_TENANT_KEY, TAB_TENANT_KEY, TenantContext } from '../core/auth/tenant-context';
 import { provideTenantInterceptor } from '../core/auth/tenant.interceptor';
 import type { MeTenant } from 'fleet/shell';
 import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
@@ -488,6 +488,66 @@ describe('hub App', () => {
       expect(el.querySelector('[data-testid="board-header"]')?.textContent).toContain('Acme');
       expect(el.querySelector('[data-testid="nav-admin"]')).toBeTruthy();
       expect(authStub.requests.every((r) => r.headers['x-blizzard-tenant'] === 'ten_a')).toBe(true);
+    });
+
+    /** The hub-level routes — the only ones the board may call before it has entered a tenant. */
+    const HUB_LEVEL = new Set(['/api/me', '/api/auth/providers', '/api/health']);
+    const tenantScoped = () => authStub.requests.filter((r) => !HUB_LEVEL.has(r.path));
+
+    it('sends nothing tenant-scoped while the picker shows, and forgets a remembered tenant that is gone', async () => {
+      sessionStorage.setItem(TAB_TENANT_KEY, 'ten_gone');
+      localStorage.setItem(LAST_TENANT_KEY, 'ten_gone');
+      authStub.restore();
+      authStub = stubAuth({ ...MEMBERLESS, tenants: [ACME_ADMIN, BETA_GUEST] }, OIDC);
+
+      const fixture = TestBed.createComponent(App);
+      await TestBed.inject(Router).navigateByUrl('/');
+      await settle(fixture);
+
+      expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="tenant-picker"]')).toBeTruthy();
+      expect(tenantScoped()).toEqual([]);
+      expect(TestBed.inject(TenantContext).current()).toBeNull();
+      expect(sessionStorage.getItem(TAB_TENANT_KEY)).toBeNull();
+      expect(localStorage.getItem(LAST_TENANT_KEY)).toBeNull();
+    });
+
+    it('sends nothing tenant-scoped while the no-access screen shows', async () => {
+      localStorage.setItem(LAST_TENANT_KEY, 'ten_gone');
+      authStub.restore();
+      authStub = stubAuth(MEMBERLESS, OIDC);
+
+      const fixture = TestBed.createComponent(App);
+      await TestBed.inject(Router).navigateByUrl('/events');
+      await settle(fixture);
+
+      expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="no-access"]')).toBeTruthy();
+      expect(tenantScoped()).toEqual([]);
+      expect(localStorage.getItem(LAST_TENANT_KEY)).toBeNull();
+    });
+
+    it('sends nothing tenant-scoped on the way to sign-in', async () => {
+      authStub.restore();
+      authStub = stubAuth(null, OIDC);
+
+      const fixture = TestBed.createComponent(App);
+      await TestBed.inject(Router).navigateByUrl('/');
+      await settle(fixture);
+
+      expect(TestBed.inject(Router).url).toBe('/login');
+      expect(tenantScoped()).toEqual([]);
+    });
+
+    it("names the entered tenant on the header's own reads from the very first", async () => {
+      authStub.restore();
+      authStub = stubAuth({ ...MEMBERLESS, tenants: [ACME_ADMIN] }, OIDC);
+
+      const fixture = TestBed.createComponent(App);
+      await TestBed.inject(Router).navigateByUrl('/');
+      await settle(fixture);
+
+      const headerReads = authStub.requests.filter((r) => r.path === '/api/chunk-counts' || r.path === '/api/spend');
+      expect(headerReads.length).toBeGreaterThanOrEqual(3);
+      expect(headerReads.every((r) => r.headers['x-blizzard-tenant'] === 'ten_a')).toBe(true);
     });
 
     it('offers the picker when the last choice is no longer a membership', async () => {

@@ -37,8 +37,12 @@
   padding: 0;
   list-style: none;
 }
+/* Every option spans the list — the width of the widest — rather than sizing to its own name: the button inside
+   the kit wrapper is this flex column's item, so it stretches. */
+.tenants li,
 .tenants fleet-kit-button {
-  display: block;
+  display: flex;
+  flex-direction: column;
 }
 .name {
   overflow-wrap: anywhere;

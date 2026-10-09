@@ -10,11 +10,17 @@ import { fleetSpendApiSpendGet, type FleetSpendView, LIVE_COVERED_POLL_BACKSTOP_
  * both ride in the query key so a new window is its own cache entry — `until` included,
  * or two windows sharing a `since` but differing in `until` would collide on one entry.
  * `until` is omitted from the request when the accessor returns `undefined` — an
- * open-ended tail.
+ * open-ended tail. `enabled` holds the read back while it is false — the app root reads it before the tenant it is
+ * scoped to may be settled.
  */
-export function injectHubFleetSpendQuery(since: () => string, until: () => string | undefined = () => undefined) {
+export function injectHubFleetSpendQuery(
+  since: () => string,
+  until: () => string | undefined = () => undefined,
+  enabled: () => boolean = () => true,
+) {
   return injectQuery(() => ({
     queryKey: [...hubFleetSpendKey, since(), until()],
+    enabled: enabled(),
     queryFn: async (): Promise<FleetSpendView> => {
       const { data, error } = await fleetSpendApiSpendGet({
         query: { since: since(), until: until() },

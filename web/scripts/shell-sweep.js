@@ -254,6 +254,9 @@
  *   - projects/runner/src/app/board/chunk-dock/chunk-detail-view-provenance.shell-sweep.spec.ts — the
  *     escalation resume box's harness-provenance badge (blizzard#441) renders beside the
  *     resume command with no horizontal overflow at 390px.
+ *   - projects/hub/src/app/core/auth/tenant-picker.shell-sweep.spec.ts — the tenant
+ *     picker's options share one width, the widest's, whatever their names' lengths,
+ *     and stay inside the viewport at 390px and 320px.
  */
 
 const { spawnSync } = require('node:child_process');
@@ -314,6 +317,7 @@ const SWEEPS = [
   { project: 'fleet', spec: 'projects/fleet/src/lib/chunk/chunk-detail/chunk-timeline-provenance.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/chunk/chunk-detail/chunk-timeline-forensics.shell-sweep.spec.ts' },
   { project: 'runner', spec: 'projects/runner/src/app/board/chunk-dock/chunk-detail-view-provenance.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/core/auth/tenant-picker.shell-sweep.spec.ts' },
 ];
 
 /** Every `*.shell-sweep.spec.ts` under `projects/`, repo-relative and POSIX-separated.
