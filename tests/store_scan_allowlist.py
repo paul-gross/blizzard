@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from blizzard.hub.auth.hub_admins import IReadHubAdminRepository
+from blizzard.hub.auth.memberships import IReadMembershipRepository
 from blizzard.hub.domain.chunk.ports.decisions import IReadChunkDecisionsRepository
 from blizzard.hub.domain.chunk.ports.delivery import IReadChunkDeliveryRepository
 from blizzard.hub.domain.chunk.ports.dependencies import IReadChunkDependenciesRepository
@@ -325,6 +327,27 @@ HUB_ALLOWED_SCANS: list[Allowance] = [
     # --- named-index walks by design ----------------------------------------------------
     IndexWalkAllowance(IReadAnalyticsEventQueries, "counts_by_agent_type", ("transcript_events",), _ANALYTICS_REASON),
     IndexWalkAllowance(IReadAnalyticsEventQueries, "counts_by_node", ("transcript_events",), _ANALYTICS_REASON),
+    IndexWalkAllowance(
+        IReadMembershipRepository,
+        "members",
+        ("membership_facts",),
+        "every membership fact one tenant holds, each reduced to its user's newest — the tenant's member list, "
+        "bounded by the people it grants.",
+    ),
+    IndexWalkAllowance(
+        IReadMembershipRepository,
+        "admin_count",
+        ("membership_facts",),
+        "every membership fact one tenant holds, counted where its user's newest grants admin — an aggregate "
+        "over the tenant's member list.",
+    ),
+    IndexWalkAllowance(
+        IReadHubAdminRepository,
+        "holders",
+        ("hub_admin_facts",),
+        "every hub-administrator fact, each reduced to its user's newest — the hub's administrators, read whole "
+        "and bounded by the grants and revocations of a role a handful of people hold.",
+    ),
     IndexWalkAllowance(
         IReadAnnotatedSources,
         "annotated_sources",

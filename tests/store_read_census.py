@@ -27,12 +27,16 @@ from blizzard.foundation.tokens import TokenHash
 from blizzard.hub.auth.auth_state import IReadAuthStateRepository
 from blizzard.hub.auth.errors import RepoErrorFactory
 from blizzard.hub.auth.facts import IReadAuthFactsRepository
+from blizzard.hub.auth.hub_admins import HubAdminFact, IReadHubAdminRepository
 from blizzard.hub.auth.identities import IReadIdentityRepository
 from blizzard.hub.auth.internal.auth_facts_repository import AuthFactsRepository
 from blizzard.hub.auth.internal.auth_state_repository import AuthStateRepository
+from blizzard.hub.auth.internal.hub_admin_repository import HubAdminRepository
 from blizzard.hub.auth.internal.identity_repository import IdentityRepository
+from blizzard.hub.auth.internal.membership_repository import MembershipRepository
 from blizzard.hub.auth.internal.superuser_bootstrap_repository import SuperuserBootstrapRepository
 from blizzard.hub.auth.internal.user_repository import UserRepository
+from blizzard.hub.auth.memberships import IReadMembershipRepository, MembershipFact
 from blizzard.hub.auth.models import AuthStateEntry, Identity, SuperuserBootstrap, User
 from blizzard.hub.auth.sessions import IReadSessionRepository
 from blizzard.hub.auth.superuser_bootstrap import IReadSuperuserBootstrapRepository
@@ -164,6 +168,7 @@ from tests.support import (
     added_runner,
     build_hub,
     chunk_stores,
+    default_tenant,
     hub_level_connections,
     hub_store_connections,
     seed_chunk_record,
@@ -889,6 +894,14 @@ def _egress_store_of(connections: ScopedConnections, hub: HubHarness) -> EgressS
 
 def _hub_events_of(hub: HubHarness) -> HubEventLogStore:
     return HubEventLogStore(hub_level_connections(hub.engine))
+
+
+def _memberships_of(hub: HubHarness) -> MembershipRepository:
+    return MembershipRepository(hub_level_connections(hub.engine))
+
+
+def _hub_admins_of(hub: HubHarness) -> HubAdminRepository:
+    return HubAdminRepository(hub_level_connections(hub.engine))
 
 
 def _ht(offset_seconds: float) -> datetime:
@@ -1763,6 +1776,17 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     hub_event_log.record(kind="trace-export-failed", message="failed", detail=None, at=_ht(101))
     hub_event_log.record(kind="egress-write-recovered", message="recovered", detail=None, at=_ht(102))
 
+    # --- memberships and hub administrators -------------------------------------------
+    memberships = _memberships_of(hub)
+    tenant = default_tenant(engine)
+    memberships.record(MembershipFact(tenant, user_1.user_id, Role.GUEST, _ht(103), "bootstrap"))
+    memberships.record(MembershipFact(tenant, user_1.user_id, Role.ADMIN, _ht(104), user_2.user_id))
+    memberships.record(MembershipFact(tenant, user_2.user_id, Role.CONTRIBUTOR, _ht(105), user_1.user_id))
+    hub_admins = _hub_admins_of(hub)
+    hub_admins.record(HubAdminFact(user_1.user_id, True, _ht(106), "bootstrap"))
+    hub_admins.record(HubAdminFact(user_2.user_id, True, _ht(107), user_1.user_id))
+    hub_admins.record(HubAdminFact(user_2.user_id, False, _ht(108), user_1.user_id))
+
     return HubWorld(
         hub=hub,
         engine=engine,
@@ -2198,6 +2222,14 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
         w.store_connections, w.hub
     ).newest_egress_failure(),
     (IReadEgress, "newest_egress_latch"): lambda w: _egress_store_of(w.store_connections, w.hub).newest_egress_latch(),
+    (IReadMembershipRepository, "role_in"): lambda w: _memberships_of(w.hub).role_in(
+        default_tenant(w.engine), w.user_1.user_id
+    ),
+    (IReadMembershipRepository, "memberships_for"): lambda w: _memberships_of(w.hub).memberships_for(w.user_1.user_id),
+    (IReadMembershipRepository, "members"): lambda w: _memberships_of(w.hub).members(default_tenant(w.engine)),
+    (IReadMembershipRepository, "admin_count"): lambda w: _memberships_of(w.hub).admin_count(default_tenant(w.engine)),
+    (IReadHubAdminRepository, "is_hub_admin"): lambda w: _hub_admins_of(w.hub).is_hub_admin(w.user_1.user_id),
+    (IReadHubAdminRepository, "holders"): lambda w: _hub_admins_of(w.hub).holders(),
     (IReadHubEventLog, "newest"): lambda w: _hub_events_of(w.hub).newest(
         ("egress-write-failed", "trace-export-failed")
     ),

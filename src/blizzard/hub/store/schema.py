@@ -1769,6 +1769,42 @@ superuser_bootstrap = Table(
     Column("updated_at", UtcDateTime, nullable=False),
 )
 
+# --- Memberships and hub administrators ----------------------------------------------
+# Both are facts (``bzh:facts-not-status``): the newest row per key is in force. A membership grants one user one
+# role in one tenant, and a ``NULL`` role revokes it; ``tenant_id`` is data here, since a person's memberships are
+# read hub-wide, before any tenant is known. ``set_by`` names the granting user's id, or ``migration``,
+# ``bootstrap``, or — for a membership granted under ``auth.mode = "none"`` — ``operator``.
+
+membership_facts = Table(
+    "membership_facts",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_membership_facts_tenant_id"), nullable=False),
+    Column("user_id", String, ForeignKey("users.id", name="fk_membership_facts_user_id"), nullable=False),
+    Column("role", String, nullable=True),  # guest | contributor | admin; NULL revokes
+    Column("set_at", UtcDateTime, nullable=False),
+    Column("set_by", String, nullable=False),
+)
+
+# One membership's newest fact is a seek on ``(tenant_id, user_id)``, and a tenant's members a walk of its
+# ``tenant_id`` range; a person's memberships across tenants seek on ``user_id``.
+Index(
+    "ix_membership_facts_tenant_user", membership_facts.c.tenant_id, membership_facts.c.user_id, membership_facts.c.id
+)
+Index("ix_membership_facts_user_id", membership_facts.c.user_id)
+
+hub_admin_facts = Table(
+    "hub_admin_facts",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("user_id", String, ForeignKey("users.id", name="fk_hub_admin_facts_user_id"), nullable=False),
+    Column("granted", Boolean, nullable=False),
+    Column("set_at", UtcDateTime, nullable=False),
+    Column("set_by", String, nullable=False),
+)
+
+Index("ix_hub_admin_facts_user_id", hub_admin_facts.c.user_id)
+
 # --- Invitations -----------------------------------------------------------------
 # One invitation admits one email address into one tenant with one role. ``email`` is stored
 # lowercased; ``token_hash`` is the sha256 of the link's token, which is never stored.
