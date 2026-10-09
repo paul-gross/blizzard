@@ -20,6 +20,15 @@ from blizzard.hub.auth.oauth.provider import OAuthExchangeError
 _log = get_logger("blizzard.hub.auth.oauth")
 
 
+def _issuer_verified(claim: object) -> bool:
+    """Whether an ``email_verified`` claim says the issuer verified the address: the JSON boolean ``true``, or
+    the string ``"true"`` in any case, which some issuers send instead. Anything else, absent or ``"false"``
+    included, is unverified."""
+    if isinstance(claim, str):
+        return claim.lower() == "true"
+    return claim is True
+
+
 class OidcProvider:
     """A generic OIDC provider — discovery + authorization-code flow + ``id_token``
     signature verification against the issuer's published JWKS.
@@ -94,7 +103,7 @@ class OidcProvider:
             raise OAuthExchangeError(f"oidc id_token for provider {self.name!r} carries no 'sub' claim")
         handle = claims.get("preferred_username") or claims.get("name") or str(subject)
         email = str(claims["email"]) if claims.get("email") is not None else None
-        email_verified = bool(claims.get("email_verified", False))
+        email_verified = _issuer_verified(claims.get("email_verified"))
         return ProviderIdentity(
             subject=str(subject),
             handle=str(handle),
