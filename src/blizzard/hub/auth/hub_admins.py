@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Protocol
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.auth.models import User
+from blizzard.hub.auth.users import IReadUserRepository
 
 if TYPE_CHECKING:
     from blizzard.hub.auth.identity_transaction import IIdentityTransactions
@@ -71,21 +72,42 @@ def revocation_refusal(*, holders: Collection[str], subject: str) -> str | None:
 
 
 class HubAdministrators:
-    """Grants and revokes the hub administrator role, each in one identity unit of work, so the last-holder check
-    and the revocation it guards read and write the same transaction."""
+    """Lists, grants and revokes the hub administrator role, each change in one identity unit of work, so the
+    last-holder check and the revocation it guards read and write the same transaction. A change to the standing
+    already in force writes nothing."""
 
-    def __init__(self, *, transactions: IIdentityTransactions, clock: IClock) -> None:
+    def __init__(
+        self,
+        *,
+        hub_admins: IReadHubAdminRepository,
+        users: IReadUserRepository,
+        transactions: IIdentityTransactions,
+        clock: IClock,
+    ) -> None:
+        self._hub_admins = hub_admins
+        self._users = users
         self._transactions = transactions
         self._clock = clock
+
+    def listing(self) -> list[User]:
+        """Every hub administrator, in holder order — two reads however many there are."""
+        holders = self._hub_admins.holders()
+        users = self._users.get_many(holders)
+        return [users[h] for h in holders if h in users]
 
     def grant(self, subject: User, *, by: str) -> None:
         """Make ``subject`` a hub administrator; ``by`` is the granting hub administrator's user id."""
         with self._transactions.begin() as writes:
+            if writes.hub_admins.is_hub_admin(subject.user_id):
+                return
             writes.hub_admins.record(HubAdminFact(subject.user_id, True, self._clock.now(), by))
 
     def revoke(self, subject: User, *, by: str) -> None:
         """Revoke ``subject``'s hub administrator role; raises :class:`LastHubAdminKept` when they hold it alone."""
         with self._transactions.begin() as writes:
-            if revocation_refusal(holders=writes.hub_admins.holders(), subject=subject.user_id) is not None:
+            holders = writes.hub_admins.holders()
+            if revocation_refusal(holders=holders, subject=subject.user_id) is not None:
                 raise LastHubAdminKept(subject.user_id)
+            if subject.user_id not in holders:
+                return
             writes.hub_admins.record(HubAdminFact(subject.user_id, False, self._clock.now(), by))

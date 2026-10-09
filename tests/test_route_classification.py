@@ -55,6 +55,9 @@ _HUB_LEVEL: set[tuple[str, str]] = {
     ("GET", "/api/egress/status"),
     ("POST", "/api/egress/reset"),
     ("POST", "/api/egress/backfill"),
+    ("GET", "/api/admin/hub-admins"),
+    ("PUT", "/api/admin/hub-admins/{user_id}"),
+    ("DELETE", "/api/admin/hub-admins/{user_id}"),
 }
 
 #: Human plane — ``(method, path) -> permission`` required via ``require(<permission>)``, or
@@ -185,6 +188,13 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     ("GET", "/api/spend"): Permission.FLEET_VIEW,
     ("GET", "/api/users"): Permission.USER_MANAGE,
     ("POST", "/api/users/{user_id}/role"): Permission.USER_MANAGE,
+    ("GET", "/api/members"): Permission.USER_MANAGE,
+    ("PUT", "/api/members/{user_id}"): Permission.USER_MANAGE,
+    ("DELETE", "/api/members/{user_id}"): Permission.USER_MANAGE,
+    # Only a hub administrator makes another.
+    ("GET", "/api/admin/hub-admins"): Permission.HUB_ADMIN_GRANT,
+    ("PUT", "/api/admin/hub-admins/{user_id}"): Permission.HUB_ADMIN_GRANT,
+    ("DELETE", "/api/admin/hub-admins/{user_id}"): Permission.HUB_ADMIN_GRANT,
     # Key rotation — the key signs runner sign-ins in every tenant, so it takes a hub permission.
     ("POST", "/api/auth/rotate-signing-key"): Permission.HUB_ADMIN_GRANT,
     # Transcript-segment discovery/content reads — above
@@ -294,7 +304,11 @@ _FLEET: set[tuple[str, str]] = {
 #: The tenant routes whose router admits a person holding the named hub-level permission into a tenant they
 #: hold no membership in (``TenantBoundAdmitting``) — each gated by ``require_either``, the admitted
 #: permission its alternative. Every other tenant route answers a non-member ``404``.
-_ADMITTING: dict[tuple[str, str], Permission] = {}
+_ADMITTING: dict[tuple[str, str], Permission] = {
+    # A hub administrator grants and revokes a membership in any tenant; listing members takes a membership.
+    ("PUT", "/api/members/{user_id}"): Permission.MEMBERSHIP_GRANT_ANY,
+    ("DELETE", "/api/members/{user_id}"): Permission.MEMBERSHIP_GRANT_ANY,
+}
 
 #: The claim route is gated by the principal without the retirement refusal: a retired runner's claim is
 #: refused in-domain with the paused-denial body older runners parse.

@@ -1,5 +1,6 @@
 """Hub administrators as facts over a migrated store: the newest fact per user is in force, any number of users hold
-the role, each fact keeps who granted it, and the last holder is kept — even against a concurrent revocation."""
+the role, each fact keeps who granted it, a change to the standing in force writes nothing, and the last holder is kept —
+even against a concurrent revocation."""
 
 from __future__ import annotations
 
@@ -26,6 +27,7 @@ from blizzard.hub.auth.hub_admins import (
 )
 from blizzard.hub.auth.internal.hub_admin_repository import HubAdminRepository
 from blizzard.hub.auth.internal.identity_transaction import IdentityTransactions
+from blizzard.hub.auth.internal.user_repository import UserRepository
 from blizzard.hub.auth.models import User
 from blizzard.hub.store import schema as s
 from tests.support import hub_level_connections, hub_migration_prototype
@@ -61,8 +63,19 @@ def _held_open_after_reading_holders(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _administrators(engine: sa.Engine, clock: FixedClock) -> HubAdministrators:
-    transactions = IdentityTransactions(hub_level_connections(engine), RepoErrorFactory(structlog.get_logger("test")))
-    return HubAdministrators(transactions=transactions, clock=clock)
+    errors = RepoErrorFactory(structlog.get_logger("test"))
+    connections = hub_level_connections(engine)
+    return HubAdministrators(
+        hub_admins=HubAdminRepository(connections),
+        users=UserRepository(connections, errors),
+        transactions=IdentityTransactions(connections, errors),
+        clock=clock,
+    )
+
+
+def _fact_count(engine: sa.Engine) -> int:
+    with engine.connect() as conn:
+        return conn.execute(sa.select(sa.func.count()).select_from(s.hub_admin_facts)).scalar_one()
 
 
 def test_hub_admin_facts_carry_the_identity_contract_columns() -> None:
@@ -121,8 +134,18 @@ def test_the_last_hub_administrator_is_kept(engine: sa.Engine) -> None:
         administrators.revoke(_user("usr_a"), by="usr_a")
     repo = HubAdminRepository(hub_level_connections(engine))
     assert repo.holders() == ["usr_a"]
-    with engine.connect() as conn:
-        assert conn.execute(sa.select(sa.func.count()).select_from(s.hub_admin_facts)).scalar_one() == 3
+    assert _fact_count(engine) == 3
+
+
+def test_a_change_to_the_standing_in_force_writes_nothing(engine: sa.Engine) -> None:
+    administrators = _administrators(engine, FixedClock(_T0))
+    administrators.grant(_user("usr_a"), by=SET_BY_BOOTSTRAP)
+
+    administrators.grant(_user("usr_a"), by="usr_a")
+    administrators.revoke(_user("usr_b"), by="usr_a")
+
+    assert _fact_count(engine) == 1
+    assert HubAdminRepository(hub_level_connections(engine)).holders() == ["usr_a"]
 
 
 def test_two_concurrent_revocations_never_leave_the_hub_without_an_administrator(

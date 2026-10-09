@@ -26,12 +26,11 @@ from blizzard.hub.auth.models import (
     AuthStateEntry,
     Identity,
     ProviderIdentity,
-    ResolvedIdentity,
     Session,
     SuperuserBootstrap,
     User,
 )
-from blizzard.hub.auth.service import PROVIDER_LOGIN_STATE_KIND, AuthService, RoleAssignmentRefused, principal
+from blizzard.hub.auth.service import PROVIDER_LOGIN_STATE_KIND, AuthService
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.tenancy import StoreScope, TenantId
 
@@ -699,122 +698,6 @@ def test_consume_state_rejects_an_expired_state() -> None:
     assert service.consume_state(state) is None
 
 
-# --- assign_role ---------------------------------------------------------
-
-
-def _identity(service: AuthService, user: User) -> ResolvedIdentity:
-    member = service.member(user, tenant=_TENANT)
-    return principal(user, tenant=_TENANT, role=member.role, hub_admin=member.hub_admin)
-
-
-def _assigning(actor_role: Role, subject_role: Role) -> tuple[AuthService, User, User, AuthFactsService]:
-    service, _, _, _, _, auth_facts = _service(FixedClock(_T0))
-    seeded = _identities(service)
-    return (
-        service,
-        seeded.seed("usr_actor", "actor", actor_role),
-        seeded.seed("usr_subject", "subject", subject_role),
-        auth_facts,
-    )
-
-
-def test_admin_promotes_a_guest_to_contributor() -> None:
-    service, admin, guest, auth_facts = _assigning(Role.ADMIN, Role.GUEST)
-
-    updated = service.assign_role(
-        actor=_identity(service, admin), subject=service.member(guest, tenant=_TENANT), to_role=Role.CONTRIBUTOR
-    )
-
-    assert updated.role is Role.CONTRIBUTOR
-    assert service.member(guest, tenant=_TENANT).role is Role.CONTRIBUTOR
-    assert _identities(service).memberships.facts[-1] == MembershipFact(
-        _TENANT, "usr_subject", Role.CONTRIBUTOR, _T0, "usr_actor"
-    )
-    facts = auth_facts.list_recent()
-    assert len(facts) == 1
-    assert facts[0].kind == "user_role_changed"
-    assert facts[0].actor == "actor"
-    assert facts[0].subject == "subject"
-    assert facts[0].detail == f"guest -> contributor in {_TENANT}"
-
-
-def test_assigning_pending_revokes_the_membership_naming_the_tenant() -> None:
-    service, admin, guest, auth_facts = _assigning(Role.ADMIN, Role.GUEST)
-
-    updated = service.assign_role(
-        actor=_identity(service, admin), subject=service.member(guest, tenant=_TENANT), to_role=Role.PENDING
-    )
-
-    assert updated.role is None
-    assert service.member(guest, tenant=_TENANT).role is None
-    assert auth_facts.list_recent()[0].detail == f"guest -> none in {_TENANT}"
-
-
-@pytest.mark.parametrize(
-    ("actor_role", "subject_role", "to_role"),
-    [
-        pytest.param(Role.ADMIN, Role.GUEST, Role.ADMIN, id="admin-granting-admin"),
-        pytest.param(Role.ADMIN, Role.ADMIN, Role.CONTRIBUTOR, id="admin-revoking-admin"),
-        pytest.param(Role.SUPERUSER, Role.GUEST, Role.SUPERUSER, id="superuser-not-assignable"),
-        pytest.param(Role.SUPERUSER, Role.SUPERUSER, Role.ADMIN, id="hub-administrator-subject"),
-    ],
-)
-def test_the_role_change_rules_refuse(actor_role: Role, subject_role: Role, to_role: Role) -> None:
-    """Granting or revoking ``admin`` takes a hub administrator; a hub administrator (``superuser``)
-    is never moved through this API, in either direction, even by another."""
-    service, actor, subject, auth_facts = _assigning(actor_role, subject_role)
-
-    with pytest.raises(RoleAssignmentRefused):
-        service.assign_role(
-            actor=_identity(service, actor), subject=service.member(subject, tenant=_TENANT), to_role=to_role
-        )
-    assert auth_facts.list_recent() == []
-
-
-def test_a_hub_administrator_granting_admin_succeeds() -> None:
-    service, superuser, guest, _ = _assigning(Role.SUPERUSER, Role.GUEST)
-
-    updated = service.assign_role(
-        actor=_identity(service, superuser), subject=service.member(guest, tenant=_TENANT), to_role=Role.ADMIN
-    )
-    assert updated.role is Role.ADMIN
-
-
-def test_self_role_change_is_refused() -> None:
-    service, admin, _, _ = _assigning(Role.ADMIN, Role.GUEST)
-
-    with pytest.raises(RoleAssignmentRefused):
-        service.assign_role(
-            actor=_identity(service, admin), subject=service.member(admin, tenant=_TENANT), to_role=Role.CONTRIBUTOR
-        )
-
-
-def test_assign_role_is_a_no_op_when_the_role_is_unchanged() -> None:
-    service, admin, guest, auth_facts = _assigning(Role.ADMIN, Role.GUEST)
-    before = list(_identities(service).memberships.facts)
-
-    updated = service.assign_role(
-        actor=_identity(service, admin), subject=service.member(guest, tenant=_TENANT), to_role=Role.GUEST
-    )
-
-    assert updated.role is Role.GUEST
-    assert _identities(service).memberships.facts == before
-    assert auth_facts.list_recent() == []
-
-
-def test_members_reads_each_users_membership_and_hub_administrator_role() -> None:
-    service, superuser, guest, _ = _assigning(Role.SUPERUSER, Role.GUEST)
-    pending = _identities(service).seed("usr_pending", "pending", Role.PENDING)
-
-    members = service.members([superuser, guest, pending], tenant=_TENANT)
-
-    assert [(m.user.user_id, m.role, m.hub_admin) for m in members] == [
-        ("usr_actor", Role.ADMIN, True),
-        ("usr_subject", Role.GUEST, False),
-        ("usr_pending", None, False),
-    ]
-
-
 # --- superuser bootstrap --------------------------------------------------
 
 
@@ -897,7 +780,7 @@ def test_a_returning_user_claims_a_newly_configured_target_at_sign_in() -> None:
 
     assert user == alice
     assert seeded.hub_admins.holders() == [alice.user_id]
-    assert service.member(alice, tenant=_TENANT).role is Role.GUEST
+    assert seeded.memberships.role_in(_TENANT, alice.user_id) is Role.GUEST
     bootstrap = superuser_bootstrap.get()
     assert bootstrap is not None
     assert bootstrap.claimed_user_id == alice.user_id

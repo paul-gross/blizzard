@@ -32,6 +32,7 @@ from blizzard.hub.api.garden_formats import GardenFormats
 from blizzard.hub.auth.auth_state import IWriteAuthStateRepository
 from blizzard.hub.auth.errors import RepoErrorFactory
 from blizzard.hub.auth.facts import AuthFactsService
+from blizzard.hub.auth.hub_admins import HubAdministrators
 from blizzard.hub.auth.identities import IReadIdentityRepository
 from blizzard.hub.auth.internal.auth_facts_repository import AuthFactsRepository
 from blizzard.hub.auth.internal.auth_state_repository import AuthStateRepository
@@ -42,7 +43,7 @@ from blizzard.hub.auth.internal.membership_repository import MembershipRepositor
 from blizzard.hub.auth.internal.session_repository import SessionRepository
 from blizzard.hub.auth.internal.superuser_bootstrap_repository import SuperuserBootstrapRepository
 from blizzard.hub.auth.internal.user_repository import UserRepository
-from blizzard.hub.auth.memberships import IReadMembershipRepository
+from blizzard.hub.auth.memberships import IReadMembershipRepository, TenantMembers
 from blizzard.hub.auth.oauth.internal.factory import ProviderEntry
 from blizzard.hub.auth.oauth.registry import IOAuthProviderRegistry
 from blizzard.hub.auth.service import AuthService
@@ -394,6 +395,10 @@ class HubServices:
     memberships: IReadMembershipRepository
     #: The identity domain service — sessions, the first-login linking rule, ``state``.
     auth: AuthService
+    #: A tenant's members, and the membership grants, changes and revocations made under the rules.
+    members: TenantMembers
+    #: The hub administrators, and their grants and revocations.
+    hub_admins: HubAdministrators
     #: The configured OAuth provider registry — empty when none is configured.
     oauth_providers: IOAuthProviderRegistry
     #: Per-IP token-bucket throttle shared by the authorize/callback routes.
@@ -1324,6 +1329,8 @@ def build_services(
     # this service rather than a raw write repository.
     auth_facts_service = AuthFactsService(facts=AuthFactsRepository(store_connections), clock=clock)
     memberships = MembershipRepository(store_connections)
+    hub_admin_store = HubAdminRepository(store_connections)
+    identity_transactions = IdentityTransactions(store_connections, auth_errors)
     open_tenants = OpenTenants(core.hub_scoped_reads.tenants.open_tenants)
     auth = AuthService(
         users=user_store,
@@ -1334,8 +1341,19 @@ def build_services(
         superuser_bootstrap=superuser_bootstrap_store,
         auth_facts=auth_facts_service,
         memberships=memberships,
-        hub_admins=HubAdminRepository(store_connections),
-        transactions=IdentityTransactions(store_connections, auth_errors),
+        hub_admins=hub_admin_store,
+        transactions=identity_transactions,
+    )
+    members = TenantMembers(
+        memberships=memberships,
+        hub_admins=hub_admin_store,
+        users=user_store,
+        transactions=identity_transactions,
+        auth_facts=auth_facts_service,
+        clock=clock,
+    )
+    hub_admins = HubAdministrators(
+        hub_admins=hub_admin_store, users=user_store, transactions=identity_transactions, clock=clock
     )
     # The provider-login seam — one registry entry per configured
     # ``[[auth.oauth.provider]]``, empty when no providers are configured.
@@ -1372,6 +1390,8 @@ def build_services(
         users=user_store,
         memberships=memberships,
         auth=auth,
+        members=members,
+        hub_admins=hub_admins,
         oauth_providers=oauth_registry,
         auth_throttle=auth_throttle,
         auth_facts=auth_facts_service,

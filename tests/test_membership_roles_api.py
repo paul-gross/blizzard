@@ -17,7 +17,16 @@ from blizzard.hub.auth.internal.identity_transaction import IdentityTransactions
 from blizzard.hub.auth.models import User
 from blizzard.hub.store import schema
 from blizzard.hub.tenancy import TenantId
-from tests.support import HubHarness, add_tenant, build_hub, default_tenant, seed_runner, seed_session, seed_user
+from tests.support import (
+    HubHarness,
+    add_tenant,
+    build_hub,
+    default_tenant,
+    seed_hub_admin,
+    seed_runner,
+    seed_session,
+    seed_user,
+)
 
 pytestmark = pytest.mark.component
 
@@ -203,35 +212,35 @@ def _before_the_next_unit(monkeypatch: pytest.MonkeyPatch, step) -> None:  # typ
     monkeypatch.setattr(IdentityTransactions, "begin", begin_after_step)
 
 
-def test_a_demotion_is_judged_against_a_promotion_that_committed_ahead_of_it(
+def test_a_demotion_is_judged_against_a_demotion_that_committed_ahead_of_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A tenant admin asks to make a contributor a guest; a hub administrator's promotion of that member to ``admin``
-    commits first, so the demotion now revokes an admin — which only a hub administrator may — and is refused."""
+    """A tenant admin asks to make the other admin a guest; a hub administrator's demotion of the asking admin commits
+    first, so the request now demotes the tenant's last admin — and is refused."""
     hub = build_hub(tmp_path, auth_mode="oauth")
     tenant = default_tenant(hub.engine)
-    root = seed_user(hub, username="root", role=Role.SUPERUSER)
+    root = seed_user(hub, username="root", role=Role.PENDING)
+    seed_hub_admin(hub.engine, root.user_id)
     tess = seed_user(hub, username="tess", role=Role.ADMIN)
-    ada = seed_user(hub, username="ada", role=Role.CONTRIBUTOR)
+    ada = seed_user(hub, username="ada", role=Role.ADMIN)
     root_cookie, tess_cookie = _cookie(hub, root), _cookie(hub, tess)
 
-    def promote() -> None:
-        promoted = hub.client.post(
-            f"/api/users/{ada.user_id}/role", json={"role": Role.ADMIN.value}, headers=_in(tenant, root_cookie)
+    def demote_tess() -> None:
+        demoted = hub.client.put(
+            f"/api/members/{tess.user_id}", json={"role": Role.GUEST.value}, headers=_in(tenant, root_cookie)
         )
-        assert promoted.status_code == 200, promoted.text
+        assert demoted.status_code == 200, demoted.text
 
-    _before_the_next_unit(monkeypatch, promote)
-    demoted = hub.client.post(
-        f"/api/users/{ada.user_id}/role", json={"role": Role.GUEST.value}, headers=_in(tenant, tess_cookie)
+    _before_the_next_unit(monkeypatch, demote_tess)
+    demoted = hub.client.put(
+        f"/api/members/{ada.user_id}", json={"role": Role.GUEST.value}, headers=_in(tenant, tess_cookie)
     )
 
-    assert demoted.status_code == 403, demoted.text
-    assert demoted.json()["detail"] == "only superuser may grant or revoke admin"
+    assert demoted.status_code == 409, demoted.text
     with hub.engine.connect() as conn:
         roles = conn.execute(
             sa.select(schema.membership_facts.c.role)
             .where(schema.membership_facts.c.user_id == ada.user_id)
             .order_by(schema.membership_facts.c.id)
         ).scalars()
-        assert list(roles) == [Role.CONTRIBUTOR.value, Role.ADMIN.value]
+        assert list(roles) == [Role.ADMIN.value]

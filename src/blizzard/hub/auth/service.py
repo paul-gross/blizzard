@@ -2,15 +2,14 @@
 rule, and collision-free username minting.
 
 Holds the **write** repositories (``bzh:controller-read-only``) and takes already-loaded
-objects (``bzh:domain-takes-objects``). Also holds :meth:`assign_role`, which changes a
-user's membership in one tenant, and the superuser claim; every membership change is
-recorded via ``auth_facts`` in the same identity unit of work."""
+objects (``bzh:domain-takes-objects``). Also holds the superuser claim, whose membership
+grant is recorded via ``auth_facts`` in the same identity unit of work."""
 
 from __future__ import annotations
 
 import re
 import secrets
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import timedelta
 
 from blizzard.auth_core import Role, permissions_for
@@ -34,7 +33,6 @@ from blizzard.hub.auth.models import (
     Session,
     SuperuserBootstrap,
     User,
-    wire_role,
 )
 from blizzard.hub.auth.pkce import Pkce
 from blizzard.hub.auth.sessions import IWriteSessionRepository
@@ -45,27 +43,9 @@ from blizzard.hub.tenancy import TenantId
 _log = get_logger("blizzard.hub.auth")
 
 
-class RoleAssignmentRefused(Exception):
-    """A role-change request violated a hub-side rule — self-change, ``admin``
-    grant/revoke by an actor who is no hub administrator, or a change touching the hub
-    administrator (``superuser``), which is not assignable through the API."""
-
-
 #: Every role the role-assignment API may assign — ``superuser`` (the hub administrator) is
 #: not one, and ``pending`` revokes the membership.
 ASSIGNABLE_ROLES: tuple[Role, ...] = tuple(r for r in Role if r is not Role.SUPERUSER)
-
-
-@domain_model
-@dataclass(frozen=True)
-class Member:
-    """A user as one tenant sees them: their membership's role there (``None`` without one) and
-    whether they are a hub administrator."""
-
-    user: User
-    tenant: TenantId
-    role: Role | None
-    hub_admin: bool
 
 
 def principal(user: User, *, tenant: TenantId | None, role: Role | None, hub_admin: bool) -> ResolvedIdentity:
@@ -80,25 +60,6 @@ def principal(user: User, *, tenant: TenantId | None, role: Role | None, hub_adm
         permissions=permissions_for(role, hub_admin),
         hub_admin=hub_admin,
     )
-
-
-def role_assignment_refusal(*, actor: ResolvedIdentity, subject: Member, to_role: Role) -> str | None:
-    """Why the role-change rules refuse ``actor`` moving ``subject`` to ``to_role``, or None when
-    they admit it: changing your own role, touching a hub administrator (``superuser``), and an
-    actor who is no hub administrator granting or revoking ``admin`` are refused."""
-    if actor.user_id == subject.user.user_id:
-        return "cannot change your own role"
-    if subject.hub_admin or to_role not in ASSIGNABLE_ROLES:
-        return "superuser is not assignable through the API (bootstrap-only)"
-    touches_admin = subject.role is Role.ADMIN or to_role is Role.ADMIN
-    if touches_admin and not actor.hub_admin:
-        return "only superuser may grant or revoke admin"
-    return None
-
-
-def assignable_roles(*, actor: ResolvedIdentity, subject: Member) -> list[Role]:
-    """Every role the role-change rules let ``actor`` assign ``subject`` — empty when they admit no change."""
-    return [r for r in ASSIGNABLE_ROLES if role_assignment_refusal(actor=actor, subject=subject, to_role=r) is None]
 
 
 #: A session slides forward on every resolve by this much (idle timeout) — chosen as a
@@ -368,52 +329,6 @@ class AuthService:
             candidate = f"{base}-{suffix}"
         return candidate
 
-    # --- memberships -------------------------------------------
-
-    def member(self, user: User, *, tenant: TenantId) -> Member:
-        """``user`` as ``tenant`` sees them."""
-        return _member(user, tenant, memberships=self._memberships, hub_admins=self._hub_admins)
-
-    def members(self, users: list[User], *, tenant: TenantId) -> list[Member]:
-        """Each of ``users`` as ``tenant`` sees them, in order — two reads however many users."""
-        roles = {m.user_id: m.role for m in self._memberships.members(tenant)}
-        holders = set(self._hub_admins.holders())
-        return [Member(u, tenant, roles.get(u.user_id), u.user_id in holders) for u in users]
-
-    def assign_role(self, *, actor: ResolvedIdentity, subject: Member, to_role: Role) -> Member:
-        """Enforce the role-change rules, then change ``subject``'s membership in its tenant —
-        ``pending`` revokes it.
-
-        ``subject`` names the user and tenant; its role and hub administrator standing are read
-        again inside the identity unit of work, and the rules judge that read, so a concurrent
-        change commits either before the judgment or after this one. Raises
-        :class:`RoleAssignmentRefused` when the actor is the subject, when the subject is a hub
-        administrator or ``to_role`` is ``superuser``, or when an actor who is no hub administrator
-        grants or revokes ``admin``. A no-op request returns the subject as read, recording no
-        fact."""
-        role = None if to_role is Role.PENDING else to_role
-        with self._transactions.begin() as writes:
-            current = _member(
-                subject.user, subject.tenant, memberships=writes.memberships, hub_admins=writes.hub_admins
-            )
-            refusal = role_assignment_refusal(actor=actor, subject=current, to_role=to_role)
-            if refusal is not None:
-                raise RoleAssignmentRefused(refusal)
-            if wire_role(current.role, hub_admin=current.hub_admin) is to_role:
-                return current
-            writes.memberships.record(
-                MembershipFact(current.tenant, current.user.user_id, role, self._clock.now(), actor.user_id)
-            )
-            self._auth_facts.user_role_changed(
-                actor=actor.username,
-                subject=current.user.username,
-                tenant=current.tenant,
-                from_role=current.role,
-                to_role=role,
-                into=writes.auth_facts,
-            )
-        return replace(current, role=role)
-
     # --- superuser bootstrap -------------------------------------
 
     def get_superuser_bootstrap(self) -> SuperuserBootstrap | None:
@@ -473,17 +388,6 @@ class AuthService:
                 )
         _log.info("superuser claimed", user_id=user.user_id, email=user.email)
         return user
-
-
-def _member(
-    user: User, tenant: TenantId, *, memberships: IReadMembershipRepository, hub_admins: IReadHubAdminRepository
-) -> Member:
-    return Member(
-        user=user,
-        tenant=tenant,
-        role=memberships.role_in(tenant, user.user_id),
-        hub_admin=hub_admins.is_hub_admin(user.user_id),
-    )
 
 
 def _claimable(bootstrap: SuperuserBootstrap | None, email: str) -> bool:
