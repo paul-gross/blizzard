@@ -415,6 +415,9 @@ class FakeHub:
         self._token = FAKE_RUNNER_TOKEN
         self._held: HubTokenHolder | None = None
         self.issued: dict[str, str] = {FAKE_RUNNER_TOKEN: default_runner_id}
+        # The tenant registration and the identity read answer with; ``None`` plays a hub that predates tenants.
+        self.tenant_id: str | None = None
+        self.tenant_name: str | None = None
         self.queue: list[QueueEntry] = []
         # A per-call scripted sequence: when set, each `peek_queue`
         # call pops its own response instead of reading the static `queue` above.
@@ -644,7 +647,13 @@ class FakeHub:
         self.registered_capabilities.append(capabilities)
         self.registered_subscriptions.append(subscriptions)
         self.registered_gates.append(gates)
-        return RegistrationReply(runner_id=runner_id, runner_name=name, first_registration=len(self.registered) == 1)
+        return RegistrationReply(
+            runner_id=runner_id,
+            runner_name=name,
+            first_registration=len(self.registered) == 1,
+            tenant_id=self.tenant_id,
+            tenant_name=self.tenant_name,
+        )
 
     def identity(self) -> TokenIdentity | TokenRefusal:
         """``GET /api/fleet/identity`` — the runner the presented token was issued to, or unknown."""
@@ -653,7 +662,9 @@ class FakeHub:
         runner_id = self.issued.get(self.token)
         if runner_id is None:
             return TokenRefusal(reason=RunnerTokenRefusalReason.UNKNOWN)
-        return TokenIdentity(runner_id=runner_id, runner_name="runner-local")
+        return TokenIdentity(
+            runner_id=runner_id, runner_name="runner-local", tenant_id=self.tenant_id, tenant_name=self.tenant_name
+        )
 
     def fetch_runner_paused(self, runner_id: str) -> bool:
         if self.down:

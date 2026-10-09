@@ -3,7 +3,8 @@ pause brake.
 
 The hub resolves who this runner is from its bearer token; the runner only declares its configured
 name. The store's identity row keeps the id of the runner the store belongs to: a registration adopts
-the reply's id only into a store that names none, and otherwise refreshes the name alone. A reply
+the reply's id only into a store that names none, and otherwise refreshes the name and the tenant
+the reply names (a reply naming none, from a hub that predates tenants, keeps the row's). A reply
 naming another runner — a token rotated since the tick's identity check, or a hub with no identity
 read — turns the verdict to a mismatch and mirrors no brake. A failed registration leaves the row,
 the holder and the mirrored brake as they stood."""
@@ -26,6 +27,7 @@ from blizzard.runner.hub.identity import (
     IWriteRunnerIdentityRepository,
     RunnerIdentity,
     RunnerIdentityHolder,
+    answered_tenant,
 )
 from blizzard.runner.lifecycle.identity_check import log_transition
 from blizzard.runner.throttle.pause import IWritePauseRepository
@@ -130,15 +132,24 @@ class Registration:
             )
             log_transition(ctx.identity_verdict, was, token_fixed=ctx.hub_token.fixed())
             return  # the reply names another runner: its brake is not this runner's
-        identity = RunnerIdentity(runner_id=reply.runner_id, runner_name=reply.runner_name, registered_at=now)
+        tenant_id, tenant_name = answered_tenant(stored, reply.tenant_id, reply.tenant_name)
+        identity = RunnerIdentity(
+            runner_id=reply.runner_id,
+            runner_name=reply.runner_name,
+            registered_at=now,
+            tenant_id=tenant_id,
+            tenant_name=tenant_name,
+        )
         # The row first, then the holder: a crash between them leaves the holder to be rebuilt from the row.
         ctx.stores.identity.record_runner_identity(identity)
         ctx.identity.hold(identity)
-        if stored is None or stored.runner_name != identity.runner_name:
+        if stored is None or (stored.runner_name, stored.tenant_name) != (identity.runner_name, identity.tenant_name):
             _log.info(
                 "runner identity recorded",
                 runner_id=identity.runner_id,
                 runner_name=identity.runner_name,
+                tenant_id=identity.tenant_id,
+                tenant_name=identity.tenant_name,
                 was_runner_name=stored.runner_name if stored is not None else None,
             )
         if not ctx.identity_verdict.matched():

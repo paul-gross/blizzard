@@ -322,7 +322,8 @@ hub_control = Table(
 )
 
 # --- Runner identity (who this runner is at its hub) -------------------------
-# A singleton row: the id and name of the latest successful registration. Nothing keys on it.
+# A singleton row: the id and name of the latest successful registration, and the tenant the hub
+# answered with. Display only — nothing keys or filters on it, and no other table carries a tenant.
 
 runner_identity = Table(
     "runner_identity",
@@ -331,6 +332,8 @@ runner_identity = Table(
     Column("runner_id", String, nullable=False),  # hub-minted rn_<ulid>
     Column("runner_name", String, nullable=False),  # the name the hub recorded at that registration
     Column("registered_at", UtcDateTime, nullable=False),  # injected-clock stamp of the registration
+    Column("tenant_id", String, nullable=True),  # the runner's tenant; NULL until a hub that names it answers
+    Column("tenant_name", String, nullable=True),  # that tenant's name as the hub last answered it
 )
 
 # --- Local pause facts (the runner's own brake) -------------------

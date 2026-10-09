@@ -298,20 +298,26 @@ class TranscriptPushAck:
 @dataclass(frozen=True)
 class RegistrationReply:
     """The hub's reply to a successful registration: the runner's hub-minted id, the name the hub
-    now holds for it, and whether this was its first registration since it was added."""
+    now holds for it, whether this was its first registration since it was added, and the tenant
+    the runner serves — ``None`` from a hub that predates tenants."""
 
     runner_id: str
     runner_name: str
     first_registration: bool
+    tenant_id: str | None = None
+    tenant_name: str | None = None
 
 
 @domain_model
 @dataclass(frozen=True)
 class TokenIdentity:
-    """The runner the hub says a presented bearer token belongs to — its id and current name."""
+    """The runner the hub says a presented bearer token belongs to — its id and current name, and
+    its tenant's id and name (``None`` from a hub that predates tenants)."""
 
     runner_id: str
     runner_name: str
+    tenant_id: str | None = None
+    tenant_name: str | None = None
 
 
 @domain_model

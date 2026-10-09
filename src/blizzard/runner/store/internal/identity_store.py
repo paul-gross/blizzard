@@ -20,14 +20,26 @@ class RunnerIdentityStore:
 
     def runner_identity(self) -> RunnerIdentity | None:
         rows = self._store.all(
-            select(runner_identity.c.runner_id, runner_identity.c.runner_name, runner_identity.c.registered_at)
+            select(
+                runner_identity.c.runner_id,
+                runner_identity.c.runner_name,
+                runner_identity.c.registered_at,
+                runner_identity.c.tenant_id,
+                runner_identity.c.tenant_name,
+            )
             .order_by(runner_identity.c.id.desc())
             .limit(1)
         )
         if not rows:
             return None
         r = rows[0]
-        return RunnerIdentity(runner_id=str(r.runner_id), runner_name=str(r.runner_name), registered_at=r.registered_at)
+        return RunnerIdentity(
+            runner_id=str(r.runner_id),
+            runner_name=str(r.runner_name),
+            registered_at=r.registered_at,
+            tenant_id=r.tenant_id,
+            tenant_name=r.tenant_name,
+        )
 
     def record_runner_identity(self, identity: RunnerIdentity) -> None:
         with self._store.begin() as conn:
@@ -37,9 +49,16 @@ class RunnerIdentityStore:
                     runner_id=identity.runner_id,
                     runner_name=identity.runner_name,
                     registered_at=identity.registered_at,
+                    tenant_id=identity.tenant_id,
+                    tenant_name=identity.tenant_name,
                 )
             )
-        _log.debug("runner identity recorded", runner_id=identity.runner_id, runner_name=identity.runner_name)
+        _log.debug(
+            "runner identity recorded",
+            runner_id=identity.runner_id,
+            runner_name=identity.runner_name,
+            tenant_id=identity.tenant_id,
+        )
 
 
 def _conforms_runner_identity_store(x: RunnerIdentityStore) -> IWriteRunnerIdentityRepository:

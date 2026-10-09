@@ -1,9 +1,12 @@
-"""The runner's identity at its hub — the id and name of its latest successful registration.
+"""The runner's identity at its hub — the id and name of its latest successful registration, and the
+tenant the hub answered with.
 
 The runner learns it from each successful registration's reply and keeps it in its store's single
-identity row, so a restart with the hub unreachable keeps it. Before the first one there is no
-identity, and the runner claims nothing and tells no traces. Every step and consumer reads the process
-holder (:class:`ICurrentRunnerIdentity`), seeded from the row at boot and replaced at each successful one."""
+identity row, so a restart with the hub unreachable keeps it. The tenant is for display: a runner
+never changes tenant, so the id alone settles which world the store belongs to. Before the first
+registration there is no identity, and the runner claims nothing and tells no traces. Every step and
+consumer reads the process holder (:class:`ICurrentRunnerIdentity`), seeded from the row at boot and
+replaced at each successful one."""
 
 from __future__ import annotations
 
@@ -20,11 +23,26 @@ from blizzard.foundation.roles import domain_model
 @dataclass(frozen=True)
 class RunnerIdentity:
     """Who this runner is at its hub: the hub-minted ``rn_`` id, the name the hub recorded at the
-    latest successful registration, and when that registration succeeded by the runner's clock."""
+    latest successful registration, when that registration succeeded by the runner's clock, and the
+    tenant the hub answered with — ``None`` until a hub that names it answers."""
 
     runner_id: str
     runner_name: str
     registered_at: datetime
+    tenant_id: str | None = None
+    tenant_name: str | None = None
+
+
+def answered_tenant(
+    stored: RunnerIdentity | None, tenant_id: str | None, tenant_name: str | None
+) -> tuple[str | None, str | None]:
+    """The tenant to keep beside the runner's id: the one the hub answered with, or — when the hub
+    names none, as one that predates tenants does — the one ``stored`` already holds."""
+    if tenant_id is not None:
+        return tenant_id, tenant_name
+    if stored is not None:
+        return stored.tenant_id, stored.tenant_name
+    return None, None
 
 
 class IReadRunnerIdentityRepository(Protocol):

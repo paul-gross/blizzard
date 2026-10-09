@@ -5,7 +5,9 @@ bearer token belongs to and compares that id with the one the store's identity r
 alone, since a runner never changes tenant and ids are unique across the hub. A store that names no
 runner adopts the token's. A different runner means a wrong token or a hub URL pointing somewhere
 else: the runner refuses to drive its leases or deliver its buffered facts, and checks again next
-tick, so restoring the right token or hub resumes it with nothing lost. While refusing, each check
+tick, so restoring the right token or hub resumes it with nothing lost. A matching answer also
+fills in the tenant it names when the row lacks it or holds another name for it — the first
+contact after an upgrade gives a row written before tenants its tenant. While refusing, each check
 first re-reads the token from the runtime dir's ``.env`` and checks with a corrected one, so restoring
 the token there needs no restart; a token the process environment supplied stays fixed until one. A
 hub that does not answer, or refuses the token, leaves the verdict as it stood: an outage never reads
@@ -13,7 +15,7 @@ as a mismatch."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Protocol
 
 from blizzard.foundation.clock import IClock
@@ -26,6 +28,7 @@ from blizzard.runner.hub.identity import (
     IWriteRunnerIdentityRepository,
     RunnerIdentity,
     RunnerIdentityHolder,
+    answered_tenant,
 )
 
 _log = get_logger("blizzard.runner.loop")
@@ -98,17 +101,33 @@ class IdentityCheck:
             return
         now = ctx.clock.now()
         stored = ctx.stores.identity.runner_identity()
+        tenant_id, tenant_name = answered_tenant(stored, answer.tenant_id, answer.tenant_name)
         if stored is None:
-            adopted = RunnerIdentity(runner_id=answer.runner_id, runner_name=answer.runner_name, registered_at=now)
-            # The row first, then the holder: a crash between them leaves the holder to be rebuilt from the row.
-            ctx.stores.identity.record_runner_identity(adopted)
-            ctx.identity.hold(adopted)
+            adopted = RunnerIdentity(
+                runner_id=answer.runner_id,
+                runner_name=answer.runner_name,
+                registered_at=now,
+                tenant_id=tenant_id,
+                tenant_name=tenant_name,
+            )
+            _record(ctx, adopted)
             stored = adopted
+        elif stored.runner_id == answer.runner_id:
+            refreshed = replace(stored, tenant_id=tenant_id, tenant_name=tenant_name)
+            if refreshed != stored:
+                _record(ctx, refreshed)
+                stored = refreshed
         state = IdentityState.MATCHED if stored.runner_id == answer.runner_id else IdentityState.MISMATCHED
         was = ctx.identity_verdict.record(
             state, store_runner_id=stored.runner_id, token_runner_id=answer.runner_id, checked_at=now
         )
         log_transition(ctx.identity_verdict, was, token_fixed=ctx.hub_token.fixed())
+
+
+def _record(ctx: IdentityCheckContext, identity: RunnerIdentity) -> None:
+    # The row first, then the holder: a crash between them leaves the holder to be rebuilt from the row.
+    ctx.stores.identity.record_runner_identity(identity)
+    ctx.identity.hold(identity)
 
 
 def _take_up_a_corrected_token(token: HubTokenHolder) -> None:
