@@ -1,7 +1,8 @@
 """What a person may do in a tenant is decided by their membership there — one session reaches every
 tenant they belong to, each under its own role; a revoked membership closes its tenant alone; and the hub
-administrator role opens the hub-level routes but nothing inside a tenant — against a real hub holding
-two tenants under ``auth.mode = "oauth"``."""
+administrator role opens the hub-level routes but nothing inside a tenant; and a role change is judged against
+the membership as it stands when the change commits — against a real hub holding two tenants under
+``auth.mode = "oauth"``."""
 
 from __future__ import annotations
 
@@ -12,6 +13,7 @@ import sqlalchemy as sa
 
 from blizzard.auth_core import HUB_PERMISSIONS, Permission, Role
 from blizzard.hub.api.auth_session import TENANT_HEADER
+from blizzard.hub.auth.internal.identity_transaction import IdentityTransactions
 from blizzard.hub.auth.models import User
 from blizzard.hub.store import schema
 from blizzard.hub.tenancy import TenantId
@@ -187,3 +189,49 @@ def test_a_tenant_admin_is_refused_the_hub_level_routes_whichever_tenant_is_name
     for headers in (cookie, _in(alpha, cookie), _in(bravo, cookie)):
         assert hub.client.get("/api/egress/status", headers=headers).status_code == 403
         assert hub.client.get("/api/traces/status", headers=headers).status_code == 403
+
+
+def _before_the_next_unit(monkeypatch: pytest.MonkeyPatch, step) -> None:  # type: ignore[no-untyped-def]
+    """Run ``step`` once, just before the next identity unit of work takes the identity lock."""
+    begin = IdentityTransactions.begin
+
+    def begin_after_step(self: IdentityTransactions):  # type: ignore[no-untyped-def]
+        monkeypatch.setattr(IdentityTransactions, "begin", begin)
+        step()
+        return begin(self)
+
+    monkeypatch.setattr(IdentityTransactions, "begin", begin_after_step)
+
+
+def test_a_demotion_is_judged_against_a_promotion_that_committed_ahead_of_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A tenant admin asks to make a contributor a guest; a hub administrator's promotion of that member to ``admin``
+    commits first, so the demotion now revokes an admin — which only a hub administrator may — and is refused."""
+    hub = build_hub(tmp_path, auth_mode="oauth")
+    tenant = default_tenant(hub.engine)
+    root = seed_user(hub, username="root", role=Role.SUPERUSER)
+    tess = seed_user(hub, username="tess", role=Role.ADMIN)
+    ada = seed_user(hub, username="ada", role=Role.CONTRIBUTOR)
+    root_cookie, tess_cookie = _cookie(hub, root), _cookie(hub, tess)
+
+    def promote() -> None:
+        promoted = hub.client.post(
+            f"/api/users/{ada.user_id}/role", json={"role": Role.ADMIN.value}, headers=_in(tenant, root_cookie)
+        )
+        assert promoted.status_code == 200, promoted.text
+
+    _before_the_next_unit(monkeypatch, promote)
+    demoted = hub.client.post(
+        f"/api/users/{ada.user_id}/role", json={"role": Role.GUEST.value}, headers=_in(tenant, tess_cookie)
+    )
+
+    assert demoted.status_code == 403, demoted.text
+    assert demoted.json()["detail"] == "only superuser may grant or revoke admin"
+    with hub.engine.connect() as conn:
+        roles = conn.execute(
+            sa.select(schema.membership_facts.c.role)
+            .where(schema.membership_facts.c.user_id == ada.user_id)
+            .order_by(schema.membership_facts.c.id)
+        ).scalars()
+        assert list(roles) == [Role.CONTRIBUTOR.value, Role.ADMIN.value]

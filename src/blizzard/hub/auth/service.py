@@ -372,12 +372,7 @@ class AuthService:
 
     def member(self, user: User, *, tenant: TenantId) -> Member:
         """``user`` as ``tenant`` sees them."""
-        return Member(
-            user=user,
-            tenant=tenant,
-            role=self._memberships.role_in(tenant, user.user_id),
-            hub_admin=self._hub_admins.is_hub_admin(user.user_id),
-        )
+        return _member(user, tenant, memberships=self._memberships, hub_admins=self._hub_admins)
 
     def members(self, users: list[User], *, tenant: TenantId) -> list[Member]:
         """Each of ``users`` as ``tenant`` sees them, in order — two reads however many users."""
@@ -389,29 +384,35 @@ class AuthService:
         """Enforce the role-change rules, then change ``subject``'s membership in its tenant —
         ``pending`` revokes it.
 
-        Raises :class:`RoleAssignmentRefused` when the actor is the subject, when the subject is a
-        hub administrator or ``to_role`` is ``superuser``, or when an actor who is no hub
-        administrator grants or revokes ``admin``. A no-op request returns ``subject`` unchanged,
-        recording no fact."""
-        refusal = role_assignment_refusal(actor=actor, subject=subject, to_role=to_role)
-        if refusal is not None:
-            raise RoleAssignmentRefused(refusal)
-        if wire_role(subject.role, hub_admin=subject.hub_admin) is to_role:
-            return subject
+        ``subject`` names the user and tenant; its role and hub administrator standing are read
+        again inside the identity unit of work, and the rules judge that read, so a concurrent
+        change commits either before the judgment or after this one. Raises
+        :class:`RoleAssignmentRefused` when the actor is the subject, when the subject is a hub
+        administrator or ``to_role`` is ``superuser``, or when an actor who is no hub administrator
+        grants or revokes ``admin``. A no-op request returns the subject as read, recording no
+        fact."""
         role = None if to_role is Role.PENDING else to_role
         with self._transactions.begin() as writes:
+            current = _member(
+                subject.user, subject.tenant, memberships=writes.memberships, hub_admins=writes.hub_admins
+            )
+            refusal = role_assignment_refusal(actor=actor, subject=current, to_role=to_role)
+            if refusal is not None:
+                raise RoleAssignmentRefused(refusal)
+            if wire_role(current.role, hub_admin=current.hub_admin) is to_role:
+                return current
             writes.memberships.record(
-                MembershipFact(subject.tenant, subject.user.user_id, role, self._clock.now(), actor.user_id)
+                MembershipFact(current.tenant, current.user.user_id, role, self._clock.now(), actor.user_id)
             )
             self._auth_facts.user_role_changed(
                 actor=actor.username,
-                subject=subject.user.username,
-                tenant=subject.tenant,
-                from_role=subject.role,
+                subject=current.user.username,
+                tenant=current.tenant,
+                from_role=current.role,
                 to_role=role,
                 into=writes.auth_facts,
             )
-        return replace(subject, role=role)
+        return replace(current, role=role)
 
     # --- superuser bootstrap -------------------------------------
 
@@ -472,6 +473,17 @@ class AuthService:
                 )
         _log.info("superuser claimed", user_id=user.user_id, email=user.email)
         return user
+
+
+def _member(
+    user: User, tenant: TenantId, *, memberships: IReadMembershipRepository, hub_admins: IReadHubAdminRepository
+) -> Member:
+    return Member(
+        user=user,
+        tenant=tenant,
+        role=memberships.role_in(tenant, user.user_id),
+        hub_admin=hub_admins.is_hub_admin(user.user_id),
+    )
 
 
 def _claimable(bootstrap: SuperuserBootstrap | None, email: str) -> bool:
