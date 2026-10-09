@@ -99,15 +99,17 @@ def _set_role(hub_dir: Path, username: str, role: str) -> None:
 def _seed_not_ready_chunk(hub_dir: Path, *, chunk_id: str, graph_id: str) -> None:
     """One bare fixture chunk — no route, no facts — so the read-only board claim
     that a guest's Promote control stays hidden has a concrete card to assert against. Derives
-    ``not_ready`` by construction: a chunk with no promote fact rests there."""
+    ``not_ready`` by construction: a chunk with no promote fact rests there. Both rows belong to
+    the store's only tenant, stamped the way ``_set_role`` stamps a membership."""
     con = sqlite3.connect(_db_path(hub_dir))
     try:
         con.execute(
-            "INSERT INTO graphs (graph_id, name, entry_node_id, definition_yaml, created_at) VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO graphs (tenant_id, graph_id, name, entry_node_id, definition_yaml, created_at)"
+            " SELECT tenants.tenant_id, ?, ?, ?, ?, ? FROM tenants",
             (graph_id, "g", "nd_1", "", "2026-07-13 00:00:00.000000"),
         )
         con.execute(
-            "INSERT INTO chunks (chunk_id, graph_id, minted_at) VALUES (?, ?, ?)",
+            "INSERT INTO chunks (tenant_id, chunk_id, graph_id, minted_at) SELECT tenants.tenant_id, ?, ?, ? FROM tenants",
             (chunk_id, graph_id, "2026-07-13 00:00:00.000000"),
         )
         con.commit()
