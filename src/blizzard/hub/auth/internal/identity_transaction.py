@@ -1,16 +1,23 @@
 """SQLAlchemy adapter for the identity unit of work (package-private).
 
-:meth:`IdentityTransactions.begin` opens one write transaction and builds every identity repository over connections
-pinned to it: their ``read`` and ``write`` hand back that one connection rather than opening their own, so nothing
-commits until the unit of work does. A tenant-owned write joins the same transaction through
-:meth:`_TransactionConnections.scoped`, whose connections are that tenant's builders over the one connection, opened
-under the tenant's lock as any scoped write is."""
+:meth:`IdentityTransactions.begin` opens one write transaction, takes the identity lock as its first statement, and
+builds every identity repository over connections pinned to it: their ``read`` and ``write`` hand back that one
+connection rather than opening their own, so nothing commits until the unit of work does. Every read a repository makes
+follows the lock, so a check the unit reads — the hub administrators, a tenant's admins — still holds when its writes
+commit. A tenant-owned write joins the same transaction through :meth:`_TransactionConnections.scoped`, whose
+connections are that tenant's builders over the one connection, opened under the tenant's lock as any scoped write is.
+
+The identity lock is a no-op ``UPDATE`` of the store's revision row (``bzh:sql-portable``): the one hub-level row every
+store the hub serves holds, since the hub refuses to start on a store whose revision is not at head, and no identity
+table is guaranteed a row. On SQLite the ``UPDATE`` takes the single writer lock before any read; on Postgres it
+queues every other unit of work behind this one's commit, and each later statement reads what that commit wrote."""
 
 from __future__ import annotations
 
 from collections.abc import Iterator
 from contextlib import contextmanager
 
+import sqlalchemy as sa
 from sqlalchemy import Connection
 
 from blizzard.foundation.logging import get_logger
@@ -26,6 +33,24 @@ from blizzard.hub.auth.internal.user_repository import UserRepository
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.tenancy import StoreScope
+
+#: The store's revision table, named only as the identity lock's target; nothing reads it here.
+_REVISION_TABLE = sa.table("alembic_version", sa.column("version_num"))
+
+
+class IdentityLockMissing(RuntimeError):
+    """Raised when the store holds no revision row to lock: it was never migrated, so no unit of work may run on it."""
+
+    def __init__(self) -> None:
+        super().__init__("the hub store holds no revision row to lock; migrate it before writing identities")
+
+
+def _lock_identities(conn: Connection) -> None:
+    """Take the identity lock as the transaction's first statement; every unit of work takes the same one row, so
+    two units never interleave and none waits on another in a different order."""
+    locked = conn.execute(sa.update(_REVISION_TABLE).values(version_num=_REVISION_TABLE.c.version_num))
+    if locked.rowcount == 0:
+        raise IdentityLockMissing
 
 
 class _TransactionConnections(HubStoreConnections):
@@ -69,6 +94,7 @@ class IdentityTransactions:
     @contextmanager
     def begin(self) -> Iterator[IdentityWrites]:
         with self._store.write("identity_transaction") as conn:
+            _lock_identities(conn)
             yield self._writes(_TransactionConnections(conn, self._store_errors))
 
     def _writes(self, connections: HubStoreConnections) -> IdentityWrites:

@@ -3,7 +3,9 @@
 Each identity repository alone commits every call on its own. A sign-in that claims the hub administrator role, or
 admits a person into a tenant, writes several of them and must land whole or not at all:
 :meth:`IIdentityTransactions.begin` hands out the write repositories of every global identity table bound to one
-transaction, committed when the block exits and rolled back when it raises. The concrete adapter lives at
+transaction, committed when the block exits and rolled back when it raises. Units of work serialize: each takes the
+identity lock before its first read, so a rule checked inside one — the last hub administrator, a tenant's last admin
+— still holds when its writes commit. The concrete adapter lives at
 ``src/blizzard/hub/auth/internal/identity_transaction.py`` (``bzh:dependency-inversion``)."""
 
 from __future__ import annotations
@@ -39,5 +41,6 @@ class IIdentityTransactions(Protocol):
     """Opens identity units of work."""
 
     def begin(self) -> AbstractContextManager[IdentityWrites]:
-        """One transaction over every identity write: committed when the block exits, rolled back when it raises."""
+        """One transaction over every identity write, holding the identity lock from its first statement: committed
+        when the block exits, rolled back when it raises."""
         ...

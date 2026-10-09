@@ -1,9 +1,11 @@
 """Hub administrators as facts over a migrated store: the newest fact per user is in force, any number of users hold
-the role, each fact keeps who granted it, and the last holder is kept."""
+the role, each fact keeps who granted it, and the last holder is kept — even against a concurrent revocation."""
 
 from __future__ import annotations
 
 import shutil
+import threading
+from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -42,6 +44,21 @@ def engine(tmp_path: Path) -> sa.Engine:
 
 def _user(user_id: str) -> User:
     return User(user_id, user_id, user_id, None, Role.ADMIN, _T0)
+
+
+def _held_open_after_reading_holders(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Hold each revocation open just after it reads the holders, until the other revocation reads them too or half
+    a second passes: two revocations that could both read before either writes are made to."""
+    both_read = threading.Barrier(2, timeout=0.5)
+    holders = HubAdminRepository.holders
+
+    def held_open(self: HubAdminRepository) -> list[str]:
+        read = holders(self)
+        with suppress(threading.BrokenBarrierError):
+            both_read.wait()
+        return read
+
+    monkeypatch.setattr(HubAdminRepository, "holders", held_open)
 
 
 def _administrators(engine: sa.Engine, clock: FixedClock) -> HubAdministrators:
@@ -107,6 +124,33 @@ def test_the_last_hub_administrator_is_kept(engine: sa.Engine) -> None:
     assert repo.holders() == ["usr_a"]
     with engine.connect() as conn:
         assert conn.execute(sa.select(sa.func.count()).select_from(s.hub_admin_facts)).scalar_one() == 3
+
+
+def test_two_concurrent_revocations_never_leave_the_hub_without_an_administrator(
+    engine: sa.Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    administrators = _administrators(engine, FixedClock(_T0))
+    administrators.grant(_user("usr_a"), by=SET_BY_BOOTSTRAP)
+    administrators.grant(_user("usr_b"), by="usr_a")
+    _held_open_after_reading_holders(monkeypatch)
+    outcomes: dict[str, str] = {}
+
+    def revoke(subject: str, by: str) -> None:
+        try:
+            administrators.revoke(_user(subject), by=by)
+            outcomes[subject] = "revoked"
+        except LastHubAdminKept:
+            outcomes[subject] = "kept"
+
+    threads = [threading.Thread(target=revoke, args=pair) for pair in (("usr_a", "usr_b"), ("usr_b", "usr_a"))]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert sorted(outcomes.values()) == ["kept", "revoked"]
+    kept = next(user_id for user_id, outcome in outcomes.items() if outcome == "kept")
+    assert HubAdminRepository(hub_level_connections(engine)).holders() == [kept]
 
 
 @pytest.mark.parametrize(
