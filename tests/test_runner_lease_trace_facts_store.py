@@ -234,6 +234,19 @@ def test_facts_wait_for_the_first_registration_then_carry_its_id(tmp_path) -> No
     assert reader.lease_trace_facts_for([fx.LEASE_ID])[fx.LEASE_ID].lease == read.lease
 
 
+def test_facts_carry_the_tenant_the_identity_row_records(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    store = _store(tmp_path, registered=False)
+    _write_lease(store, fx.LEASE_ID, fx.CHUNK_ID)
+    store.record_runner_identity(
+        RunnerIdentity("rn_01JREGISTERED", "r-claude", fx.at(200), tenant_id="tn_bravo", tenant_name="bravo")
+    )
+
+    read = _reader(store).lease_trace_facts(fx.LEASE_ID)
+
+    assert read is not None
+    assert (read.runner.tenant_id, read.runner.tenant_name) == ("tn_bravo", "bravo")
+
+
 def test_each_lease_keeps_only_its_own_rows(tmp_path) -> None:  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     _write_lease(store, "lease_a", "ch_a")

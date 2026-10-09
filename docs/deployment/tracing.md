@@ -143,6 +143,8 @@ absent rather than empty when there is nothing to say.
 | `blizzard.step.kind`                       | `string`   | Whether the step was a `step` or a `gate`.                                                                                                                                                                    |
 | `blizzard.runner.id`                       | `string`   | The runner that held the step or ran the lease.                                                                                                                                                               |
 | `blizzard.runner.name`                     | `string`   | The latest registered name of the runner that held the step or ran the lease, as of when the span was told.                                                                                                   |
+| `blizzard.tenant`                          | `string`   | The tenant the runner that ran the lease serves, as its hub last answered; absent until a hub that names it answers.                                                                                          |
+| `blizzard.tenant_name`                     | `string`   | The name of the tenant the runner that ran the lease serves, as of when the span was told.                                                                                                                    |
 | `blizzard.harness.id`                      | `string`   | The harness: on a step, the one its last invocation that recorded one ran under; on a runner span, the one the lease or invocation ran under.                                                                 |
 | `blizzard.harness.version`                 | `string`   | The version of that harness.                                                                                                                                                                                  |
 | `blizzard.step.models`                     | `string[]` | The distinct models the step's invocations used, in first-use order.                                                                                                                                          |
@@ -498,7 +500,8 @@ alongside `platform = true`, a Claude Code worker exports its metrics, logs and 
   worker holding a lease token is pointed at the runner, and a takeover's attended session never is.
 - **What the runner keeps.** Claude Code's scopes only: `com.anthropic.claude_code` for metrics, `.events` for logs,
   `.tracing` for traces. Each span, data point and log record is stamped with `blizzard.caller=worker`,
-  `blizzard.chunk.id`, `blizzard.lease.id`, `blizzard.runner.id` and `blizzard.runner.name`.
+  `blizzard.chunk.id`, `blizzard.lease.id`, `blizzard.runner.id` and `blizzard.runner.name`, and with `blizzard.tenant`
+  and `blizzard.tenant_name` once the runner's hub has named its tenant.
 - **Where it goes.** Under `service.name` `blizzard-claude-code` through the runner's own OpenTelemetry settings for
   that signal. Claude Code's own resource name is `claude-code`; `[tracing.worker_program_services]` renames by scope.
 - **Judgement turns.** A judgement, a `--resume` turn, was observed exporting metrics and logs but no spans on
@@ -598,6 +601,8 @@ configures, with no daemon in between.
 | `blizzard.lease.id`               | `string` | The lease a worker's span arrived under, stamped by the runner.                                              |
 | `blizzard.runner.id`              | `string` | The runner the span belongs to, or the runner a request authenticated as.                                    |
 | `blizzard.runner.name`            | `string` | The latest registered name of the runner the span belongs to, or of the runner a request authenticated as.   |
+| `blizzard.tenant`                 | `string` | The tenant a request acts in, or the tenant the runner the span belongs to serves; absent until known.       |
+| `blizzard.tenant_name`            | `string` | The name of that tenant, as of when the span was told.                                                       |
 | `blizzard.tick.step`              | `string` | The tick step a child span covers.                                                                           |
 | `error.type`                      | `string` | The error class when the CLI's request failed.                                                               |
 | `http.request.method`             | `string` | The HTTP method of the CLI's request to a daemon.                                                            |

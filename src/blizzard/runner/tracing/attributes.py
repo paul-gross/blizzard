@@ -8,6 +8,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from blizzard.foundation import trace_attributes as shared
+from blizzard.foundation.platform_tracing import attributes as platform_attributes
 
 INSTRUMENTATION_SCOPE = "blizzard.runner.runner_spans"
 INSTRUMENTATION_SCOPE_VERSION = "3"
@@ -16,6 +17,9 @@ DEFAULT_SERVICE_NAME = "blizzard-runner"
 # Dimensions
 RUNNER_ID = "blizzard.runner.id"
 RUNNER_NAME = "blizzard.runner.name"
+#: The tenant the runner serves, and its name — the names the hub stamps on a request's span.
+TENANT = platform_attributes.TENANT
+TENANT_NAME = platform_attributes.TENANT_NAME
 
 # Lease and session
 LEASE_ID = "blizzard.lease.id"

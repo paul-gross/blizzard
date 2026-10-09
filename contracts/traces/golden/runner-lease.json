@@ -19,7 +19,9 @@
       "blizzard.runner.id": "r-1",
       "blizzard.runner.name": "r-claude",
       "blizzard.session.name": "builder",
-      "blizzard.step.epoch": 1
+      "blizzard.step.epoch": 1,
+      "blizzard.tenant": "tn_bravo",
+      "blizzard.tenant_name": "bravo"
     },
     "end": "2026-01-01T00:01:40Z",
     "events": [
@@ -83,6 +85,8 @@
       "blizzard.runner.name": "r-claude",
       "blizzard.session.name": "builder",
       "blizzard.step.epoch": 1,
+      "blizzard.tenant": "tn_bravo",
+      "blizzard.tenant_name": "bravo",
       "gen_ai.agent.name": "builder",
       "gen_ai.conversation.id": "sess-1",
       "gen_ai.operation.name": "invoke_agent",
@@ -137,7 +141,9 @@
       "blizzard.node.name": "build",
       "blizzard.runner.id": "r-1",
       "blizzard.runner.name": "r-claude",
-      "blizzard.step.epoch": 1
+      "blizzard.step.epoch": 1,
+      "blizzard.tenant": "tn_bravo",
+      "blizzard.tenant_name": "bravo"
     },
     "end": "2026-01-01T00:00:40Z",
     "events": [],
@@ -179,6 +185,8 @@
       "blizzard.runner.name": "r-claude",
       "blizzard.session.name": "builder",
       "blizzard.step.epoch": 1,
+      "blizzard.tenant": "tn_bravo",
+      "blizzard.tenant_name": "bravo",
       "gen_ai.agent.name": "builder",
       "gen_ai.conversation.id": "sess-2",
       "gen_ai.operation.name": "invoke_agent",
@@ -221,7 +229,9 @@
       "blizzard.node.name": "build",
       "blizzard.runner.id": "r-1",
       "blizzard.runner.name": "r-claude",
-      "blizzard.step.epoch": 1
+      "blizzard.step.epoch": 1,
+      "blizzard.tenant": "tn_bravo",
+      "blizzard.tenant_name": "bravo"
     },
     "end": "2026-01-01T00:01:40Z",
     "events": [],
@@ -250,7 +260,9 @@
       "blizzard.overload.streak": 1,
       "blizzard.runner.id": "r-1",
       "blizzard.runner.name": "r-claude",
-      "blizzard.step.epoch": 1
+      "blizzard.step.epoch": 1,
+      "blizzard.tenant": "tn_bravo",
+      "blizzard.tenant_name": "bravo"
     },
     "end": "2026-01-01T00:01:10Z",
     "events": [],
@@ -278,7 +290,9 @@
       "blizzard.node.name": "build",
       "blizzard.runner.id": "r-1",
       "blizzard.runner.name": "r-claude",
-      "blizzard.step.epoch": 1
+      "blizzard.step.epoch": 1,
+      "blizzard.tenant": "tn_bravo",
+      "blizzard.tenant_name": "bravo"
     },
     "end": "2026-01-01T00:01:40Z",
     "events": [],

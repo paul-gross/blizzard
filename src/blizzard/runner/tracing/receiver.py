@@ -19,7 +19,7 @@ from blizzard.foundation.trace_ids import DerivedContext, SpanRole, StepKey, chu
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryNames
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.leases.model import Lease
-from blizzard.runner.tracing.attributes import RUNNER_ID, RUNNER_NAME
+from blizzard.runner.tracing.attributes import RUNNER_ID, RUNNER_NAME, TENANT, TENANT_NAME
 
 __all__ = [
     "CLI_SERVICE_NAME",
@@ -54,7 +54,7 @@ _WORKER = "worker"
 class Allowlist:
     """The one scope a span may arrive under and the attributes it may carry, each with its declared value
     type: ``string``, ``int`` or ``double``. ``None`` for either admits any scope, or any attribute, the
-    caps still holding. ``stamp_runner`` also stamps the runner's id and name on each kept span."""
+    caps still holding. ``stamp_runner`` also stamps the runner's id, name and tenant on each kept span."""
 
     scope: str | None
     attributes: Mapping[str, str] | None
@@ -122,7 +122,7 @@ def admit_data_points(
     points: list[ReceivedDataPoint], lease: Lease, scopes: frozenset[str], *, runner: RunnerIdentity
 ) -> Admission[ReceivedDataPoint]:
     """The data points under any of ``scopes``, each rebuilt: its sender's attributes capped, then the lease's stamps —
-    chunk, lease, caller, and the runner's id and name — replacing any the sender set."""
+    chunk, lease, caller, and the runner's id, name and tenant — replacing any the sender set."""
     kept = [
         replace(
             point,
@@ -181,8 +181,16 @@ def _stamp(attributes: dict[str, Scalar], lease: Lease) -> None:
 
 
 def _stamp_runner(attributes: dict[str, Scalar], runner: RunnerIdentity) -> None:
+    """The runner's id, name and tenant, replacing any the sender set — a tenant the runner has not
+    learned yet is left absent, never the sender's."""
     attributes[RUNNER_ID] = runner.runner_id
     attributes[RUNNER_NAME] = runner.runner_name
+    attributes.pop(TENANT, None)
+    attributes.pop(TENANT_NAME, None)
+    if runner.tenant_id is not None:
+        attributes[TENANT] = runner.tenant_id
+    if runner.tenant_name is not None:
+        attributes[TENANT_NAME] = runner.tenant_name
 
 
 def _is_type(value: Scalar, declared: str) -> bool:
