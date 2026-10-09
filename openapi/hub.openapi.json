@@ -1,5 +1,16 @@
 {
   "components": {
+    "parameters": {
+      "TenantHeader": {
+        "description": "The id of the tenant the request acts in. A caller with one membership may omit it; a runner or marker token acts in its own tenant, and a header naming another is refused 400.",
+        "in": "header",
+        "name": "X-Blizzard-Tenant",
+        "required": false,
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
     "schemas": {
       "ActivityChunkChangeCause": {
         "enum": [
@@ -6340,12 +6351,15 @@
           "seg",
           "wi",
           "rtn",
+          "scp",
           "fin",
           "fins",
           "gprop",
           "dep",
           "apl",
-          "rn"
+          "rn",
+          "ten",
+          "inv"
         ],
         "title": "IdPrefix",
         "type": "string"
@@ -6492,7 +6506,7 @@
         "type": "object"
       },
       "MeResponse": {
-        "description": "The resolved identity's wire view.",
+        "description": "The resolved identity's wire view. ``role`` is the membership's role in the request's\ntenant \u2014 ``pending`` with none, ``superuser`` for a hub administrator.",
         "properties": {
           "assignable_roles": {
             "default": [],
@@ -7093,7 +7107,11 @@
           "user:manage",
           "transcript:read",
           "analytics:admin",
-          "config:edit"
+          "config:edit",
+          "tenant:admin",
+          "membership:grant-any",
+          "hub-admin:grant",
+          "export:admin"
         ],
         "title": "Permission",
         "type": "string"
@@ -19745,7 +19763,7 @@
     },
     "/api/me": {
       "get": {
-        "description": "Under ``auth.mode = \"none\"`` the implicit operator/superuser; under ``oauth``\nwith a resolving session, the session's identity; under ``oauth`` with none, 401.",
+        "description": "Under ``auth.mode = \"none\"`` the implicit operator/superuser; under ``oauth``\nwith a resolving session, the session's identity; under ``oauth`` with none, 401.\n``role`` and ``permissions`` are those of the tenant the request names in\n``X-Blizzard-Tenant``, else of the caller's one membership, else the hub-level ones.",
         "operationId": "me_api_me_get",
         "responses": {
           "200": {
@@ -22845,7 +22863,7 @@
     },
     "/api/users/{user_id}/role": {
       "post": {
-        "description": "Assign ``user_id`` a new role. Three refusals, each a 403: changing your own role;\nany change touching ``superuser``, which is bootstrap-only; and granting or revoking\n``admin`` as anyone but a ``superuser``. A no-op change is accepted and records\nnothing. A real one records a ``user_role_changed`` fact and takes effect on the\nsubject's next request, with no re-login.",
+        "description": "Assign ``user_id`` a new role in the actor's tenant \u2014 ``pending`` revokes their\nmembership. Three refusals, each a 403: changing your own role; any change touching\n``superuser`` (a hub administrator); and granting or revoking ``admin`` as anyone but a\nhub administrator. A no-op change is accepted and records\nnothing. A real one records a ``user_role_changed`` fact and takes effect on the\nsubject's next request, with no re-login.",
         "operationId": "assign_role_api_users__user_id__role_post",
         "parameters": [
           {

@@ -4074,12 +4074,15 @@ export const IdPrefix = {
     SEG: 'seg',
     WI: 'wi',
     RTN: 'rtn',
+    SCP: 'scp',
     FIN: 'fin',
     FINS: 'fins',
     GPROP: 'gprop',
     DEP: 'dep',
     APL: 'apl',
-    RN: 'rn'
+    RN: 'rn',
+    TEN: 'ten',
+    INV: 'inv'
 } as const;
 
 /**
@@ -4200,7 +4203,8 @@ export type LeaseTranscriptView = {
 /**
  * MeResponse
  *
- * The resolved identity's wire view.
+ * The resolved identity's wire view. ``role`` is the membership's role in the request's
+ * tenant — ``pending`` with none, ``superuser`` for a hub administrator.
  */
 export type MeResponse = {
     /**
@@ -4570,7 +4574,11 @@ export const Permission = {
     USER_MANAGE: 'user:manage',
     TRANSCRIPT_READ: 'transcript:read',
     ANALYTICS_ADMIN: 'analytics:admin',
-    CONFIG_EDIT: 'config:edit'
+    CONFIG_EDIT: 'config:edit',
+    TENANT_ADMIN: 'tenant:admin',
+    MEMBERSHIP_GRANT_ANY: 'membership:grant-any',
+    HUB_ADMIN_GRANT: 'hub-admin:grant',
+    EXPORT_ADMIN: 'export:admin'
 } as const;
 
 /**
@@ -7957,6 +7965,11 @@ export type SecretCreateRequestWritable = {
      */
     value: string;
 };
+
+/**
+ * The id of the tenant the request acts in. A caller with one membership may omit it; a runner or marker token acts in its own tenant, and a header naming another is refused 400.
+ */
+export type TenantHeader = string;
 
 export type ListActivityApiActivityGetData = {
     body?: never;

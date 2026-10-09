@@ -1391,6 +1391,8 @@ export const healthApiHealthGet = <ThrowOnError extends boolean = false>(options
  *
  * Under ``auth.mode = "none"`` the implicit operator/superuser; under ``oauth``
  * with a resolving session, the session's identity; under ``oauth`` with none, 401.
+ * ``role`` and ``permissions`` are those of the tenant the request names in
+ * ``X-Blizzard-Tenant``, else of the caller's one membership, else the hub-level ones.
  */
 export const meApiMeGet = <ThrowOnError extends boolean = false>(options?: Options<MeApiMeGetData, ThrowOnError>): RequestResult<MeApiMeGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<MeApiMeGetResponses, unknown, ThrowOnError>({ url: '/api/me', ...options });
 
@@ -2030,9 +2032,10 @@ export const listUsersApiUsersGet = <ThrowOnError extends boolean = false>(optio
 /**
  * Assign Role
  *
- * Assign ``user_id`` a new role. Three refusals, each a 403: changing your own role;
- * any change touching ``superuser``, which is bootstrap-only; and granting or revoking
- * ``admin`` as anyone but a ``superuser``. A no-op change is accepted and records
+ * Assign ``user_id`` a new role in the actor's tenant — ``pending`` revokes their
+ * membership. Three refusals, each a 403: changing your own role; any change touching
+ * ``superuser`` (a hub administrator); and granting or revoking ``admin`` as anyone but a
+ * hub administrator. A no-op change is accepted and records
  * nothing. A real one records a ``user_role_changed`` fact and takes effect on the
  * subject's next request, with no re-login.
  */
