@@ -6,6 +6,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
+from functools import total_ordering
 from typing import TYPE_CHECKING, Protocol
 
 from blizzard.foundation.event_log import EventLogKind
@@ -29,14 +30,27 @@ class UsagePosition:
 
 
 @domain_model
-@dataclass(frozen=True, order=True)
+@total_ordering
+@dataclass(frozen=True)
 class EventsPosition:
     """A position in the ``events`` dataset's total order: the source's time (``derived_at`` or ``dropped_at``),
-    then the segment, then the extractor version, empty for a drop so it sorts before any derivation beside it."""
+    then the segment, then the extractor version, empty for a drop so it sorts before any derivation beside it,
+    then the tenant — segment ids are runner-minted, so two tenants may each hold an item at one time, segment
+    and version.
+
+    A position with no tenant stands past every tenant's item at its own time, segment and version: where a
+    reset starts, and what a position recorded without its tenant resumes from."""
 
     at: datetime
     segment_id: str = ""
     extractor_version: str = ""
+    tenant: TenantId | None = None
+
+    def __lt__(self, other: EventsPosition) -> bool:
+        return self._order() < other._order()
+
+    def _order(self) -> tuple[datetime, str, str, bool, str]:
+        return (self.at, self.segment_id, self.extractor_version, self.tenant is None, self.tenant or "")
 
 
 @domain_model

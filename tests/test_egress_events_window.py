@@ -53,6 +53,14 @@ def test_a_drop_sorts_before_a_derivation_at_its_own_time_and_segment() -> None:
     assert events_position_text(position_of(_drop(5, "sg_a"))) < events_position_text(position_of(_marker(5, "sg_a")))
 
 
+def test_the_tenant_orders_items_at_one_time_segment_and_version_and_a_tenantless_position_is_past_them_all() -> None:
+    first, second = (replace(_marker(5, "sg_a"), tenant=TenantId(t)) for t in ("ten_a", "ten_b"))
+    assert position_of(first) == EventsPosition(_at(5), "sg_a", "v1", TenantId("ten_a"))
+    assert position_of(first) < position_of(second) < EventsPosition(_at(5), "sg_a", "v1")
+    assert EventsPosition(_at(5), "sg_a", "v1") < position_of(replace(_marker(5, "sg_b"), tenant=TenantId("ten_a")))
+    assert position_of(replace(_drop(5, "sg_a"), tenant=TenantId("ten_b"))) < position_of(first)
+
+
 def test_markers_and_drops_merge_in_cursor_order() -> None:
     markers = [_marker(1, "sg_a"), _marker(5, "sg_a"), _marker(9, "sg_c")]
     drops = [_drop(5, "sg_a"), _drop(7, "sg_b")]

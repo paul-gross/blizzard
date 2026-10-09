@@ -371,7 +371,9 @@ _l = s.lease_facts.c
 def markers_after(
     conn: Connection, position: EventsPosition, until: datetime, limit: int, extractor_version: str | None
 ) -> list[DerivationMarker]:
-    past = or_(
+    """Up to ``limit`` of every open tenant's markers past ``position``, in the events order: ``derived_at``,
+    segment, extractor version, tenant."""
+    later = or_(
         _d.derived_at > position.at,
         and_(
             _d.derived_at == position.at,
@@ -381,22 +383,38 @@ def markers_after(
             ),
         ),
     )
+    past = later
+    if position.tenant is not None:
+        beside = and_(
+            _d.derived_at == position.at,
+            _d.segment_id == position.segment_id,
+            _d.extractor_version == position.extractor_version,
+            _d.tenant_id > position.tenant,
+        )
+        past = or_(later, beside)
     stmt = select(s.transcript_event_derivations).where(
         open_tenant(s.transcript_event_derivations), past, _d.derived_at <= until
     )
     if extractor_version is not None:
         stmt = stmt.where(_d.extractor_version == extractor_version)
-    rows = conn.execute(stmt.order_by(_d.derived_at, _d.segment_id, _d.extractor_version).limit(limit)).all()
+    order = (_d.derived_at, _d.segment_id, _d.extractor_version, _d.tenant_id)
+    rows = conn.execute(stmt.order_by(*order).limit(limit)).all()
     return [_marker(row) for row in rows]
 
 
 def drops_after(conn: Connection, position: EventsPosition, until: datetime, limit: int) -> list[DropFact]:
-    # A drop's version is empty, so one at the position's own time and segment is never past it.
+    """Up to ``limit`` of every open tenant's drop facts past ``position``, in the events order: ``dropped_at``,
+    segment, then tenant — a drop's version is empty, so it is beside a position only when the position's is."""
     past = or_(_x.dropped_at > position.at, and_(_x.dropped_at == position.at, _x.segment_id > position.segment_id))
+    if position.tenant is not None and not position.extractor_version:
+        beside = and_(
+            _x.dropped_at == position.at, _x.segment_id == position.segment_id, _x.tenant_id > position.tenant
+        )
+        past = or_(past, beside)
     stmt = (
         select(s.transcript_event_drops)
         .where(open_tenant(s.transcript_event_drops), past, _x.dropped_at <= until)
-        .order_by(_x.dropped_at, _x.segment_id, _x.id)
+        .order_by(_x.dropped_at, _x.segment_id, _x.tenant_id, _x.id)
         .limit(limit)
     )
     return [_drop(row) for row in conn.execute(stmt).all()]

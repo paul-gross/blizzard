@@ -48,8 +48,8 @@ def derivations_by_marker(derivations: Iterable[EventDerivation]) -> dict[Deriva
 
 def position_of(item: EventsItem) -> EventsPosition:
     if isinstance(item, DropFact):
-        return EventsPosition(item.dropped_at, item.segment_id, "")
-    return EventsPosition(item.derived_at, item.segment_id, item.extractor_version)
+        return EventsPosition(item.dropped_at, item.segment_id, "", item.tenant)
+    return EventsPosition(item.derived_at, item.segment_id, item.extractor_version, item.tenant)
 
 
 def _cost(item: EventsItem) -> int:

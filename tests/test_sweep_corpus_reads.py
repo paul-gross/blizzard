@@ -5,6 +5,7 @@ every tenant; and every statement the group issues carries the hub-scoped marker
 
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime, timedelta
 from functools import partial
 from pathlib import Path
@@ -17,6 +18,7 @@ from sqlalchemy import event
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.chunk.model import WorkRef
+from blizzard.hub.domain.observability.egress.events_window import EventsItem, position_of
 from blizzard.hub.domain.observability.egress.repository import EpochKey, EventsPosition, UsagePosition
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
@@ -217,6 +219,71 @@ def test_marker_and_drop_pages_are_the_open_tenants_rows_each_with_its_tenant(wo
     assert {(d.tenant, d.segment_id) for d in drops} == {(t, f"sg_dropped_{t}") for t in (world.carried, _OPEN)}
     derived = world.corpus.derivations(markers)
     assert {(d.marker.tenant, d.chunk_id) for d in derived} == {(t, _live(t)) for t in (world.carried, _OPEN)}
+
+
+def _tie(world: _World) -> None:
+    """A marker and a drop of one segment id at one instant in each open tenant — a runner-minted id two tenants
+    may each hold."""
+    for tenant in (world.carried, _OPEN):
+        world.insert(
+            s.transcript_event_derivations,
+            tenant_id=tenant,
+            segment_id="sg_tied",
+            extractor_version=_EXTRACTOR,
+            content_fingerprint="fp",
+            derived_at=_AT,
+            event_count=0,
+            complete=True,
+        )
+        world.insert(
+            s.transcript_event_drops,
+            tenant_id=tenant,
+            segment_id="sg_tied",
+            chunk_id=_live(tenant),
+            epoch=1,
+            spawn_generation=0,
+            dropped_at=_AT,
+        )
+
+
+def test_a_page_ending_between_two_tenants_at_one_position_resumes_at_the_other(world: _World) -> None:
+    _tie(world)
+    reads: dict[str, Callable[[EventsPosition, int], Sequence[EventsItem]]] = {
+        "markers": lambda at, limit: world.corpus.markers_after(at, _AFTER, limit, extractor_version=None),
+        "drops": lambda at, limit: world.corpus.drops_after(at, _AFTER, limit),
+    }
+    for name, read in reads.items():
+        paged: list[EventsItem] = []
+        position = EventsPosition(_BEFORE)
+        while page := read(position, 1):
+            paged += page
+            position = position_of(page[-1])
+        assert paged == list(read(EventsPosition(_BEFORE), 50)), name
+        assert sorted(item.tenant or "" for item in paged if item.segment_id == "sg_tied") == sorted(
+            [world.carried, _OPEN]
+        ), name
+
+
+def test_a_position_recorded_without_its_tenant_resumes_past_every_tenant_at_it(world: _World) -> None:
+    _tie(world)
+    world.insert(
+        s.transcript_event_derivations,
+        tenant_id=_OPEN,
+        segment_id="sg_zz",
+        extractor_version=_EXTRACTOR,
+        content_fingerprint="fp",
+        derived_at=_AT,
+        event_count=0,
+        complete=True,
+    )
+    recorded = EventsPosition(_AT, "sg_tied", _EXTRACTOR)
+    every = world.corpus.markers_after(EventsPosition(_BEFORE), _AFTER, 50, extractor_version=None)
+    resumed = world.corpus.markers_after(recorded, _AFTER, 50, extractor_version=None)
+    assert [position_of(m) for m in resumed] == [position_of(m) for m in every if position_of(m) > recorded]
+    assert "sg_zz" in {m.segment_id for m in resumed}
+    assert all(m.segment_id != "sg_tied" for m in resumed)
+    drops = world.corpus.drops_after(EventsPosition(_AT, "sg_tied"), _AFTER, 50)
+    assert all(d.segment_id != "sg_tied" for d in drops)
 
 
 def test_backfill_epochs_are_the_open_tenants_each_with_its_tenant(world: _World) -> None:
