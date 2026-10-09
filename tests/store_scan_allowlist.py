@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from blizzard.hub.auth.hub_admins import IReadHubAdminRepository
+from blizzard.hub.auth.invitations import IReadInvitationRepository
 from blizzard.hub.auth.memberships import IReadMembershipRepository
 from blizzard.hub.domain.chunk.ports.decisions import IReadChunkDecisionsRepository
 from blizzard.hub.domain.chunk.ports.delivery import IReadChunkDeliveryRepository
@@ -326,6 +327,14 @@ HUB_ALLOWED_SCANS: list[Allowance] = [
     TableWideAllowance("secrets", 200, _FLEET_CONFIG_REASON),
     TableWideAllowance("work_source_lifecycle_facts", 200, _FLEET_CONFIG_REASON),
     TableWideAllowance("work_sources", 200, _FLEET_CONFIG_REASON),
+    MethodScopedAllowance(
+        IReadInvitationRepository,
+        "list",
+        "invitations",
+        200,
+        "every invitation one tenant has issued, read whole on its tenant key — the tenant's invitation list is what "
+        "`invite list` shows, bounded by the invitations its admins hand out; a lookup by id or token uses its own key.",
+    ),
     # --- named-index walks by design ----------------------------------------------------
     IndexWalkAllowance(IReadAnalyticsEventQueries, "counts_by_agent_type", ("transcript_events",), _ANALYTICS_REASON),
     IndexWalkAllowance(IReadAnalyticsEventQueries, "counts_by_node", ("transcript_events",), _ANALYTICS_REASON),

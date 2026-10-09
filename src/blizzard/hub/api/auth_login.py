@@ -1,5 +1,9 @@
 """The provider-login surface — providers, authorize, callback, logout.
 
+A sign-in started from an invitation link carries the link's token as ``invite``; ``state`` holds only its hash
+through the provider round trip. On the callback the token resolves through the hub-scoped invitation reads, and a
+sign-in that accepts it lands on the board's one-shot :data:`INVITATION_LANDING` naming the invited tenant.
+
 Public plane throughout — no ``require(<permission>)``: an unauthenticated visitor must
 reach these to log in at all. Under ``auth.mode = "none"`` every route here is inert
 (``providers`` empty, ``authorize``/``callback`` 404).
@@ -8,6 +12,7 @@ reach these to log in at all. Under ``auth.mode = "none"`` every route here is i
 from __future__ import annotations
 
 from dataclasses import dataclass
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -18,6 +23,8 @@ from blizzard.foundation.return_to import ReturnTo
 from blizzard.hub.api.auth_session import _SESSION_COOKIE_NAME, PresentedSession
 from blizzard.hub.api.hub_level import hub_services
 from blizzard.hub.auth.facts import AuthFactsService
+from blizzard.hub.auth.invitations import InvitationToken
+from blizzard.hub.auth.models import AuthStateEntry, ProviderIdentity, User
 from blizzard.hub.auth.oauth.provider import IOAuthProvider, OAuthExchangeError
 from blizzard.hub.auth.service import ABSOLUTE_MAX_AGE, PROVIDER_LOGIN_STATE_KIND
 from blizzard.hub.composition import HubServices
@@ -26,6 +33,10 @@ from blizzard.hub.config import AUTH_MODE_NONE
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 _THROTTLE_DETAIL = "too many login attempts — try again shortly"
+
+#: The board route a sign-in that accepted an invitation lands on, its ``tenant`` naming the invited tenant: the board
+#: selects that tenant and moves on.
+INVITATION_LANDING = "/invite/accepted"
 
 
 class ProviderSummary(BaseModel):
@@ -101,7 +112,7 @@ def list_providers(request: Request) -> list[ProviderSummary]:
 
 
 @router.get("/{name}/authorize")
-def authorize(name: str, request: Request, return_to: str | None = None) -> RedirectResponse:
+def authorize(name: str, request: Request, return_to: str | None = None, invite: str | None = None) -> RedirectResponse:
     if request.app.state.config.auth.mode == AUTH_MODE_NONE:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="login is not enabled")
     login = ProviderLogin.of(request, name)
@@ -110,7 +121,10 @@ def authorize(name: str, request: Request, return_to: str | None = None) -> Redi
     if provider is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown provider {name!r}")
     state = login.services.auth.start_state(
-        kind=PROVIDER_LOGIN_STATE_KIND, provider_name=name, return_to=ReturnTo(return_to).safe
+        kind=PROVIDER_LOGIN_STATE_KIND,
+        provider_name=name,
+        return_to=ReturnTo(return_to).safe,
+        invitation_token_hash=InvitationToken(invite).hash if invite else None,
     )
     return RedirectResponse(provider.authorize_url(state=state, redirect_uri=login.callback_url))
 
@@ -139,10 +153,9 @@ def callback(name: str, request: Request, code: str | None = None, state: str | 
     except OAuthExchangeError as exc:
         return refusal.login_failed(str(exc))
 
-    user = login.services.auth.link_or_mint(identity, provider_name=name)
-    plaintext, _session = login.services.auth.mint_session(user)
+    plaintext, landing = _signed_in(login, entry, identity)
 
-    response = RedirectResponse(entry.return_to, status_code=status.HTTP_302_FOUND)
+    response = RedirectResponse(landing, status_code=status.HTTP_302_FOUND)
     response.set_cookie(
         _SESSION_COOKIE_NAME,
         plaintext,
@@ -152,6 +165,21 @@ def callback(name: str, request: Request, code: str | None = None, state: str | 
         max_age=int(ABSOLUTE_MAX_AGE.total_seconds()),
     )
     return response
+
+
+def _signed_in(login: ProviderLogin, entry: AuthStateEntry, identity: ProviderIdentity) -> tuple[str, str]:
+    """The session the callback hands the browser and where it lands: through the invitation the sign-in was
+    started with when it accepts, landing in the invited tenant; otherwise as a plain sign-in, at ``return_to``."""
+    auth = login.services.auth
+    if entry.invitation_token_hash is not None:
+        invitation = login.services.hub_scoped_reads.invitations.invitation_for_token_hash(entry.invitation_token_hash)
+        if invitation is not None:
+            accepted = auth.accept_invitation(identity, provider_name=login.name, invitation=invitation)
+            if accepted is not None:
+                return accepted.session_id, f"{INVITATION_LANDING}?{urlencode({'tenant': accepted.tenant})}"
+    user: User = auth.link_or_mint(identity, provider_name=login.name)
+    plaintext, _session = auth.mint_session(user)
+    return plaintext, entry.return_to
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)

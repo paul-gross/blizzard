@@ -2,19 +2,22 @@
 rule, and collision-free username minting.
 
 Holds the **write** repositories (``bzh:controller-read-only``) and takes already-loaded
-objects (``bzh:domain-takes-objects``). Also holds the superuser claim, whose membership
-grant is recorded via ``auth_facts`` in the same identity unit of work."""
+objects (``bzh:domain-takes-objects``). Also holds :meth:`accept_invitation`, which admits a
+person into a tenant through an invitation, and the superuser claim; every membership grant
+either makes is recorded via ``auth_facts`` in the same identity unit of work."""
 
 from __future__ import annotations
 
 import re
 import secrets
+from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from blizzard.auth_core import Role, permissions_for
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id, IdPrefix
+from blizzard.foundation.invitations import InvitationState
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.auth import hub_admins, memberships
@@ -23,7 +26,13 @@ from blizzard.hub.auth.facts import AuthFactsService
 from blizzard.hub.auth.hashing import SessionId
 from blizzard.hub.auth.hub_admins import HubAdminFact, IReadHubAdminRepository
 from blizzard.hub.auth.identities import IWriteIdentityRepository
-from blizzard.hub.auth.identity_transaction import IIdentityTransactions
+from blizzard.hub.auth.identity_transaction import IdentityWrites, IIdentityTransactions
+from blizzard.hub.auth.invitations import (
+    InvitationOutcome,
+    InvitationOutcomeKind,
+    IWriteInvitationRepository,
+    TenantInvitation,
+)
 from blizzard.hub.auth.memberships import IReadMembershipRepository, MembershipFact
 from blizzard.hub.auth.models import (
     AuthStateEntry,
@@ -38,7 +47,8 @@ from blizzard.hub.auth.pkce import Pkce
 from blizzard.hub.auth.sessions import IWriteSessionRepository
 from blizzard.hub.auth.superuser_bootstrap import IWriteSuperuserBootstrapRepository
 from blizzard.hub.auth.users import IWriteUserRepository
-from blizzard.hub.tenancy import TenantId
+from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.tenancy import StoreScope, TenantId
 
 _log = get_logger("blizzard.hub.auth")
 
@@ -46,6 +56,17 @@ _log = get_logger("blizzard.hub.auth")
 #: Every role the role-assignment API may assign — ``superuser`` (the hub administrator) is
 #: not one, and ``pending`` revokes the membership.
 ASSIGNABLE_ROLES: tuple[Role, ...] = tuple(r for r in Role if r is not Role.SUPERUSER)
+
+
+@domain_model
+@dataclass(frozen=True)
+class InvitationAccepted:
+    """A sign-in that accepted an invitation: the person, their new session's plaintext id — handed out this once —
+    and the tenant the invitation admitted them into."""
+
+    user: User
+    session_id: str
+    tenant: TenantId
 
 
 def principal(user: User, *, tenant: TenantId | None, role: Role | None, hub_admin: bool) -> ResolvedIdentity:
@@ -132,6 +153,7 @@ class AuthService:
         memberships: IReadMembershipRepository,
         hub_admins: IReadHubAdminRepository,
         transactions: IIdentityTransactions,
+        invitations: Callable[[ScopedConnections], IWriteInvitationRepository],
         idle_ttl: timedelta = IDLE_TTL,
         absolute_max_age: timedelta = ABSOLUTE_MAX_AGE,
         touch_granularity: timedelta = TOUCH_GRANULARITY,
@@ -146,6 +168,7 @@ class AuthService:
         self._memberships = memberships
         self._hub_admins = hub_admins
         self._transactions = transactions
+        self._invitations = invitations
         self._idle_ttl = idle_ttl
         self._absolute_max_age = absolute_max_age
         self._touch_granularity = touch_granularity
@@ -175,6 +198,9 @@ class AuthService:
     def mint_session(self, user: User) -> tuple[str, Session]:
         """Mint a fresh session for ``user``; returns ``(plaintext_id, session)`` — only
         the hash is stored, so the plaintext is handed back exactly once (#92)."""
+        return self._open_session(user, self._sessions)
+
+    def _open_session(self, user: User, sessions: IWriteSessionRepository) -> tuple[str, Session]:
         plaintext = secrets.token_urlsafe(SessionId.BYTES)
         now = self._clock.now()
         session = Session(
@@ -184,7 +210,7 @@ class AuthService:
             expires_at=now + self._idle_ttl,
             last_seen_at=now,
         )
-        self._sessions.create(session)
+        sessions.create(session)
         _log.info("session minted", user_id=user.user_id, username=user.username)
         return plaintext, session
 
@@ -196,19 +222,31 @@ class AuthService:
         else a **verified** email match attaches; else a user with no membership is minted.
         Whichever user it resolves to claims a configured, still-unclaimed ``auth.superuser``
         whose email it holds."""
-        existing_link = self._identities.get(provider_name, identity.subject)
+        return self._claim_superuser(
+            self._resolve_user(identity, provider_name, users=self._users, identities=self._identities)
+        )
+
+    def _resolve_user(
+        self,
+        identity: ProviderIdentity,
+        provider_name: str,
+        *,
+        users: IWriteUserRepository,
+        identities: IWriteIdentityRepository,
+    ) -> User:
+        existing_link = identities.get(provider_name, identity.subject)
         if existing_link is not None:
-            user = self._users.get(existing_link.user_id)
+            user = users.get(existing_link.user_id)
             assert user is not None, f"identity {provider_name!r}:{identity.subject!r} references a missing user"
             if existing_link.handle != identity.handle:
-                self._identities.update_handle(provider_name, identity.subject, handle=identity.handle)
-            return self._claim_superuser(user)
+                identities.update_handle(provider_name, identity.subject, handle=identity.handle)
+            return user
 
         now = self._clock.now()
         if identity.email_verified and identity.email:
-            matched = self._users.get_by_email(identity.email)
+            matched = users.get_by_email(identity.email)
             if matched is not None:
-                self._identities.link(
+                identities.link(
                     Identity(
                         provider_name=provider_name,
                         subject=identity.subject,
@@ -217,17 +255,17 @@ class AuthService:
                         created_at=now,
                     )
                 )
-                return self._claim_superuser(matched)
+                return matched
 
         user = User(
             user_id=Id.mint(IdPrefix.USER, self._clock).value,
-            username=self.mint_username(identity.handle),
+            username=self._username(identity.handle, users),
             display_name=identity.handle,
             email=identity.email if identity.email_verified else None,
             created_at=now,
         )
-        self._users.create(user)
-        self._identities.link(
+        users.create(user)
+        identities.link(
             Identity(
                 provider_name=provider_name,
                 subject=identity.subject,
@@ -236,16 +274,24 @@ class AuthService:
                 created_at=now,
             )
         )
-        return self._claim_superuser(user)
+        return user
 
     def revoke(self, session: Session) -> None:
         """Delete ``session`` outright — logout (#92)."""
         self._sessions.delete(session.id_hash)
         _log.info("session revoked", user_id=session.user_id)
 
-    def start_state(self, *, kind: str, provider_name: str, return_to: str, ttl: timedelta = STATE_TTL) -> str:
-        """Mint and persist a single-use ``state``; returns the plaintext
-        value to round-trip through the redirect."""
+    def start_state(
+        self,
+        *,
+        kind: str,
+        provider_name: str,
+        return_to: str,
+        invitation_token_hash: str | None = None,
+        ttl: timedelta = STATE_TTL,
+    ) -> str:
+        """Mint and persist a single-use ``state``, carrying the hash of the invitation token the sign-in was
+        started with, if any; returns the plaintext value to round-trip through the redirect."""
         state = secrets.token_urlsafe(STATE_BYTES)
         now = self._clock.now()
         self._auth_state.create(
@@ -257,6 +303,7 @@ class AuthService:
                 code_challenge=None,
                 created_at=now,
                 expires_at=now + ttl,
+                invitation_token_hash=invitation_token_hash,
             )
         )
         return state
@@ -321,13 +368,61 @@ class AuthService:
     def mint_username(self, handle: str) -> str:
         """A collision-free username from a provider ``handle`` — the slug, or the slug
         with a numeric suffix appended once a collision is found."""
+        return self._username(handle, self._users)
+
+    @staticmethod
+    def _username(handle: str, users: IWriteUserRepository) -> str:
         base = Slug(handle).text
         candidate = base
         suffix = 1
-        while self._users.username_exists(candidate):
+        while users.username_exists(candidate):
             suffix += 1
             candidate = f"{base}-{suffix}"
         return candidate
+
+    # --- invitations -------------------------------------------
+
+    def accept_invitation(
+        self, identity: ProviderIdentity, *, provider_name: str, invitation: TenantInvitation
+    ) -> InvitationAccepted | None:
+        """Admit the person ``identity`` signs in as through ``invitation``, in one identity unit of work: resolve the
+        user as :meth:`link_or_mint` does — minting one for an identity and email the hub has not seen — grant the
+        invitation's role in its tenant unless they already hold a membership there, whose role stays as it is,
+        record the invitation accepted, and mint their session. Whichever user it resolves to then claims a
+        configured, still-unclaimed ``auth.superuser`` whose email it holds.
+
+        ``None``, writing nothing, when the invitation is no longer live or ``identity`` carries no address the
+        invitation admits."""
+        now = self._clock.now()
+        with self._transactions.begin() as writes:
+            invitations = self._invitations(writes.tenant_connections(StoreScope(invitation.tenant)))
+            record = invitations.get(invitation.invitation_id)
+            if record is None or record.state(now) is not InvitationState.LIVE:
+                return None
+            if not record.invitation.admits(identity):
+                return None
+            user = self._resolve_user(identity, provider_name, users=writes.users, identities=writes.identities)
+            if writes.memberships.role_in(invitation.tenant, user.user_id) is None:
+                self._grant(record.invitation.role, user=user, invitation=invitation, at=now, writes=writes)
+            invitations.record(
+                InvitationOutcome(invitation.invitation_id, InvitationOutcomeKind.ACCEPTED, user.user_id, now)
+            )
+            plaintext, _session = self._open_session(user, writes.sessions)
+        _log.info("invitation accepted", user_id=user.user_id, invitation_id=invitation.invitation_id)
+        return InvitationAccepted(self._claim_superuser(user), plaintext, invitation.tenant)
+
+    def _grant(
+        self, role: Role, *, user: User, invitation: TenantInvitation, at: datetime, writes: IdentityWrites
+    ) -> None:
+        writes.memberships.record(MembershipFact(invitation.tenant, user.user_id, role, at, invitation.invitation_id))
+        self._auth_facts.user_role_changed(
+            actor=invitation.invitation_id,
+            subject=user.username,
+            tenant=invitation.tenant,
+            from_role=None,
+            to_role=role,
+            into=writes.auth_facts,
+        )
 
     # --- superuser bootstrap -------------------------------------
 

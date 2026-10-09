@@ -36,6 +36,13 @@ from blizzard.hub.auth.internal.identity_repository import IdentityRepository
 from blizzard.hub.auth.internal.membership_repository import MembershipRepository
 from blizzard.hub.auth.internal.superuser_bootstrap_repository import SuperuserBootstrapRepository
 from blizzard.hub.auth.internal.user_repository import UserRepository
+from blizzard.hub.auth.invitations import (
+    Invitation,
+    InvitationOutcome,
+    InvitationOutcomeKind,
+    InvitationToken,
+    IReadInvitationRepository,
+)
 from blizzard.hub.auth.memberships import IReadMembershipRepository, MembershipFact
 from blizzard.hub.auth.models import AuthStateEntry, Identity, SuperuserBootstrap, User
 from blizzard.hub.auth.sessions import IReadSessionRepository
@@ -121,6 +128,8 @@ from blizzard.hub.store.internal.garden_sweeps_store import GardenSweepsStore
 from blizzard.hub.store.internal.garden_trend_store import GardenTrendStore
 from blizzard.hub.store.internal.hub_event_log_store import HubEventLogStore
 from blizzard.hub.store.internal.hub_scoped_credentials import CredentialReads
+from blizzard.hub.store.internal.hub_scoped_invitations import InvitationReads
+from blizzard.hub.store.internal.invitation_store import InvitationStore
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
 from blizzard.hub.store.internal.secret_store import SecretStore
 from blizzard.hub.store.internal.trace_store import TraceStore
@@ -1000,6 +1009,7 @@ class HubWorld:
     garden_trend: IReadGardenTrendRepository
     work_items: IReadWorkItemRepository
     secrets: ISecretCatalog
+    invitations: IReadInvitationRepository
     config_revisions: IReadConfigRevisions
     config_imports: IReadConfigImports
     default_graph: Graph
@@ -1012,6 +1022,8 @@ class HubWorld:
     session_id_hash: str
     auth_state_value: str
     runner_token_hash: str
+    invitation_id: str
+    invitation_token_hash: str
     routine_id: str
     scope_a: str
     scope_c: str
@@ -1786,6 +1798,27 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     hub_admins.record(HubAdminFact(user_2.user_id, True, _ht(107), user_1.user_id))
     hub_admins.record(HubAdminFact(user_2.user_id, False, _ht(108), user_1.user_id))
 
+    # --- invitations: one live, one revoked -----------------------------------------------------
+    invitation_store = InvitationStore(store_connections)
+    invitation_token_hash = InvitationToken("census-invitation-1").hash
+    for invitation_id, token_hash in (
+        ("inv_census_1", invitation_token_hash),
+        ("inv_census_2", InvitationToken("census-invitation-2").hash),
+    ):
+        invitation_store.create(
+            Invitation(
+                invitation_id=invitation_id,
+                tenant=default_tenant(engine),
+                email="invitee@example.com",
+                role=Role.CONTRIBUTOR,
+                token_hash=token_hash,
+                created_by=user_1.user_id,
+                created_at=_ht(109),
+                expires_at=_ht(109 + 7 * 86400),
+            )
+        )
+    invitation_store.record(InvitationOutcome("inv_census_2", InvitationOutcomeKind.REVOKED, user_1.user_id, _ht(110)))
+
     return HubWorld(
         hub=hub,
         engine=engine,
@@ -1803,6 +1836,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         garden_trend=garden_trend_store,
         work_items=work_items,
         secrets=secret_store,
+        invitations=invitation_store,
         config_revisions=ConfigRevisionsStore(store_connections),
         config_imports=ConfigImportStore(store_connections),
         default_graph=default_graph,
@@ -1815,6 +1849,8 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         session_id_hash=session_id_hash,
         auth_state_value=auth_state_value,
         runner_token_hash=runner_token_hash,
+        invitation_id="inv_census_1",
+        invitation_token_hash=invitation_token_hash,
         routine_id=routine.routine_id,
         scope_a="blizzard",
         scope_c="legacy",
@@ -1852,7 +1888,7 @@ HubRecipe = Callable[[HubWorld], object]
 
 #: Every reflected hub ``(Protocol, method)``, mapped to a recipe against :func:`build_hub_world`'s world.
 #: Hub read seams named outside the ``IRead*`` convention, reflected beside it.
-HUB_NAMED_READ_SEAMS: tuple[type, ...] = (ISecretCatalog, CredentialReads)
+HUB_NAMED_READ_SEAMS: tuple[type, ...] = (ISecretCatalog, CredentialReads, InvitationReads)
 
 HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadAuthStateRepository, "get"): lambda w: w.auth_state.get(w.auth_state_value),
@@ -2230,6 +2266,11 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadMembershipRepository, "only_tenant"): lambda w: _memberships_of(w.hub).only_tenant(),
     (IReadHubAdminRepository, "is_hub_admin"): lambda w: _hub_admins_of(w.hub).is_hub_admin(w.user_1.user_id),
     (IReadHubAdminRepository, "holders"): lambda w: _hub_admins_of(w.hub).holders(),
+    (IReadInvitationRepository, "get"): lambda w: w.invitations.get(w.invitation_id),
+    (IReadInvitationRepository, "list"): lambda w: w.invitations.list(),
+    (InvitationReads, "invitation_for_token_hash"): lambda w: (
+        w.hub.hub_services.hub_scoped_reads.invitations.invitation_for_token_hash(w.invitation_token_hash)
+    ),
     (IReadHubEventLog, "newest"): lambda w: _hub_events_of(w.hub).newest(
         ("egress-write-failed", "trace-export-failed")
     ),

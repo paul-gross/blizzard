@@ -200,6 +200,9 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     ("GET", "/api/admin/hub-admins"): Permission.HUB_ADMIN_GRANT,
     ("PUT", "/api/admin/hub-admins/{user_id}"): Permission.HUB_ADMIN_GRANT,
     ("DELETE", "/api/admin/hub-admins/{user_id}"): Permission.HUB_ADMIN_GRANT,
+    ("POST", "/api/invitations"): Permission.USER_MANAGE,
+    ("GET", "/api/invitations"): Permission.USER_MANAGE,
+    ("POST", "/api/invitations/{invitation_id}/revocations"): Permission.USER_MANAGE,
     # Key rotation — the key signs runner sign-ins in every tenant, so it takes a hub permission.
     ("POST", "/api/auth/rotate-signing-key"): Permission.HUB_ADMIN_GRANT,
     # Transcript-segment discovery/content reads — above
@@ -319,6 +322,10 @@ _ADMITTING: dict[tuple[str, str], Permission] = {
     # A hub administrator grants and revokes a membership in any tenant; listing members takes a membership.
     ("PUT", "/api/members/{user_id}"): Permission.MEMBERSHIP_GRANT_ANY,
     ("DELETE", "/api/members/{user_id}"): Permission.MEMBERSHIP_GRANT_ANY,
+    # The hub administrator gives a tenant with no admin yet its first one by invitation.
+    ("POST", "/api/invitations"): Permission.MEMBERSHIP_GRANT_ANY,
+    ("GET", "/api/invitations"): Permission.MEMBERSHIP_GRANT_ANY,
+    ("POST", "/api/invitations/{invitation_id}/revocations"): Permission.MEMBERSHIP_GRANT_ANY,
 }
 
 #: The claim route is gated by the principal without the retirement refusal: a retired runner's claim is

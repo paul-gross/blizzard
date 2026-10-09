@@ -48,7 +48,8 @@ class MembershipRoleRefused(ValueError):
 @dataclass(frozen=True)
 class MembershipFact:
     """One grant, change, or revocation (``role`` is ``None``) of ``user_id``'s membership in ``tenant_id``.
-    ``set_by`` is the granting user's id, or one of the ``SET_BY_*`` values."""
+    ``set_by`` is the granting user's id, the id of the invitation whose acceptance granted it, or one of the
+    ``SET_BY_*`` values."""
 
     tenant_id: TenantId
     user_id: str

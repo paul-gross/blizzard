@@ -91,6 +91,9 @@ class AuthStateEntry:
     expires_at: datetime
     #: The user this row mints a session for — ``kind="cli_login"`` rows only.
     user_id: str | None = None
+    #: The sha256 hex of the invitation token a provider sign-in was started with — ``provider_login`` rows started
+    #: through an invitation link only.
+    invitation_token_hash: str | None = None
 
 
 @domain_model

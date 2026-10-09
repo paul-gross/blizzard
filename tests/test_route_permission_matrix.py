@@ -122,6 +122,9 @@ def _mutations(ids: dict[str, str]) -> list[tuple[str, str, dict[str, object]]]:
         ("POST", "/api/runners/runner-a/token-revocations", {"by": "x"}),  # RUNNER_RETIRE
         ("POST", "/api/graphs", {"definition_yaml": _GRAPH_YAML}),  # GRAPH_EDIT
         ("GET", "/api/users", {}),  # USER_MANAGE
+        ("POST", "/api/invitations", {"email": "new@example.com", "role": "guest"}),  # USER_MANAGE
+        ("GET", "/api/invitations", {}),  # USER_MANAGE
+        ("POST", "/api/invitations/inv_missing/revocations", {}),  # USER_MANAGE
         ("POST", "/api/analytics/re-derive", {"limit": 1}),  # ANALYTICS_ADMIN
         (
             "POST",

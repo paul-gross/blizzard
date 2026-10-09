@@ -43,6 +43,7 @@ from blizzard.hub.auth.internal.membership_repository import MembershipRepositor
 from blizzard.hub.auth.internal.session_repository import SessionRepository
 from blizzard.hub.auth.internal.superuser_bootstrap_repository import SuperuserBootstrapRepository
 from blizzard.hub.auth.internal.user_repository import UserRepository
+from blizzard.hub.auth.invitations import InvitationService
 from blizzard.hub.auth.memberships import IReadMembershipRepository, TenantMembers
 from blizzard.hub.auth.oauth.internal.factory import ProviderEntry
 from blizzard.hub.auth.oauth.registry import IOAuthProviderRegistry
@@ -177,6 +178,7 @@ from blizzard.hub.store.internal.garden_trend_store import GardenTrendStore
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.internal.hub_event_log_store import HubEventLogStore
 from blizzard.hub.store.internal.hub_scoped_reads import HubScopedReads, build_hub_scoped_reads
+from blizzard.hub.store.internal.invitation_store import InvitationStore
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
 from blizzard.hub.store.internal.review_findings_store import ReviewFindingsStore
 from blizzard.hub.store.internal.routine_scope_store import RoutineScopeStore
@@ -333,6 +335,8 @@ class TenantServices:
     finding_bucket: FindingBucketReader
     #: Records a delivering node-step's garden delivery: validate, then materialize in one transaction.
     garden_delivery: GardenDeliveryRecorder
+    #: Issue, list and revoke the tenant's invitations.
+    invitations: InvitationService
     #: Record a delivery lane's deferred review findings, once per chunk.
     review_findings: ReviewFindingsRecorder
     #: Resolves a cited commit against the configured forge.
@@ -454,6 +458,7 @@ class TenantStores:
     config_changes: ConfigChangeStore
     config_apply: ConfigApplyStore
     config_import: ConfigImportStore
+    invitations: InvitationStore
     clock: IClock
 
     @property
@@ -495,6 +500,7 @@ def build_tenant_stores(connections: ScopedConnections, *, clock: IClock) -> Ten
         config_changes=ConfigChangeStore(connections),
         config_apply=ConfigApplyStore(connections),
         config_import=ConfigImportStore(connections),
+        invitations=InvitationStore(connections),
         work_item_edits=WorkItemEditService(
             items=work_item_store,
             work_refs=chunk_stores.work_refs,
@@ -1127,6 +1133,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             formats=garden_formats,
             clock=clock,
         ),
+        invitations=InvitationService(tenant=lambda: stores.scope.tenant, invitations=stores.invitations, clock=clock),
     )
     sweeps = TenantSweeps(
         close_drain=CloseIntentDrainer(
@@ -1350,6 +1357,7 @@ def build_services(
         memberships=memberships,
         hub_admins=hub_admin_store,
         transactions=identity_transactions,
+        invitations=InvitationStore,
     )
     members = TenantMembers(
         memberships=memberships,

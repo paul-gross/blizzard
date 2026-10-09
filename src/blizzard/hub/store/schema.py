@@ -1742,6 +1742,8 @@ auth_state = Table(
     Column("created_at", UtcDateTime, nullable=False),
     Column("expires_at", UtcDateTime, nullable=False),
     Column("user_id", String, nullable=True),  # cli_login rows only — see note above
+    # The sha256 hex of the invitation token a provider_login row was started with; NULL for every other sign-in.
+    Column("invitation_token_hash", String, nullable=True),
 )
 
 # The append-only, non-chunk auth/security event log (``bzh:facts-not-status``) — these

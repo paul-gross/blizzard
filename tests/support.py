@@ -37,7 +37,6 @@ from sqlalchemy.sql.base import Executable
 from blizzard.auth_core import MEMBERSHIP_ROLES, Role
 from blizzard.foundation.clock import FixedClock, IClock
 from blizzard.foundation.forwarded import TrustedProxies
-from blizzard.foundation.hashing import Sha256Hex
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
@@ -50,6 +49,7 @@ from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.foundation.trace_spans import FinishedSpan
 from blizzard.hub.api.auth_session import TENANT_HEADER
 from blizzard.hub.app import create_app
+from blizzard.hub.auth.invitations import InvitationToken
 from blizzard.hub.auth.models import User
 from blizzard.hub.auth.oauth.provider import IOAuthProvider
 from blizzard.hub.auth.oauth.registry import OAuthProviderRegistry
@@ -1485,11 +1485,6 @@ def seed_hub_admin(engine: Engine, user_id: str, *, set_by: str = "test", at: da
         conn.execute(sa_insert(schema.hub_admin_facts).values(user_id=user_id, granted=True, set_at=at, set_by=set_by))
 
 
-def _invitation_token_hash(token: str) -> str:
-    """The digest an invitation's link token is stored and looked up as: its sha256 hex — the token is never stored."""
-    return Sha256Hex(token).hex
-
-
 def seed_invitation(
     engine: Engine,
     tenant: TenantId,
@@ -1513,7 +1508,7 @@ def seed_invitation(
                 tenant_id=tenant,
                 email=email.lower(),
                 role=role.value,
-                token_hash=_invitation_token_hash(token),
+                token_hash=InvitationToken(token).hash,
                 created_by=created_by,
                 created_at=at,
                 expires_at=at + lifetime,

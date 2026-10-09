@@ -20,6 +20,7 @@ from blizzard.hub.auth.facts import AuthFactsService
 from blizzard.hub.auth.hashing import SessionId
 from blizzard.hub.auth.hub_admins import HubAdminFact
 from blizzard.hub.auth.identity_transaction import IdentityWrites
+from blizzard.hub.auth.invitations import IWriteInvitationRepository
 from blizzard.hub.auth.memberships import Membership, MembershipFact
 from blizzard.hub.auth.models import (
     AuthFact,
@@ -213,7 +214,13 @@ class _FakeHubAdminRepository:
 
 
 def _joins_no_tenant(scope: StoreScope) -> ScopedConnections:
-    raise AssertionError(f"the auth service writes nothing tenant-owned; it opened {scope.tenant}")
+    raise AssertionError(
+        f"accepting an invitation is the one tenant-owned write, and no test here does; {scope.tenant}"
+    )
+
+
+def _no_invitations(connections: ScopedConnections) -> IWriteInvitationRepository:
+    raise AssertionError("accepting an invitation is pinned against a real store, never through these fakes")
 
 
 class _FakeTransactions:
@@ -293,6 +300,7 @@ def _service(
         memberships=identity.memberships,
         hub_admins=identity.hub_admins,
         transactions=_FakeTransactions(writes),
+        invitations=_no_invitations,
         **kwargs,  # type: ignore[arg-type]
     )
     _IDENTITIES[id(service)] = identity
