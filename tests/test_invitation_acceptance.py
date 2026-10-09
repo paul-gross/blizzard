@@ -9,7 +9,9 @@ else the one account holding it in another case; several holding it in other cas
 an auth fact records, and the person resolves as a sign-in resolves them.
 An invitation accepted or revoked between a reader's check and its write goes to whichever outcome was recorded first:
 the acceptance that loses is refused as no longer usable, the revocation that loses answers 409. A person already
-signed in who opens an invitation goes through the same check."""
+signed in who opens an invitation goes through the same check. An acceptance claims a configured, still-unclaimed
+``auth.superuser`` only when the accepting identity vouches for the address — never on the account's stored email
+alone."""
 
 from __future__ import annotations
 
@@ -21,10 +23,13 @@ from urllib.parse import parse_qs, urlsplit
 
 import pytest
 import sqlalchemy as sa
+import structlog
 
 from blizzard.auth_core import Role
+from blizzard.hub.auth.errors import RepoErrorFactory
+from blizzard.hub.auth.internal.identity_repository import IdentityRepository
 from blizzard.hub.auth.invitations import InvitationRecord, InvitationToken, TenantInvitation
-from blizzard.hub.auth.models import ProviderIdentity
+from blizzard.hub.auth.models import Identity, ProviderIdentity
 from blizzard.hub.auth.service import SignInRefusal
 from blizzard.hub.store import schema
 from blizzard.hub.store.internal.invitation_store import InvitationStore
@@ -35,6 +40,7 @@ from tests.support import (
     close_tenant,
     default_tenant,
     hub_scoped,
+    hub_store_connections,
     seed_invitation,
     seed_session,
     seed_user,
@@ -286,6 +292,37 @@ def test_an_invitation_no_longer_usable_writes_nothing(tmp_path: Path, invitatio
     _refused(_sign_in(hub, token), SignInRefusal.INVITATION_UNUSABLE)
 
     assert _written(hub) == before
+
+
+@pytest.mark.parametrize(
+    ("target", "held_by_the_linked_account", "claims"),
+    [
+        pytest.param("ada@home.example", False, True, id="the-identitys-primary-address"),
+        pytest.param("ADA.WORK@example.com", False, True, id="another-address-the-provider-verifies"),
+        pytest.param("root@example.com", True, False, id="only-the-accounts-stored-email"),
+    ],
+)
+def test_an_acceptance_claims_the_superuser_only_through_an_identity_vouching_for_it(
+    tmp_path: Path, target: str, held_by_the_linked_account: bool, claims: bool
+) -> None:
+    hub, _github = _hub(tmp_path, _ada())
+    if held_by_the_linked_account:
+        holder = seed_user(hub, username="ada", role=Role.CONTRIBUTOR, email=target)
+        IdentityRepository(hub_store_connections(hub.engine), RepoErrorFactory(structlog.get_logger("test"))).link(
+            Identity("github", "4242", holder.user_id, "ada", hub.clock.now())
+        )
+    hub.hub_services.auth.record_superuser_bootstrap(email=target, claimed_user_id=None)
+    other = hub.add_tenant("other")
+    _invitation_id, token = seed_invitation(hub.engine, other.tenant, _WORK, Role.GUEST)
+
+    landed = _sign_in(hub, token)
+
+    assert parse_qs(urlsplit(landed.headers["location"]).query) == {"tenant": [other.tenant]}
+    me = hub.client.get("/api/me", cookies={"bz_session": landed.cookies["bz_session"]})
+    assert me.status_code == 200, me.text
+    assert (me.json()["username"], me.json()["hub_admin"]) == ("ada", claims)
+    [bootstrap] = _rows(hub, schema.superuser_bootstrap)
+    assert (bootstrap.claimed_user_id is not None) is claims
 
 
 def test_a_signed_in_person_is_admitted_into_one_more_tenant_when_their_account_carries_the_address(

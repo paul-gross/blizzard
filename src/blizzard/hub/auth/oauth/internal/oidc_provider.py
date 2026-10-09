@@ -35,7 +35,9 @@ class OidcProvider:
 
     An issuer's ``email_verified`` claim is only as trustworthy as the issuer's own
     directory, so its addresses are authoritative only when the hub administrator
-    configures them so (``emails_authoritative``)."""
+    configures them so (``emails_authoritative``). Until then no address it reports
+    accepts an invitation, links to an existing user or claims ``auth.superuser``: it
+    signs in only identities already linked to a user."""
 
     type = "oidc"
 

@@ -85,8 +85,10 @@ _AUTH_OAUTH_PROVIDER_EXAMPLE_COMMENT = """
 # api_base = "https://ghe.example.internal"       # optional: override the provider's
 #                                                  # default host (github type only)
 # emails_authoritative = false       # oidc only: true lets the issuer's verified email
-#                                    # accept an invitation — set it only for a directory
-#                                    # trusted for every address it vouches for
+#                                    # accept an invitation, claim auth.superuser and link
+#                                    # to the account holding it; false signs in only
+#                                    # identities already linked to a user. Set it only for
+#                                    # a directory trusted for every address it vouches for
 """
 
 
@@ -234,8 +236,10 @@ class OAuthProviderConfig:
     names the environment variable carrying the secret, never the secret itself.
     ``api_base`` overrides the provider's default host — ``github`` type only, an
     ``oidc`` provider's ``issuer`` already naming its own. ``emails_authoritative`` lets an
-    ``oidc`` provider's verified email accept an invitation; a ``github`` provider's always
-    may, so the key is refused on one."""
+    ``oidc`` provider's verified email accept an invitation, claim ``auth.superuser`` and link
+    a first sign-in to the user holding that address; without it the provider signs in only
+    identities already linked to a user. A ``github`` provider is always authoritative, so
+    the key is refused on one."""
 
     name: str
     type: str

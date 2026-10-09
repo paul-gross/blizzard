@@ -15,12 +15,16 @@ block is the field-by-field reference.
 A provider's `client_secret_env` names an environment variable, never the secret itself; the secret is a deployment
 credential in the hub's runtime env file.
 
-An invitation is accepted only by a person whose provider vouches for the invited address. A `github` provider always
-does: GitHub reports an address as verified only once its owner has proven it. An `oidc` provider does only when its
-entry sets `emails_authoritative = true` (default `false`, so a person signing in through it never accepts an
-invitation). Set it only for a directory you trust for every address it reports as verified — one that lets its users
-claim an address they do not own would let them accept an invitation meant for someone else. The key is refused on a
-`github` entry and must be a boolean.
+A sign-in's email counts only when its provider vouches for the address. A `github` provider always does: GitHub
+reports an address as verified only once its owner has proven it. An `oidc` provider does only when its entry sets
+`emails_authoritative = true` (default `false`). Only an address the provider vouches for accepts an invitation or
+claims `[auth].superuser` — any address it reports as verified on the account. Only the account's primary address, when
+vouched for, links a first sign-in to the existing account holding exactly that address — the email merge that lets one
+person sign in through a second provider and land on the same account. A provider that is not authoritative
+therefore signs in only identities already linked to a user; any other sign-in through it is refused as invite-only and
+writes nothing. Set the key only for a directory you trust for every address it reports as verified — one that lets its
+users claim an address they do not own would let them accept an invitation meant for someone else, sign in as another
+person's account, or claim the superuser. The key is refused on a `github` entry and must be a boolean.
 
 `blizzard hub rotate-signing-key` mints a fresh current IdP signing key, demoting the old to previous; runners re-fetch
 JWKS on an unknown `kid`, no restart needed; under oauth the verb is gated on `user:manage` and needs a logged-in
@@ -45,11 +49,13 @@ worker saw.
 An admin — promoted via `POST /api/users/{id}/role`, gated on `user:manage` — can move a subject freely among pending,
 guest, and contributor, but only a superuser actor may grant or revoke admin itself.
 
-`[auth].superuser` names one email as the bootstrap identity, ensured at every hub boot: a verified login matching it is
-promoted to superuser; until claimed, the intent sits pre-provisioned, surfaced in the boot log and an `auth_facts`
-entry on every restart. Changing `superuser` to a different email demotes the previous claimant to admin; at most one
-bootstrapped superuser exists, this is the only way into or out of the role, and it is never assignable through the
-admin API.
+`[auth].superuser` names one email as the bootstrap identity, ensured at every hub boot: the first sign-in whose
+provider vouches for that exact address, as the account's primary or another verified address, claims it and becomes a
+hub administrator, whether it signs in a new person or an existing one. An account merely holding the address never
+claims, nor does a sign-in through a provider that is not authoritative. Until claimed, the intent sits pre-provisioned,
+surfaced in the boot log and an `auth_facts` entry on every restart. Changing `superuser` to a different email records a
+new intent, claimed the same way, and the previous claimant stays a hub administrator; unsetting it cancels an intent
+nobody has claimed. Configuration never revokes anyone.
 
 ### Transcript surfaces
 

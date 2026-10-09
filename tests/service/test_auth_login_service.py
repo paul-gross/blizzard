@@ -266,10 +266,13 @@ def test_an_uninvited_first_sign_in_lands_on_the_invite_only_refusal_with_no_ses
             assert hub.get("/api/me").status_code == 401
 
 
-def test_named_superuser_email_lands_superuser_on_first_verified_login(tmp_path: Path) -> None:
+@pytest.mark.parametrize("authoritative", [True, False], ids=["authoritative", "not-authoritative"])
+def test_named_superuser_email_lands_superuser_on_first_verified_login(tmp_path: Path, authoritative: bool) -> None:
     """The bootstrap-claim path, over the real wire: a fresh store with
     ``auth.superuser`` set pre-provisions an unclaimed intent, and the first verified
-    login for that exact email lands the freshly-minted user as ``superuser``."""
+    login for that exact email lands the freshly-minted user as ``superuser`` — when the
+    provider is authoritative for its addresses. Through one that is not, the same login is
+    refused as invite-only, with no session."""
     bin_dir = require_stub_idp()
     idp_port = _free_port()
     hub_port = _free_port()
@@ -286,10 +289,15 @@ def test_named_superuser_email_lands_superuser_on_first_verified_login(tmp_path:
             client_id="cid",
             client_secret_env=_SECRET_ENV,
             issuer=f"http://127.0.0.1:{idp_port}",
-            emails_authoritative=True,
+            emails_authoritative=authoritative,
         )
         with _oauth_hub(tmp_path / "hub", hub_port, providers=(provider,), superuser="root@example.com") as hub:
-            hub.get("/api/auth/oidc-co/authorize", follow_redirects=True)
+            landed = hub.get("/api/auth/oidc-co/authorize", follow_redirects=True)
+            if not authoritative:
+                assert landed.history[-1].headers["location"] == "/login?refusal=invite_only"
+                assert "bz_session" not in hub.cookies
+                assert hub.get("/api/me").status_code == 401
+                return
             assert "bz_session" in hub.cookies
 
             me_resp = hub.get("/api/me")

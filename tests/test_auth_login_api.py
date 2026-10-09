@@ -53,8 +53,10 @@ def _state_from_redirect(location: str) -> str:
 # --- providers ------------------------------------------------------------------
 
 
-#: Ada as a provider reports her, with the verified email :func:`known_ada` seeds her under.
-ADA = ProviderIdentity(subject="1", handle="ada", email="ada@example.com", email_verified=True)
+#: Ada as an authoritative provider reports her, with the verified email :func:`known_ada` seeds her under.
+ADA = ProviderIdentity(
+    subject="1", handle="ada", email="ada@example.com", email_verified=True, emails_authoritative=True
+)
 
 
 def known_ada(hub: HubHarness) -> User:
@@ -158,12 +160,18 @@ def _login(hub, provider: FakeOAuthProvider, code: str) -> None:  # type: ignore
     assert resp.status_code in (302, 307), resp.text
 
 
+#: Ada as GitHub reports her — a provider authoritative for every address it verifies.
+_GITHUB_ADA = ProviderIdentity(
+    subject="gh-1", handle="ada", email="ada@example.com", email_verified=True, emails_authoritative=True
+)
+
+
 def test_second_provider_login_with_same_verified_email_lands_on_the_same_user(tmp_path: Path) -> None:
     github = FakeOAuthProvider(name="github", type="github")
     oidc = FakeOAuthProvider(name="oidc-co", type="oidc")
-    github.codes["c1"] = ProviderIdentity(subject="gh-1", handle="ada", email="ada@example.com", email_verified=True)
+    github.codes["c1"] = _GITHUB_ADA
     oidc.codes["c2"] = ProviderIdentity(
-        subject="oidc-1", handle="ada.lovelace", email="ada@example.com", email_verified=True
+        subject="oidc-1", handle="ada.lovelace", email="ada@example.com", email_verified=True, emails_authoritative=True
     )
     hub = build_hub(tmp_path, auth_mode="oauth", oauth_providers={"github": github, "oidc-co": oidc})
     ada = known_ada(hub)
@@ -178,11 +186,24 @@ def test_second_provider_login_with_same_verified_email_lands_on_the_same_user(t
     assert first_me["user_id"] == second_me["user_id"] == ada.user_id
 
 
-def test_unverified_email_never_merges(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("verified", "authoritative"),
+    [(False, True), (True, False)],
+    ids=["unverified-email", "provider-not-authoritative"],
+)
+def test_an_email_its_provider_does_not_vouch_for_never_merges(
+    tmp_path: Path, verified: bool, authoritative: bool
+) -> None:
     github = FakeOAuthProvider(name="github", type="github")
     oidc = FakeOAuthProvider(name="oidc-co", type="oidc")
-    github.codes["c1"] = ProviderIdentity(subject="gh-1", handle="ada", email="ada@example.com", email_verified=True)
-    oidc.codes["c2"] = ProviderIdentity(subject="oidc-1", handle="ada2", email="ada@example.com", email_verified=False)
+    github.codes["c1"] = _GITHUB_ADA
+    oidc.codes["c2"] = ProviderIdentity(
+        subject="oidc-1",
+        handle="ada2",
+        email="ada@example.com",
+        email_verified=verified,
+        emails_authoritative=authoritative,
+    )
     hub = build_hub(tmp_path, auth_mode="oauth", oauth_providers={"github": github, "oidc-co": oidc})
     ada = known_ada(hub)
     _login(hub, github, "c1")
@@ -193,11 +214,12 @@ def test_unverified_email_never_merges(tmp_path: Path) -> None:
     _assert_refused_invite_only(refused)
     assert [row.provider_name for row in _rows(hub, schema.identities)] == ["github"]
     assert [row.id for row in _rows(hub, schema.users)] == [ada.user_id]
+    assert len(_rows(hub, schema.sessions)) == 1
 
 
 def test_provider_handle_rename_refreshes_without_reminting(tmp_path: Path) -> None:
     github = FakeOAuthProvider(name="github", type="github")
-    github.codes["c1"] = ProviderIdentity(subject="gh-1", handle="ada", email="ada@example.com", email_verified=True)
+    github.codes["c1"] = _GITHUB_ADA
     github.codes["c2"] = ProviderIdentity(subject="gh-1", handle="ada-lovelace", email=None, email_verified=False)
     hub = build_hub(tmp_path, auth_mode="oauth", oauth_providers={"github": github})
     known_ada(hub)

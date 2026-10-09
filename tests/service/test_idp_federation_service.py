@@ -175,6 +175,7 @@ def test_the_wire_leg_ends_in_an_unlocked_runner_route(tmp_path: Path) -> None:
             client_id="cid",
             client_secret_env=_SECRET_ENV,
             issuer=f"http://127.0.0.1:{idp_port}",
+            emails_authoritative=True,
         )
         with _oauth_hub(tmp_path / "hub", hub_port, providers=(provider,), superuser="svc-user@example.com") as hub:
             hub.get("/api/auth/oidc-svc/authorize", follow_redirects=True)
@@ -211,6 +212,7 @@ def test_key_rotation_is_picked_up_by_a_live_runner_with_no_restart(tmp_path: Pa
             client_id="cid",
             client_secret_env=_SECRET_ENV,
             issuer=f"http://127.0.0.1:{idp_port}",
+            emails_authoritative=True,
         )
         with _oauth_hub(tmp_path / "hub", hub_port, providers=(provider,), superuser="svc-admin@example.com") as hub:
             hub.get("/api/auth/oidc-svc/authorize", follow_redirects=True)
@@ -255,6 +257,7 @@ def test_a_two_provider_bounce_resumes_through_the_login_chooser(tmp_path: Path)
             client_id="cid",
             client_secret_env=_SECRET_ENV,
             issuer=f"http://127.0.0.1:{idp_a_port}",
+            emails_authoritative=True,
         )
         provider_b = OAuthProviderConfig(
             name="oidc-b",

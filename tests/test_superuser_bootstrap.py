@@ -131,7 +131,13 @@ def test_changing_auth_superuser_records_a_new_target_and_revokes_nobody(tmp_pat
 
 def _sign_in(services, *, handle: str) -> User:  # type: ignore[no-untyped-def]
     return services.auth.link_or_mint(
-        ProviderIdentity(subject=f"gh-{handle}", handle=handle, email=f"{handle}@example.com", email_verified=True),
+        ProviderIdentity(
+            subject=f"gh-{handle}",
+            handle=handle,
+            email=f"{handle}@example.com",
+            email_verified=True,
+            emails_authoritative=True,
+        ),
         provider_name="github",
     )
 
@@ -242,7 +248,13 @@ def test_the_first_sign_in_claims_the_hub_administrator_and_the_first_tenants_ad
     services = hub_app.build_hosted_app(config).state.services
 
     user = services.auth.link_or_mint(
-        ProviderIdentity(subject="gh-alice", handle="alice", email="alice@example.com", email_verified=True),
+        ProviderIdentity(
+            subject="gh-alice",
+            handle="alice",
+            email="alice@example.com",
+            email_verified=True,
+            emails_authoritative=True,
+        ),
         provider_name="github",
     )
 

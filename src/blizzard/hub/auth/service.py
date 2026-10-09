@@ -80,7 +80,8 @@ class SignInRefusal(StrEnum):
     """Why a sign-in admitted nobody — the code the board's login page shows its text for. Every refusal writes
     nothing: no user, identity link, membership, invitation fact or session."""
 
-    #: A first sign-in by a person the hub does not know, with no invitation.
+    #: A first sign-in by an identity linked to no user, with no invitation — a person the hub does not know, or one
+    #: whose provider does not vouch for the address that names them.
     INVITE_ONLY = "invite_only"
     #: The invitation is expired, revoked or already used — or names nothing.
     INVITATION_UNUSABLE = "invitation_unusable"
@@ -239,23 +240,24 @@ class AuthService:
         :class:`User` it belongs to, minting one only for the configured ``auth.superuser``.
 
         An existing ``(provider_name, subject)`` link wins, its ``handle`` refreshed in place;
-        else a **verified** email match attaches; else, when the verified email is the
-        still-unclaimed ``auth.superuser``, a user is minted. Whichever user it resolves to claims
-        a configured, still-unclaimed ``auth.superuser`` whose email it holds. ``None``, writing
-        nothing, for anyone else — they arrive only through an invitation."""
+        else the identity's primary email, when its provider vouches for it — verified, from a
+        provider authoritative for its addresses — attaches it to the user holding that address;
+        else, when an address it vouches for is the still-unclaimed ``auth.superuser``, a user is
+        minted. Whichever user it resolves to claims a configured, still-unclaimed
+        ``auth.superuser`` the identity vouches for. A provider that is not authoritative
+        therefore signs in only identities already linked to a user. ``None``, writing nothing,
+        for anyone else — they arrive only through an invitation."""
         user = self._known_user(identity, provider_name, users=self._users, identities=self._identities)
         if user is None:
             if not self._is_superuser_target(identity):
                 return None
             user = self._mint_user(identity, provider_name, users=self._users, identities=self._identities)
-        return self._claim_superuser(user)
+        return self._claim_superuser(user, identity)
 
     def _is_superuser_target(self, identity: ProviderIdentity) -> bool:
-        """Whether ``identity``'s verified email is the configured, still-unclaimed ``auth.superuser`` — the one
-        person a sign-in admits without an invitation."""
-        if not identity.email_verified or not identity.email:
-            return False
-        return _claimable(self._superuser_bootstrap.get(), identity.email)
+        """Whether an address ``identity`` vouches for is the configured, still-unclaimed ``auth.superuser`` — the
+        one person a sign-in admits without an invitation."""
+        return _claimable(self._superuser_bootstrap.get(), _vouched_emails(identity))
 
     def _known_user(
         self,
@@ -265,8 +267,8 @@ class AuthService:
         users: IWriteUserRepository,
         identities: IWriteIdentityRepository,
     ) -> User | None:
-        """The user ``identity`` already resolves to — by its link, else by its verified email — linking it on an
-        email match; ``None``, writing nothing, when the hub does not know the person."""
+        """The user ``identity`` already resolves to — by its link, else by the primary email it vouches for — linking
+        it on an email match; ``None``, writing nothing, when the hub does not know the person."""
         linked = self._linked_user(identity, provider_name, users=users, identities=identities)
         if linked is not None:
             return linked
@@ -277,8 +279,8 @@ class AuthService:
     ) -> User:
         """The user an acceptance admits ``identity`` as: the one it is linked to; else the account the invited address
         already names — held exactly, else held in another case by that one account — ``identity`` linked to it; else
-        as a sign-in resolves it, by its own verified email, minting a user when that names none either. Several
-        accounts holding the address in other cases and none exactly name no one: an auth fact records it."""
+        as a sign-in resolves it, by the primary email it vouches for, minting a user when that names none either.
+        Several accounts holding the address in other cases and none exactly name no one: an auth fact records it."""
         users, identities = writes.users, writes.identities
         user = self._linked_user(identity, provider_name, users=users, identities=identities)
         if user is None:
@@ -334,11 +336,12 @@ class AuthService:
         users: IWriteUserRepository,
         identities: IWriteIdentityRepository,
     ) -> User | None:
-        """The user ``identity``'s verified email names exactly, ``identity`` linked to it; ``None``, writing nothing,
-        when it names none."""
-        if not identity.email_verified or not identity.email:
+        """The user the primary email ``identity`` vouches for names exactly, ``identity`` linked to it; ``None``,
+        writing nothing, when it names none or the identity vouches for no primary email."""
+        email = _vouched_email(identity)
+        if email is None:
             return None
-        matched = users.get_by_email(identity.email)
+        matched = users.get_by_email(email)
         if matched is not None:
             self._link(identity, provider_name, matched, identities)
         return matched
@@ -369,7 +372,7 @@ class AuthService:
             user_id=Id.mint(IdPrefix.USER, self._clock).value,
             username=self._username(identity.handle, users),
             display_name=identity.handle,
-            email=identity.email if identity.email_verified else None,
+            email=_vouched_email(identity),
             created_at=now,
         )
         users.create(user)
@@ -497,7 +500,7 @@ class AuthService:
         user (:meth:`_accepting_user`) — minting one for an identity and email the hub has not seen — grant the
         invitation's role in its tenant unless they already hold a membership there, whose role stays as it is,
         record the invitation accepted, and mint their session. Whichever user it resolves to then claims a
-        configured, still-unclaimed ``auth.superuser`` whose email it holds.
+        configured, still-unclaimed ``auth.superuser`` that ``identity`` vouches for.
 
         A refusal, writing nothing, when the invitation is no longer live (``INVITATION_UNUSABLE``) or ``identity``
         carries no address the invitation admits (``INVITATION_EMAIL_MISMATCH`` — it stays live). An invitation
@@ -521,7 +524,7 @@ class AuthService:
         except InvitationAlreadyResolved:
             return SignInRefusal.INVITATION_UNUSABLE
         _log.info("invitation accepted", user_id=user.user_id, invitation_id=invitation.invitation_id)
-        return InvitationAccepted(self._claim_superuser(user), plaintext, invitation.tenant)
+        return InvitationAccepted(self._claim_superuser(user, identity), plaintext, invitation.tenant)
 
     def _grant(
         self, role: Role, *, user: User, invitation: TenantInvitation, at: datetime, writes: IdentityWrites
@@ -565,18 +568,22 @@ class AuthService:
         """Surface a still-unclaimed bootstrap target — never a silent dead end."""
         self._auth_facts.superuser_bootstrap_unclaimed(email=email)
 
-    def _claim_superuser(self, user: User) -> User:
-        """Claim the configured ``auth.superuser`` for ``user`` when its email is the still-unclaimed
-        target, in one identity unit of work: the claim, the hub administrator role (``bootstrap``),
-        and — while the hub holds exactly one tenant and it has no admin — an ``admin`` membership
-        there. A target already claimed is never claimed again. Returns ``user``."""
-        if user.email is None or not _claimable(self._superuser_bootstrap.get(), user.email):
+    def _claim_superuser(self, user: User, identity: ProviderIdentity) -> User:
+        """Claim the configured ``auth.superuser`` for ``user`` when ``identity`` — the one signing
+        in — vouches for the still-unclaimed target, in one identity unit of work: the claim, the
+        hub administrator role (``bootstrap``), and — while the hub holds exactly one tenant and it
+        has no admin — an ``admin`` membership there. The account's stored email never claims by
+        itself, and a target already claimed is never claimed again. Returns ``user``."""
+        vouched = _vouched_emails(identity)
+        if not _claimable(self._superuser_bootstrap.get(), vouched):
             return user
         now = self._clock.now()
         with self._transactions.begin() as writes:
-            if not _claimable(writes.bootstrap.get(), user.email):
+            target = writes.bootstrap.get()
+            if target is None or not _claimable(target, vouched):
                 return user
-            writes.bootstrap.upsert(SuperuserBootstrap(email=user.email, claimed_user_id=user.user_id, updated_at=now))
+            email = target.email
+            writes.bootstrap.upsert(SuperuserBootstrap(email=email, claimed_user_id=user.user_id, updated_at=now))
             if not writes.hub_admins.is_hub_admin(user.user_id):
                 writes.hub_admins.record(HubAdminFact(user.user_id, True, now, hub_admins.SET_BY_BOOTSTRAP))
             tenant = writes.memberships.only_tenant()
@@ -593,9 +600,28 @@ class AuthService:
                     to_role=Role.ADMIN,
                     into=writes.auth_facts,
                 )
-        _log.info("superuser claimed", user_id=user.user_id, email=user.email)
+        _log.info("superuser claimed", user_id=user.user_id, email=email)
         return user
 
 
-def _claimable(bootstrap: SuperuserBootstrap | None, email: str) -> bool:
-    return bootstrap is not None and bootstrap.claimed_user_id is None and bootstrap.email == email
+def _vouched_email(identity: ProviderIdentity) -> str | None:
+    """``identity``'s primary email when its provider vouches for it — verified, from a provider authoritative for the
+    addresses it reports: the one address that may link it to an existing user or become a new user's email. ``None``
+    from any other identity."""
+    if identity.emails_authoritative and identity.email_verified and identity.email:
+        return identity.email
+    return None
+
+
+def _vouched_emails(identity: ProviderIdentity) -> frozenset[str]:
+    """Every address ``identity``'s provider vouches for — its verified primary and every other address it reports as
+    verified, all only from a provider authoritative for them: the addresses that may claim ``auth.superuser``. Empty
+    from any other identity."""
+    if not identity.emails_authoritative:
+        return frozenset()
+    primary = _vouched_email(identity)
+    return frozenset(identity.verified_emails) | ({primary} if primary is not None else set())
+
+
+def _claimable(bootstrap: SuperuserBootstrap | None, emails: frozenset[str]) -> bool:
+    return bootstrap is not None and bootstrap.claimed_user_id is None and bootstrap.email in emails

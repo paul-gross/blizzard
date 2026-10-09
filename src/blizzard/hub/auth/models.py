@@ -62,15 +62,19 @@ class ProviderIdentity:
 
     subject: str
     handle: str
-    #: The account's primary address — the one a new user's row keeps and the email-merge
-    #: rule matches on.
+    #: The account's primary address — the one a new user's row keeps and the email-merge rule
+    #: matches on, each only when verified and ``emails_authoritative``.
     email: str | None
     email_verified: bool
-    #: Every address the provider reports as verified on the account, the primary among them.
+    #: Every address the provider reports as verified on the account, the primary among them —
+    #: the addresses an invitation admits and the ``auth.superuser`` claim compares, each only
+    #: when ``emails_authoritative``.
     verified_emails: tuple[str, ...] = ()
-    #: Whether the provider vouches for every address in ``verified_emails`` — only then may
-    #: one of them admit the account through an email invitation. A provider that cannot say
-    #: (a client's own directory, say) reports ``False``.
+    #: Whether the provider vouches for every address it reports as verified — only then may
+    #: one of them admit the account through an email invitation, link it to the user holding
+    #: that address, or claim ``auth.superuser``. A provider that cannot say (a client's own
+    #: directory, say) reports ``False``, and signs in only identities already linked to a
+    #: user. ``github`` always reports ``True``.
     emails_authoritative: bool = False
 
 

@@ -84,6 +84,7 @@ def _oauth_hub(hub_dir: Path, idp_port: int, port: int) -> Iterator[httpx.Client
         client_id="cid",
         client_secret_env=_SECRET_ENV,
         issuer=f"http://127.0.0.1:{idp_port}",
+        emails_authoritative=True,
     )
     config = HubConfig.load(hub_dir)
     # `superuser` (bootstrap) matches the stub IdP profile below, so the

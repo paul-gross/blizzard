@@ -575,9 +575,16 @@ def test_mint_username_falls_back_to_user_for_an_all_symbol_handle() -> None:
 
 
 def _provider_identity(
-    *, subject: str = "gh-1", handle: str = "ada", email: str | None = "ada@example.com", verified: bool = True
+    *,
+    subject: str = "gh-1",
+    handle: str = "ada",
+    email: str | None = "ada@example.com",
+    verified: bool = True,
+    authoritative: bool = True,
 ) -> ProviderIdentity:
-    return ProviderIdentity(subject=subject, handle=handle, email=email, email_verified=verified)
+    return ProviderIdentity(
+        subject=subject, handle=handle, email=email, email_verified=verified, emails_authoritative=authoritative
+    )
 
 
 def _signed_in(service: AuthService, identity: ProviderIdentity, *, provider_name: str = "github") -> User:
@@ -638,23 +645,31 @@ def test_link_or_mint_refreshes_the_handle_on_a_provider_side_rename() -> None:
     assert link.handle == "ada-lovelace"
 
 
-def test_link_or_mint_attaches_a_second_provider_identity_to_the_same_verified_email() -> None:
+@pytest.mark.parametrize("authoritative", [True, False], ids=["authoritative", "not-authoritative"])
+def test_link_or_mint_attaches_a_new_identity_to_the_same_email_only_from_an_authoritative_provider(
+    authoritative: bool,
+) -> None:
     """A new identity whose verified email is a known person's lands on that user — one ``users`` row, an
-    ``identities`` row per provider."""
+    ``identities`` row per provider — when its provider vouches for the address. From a provider that does not, it is
+    a stranger: refused, linked to no one, nothing written."""
     clock = FixedClock(_T0)
-    service, users, _, identities, _, _ = _service(clock)
+    service, users, sessions, identities, _, auth_facts = _service(clock)
     ada = _known_ada(service, identities, linked=False)
-
     first = _signed_in(service, _provider_identity(subject="gh-1", handle="ada"))
-    second = _signed_in(
-        service,
-        ProviderIdentity(subject="oidc-1", handle="ada.lovelace", email="ada@example.com", email_verified=True),
+
+    second = service.link_or_mint(
+        _provider_identity(subject="oidc-1", handle="ada.lovelace", authoritative=authoritative),
         provider_name="oidc-co",
     )
 
-    assert first == second == ada
+    assert first == ada
+    assert second == (ada if authoritative else None)
     assert len(users.by_id) == 1
-    assert {i.provider_name for i in identities.list_for_user(ada.user_id)} == {"github", "oidc-co"}
+    linked = {"github", "oidc-co"} if authoritative else {"github"}
+    assert {i.provider_name for i in identities.list_for_user(ada.user_id)} == linked
+    assert sessions.by_hash == {}
+    assert _identities(service).hub_admins.facts == []
+    assert auth_facts.list_recent() == []
 
 
 def test_link_or_mint_never_merges_an_unverified_email_even_when_it_matches() -> None:
@@ -745,14 +760,32 @@ def _alice() -> ProviderIdentity:
     return _provider_identity(subject="gh-alice", handle="alice", email="alice@example.com", verified=True)
 
 
-def test_the_first_claim_makes_a_hub_administrator_and_the_first_tenants_admin() -> None:
-    """With one tenant and no admin in it, the claim grants the hub administrator role and an
-    ``admin`` membership, both ``bootstrap``, recording the membership's ``user_role_changed``."""
+@pytest.mark.parametrize(
+    "signing_in",
+    [
+        pytest.param(_alice(), id="target-is-the-primary-address"),
+        pytest.param(
+            ProviderIdentity(
+                subject="gh-alice",
+                handle="alice",
+                email="alice@work.example",
+                email_verified=True,
+                verified_emails=("alice@work.example", "alice@example.com"),
+                emails_authoritative=True,
+            ),
+            id="target-is-another-verified-address",
+        ),
+    ],
+)
+def test_the_first_claim_makes_a_hub_administrator_and_the_first_tenants_admin(signing_in: ProviderIdentity) -> None:
+    """With one tenant and no admin in it, the claim — by a sign-in whose provider vouches for the target as any of
+    its verified addresses — grants the hub administrator role and an ``admin`` membership, both ``bootstrap``,
+    recording the membership's ``user_role_changed``."""
     clock = FixedClock(_T0)
     service, _, _, _, superuser_bootstrap, auth_facts = _service(clock)
     service.record_superuser_bootstrap(email="alice@example.com", claimed_user_id=None)
 
-    user = _signed_in(service, _alice())
+    user = _signed_in(service, signing_in)
 
     seeded = _identities(service)
     assert seeded.hub_admins.facts == [HubAdminFact(user.user_id, True, _T0, "bootstrap")]
@@ -782,39 +815,95 @@ def test_the_claim_grants_no_membership_once_a_tenant_has_an_admin_or_a_second_e
     assert seeded.memberships.facts == before
 
 
-def test_a_returning_user_claims_a_newly_configured_target_at_sign_in() -> None:
-    """A user who already exists claims the target when they sign in, keeping their membership."""
+@pytest.mark.parametrize(
+    ("provider_name", "signing_in", "claims"),
+    [
+        pytest.param("github", _alice(), True, id="authoritative-identity-vouching-for-the-address"),
+        pytest.param(
+            "github",
+            ProviderIdentity(
+                subject="gh-alice",
+                handle="alice",
+                email="alice@work.example",
+                email_verified=True,
+                verified_emails=("alice@work.example", "alice@example.com"),
+                emails_authoritative=True,
+            ),
+            True,
+            id="authoritative-identity-vouching-for-it-as-another-verified-address",
+        ),
+        pytest.param(
+            "oidc-co",
+            ProviderIdentity(
+                subject="oidc-alice",
+                handle="alice",
+                email="alice@example.com",
+                email_verified=True,
+                verified_emails=("alice@example.com",),
+            ),
+            False,
+            id="identity-from-a-provider-that-is-not-authoritative",
+        ),
+        pytest.param(
+            "github",
+            _provider_identity(subject="gh-alice", handle="alice", email="alice@home.example"),
+            False,
+            id="only-the-accounts-stored-email-matches",
+        ),
+    ],
+)
+def test_a_returning_user_claims_a_newly_configured_target_only_through_an_identity_vouching_for_it(
+    provider_name: str, signing_in: ProviderIdentity, claims: bool
+) -> None:
+    """A user who already exists claims the target when they sign in through an identity whose provider vouches for
+    the address — as its primary or another verified address — keeping their membership; the address the account
+    holds never claims by itself."""
     clock = FixedClock(_T0)
     service, _, _, identities, superuser_bootstrap, _ = _service(clock)
     seeded = _identities(service)
     seeded.seed("usr_admin", "admin", Role.ADMIN)
     alice = seeded.seed("usr_alice", "alice", Role.GUEST, email="alice@example.com")
     identities.link(Identity("github", "gh-alice", alice.user_id, "alice", _T0))
+    identities.link(Identity("oidc-co", "oidc-alice", alice.user_id, "alice", _T0))
     service.record_superuser_bootstrap(email="alice@example.com", claimed_user_id=None)
 
-    user = _signed_in(service, _alice())
+    user = _signed_in(service, signing_in, provider_name=provider_name)
 
     assert user == alice
-    assert seeded.hub_admins.holders() == [alice.user_id]
+    assert seeded.hub_admins.holders() == ([alice.user_id] if claims else [])
     assert seeded.memberships.role_in(_TENANT, alice.user_id) is Role.GUEST
     bootstrap = superuser_bootstrap.get()
     assert bootstrap is not None
-    assert bootstrap.claimed_user_id == alice.user_id
+    assert bootstrap.claimed_user_id == (alice.user_id if claims else None)
 
 
-def test_the_superuser_target_is_admitted_only_on_a_verified_email() -> None:
+@pytest.mark.parametrize(
+    ("verified", "authoritative"),
+    [(False, True), (True, False)],
+    ids=["unverified-email", "provider-not-authoritative"],
+)
+def test_the_superuser_target_is_admitted_only_on_an_email_its_provider_vouches_for(
+    verified: bool, authoritative: bool
+) -> None:
     """The configured ``auth.superuser`` is the one stranger a sign-in admits without an invitation — and only when
-    the provider verified the address."""
+    the provider verified the address and is authoritative for the addresses it reports."""
     clock = FixedClock(_T0)
-    service, users, _, _, superuser_bootstrap, _ = _service(clock)
+    service, users, sessions, identities, superuser_bootstrap, auth_facts = _service(clock)
     service.record_superuser_bootstrap(email="alice@example.com", claimed_user_id=None)
 
     refused = service.link_or_mint(
-        _provider_identity(subject="gh-alice", email="alice@example.com", verified=False), provider_name="github"
+        _provider_identity(
+            subject="oidc-alice", email="alice@example.com", verified=verified, authoritative=authoritative
+        ),
+        provider_name="oidc-co",
     )
 
     assert refused is None
     assert users.by_id == {}
+    assert identities.get("oidc-co", "oidc-alice") is None
+    assert sessions.by_hash == {}
+    assert _identities(service).hub_admins.facts == []
+    assert auth_facts.list_recent() == []
     bootstrap = superuser_bootstrap.get()
     assert bootstrap is not None
     assert bootstrap.claimed_user_id is None
