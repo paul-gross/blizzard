@@ -1,5 +1,6 @@
 import type { Routes } from '@angular/router';
 import { matchesMobileViewport } from 'fleet/shell';
+import { enterInvitedTenant } from '../core/auth/invite-accepted';
 
 /**
  * The hub app's top-level route table. `''` redirects to `/board` (today's default
@@ -158,6 +159,12 @@ export const routes: Routes = [
   // interceptor. Rendered outside the app shell (`App`'s own `authState` branch),
   // so it carries no header/nav chrome of its own.
   { path: 'login', loadComponent: () => import('../login/login-page').then((m) => m.LoginPage) },
+  // An invitation's landing — public like `/login`, and rendered outside the shell
+  // whatever the session. The hub lands an accepted invitation on `invite/accepted`,
+  // which enters the invited tenant and replaces itself with the board's root; it
+  // is listed first, so it is never read as a token.
+  { path: 'invite/accepted', canActivate: [enterInvitedTenant], children: [] },
+  { path: 'invite/:token', loadComponent: () => import('../login/invite-page').then((m) => m.InvitePage) },
   // The admin surface — the route the permission-gated nav entry points at. Users,
   // the user listing, is the default child; beside it sit the configured nouns, each
   // a list route whose detail is a child, the gardening tabs' own nesting, so a pick

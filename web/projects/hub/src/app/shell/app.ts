@@ -21,7 +21,7 @@ import { injectHubChunkCountsQuery } from '../board/chunks/chunk-counts.query';
 import { injectHubFleetSpendQuery } from '../board/fleet-spend/fleet-spend.query';
 import { injectHubHealthQuery } from '../board/health/health.query';
 import { injectLogoutMutation } from '../core/auth/logout.mutations';
-import { redirectToLogin } from '../core/auth/auth-redirect';
+import { isPublicUrl, redirectToLogin } from '../core/auth/auth-redirect';
 
 import { readDemoConfig } from '../demo/demo-config';
 import { startOfLocalDayIso, startOfPreviousLocalDayIso } from '../core/local-day';
@@ -61,18 +61,21 @@ import {
  *   routed page, so navigating between tabs never restarts the stream or drops the
  *   query cache.
  *
- * Session-aware UI: {@link authState} gates what renders at the very
+ * The public pages — sign-in with its refusals, and an invitation's landing
+ * ({@link isPublicUrl}) — render as a bare `<router-outlet>` whatever the session,
+ * once the router has actually landed on one (`onPublicRoute`): they carry their
+ * own full-page chrome, and a person already signed in opens an invitation too.
+ *
+ * Everywhere else, {@link authState} gates what renders at the very
  * top, above the mobile/desktop fork — `/api/me` (`injectMeQuery`) is the one read
  * that decides it, and the tenant is settled here, once, from its memberships
  * ({@link TenantContext}), before any view renders:
  *
  * - **`unauthenticated`** (no/expired session) redirects to `/login` (an effect
- *   below, plus the 401 interceptor on the same underlying response) and renders a
- *   bare `<router-outlet>` — but only once the router has actually landed there
- *   (`onLoginRoute`); router navigation is async, so a session dropping mid-route
- *   withholds the outlet for that one tick rather than let it re-activate the
- *   previous, now-ungated route. `/login` carries its own full-page chrome, so the
- *   header/nav/tab-bar are withheld here regardless;
+ *   below, plus the 401 interceptor on the same underlying response) and renders
+ *   nothing until the router lands there; router navigation is async, so a session
+ *   dropping mid-route withholds the outlet for that one tick rather than let it
+ *   re-activate the previous, now-ungated route;
  * - **`no-access`** (a resolved identity holding no membership) renders only
  *   {@link NoAccess} — no header, no nav, no view;
  * - **`choose`** (several memberships, none of them this tab's tenant or the
@@ -167,10 +170,10 @@ export class App {
   /** The selected tenant's name, for the header; empty outside `ready`. */
   protected readonly tenantName = computed(() => selectedTenantName(this.tenancy()));
 
-  /** The router's current URL as a signal — read only to decide whether the
-   * `unauthenticated` branch's `<router-outlet>` is safe to render yet (see the
-   * template). Router navigation is async, so a session dropping mid-route does not
-   * make `/login` current the same tick `authState` flips. */
+  /** The router's current URL as a signal — read only to decide whether a public
+   * page's bare `<router-outlet>` is safe to render yet (see the template). Router
+   * navigation is async, so a session dropping mid-route does not make `/login`
+   * current the same tick `authState` flips. */
   private readonly routerUrl = toSignal(
     this.router.events.pipe(
       filter((event) => event instanceof NavigationEnd),
@@ -179,7 +182,8 @@ export class App {
     { initialValue: this.router.url },
   );
 
-  protected readonly onLoginRoute = computed(() => this.routerUrl().startsWith('/login'));
+  /** Whether the router has landed on a public page — see the class docstring. */
+  protected readonly onPublicRoute = computed(() => isPublicUrl(this.routerUrl()));
 
   /** Whether a login mechanism is even configured — `GET /api/auth/providers`
    * answers `[]` outright under `auth.mode = "none"` (the hub's own answer, never
@@ -231,7 +235,7 @@ export class App {
     // 401 interceptor also fires on the same underlying `/api/me` 401, but this is
     // the primary, always-correct trigger regardless of which read surfaced it.
     effect(() => {
-      if (this.authState() === 'unauthenticated' && !this.onLoginRoute()) redirectToLogin(this.router);
+      if (this.authState() === 'unauthenticated' && !this.onPublicRoute()) redirectToLogin(this.router);
     });
 
     // The SSE spine's explicit auth-failure channel — a session that

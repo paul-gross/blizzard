@@ -10,8 +10,10 @@ import {
   type EventSourceFactory,
   type FleetEventSource,
 } from 'fleet';
-import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
+import { type MeResponse } from 'fleet/shell';
+import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
 
+import { LAST_TENANT_KEY, TAB_TENANT_KEY } from '../core/auth/tenant-context';
 import { App } from './app';
 import { routes } from './app.routes';
 
@@ -183,5 +185,109 @@ describe('the fleet route (mobile-only, redirects to /board on desktop)', () => 
     expect(router.url).toBe('/board');
     expect(el.querySelector('[data-testid="board-shell"]')).toBeTruthy();
     expect(el.querySelector('[data-testid="mobile-fleet-panel"]')).toBeNull();
+  });
+});
+
+/**
+ * The public pages — sign-in with its refusals, and an invitation's landing — render outside the shell whatever the
+ * session, and an unauthenticated read never redirects away from them. The hub lands an accepted invitation on
+ * `/invite/accepted?tenant=…`, which enters the invited tenant.
+ */
+describe('the public pages (sign-in refusals and invitations)', () => {
+  const GITHUB = [{ name: 'github', display_name: 'GitHub', type: 'github' }];
+  const TWO_TENANTS: MeResponse = {
+    ...OPERATOR_ME_RESPONSE,
+    role: null,
+    tenants: [
+      { tenant_id: 'ten_acme', name: 'Acme', role: 'admin', permissions: ['fleet:view'] },
+      { tenant_id: 'ten_globex', name: 'Globex', role: 'guest', permissions: ['fleet:view'] },
+    ],
+  };
+  let authStub: RequestClientStub;
+  let me: MeResponse | null;
+
+  beforeEach(async () => {
+    localStorage.clear();
+    sessionStorage.clear();
+    me = null;
+    authStub = stubRequestClient(hubClient, (method, path) => {
+      if (path === '/api/me') return me ?? stubError(401, { detail: 'authentication required' });
+      if (path === '/api/auth/providers') return GITHUB;
+      if (path === '/api/chunks') return { chunks: [], next_cursor: null };
+      if (path === '/api/questions' || path === '/api/graphs') return [];
+      if (path === '/api/spend') return { cost_usd: 0, cost_partial: false };
+      return {};
+    });
+    await TestBed.configureTestingModule({
+      imports: [App],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+        provideRouter(routes, withRouterConfig({ onSameUrlNavigation: 'reload' })),
+        provideViewportRenavigation(),
+        { provide: EVENT_SOURCE_FACTORY, useValue: (() => new FakeEventSource() as unknown as FleetEventSource) as EventSourceFactory },
+      ],
+    }).compileComponents();
+    TestBed.inject(ViewportService).setOverride('desktop');
+  });
+
+  afterEach(() => authStub.restore());
+
+  async function open(url: string) {
+    const fixture = TestBed.createComponent(App);
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl(url);
+    await settle(fixture);
+    return { el: fixture.nativeElement as HTMLElement, router };
+  }
+
+  it('lands a signed-out person on an invitation, whose sign-in carries the token', async () => {
+    const { el, router } = await open('/invite/tok_1');
+
+    expect(router.url).toBe('/invite/tok_1');
+    expect(el.querySelector('[data-testid="invite-page"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="login-provider-github"]')?.getAttribute('href')).toBe(
+      '/api/auth/github/authorize?return_to=%2F&invite=tok_1',
+    );
+  });
+
+  it('shows a signed-in person the invitation outside the shell, so their account goes through the same check', async () => {
+    me = TWO_TENANTS;
+    sessionStorage.setItem(TAB_TENANT_KEY, 'ten_acme');
+    const { el, router } = await open('/invite/tok_1');
+
+    expect(router.url).toBe('/invite/tok_1');
+    expect(el.querySelector('[data-testid="invite-page"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="board-header"]')).toBeNull();
+  });
+
+  it('shows a refused sign-in its reason and keeps the refusal in the URL', async () => {
+    const { el, router } = await open('/login?refusal=invitation_email_mismatch');
+
+    expect(router.url).toBe('/login?refusal=invitation_email_mismatch');
+    expect(el.querySelector('[data-testid="login-refusal"]')?.textContent).toContain(
+      'This invitation is for a different email address.',
+    );
+  });
+
+  it('lands an accepted invitation in the invited tenant, among several, and leaves the landing URL', async () => {
+    me = TWO_TENANTS;
+    sessionStorage.setItem(TAB_TENANT_KEY, 'ten_acme');
+    localStorage.setItem(LAST_TENANT_KEY, 'ten_acme');
+    const { el, router } = await open('/invite/accepted?tenant=ten_globex');
+
+    expect(router.url.startsWith('/invite')).toBe(false);
+    expect(sessionStorage.getItem(TAB_TENANT_KEY)).toBe('ten_globex');
+    expect(localStorage.getItem(LAST_TENANT_KEY)).toBe('ten_globex');
+    expect(el.querySelector('[data-testid="board-header-tagline"]')?.textContent?.trim()).toBe('Globex');
+  });
+
+  it('settles a landing naming a tenant the person is not in like any stale choice', async () => {
+    me = TWO_TENANTS;
+    const { el, router } = await open('/invite/accepted?tenant=ten_elsewhere');
+
+    expect(router.url.startsWith('/invite')).toBe(false);
+    expect(el.querySelector('[data-testid="tenant-picker"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="board-header"]')).toBeNull();
   });
 });

@@ -116,4 +116,28 @@ describe('LoginPage', () => {
     expect(localStorage.getItem('fleet.auth.last-provider')).toBe('oidc-co');
     expect(sessionStorage.getItem('fleet.auth.last-provider')).toBeNull();
   });
+
+  it('says nothing of a refusal on an ordinary sign-in', async () => {
+    const fixture = await mount([{ name: 'github', display_name: 'GitHub', type: 'github' }]);
+
+    expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="login-refusal"]')).toBeNull();
+  });
+
+  it.each([
+    ['invite_only', "You don't have access to anything here yet. Reach out to your administrator for access."],
+    ['invitation_unusable', 'This invitation is no longer valid. Reach out to your administrator for a new one.'],
+    [
+      'invitation_email_mismatch',
+      'This invitation is for a different email address. Sign in with the account that uses it, or reach out to your administrator.',
+    ],
+    ['not_a_known_code', "You don't have access to anything here yet. Reach out to your administrator for access."],
+  ])('shows why the hub turned the sign-in away (refusal=%s), with the providers still offered', async (code, text) => {
+    const fixture = await mount([{ name: 'github', display_name: 'GitHub', type: 'github' }], { refusal: code });
+    const el = fixture.nativeElement as HTMLElement;
+
+    const refusal = el.querySelector('[data-testid="login-refusal"]');
+    expect(refusal?.textContent?.trim()).toBe(text);
+    expect(refusal?.getAttribute('role')).toBe('alert');
+    expect(el.querySelector('[data-testid="login-provider-github"]')).toBeTruthy();
+  });
 });

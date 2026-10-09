@@ -25,6 +25,13 @@
   font-size: var(--fs-sm);
   letter-spacing: 0.1em;
 }
+.notice {
+  margin: 0 0 16px;
+  color: var(--snow);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  text-align: center;
+}
 .body {
   position: relative;
   width: 100%;

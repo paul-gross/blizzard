@@ -1,85 +1,87 @@
-@switch (authState()) {
-  @case ('unauthenticated') {
-    @if (onLoginRoute()) {
-      <router-outlet />
-    } @else {
+@if (onPublicRoute()) {
+  <!-- Sign-in and an invitation's landing carry their own full-page chrome and
+       render whatever the session. -->
+  <router-outlet />
+} @else {
+  @switch (authState()) {
+    @case ('unauthenticated') {
       <!-- The redirect to /login (the 401 interceptor, or this class's own
-           effect below) has not landed yet — withhold the outlet rather than
-           let it re-activate whatever route was current before the session
-           dropped (e.g. the board), which would flash ungated content. -->
+           effect) has not landed yet — withhold the outlet rather than let it
+           re-activate whatever route was current before the session dropped
+           (e.g. the board), which would flash ungated content. -->
       <div class="boot" data-testid="auth-loading"></div>
     }
-  }
-  @case ('no-access') {
-    <app-no-access [me]="me()" [logoutPending]="logoutPending()" [logoutError]="logoutError()" (logout)="onLogout()" />
-  }
-  @case ('choose') {
-    <app-tenant-picker
-      [tenants]="memberships()"
-      [me]="me()"
-      [logoutPending]="logoutPending()"
-      [logoutError]="logoutError()"
-      (choose)="onChooseTenant($event)"
-      (logout)="onLogout()"
-    />
-  }
-  @case ('ready') {
-    <fleet-app-shell>
-      <!-- Each slotted node sits in its own @if/@else pair rather than
-           sharing an @else with a sibling: a control-flow branch with more
-           than one root node cannot resolve which named ng-content slot
-           each child belongs to (NG8011), so AppShell's ordering
-           guarantee only holds when every projected node is the sole
-           root of its own branch. -->
-      @if (mobile()) {
-        <!-- Both menus below are @defer-loaded: their CDK menu/overlay stack
-             is interaction-only chrome, and an eager reference from this
-             template would keep it in the initial chunk. `on immediate`
-             fetches them right after first render, so the shell is usable
-             before they land. -->
-        <!-- A @defer block does not carry its root node's slot attribute
-             through to projection, so the wrapper names the slot instead. -->
-        <ng-container ngProjectAs="[shell-header]">
-          @defer (on immediate) {
-            <app-mobile-titlebar [live]="streamLive()" />
-          } @placeholder {
-            <!-- Holds the titlebar's box so the routed content below does not
-                 shift when the real titlebar arrives. -->
-            <div class="titlebar-placeholder" data-testid="mobile-titlebar-placeholder"></div>
-          }
-        </ng-container>
-      } @else {
-        <fleet-board-header
-          shell-header
-          [tagline]="tenantName()"
-          [connection]="connection()"
-          [counts]="counts()"
-          [spendToday]="spendToday.data() ?? null"
-          [spendYesterday]="spendYesterday.data() ?? null"
-        >
-          <ng-container ngProjectAs="[header-trailing]">
+    @case ('no-access') {
+      <app-no-access [me]="me()" [logoutPending]="logoutPending()" [logoutError]="logoutError()" (logout)="onLogout()" />
+    }
+    @case ('choose') {
+      <app-tenant-picker
+        [tenants]="memberships()"
+        [me]="me()"
+        [logoutPending]="logoutPending()"
+        [logoutError]="logoutError()"
+        (choose)="onChooseTenant($event)"
+        (logout)="onLogout()"
+      />
+    }
+    @case ('ready') {
+      <fleet-app-shell>
+        <!-- Each slotted node sits in its own @if/@else pair rather than
+             sharing an @else with a sibling: a control-flow branch with more
+             than one root node cannot resolve which named ng-content slot
+             each child belongs to (NG8011), so AppShell's ordering
+             guarantee only holds when every projected node is the sole
+             root of its own branch. -->
+        @if (mobile()) {
+          <!-- Both menus below are @defer-loaded: their CDK menu/overlay stack
+               is interaction-only chrome, and an eager reference from this
+               template would keep it in the initial chunk. `on immediate`
+               fetches them right after first render, so the shell is usable
+               before they land. -->
+          <!-- A @defer block does not carry its root node's slot attribute
+               through to projection, so the wrapper names the slot instead. -->
+          <ng-container ngProjectAs="[shell-header]">
             @defer (on immediate) {
-              <app-nav-menu [logoutPending]="logoutPending()" (logout)="onLogout()" />
+              <app-mobile-titlebar [live]="streamLive()" />
+            } @placeholder {
+              <!-- Holds the titlebar's box so the routed content below does not
+                   shift when the real titlebar arrives. -->
+              <div class="titlebar-placeholder" data-testid="mobile-titlebar-placeholder"></div>
             }
           </ng-container>
-        </fleet-board-header>
-      }
-      @if (!mobile()) {
-        <app-nav shell-nav [showAdmin]="canManageUsers()" />
-      }
-      @if (logoutError(); as error) {
-        <p class="logout-error" role="alert" data-testid="logout-error">{{ error }}</p>
-      }
-      <router-outlet />
-      @if (mobile()) {
-        <app-mobile-tab-bar shell-tab-bar />
-      }
-    </fleet-app-shell>
-  }
-  @default {
-    <!-- 'loading' — the first /api/me round trip has not resolved yet. No
-         header/nav until the session state is known, so nothing gated flashes
-         visible-then-hidden. -->
-    <div class="boot" data-testid="auth-loading"></div>
+        } @else {
+          <fleet-board-header
+            shell-header
+            [tagline]="tenantName()"
+            [connection]="connection()"
+            [counts]="counts()"
+            [spendToday]="spendToday.data() ?? null"
+            [spendYesterday]="spendYesterday.data() ?? null"
+          >
+            <ng-container ngProjectAs="[header-trailing]">
+              @defer (on immediate) {
+                <app-nav-menu [logoutPending]="logoutPending()" (logout)="onLogout()" />
+              }
+            </ng-container>
+          </fleet-board-header>
+        }
+        @if (!mobile()) {
+          <app-nav shell-nav [showAdmin]="canManageUsers()" />
+        }
+        @if (logoutError(); as error) {
+          <p class="logout-error" role="alert" data-testid="logout-error">{{ error }}</p>
+        }
+        <router-outlet />
+        @if (mobile()) {
+          <app-mobile-tab-bar shell-tab-bar />
+        }
+      </fleet-app-shell>
+    }
+    @default {
+      <!-- 'loading' — the first /api/me round trip has not resolved yet. No
+           header/nav until the session state is known, so nothing gated flashes
+           visible-then-hidden. -->
+      <div class="boot" data-testid="auth-loading"></div>
+    }
   }
 }

@@ -37,6 +37,10 @@ export class LoginButtons {
    * authorize link as `return_to`, which the hub honors only as a same-origin path. */
   readonly returnTo = input<string>('/');
 
+  /** An invitation's token, carried on each authorize link as `invite` so the hub admits the account into the
+   * invitation's tenant once the provider proves it holds the invited email; `null` for a plain sign-in. */
+  readonly invite = input<string | null>(null);
+
   /** Fired (with the provider's name) the instant a button is clicked, before the
    * browser follows the link's own navigation — the container persists it as the
    * new last-used provider. */
@@ -57,6 +61,8 @@ export class LoginButtons {
   });
 
   protected hrefFor(name: string): string {
-    return `/api/auth/${encodeURIComponent(name)}/authorize?return_to=${encodeURIComponent(this.returnTo())}`;
+    const invite = this.invite();
+    const carried = invite === null ? '' : `&invite=${encodeURIComponent(invite)}`;
+    return `/api/auth/${encodeURIComponent(name)}/authorize?return_to=${encodeURIComponent(this.returnTo())}${carried}`;
   }
 }
