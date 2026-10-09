@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Iterable, Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Protocol
 
 import click
@@ -36,6 +36,10 @@ TENANT_HEADER = "X-Blizzard-Tenant"
 
 #: The error code a call answers when the caller belongs to several tenants and named none.
 _TENANT_REQUIRED = "tenant_required"
+
+#: The ``detail`` a call answers when the tenant it acts in does not exist, is closed, or is one the caller cannot
+#: enter — the hub tells those apart for no one.
+_NO_SUCH_TENANT = "no such tenant"
 
 
 @dto
@@ -179,7 +183,7 @@ class CliContext:
         Dispatches through ``httpx``'s module-level ``stream``, mirroring :meth:`send` so
         ``monkeypatch.setattr`` still intercepts it; a refusal resolves before any line is
         yielded, so it surfaces like :meth:`check`'s buffered path, not mid-iteration — a
-        ``409 tenant_required`` as :meth:`send` raises it."""
+        tenant refusal as :meth:`send` raises it."""
         full_url = f"{self.hub_url.rstrip('/')}{path}"
         try:
             with httpx.stream(
@@ -187,7 +191,7 @@ class CliContext:
             ) as resp:
                 if resp.status_code >= 400:
                     resp.read()
-                self._refuse_unnamed_tenant(resp)
+                self._refuse_tenant(resp)
                 self.check(resp, operation, on_status=on_status)
                 yield from resp.iter_lines()
         except httpx.HTTPError as exc:
@@ -206,10 +210,9 @@ class CliContext:
         raw_body: RawBody | None = None,
     ) -> httpx.Response:
         """The call itself, unchecked — for a verb that reads a status code of its own first —
-        except a ``409 tenant_required``, which no verb answers itself: it raises, listing the tenants the
-        caller can name with ``--tenant``. Dispatches through ``httpx``'s module-level verb function,
-        same as :meth:`stream` — except a DELETE carrying a JSON body, which ``httpx.delete`` refuses a ``json`` keyword
-        for: that case goes through ``httpx.request`` instead."""
+        except a tenant refusal, which no verb answers itself (:meth:`_refuse_tenant`). Dispatches through
+        ``httpx``'s module-level verb function, same as :meth:`stream` — except a DELETE carrying a JSON body, which
+        ``httpx.delete`` refuses a ``json`` keyword for: that case goes through ``httpx.request`` instead."""
         full_url = f"{self.hub_url.rstrip('/')}{path}"
         kwargs: dict[str, Any] = {"timeout": timeout}
         if json_body is not None:
@@ -232,7 +235,7 @@ class CliContext:
                 resp = getattr(httpx, method)(full_url, **kwargs)
         except httpx.HTTPError as exc:
             raise self.failed(f"{method.upper()} {path}", exc) from exc
-        self._refuse_unnamed_tenant(resp)
+        self._refuse_tenant(resp)
         return resp
 
     def check(self, resp: httpx.Response, operation: str, *, on_status: dict[int, str] | None = None) -> None:
@@ -329,18 +332,33 @@ class CliContext:
         self.check(resp, operation, on_status=on_status)
         return resp
 
-    def _refuse_unnamed_tenant(self, resp: httpx.Response) -> None:
-        """Raise on the hub's ``409 tenant_required`` — the caller belongs to several tenants and the call
-        named none — with the caller's tenants from ``/api/me``, ids beside names, and how to name one."""
-        if resp.status_code != httpx.codes.CONFLICT or _error_code(resp) != _TENANT_REQUIRED:
-            return
-        me = self.send("get", "/api/me")
+    def _refuse_tenant(self, resp: httpx.Response) -> None:
+        """Raise when the hub refuses the tenant the call acts in, before a verb can read the status code as its own:
+        a ``409 tenant_required`` (the caller belongs to several tenants and the call named none), or a ``404 no such
+        tenant`` for the tenant ``--tenant`` named. Either lists the caller's tenants from ``/api/me``, ids beside
+        names. A ``404 no such tenant`` on a call naming no tenant stays the hub's own words: it is the caller holding
+        no membership, or a hub-level verb's own tenant argument."""
+        if resp.status_code == httpx.codes.CONFLICT and _error_code(resp) == _TENANT_REQUIRED:
+            raise self._tenant_refusal(
+                "you belong to several tenants — name the one to act in with --tenant <tenant_id>"
+            )
+        if resp.status_code == httpx.codes.NOT_FOUND and self.detail(resp, "") == _NO_SUCH_TENANT:
+            if self.tenant is None:
+                raise click.ClickException(_NO_SUCH_TENANT)
+            raise self._tenant_refusal(
+                f"no tenant {self.tenant} you can enter — it does not exist, it is closed, or you are not its member"
+            )
+
+    def _tenant_refusal(self, headline: str) -> click.ClickException:
+        """``headline``, then the tenants the caller can name with ``--tenant``. ``/api/me`` is asked without the
+        refused tenant's header, which would refuse it too."""
+        me = replace(self, tenant=None).send("get", "/api/me")
         tenants = _tenants_of(me) if me.status_code == httpx.codes.OK else []
-        lines = ["you belong to several tenants — name the one to act in with --tenant <tenant_id>"]
+        lines = [headline]
         if tenants:
             lines.append("your tenants:")
             lines.extend(f"  {t['tenant_id']}  {t['name']}  ({t['role']})" for t in tenants)
-        raise click.ClickException("\n".join(lines))
+        return click.ClickException("\n".join(lines))
 
     def _headers(self, *, door: bool = False) -> dict[str, str]:
         """``X-Blizzard-Door: cli`` when ``door``; the ``Authorization: Bearer`` header

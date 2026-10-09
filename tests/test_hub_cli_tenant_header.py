@@ -1,6 +1,7 @@
 """How a hub verb names its tenant: ``--tenant`` sends ``X-Blizzard-Tenant`` and nothing else does; a person
-who belongs to several tenants and names none is told their tenants, ids beside names; hub-level verbs carry no
-``--tenant``; and a CLI sign-in belongs to the person, never to one tenant — against a real hub holding two."""
+who belongs to several tenants and names none, or names one they cannot enter, is told their tenants, ids beside
+names, whatever the verb; hub-level verbs carry no ``--tenant``; and a CLI sign-in belongs to the person, never
+to one tenant — against a real hub holding two."""
 
 from __future__ import annotations
 
@@ -82,6 +83,49 @@ def test_naming_no_tenant_among_several_lists_the_callers_tenants(
     assert "--tenant <tenant_id>" in result.output
     assert f"{bravo.tenant}  bravo  (admin)" in result.output
     assert default_tenant(hub.engine) in result.output
+
+
+def _cli_routed(hub: HubHarness, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Route every CLI verb function to ``hub``."""
+    for method in ("get", "post", "put"):
+
+        def call(url: str, *, timeout: float, _method: str = method, **kwargs: Any) -> httpx.Response:
+            return hub.client.request(_method.upper(), url, **kwargs)
+
+        monkeypatch.setattr(httpx, method, call)
+
+
+@pytest.mark.parametrize(
+    ("args", "stdin"),
+    [(["runner", "add", "r9"], None), (["secret", "set", "gh-foo"], "v"), (["runner", "list"], None)],
+    ids=["runner-add", "secret-set", "runner-list"],
+)
+def test_a_tenant_the_caller_cannot_enter_is_named_as_such(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, args: list[str], stdin: str | None
+) -> None:
+    hub = build_hub(tmp_path)
+    bravo = hub.add_tenant("bravo")
+    _cli_routed(hub, monkeypatch)
+
+    result = CliRunner().invoke(hub_group, [*args, "--tenant", "ten_01BOGUS", "--hub-url", _HUB_URL], input=stdin)
+
+    assert result.exit_code != 0
+    assert "no tenant ten_01BOGUS you can enter" in result.output
+    assert f"{bravo.tenant}  bravo  (admin)" in result.output
+    assert "predates" not in result.output and "unknown secret" not in result.output
+
+
+def test_a_verbs_own_404_keeps_its_own_message(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    hub = build_hub(tmp_path)
+    bravo = hub.add_tenant("bravo")
+    _cli_routed(hub, monkeypatch)
+
+    result = CliRunner().invoke(
+        hub_group, ["secret", "set", "gh-foo", "--tenant", bravo.tenant, "--hub-url", _HUB_URL], input="v"
+    )
+
+    assert result.exit_code != 0
+    assert "unknown secret gh-foo" in result.output
 
 
 def test_only_a_tenant_verb_offers_tenant() -> None:
