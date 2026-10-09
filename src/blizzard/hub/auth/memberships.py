@@ -23,7 +23,7 @@ from blizzard.hub.auth.facts import AuthFactsService
 from blizzard.hub.auth.hub_admins import IReadHubAdminRepository
 from blizzard.hub.auth.models import ResolvedIdentity, User
 from blizzard.hub.auth.users import IReadUserRepository
-from blizzard.hub.tenancy import TenantId
+from blizzard.hub.tenancy import StoreScope, TenantId
 
 if TYPE_CHECKING:
     from blizzard.hub.auth.identity_transaction import IIdentityTransactions
@@ -217,10 +217,15 @@ class TenantMembers:
         """Move ``subject`` to ``to_role`` in its tenant — ``None`` revokes — and record a ``user_role_changed`` fact.
 
         ``subject`` names the user and tenant; its role and hub administrator standing, and the tenant's admin count,
-        are read again inside the unit of work and the rules judge that read. Raises :class:`NotAMember`,
+        are read again inside the unit of work and the rules judge that read. The unit first takes the tenant's lock
+        on the condition that it is open, so no close or deletion commits between that read and the change: a tenant
+        closed or deleted since ``subject`` was named raises :class:`~blizzard.hub.tenancy.TenantClosed` or
+        :class:`~blizzard.hub.tenancy.UnknownTenant` and nothing is written. Raises :class:`NotAMember`,
         :class:`MembershipChangeRefused` or :class:`LastAdminKept`. A change to the role already in force writes
         nothing and returns the subject as read."""
         with self._transactions.begin() as writes:
+            with writes.tenant_connections(StoreScope(subject.tenant)).write("lock_open_tenant"):
+                pass
             current = _member(
                 subject.user, subject.tenant, memberships=writes.memberships, hub_admins=writes.hub_admins
             )

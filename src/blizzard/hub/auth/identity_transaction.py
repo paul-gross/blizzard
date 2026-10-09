@@ -42,7 +42,8 @@ class IdentityWrites:
     auth_facts: IWriteAuthFactsRepository
     #: A tenant's connections on the unit's transaction, for the tenant-owned repositories a change builds over them:
     #: their first write takes the tenant's lock — refusing a tenant that does not exist or is closed, which rolls
-    #: the whole unit back — and every write commits or rolls back with the identity writes.
+    #: the whole unit back — and every write commits or rolls back with the identity writes. A unit that records a
+    #: global row naming a tenant — a membership — opens a write here first, holding the tenant open until it commits.
     tenant_connections: Callable[[StoreScope], ScopedConnections]
 
 

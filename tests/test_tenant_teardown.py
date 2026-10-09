@@ -38,6 +38,7 @@ from tests.support import (
     default_tenant,
     hub_level_connections,
     scoped_connections,
+    seed_hub_admin,
     seed_membership,
     seed_runner,
     seed_session,
@@ -194,6 +195,83 @@ def test_a_runner_write_whose_tenant_closes_mid_request_answers_401_and_writes_n
         401,
         {"detail": "bearer token does not resolve to a known runner"},
     )
+    assert _rows_of(hub, tenant) == rows["closed"]
+
+
+def _deleting_after_resolution(hub: HubHarness, tenant: TenantId, states: list[DeletionState]) -> None:
+    """Make each request delete ``tenant`` outright right after resolving it, before its route writes — the window a
+    deletion completing mid-request lands in — keeping each deletion's state in ``states``."""
+    assert hub.app is not None
+
+    def resolving_then_deleting(request: Request, services: Hub) -> TenantRequest:
+        resolved = resolve_tenant(request, services)
+        states.append(services.tenant_teardown.delete(tenant, by="usr_deleter").state)
+        return resolved
+
+    hub.app.dependency_overrides[resolve_tenant] = resolving_then_deleting
+
+
+def _hub_administrator(hub: HubHarness, tenant: TenantId) -> dict[str, str]:
+    """The headers of a hub administrator holding no membership, acting in ``tenant``."""
+    admin = seed_user(hub, username="hal", role=Role.PENDING)
+    seed_hub_admin(hub.engine, admin.user_id)
+    return {"Authorization": f"Bearer {seed_session(hub, admin)}", "X-Blizzard-Tenant": tenant}
+
+
+def test_a_hub_administrators_grant_whose_tenant_is_deleted_mid_request_answers_404_and_records_nothing(
+    hub: HubHarness,
+) -> None:
+    tenant = _created(hub)
+    nobody = seed_user(hub, username="nobody", role=Role.PENDING)
+    headers = _hub_administrator(hub, tenant)
+    states: list[DeletionState] = []
+    _deleting_after_resolution(hub, tenant, states)
+    assert hub.app is not None
+
+    response = TestClient(hub.app).put(f"/api/members/{nobody.user_id}", json={"role": "admin"}, headers=headers)
+
+    assert (response.status_code, response.json()) == (404, {"detail": "no such tenant"})
+    assert states == [DeletionState.DELETED]
+    assert _rows_of(hub, tenant) == {}
+
+
+def test_a_hub_administrators_grant_whose_tenant_closes_mid_request_answers_404_and_records_nothing(
+    hub: HubHarness,
+) -> None:
+    tenant = _created(hub)
+    nobody = seed_user(hub, username="nobody", role=Role.PENDING)
+    headers = _hub_administrator(hub, tenant)
+    rows: dict[str, dict[str, int]] = {}
+    _closing_after_resolution(hub, tenant, rows)
+    assert hub.app is not None
+
+    response = TestClient(hub.app).put(f"/api/members/{nobody.user_id}", json={"role": "admin"}, headers=headers)
+
+    assert (response.status_code, response.json()) == (404, {"detail": "no such tenant"})
+    assert _rows_of(hub, tenant) == rows["closed"]
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "body"),
+    [("DELETE", "/api/members/{user_id}", None), ("POST", "/api/users/{user_id}/role", {"role": "pending"})],
+    ids=["revoke", "role-alias"],
+)
+def test_a_tenant_admins_revoke_whose_tenant_closes_mid_request_answers_404_and_records_nothing(
+    hub: HubHarness, method: str, path: str, body: dict[str, str] | None
+) -> None:
+    tenant = _created(hub)
+    admin = seed_user(hub, username="mia", role=Role.PENDING)
+    seed_membership(hub.engine, tenant, admin.user_id, Role.ADMIN)
+    bob = seed_user(hub, username="bob", role=Role.PENDING)
+    seed_membership(hub.engine, tenant, bob.user_id, Role.CONTRIBUTOR)
+    headers = {"Authorization": f"Bearer {seed_session(hub, admin)}", "X-Blizzard-Tenant": tenant}
+    rows: dict[str, dict[str, int]] = {}
+    _closing_after_resolution(hub, tenant, rows)
+    assert hub.app is not None
+
+    response = TestClient(hub.app).request(method, path.format(user_id=bob.user_id), json=body, headers=headers)
+
+    assert (response.status_code, response.json()) == (404, {"detail": "no such tenant"})
     assert _rows_of(hub, tenant) == rows["closed"]
 
 
