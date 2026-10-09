@@ -1,8 +1,9 @@
 """Browser login dance + mid-stream session-expiry redirect.
 
 Real Chromium over the served board under oauth: an uninvited login lands back on the login
-page with the invite-only refusal; invited as `guest` the person reads read-only; `contributor`
-gets the write control; a session expiring mid-SSE redirects to login within one reconnect.
+page with the invite-only refusal; invited as `guest` — through the board's invitation page — the
+person reads read-only; `contributor` gets the write control; a session expiring mid-SSE
+redirects to login within one reconnect.
 Skipped unless ``BLIZZARD_E2E=1``.
 """
 
@@ -10,6 +11,7 @@ from __future__ import annotations
 
 import dataclasses
 import os
+import re
 import sqlite3
 import subprocess
 import sys
@@ -175,6 +177,9 @@ def test_browser_login_dance_and_mid_stream_session_expiry(tmp_path: Path) -> No
             # with the refusal, holding no session.
             page.wait_for_url("**/login?refusal=invite_only")
             expect(page.get_by_test_id("login-page")).to_be_visible()
+            expect(page.get_by_test_id("login-refusal")).to_have_text(
+                "You don't have access to anything here yet. Reach out to your administrator for access."
+            )
             expect(page.get_by_test_id("board-header")).to_have_count(0)
             assert not [cookie for cookie in page.context.cookies() if cookie.get("name") == "bz_session"]
 
@@ -183,14 +188,18 @@ def test_browser_login_dance_and_mid_stream_session_expiry(tmp_path: Path) -> No
             _seed_not_ready_chunk(hub_dir, chunk_id=chunk_id, graph_id=graph_id)
             proc = _start_hub(hub_dir, hub_port)
             token = invite(hub_dir, "octocat@example.com", role=Role.GUEST)
-            page.goto(f"http://127.0.0.1:{hub_port}/api/auth/{_PROVIDER_NAME}/authorize?invite={token}")
-            # Accepting signs the person in; the board's landing route for it is the board's own.
-            assert [cookie for cookie in page.context.cookies() if cookie.get("name") == "bz_session"]
+            # The invitation's link opens the board's landing page; its provider button carries the token
+            # through the dance, and accepting it signs the person in to the board.
+            page.goto(f"http://127.0.0.1:{hub_port}/invite/{token}", wait_until="load")
+            expect(page.get_by_test_id("invite-page")).to_be_visible()
+            invite_button = page.get_by_test_id(f"login-provider-{_PROVIDER_NAME}")
+            expect(invite_button).to_have_attribute("href", re.compile(rf"&invite={re.escape(token)}$"))
+            invite_button.click()
 
-            page.goto(f"http://127.0.0.1:{hub_port}/", wait_until="load")
             expect(page.get_by_test_id("board-header")).to_be_visible()
             expect(page.get_by_test_id("board-shell")).to_be_visible()
-            expect(page.get_by_test_id("pending-lobby")).to_have_count(0)
+            expect(page.get_by_test_id("no-access")).to_have_count(0)
+            assert [cookie for cookie in page.context.cookies() if cookie.get("name") == "bz_session"]
             # The seeded chunk's card is visible — a guest reads everything — but its
             # Promote control is not.
             expect(page.locator(f'[data-chunk="{chunk_id}"]')).to_be_visible()
