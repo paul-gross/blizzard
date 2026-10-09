@@ -388,6 +388,11 @@ class HubServices:
     annotation: AnnotationReconciler | None
 
 
+#: The services one tenant's requests are served by. The hub wires a single bag, so a tenant's
+#: services and the hub-level services are the same instance.
+type TenantServices = HubServices
+
+
 @dataclass(frozen=True)
 class TenantStores:
     """One tenant's repository set and the leaf services over it, every adapter holding the same
