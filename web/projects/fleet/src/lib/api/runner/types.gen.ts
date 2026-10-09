@@ -2644,6 +2644,14 @@ export type RunnerStatusView = {
      */
     runner_name?: string | null;
     /**
+     * Tenant Id
+     */
+    tenant_id?: string | null;
+    /**
+     * Tenant Name
+     */
+    tenant_name?: string | null;
+    /**
      * Workspace Id
      */
     workspace_id: string;
