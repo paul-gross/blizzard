@@ -200,7 +200,10 @@ FROM (
       max(CASE WHEN t.record_type = 'derivation' THEN t.derived_at END) OVER (PARTITION BY t.segment_tenant_id, t.segment_id) AS newest_derived_at,
       max(CASE WHEN t.record_type = 'dropped' THEN t.dropped_at END) OVER (PARTITION BY t.segment_tenant_id, t.segment_id) AS last_dropped_at
     FROM (
-      SELECT e.*, coalesce(e.tenant_id, min(e.tenant_id) OVER (PARTITION BY e.segment_id)) AS segment_tenant_id
+      -- A row of a file written before the upgrade to tenants has no tenant_id and belongs to the tenant the upgrade
+      -- carried the hub's data into. That tenant was minted at the upgrade, so its time-ordered id is the earliest of
+      -- any relation holding a row it wrote since; a relation holding none gives such rows to its earliest tenant.
+      SELECT e.*, coalesce(e.tenant_id, min(e.tenant_id) OVER ()) AS segment_tenant_id
       FROM events AS e
     ) AS t
   ) AS m
@@ -223,7 +226,10 @@ FROM (
       max(CASE WHEN t.record_type = 'derivation' THEN t.derived_at END) OVER (PARTITION BY t.segment_tenant_id, t.segment_id, t.extractor_version) AS newest_derived_at,
       max(CASE WHEN t.record_type = 'dropped' THEN t.dropped_at END) OVER (PARTITION BY t.segment_tenant_id, t.segment_id) AS last_dropped_at
     FROM (
-      SELECT e.*, coalesce(e.tenant_id, min(e.tenant_id) OVER (PARTITION BY e.segment_id)) AS segment_tenant_id
+      -- A row of a file written before the upgrade to tenants has no tenant_id and belongs to the tenant the upgrade
+      -- carried the hub's data into. That tenant was minted at the upgrade, so its time-ordered id is the earliest of
+      -- any relation holding a row it wrote since; a relation holding none gives such rows to its earliest tenant.
+      SELECT e.*, coalesce(e.tenant_id, min(e.tenant_id) OVER ()) AS segment_tenant_id
       FROM events AS e
     ) AS t
   ) AS m
@@ -308,9 +314,13 @@ another, filtered by `extractor_version`.
 
 Segment ids are minted by runners, so two tenants may each hold a segment with the same id. Both views read a segment
 within its tenant, the view's `segment_tenant_id`: one tenant's derivations and drops never outdate another's events. A
-row from a file written before the upgrade to tenants has no `tenant_id`; it takes the tenant of its segment's later
-rows, the tenant the upgrade carried the hub's data into, so its copies collapse with that tenant's and its newer
-derivations outdate it.
+row from a file written before the upgrade to tenants has no `tenant_id`, and belongs to the tenant the upgrade carried
+the hub's data into. Tenant ids are time-ordered and that tenant was minted at the upgrade, before any other, so the
+views give such a row the earliest tenant id of the relation they read: its copies collapse with that tenant's, that
+tenant's newer derivations and drops outdate it, and another tenant re-using one of its segment ids never claims it.
+This holds while the relation holds at least one row the carried-over tenant wrote after the upgrade, on any segment. A
+relation without one — some tenants' files loaded without the carried-over tenant's, or a hub whose carried-over tenant
+has exported nothing since — gives its pre-upgrade rows to the earliest tenant it does hold.
 
 ### Extractor versions
 
@@ -556,9 +566,11 @@ version 1, since the change only adds nullable columns. From the upgrade on:
   [The directory](#the-directory) describes.
 
 A loader that wants one tenant filters on `tenant_id`, or on an events view's `segment_tenant_id`, which also places a
-row written before the upgrade under the tenant its segment's later rows name, and is null where none does. To give
-history the columns, backfill it window by window, each within `backfill_max_window`; a backfill writes every row with
-its tenant, without moving a cursor:
+row written before the upgrade under the carried-over tenant, as [Reading current truth](#reading-current-truth)
+describes, and is null when no row the view reads names a tenant. Filter the view's output, not the relation beneath
+it: a relation narrowed to another tenant gives that tenant the pre-upgrade rows. To give history the columns, backfill
+it window by window, each within `backfill_max_window`; a backfill writes every row with its tenant, without moving a
+cursor:
 
 ```sh
 blizzard hub egress backfill --since <t> --until <t>

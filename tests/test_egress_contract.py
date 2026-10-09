@@ -719,9 +719,13 @@ def test_versioning_names_the_egress_contract() -> None:
 # -- the events views over the golden --------------------------------------------------------------------------------
 
 
-def _golden_events_connection(copied_before_the_upgrade: str | None = None) -> duckdb.DuckDBPyConnection:
+def _golden_events_connection(
+    copied_before_the_upgrade: str | None = None, written_before_the_upgrade: str | None = None
+) -> duckdb.DuckDBPyConnection:
     """DuckDB over the golden ``events`` with the dictionary's views. ``copied_before_the_upgrade`` adds, for the golden
-    rows it selects, a copy exported a day earlier from a file written before the upgrade to tenants: no tenant."""
+    rows it selects, a copy exported a day earlier from a file written before the upgrade to tenants: no tenant.
+    ``written_before_the_upgrade`` instead strips the tenant from the golden rows it selects, as though they were only
+    ever exported before the upgrade."""
     files = sorted(str(p) for p in (_GOLDEN_DIR / "events").rglob("*.ndjson"))
     assert files
     connection = duckdb.connect()
@@ -737,7 +741,13 @@ def _golden_events_connection(copied_before_the_upgrade: str | None = None) -> d
         else " UNION ALL SELECT * REPLACE (NULL AS tenant_id, NULL AS tenant_name, exported_at - INTERVAL 1 DAY AS "
         f"exported_at) FROM golden WHERE {copied_before_the_upgrade}"
     )
-    connection.execute(f"CREATE VIEW events AS SELECT * FROM golden{copies}")
+    stripped = (
+        "*"
+        if written_before_the_upgrade is None
+        else f"* REPLACE (CASE WHEN {written_before_the_upgrade} THEN NULL ELSE tenant_id END AS tenant_id, "
+        f"CASE WHEN {written_before_the_upgrade} THEN NULL ELSE tenant_name END AS tenant_name)"
+    )
+    connection.execute(f"CREATE VIEW events AS SELECT {stripped} FROM golden{copies}")
     for view in _datasets()["events"]["views"]:
         connection.execute(f"CREATE VIEW {view} AS {_published_views()[view]}")
     return connection
@@ -837,3 +847,24 @@ def test_an_events_view_counts_a_copy_exported_before_the_upgrade_as_its_tenants
     copied = _golden_events_connection(f"{first_pass} AND segment_id NOT LIKE 'seg-shared%'")
     assert copied.execute("SELECT count(*) FROM events WHERE tenant_id IS NULL").fetchone() == (19,)
     assert copied.execute(query).fetchall() == _golden_events_connection().execute(query).fetchall()
+
+
+@pytest.mark.parametrize("view", ["events_current", "events_by_version"])
+def test_an_events_view_keeps_a_pre_upgrade_segment_with_its_tenant_when_another_tenant_reuses_its_id(
+    view: str,
+) -> None:
+    """The carried-over tenant derived ``seg-shared`` and ``seg-shared-dropped`` only before the upgrade, so it holds no
+    later row of either. Another tenant's runner re-uses both ids, derives the second later and drops it: the
+    pre-upgrade rows still read as the carried-over tenant's, and the other tenant's derivation and drop leave them
+    counting."""
+    stripped = f"tenant_id = '{_EVENTS_TENANT}' AND segment_id LIKE 'seg-shared%'"
+    connection = _golden_events_connection(written_before_the_upgrade=stripped)
+    assert connection.execute("SELECT count(*) FROM events WHERE tenant_id IS NULL").fetchone() == (4,)
+    got = connection.execute(
+        f"SELECT segment_tenant_id, segment_id, subject FROM {view} WHERE segment_id LIKE 'seg-shared%' ORDER BY ALL"
+    ).fetchall()
+    assert got == [
+        (_EVENTS_TENANT, "seg-shared", "globex.py"),
+        (_EVENTS_TENANT, "seg-shared-dropped", "globex-kept.py"),
+        (_OTHER_TENANT, "seg-shared", "initech.py"),
+    ]
