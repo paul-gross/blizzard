@@ -18,13 +18,13 @@ import { type hubApi, type UserView, KitAsyncState, KitPanel, KitSelect, type Ki
  * load and submit) is not this component's concern.
  */
 @Component({
-  selector: 'app-users-table',
+  selector: 'app-members-table',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [KitAsyncState, KitPanel, KitSelect, FleetWhen],
-  templateUrl: './users-table.html',
-  styleUrl: './users-table.css',
+  templateUrl: './members-table.html',
+  styleUrl: './members-table.css',
 })
-export class UsersTable {
+export class MembersTable {
   /** `GET /api/users`'s own rows. */
   readonly users = input<readonly UserView[]>([]);
 

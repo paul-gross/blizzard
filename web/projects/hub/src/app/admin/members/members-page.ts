@@ -1,16 +1,16 @@
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
-import { UsersTable } from './users-table';
+import { MembersTable } from './members-table';
 import { asyncState, injectPendingMutationVariables, KitAsyncState } from 'fleet';
 import { injectAssignRoleMutation, type AssignRoleVars } from './assign-role.mutations';
-import { injectMeQuery } from '../core/auth/me.query';
-import { injectUsersQuery } from './users.query';
-import { assignRoleMutationKey } from '../core/mutation-keys';
-import { assignRoleErrorText, pendingRoleUserIds } from './admin-page.model';
+import { injectMeQuery } from '../../core/auth/me.query';
+import { injectMembersQuery } from './members.query';
+import { assignRoleMutationKey } from '../../core/mutation-keys';
+import { assignRoleErrorText, pendingRoleUserIds } from './members-page.model';
 
 /**
- * The `/admin` route — a container reading `injectUsersQuery()` (`GET /api/users`)
+ * The `/admin` route — a container reading `injectMembersQuery()` (`GET /api/users`)
  * and `injectMeQuery()` (the signed-in actor's own identity, for `isSelf` gating and the
- * `assignable_roles` the selectors offer in {@link UsersTable}; each user row carries its own
+ * `assignable_roles` the selectors offer in {@link MembersTable}; each user row carries its own
  * actor-relative `assignable_roles`), composing the presentational table
  * (`bzh:frontend-container-presentational`).
  * Routed behind the `user:manage` nav gate (`app-nav.ts`'s `showAdmin`); this page's own `GET /api/users` read
@@ -31,14 +31,14 @@ import { assignRoleErrorText, pendingRoleUserIds } from './admin-page.model';
  * as a success that only a reload reveals never happened.
  */
 @Component({
-  selector: 'app-admin-page',
+  selector: 'app-members-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [UsersTable, KitAsyncState],
-  templateUrl: './admin-page.html',
-  styleUrl: './admin-page.css',
+  imports: [MembersTable, KitAsyncState],
+  templateUrl: './members-page.html',
+  styleUrl: './members-page.css',
 })
-export class AdminPage {
-  protected readonly usersQuery = injectUsersQuery();
+export class MembersPage {
+  protected readonly usersQuery = injectMembersQuery();
   private readonly meQuery = injectMeQuery();
   private readonly assignRoleMutation = injectAssignRoleMutation();
 
@@ -51,7 +51,7 @@ export class AdminPage {
   protected readonly assignableRoles = computed(() => this.meQuery.data()?.assignable_roles ?? []);
 
   /** `KitAsyncState`'s own triad — `empty` is never reached here (an empty user list
-   * still renders {@link UsersTable}'s own empty state, a distinct message from "no
+   * still renders {@link MembersTable}'s own empty state, a distinct message from "no
    * users administrable at all"), so this collapses to loading/error/ready. */
   protected readonly triadState = computed(() => asyncState(this.usersQuery, false));
 

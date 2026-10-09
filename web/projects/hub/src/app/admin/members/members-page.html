@@ -1,14 +1,14 @@
 <fleet-kit-async-state
   [state]="triadState()"
   loadingText="Loading users…"
-  loadingTestid="admin-page-loading"
+  loadingTestid="members-page-loading"
   errorText="Failed to load users."
-  errorTestid="admin-page-error"
+  errorTestid="members-page-error"
 >
   @if (assignRoleError(); as message) {
-    <p class="assign-role-error" data-testid="admin-page-assign-role-error">{{ message }}</p>
+    <p class="assign-role-error" data-testid="members-page-assign-role-error">{{ message }}</p>
   }
-  <app-users-table
+  <app-members-table
     [users]="usersQuery.data() ?? []"
     [currentUserId]="currentUserId()"
     [assignableRoles]="assignableRoles()"

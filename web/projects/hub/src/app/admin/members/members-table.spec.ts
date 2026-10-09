@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 
 import type { UserView } from 'fleet';
 import { OPERATOR_ME_RESPONSE } from 'fleet/testing';
-import { UsersTable } from './users-table';
+import { MembersTable } from './members-table';
 
 const BASE_USERS: readonly UserView[] = [
   {
@@ -57,16 +57,16 @@ function usersFor(actor: Actor): readonly UserView[] {
 
 const USERS = usersFor('admin');
 
-describe('UsersTable', () => {
+describe('MembersTable', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [UsersTable],
+      imports: [MembersTable],
       providers: [provideZonelessChangeDetection()],
     }).compileComponents();
   });
 
   function mount(inputs: Partial<{ users: readonly UserView[]; currentUserId: string | null; actor: Actor }> = {}) {
-    const fixture = TestBed.createComponent(UsersTable);
+    const fixture = TestBed.createComponent(MembersTable);
     fixture.componentRef.setInput('users', inputs.users ?? usersFor(inputs.actor ?? 'admin'));
     fixture.componentRef.setInput('currentUserId', inputs.currentUserId ?? null);
     fixture.componentRef.setInput('assignableRoles', OPERATOR_ME_RESPONSE.assignable_roles ?? []);
@@ -78,12 +78,12 @@ describe('UsersTable', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    const rows = el.querySelectorAll('[data-testid="users-table-row"]');
+    const rows = el.querySelectorAll('[data-testid="members-table-row"]');
     expect(rows).toHaveLength(4);
     const adaRow = el.querySelector('[data-user-id="usr_admin"]');
-    expect(adaRow?.querySelector('[data-testid="users-table-username"]')?.textContent).toContain('ada');
-    expect(adaRow?.querySelector('[data-testid="users-table-email"]')?.textContent).toContain('ada@example.com');
-    expect(adaRow?.querySelector('[data-testid="users-table-identities"]')?.textContent).toContain('github');
+    expect(adaRow?.querySelector('[data-testid="members-table-username"]')?.textContent).toContain('ada');
+    expect(adaRow?.querySelector('[data-testid="members-table-email"]')?.textContent).toContain('ada@example.com');
+    expect(adaRow?.querySelector('[data-testid="members-table-identities"]')?.textContent).toContain('github');
   });
 
   it('renders the created column via the shared relative-date component, not a raw ISO string', async () => {
@@ -92,7 +92,7 @@ describe('UsersTable', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     const adaRow = el.querySelector('[data-user-id="usr_admin"]');
-    const when = adaRow?.querySelector('fleet-when[data-testid="users-table-created-at"]');
+    const when = adaRow?.querySelector('fleet-when[data-testid="members-table-created-at"]');
     expect(when).toBeTruthy();
     expect(when?.textContent?.trim()).not.toBe(USERS[0].created_at);
   });
@@ -102,7 +102,7 @@ describe('UsersTable', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="users-table-empty"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="members-table-empty"]')).toBeTruthy();
   });
 
   it('renders a superuser row as static text, never a selector — bootstrap-only', async () => {
@@ -111,8 +111,8 @@ describe('UsersTable', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     const rootRow = el.querySelector('[data-user-id="usr_root"]');
-    expect(rootRow?.querySelector('[data-testid="users-table-role-static"]')?.textContent).toContain('superuser');
-    expect(rootRow?.querySelector('[data-testid="users-table-role-select"]')).toBeNull();
+    expect(rootRow?.querySelector('[data-testid="members-table-role-static"]')?.textContent).toContain('superuser');
+    expect(rootRow?.querySelector('[data-testid="members-table-role-select"]')).toBeNull();
   });
 
   it("renders the signed-in actor's own row as static text — self-change refused", async () => {
@@ -121,8 +121,8 @@ describe('UsersTable', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     const adaRow = el.querySelector('[data-user-id="usr_admin"]');
-    expect(adaRow?.querySelector('[data-testid="users-table-role-static"]')?.textContent).toContain('(you)');
-    expect(adaRow?.querySelector('[data-testid="users-table-role-select"]')).toBeNull();
+    expect(adaRow?.querySelector('[data-testid="members-table-role-static"]')?.textContent).toContain('(you)');
+    expect(adaRow?.querySelector('[data-testid="members-table-role-select"]')).toBeNull();
   });
 
   it('renders four role options in order for an ordinary row', async () => {
@@ -131,7 +131,7 @@ describe('UsersTable', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     const guestRow = el.querySelector('[data-user-id="usr_guest"]');
-    guestRow?.querySelector<HTMLButtonElement>('[data-testid="users-table-role-select"]')?.click();
+    guestRow?.querySelector<HTMLButtonElement>('[data-testid="members-table-role-select"]')?.click();
     await fixture.whenStable();
     expect(Array.from(document.querySelectorAll('[role="listbox"] [role="option"]')).map((o) => o.textContent?.trim())).toEqual(['pending', 'guest', 'contributor', 'admin']);
   });
@@ -141,10 +141,10 @@ describe('UsersTable', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    const guestSelect = el.querySelector<HTMLSelectElement>('[data-user-id="usr_guest"] [data-testid="users-table-role-select"]');
+    const guestSelect = el.querySelector<HTMLSelectElement>('[data-user-id="usr_guest"] [data-testid="members-table-role-select"]');
     expect(guestSelect?.getAttribute('aria-label')).toBe('Role for grace: guest');
     const pendingSelect = el.querySelector<HTMLSelectElement>(
-      '[data-user-id="usr_pending"] [data-testid="users-table-role-select"]',
+      '[data-user-id="usr_pending"] [data-testid="members-table-role-select"]',
     );
     expect(pendingSelect?.getAttribute('aria-label')).toBe('Role for newcomer: pending');
   });
@@ -155,8 +155,8 @@ describe('UsersTable', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector<HTMLButtonElement>('[data-user-id="usr_pending"] [data-testid="users-table-role-select"]')?.disabled).toBe(true);
-    const others = Array.from(el.querySelectorAll<HTMLButtonElement>('[data-testid="users-table-role-select"]')).filter(
+    expect(el.querySelector<HTMLButtonElement>('[data-user-id="usr_pending"] [data-testid="members-table-role-select"]')?.disabled).toBe(true);
+    const others = Array.from(el.querySelectorAll<HTMLButtonElement>('[data-testid="members-table-role-select"]')).filter(
       (select) => select.closest('tr')?.getAttribute('data-user-id') !== 'usr_pending',
     );
     expect(others.length).toBeGreaterThan(0);
@@ -169,10 +169,10 @@ describe('UsersTable', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     const pendingRow = el.querySelector('[data-user-id="usr_pending"]');
-    const select = pendingRow?.querySelector<HTMLSelectElement>('[data-testid="users-table-role-select"]');
+    const select = pendingRow?.querySelector<HTMLSelectElement>('[data-testid="members-table-role-select"]');
     expect(select).toBeTruthy();
     expect(select?.disabled).toBe(false);
-    expect(pendingRow?.querySelector('[data-testid="users-table-role-static"]')).toBeNull();
+    expect(pendingRow?.querySelector('[data-testid="members-table-role-static"]')).toBeNull();
 
     select?.click();
     await fixture.whenStable();
@@ -185,7 +185,7 @@ describe('UsersTable', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     const guestRow = el.querySelector('[data-user-id="usr_guest"]');
-    guestRow?.querySelector<HTMLButtonElement>('[data-testid="users-table-role-select"]')?.click();
+    guestRow?.querySelector<HTMLButtonElement>('[data-testid="members-table-role-select"]')?.click();
     await fixture.whenStable();
     expect(document.querySelector('[role="listbox"] [role="option"][title="admin"]')?.getAttribute('aria-disabled')).toBe('true');
   });
@@ -196,7 +196,7 @@ describe('UsersTable', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     const guestRow = el.querySelector('[data-user-id="usr_guest"]');
-    guestRow?.querySelector<HTMLButtonElement>('[data-testid="users-table-role-select"]')?.click();
+    guestRow?.querySelector<HTMLButtonElement>('[data-testid="members-table-role-select"]')?.click();
     await fixture.whenStable();
     expect(document.querySelector('[role="listbox"] [role="option"][title="admin"]')?.getAttribute('aria-disabled')).not.toBe('true');
   });
@@ -207,7 +207,7 @@ describe('UsersTable', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     const adaRow = el.querySelector('[data-user-id="usr_admin"]');
-    const select = adaRow?.querySelector<HTMLSelectElement>('[data-testid="users-table-role-select"]');
+    const select = adaRow?.querySelector<HTMLSelectElement>('[data-testid="members-table-role-select"]');
     expect(select?.disabled).toBe(true);
   });
 
@@ -219,7 +219,7 @@ describe('UsersTable', () => {
     fixture.componentInstance.assignRole.subscribe((event) => emitted.push(event));
 
     const guestRow = el.querySelector('[data-user-id="usr_guest"]');
-    const select = guestRow?.querySelector<HTMLSelectElement>('[data-testid="users-table-role-select"]');
+    const select = guestRow?.querySelector<HTMLSelectElement>('[data-testid="members-table-role-select"]');
     expect(select).toBeTruthy();
     select!.click();
     await fixture.whenStable();

@@ -174,7 +174,7 @@ export const routes: Routes = [
     loadComponent: () => import('../admin/admin-shell').then((m) => m.AdminShell),
     children: [
       { path: '', redirectTo: 'users', pathMatch: 'full' },
-      { path: 'users', loadComponent: () => import('../admin/admin-page').then((m) => m.AdminPage) },
+      { path: 'users', loadComponent: () => import('../admin/members/members-page').then((m) => m.MembersPage) },
       {
         path: 'work-sources',
         loadComponent: () => import('../admin/work-sources/work-sources-page').then((m) => m.WorkSourcesPage),

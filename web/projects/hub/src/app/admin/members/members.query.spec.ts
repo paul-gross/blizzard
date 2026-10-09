@@ -4,7 +4,7 @@ import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-exper
 
 import { hubClient } from 'fleet';
 import { settle, type RequestClientStub, stubError, stubRequestClient } from 'fleet/testing';
-import { injectUsersQuery } from './users.query';
+import { injectMembersQuery } from './members.query';
 
 @Component({
   selector: 'app-test-users-query-host',
@@ -12,7 +12,7 @@ import { injectUsersQuery } from './users.query';
   template: '',
 })
 class TestUsersQueryHost {
-  readonly query = injectUsersQuery();
+  readonly query = injectMembersQuery();
 }
 
 const USERS = [
@@ -27,7 +27,7 @@ const USERS = [
   },
 ];
 
-describe('injectUsersQuery', () => {
+describe('injectMembersQuery', () => {
   let stub: RequestClientStub;
   afterEach(() => stub?.restore());
 

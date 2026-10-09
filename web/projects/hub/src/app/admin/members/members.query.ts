@@ -8,7 +8,7 @@ import { type UserView, listUsersApiUsersGet, hubUsersKey } from 'fleet';
  * error state). Not in the SSE event vocabulary, so it carries no live-invalidation
  * wiring.
  */
-export function injectUsersQuery() {
+export function injectMembersQuery() {
   return injectQuery(() => ({
     queryKey: hubUsersKey,
     queryFn: async (): Promise<UserView[]> => {

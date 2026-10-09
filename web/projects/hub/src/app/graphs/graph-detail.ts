@@ -75,7 +75,7 @@ export class GraphDetail {
 
   /** This detail's async state — a single-resource read never reaches `'empty'`
    * (a graph either resolves or the read errors), so `isEmpty` is always
-   * `false`, the same reasoning `admin-page.ts`'s `triadState` documents. */
+   * `false`, the same reasoning `members-page.ts`'s `triadState` documents. */
   protected readonly state = computed<KitAsyncStateValue>(() => asyncState(this.graphQuery, false));
 
   /** Whether the current identity may author graphs (`graph:edit`, admin-tier)

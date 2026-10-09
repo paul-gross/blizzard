@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { assignRoleErrorText, pendingRoleUserIds } from './admin-page.model';
+import { assignRoleErrorText, pendingRoleUserIds } from './members-page.model';
 
 describe('assignRoleErrorText', () => {
   it('is null without an error', () => {

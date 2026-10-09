@@ -1,6 +1,6 @@
-<fleet-kit-panel class="users-table" aria-label="Users" data-testid="users-table" label="Users">
+<fleet-kit-panel class="members-table" aria-label="Users" data-testid="members-table" label="Users">
   @if (users().length === 0) {
-    <fleet-kit-async-state state="empty" placement="inline" emptyText="No users yet." emptyTestid="users-table-empty" />
+    <fleet-kit-async-state state="empty" placement="inline" emptyText="No users yet." emptyTestid="members-table-empty" />
   } @else {
     <table>
       <thead>
@@ -15,20 +15,20 @@
       </thead>
       <tbody>
         @for (user of users(); track user.user_id) {
-          <tr data-testid="users-table-row" [attr.data-user-id]="user.user_id">
-            <td data-testid="users-table-username">{{ user.username }}</td>
-            <td data-testid="users-table-display-name">{{ user.display_name }}</td>
-            <td data-testid="users-table-email">{{ user.email ?? '—' }}</td>
-            <td data-testid="users-table-identities">
+          <tr data-testid="members-table-row" [attr.data-user-id]="user.user_id">
+            <td data-testid="members-table-username">{{ user.username }}</td>
+            <td data-testid="members-table-display-name">{{ user.display_name }}</td>
+            <td data-testid="members-table-email">{{ user.email ?? '—' }}</td>
+            <td data-testid="members-table-identities">
               {{ user.identities?.length ? user.identities!.map((i) => i.provider_name).join(', ') : '—' }}
             </td>
             <td>
               @if (isSelf(user) || !isAssignableRole(user.role)) {
-                <span data-testid="users-table-role-static">{{ user.role }}{{ isSelf(user) ? ' (you)' : '' }}</span>
+                <span data-testid="members-table-role-static">{{ user.role }}{{ isSelf(user) ? ' (you)' : '' }}</span>
               } @else {
                 <fleet-kit-select
                   [ariaLabel]="'Role for ' + user.username"
-                  testid="users-table-role-select"
+                  testid="members-table-role-select"
                   [options]="roleOptions(user)"
                   [selectedValue]="user.role"
                   [disabled]="isPending(user) || !user.assignable_roles?.length"
@@ -37,7 +37,7 @@
               }
             </td>
             <td>
-              <fleet-when data-testid="users-table-created-at" [iso]="user.created_at" />
+              <fleet-when data-testid="members-table-created-at" [iso]="user.created_at" />
             </td>
           </tr>
         }

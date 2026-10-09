@@ -4,7 +4,7 @@ import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-exper
 import { hubClient } from 'fleet';
 import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
 
-import { AdminPage } from './admin-page';
+import { MembersPage } from './members-page';
 
 const ME_ADMIN = {
   user_id: 'usr_admin',
@@ -45,7 +45,7 @@ const USERS_FOR_SUPERUSER = USERS.map((user) => ({
   assignable_roles: ['pending', 'guest', 'contributor', 'admin'],
 }));
 
-describe('AdminPage', () => {
+describe('MembersPage', () => {
   let stub: RequestClientStub;
   afterEach(() => stub?.restore());
 
@@ -56,13 +56,13 @@ describe('AdminPage', () => {
       return {};
     });
     await TestBed.configureTestingModule({
-      imports: [AdminPage],
+      imports: [MembersPage],
       providers: [
         provideZonelessChangeDetection(),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
       ],
     }).compileComponents();
-    const fixture = TestBed.createComponent(AdminPage);
+    const fixture = TestBed.createComponent(MembersPage);
     await settle(fixture);
     return fixture;
   }
@@ -71,15 +71,15 @@ describe('AdminPage', () => {
     const fixture = await mount(ME_ADMIN, USERS);
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('app-users-table')).toBeTruthy();
-    expect(el.querySelectorAll('[data-testid="users-table-row"]')).toHaveLength(2);
+    expect(el.querySelector('app-members-table')).toBeTruthy();
+    expect(el.querySelectorAll('[data-testid="members-table-row"]')).toHaveLength(2);
   });
 
   it('renders an error state when the users read is refused (403, below user:manage)', async () => {
     const fixture = await mount(ME_ADMIN, stubError(403, { detail: "missing permission 'user:manage'" }));
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="admin-page-error"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="members-page-error"]')).toBeTruthy();
   });
 
   it("enables the roles the hub's listing offers the actor on each row (admin option enabled)", async () => {
@@ -87,7 +87,7 @@ describe('AdminPage', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     const guestRow = el.querySelector('[data-user-id="usr_guest"]');
-    guestRow?.querySelector<HTMLButtonElement>('[data-testid="users-table-role-select"]')?.click();
+    guestRow?.querySelector<HTMLButtonElement>('[data-testid="members-table-role-select"]')?.click();
     await settle(fixture);
     expect(document.querySelector('[role="listbox"] [role="option"][title="admin"]')?.getAttribute('aria-disabled')).not.toBe('true');
   });
@@ -97,7 +97,7 @@ describe('AdminPage', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     const ownRow = el.querySelector('[data-user-id="usr_admin"]');
-    expect(ownRow?.querySelector('[data-testid="users-table-role-static"]')?.textContent).toContain('(you)');
+    expect(ownRow?.querySelector('[data-testid="members-table-role-static"]')?.textContent).toContain('(you)');
   });
 
   it('surfaces a refused role change instead of appearing to succeed', async () => {
@@ -109,14 +109,14 @@ describe('AdminPage', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     const select = el.querySelector<HTMLSelectElement>(
-      '[data-user-id="usr_guest"] [data-testid="users-table-role-select"]',
+      '[data-user-id="usr_guest"] [data-testid="members-table-role-select"]',
     );
     select!.click();
     await settle(fixture);
     document.querySelector<HTMLElement>('[role="listbox"] [role="option"][title="contributor"]')?.click();
     await settle(fixture);
 
-    expect(el.querySelector('[data-testid="admin-page-assign-role-error"]')?.textContent).toContain(
+    expect(el.querySelector('[data-testid="members-page-assign-role-error"]')?.textContent).toContain(
       'only superuser may grant or revoke admin',
     );
   });
