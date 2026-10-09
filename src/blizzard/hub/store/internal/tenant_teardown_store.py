@@ -1,10 +1,12 @@
 """SQLAlchemy adapter for tenant deletion (package-private).
 
-The close is a hub-level write over the global ``tenants`` and ``tenant_deletions``: it locks the tenant's row first —
-the same row every scoped write of the tenant locks before its first statement — and only then records the deletion
-fact, so a write in flight either committed before the close or is refused after it. The drain and the completion are
-the tenant's teardown writes (:meth:`~blizzard.hub.store.scoped.ScopedConnections.teardown`): each locks the deletion
-fact, which also serializes two drains of one tenant, and removes rows through the tenant's own builders.
+The close is a hub-level write over the global ``tenants`` and ``tenant_deletions``: it locks every tenant's row first —
+among them the tenant's own, the same row every scoped write of the tenant locks before its first statement — and only
+then checks that another tenant stays open and records the deletion fact, so a write in flight either committed before
+the close or is refused after it, and two closes of different tenants never both pass the last-open-tenant check. The
+drain and the completion are the tenant's teardown writes
+(:meth:`~blizzard.hub.store.scoped.ScopedConnections.teardown`): each locks the deletion fact, which also serializes two
+drains of one tenant, and removes rows through the tenant's own builders.
 
 The drain walks :data:`DRAIN_ORDER` — the reverse of ``schema.metadata.sorted_tables`` restricted to tenant-owned
 tables, children before parents — from the top on every batch, deleting each table's rows by primary key. Nothing
@@ -15,7 +17,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Table, delete, exists, func, insert, literal, select, tuple_, update
+from sqlalchemy import Connection, Table, delete, exists, func, insert, literal, select, tuple_, update
 
 from blizzard.hub.domain.tenancy.teardown import CloseOutcome, IWriteTenantTeardowns, LastTenant, TenantDeletion
 from blizzard.hub.store import schema as s
@@ -39,6 +41,22 @@ def _deletion(row: Any) -> TenantDeletion:
         rows_removed=row.rows_removed or 0,
         deleted_at=row.deleted_at,
     )
+
+
+def _lock_every_tenant(conn: Connection) -> set[str]:
+    """Take every ``tenants`` row's write lock — one no-op ``UPDATE`` each, in ``tenant_id`` order — and name the rows
+    locked. The last-open-tenant check reads the other tenants' rows, so locking the closing tenant's own row alone lets
+    two closes of different tenants each pass it under Postgres' READ COMMITTED, neither seeing the other's uncommitted
+    deletion fact. Taken in one order, the locks queue the second close behind the first, whose committed fact its
+    check then reads (``bzh:store-exclusive-write``; ``FOR UPDATE`` renders nothing on SQLite). On SQLite the first
+    ``UPDATE`` takes the single writer lock, as the own-row lock did. The race is verified on SQLite only; on Postgres
+    it stays unverified."""
+    tenants = conn.execute(select(_t.tenant_id).order_by(_t.tenant_id)).scalars().all()
+    return {
+        each
+        for each in tenants
+        if conn.execute(update(s.tenants).where(_t.tenant_id == each).values(name=_t.name)).rowcount
+    }
 
 
 def _delete_some(connections: ScopedConnections, conn: Any, table: Table, limit: int) -> int:
@@ -67,11 +85,11 @@ class TenantTeardownStore:
 
     def close(self, tenant: TenantId, *, by: str, at: datetime) -> CloseOutcome:
         with self._store.write("close_tenant") as conn:
-            locked = conn.execute(update(s.tenants).where(_t.tenant_id == tenant).values(name=_t.name)).rowcount
+            locked = _lock_every_tenant(conn)
             done = conn.execute(select(_d.deleted_at).where(_d.tenant_id == tenant)).one_or_none()
             if done is not None:
                 return CloseOutcome.UNDERWAY if done.deleted_at is None else CloseOutcome.DELETED
-            if locked != 1:
+            if tenant not in locked:
                 raise UnknownTenant(tenant)
             closed = exists().where(_d.tenant_id == _t.tenant_id)
             if not conn.execute(select(exists().where(_t.tenant_id != tenant, ~closed))).scalar_one():

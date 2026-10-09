@@ -31,6 +31,7 @@ from tests.support import (
     HubHarness,
     added_runner,
     build_hub,
+    capture_statements,
     default_tenant,
     hub_level_connections,
     scoped_connections,
@@ -263,6 +264,20 @@ def test_the_only_open_tenant_and_an_unknown_one_are_refused_and_nothing_is_writ
 
     assert _deletions(hub) == []
     assert _hub_events(hub) == []
+
+
+def test_a_close_locks_every_tenant_row_in_id_order_before_its_last_tenant_check(hub: HubHarness) -> None:
+    tenants = sorted([default_tenant(hub.engine), _created(hub, "acme"), _created(hub, "bravo")])
+    store = TenantTeardownStore(hub_level_connections(hub.engine))
+
+    with capture_statements(hub.engine) as statements:
+        store.close(tenants[1], by="usr_closer", at=hub.hub_services.clock.now())
+
+    texts = [" ".join(sql.split()) for sql, _ in statements]
+    locks = [i for i, sql in enumerate(texts) if sql.startswith("UPDATE tenants ")]
+    check = next(i for i, sql in enumerate(texts) if sql.startswith("SELECT EXISTS") and "tenant_deletions" in sql)
+    assert [tuple(statements[i][1]) for i in locks] == [(tenant,) for tenant in tenants]
+    assert max(locks) < check
 
 
 def test_the_last_open_tenant_stays_refused_while_another_deletion_is_underway(
