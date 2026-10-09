@@ -122,16 +122,17 @@ def reconcile_open_tenants(
     open_tenants: Mapping[TenantId, str], reconciliation_of: Callable[[TenantId], GraphReconciliation]
 ) -> list[TenantGraphOutcomes]:
     """Reconcile the packaged set into each of ``open_tenants``, by id, through the reconciliation
-    ``reconciliation_of`` opens over that tenant's own stores. A tenant closed since the set was read has no stores to
-    open, and is passed over."""
+    ``reconciliation_of`` opens over that tenant's own stores. A tenant closed since the set was read — before its
+    stores open, or between their opening and a mint, which its closed tenant lock refuses — is passed over and left
+    out of the answer; every later tenant still reconciles."""
     reports: list[TenantGraphOutcomes] = []
     for tenant, name in sorted(open_tenants.items()):
         try:
-            reconciliation = reconciliation_of(tenant)
+            outcomes = reconciliation_of(tenant).outcomes()
         except (TenantClosed, UnknownTenant):
-            _log.info("tenant closed before its graph sync; passed over", tenant=tenant)
+            _log.info("tenant closed during its graph sync; passed over", tenant=tenant)
             continue
-        reports.append(TenantGraphOutcomes(tenant=tenant, name=name, outcomes=reconciliation.outcomes()))
+        reports.append(TenantGraphOutcomes(tenant=tenant, name=name, outcomes=outcomes))
     return reports
 
 

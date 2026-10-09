@@ -11,10 +11,11 @@ from fastapi.testclient import TestClient
 
 from blizzard.auth_core import Role
 from blizzard.hub.api.auth_session import TENANT_HEADER
+from blizzard.hub.composition import TenantCache, TenantServices
 from blizzard.hub.config import AUTH_MODE_OAUTH
 from blizzard.hub.domain.tenancy import teardown
 from blizzard.hub.graphs import PACKAGED, GraphFile
-from blizzard.hub.tenancy import TenantId
+from blizzard.hub.tenancy import StoreScope, TenantId
 from tests.support import HubHarness, build_hub, default_tenant, seed_hub_admin, seed_runner, seed_session, seed_user
 
 pytestmark = pytest.mark.component
@@ -153,6 +154,36 @@ def test_the_hub_graph_sync_answers_once_per_open_tenant(hub: HubHarness) -> Non
     by_tenant = {t["tenant_id"]: t for t in body["tenants"]}
     assert sorted(e["name"] for e in by_tenant[created["tenant_id"]]["entries"]) == _PACKAGED_NAMES
     assert {e["status"] for e in by_tenant[created["tenant_id"]]["entries"]} == {"up-to-date"}
+
+
+def test_a_tenant_closing_mid_sync_is_passed_over_and_the_later_tenants_still_sync(
+    hub: HubHarness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Tenants seeded straight into the store hold no packaged graph yet, so each one's sync mints — and a mint is the
+    # write a closed tenant's lock refuses.
+    session = _hub_admin(hub)
+    first, middle, last = sorted(
+        [default_tenant(hub.engine), hub.add_tenant("acme").tenant, hub.add_tenant("bolt").tenant]
+    )
+    opened = TenantCache.open_services
+
+    def open_then_close(self: TenantCache, scope: StoreScope) -> TenantServices:
+        services = opened(self, scope)
+        if scope.tenant == middle:
+            hub.hub_services.tenant_teardown.close(middle, by="usr_closer")
+        return services
+
+    monkeypatch.setattr(TenantCache, "open_services", open_then_close)
+
+    resp = hub.client.post("/api/admin/graphs/sync", headers=_bearer(session))
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["ok"] is True
+    assert [t["tenant_id"] for t in body["tenants"]] == [first, last]
+    for synced in body["tenants"]:
+        assert sorted(e["name"] for e in synced["entries"]) == _PACKAGED_NAMES
+        assert {e["status"] for e in synced["entries"]} == {"minted"}
 
 
 def test_a_rename_reaches_the_next_registration_of_the_tenants_runner(hub: HubHarness) -> None:
