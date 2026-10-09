@@ -4,7 +4,11 @@ rule, and collision-free username minting.
 Holds the **write** repositories (``bzh:controller-read-only``) and takes already-loaded
 objects (``bzh:domain-takes-objects``). Also holds :meth:`accept_invitation`, which admits a
 person into a tenant through an invitation, and the superuser claim; every membership grant
-either makes is recorded via ``auth_facts`` in the same identity unit of work."""
+either makes is recorded via ``auth_facts`` in the same identity unit of work.
+
+The hub is invite-only: signing in recognizes a person the hub already knows, and admits a new
+one only through an invitation or as the configured ``auth.superuser``. A sign-in that admits
+nobody writes nothing and names its :class:`SignInRefusal`."""
 
 from __future__ import annotations
 
@@ -13,6 +17,7 @@ import secrets
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from enum import StrEnum
 
 from blizzard.auth_core import Role, permissions_for
 from blizzard.foundation.clock import IClock
@@ -67,6 +72,19 @@ class InvitationAccepted:
     user: User
     session_id: str
     tenant: TenantId
+
+
+class SignInRefusal(StrEnum):
+    """Why a sign-in admitted nobody — the code the board's login page shows its text for. Every refusal writes
+    nothing: no user, identity link, membership, invitation fact or session."""
+
+    #: A first sign-in by a person the hub does not know, with no invitation.
+    INVITE_ONLY = "invite_only"
+    #: The invitation is expired, revoked or already used — or names nothing.
+    INVITATION_UNUSABLE = "invitation_unusable"
+    #: No verified email on the account matches the invitation's, or the provider does not vouch for every address
+    #: it reports; the invitation stays live.
+    INVITATION_EMAIL_MISMATCH = "invitation_email_mismatch"
 
 
 def principal(user: User, *, tenant: TenantId | None, role: Role | None, hub_admin: bool) -> ResolvedIdentity:
@@ -214,17 +232,28 @@ class AuthService:
         _log.info("session minted", user_id=user.user_id, username=user.username)
         return plaintext, session
 
-    def link_or_mint(self, identity: ProviderIdentity, *, provider_name: str) -> User:
-        """The first-login email-merge linking rule: resolve ``identity`` to the
-        :class:`User` it belongs to, minting one if none exists.
+    def link_or_mint(self, identity: ProviderIdentity, *, provider_name: str) -> User | None:
+        """The first-login email-merge linking rule, invite-only: resolve ``identity`` to the
+        :class:`User` it belongs to, minting one only for the configured ``auth.superuser``.
 
         An existing ``(provider_name, subject)`` link wins, its ``handle`` refreshed in place;
-        else a **verified** email match attaches; else a user with no membership is minted.
-        Whichever user it resolves to claims a configured, still-unclaimed ``auth.superuser``
-        whose email it holds."""
-        return self._claim_superuser(
-            self._resolve_user(identity, provider_name, users=self._users, identities=self._identities)
-        )
+        else a **verified** email match attaches; else, when the verified email is the
+        still-unclaimed ``auth.superuser``, a user is minted. Whichever user it resolves to claims
+        a configured, still-unclaimed ``auth.superuser`` whose email it holds. ``None``, writing
+        nothing, for anyone else — they arrive only through an invitation."""
+        user = self._known_user(identity, provider_name, users=self._users, identities=self._identities)
+        if user is None:
+            if not self._is_superuser_target(identity):
+                return None
+            user = self._mint_user(identity, provider_name, users=self._users, identities=self._identities)
+        return self._claim_superuser(user)
+
+    def _is_superuser_target(self, identity: ProviderIdentity) -> bool:
+        """Whether ``identity``'s verified email is the configured, still-unclaimed ``auth.superuser`` — the one
+        person a sign-in admits without an invitation."""
+        if not identity.email_verified or not identity.email:
+            return False
+        return _claimable(self._superuser_bootstrap.get(), identity.email)
 
     def _resolve_user(
         self,
@@ -234,6 +263,21 @@ class AuthService:
         users: IWriteUserRepository,
         identities: IWriteIdentityRepository,
     ) -> User:
+        known = self._known_user(identity, provider_name, users=users, identities=identities)
+        return (
+            known if known is not None else self._mint_user(identity, provider_name, users=users, identities=identities)
+        )
+
+    def _known_user(
+        self,
+        identity: ProviderIdentity,
+        provider_name: str,
+        *,
+        users: IWriteUserRepository,
+        identities: IWriteIdentityRepository,
+    ) -> User | None:
+        """The user ``identity`` already resolves to — by its link, else by its verified email — linking it on an
+        email match; ``None``, writing nothing, when the hub does not know the person."""
         existing_link = identities.get(provider_name, identity.subject)
         if existing_link is not None:
             user = users.get(existing_link.user_id)
@@ -242,7 +286,6 @@ class AuthService:
                 identities.update_handle(provider_name, identity.subject, handle=identity.handle)
             return user
 
-        now = self._clock.now()
         if identity.email_verified and identity.email:
             matched = users.get_by_email(identity.email)
             if matched is not None:
@@ -252,11 +295,21 @@ class AuthService:
                         subject=identity.subject,
                         user_id=matched.user_id,
                         handle=identity.handle,
-                        created_at=now,
+                        created_at=self._clock.now(),
                     )
                 )
                 return matched
+        return None
 
+    def _mint_user(
+        self,
+        identity: ProviderIdentity,
+        provider_name: str,
+        *,
+        users: IWriteUserRepository,
+        identities: IWriteIdentityRepository,
+    ) -> User:
+        now = self._clock.now()
         user = User(
             user_id=Id.mint(IdPrefix.USER, self._clock).value,
             username=self._username(identity.handle, users),
@@ -384,23 +437,23 @@ class AuthService:
 
     def accept_invitation(
         self, identity: ProviderIdentity, *, provider_name: str, invitation: TenantInvitation
-    ) -> InvitationAccepted | None:
+    ) -> InvitationAccepted | SignInRefusal:
         """Admit the person ``identity`` signs in as through ``invitation``, in one identity unit of work: resolve the
         user as :meth:`link_or_mint` does — minting one for an identity and email the hub has not seen — grant the
         invitation's role in its tenant unless they already hold a membership there, whose role stays as it is,
         record the invitation accepted, and mint their session. Whichever user it resolves to then claims a
         configured, still-unclaimed ``auth.superuser`` whose email it holds.
 
-        ``None``, writing nothing, when the invitation is no longer live or ``identity`` carries no address the
-        invitation admits."""
+        A refusal, writing nothing, when the invitation is no longer live (``INVITATION_UNUSABLE``) or ``identity``
+        carries no address the invitation admits (``INVITATION_EMAIL_MISMATCH`` — it stays live)."""
         now = self._clock.now()
         with self._transactions.begin() as writes:
             invitations = self._invitations(writes.tenant_connections(StoreScope(invitation.tenant)))
             record = invitations.get(invitation.invitation_id)
             if record is None or record.state(now) is not InvitationState.LIVE:
-                return None
+                return SignInRefusal.INVITATION_UNUSABLE
             if not record.invitation.admits(identity):
-                return None
+                return SignInRefusal.INVITATION_EMAIL_MISMATCH
             user = self._resolve_user(identity, provider_name, users=writes.users, identities=writes.identities)
             if writes.memberships.role_in(invitation.tenant, user.user_id) is None:
                 self._grant(record.invitation.role, user=user, invitation=invitation, at=now, writes=writes)

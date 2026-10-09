@@ -2,11 +2,13 @@
 trip, and on the callback one identity unit of work admits the person — the user and identity link when new, the
 membership the invitation grants unless they already hold one there, the ``accepted`` fact, and the session — then
 lands them in the invited tenant. A provider that does not vouch for every address it reports, an account carrying no
-invited address, and an invitation no longer live admit nobody and write nothing; a failure part way leaves nothing
-behind."""
+invited address, and an invitation no longer live or naming nothing admit nobody, write nothing and land on the login
+page naming why — the invitation stays live when only the address was wrong; a failure part way leaves nothing behind.
+A person already signed in who opens an invitation goes through the same check."""
 
 from __future__ import annotations
 
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
@@ -17,9 +19,18 @@ import sqlalchemy as sa
 from blizzard.auth_core import Role
 from blizzard.hub.auth.invitations import InvitationToken, TenantInvitation
 from blizzard.hub.auth.models import ProviderIdentity
+from blizzard.hub.auth.service import SignInRefusal
 from blizzard.hub.store import schema
 from blizzard.hub.tenancy import TenantClosed, TenantId
-from tests.support import HubHarness, build_hub, default_tenant, hub_scoped, seed_invitation, seed_user
+from tests.support import (
+    HubHarness,
+    build_hub,
+    close_tenant,
+    default_tenant,
+    hub_scoped,
+    seed_invitation,
+    seed_user,
+)
 from tests.test_auth_login_api import FakeOAuthProvider, _state_from_redirect
 
 pytestmark = pytest.mark.component
@@ -44,10 +55,19 @@ def _hub(tmp_path: Path, identity: ProviderIdentity) -> tuple[HubHarness, FakeOA
     return build_hub(tmp_path, auth_mode="oauth", oauth_providers={"github": github}), github
 
 
-def _sign_in(hub: HubHarness, token: str) -> Any:
-    authorize = hub.client.get(f"/api/auth/github/authorize?invite={token}", follow_redirects=False)
+def _sign_in(hub: HubHarness, token: str, *, session: str | None = None) -> Any:
+    cookies = {"bz_session": session} if session is not None else None
+    authorize = hub.client.get(f"/api/auth/github/authorize?invite={token}", follow_redirects=False, cookies=cookies)
     state = _state_from_redirect(authorize.headers["location"])
-    return hub.client.get(f"/api/auth/github/callback?code=code&state={state}", follow_redirects=False)
+    return hub.client.get(f"/api/auth/github/callback?code=code&state={state}", follow_redirects=False, cookies=cookies)
+
+
+def _refused(landed: Any, refusal: SignInRefusal) -> None:
+    """``landed`` is a refused sign-in: the login page naming ``refusal``, and no session handed out."""
+    assert landed.status_code == 302, landed.text
+    location = urlsplit(landed.headers["location"])
+    assert (location.path, parse_qs(location.query)) == ("/login", {"refusal": [refusal.value]})
+    assert "bz_session" not in landed.cookies
 
 
 def _rows(hub: HubHarness, table: sa.Table) -> list[sa.Row[Any]]:
@@ -128,18 +148,111 @@ def test_an_existing_member_records_the_acceptance_and_keeps_their_role(tmp_path
         pytest.param(_ada(emails=("ada@home.example",)), id="no-invited-address"),
     ],
 )
-def test_an_identity_the_invitation_does_not_admit_writes_nothing(tmp_path: Path, identity: ProviderIdentity) -> None:
-    hub, _github = _hub(tmp_path, identity)
+def test_an_identity_the_invitation_does_not_admit_writes_nothing_and_leaves_it_live(
+    tmp_path: Path, identity: ProviderIdentity
+) -> None:
+    hub, github = _hub(tmp_path, identity)
     tenant = default_tenant(hub.engine)
-    invitation_id, _token = seed_invitation(hub.engine, tenant, _WORK, Role.GUEST)
+    _invitation_id, token = seed_invitation(hub.engine, tenant, _WORK, Role.GUEST)
     before = _written(hub)
 
-    accepted = hub.hub_services.auth.accept_invitation(
-        identity, provider_name="github", invitation=TenantInvitation(tenant, invitation_id)
-    )
+    _refused(_sign_in(hub, token), SignInRefusal.INVITATION_EMAIL_MISMATCH)
 
-    assert accepted is None
     assert _written(hub) == before
+    github.codes["code"] = _ada()
+    landed = _sign_in(hub, token)
+    assert urlsplit(landed.headers["location"]).path == "/invite/accepted"
+
+
+def _expired(hub: HubHarness, tenant: TenantId) -> str:
+    _invitation_id, token = seed_invitation(
+        hub.engine, tenant, _WORK, Role.GUEST, at=hub.clock.now() - timedelta(days=8), lifetime=timedelta(days=7)
+    )
+    return token
+
+
+def _revoked(hub: HubHarness, tenant: TenantId) -> str:
+    invitation_id, token = seed_invitation(hub.engine, tenant, _WORK, Role.GUEST)
+    with hub.engine.begin() as conn:
+        conn.execute(
+            hub_scoped(
+                sa.insert(schema.invitation_facts).values(
+                    tenant_id=tenant,
+                    invitation_id=invitation_id,
+                    kind="revoked",
+                    actor_user_id="usr_admin",
+                    recorded_at=hub.clock.now(),
+                )
+            )
+        )
+    return token
+
+
+def _used(hub: HubHarness, tenant: TenantId) -> str:
+    _invitation_id, token = seed_invitation(hub.engine, tenant, _WORK, Role.GUEST)
+    assert urlsplit(_sign_in(hub, token).headers["location"]).path == "/invite/accepted"
+    return token
+
+
+def _closed(hub: HubHarness, tenant: TenantId) -> str:
+    other = hub.add_tenant("other")
+    _invitation_id, token = seed_invitation(hub.engine, other.tenant, _WORK, Role.GUEST)
+    close_tenant(hub.engine, other.tenant)
+    return token
+
+
+@pytest.mark.parametrize(
+    "invitation",
+    [
+        pytest.param(_expired, id="expired"),
+        pytest.param(_revoked, id="revoked"),
+        pytest.param(_used, id="already-used"),
+        pytest.param(_closed, id="tenant-closed"),
+        pytest.param(lambda _hub, _tenant: "no-such-token", id="names-nothing"),
+    ],
+)
+def test_an_invitation_no_longer_usable_writes_nothing(tmp_path: Path, invitation: Any) -> None:
+    hub, _github = _hub(tmp_path, _ada())
+    token = invitation(hub, default_tenant(hub.engine))
+    before = _written(hub)
+
+    _refused(_sign_in(hub, token), SignInRefusal.INVITATION_UNUSABLE)
+
+    assert _written(hub) == before
+
+
+def test_a_signed_in_person_is_admitted_into_one_more_tenant_when_their_account_carries_the_address(
+    tmp_path: Path,
+) -> None:
+    hub, _github = _hub(tmp_path, _ada())
+    member = seed_user(hub, username="ada", role=Role.CONTRIBUTOR, email="ada@home.example")
+    session, _ = hub.hub_services.auth.mint_session(member)
+    other = hub.add_tenant("other")
+    _invitation_id, token = seed_invitation(hub.engine, other.tenant, _WORK, Role.GUEST)
+
+    landed = _sign_in(hub, token, session=session)
+
+    assert parse_qs(urlsplit(landed.headers["location"]).query) == {"tenant": [other.tenant]}
+    assert hub.hub_services.memberships.role_in(other.tenant, member.user_id) is Role.GUEST
+    assert hub.hub_services.memberships.role_in(default_tenant(hub.engine), member.user_id) is Role.CONTRIBUTOR
+
+
+def test_a_signed_in_person_whose_account_lacks_the_address_is_refused_and_keeps_their_session(
+    tmp_path: Path,
+) -> None:
+    hub, _github = _hub(tmp_path, _ada(emails=("ada@home.example",)))
+    member = seed_user(hub, username="ada", role=Role.CONTRIBUTOR, email="ada@home.example")
+    session, _ = hub.hub_services.auth.mint_session(member)
+    other = hub.add_tenant("other")
+    _invitation_id, token = seed_invitation(hub.engine, other.tenant, _WORK, Role.GUEST)
+    before = _written(hub)
+
+    _refused(_sign_in(hub, token, session=session), SignInRefusal.INVITATION_EMAIL_MISMATCH)
+
+    assert _written(hub) == before
+    assert hub.hub_services.memberships.role_in(other.tenant, member.user_id) is None
+    me = hub.client.get("/api/me", cookies={"bz_session": session})
+    assert me.status_code == 200, me.text
 
 
 def test_an_invitation_is_accepted_at_most_once(tmp_path: Path) -> None:
@@ -152,7 +265,7 @@ def test_an_invitation_is_accepted_at_most_once(tmp_path: Path) -> None:
 
     again = hub.hub_services.auth.accept_invitation(_ada(), provider_name="github", invitation=invitation)
 
-    assert again is None
+    assert again is SignInRefusal.INVITATION_UNUSABLE
     assert _written(hub) == after_first
 
 
@@ -160,7 +273,7 @@ def test_a_failure_part_way_leaves_nothing_behind(tmp_path: Path) -> None:
     hub, _github = _hub(tmp_path, _ada())
     other = hub.add_tenant("other")
     invitation_id, _token = seed_invitation(hub.engine, other.tenant, _WORK, Role.GUEST)
-    _close(hub, other.tenant)
+    close_tenant(hub.engine, other.tenant)
     before = _written(hub)
 
     with pytest.raises(TenantClosed):
@@ -169,15 +282,3 @@ def test_a_failure_part_way_leaves_nothing_behind(tmp_path: Path) -> None:
         )
 
     assert _written(hub) == before
-
-
-def _close(hub: HubHarness, tenant: TenantId) -> None:
-    """Close ``tenant`` as a deletion's first step records it — its writes are refused from then on."""
-    with hub.engine.begin() as conn:
-        conn.execute(
-            hub_scoped(
-                sa.insert(schema.tenant_deletions).values(
-                    tenant_id=tenant, name="other", deleted_by="test", deleted_at=None
-                )
-            )
-        )

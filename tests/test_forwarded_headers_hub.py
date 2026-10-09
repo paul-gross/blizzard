@@ -12,9 +12,8 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from blizzard.hub.auth.models import ProviderIdentity
 from tests.support import build_hub
-from tests.test_auth_login_api import FakeOAuthProvider, _state_from_redirect
+from tests.test_auth_login_api import ADA, FakeOAuthProvider, _state_from_redirect, known_ada
 
 pytestmark = pytest.mark.component
 
@@ -32,8 +31,9 @@ def _client(hub, peer: str) -> TestClient:  # type: ignore[no-untyped-def]
 
 def test_forwarded_proto_https_from_a_trusted_proxy_mints_a_secure_cookie(tmp_path: Path) -> None:
     github = FakeOAuthProvider(name="github")
-    github.codes["c1"] = ProviderIdentity(subject="1", handle="ada", email=None, email_verified=False)
+    github.codes["c1"] = ADA
     hub = build_hub(tmp_path, auth_mode="oauth", oauth_providers={"github": github}, trusted_proxies=[_PROXY_IP])
+    known_ada(hub)
     client = _client(hub, _PROXY_IP)
 
     headers = {"x-forwarded-proto": "https"}
@@ -48,8 +48,9 @@ def test_forwarded_proto_https_from_a_trusted_proxy_mints_a_secure_cookie(tmp_pa
 
 def test_forwarded_proto_https_from_an_unlisted_peer_is_ignored(tmp_path: Path) -> None:
     github = FakeOAuthProvider(name="github")
-    github.codes["c1"] = ProviderIdentity(subject="1", handle="ada", email=None, email_verified=False)
+    github.codes["c1"] = ADA
     hub = build_hub(tmp_path, auth_mode="oauth", oauth_providers={"github": github}, trusted_proxies=[_PROXY_IP])
+    known_ada(hub)
     client = _client(hub, _DIRECT_IP)  # not the configured proxy
 
     headers = {"x-forwarded-proto": "https"}
@@ -62,8 +63,9 @@ def test_forwarded_proto_https_from_an_unlisted_peer_is_ignored(tmp_path: Path) 
 
 def test_with_no_trusted_proxies_the_forwarded_proto_header_is_ignored(tmp_path: Path) -> None:
     github = FakeOAuthProvider(name="github")
-    github.codes["c1"] = ProviderIdentity(subject="1", handle="ada", email=None, email_verified=False)
+    github.codes["c1"] = ADA
     hub = build_hub(tmp_path, auth_mode="oauth", oauth_providers={"github": github})  # empty default
+    known_ada(hub)
     client = _client(hub, _PROXY_IP)
 
     headers = {"x-forwarded-proto": "https"}

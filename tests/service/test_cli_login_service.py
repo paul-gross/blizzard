@@ -23,6 +23,7 @@ from blizzard.hub.auth.pkce import Pkce
 from blizzard.hub.config import AuthConfig, HubConfig, OAuthProviderConfig
 from tests.e2e.test_acceptance_loop import _await_http, _free_port, _terminate
 from tests.service.support import require_stub_idp, service_gate, stub_idp
+from tests.service.test_auth_login_service import invite
 from tests.support import daemon_log_sink
 
 pytestmark = [pytest.mark.service, service_gate]
@@ -61,10 +62,10 @@ def _oauth_hub(hub_dir: Path, port: int, *, providers: tuple[OAuthProviderConfig
         _terminate(proc)
 
 
-def _establish_hub_session(hub: httpx.Client, idp_port: int) -> None:
-    """The provider dance, driven exactly like ``tests/service/test_auth_login_service.py``'s
-    own scenarios — ``hub`` ends carrying a ``bz_session`` cookie."""
-    hub.get("/api/auth/oidc-svc/authorize", follow_redirects=True)
+def _establish_hub_session(hub: httpx.Client, hub_dir: Path, email: str) -> None:
+    """The provider dance of a person invited as ``email``, driven exactly like
+    ``tests/service/test_auth_login_service.py``'s own scenarios — ``hub`` ends carrying a ``bz_session`` cookie."""
+    hub.get(f"/api/auth/oidc-svc/authorize?invite={invite(hub_dir, email)}", follow_redirects=True)
     assert "bz_session" in hub.cookies
 
 
@@ -111,9 +112,10 @@ def test_the_loopback_form_ends_in_a_working_bearer_session(tmp_path: Path) -> N
             client_id="cid",
             client_secret_env=_SECRET_ENV,
             issuer=f"http://127.0.0.1:{idp_port}",
+            emails_authoritative=True,
         )
         with _oauth_hub(tmp_path / "hub", hub_port, providers=(provider,)) as hub:
-            _establish_hub_session(hub, idp_port)
+            _establish_hub_session(hub, tmp_path / "hub", "cli-user@example.com")
 
             redirect_uri = "http://127.0.0.1:54123/callback"
             code, _state = _mint_cli_code(hub, redirect_uri=redirect_uri)
@@ -162,9 +164,10 @@ def test_logout_revokes_the_bearer_session_server_side(tmp_path: Path) -> None:
             client_id="cid",
             client_secret_env=_SECRET_ENV,
             issuer=f"http://127.0.0.1:{idp_port}",
+            emails_authoritative=True,
         )
         with _oauth_hub(tmp_path / "hub", hub_port, providers=(provider,)) as hub:
-            _establish_hub_session(hub, idp_port)
+            _establish_hub_session(hub, tmp_path / "hub", "logout@example.com")
 
             redirect_uri = "http://127.0.0.1:54124/callback"
             code, _state = _mint_cli_code(hub, redirect_uri=redirect_uri)
@@ -206,9 +209,10 @@ def test_the_paste_code_form_completes_the_same_login_with_no_loopback_listener(
             client_id="cid",
             client_secret_env=_SECRET_ENV,
             issuer=f"http://127.0.0.1:{idp_port}",
+            emails_authoritative=True,
         )
         with _oauth_hub(tmp_path / "hub", hub_port, providers=(provider,)) as hub:
-            _establish_hub_session(hub, idp_port)
+            _establish_hub_session(hub, tmp_path / "hub", "paste@example.com")
 
             # No loopback listener anywhere in this test — the out-of-band redirect
             # form renders a paste-able code instead of a 302.

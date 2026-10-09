@@ -1,8 +1,9 @@
 """Browser login dance + mid-stream session-expiry redirect.
 
-Real Chromium over the served board under oauth: login lands `pending`; `guest` reads
-read-only; `contributor` gets the write control; a session expiring mid-SSE redirects to
-login within one reconnect. Skipped unless ``BLIZZARD_E2E=1``.
+Real Chromium over the served board under oauth: an uninvited login lands back on the login
+page with the invite-only refusal; invited as `guest` the person reads read-only; `contributor`
+gets the write control; a session expiring mid-SSE redirects to login within one reconnect.
+Skipped unless ``BLIZZARD_E2E=1``.
 """
 
 from __future__ import annotations
@@ -18,9 +19,11 @@ from pathlib import Path
 import httpx
 import pytest
 
+from blizzard.auth_core import Role
 from blizzard.hub.config import AuthConfig, HubConfig, OAuthProviderConfig
 from tests.e2e.test_acceptance_loop import _await_http, _free_port, _terminate
 from tests.service.support import require_stub_idp, stub_idp
+from tests.service.test_auth_login_service import invite
 from tests.support import daemon_log_sink
 
 pytestmark = [
@@ -53,6 +56,7 @@ def _init_oauth_hub(hub_dir: Path, idp_port: int) -> None:
         client_id="cid",
         client_secret_env=_SECRET_ENV,
         issuer=f"http://127.0.0.1:{idp_port}",
+        emails_authoritative=True,
     )
     config = HubConfig.load(hub_dir)
     config = dataclasses.replace(config, auth=AuthConfig(mode="oauth", oauth_providers=(provider,)))
@@ -129,7 +133,8 @@ def _expire_session(hub_dir: Path) -> None:
 
 
 def test_browser_login_dance_and_mid_stream_session_expiry(tmp_path: Path) -> None:
-    """The `test_login_session_e2e` scenario: login lands `pending`; `guest` reaches the board read-only;
+    """The `test_login_session_e2e` scenario: an uninvited login is refused; invited as `guest` the person reaches
+    the board read-only;
     `contributor` gets the write control; a session expiring mid-SSE surfaces as a
     login redirect within one reconnect cycle."""
     from playwright.sync_api import expect, sync_playwright
@@ -164,18 +169,23 @@ def test_browser_login_dance_and_mid_stream_session_expiry(tmp_path: Path) -> No
             # --- The real OAuth dance against the stub IdP -----------------------
             page.get_by_test_id(f"login-provider-{_PROVIDER_NAME}").click()
 
-            # A fresh identity mints as `pending` — the bottom, no-access role (#210)
-            # — the lobby is the authenticated proof the dance worked.
-            expect(page.get_by_test_id("pending-lobby")).to_be_visible()
-            expect(page.get_by_test_id("pending-lobby-username")).to_contain_text("octocat")
+            # The hub is invite-only: a person it has never seen is handed back to the login page
+            # with the refusal, holding no session.
+            page.wait_for_url("**/login?refusal=invite_only")
+            expect(page.get_by_test_id("login-page")).to_be_visible()
+            expect(page.get_by_test_id("board-header")).to_have_count(0)
+            assert not [cookie for cookie in page.context.cookies() if cookie.get("name") == "bz_session"]
 
-            # --- 2. Promoted to `guest`, the board is reachable read-only (#210) ---
+            # --- 2. Invited as `guest`, the board is reachable read-only -------------
             _terminate(proc)
-            _set_role(hub_dir, "octocat", "guest")
             _seed_not_ready_chunk(hub_dir, chunk_id=chunk_id, graph_id=graph_id)
             proc = _start_hub(hub_dir, hub_port)
+            token = invite(hub_dir, "octocat@example.com", role=Role.GUEST)
+            page.goto(f"http://127.0.0.1:{hub_port}/api/auth/{_PROVIDER_NAME}/authorize?invite={token}")
+            # Accepting signs the person in; the board's landing route for it is the board's own.
+            assert [cookie for cookie in page.context.cookies() if cookie.get("name") == "bz_session"]
 
-            page.reload(wait_until="load")
+            page.goto(f"http://127.0.0.1:{hub_port}/", wait_until="load")
             expect(page.get_by_test_id("board-header")).to_be_visible()
             expect(page.get_by_test_id("board-shell")).to_be_visible()
             expect(page.get_by_test_id("pending-lobby")).to_have_count(0)

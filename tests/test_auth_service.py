@@ -576,43 +576,47 @@ def _provider_identity(
     return ProviderIdentity(subject=subject, handle=handle, email=email, email_verified=verified)
 
 
-def test_link_or_mint_mints_a_new_pending_user_for_an_unknown_identity() -> None:
+def _signed_in(service: AuthService, identity: ProviderIdentity, *, provider_name: str = "github") -> User:
+    user = service.link_or_mint(identity, provider_name=provider_name)
+    assert user is not None, f"{identity.handle!r} was refused"
+    return user
+
+
+def _known_ada(service: AuthService, identities: _FakeIdentityRepository, *, linked: bool = True) -> User:
+    """Ada as the hub already knows her: a contributor with a verified email, her GitHub identity linked unless
+    ``linked`` is false."""
+    ada = _identities(service).seed("usr_ada", "ada", Role.CONTRIBUTOR, email="ada@example.com")
+    if linked:
+        identities.link(Identity("github", "gh-1", ada.user_id, "ada", _T0))
+    return ada
+
+
+@pytest.mark.parametrize("verified", [True, False], ids=["verified-email", "unverified-email"])
+def test_link_or_mint_admits_no_one_the_hub_does_not_know_and_writes_nothing(verified: bool) -> None:
     clock = FixedClock(_T0)
-    service, users, _, identities, _, _ = _service(clock)
+    service, users, sessions, identities, _, auth_facts = _service(clock)
 
-    user = service.link_or_mint(_provider_identity(), provider_name="github")
+    refused = service.link_or_mint(_provider_identity(verified=verified), provider_name="github")
 
+    assert refused is None
+    assert users.by_id == {}
+    assert identities.get("github", "gh-1") is None
+    assert sessions.by_hash == {}
     assert _identities(service).memberships.facts == []
-    assert user.username == "ada"
-    assert user.email == "ada@example.com"
-    assert users.get(user.user_id) is user or users.get(user.user_id) == user
-    link = identities.get("github", "gh-1")
-    assert link is not None
-    assert link.user_id == user.user_id
-    assert link.handle == "ada"
-
-
-def test_link_or_mint_never_stores_an_unverified_email_on_a_newly_minted_user() -> None:
-    """An unverified provider-reported email is not proof of ownership, so it is not
-    stored on a newly minted user."""
-    clock = FixedClock(_T0)
-    service, _, _, _, _, _ = _service(clock)
-
-    user = service.link_or_mint(_provider_identity(verified=False), provider_name="github")
-
-    assert user.email is None
+    assert auth_facts.list_recent() == []
 
 
 def test_link_or_mint_subject_mapping_wins_on_a_later_login() -> None:
     """An existing ``(provider, subject)`` always resolves its own user — never
     re-mints, never re-merges by email."""
     clock = FixedClock(_T0)
-    service, _, _, _, _, _ = _service(clock)
-    first = service.link_or_mint(_provider_identity(), provider_name="github")
+    service, _, _, identities, _, _ = _service(clock)
+    ada = _known_ada(service, identities)
 
-    second = service.link_or_mint(_provider_identity(email="different@example.com"), provider_name="github")
+    again = _signed_in(service, _provider_identity(email="different@example.com"))
 
-    assert second.user_id == first.user_id
+    assert again == ada
+    assert _identities(service).memberships.role_in(_TENANT, ada.user_id) is Role.CONTRIBUTOR
 
 
 def test_link_or_mint_refreshes_the_handle_on_a_provider_side_rename() -> None:
@@ -620,47 +624,47 @@ def test_link_or_mint_refreshes_the_handle_on_a_provider_side_rename() -> None:
     handle too."""
     clock = FixedClock(_T0)
     service, _, _, identities, _, _ = _service(clock)
-    first = service.link_or_mint(_provider_identity(handle="ada"), provider_name="github")
+    ada = _known_ada(service, identities)
 
-    renamed = service.link_or_mint(_provider_identity(handle="ada-lovelace"), provider_name="github")
+    renamed = _signed_in(service, _provider_identity(handle="ada-lovelace"))
 
-    assert renamed.user_id == first.user_id
+    assert renamed.user_id == ada.user_id
     link = identities.get("github", "gh-1")
     assert link is not None
     assert link.handle == "ada-lovelace"
 
 
 def test_link_or_mint_attaches_a_second_provider_identity_to_the_same_verified_email() -> None:
-    """Second-provider login with the same verified email lands on the same user —
-    one ``users`` row, two ``identities`` rows."""
+    """A new identity whose verified email is a known person's lands on that user — one ``users`` row, an
+    ``identities`` row per provider."""
     clock = FixedClock(_T0)
     service, users, _, identities, _, _ = _service(clock)
-    first = service.link_or_mint(_provider_identity(subject="gh-1", handle="ada"), provider_name="github")
+    ada = _known_ada(service, identities, linked=False)
 
-    second = service.link_or_mint(
+    first = _signed_in(service, _provider_identity(subject="gh-1", handle="ada"))
+    second = _signed_in(
+        service,
         ProviderIdentity(subject="oidc-1", handle="ada.lovelace", email="ada@example.com", email_verified=True),
         provider_name="oidc-co",
     )
 
-    assert second.user_id == first.user_id
+    assert first == second == ada
     assert len(users.by_id) == 1
-    assert identities.list_for_user(first.user_id) == sorted(
-        identities.list_for_user(first.user_id), key=lambda i: i.provider_name
-    )
-    assert {i.provider_name for i in identities.list_for_user(first.user_id)} == {"github", "oidc-co"}
+    assert {i.provider_name for i in identities.list_for_user(ada.user_id)} == {"github", "oidc-co"}
 
 
 def test_link_or_mint_never_merges_an_unverified_email_even_when_it_matches() -> None:
-    """An unverified email never merges — a second (unverified) identity mints its own
-    user rather than attaching to the existing one sharing that email address."""
+    """An unverified email never merges — a second identity reporting a known person's address unverified is a
+    stranger, admitted nowhere and linked to no one."""
     clock = FixedClock(_T0)
-    service, users, _, _, _, _ = _service(clock)
-    first = service.link_or_mint(_provider_identity(subject="gh-1"), provider_name="github")
+    service, users, _, identities, _, _ = _service(clock)
+    ada = _known_ada(service, identities)
 
-    second = service.link_or_mint(_provider_identity(subject="oidc-1", verified=False), provider_name="oidc-co")
+    refused = service.link_or_mint(_provider_identity(subject="oidc-1", verified=False), provider_name="oidc-co")
 
-    assert second.user_id != first.user_id
-    assert len(users.by_id) == 2
+    assert refused is None
+    assert len(users.by_id) == 1
+    assert [i.provider_name for i in identities.list_for_user(ada.user_id)] == ["github"]
 
 
 # --- state -------------------------------------------------------------
@@ -744,7 +748,7 @@ def test_the_first_claim_makes_a_hub_administrator_and_the_first_tenants_admin()
     service, _, _, _, superuser_bootstrap, auth_facts = _service(clock)
     service.record_superuser_bootstrap(email="alice@example.com", claimed_user_id=None)
 
-    user = service.link_or_mint(_alice(), provider_name="github")
+    user = _signed_in(service, _alice())
 
     seeded = _identities(service)
     assert seeded.hub_admins.facts == [HubAdminFact(user.user_id, True, _T0, "bootstrap")]
@@ -768,7 +772,7 @@ def test_the_claim_grants_no_membership_once_a_tenant_has_an_admin_or_a_second_e
     before = list(seeded.memberships.facts)
     service.record_superuser_bootstrap(email="alice@example.com", claimed_user_id=None)
 
-    user = service.link_or_mint(_alice(), provider_name="github")
+    user = _signed_in(service, _alice())
 
     assert seeded.hub_admins.holders() == [user.user_id]
     assert seeded.memberships.facts == before
@@ -784,7 +788,7 @@ def test_a_returning_user_claims_a_newly_configured_target_at_sign_in() -> None:
     identities.link(Identity("github", "gh-alice", alice.user_id, "alice", _T0))
     service.record_superuser_bootstrap(email="alice@example.com", claimed_user_id=None)
 
-    user = service.link_or_mint(_alice(), provider_name="github")
+    user = _signed_in(service, _alice())
 
     assert user == alice
     assert seeded.hub_admins.holders() == [alice.user_id]
@@ -794,12 +798,32 @@ def test_a_returning_user_claims_a_newly_configured_target_at_sign_in() -> None:
     assert bootstrap.claimed_user_id == alice.user_id
 
 
+def test_the_superuser_target_is_admitted_only_on_a_verified_email() -> None:
+    """The configured ``auth.superuser`` is the one stranger a sign-in admits without an invitation — and only when
+    the provider verified the address."""
+    clock = FixedClock(_T0)
+    service, users, _, _, superuser_bootstrap, _ = _service(clock)
+    service.record_superuser_bootstrap(email="alice@example.com", claimed_user_id=None)
+
+    refused = service.link_or_mint(
+        _provider_identity(subject="gh-alice", email="alice@example.com", verified=False), provider_name="github"
+    )
+
+    assert refused is None
+    assert users.by_id == {}
+    bootstrap = superuser_bootstrap.get()
+    assert bootstrap is not None
+    assert bootstrap.claimed_user_id is None
+
+
 def test_link_or_mint_does_not_claim_a_bootstrap_target_for_a_different_email() -> None:
     clock = FixedClock(_T0)
     service, _, _, _, superuser_bootstrap, _ = _service(clock)
     service.record_superuser_bootstrap(email="alice@example.com", claimed_user_id=None)
 
-    service.link_or_mint(_provider_identity(email="bob@example.com"), provider_name="github")
+    refused = service.link_or_mint(_provider_identity(email="bob@example.com"), provider_name="github")
+
+    assert refused is None
 
     assert _identities(service).hub_admins.facts == []
     bootstrap = superuser_bootstrap.get()
@@ -812,7 +836,11 @@ def test_link_or_mint_does_not_reclaim_an_already_claimed_bootstrap_target() -> 
     service, _, _, _, superuser_bootstrap, _ = _service(clock)
     service.record_superuser_bootstrap(email="alice@example.com", claimed_user_id="usr_already")
 
-    service.link_or_mint(_provider_identity(subject="gh-alice-2", email="alice@example.com"), provider_name="github")
+    refused = service.link_or_mint(
+        _provider_identity(subject="gh-alice-2", email="alice@example.com"), provider_name="github"
+    )
+
+    assert refused is None
 
     assert _identities(service).hub_admins.facts == []
     assert _identities(service).memberships.facts == []
