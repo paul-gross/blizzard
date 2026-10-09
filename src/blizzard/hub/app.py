@@ -41,6 +41,8 @@ from blizzard.foundation.trace_attributes import CHUNK_ID
 from blizzard.foundation.trace_export.internal.otlp import OtlpTraceExporter
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.foundation.web import Frontend, install_schema_components
+from blizzard.hub.api.admin_events import router as admin_events_router
+from blizzard.hub.api.admin_tenants import router as admin_tenants_router
 from blizzard.hub.api.analytics import router as analytics_router
 from blizzard.hub.api.auth_login import router as auth_login_router
 from blizzard.hub.api.chunk_dependencies import router as chunk_dependencies_router
@@ -378,6 +380,8 @@ def create_app(
     app.include_router(analytics_router)
     app.include_router(traces_router)
     app.include_router(egress_router)
+    app.include_router(admin_tenants_router)
+    app.include_router(admin_events_router)
     app.include_router(work_sources_router)
     app.include_router(repositories_router)
     # Outside the fleet gate — pinned by `tests/test_fleet_identity.py`'s tokenless-401 case.

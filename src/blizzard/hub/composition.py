@@ -123,7 +123,7 @@ from blizzard.hub.domain.observability.egress.reset import EgressReset
 from blizzard.hub.domain.observability.egress.status import EgressStatusReader
 from blizzard.hub.domain.observability.egress.sweep import EgressSweep
 from blizzard.hub.domain.observability.forge_status import FULL_PASS_FLOOR_INTERVALS, AnnotationReconciler
-from blizzard.hub.domain.observability.hub_events import HubEventLogService
+from blizzard.hub.domain.observability.hub_events import HubEventLogService, IReadHubEventLog
 from blizzard.hub.domain.observability.tracing.replay import TraceReplay
 from blizzard.hub.domain.observability.tracing.status import TraceStatusReader
 from blizzard.hub.domain.observability.tracing.sweep import TraceExportSweep
@@ -142,6 +142,7 @@ from blizzard.hub.domain.operations.restart import RestartService
 from blizzard.hub.domain.operations.stop import StopService
 from blizzard.hub.domain.runners.enrollment import RunnerEnrollmentService
 from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, RetiredRunnerGuard
+from blizzard.hub.domain.tenancy.administration import TenantAdministration
 from blizzard.hub.domain.work_items.closure import CloseIntentDrainer
 from blizzard.hub.domain.work_items.editing import WorkItemEditService
 from blizzard.hub.egress.factory import EgressUnavailable, build_egress_writer
@@ -151,6 +152,7 @@ from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.events.brokers import TenantBrokers
 from blizzard.hub.forge.internal.commit_resolver import GitHubCommitResolver
 from blizzard.hub.forge.repository_commits import ICommitForge, RepositoryCommitResolver
+from blizzard.hub.graph_sync import packaged_minter
 from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.live_config import ConfigObjectCache
 from blizzard.hub.open_tenants import OpenTenants
@@ -185,6 +187,7 @@ from blizzard.hub.store.internal.scope_store import ScopeStore
 from blizzard.hub.store.internal.secret_referrers import SecretReferrersStore
 from blizzard.hub.store.internal.secret_store import SecretStore
 from blizzard.hub.store.internal.sole_tenant import SoleTenantConnections, SoleTenantUnresolved
+from blizzard.hub.store.internal.tenant_admin_store import TenantAdministrationStore
 from blizzard.hub.store.internal.trace_store import TraceStore
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
@@ -361,6 +364,10 @@ class HubServices:
     marker_authority: MarkerAuthority
     #: The hub's own occurrences — its exports', its startup — recorded in ``hub_event_log``, published to no stream.
     hub_event_log: HubEventLogService
+    #: The hub's own event log, read newest-first — by hub administrators alone.
+    hub_events: IReadHubEventLog
+    #: Creates, renames and lists the hub's tenants.
+    tenant_admin: TenantAdministration
     clock: IClock
     #: The published ``ArtifactScope.SYSTEM`` set — the loader itself, so a read through it
     #: stays fresh (``bzh:system-scope-reads-live``); injected rather than a module singleton.
@@ -1355,6 +1362,12 @@ def build_services(
     hub_admins = HubAdministrators(
         hub_admins=hub_admin_store, users=user_store, transactions=identity_transactions, clock=clock
     )
+    tenant_admin = TenantAdministration(
+        tenants=TenantAdministrationStore(store_connections, identity_transactions),
+        mint_packaged=packaged_minter(clock),
+        changed=open_tenants.refresh,
+        clock=clock,
+    )
     # The provider-login seam — one registry entry per configured
     # ``[[auth.oauth.provider]]``, empty when no providers are configured.
     oauth_registry = oauth_registry or ProviderEntry.registry(oauth_providers, http_client=oauth_http_client)
@@ -1373,6 +1386,8 @@ def build_services(
         tenant_registry=lambda tenant: core.open(StoreScope(tenant)).registry,
         marker_authority=marker_authority,
         hub_event_log=hub_event_log,
+        hub_events=hub_events,
+        tenant_admin=tenant_admin,
         clock=clock,
         system_artifacts=system_artifacts,
         close_drain=sole.sweeps.close_drain,

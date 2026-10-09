@@ -38,12 +38,14 @@ open — one statement that both takes the store's write lock and reads ``tenant
 it — and raises :class:`TenantClosed` when the tenant is closed (:class:`UnknownTenant` when no
 tenant has the id). On SQLite that statement is the transaction's first write, so the driver's
 deferred ``BEGIN`` precedes it and the read runs under the single writer lock: a close either
-committed before it, and is seen, or waits for the writer's commit."""
+committed before it, and is seen, or waits for the writer's commit. The one write that cannot lock its
+tenant's row is the one that creates it: ``founding`` opens by inserting that row instead."""
 
 from __future__ import annotations
 
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
+from datetime import datetime
 from typing import Any
 
 import sqlalchemy as sa
@@ -250,6 +252,19 @@ class ScopedConnections(HubStoreConnections, ScopedStatements):
         whole transaction runs under the tenant's lock and a closed tenant writes nothing."""
         with super().write(operation, expect=expect) as conn:
             self._lock_open_tenant(conn)
+            yield self._bind(conn)
+
+    @contextmanager
+    def founding(self, operation: str, *, name: str, created_at: datetime, created_by: str) -> Iterator[Connection]:
+        """Like :meth:`write`, opened by inserting the scope's ``tenants`` row instead of locking it: the write that
+        brings its tenant into being. On connections joined to an open transaction it runs on that transaction, so
+        each later write there locks the row this one inserted and everything commits or rolls back together."""
+        with super().write(operation) as conn:
+            conn.execute(
+                sa.insert(s.tenants).values(
+                    tenant_id=self.scope.tenant, name=name, created_at=created_at, created_by=created_by
+                )
+            )
             yield self._bind(conn)
 
     def _lock_open_tenant(self, conn: Connection) -> None:

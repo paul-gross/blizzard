@@ -26,8 +26,25 @@ class HubEvent:
     message: str
 
 
+@domain_model
+@dataclass(frozen=True)
+class HubEventEntry:
+    """One ``hub_event_log`` row as a hub administrator reads it: its id, severity, kind, time, message and detail."""
+
+    event_id: int
+    severity: EventLogSeverity
+    kind: HubEventKind
+    at: datetime
+    message: str
+    detail: dict | None  # type: ignore[type-arg]
+
+
 class IReadHubEventLog(Protocol):
     """The hub's own event log, read newest-first."""
+
+    def recent(self, limit: int) -> list[HubEventEntry]:
+        """The newest ``limit`` rows, newest first — the hub administrators' read of the log."""
+        ...
 
     def newest(self, kinds: Sequence[HubEventKind]) -> HubEvent | None:
         """The newest event of any of ``kinds`` — filtered in the query, so a newer event of another kind never hides
@@ -55,4 +72,4 @@ class HubEventLogService:
         return self._events.append(severity=HUB_EVENT_SEVERITY[kind], kind=kind, message=message, detail=detail, at=at)
 
 
-__all__ = ["HubEvent", "HubEventLogService", "IReadHubEventLog", "IWriteHubEventLog"]
+__all__ = ["HubEvent", "HubEventEntry", "HubEventLogService", "IReadHubEventLog", "IWriteHubEventLog"]

@@ -58,6 +58,8 @@ _DEPRECATED_ALIAS_PAIRS = [
 
 _SANCTIONED_DEPRECATED_OPERATIONS = {f"GET {alias}" for _, alias in _DEPRECATED_ALIAS_PAIRS} | {
     "POST /api/graphs/{graph_id}/follow-latest",
+    # The tenant-scoped graph sync, superseded by the hub-level one over every open tenant.
+    "POST /api/graphs/sync",
     # The users routes, superseded by the members routes of the request's tenant.
     "GET /api/users",
     "POST /api/users/{user_id}/role",

@@ -58,6 +58,11 @@ _HUB_LEVEL: set[tuple[str, str]] = {
     ("GET", "/api/admin/hub-admins"),
     ("PUT", "/api/admin/hub-admins/{user_id}"),
     ("DELETE", "/api/admin/hub-admins/{user_id}"),
+    ("POST", "/api/admin/tenants"),
+    ("GET", "/api/admin/tenants"),
+    ("PATCH", "/api/admin/tenants/{tenant_id}"),
+    ("POST", "/api/admin/graphs/sync"),
+    ("GET", "/api/admin/events"),
 }
 
 #: Human plane — ``(method, path) -> permission`` required via ``require(<permission>)``, or
@@ -211,6 +216,12 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     ("GET", "/api/egress/status"): Permission.EXPORT_ADMIN,
     ("POST", "/api/egress/reset"): Permission.EXPORT_ADMIN,
     ("POST", "/api/egress/backfill"): Permission.EXPORT_ADMIN,
+    # Tenant administration and the hub's own event log — hub administrators alone.
+    ("POST", "/api/admin/tenants"): Permission.TENANT_ADMIN,
+    ("GET", "/api/admin/tenants"): Permission.TENANT_ADMIN,
+    ("PATCH", "/api/admin/tenants/{tenant_id}"): Permission.TENANT_ADMIN,
+    ("POST", "/api/admin/graphs/sync"): Permission.TENANT_ADMIN,
+    ("GET", "/api/admin/events"): Permission.TENANT_ADMIN,
     # The read-only events/counts surfaces — no grant of their own.
     ("GET", "/api/analytics/events"): Permission.TRANSCRIPT_READ,
     ("GET", "/api/analytics/events/ndjson"): Permission.TRANSCRIPT_READ,

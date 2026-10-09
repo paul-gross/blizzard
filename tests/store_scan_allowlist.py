@@ -31,7 +31,9 @@ from blizzard.hub.domain.observability.analytics.events import IReadTranscriptEv
 from blizzard.hub.domain.observability.analytics.operational import IReadOperationalAnalytics
 from blizzard.hub.domain.observability.analytics.queries import IReadAnalyticsEventQueries
 from blizzard.hub.domain.observability.forge_status import IReadAnnotatedSources
+from blizzard.hub.domain.observability.hub_events import IReadHubEventLog
 from blizzard.hub.domain.observability.tracing.repository import IReadTraceStatus, IReadTraceSteps
+from blizzard.hub.domain.tenancy.administration import IReadTenantDirectory
 from blizzard.runner.hub.outbound_buffer import IReadOutboundRepository
 from blizzard.runner.tracing.repository import IReadLeaseTraceCursor
 from blizzard.runner.transcripts.ledger import IReadTranscriptLedgerRepository
@@ -347,6 +349,20 @@ HUB_ALLOWED_SCANS: list[Allowance] = [
         ("tenants",),
         "reads at most two tenants to tell whether the hub holds exactly one — a LIMIT 2 read of the key index's "
         "first entries, never a walk of it, whatever the tenant count.",
+    ),
+    IndexWalkAllowance(
+        IReadTenantDirectory,
+        "list_tenants",
+        ("tenants", "tenant_deletions"),
+        "every tenant the hub holds, walked down its key in creation order, each probed once for a deletion fact by "
+        "the tenant's own id — the hub administrator's list of tenants, bounded by the tenants they created.",
+    ),
+    IndexWalkAllowance(
+        IReadHubEventLog,
+        "recent",
+        ("hub_event_log",),
+        "the newest page of the hub's own event log, walked down ix_hub_event_log_recorded_at from its newest end "
+        "and stopped at the page's limit — a newest-rows read, never a walk of the whole log.",
     ),
     IndexWalkAllowance(
         IReadHubAdminRepository,

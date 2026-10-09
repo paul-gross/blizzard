@@ -105,6 +105,7 @@ from blizzard.hub.domain.observability.tracing.repository import (
 from blizzard.hub.domain.observability.transcripts import IReadTranscriptSegments
 from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
 from blizzard.hub.domain.runners.route import Route
+from blizzard.hub.domain.tenancy.administration import IReadTenantDirectory
 from blizzard.hub.domain.work_items.closure import IReadCloseIntentCorpus
 from blizzard.hub.secrets import hub_key_provider, secret_cipher
 from blizzard.hub.store.internal.chunk_rows import MARKER_PREFIX
@@ -2232,6 +2233,8 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadHubEventLog, "newest"): lambda w: _hub_events_of(w.hub).newest(
         ("egress-write-failed", "trace-export-failed")
     ),
+    (IReadHubEventLog, "recent"): lambda w: _hub_events_of(w.hub).recent(50),
+    (IReadTenantDirectory, "list_tenants"): lambda w: w.hub.hub_services.tenant_admin.list_tenants(),
     (IReadEgressEvents, "markers_after"): lambda w: w.hub.hub_services.hub_scoped_reads.corpus.markers_after(
         EventsPosition(_HUB_BASE), _HUB_UNTIL, 50, extractor_version=EXTRACTOR_VERSION
     ),

@@ -138,9 +138,15 @@ def mint_graph(request: GraphMintRequest, services: Services) -> object:
     return _graph_view(graph, retired=False, warnings=warnings)
 
 
-@router.post("/graphs/sync", response_model=GraphSyncResponse, dependencies=[Depends(require(Permission.GRAPH_EDIT))])
+@router.post(
+    "/graphs/sync",
+    response_model=GraphSyncResponse,
+    dependencies=[Depends(require(Permission.GRAPH_EDIT))],
+    deprecated=True,
+)
 def sync_graphs(services: Services) -> GraphSyncResponse:
-    """Reconcile the packaged graph set against the store, minting only what changed.
+    """Reconcile the packaged graph set against the request's tenant, minting only what changed — superseded by
+    ``POST /api/admin/graphs/sync``, which reconciles every open tenant.
 
     Idempotent, so it is safe to run unconditionally. Registered above
     ``/graphs/{graph_id}`` so ``sync`` is not matched as a graph id. Always ``200``: a
