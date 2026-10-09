@@ -21,6 +21,7 @@ from blizzard.hub import app as hub_app
 from blizzard.hub import runtime as hub_runtime
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.chunk.model import WorkRef
+from blizzard.hub.tenancy import StoreScope
 from blizzard.hub.work_sources.annotator import WorkStatusMarker
 from blizzard.hub.work_sources.internal.github_work_source import GitHubWorkSource
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
@@ -88,7 +89,9 @@ def _promote(client: TestClient, token: str) -> None:
 
 
 def _sources(services: HubServices) -> IWorkSourceRegistry:
-    return services.tenants.sole_tenant.work_sources
+    tenant = services.tenants.open_tenants.only()
+    assert tenant is not None
+    return services.tenants.open_services(StoreScope(tenant)).work_sources
 
 
 def _adapter(services: HubServices) -> GitHubWorkSource:

@@ -24,12 +24,12 @@ from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.store import schema as hub
-from blizzard.hub.store.errors import HubStoreErrorFactory
+from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
 from blizzard.hub.store.internal.chunk_rows import DEFAULT_MODEL
-from blizzard.hub.store.internal.sole_tenant import SoleTenantConnections
-from blizzard.hub.tenancy import HUB_SCOPED_OPTION
+from blizzard.hub.store.scoped import is_tenant_owned
+from blizzard.hub.tenancy import HUB_SCOPED_OPTION, StoreScope, TenantId
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from blizzard.runner.process.probe import IProcessProbe
 from blizzard.runner.store import schema as runner
@@ -799,6 +799,30 @@ class OneLiveExecSlot(QueryCheck):
         ]
 
 
+class NoRowOfADeletedTenant(QueryCheck):
+    """``hub:no-row-of-a-deleted-tenant`` — a tenant's deletion removes every row it owns before it
+    removes the tenant, so no tenant-owned row names a tenant absent from ``tenants``."""
+
+    def run(self) -> list[Violation]:
+        present = select(hub.tenants.c.tenant_id)
+        violations: list[Violation] = []
+        for table in hub.metadata.sorted_tables:
+            if not is_tenant_owned(table):
+                continue
+            tenant, rows = table.c.tenant_id, func.count()
+            orphaned = self.conn.execute(
+                select(tenant, rows).where(tenant.not_in(present)).group_by(tenant).order_by(tenant)
+            ).all()
+            violations.extend(
+                Violation(
+                    "hub:no-row-of-a-deleted-tenant",
+                    f"{table.name} holds {row[1]} row(s) of tenant {row.tenant_id}, which is not in tenants",
+                )
+                for row in orphaned
+            )
+        return violations
+
+
 class MigrationsAtomic(QueryCheck):
     """``hub:one-migration-per-node-epoch`` — one row per ``(chunk, from_node, epoch)``;
     ``hub:migration-pin-consistent`` — the chunk carries the newest migration's target pin;
@@ -1118,15 +1142,32 @@ class HubInvariants:
                 violations.extend(check.run())
         with hub_wide.connect() as conn:
             violations.extend(MigrationsAtomic(conn).run())
-        store_connections = SoleTenantConnections(self.engine, HubStoreErrorFactory(get_logger("blizzard.hub.store")))
-        facts_store = ChunkFactsStore(store_connections, self.clock)
-        record_store = ChunkRecordStore(store_connections, self.clock)
-        for facts_check in (
-            DerivationAndDelivery(facts_store, record_store),
-            LiveRouteHasToken(facts_store, record_store),
-        ):
-            violations.extend(facts_check.run())
+            violations.extend(NoRowOfADeletedTenant(conn).run())
+            open_tenants = _open_tenants(conn)
+        store_connections = HubStoreConnections(self.engine, HubStoreErrorFactory(get_logger("blizzard.hub.store")))
+        for tenant in open_tenants:
+            # The facts checks load chunks through the tenant's own adapters, one tenant at a time.
+            connections = store_connections.scoped(StoreScope(tenant))
+            facts_store = ChunkFactsStore(connections, self.clock)
+            record_store = ChunkRecordStore(connections, self.clock)
+            for facts_check in (
+                DerivationAndDelivery(facts_store, record_store),
+                LiveRouteHasToken(facts_store, record_store),
+            ):
+                violations.extend(
+                    Violation(found.invariant, f"tenant {tenant}: {found.detail}") for found in facts_check.run()
+                )
         return violations
+
+
+def _open_tenants(conn: Connection) -> list[TenantId]:
+    """Every tenant no deletion has closed, in id order. A closed tenant's rows are being drained, a chunk's
+    facts before its record, so its chunks are no longer whole and are left out of the facts checks."""
+    closed = select(hub.tenant_deletions.c.tenant_id)
+    tenants = hub.tenants.c.tenant_id
+    return [
+        TenantId(t) for t in conn.execute(select(tenants).where(tenants.not_in(closed)).order_by(tenants)).scalars()
+    ]
 
 
 @collaborator

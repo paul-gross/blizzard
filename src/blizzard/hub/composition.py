@@ -17,6 +17,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 from datetime import timedelta
 from pathlib import Path
+from typing import Protocol
 
 import httpx
 from sqlalchemy import Engine
@@ -25,6 +26,7 @@ from blizzard.foundation.clock import IClock, SystemClock
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.tracer import IPlatformTracer
+from blizzard.foundation.roles import collaborator
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.exporter import ITraceExporter
 from blizzard.foundation.trace_export.settings import TracingSettings
@@ -198,7 +200,6 @@ from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStor
 from blizzard.hub.store.internal.scope_store import ScopeStore
 from blizzard.hub.store.internal.secret_referrers import SecretReferrersStore
 from blizzard.hub.store.internal.secret_store import SecretStore
-from blizzard.hub.store.internal.sole_tenant import SoleTenantConnections, SoleTenantUnresolved
 from blizzard.hub.store.internal.tenant_admin_store import TenantAdministrationStore
 from blizzard.hub.store.internal.tenant_teardown_store import TenantTeardownStore
 from blizzard.hub.store.internal.trace_store import TraceStore
@@ -544,21 +545,16 @@ class TenantCache:
     (``confirm_open`` raises :class:`UnknownTenant` or :class:`TenantClosed`) under the cache's one
     lock before building, so two racing opens of a tenant never yield two entries — nor two of its
     cycle-check locks — and a deletion's evict, which waits on that lock, drops an entry its close
-    raced. ``resident`` is the set a single-tenant hub serves before it knows its tenant's id; the
-    first open of that tenant adopts it, with the services built for it, rather than building a
-    second set."""
+    raced."""
 
     def __init__(
         self,
         *,
         build: Callable[[StoreScope], TenantStores],
         confirm_open: Callable[[TenantId], None],
-        resident: TenantStores | None = None,
     ) -> None:
         self._build = build
         self._confirm_open = confirm_open
-        self._resident = resident
-        self._resident_stores = resident
         self._serving: TenantServing | None = None
         self._entries: dict[TenantId, _TenantEntry] = {}
         self._lock = threading.Lock()
@@ -606,32 +602,11 @@ class TenantCache:
                 # A deletion commits its close before it evicts, and evicting waits on this lock: a close
                 # this check missed is followed by an evict that drops the entry cached here.
                 self._confirm_open(scope.tenant)
-                entry = _TenantEntry(self._adopt_resident(scope) or self._build(scope))
+                entry = _TenantEntry(self._build(scope))
                 self._entries[scope.tenant] = entry
             if entry.served is None and self._serving is not None:
-                entry.served = self._serve(scope.tenant, entry.stores, self._serving)
+                entry.served = self._serving.serve(scope.tenant, entry.stores)
             return entry
-
-    def _serve(self, tenant: TenantId, stores: TenantStores, serving: TenantServing) -> ServedTenant:
-        if stores is self._resident_stores:
-            serving.brokers.adopt(tenant, serving.resident.services.events)
-            return serving.resident
-        return serving.build(stores, serving.brokers.for_tenant(tenant))
-
-    def _adopt_resident(self, scope: StoreScope) -> TenantStores | None:
-        resident = self._resident
-        if resident is None:
-            return None
-        try:
-            resident_scope = resident.scope
-        except SoleTenantUnresolved:
-            # The store holds several tenants, so the resident set names none of them.
-            self._resident = None
-            return None
-        if resident_scope != scope:
-            return None
-        self._resident = None
-        return resident
 
 
 @dataclass
@@ -660,28 +635,32 @@ class ServedTenant:
     live: LiveConfig
 
 
+@collaborator
 @dataclass(frozen=True)
 class TenantServing:
     """How a :class:`TenantCache` serves its tenants: ``build`` wires a tenant's services over its
-    stores and its broker from ``brokers``; ``resident`` is the sole tenant's, wired before its id is
-    known and adopted with the resident stores."""
+    stores and its broker from ``brokers``."""
 
     build: Callable[[TenantStores, EventBroker], ServedTenant]
     brokers: TenantBrokers
-    resident: ServedTenant
+
+    def serve(self, tenant: TenantId, stores: TenantStores) -> ServedTenant:
+        """What serving ``tenant`` builds over its ``stores``, publishing to its broker."""
+        return self.build(stores, self.brokers.for_tenant(tenant))
+
+
+class IOpenTenantServices(Protocol):
+    """Opens ``scope``'s tenant's services, built once per tenant; raises ``UnknownTenant`` or ``TenantClosed`` for a
+    tenant there are none to open for."""
+
+    def __call__(self, scope: StoreScope, /) -> TenantServices: ...
 
 
 @dataclass(frozen=True)
 class TenantServicesOpener:
     """Opens a tenant's services — the hub-level services' only way to a tenant's."""
 
-    #: ``scope``'s tenant's services, built once per tenant; raises ``UnknownTenant`` or
-    #: ``TenantClosed`` for a tenant there are none to open for.
-    open_services: Callable[[StoreScope], TenantServices]
-    #: The services of the store's only tenant — the ones a single-tenant hub serves.
-    sole_tenant: TenantServices
-    #: The store's only tenant — the one a single-tenant hub serves every request in.
-    sole_scope: Callable[[], StoreScope]
+    open_services: IOpenTenantServices
     #: The open tenants and their names, held in memory — what a request's tenant is resolved against.
     open_tenants: OpenTenants
 
@@ -699,9 +678,6 @@ class HubCore:
     hub_events: HubEventLogStore
     hub_event_log: HubEventLogService
     tenants: TenantCache
-    #: The stores of the store's only tenant — the set a single-tenant hub serves, and the one
-    #: :meth:`open` returns for that tenant.
-    sole_tenant: TenantStores
     clock: IClock
 
     def open(self, scope: StoreScope) -> TenantStores:
@@ -770,7 +746,6 @@ def build_hub_core(engine: Engine, *, clock: IClock) -> HubCore:
     store_errors = HubStoreErrorFactory(get_logger("blizzard.hub.store"))
     store_connections = HubStoreConnections(engine, store_errors)
     hub_scoped_reads = build_hub_scoped_reads(store_connections)
-    sole_tenant = build_tenant_stores(SoleTenantConnections(engine, store_errors), clock=clock)
     auth_errors = RepoErrorFactory(get_logger("blizzard.hub.auth"))
     hub_events = HubEventLogStore(store_connections)
 
@@ -784,8 +759,7 @@ def build_hub_core(engine: Engine, *, clock: IClock) -> HubCore:
         users=UserRepository(store_connections, auth_errors),
         hub_events=hub_events,
         hub_event_log=HubEventLogService(events=hub_events),
-        tenants=TenantCache(build=build, confirm_open=hub_scoped_reads.tenants.confirm_open, resident=sole_tenant),
-        sole_tenant=sole_tenant,
+        tenants=TenantCache(build=build, confirm_open=hub_scoped_reads.tenants.confirm_open),
         clock=clock,
     )
 
@@ -1218,15 +1192,8 @@ def build_services(
         transcript_caps=transcript_caps,
         platform_tracer=platform_tracer,
     )
-    # The sole tenant's id is read from the store on first use, so its services publish to a broker
-    # made here, adopted as that tenant's once the cache first opens it.
-    sole = build_tenant_services(core.sole_tenant, parts, events=EventBroker())
     core.tenants.serve(
-        TenantServing(
-            build=lambda stores, events: build_tenant_services(stores, parts, events=events),
-            brokers=brokers,
-            resident=sole,
-        )
+        TenantServing(build=lambda stores, events: build_tenant_services(stores, parts, events=events), brokers=brokers)
     )
     hub_events = core.hub_events
     hub_event_log = core.hub_event_log
@@ -1395,8 +1362,6 @@ def build_services(
     return HubServices(
         tenants=TenantServicesOpener(
             open_services=core.open_services,
-            sole_tenant=sole.services,
-            sole_scope=lambda: core.sole_tenant.scope,
             open_tenants=open_tenants,
         ),
         hub_scoped_reads=core.hub_scoped_reads,

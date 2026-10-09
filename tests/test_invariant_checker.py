@@ -22,7 +22,7 @@ from blizzard.runner.runtime import init_environment as init_runner
 from blizzard.runner.store import schema as runner
 from blizzard.tools.invariants import HubInvariants, RunnerInvariants
 from tests.runner_fakes import FakeProbe
-from tests.support import migrate_to, seed_chunk, seed_graph, stamp
+from tests.support import add_tenant, close_tenant, hub_scoped, migrate_to, seed_chunk, seed_graph, stamp
 
 pytestmark = pytest.mark.component
 
@@ -1874,3 +1874,93 @@ def test_a_backfilled_epoch_with_two_runners_lease_rows_is_clean(tmp_path: Path)
         assert [v for v in HubInvariants(engine).run() if v.invariant == "hub:epochs-owned"] == []
     finally:
         engine.dispose()
+
+
+def _seed_landed_mid_flight(conn: sa.Connection, tenant: str) -> None:
+    """A chunk in ``tenant`` whose ``delivery.landed`` fact sits beside a non-terminal newest transition."""
+    conn.execute(
+        insert(hub.chunks).values(
+            stamp(hub.chunks, tenant_id=tenant, chunk_id="ch_1", graph_id="gr_1", minted_at=_NOW, model="m")
+        )
+    )
+    conn.execute(
+        insert(hub.lease_facts).values(
+            stamp(hub.lease_facts, tenant_id=tenant, chunk_id="ch_1", epoch=2, runner_id="hub", minted_at=_NOW)
+        )
+    )
+    conn.execute(
+        insert(hub.transitions).values(
+            stamp(
+                hub.transitions,
+                tenant_id=tenant,
+                transition_id="tr_1",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                from_node_id="nd_deliver",
+                to_node_id="nd_verify",
+                choice_name="landed",
+                epoch=2,
+                runner_id="hub",
+                recorded_at=_NOW,
+            )
+        )
+    )
+    conn.execute(
+        insert(hub.delivery_landed).values(
+            stamp(hub.delivery_landed, tenant_id=tenant, chunk_id="ch_1", landed_at=_NOW)
+        )
+    )
+
+
+def test_each_tenants_chunks_are_facts_checked_in_that_tenant(tmp_path: Path) -> None:
+    engine = _hub_engine(tmp_path)
+    second = add_tenant(engine, "second")
+    with engine.begin() as conn:
+        _seed_landed_mid_flight(conn, second)
+
+    breaches = [v for v in HubInvariants(engine).run() if v.invariant == "hub:merge-queue-single-state"]
+
+    assert [v.detail for v in breaches] == [
+        f"tenant {second}: chunk ch_1 is delivery.landed but newest transition targets nd_verify"
+    ]
+
+
+def test_a_closed_tenants_chunks_are_not_facts_checked(tmp_path: Path) -> None:
+    """A closed tenant's rows are being drained, a chunk's facts before its record: what is left of a chunk is
+    no longer whole, so it is not judged."""
+    engine = _hub_engine(tmp_path)
+    second = add_tenant(engine, "second")
+    with engine.begin() as conn:
+        _seed_landed_mid_flight(conn, second)
+    close_tenant(engine, second)
+
+    assert [v for v in HubInvariants(engine).run() if v.invariant == "hub:merge-queue-single-state"] == []
+
+
+def test_a_row_naming_a_tenant_absent_from_tenants_is_a_violation(tmp_path: Path) -> None:
+    """A deletion that removed its tenant's row but left some of the rows the tenant owns."""
+    engine = _hub_engine(tmp_path)
+    with engine.begin() as conn:
+        seed_graph(conn, "gr_1", at=_NOW)
+    second = add_tenant(engine, "second")
+    with engine.begin() as conn:
+        conn.execute(
+            insert(hub.graphs).values(
+                stamp(
+                    hub.graphs,
+                    tenant_id=second,
+                    graph_id="gr_2",
+                    name="g",
+                    entry_node_id="nd_1",
+                    definition_yaml="",
+                    created_at=_NOW,
+                )
+            )
+        )
+    assert HubInvariants(engine).run() == []
+    with engine.begin() as conn:
+        conn.execute(hub_scoped(sa.delete(hub.tenants).where(hub.tenants.c.tenant_id == second)))
+
+    breaches = [v for v in HubInvariants(engine).run() if v.invariant == "hub:no-row-of-a-deleted-tenant"]
+
+    assert [v.detail for v in breaches] == [f"graphs holds 1 row(s) of tenant {second}, which is not in tenants"]

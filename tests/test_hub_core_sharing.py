@@ -12,7 +12,7 @@ from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.composition import build_hub_core
 from blizzard.hub.store.errors import HubStoreError
-from blizzard.hub.tenancy import StoreScope
+from blizzard.hub.tenancy import StoreScope, TenantId
 from tests.support import add_tenant, build_hub, default_tenant, tenant_services_of
 
 pytestmark = pytest.mark.component
@@ -65,18 +65,19 @@ def test_a_second_tenant_gets_its_own_services_and_leaves_the_default_one_named(
     assert hub.client.get("/api/chunks").status_code == 200
 
 
-def test_the_cores_tenant_connections_are_scoped_to_the_stores_only_tenant(tmp_path: Path) -> None:
+def test_the_stores_the_core_opens_for_a_tenant_are_scoped_to_it(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
+    scope = StoreScope(default_tenant(hub.engine))
 
     core = build_hub_core(hub.engine, clock=hub.clock)
 
-    assert core.sole_tenant.connections.scope == StoreScope(default_tenant(hub.engine))
+    assert core.open(scope).connections.scope == scope
 
 
-def test_the_core_names_its_tenant_on_first_use_so_a_stale_store_still_builds(tmp_path: Path) -> None:
+def test_the_core_reads_no_tenant_until_one_is_opened_so_a_stale_store_still_builds(tmp_path: Path) -> None:
     engine = create_engine_from_url(f"sqlite:///{tmp_path / 'empty.db'}")
 
     core = build_hub_core(engine, clock=SystemClock())
 
     with pytest.raises(HubStoreError):
-        _ = core.sole_tenant.connections.scope
+        core.open(StoreScope(TenantId("ten_01J0000000000000000000000")))

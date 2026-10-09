@@ -20,7 +20,8 @@ from blizzard.hub.domain.config.secrets import SecretName
 from blizzard.hub.domain.config.work_sources import WorkSourceEdit, WorkSourceFields
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.secrets import hub_key_provider
-from tests.support import OP, config_authoring
+from blizzard.hub.tenancy import StoreScope
+from tests.support import OP, config_authoring, default_tenant
 
 pytestmark = pytest.mark.component
 
@@ -49,6 +50,7 @@ class _World:
         self.keys = hub_key_provider({}, data_dir=tmp_path / "data")
         clock = FixedClock(_NOW)
         self.core = build_hub_core(self.engine, clock=clock)
+        self.stores = self.core.open(StoreScope(default_tenant(self.engine)))
         self.authoring = config_authoring(self.engine, keys=self.keys, clock=clock)
         self.authoring.create_secret(SecretName.parse("gh"), "tok-a", OP)
         self.authoring.create_work_source("demo", _FIELDS, OP)
@@ -56,14 +58,14 @@ class _World:
         self.builds = 0
 
     def second_process(self) -> LiveConfig:
-        return build_live_config(self.core.sole_tenant, secret_keys=self.keys)
+        return build_live_config(self.stores, secret_keys=self.keys)
 
     def client(self, live: LiveConfig | None = None) -> _Client | None:
         live = live or self.live
 
         def build() -> _Client:
             self.builds += 1
-            record = self.core.sole_tenant.work_source_records.get("demo")
+            record = self.stores.work_source_records.get("demo")
             assert record is not None and record.fields.secret is not None
             token = live.secrets.reveal(SecretName.parse(record.fields.secret)).expose()
             return _Client(record.fields.locator, record.fields.annotate, token)
@@ -71,7 +73,7 @@ class _World:
         return live.objects.get(RecordKind.WORK_SOURCE, "demo", build)
 
     def source(self):  # type: ignore[no-untyped-def]
-        record = self.core.sole_tenant.work_source_records.get("demo")
+        record = self.stores.work_source_records.get("demo")
         assert record is not None
         return record
 
@@ -122,7 +124,7 @@ def test_a_retire_rebuilds_and_sets_the_replaced_object_aside(world: _World) -> 
 
 def test_a_secret_replace_rebuilds_with_the_new_value(world: _World) -> None:
     first = world.client()
-    secret = world.core.sole_tenant.secrets.get("gh")
+    secret = world.stores.secrets.get("gh")
     assert secret is not None
     world.authoring.replace_secret(secret, "tok-b", OP)
 

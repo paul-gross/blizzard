@@ -68,15 +68,6 @@ def test_a_tenants_stores_are_built_once(tmp_path: Path) -> None:
     assert core.open(scope) is core.open(scope)
 
 
-def test_a_single_tenant_hub_opens_the_stores_it_already_serves(tmp_path: Path) -> None:
-    core, engine = _core(tmp_path)
-
-    stores = core.open(StoreScope(default_tenant(engine)))
-
-    assert stores is core.sole_tenant
-    assert stores.cycle_lock is core.sole_tenant.cycle_lock
-
-
 def test_each_tenant_opens_its_own_stores_over_its_own_scope(tmp_path: Path) -> None:
     core, engine = _core(tmp_path)
     first = default_tenant(engine)
@@ -228,6 +219,7 @@ def _served(core: HubCore, tmp_path: Path, brokers: TenantBrokers) -> HubService
 def test_a_tenants_services_are_built_once_over_its_own_stores(tmp_path: Path) -> None:
     core, engine = _core(tmp_path)
     hub = _served(core, tmp_path, TenantBrokers())
+    first = hub.tenants.open_services(StoreScope(default_tenant(engine)))
     second = add_tenant(engine, "second")
 
     services = hub.tenants.open_services(StoreScope(second))
@@ -237,33 +229,23 @@ def test_a_tenants_services_are_built_once_over_its_own_stores(tmp_path: Path) -
     assert services.registry is stores.registry
     assert services.delete is stores.delete
     assert services.finding_exit is stores.finding_exit
-    assert services is not hub.tenants.sole_tenant
-    assert services.registry is not hub.tenants.sole_tenant.registry
-
-
-def test_the_sole_tenants_services_are_the_ones_its_first_open_adopts(tmp_path: Path) -> None:
-    core, engine = _core(tmp_path)
-    brokers = TenantBrokers()
-    hub = _served(core, tmp_path, brokers)
-    tenant = default_tenant(engine)
-
-    services = hub.tenants.open_services(StoreScope(tenant))
-
-    assert services is hub.tenants.sole_tenant
-    assert core.open(StoreScope(tenant)) is core.sole_tenant
-    assert brokers.for_tenant(tenant) is services.events
+    assert services is not first
+    assert services.registry is not first.registry
 
 
 def test_each_tenant_publishes_to_its_own_broker(tmp_path: Path) -> None:
     core, engine = _core(tmp_path)
     brokers = TenantBrokers()
     hub = _served(core, tmp_path, brokers)
+    tenant = default_tenant(engine)
+    first = hub.tenants.open_services(StoreScope(tenant))
     second = add_tenant(engine, "second")
 
     services = hub.tenants.open_services(StoreScope(second))
 
+    assert first.events is brokers.for_tenant(tenant)
     assert services.events is brokers.for_tenant(second)
-    assert services.events is not hub.tenants.sole_tenant.events
+    assert services.events is not first.events
 
 
 def test_eviction_drops_a_tenants_services_and_its_broker(tmp_path: Path) -> None:

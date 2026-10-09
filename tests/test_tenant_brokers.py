@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import pytest
 
-from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.events.brokers import TenantBrokers
 from blizzard.hub.tenancy import TenantId
 
@@ -35,15 +34,6 @@ def test_a_dropped_tenants_next_use_creates_a_fresh_broker() -> None:
     after = brokers.for_tenant(_A)
     assert after is not before
     assert after.replay_since(0) == []
-
-
-def test_an_adopted_broker_is_the_tenants_unless_it_already_has_one() -> None:
-    brokers = TenantBrokers()
-    made_early = EventBroker()
-
-    assert brokers.adopt(_A, made_early) is made_early
-    assert brokers.for_tenant(_A) is made_early
-    assert brokers.adopt(_A, EventBroker()) is made_early
 
 
 def test_one_tenants_churn_never_evicts_anothers_replay_tail() -> None:

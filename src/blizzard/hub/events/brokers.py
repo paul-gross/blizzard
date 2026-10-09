@@ -26,13 +26,6 @@ class TenantBrokers:
                 broker = self._brokers[tenant] = EventBroker()
             return broker
 
-    def adopt(self, tenant: TenantId, broker: EventBroker) -> EventBroker:
-        """Hold ``broker`` as ``tenant``'s unless it already has one; returns the one it holds. The services
-        a hub builds before it knows its only tenant's id publish to a broker made for them, adopted here
-        once that id is known."""
-        with self._lock:
-            return self._brokers.setdefault(tenant, broker)
-
     def drop(self, tenant: TenantId) -> None:
         """Forget ``tenant``'s broker, if it has one, closing it so every stream open on it ends; a later
         use creates a fresh one."""

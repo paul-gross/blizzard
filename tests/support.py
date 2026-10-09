@@ -194,7 +194,7 @@ def stamp(table: sa.Table, /, **values: Any) -> dict[str, Any]:
     the store's only tenant, the same one ``default_tenant`` reads, and ``NULL`` when the store holds
     none or several — never one picked from many: a test with a second tenant names the one it means."""
     if is_tenant_owned(table) and "tenant_id" not in values:
-        values["tenant_id"] = sole_tenant_subquery()
+        values["tenant_id"] = only_tenant_subquery()
     return _with_scope_id(table, values)
 
 
@@ -227,16 +227,16 @@ def _with_scope_id(table: sa.Table, values: dict[str, Any]) -> dict[str, Any]:
     slug = values[slug_column] if keeps_slug else values.pop(slug_column)
     tenant = values["tenant_id"]
     named = isinstance(tenant, str)
-    # Raw SQL, which the tenant guard does not walk: the row's tenant may itself be the sole-tenant
+    # Raw SQL, which the tenant guard does not walk: the row's tenant may itself be the only-tenant
     # subquery, which the guard does not read as naming a tenant.
-    tenant_sql = ":seed_scope_tenant" if named else _SOLE_TENANT_SQL
+    tenant_sql = ":seed_scope_tenant" if named else _ONLY_TENANT_SQL
     lookup = sa.text(f"SELECT scope_id FROM scopes WHERE slug = :seed_scope_slug AND tenant_id = ({tenant_sql})")
     lookup = lookup.bindparams(seed_scope_slug=slug, **({"seed_scope_tenant": tenant} if named else {}))
     values[id_column] = lookup.columns(sa.column("scope_id", sa.String)).scalar_subquery()
     return values
 
 
-_SOLE_TENANT_SQL = "SELECT tenant_id FROM tenants WHERE (SELECT count(*) FROM tenants) = 1"
+_ONLY_TENANT_SQL = "SELECT tenant_id FROM tenants WHERE (SELECT count(*) FROM tenants) = 1"
 
 
 def seed_scope(conns: ScopedConnections, slug: str, *, at: datetime) -> str:
@@ -246,7 +246,7 @@ def seed_scope(conns: ScopedConnections, slug: str, *, at: datetime) -> str:
     return ScopeStore(conns).ensure(record, change=change).scope_id
 
 
-def sole_tenant_subquery() -> sa.ScalarSelect[Any]:
+def only_tenant_subquery() -> sa.ScalarSelect[Any]:
     """The store's only tenant as a scalar subquery, ``NULL`` unless ``tenants`` holds exactly one row."""
     tenants = schema.tenants
     holds_one = sa.select(sa.func.count()).select_from(tenants).correlate(None).scalar_subquery() == 1
@@ -974,10 +974,12 @@ class TenantHarness:
 
 
 def tenant_services_of(app: FastAPI) -> TenantServices:
-    """The default tenant's services of a wired ``app`` — the name every test reads a tenant field
-    of an app through; a hub-level field is read off ``app.state.services`` itself."""
-    services: HubServices = app.state.services
-    return services.tenants.sole_tenant
+    """The services of a wired ``app``'s only open tenant — the name every test reads a tenant field of an
+    app through; a hub-level field is read off ``app.state.services`` itself."""
+    tenants = app.state.services.tenants
+    tenant = tenants.open_tenants.only()
+    assert tenant is not None, "tenant_services_of needs an app serving exactly one open tenant"
+    return tenants.open_services(StoreScope(tenant))
 
 
 def serve_default_tenant(hub: HubHarness, services: TenantServices) -> None:
@@ -990,9 +992,7 @@ def serve_default_tenant(hub: HubHarness, services: TenantServices) -> None:
     def open_services(scope: StoreScope) -> TenantServices:
         return services if scope.tenant == default else tenants.open_services(scope)
 
-    hub.app.state.services = replace(
-        hub.hub_services, tenants=replace(tenants, sole_tenant=services, open_services=open_services)
-    )
+    hub.app.state.services = replace(hub.hub_services, tenants=replace(tenants, open_services=open_services))
 
 
 _hub_prototype_lock = threading.Lock()
@@ -1122,9 +1122,13 @@ def build_hub(
     # mirroring `WorkSourceEntry.registry`'s production wiring.
     closers: dict[str, IWorkCloser] = {}
     core = build_hub_core(engine, clock=clock)
-    resident = core.sole_tenant
+    default = StoreScope(default_tenant(engine))
+    default_stores = core.open(default)
     hub_source = HubWorkSource(
-        resident.work_item_store, resident.work_item_edits, core.users, resident.garden_proposal_resolution
+        default_stores.work_item_store,
+        default_stores.work_item_edits,
+        core.users,
+        default_stores.garden_proposal_resolution,
     )
     built_sources[RESERVED_HUB_SOURCE_NAME] = hub_source
     editors[RESERVED_HUB_SOURCE_NAME] = hub_source
@@ -1133,7 +1137,7 @@ def build_hub(
 
     def tenant_work_sources(stores: TenantStores, _live: LiveConfig) -> IWorkSourceRegistry:
         # The default tenant reads the fakes; any other tenant holds only its own built-in source.
-        if stores is core.sole_tenant:
+        if stores.scope == default:
             return work_source_registry
         source = HubWorkSource(
             stores.work_item_store, stores.work_item_edits, core.users, stores.garden_proposal_resolution
@@ -1165,10 +1169,8 @@ def build_hub(
         egress_path_key=egress_path_key,
         annotation_interval_seconds=config.annotation_interval_seconds,
     )
-    # Pinned now: a second tenant a test adds later leaves the default tenant named.
-    _ = core.sole_tenant.connections.scope
     hub_services.tenants.open_tenants.refresh()
-    services = hub_services.tenants.sole_tenant
+    services = hub_services.tenants.open_services(default)
     app = create_app(config, services=hub_services)
     client = RunnerFleetClient(app, services=services, register_claimants=auto_register_claimants)
     # Warm FastAPI's per-router route-resolution cache: it lazily caches routes on first
@@ -1692,7 +1694,7 @@ def _stamp_as_stored(conn: sa.Connection, table: sa.Table, values: dict[str, Any
     """``values`` carrying the store's only tenant when the store's own ``table`` has a ``tenant_id``
     column — decided by the store's revision, not today's schema, so the seed fits any revision."""
     if any(column["name"] == "tenant_id" for column in sa.inspect(conn).get_columns(table.name)):
-        values["tenant_id"] = sole_tenant_subquery()
+        values["tenant_id"] = only_tenant_subquery()
     return values
 
 
