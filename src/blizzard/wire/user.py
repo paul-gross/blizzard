@@ -73,3 +73,17 @@ class RoleAssignmentRequest(BaseModel):
     """``POST /api/users/{id}/role`` body — the target role, by its wire value; ``pending`` revokes."""
 
     role: str
+
+
+class CallerTenantView(BaseModel):
+    """One tenant ``GET /api/me`` says the caller may enter: its id, the only way to name it, and its name."""
+
+    tenant_id: str
+    name: str
+
+
+class CallerTenantsView(BaseModel):
+    """``GET /api/me`` as a client that only picks a tenant reads it — the tenants the caller may enter, ordered by
+    id, and nothing else of the answer. Empty from a hub that predates tenants."""
+
+    tenants: list[CallerTenantView] = []

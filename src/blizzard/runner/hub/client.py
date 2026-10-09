@@ -52,11 +52,15 @@ class IdentityRouteMissing(HubClientError):
 class RunnerAddRefusalReason(StrEnum):
     """Why the hub refused to add a runner: ``SIGN_IN_REQUIRED``, the hub requires an operator
     session and none was presented, or it was not accepted (401); ``FORBIDDEN``, the operator
-    lacks ``runner:add`` (403); ``UNSUPPORTED``, the hub predates adding runners (404 or 405)."""
+    lacks ``runner:add`` (403); ``UNSUPPORTED``, the hub predates adding runners (404 or 405);
+    ``TENANT_REQUIRED``, the operator may enter several tenants and named none (409);
+    ``NO_SUCH_TENANT``, the named tenant is none the operator may enter (404)."""
 
     SIGN_IN_REQUIRED = "sign_in_required"
     FORBIDDEN = "forbidden"
     UNSUPPORTED = "unsupported"
+    TENANT_REQUIRED = "tenant_required"
+    NO_SUCH_TENANT = "no_such_tenant"
 
 
 class RunnerAddRefused(HubClientError):
@@ -332,6 +336,15 @@ class TokenRefusal:
 
 @domain_model
 @dataclass(frozen=True)
+class OperatorTenant:
+    """A tenant the operator may add a runner in — its id, the only way to name it, and its name."""
+
+    tenant_id: str
+    name: str
+
+
+@domain_model
+@dataclass(frozen=True)
 class IssuedIdentity:
     """A runner the hub just added: its minted id, its initial name, and the plaintext bearer token
     minted with the id — shown by the hub this once."""
@@ -446,13 +459,19 @@ class ITokenIdentityReader(Protocol):
 
 
 class IHubRunnerAdmin(Protocol):
-    """The one runner-side call made under an operator's credential rather than a runner token:
-    adding a runner. Its credential is the operator's signed-in session for the hub when one is
-    held, and none otherwise — never a runner token. A hub without sign-in admits no credential;
-    any other answers 401."""
+    """The runner-side calls made under an operator's credential rather than a runner token: adding
+    a runner, and listing the tenants the operator may add one in. Its credential is the operator's
+    signed-in session for the hub when one is held, and none otherwise — never a runner token. A hub
+    without sign-in admits no credential; any other answers 401."""
 
-    def add_runner(self, name: str) -> IssuedIdentity:
-        """``POST /api/runners`` — add a runner under the initial ``name``; the hub mints its id and
-        bearer token together. A refusal raises :class:`RunnerAddRefused`; an unreachable hub or a
-        5xx raises :class:`HubClientError`, and the hub has added nothing the caller can use."""
+    def add_runner(self, name: str, *, tenant_id: str | None = None) -> IssuedIdentity:
+        """``POST /api/runners`` — add a runner under the initial ``name`` in the tenant ``tenant_id``
+        names, or, with none named, the one the hub resolves for the operator; the hub mints its id
+        and bearer token together. A refusal raises :class:`RunnerAddRefused`; an unreachable hub or
+        a 5xx raises :class:`HubClientError`, and the hub has added nothing the caller can use."""
+        ...
+
+    def tenants(self) -> list[OperatorTenant]:
+        """``GET /api/me`` — every tenant the operator may enter, ordered by id; empty from a hub
+        that predates tenants. Any failure raises :class:`HubClientError`."""
         ...

@@ -439,9 +439,9 @@ class _JoinLog:
 class _LoggedAdmin(FakeHubRunnerAdmin):
     log: _JoinLog = field(default_factory=_JoinLog)
 
-    def add_runner(self, name: str) -> IssuedIdentity:
+    def add_runner(self, name: str, *, tenant_id: str | None = None) -> IssuedIdentity:
         self.log.calls.append("add")
-        return super().add_runner(name)
+        return super().add_runner(name, tenant_id=tenant_id)
 
 
 class _Tokens:
