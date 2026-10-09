@@ -1646,6 +1646,7 @@ def explain_query_plan(engine: Engine, statement: str, parameters: Any) -> Seque
 
 
 _SCAN_OR_SEARCH = re.compile(r"^(SCAN|SEARCH) (\S+)(.*)$")
+_TENANT_PREFIX_ONLY = re.compile(r"INDEX \S+ \(tenant_id=\?\)$")
 _ALIASED_FROM_ITEM = re.compile(r"\b(?:FROM|JOIN)\s+(\w+)\s+AS\s+(\w+)", re.IGNORECASE)
 
 
@@ -1659,9 +1660,10 @@ def _statement_aliases(statement: str) -> dict[str, str]:
 def _offending_table(detail: str, tables: set[str], aliases: dict[str, str]) -> str | None:
     """``detail`` is a plan row's last column, e.g. ``SCAN t``, ``SEARCH t USING INDEX ix (...)``, or ``SEARCH t USING
     AUTOMATIC COVERING INDEX (...)``; ``t`` may itself be an alias, resolved back to its real table via ``aliases``.
-    Offends when the resolved table names one of ``tables`` and is either a bare scan with no ``USING [COVERING]
-    INDEX`` clause, or any search/scan through sqlite's own automatic index — a real named index is never an
-    offense."""
+    Offends when the resolved table names one of ``tables`` and the plan reads it whole: a bare scan, any search or scan
+    through sqlite's own automatic index, a full walk of a named index (``SCAN t USING [COVERING] INDEX ix``), or a
+    search that seeks only the tenant (``SEARCH t USING INDEX ix (tenant_id=?)``) — a scoped read always carries
+    ``tenant_id = ?``, so a tenant-led index searched by that alone walks every row the tenant holds."""
     match = _SCAN_OR_SEARCH.match(detail)
     if match is None:
         return None
@@ -1669,9 +1671,9 @@ def _offending_table(detail: str, tables: set[str], aliases: dict[str, str]) -> 
     table = aliases.get(name, name)
     if table not in tables:
         return None
-    if "AUTOMATIC" in rest:
+    if "AUTOMATIC" in rest or verb == "SCAN":
         return table
-    if verb == "SCAN" and "USING" not in rest:
+    if _TENANT_PREFIX_ONLY.search(rest):
         return table
     return None
 
@@ -1680,9 +1682,9 @@ def offending_index_scans(
     engine: Engine, statements: Iterable[tuple[str, Any]], tables: Iterable[str]
 ) -> list[tuple[str, sa.Row[Any]]]:
     """Re-runs every distinct captured ``SELECT`` in ``statements`` under ``EXPLAIN QUERY
-    PLAN`` and returns ``(table, plan row)`` for each row that scans or automatic-indexes
-    into one of ``tables`` instead of a real named index — the shared classifier a
-    component-tier gate drives per store against its own table vocabulary."""
+    PLAN`` and returns ``(table, plan row)`` for each row that reads one of ``tables`` whole
+    (:func:`_offending_table` names the plans) — the shared classifier a component-tier gate
+    drives per store against its own table vocabulary."""
     vocabulary = set(tables)
     offenders: list[tuple[str, sa.Row[Any]]] = []
     seen: set[str] = set()
