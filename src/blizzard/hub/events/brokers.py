@@ -1,4 +1,5 @@
-"""One event broker per tenant: a tenant's stream sees only the events its own services publish."""
+"""One event broker per tenant: a tenant's stream sees only the events its own services publish, and ends
+when its tenant's broker is dropped."""
 
 from __future__ import annotations
 
@@ -33,6 +34,9 @@ class TenantBrokers:
             return self._brokers.setdefault(tenant, broker)
 
     def drop(self, tenant: TenantId) -> None:
-        """Forget ``tenant``'s broker, if it has one; a later use creates a fresh one."""
+        """Forget ``tenant``'s broker, if it has one, closing it so every stream open on it ends; a later
+        use creates a fresh one."""
         with self._lock:
-            self._brokers.pop(tenant, None)
+            broker = self._brokers.pop(tenant, None)
+        if broker is not None:
+            broker.close()

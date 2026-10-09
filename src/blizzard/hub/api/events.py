@@ -1,9 +1,10 @@
 """The hub live-event stream — ``GET /api/events/stream`` (SSE), excluded from the OpenAPI schema.
 
-A subscriber registers with :class:`~blizzard.hub.events.broker.EventBroker`, replays the
-buffered tail newer than its ``Last-Event-ID``, then streams live until it disconnects — ids
-are monotonic, so an event caught in both is emitted once. :class:`Cursor`/:class:`Stream` are
-the runner-shared machinery; only the reserved open-of-stream comment names this daemon."""
+A subscriber registers with its tenant's :class:`~blizzard.hub.events.broker.EventBroker`, replays
+the buffered tail newer than its ``Last-Event-ID``, then streams live until it disconnects or its
+tenant's broker is dropped — ids are monotonic, so an event caught in both is emitted once.
+:class:`Cursor`/:class:`Stream` are the runner-shared machinery; only the reserved open-of-stream
+comment names this daemon."""
 
 from __future__ import annotations
 
@@ -18,14 +19,12 @@ from fastapi.responses import StreamingResponse
 
 from blizzard.auth_core import Permission
 from blizzard.foundation.event_log import EventLogSeverity
-from blizzard.foundation.events.broker import EventBroker
 from blizzard.foundation.events.stream import Cursor, Stream
 from blizzard.foundation.roles import dto
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
-from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.chunk.model import ActivityEntry, ActivityFeed, EventFeed, OperationalEvent
 from blizzard.hub.domain.kernel.pagination import DEFAULT_LIMIT
@@ -39,18 +38,16 @@ _RESERVED_COMMENT = ": blizzard hub event stream\n\n"
 FEED_MAX_LIMIT = 200
 
 
-@router.get("/events/stream", include_in_schema=False)
-async def events_stream(
-    request: Request, identity: Annotated[ResolvedIdentity, Depends(require(Permission.FLEET_VIEW))]
-) -> StreamingResponse:
-    """Subscribe to the live event stream, resuming from ``Last-Event-ID`` if present.
-
-    ``identity`` is unused beyond the gate itself — ``require(Permission.FLEET_VIEW)`` already
-    raised 401/403 before this body runs."""
-    del identity
-    broker: EventBroker | None = getattr(request.app.state, "events", None)
+@router.get(
+    "/events/stream",
+    include_in_schema=False,
+    dependencies=[Depends(reject_runner_principal), Depends(require(Permission.FLEET_VIEW))],
+)
+async def events_stream(request: Request, services: Services) -> StreamingResponse:
+    """Subscribe to the live event stream of the request's tenant, resuming from ``Last-Event-ID`` if
+    present. The stream ends when the tenant's broker is dropped."""
     shutdown: asyncio.Event | None = getattr(request.app.state, "shutdown", None)
-    stream = Stream(broker, request, Cursor.of(request), _RESERVED_COMMENT, shutdown)
+    stream = Stream(services.events, request, Cursor.of(request), _RESERVED_COMMENT, shutdown)
     return StreamingResponse(stream.frames(), media_type="text/event-stream")
 
 

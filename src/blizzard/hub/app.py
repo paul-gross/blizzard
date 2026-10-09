@@ -96,7 +96,6 @@ from blizzard.hub.domain.observability.tracing.attributes import (
 )
 from blizzard.hub.domain.observability.transcripts import TranscriptCaps
 from blizzard.hub.domain.runners.registration import RunnerRetired
-from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.secrets import KeyCoverage, hub_key_provider, require_hub_key
 from blizzard.hub.secrets.rotation import RotationResult, rotate_keys
@@ -340,9 +339,6 @@ def create_app(
     app.state.config = config
     app.state.readiness = readiness
     app.state.services = services
-    # The event broker is always present (cheap, in-memory) so the SSE stream opens
-    # cleanly even on the store-free app.
-    app.state.events = services.tenants.sole_tenant.events if services is not None else EventBroker()
     # Set on shutdown by ``_lifespan``; every SSE stream races it.
     app.state.shutdown = asyncio.Event()
 
