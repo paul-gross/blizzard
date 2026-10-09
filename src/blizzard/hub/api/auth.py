@@ -35,6 +35,9 @@ _PRINCIPAL_SCOPE_KEY = "blizzard.runner_principal"
 #: loaded model whether it is retired rather than reading the registry a second time.
 _REGISTRATION_SCOPE_KEY = "blizzard.runner_registration"
 
+#: Why a fleet call is refused when its bearer token names no runner the hub can serve.
+UNRESOLVED_RUNNER_TOKEN = "bearer token does not resolve to a known runner"
+
 
 @dto
 @dataclass(frozen=True)
@@ -47,6 +50,12 @@ class RunnerPrincipal:
     runner_name: str
     workspace_id: str | None
     tenant_id: TenantId
+
+
+def resolved_runner(request: Request) -> RunnerPrincipal | None:
+    """The runner ``request``'s bearer token already resolved to, or ``None`` when none was resolved — read
+    without resolving the token again, so a tenant closed since still names the runner that called."""
+    return request.scope.get(_PRINCIPAL_SCOPE_KEY)
 
 
 @dataclass(frozen=True)
@@ -109,11 +118,7 @@ class RunnerAuth:
         if token is not None and credentials.revoked_token_runner(TokenHash(token).hex) is not None:
             _log.warning("revoked runner token presented", path=self.request.url.path)
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="bearer token has been revoked")
-        reason = (
-            "missing or malformed Authorization header"
-            if token is None
-            else "bearer token does not resolve to a known runner"
-        )
+        reason = "missing or malformed Authorization header" if token is None else UNRESOLVED_RUNNER_TOKEN
         _log.warning("runner auth failed", reason=reason, path=self.request.url.path)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=reason)
 

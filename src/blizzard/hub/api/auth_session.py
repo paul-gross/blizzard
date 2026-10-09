@@ -24,12 +24,13 @@ from typing import Annotated
 
 import structlog
 from fastapi import Depends, HTTPException, Request, status
+from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 
 from blizzard.auth_core import HUB_PERMISSIONS, Permission, Role, permissions_for
 from blizzard.foundation.platform_tracing.attributes import Caller, annotate_caller, annotate_tenant
 from blizzard.foundation.roles import collaborator
-from blizzard.hub.api.auth import RunnerAuth, RunnerPrincipal
+from blizzard.hub.api.auth import UNRESOLVED_RUNNER_TOKEN, RunnerAuth, RunnerPrincipal, resolved_runner
 from blizzard.hub.api.bearer import presented_bearer
 from blizzard.hub.api.hub_level import Hub, hub_services
 from blizzard.hub.auth.hashing import SessionId
@@ -297,6 +298,16 @@ def _served(hub: HubServices, tenant: TenantId, identity: Principal) -> TenantRe
 
 def _no_such_tenant() -> HTTPException:
     return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NO_SUCH_TENANT)
+
+
+def refuse_closed_tenant(request: Request, exc: Exception) -> JSONResponse:
+    """Answer a request whose tenant closed, or was removed, after the request resolved it — its scoped
+    write raised :class:`TenantClosed` or :class:`UnknownTenant` — as the tenant's next resolution would:
+    ``401`` to the runner whose token resolved it, the ``404`` of a tenant that does not exist to anyone else."""
+    assert isinstance(exc, TenantClosed | UnknownTenant)
+    if resolved_runner(request) is not None:
+        return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content={"detail": UNRESOLVED_RUNNER_TOKEN})
+    return JSONResponse(status_code=status.HTTP_404_NOT_FOUND, content={"detail": _NO_SUCH_TENANT})
 
 
 def _tenant_required() -> HTTPException:

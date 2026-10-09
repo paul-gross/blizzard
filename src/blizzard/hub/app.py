@@ -45,6 +45,7 @@ from blizzard.hub.api.admin_events import router as admin_events_router
 from blizzard.hub.api.admin_tenants import router as admin_tenants_router
 from blizzard.hub.api.analytics import router as analytics_router
 from blizzard.hub.api.auth_login import router as auth_login_router
+from blizzard.hub.api.auth_session import refuse_closed_tenant
 from blizzard.hub.api.chunk_dependencies import router as chunk_dependencies_router
 from blizzard.hub.api.chunks import router as chunks_router
 from blizzard.hub.api.config import router as config_router
@@ -106,7 +107,7 @@ from blizzard.hub.runtime import migration_runner
 from blizzard.hub.secrets import KeyCoverage, hub_key_provider, require_hub_key
 from blizzard.hub.secrets.rotation import RotationResult, rotate_keys
 from blizzard.hub.store.tenant_guard import install_tenant_guard
-from blizzard.hub.tenancy import StoreScope, TenantId
+from blizzard.hub.tenancy import StoreScope, TenantClosed, TenantId, UnknownTenant
 from blizzard.hub.work_sources.internal.factory import WorkSourceEntry
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
 from blizzard.wire.components import HUB_SCHEMA_COMPONENTS
@@ -381,6 +382,8 @@ def create_app(
 
     app.add_exception_handler(RunnerRetired, _refuse_retired_runner)
     app.add_exception_handler(RequestValidationError, _validation_error)
+    app.add_exception_handler(TenantClosed, refuse_closed_tenant)
+    app.add_exception_handler(UnknownTenant, refuse_closed_tenant)
 
     # API routers first, so /api/* always wins over the web mount at /.
     app.include_router(health_router)

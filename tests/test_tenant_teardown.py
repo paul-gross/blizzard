@@ -9,10 +9,13 @@ from pathlib import Path
 
 import pytest
 import sqlalchemy as sa
+from fastapi import Request
 from fastapi.testclient import TestClient
 
 from blizzard.auth_core import Role
 from blizzard.foundation.store.utc import as_utc
+from blizzard.hub.api.auth_session import TenantRequest, resolve_tenant
+from blizzard.hub.api.hub_level import Hub
 from blizzard.hub.config import AUTH_MODE_OAUTH
 from blizzard.hub.domain.tenancy import teardown
 from blizzard.hub.domain.tenancy.teardown import (
@@ -145,6 +148,53 @@ def test_after_a_close_the_tenants_people_get_404_and_its_runners_401(hub: HubHa
 
     assert client.get("/api/chunks", headers=person).status_code == 404
     assert client.post("/api/fleet/runners", json=registration, headers=runner).status_code == 401
+
+
+def _closing_after_resolution(hub: HubHarness, tenant: TenantId, rows: dict[str, dict[str, int]]) -> None:
+    """Make each request close ``tenant`` right after resolving it, before its route writes — the window a close
+    committing mid-request lands in — keeping the tenant's rows as the close left them in ``rows["closed"]``."""
+    assert hub.app is not None
+
+    def resolving_then_closing(request: Request, services: Hub) -> TenantRequest:
+        resolved = resolve_tenant(request, services)
+        services.tenant_teardown.close(tenant, by="usr_closer")
+        rows["closed"] = _rows_of(hub, tenant)
+        return resolved
+
+    hub.app.dependency_overrides[resolve_tenant] = resolving_then_closing
+
+
+def test_a_member_write_whose_tenant_closes_mid_request_answers_404_and_writes_nothing(hub: HubHarness) -> None:
+    tenant = _created(hub)
+    member = seed_user(hub, username="mia", role=Role.PENDING)
+    seed_membership(hub.engine, tenant, member.user_id, Role.ADMIN)
+    person = {"Authorization": f"Bearer {seed_session(hub, member)}", "X-Blizzard-Tenant": tenant}
+    rows: dict[str, dict[str, int]] = {}
+    _closing_after_resolution(hub, tenant, rows)
+    assert hub.app is not None
+
+    response = TestClient(hub.app).post("/api/secrets", json={"name": "gh", "value": "v"}, headers=person)
+
+    assert (response.status_code, response.json()) == (404, {"detail": "no such tenant"})
+    assert _rows_of(hub, tenant) == rows["closed"]
+
+
+def test_a_runner_write_whose_tenant_closes_mid_request_answers_401_and_writes_nothing(hub: HubHarness) -> None:
+    tenant = _created(hub)
+    runner = {"Authorization": f"Bearer {seed_runner(hub.open_services(tenant), 'rn-acme-1', register=False)}"}
+    rows: dict[str, dict[str, int]] = {}
+    _closing_after_resolution(hub, tenant, rows)
+    assert hub.app is not None
+
+    response = TestClient(hub.app).post(
+        "/api/fleet/runners", json={"workspace_id": "w1", "name": "r-acme"}, headers=runner
+    )
+
+    assert (response.status_code, response.json()) == (
+        401,
+        {"detail": "bearer token does not resolve to a known runner"},
+    )
+    assert _rows_of(hub, tenant) == rows["closed"]
 
 
 def test_after_a_close_a_member_signing_in_to_its_runner_is_answered_as_an_unknown_client(hub: HubHarness) -> None:
