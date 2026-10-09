@@ -21,6 +21,7 @@ from enum import StrEnum
 from typing import Protocol
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.event_log import HubEventKind
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
@@ -33,6 +34,18 @@ DRAIN_BATCH_ROWS = 5_000
 DRAIN_PASS_ROWS = 50_000
 
 _log = get_logger("blizzard.hub.tenant_teardown")
+
+# A kill at any of these leaves the deletion fact standing, so the ``tenant_teardown`` sweep resumes the drain from
+# wherever the tables stand once the hub is back (``bzh:crash-point-registry``).
+_CP_AFTER_CLOSE = crashpoint(
+    "teardown.after-close.before-drain", "deletion fact committed and the tenant dropped; no row drained yet"
+)
+_CP_AFTER_BATCH = crashpoint(
+    "teardown.after-batch.before-next", "a full drain batch and its count committed; the next batch not begun"
+)
+_CP_AFTER_DRAIN = crashpoint(
+    "teardown.after-drain.before-complete", "every row of the tenant drained; the tenant itself not yet removed"
+)
 
 
 @domain_model
@@ -159,6 +172,7 @@ class TenantTeardown:
             deletion = self._teardowns.deletion(tenant)
             assert deletion is not None
             raise TenantAlreadyDeleted(deletion)
+        _CP_AFTER_CLOSE.reached()
         return self.advance(tenant, budget=DRAIN_PASS_ROWS if budget is None else budget)
 
     def close(self, tenant: TenantId, *, by: str) -> CloseOutcome:
@@ -186,6 +200,7 @@ class TenantTeardown:
             removed += batch
             if batch < limit:
                 return removed, True
+            _CP_AFTER_BATCH.reached()
         return removed, False
 
     def complete(self, tenant: TenantId) -> int | None:
@@ -207,6 +222,7 @@ class TenantTeardown:
         _, drained = self.drain(tenant, budget=budget)
         if not drained:
             return DeletionProgress(DeletionState.DELETING, None)
+        _CP_AFTER_DRAIN.reached()
         rows_removed = self.complete(tenant)
         if rows_removed is None:
             deletion = self._teardowns.deletion(tenant)
