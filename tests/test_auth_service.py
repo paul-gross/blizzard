@@ -54,6 +54,10 @@ class _FakeUserRepository:
     def get_by_email(self, email: str) -> User | None:
         return next((u for u in self.by_id.values() if u.email == email), None)
 
+    def list_by_email_any_case(self, email: str) -> list[User]:
+        folded = [u for u in self.by_id.values() if u.email is not None and u.email.lower() == email.lower()]
+        return sorted(folded, key=lambda u: u.created_at)
+
     def username_exists(self, username: str) -> bool:
         return self.get_by_username(username) is not None
 

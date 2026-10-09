@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from sqlalchemy import insert, select
+from sqlalchemy import func, insert, select
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.store.batching import id_batches
@@ -42,6 +42,15 @@ class UserRepository:
         with self._store.read("get_by_email") as conn:
             row = conn.execute(select(s.users).where(s.users.c.email == email)).one_or_none()
             return self._user(row) if row is not None else None
+
+    def list_by_email_any_case(self, email: str) -> list[User]:
+        with self._store.read("list_by_email_any_case") as conn:
+            rows = conn.execute(
+                select(s.users)
+                .where(func.lower(s.users.c.email) == email.lower())
+                .order_by(s.users.c.created_at, s.users.c.id)
+            ).all()
+            return [self._user(row) for row in rows]
 
     def username_exists(self, username: str) -> bool:
         with self._store.read("username_exists") as conn:

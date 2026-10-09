@@ -28,6 +28,10 @@ USER_ROLE_CHANGED = "user_role_changed"
 #: A configured ``auth.superuser`` email matches no verified user yet — reported at
 #: every boot while unclaimed, never a silent dead end.
 SUPERUSER_BOOTSTRAP_UNCLAIMED = "superuser_bootstrap_unclaimed"
+#: An acceptance found several accounts holding the invited address in other cases and none holding it exactly, so
+#: it chose none of them and resolved the person as a sign-in does — the invitation, the address, and how many
+#: accounts hold it.
+INVITATION_ADDRESS_AMBIGUOUS = "invitation_address_ambiguous"
 
 _log = get_logger("blizzard.hub.auth")
 
@@ -100,6 +104,17 @@ class AuthFactsService:
             actor="system",
             subject=email,
             detail="auth.superuser names no verified user yet",
+        )
+
+    def invitation_address_ambiguous(
+        self, *, invitation_id: str, email: str, holders: int, into: IWriteAuthFactsRepository | None = None
+    ) -> None:
+        self.record(
+            INVITATION_ADDRESS_AMBIGUOUS,
+            actor=invitation_id,
+            subject=email,
+            detail=f"{holders} accounts hold it in other cases, none exactly",
+            into=into,
         )
 
 

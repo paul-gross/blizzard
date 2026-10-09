@@ -33,6 +33,7 @@ from blizzard.hub.auth.hub_admins import HubAdminFact, IReadHubAdminRepository
 from blizzard.hub.auth.identities import IWriteIdentityRepository
 from blizzard.hub.auth.identity_transaction import IdentityWrites, IIdentityTransactions
 from blizzard.hub.auth.invitations import (
+    Invitation,
     InvitationAlreadyResolved,
     InvitationOutcome,
     InvitationOutcomeKind,
@@ -256,19 +257,6 @@ class AuthService:
             return False
         return _claimable(self._superuser_bootstrap.get(), identity.email)
 
-    def _resolve_user(
-        self,
-        identity: ProviderIdentity,
-        provider_name: str,
-        *,
-        users: IWriteUserRepository,
-        identities: IWriteIdentityRepository,
-    ) -> User:
-        known = self._known_user(identity, provider_name, users=users, identities=identities)
-        return (
-            known if known is not None else self._mint_user(identity, provider_name, users=users, identities=identities)
-        )
-
     def _known_user(
         self,
         identity: ProviderIdentity,
@@ -279,28 +267,94 @@ class AuthService:
     ) -> User | None:
         """The user ``identity`` already resolves to — by its link, else by its verified email — linking it on an
         email match; ``None``, writing nothing, when the hub does not know the person."""
-        existing_link = identities.get(provider_name, identity.subject)
-        if existing_link is not None:
-            user = users.get(existing_link.user_id)
-            assert user is not None, f"identity {provider_name!r}:{identity.subject!r} references a missing user"
-            if existing_link.handle != identity.handle:
-                identities.update_handle(provider_name, identity.subject, handle=identity.handle)
-            return user
+        linked = self._linked_user(identity, provider_name, users=users, identities=identities)
+        if linked is not None:
+            return linked
+        return self._email_user(identity, provider_name, users=users, identities=identities)
 
-        if identity.email_verified and identity.email:
-            matched = users.get_by_email(identity.email)
-            if matched is not None:
-                identities.link(
-                    Identity(
-                        provider_name=provider_name,
-                        subject=identity.subject,
-                        user_id=matched.user_id,
-                        handle=identity.handle,
-                        created_at=self._clock.now(),
-                    )
-                )
-                return matched
+    def _accepting_user(
+        self, identity: ProviderIdentity, provider_name: str, *, invitation: Invitation, writes: IdentityWrites
+    ) -> User:
+        """The user an acceptance admits ``identity`` as: the one it is linked to; else the account the invited address
+        already names — held exactly, else held in another case by that one account — ``identity`` linked to it; else
+        as a sign-in resolves it, by its own verified email, minting a user when that names none either. Several
+        accounts holding the address in other cases and none exactly name no one: an auth fact records it."""
+        users, identities = writes.users, writes.identities
+        user = self._linked_user(identity, provider_name, users=users, identities=identities)
+        if user is None:
+            user = self._invited_address_holder(invitation, writes)
+            if user is not None:
+                self._link(identity, provider_name, user, identities)
+        if user is None:
+            user = self._email_user(identity, provider_name, users=users, identities=identities)
+        return (
+            user if user is not None else self._mint_user(identity, provider_name, users=users, identities=identities)
+        )
+
+    def _invited_address_holder(self, invitation: Invitation, writes: IdentityWrites) -> User | None:
+        holders = writes.users.list_by_email_any_case(invitation.email)
+        exact = [user for user in holders if user.email == invitation.email]
+        if exact:
+            return exact[0]
+        if len(holders) == 1:
+            return holders[0]
+        if holders:
+            self._auth_facts.invitation_address_ambiguous(
+                invitation_id=invitation.invitation_id,
+                email=invitation.email,
+                holders=len(holders),
+                into=writes.auth_facts,
+            )
         return None
+
+    def _linked_user(
+        self,
+        identity: ProviderIdentity,
+        provider_name: str,
+        *,
+        users: IWriteUserRepository,
+        identities: IWriteIdentityRepository,
+    ) -> User | None:
+        """The user ``identity``'s link names, its ``handle`` refreshed in place; ``None`` when the hub has not linked
+        it."""
+        existing_link = identities.get(provider_name, identity.subject)
+        if existing_link is None:
+            return None
+        user = users.get(existing_link.user_id)
+        assert user is not None, f"identity {provider_name!r}:{identity.subject!r} references a missing user"
+        if existing_link.handle != identity.handle:
+            identities.update_handle(provider_name, identity.subject, handle=identity.handle)
+        return user
+
+    def _email_user(
+        self,
+        identity: ProviderIdentity,
+        provider_name: str,
+        *,
+        users: IWriteUserRepository,
+        identities: IWriteIdentityRepository,
+    ) -> User | None:
+        """The user ``identity``'s verified email names exactly, ``identity`` linked to it; ``None``, writing nothing,
+        when it names none."""
+        if not identity.email_verified or not identity.email:
+            return None
+        matched = users.get_by_email(identity.email)
+        if matched is not None:
+            self._link(identity, provider_name, matched, identities)
+        return matched
+
+    def _link(
+        self, identity: ProviderIdentity, provider_name: str, user: User, identities: IWriteIdentityRepository
+    ) -> None:
+        identities.link(
+            Identity(
+                provider_name=provider_name,
+                subject=identity.subject,
+                user_id=user.user_id,
+                handle=identity.handle,
+                created_at=self._clock.now(),
+            )
+        )
 
     def _mint_user(
         self,
@@ -440,7 +494,7 @@ class AuthService:
         self, identity: ProviderIdentity, *, provider_name: str, invitation: TenantInvitation
     ) -> InvitationAccepted | SignInRefusal:
         """Admit the person ``identity`` signs in as through ``invitation``, in one identity unit of work: resolve the
-        user as :meth:`link_or_mint` does — minting one for an identity and email the hub has not seen — grant the
+        user (:meth:`_accepting_user`) — minting one for an identity and email the hub has not seen — grant the
         invitation's role in its tenant unless they already hold a membership there, whose role stays as it is,
         record the invitation accepted, and mint their session. Whichever user it resolves to then claims a
         configured, still-unclaimed ``auth.superuser`` whose email it holds.
@@ -457,7 +511,7 @@ class AuthService:
                     return SignInRefusal.INVITATION_UNUSABLE
                 if not record.invitation.admits(identity):
                     return SignInRefusal.INVITATION_EMAIL_MISMATCH
-                user = self._resolve_user(identity, provider_name, users=writes.users, identities=writes.identities)
+                user = self._accepting_user(identity, provider_name, invitation=record.invitation, writes=writes)
                 if writes.memberships.role_in(invitation.tenant, user.user_id) is None:
                     self._grant(record.invitation.role, user=user, invitation=invitation, at=now, writes=writes)
                 invitations.record(

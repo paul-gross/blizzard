@@ -1912,6 +1912,9 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadUserRepository, "get"): lambda w: w.hub.services.users.get(w.user_1.user_id),
     (IReadUserRepository, "get_by_username"): lambda w: w.hub.services.users.get_by_username("alice"),
     (IReadUserRepository, "get_by_email"): lambda w: w.hub.services.users.get_by_email("alice@example.com"),
+    (IReadUserRepository, "list_by_email_any_case"): lambda w: w.hub.services.users.list_by_email_any_case(
+        "Alice@Example.com"
+    ),
     (IReadUserRepository, "username_exists"): lambda w: w.hub.services.users.username_exists("alice"),
     (IReadUserRepository, "get_many"): lambda w: w.hub.services.users.get_many([w.user_1.user_id, w.user_2.user_id]),
     (IReadUserRepository, "list_all"): lambda w: w.hub.services.users.list_all(),

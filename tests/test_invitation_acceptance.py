@@ -4,6 +4,9 @@ membership the invitation grants unless they already hold one there, the ``accep
 lands them in the invited tenant. A provider that does not vouch for every address it reports, an account carrying no
 invited address, and an invitation no longer live or naming nothing admit nobody, write nothing and land on the login
 page naming why — the invitation stays live when only the address was wrong; a failure part way leaves nothing behind.
+An identity the hub has not linked joins the account the invited address already names — the one holding it exactly,
+else the one account holding it in another case; several holding it in other cases and none exactly name no one, which
+an auth fact records, and the person resolves as a sign-in resolves them.
 An invitation accepted or revoked between a reader's check and its write goes to whichever outcome was recorded first:
 the acceptance that loses is refused as no longer usable, the revocation that loses answers 409. A person already
 signed in who opens an invitation goes through the same check."""
@@ -144,6 +147,65 @@ def test_an_existing_member_records_the_acceptance_and_keeps_their_role(tmp_path
     assert hub.hub_services.memberships.role_in(tenant, member.user_id) is Role.ADMIN
     [fact] = _rows(hub, schema.invitation_facts)
     assert (fact.invitation_id, fact.kind, fact.actor_user_id) == (invitation_id, "accepted", member.user_id)
+
+
+@pytest.mark.parametrize("stored", ["ada.work@example.com", "ADA.WORK@EXAMPLE.COM"])
+def test_an_unlinked_identity_joins_the_account_holding_the_invited_address_in_any_case(
+    tmp_path: Path, stored: str
+) -> None:
+    hub, _github = _hub(tmp_path, _ada(emails=(_WORK,)))
+    member = seed_user(hub, username="ada", role=Role.CONTRIBUTOR, email=stored)
+    other = hub.add_tenant("other")
+    invitation_id, token = seed_invitation(hub.engine, other.tenant, _WORK, Role.GUEST)
+
+    landed = _sign_in(hub, token)
+
+    assert parse_qs(urlsplit(landed.headers["location"]).query) == {"tenant": [other.tenant]}
+    assert [user.id for user in _rows(hub, schema.users)] == [member.user_id]
+    [link] = _rows(hub, schema.identities)
+    assert (link.provider_name, link.subject, link.user_id) == ("github", "4242", member.user_id)
+    assert hub.hub_services.memberships.role_in(other.tenant, member.user_id) is Role.GUEST
+    assert hub.hub_services.memberships.role_in(default_tenant(hub.engine), member.user_id) is Role.CONTRIBUTOR
+    [fact] = _rows(hub, schema.invitation_facts)
+    assert (fact.invitation_id, fact.actor_user_id) == (invitation_id, member.user_id)
+
+
+def test_the_account_holding_the_invited_address_exactly_wins_over_one_holding_it_in_another_case(
+    tmp_path: Path,
+) -> None:
+    hub, _github = _hub(tmp_path, _ada())
+    other_case = seed_user(hub, username="ada-old", role=Role.CONTRIBUTOR, email=_WORK)
+    exact = seed_user(hub, username="ada", role=Role.CONTRIBUTOR, email=_WORK.lower())
+    other = hub.add_tenant("other")
+    _invitation_id, token = seed_invitation(hub.engine, other.tenant, _WORK, Role.GUEST)
+
+    _sign_in(hub, token)
+
+    assert len(_rows(hub, schema.users)) == 2
+    assert hub.hub_services.memberships.role_in(other.tenant, exact.user_id) is Role.GUEST
+    assert hub.hub_services.memberships.role_in(other.tenant, other_case.user_id) is None
+
+
+def test_several_accounts_holding_the_invited_address_in_other_cases_name_no_one_and_are_recorded(
+    tmp_path: Path,
+) -> None:
+    hub, _github = _hub(tmp_path, _ada())
+    holders = [
+        seed_user(hub, username=f"ada-{n}", role=Role.CONTRIBUTOR, email=email)
+        for n, email in enumerate((_WORK, _WORK.upper()))
+    ]
+    other = hub.add_tenant("other")
+    invitation_id, token = seed_invitation(hub.engine, other.tenant, _WORK, Role.GUEST)
+
+    landed = _sign_in(hub, token)
+
+    assert parse_qs(urlsplit(landed.headers["location"]).query) == {"tenant": [other.tenant]}
+    [minted] = [user for user in _rows(hub, schema.users) if user.id not in {h.user_id for h in holders}]
+    assert (minted.username, minted.email) == ("ada", "ada@home.example")
+    assert hub.hub_services.memberships.role_in(other.tenant, minted.id) is Role.GUEST
+    assert all(hub.hub_services.memberships.role_in(other.tenant, h.user_id) is None for h in holders)
+    [ambiguous] = [fact for fact in _rows(hub, schema.auth_facts) if fact.kind == "invitation_address_ambiguous"]
+    assert (ambiguous.actor, ambiguous.subject) == (invitation_id, _WORK.lower())
 
 
 @pytest.mark.parametrize(
