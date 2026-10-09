@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, status
 from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
-from blizzard.hub.api.auth_session import require
+from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.door import RequestDoor, change_context
 from blizzard.hub.auth.models import ResolvedIdentity
@@ -23,7 +23,9 @@ from blizzard.hub.domain.config.work_sources import ConfigFieldError, ConfigRevi
 from blizzard.hub.domain.garden.scopes import Scope, ScopeEdit, ScopeSlug, ScopeSlugError
 from blizzard.wire.scope import ScopeCreateRequest, ScopeEditRequest, ScopeLifecycleRequest, ScopeView
 
-router = APIRouter(prefix="/api", tags=["scopes"], dependencies=[Depends(reject_runner_principal)])
+router = APIRouter(
+    prefix="/api", tags=["scopes"], dependencies=[Depends(reject_runner_principal), Depends(tenant_bound)]
+)
 
 
 def scope_view(scope: Scope) -> ScopeView:

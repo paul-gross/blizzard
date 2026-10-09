@@ -42,6 +42,7 @@ from blizzard.hub.auth.internal.membership_repository import MembershipRepositor
 from blizzard.hub.auth.internal.session_repository import SessionRepository
 from blizzard.hub.auth.internal.superuser_bootstrap_repository import SuperuserBootstrapRepository
 from blizzard.hub.auth.internal.user_repository import UserRepository
+from blizzard.hub.auth.memberships import IReadMembershipRepository
 from blizzard.hub.auth.oauth.internal.factory import ProviderEntry
 from blizzard.hub.auth.oauth.registry import IOAuthProviderRegistry
 from blizzard.hub.auth.service import AuthService
@@ -151,6 +152,7 @@ from blizzard.hub.forge.internal.commit_resolver import GitHubCommitResolver
 from blizzard.hub.forge.repository_commits import ICommitForge, RepositoryCommitResolver
 from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.live_config import ConfigObjectCache
+from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.secrets import StoreSecretReader, secret_cipher
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.analytics_event_query_store import AnalyticsEventQueryStore
@@ -388,6 +390,8 @@ class HubServices:
     identities: IReadIdentityRepository
     #: The user read repository — every write still goes through ``auth``.
     users: IReadUserRepository
+    #: The membership read repository — whose memberships a request's tenant is resolved against.
+    memberships: IReadMembershipRepository
     #: The identity domain service — sessions, the first-login linking rule, ``state``.
     auth: AuthService
     #: The configured OAuth provider registry — empty when none is configured.
@@ -636,6 +640,8 @@ class TenantServicesOpener:
     sole_tenant: TenantServices
     #: The store's only tenant — the one a single-tenant hub serves every request in.
     sole_scope: Callable[[], StoreScope]
+    #: The open tenants and their names, held in memory — what a request's tenant is resolved against.
+    open_tenants: OpenTenants
 
 
 @dataclass(frozen=True)
@@ -874,6 +880,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         workdir=parts.hub_workdir,
         clock=clock,
         marker_authority=parts.marker_authority,
+        tenant=lambda: stores.scope.tenant,
         repositories=stores.repository_records,
         secrets=live.secrets,
         marker_callback_base_url=parts.hub_marker_callback_base_url,
@@ -1316,6 +1323,8 @@ def build_services(
     # Built ahead of `auth` below, which records role-change facts through
     # this service rather than a raw write repository.
     auth_facts_service = AuthFactsService(facts=AuthFactsRepository(store_connections), clock=clock)
+    memberships = MembershipRepository(store_connections)
+    open_tenants = OpenTenants(core.hub_scoped_reads.tenants.open_tenants)
     auth = AuthService(
         users=user_store,
         identities=identity_store,
@@ -1324,7 +1333,7 @@ def build_services(
         clock=clock,
         superuser_bootstrap=superuser_bootstrap_store,
         auth_facts=auth_facts_service,
-        memberships=MembershipRepository(store_connections),
+        memberships=memberships,
         hub_admins=HubAdminRepository(store_connections),
         transactions=IdentityTransactions(store_connections, auth_errors),
     )
@@ -1340,6 +1349,7 @@ def build_services(
             open_services=core.open_services,
             sole_tenant=sole.services,
             sole_scope=lambda: core.sole_tenant.scope,
+            open_tenants=open_tenants,
         ),
         hub_scoped_reads=core.hub_scoped_reads,
         tenant_registry=lambda tenant: core.open(StoreScope(tenant)).registry,
@@ -1360,6 +1370,7 @@ def build_services(
         sessions=session_store,
         identities=identity_store,
         users=user_store,
+        memberships=memberships,
         auth=auth,
         oauth_providers=oauth_registry,
         auth_throttle=auth_throttle,

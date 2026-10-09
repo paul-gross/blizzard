@@ -8,6 +8,7 @@ durable, and map the outcome to an authored edge. Structurally agentless
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import timedelta
 
@@ -62,6 +63,7 @@ from blizzard.hub.domain.graph.model import (
     RunStep,
 )
 from blizzard.hub.domain.observability.tracing.platform import RUN_STEP_EXIT_CODE, RUN_STEP_NAME, RUN_STEP_SPAN
+from blizzard.hub.tenancy import TenantId
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
 
 _HUB_RUNNER_ID = "hub"
@@ -412,6 +414,7 @@ class HubNodeExecutor:
         workdir: IHubWorkdir,
         clock: IClock,
         marker_authority: MarkerAuthority,
+        tenant: Callable[[], TenantId],
         repositories: IReadRepositoryRecordRepository,
         secrets: ISecretReader,
         marker_callback_base_url: str = "",
@@ -430,6 +433,7 @@ class HubNodeExecutor:
         self._workdir = workdir
         self._clock = clock
         self._marker_authority = marker_authority
+        self._tenant = tenant
         self._repositories = repositories
         self._secrets = secrets
         self._marker_callback_base_url = marker_callback_base_url
@@ -532,7 +536,9 @@ class HubNodeExecutor:
         artifacts = self._artifacts.load_artifacts(chunk.chunk_id)
         # Minted before the env is built and revoked once this call is done with it, so
         # it is live only for this (chunk, node, epoch) visit.
-        marker_token = self._marker_authority.issue(chunk.chunk_id, node_id=node.node_id, epoch=epoch)
+        marker_token = self._marker_authority.issue(
+            chunk.chunk_id, node_id=node.node_id, epoch=epoch, tenant=self._tenant()
+        )
         try:
             try:
                 git_commits = GitCommits.of(artifacts)

@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
-from blizzard.hub.api.auth_session import require
+from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.chunk.dependencies import (
@@ -32,7 +32,9 @@ from blizzard.wire.chunk import (
     PrerequisiteIsEphemeralView,
 )
 
-router = APIRouter(prefix="/api", tags=["chunk-dependencies"], dependencies=[Depends(reject_runner_principal)])
+router = APIRouter(
+    prefix="/api", tags=["chunk-dependencies"], dependencies=[Depends(reject_runner_principal), Depends(tenant_bound)]
+)
 
 
 def _resolve_dependent(services: TenantServices, chunk_id: str) -> Chunk:

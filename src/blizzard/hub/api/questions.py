@@ -17,14 +17,16 @@ from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
-from blizzard.hub.api.auth_session import require
+from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.domain.chunk.model import ChunkFacts, NodeQuestion, QuestionClosed
 from blizzard.hub.domain.execution.questions import AskedQuestion
 from blizzard.wire.question import AnswerRequest, AnswerResult, QuestionAsked, QuestionView
 
-router = APIRouter(prefix="/api", tags=["questions"], dependencies=[Depends(reject_runner_principal)])
+router = APIRouter(
+    prefix="/api", tags=["questions"], dependencies=[Depends(reject_runner_principal), Depends(tenant_bound)]
+)
 
 
 def question_view(row: NodeQuestion, runner_names: Mapping[str, str]) -> QuestionView:

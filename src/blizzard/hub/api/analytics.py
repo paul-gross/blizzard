@@ -20,7 +20,7 @@ from blizzard.auth_core import Permission
 from blizzard.foundation.roles import dto
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
-from blizzard.hub.api.auth_session import require
+from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
 from blizzard.hub.domain.kernel.pagination import MalformedCursor
 from blizzard.hub.domain.observability.analytics.derivation import ReDeriveScope, ReDeriveScopeRefused
@@ -58,7 +58,9 @@ from blizzard.wire.analytics import (
     ReDeriveResponse,
 )
 
-router = APIRouter(prefix="/api/analytics", tags=["analytics"], dependencies=[Depends(reject_runner_principal)])
+router = APIRouter(
+    prefix="/api/analytics", tags=["analytics"], dependencies=[Depends(reject_runner_principal), Depends(tenant_bound)]
+)
 
 #: Default internal page size for the NDJSON stream — never the whole result set at once.
 _STREAM_BATCH_SIZE = 500

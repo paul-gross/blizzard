@@ -18,7 +18,7 @@ from blizzard.auth_core import Permission
 from blizzard.foundation.findings import FindingFactKind
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
-from blizzard.hub.api.auth_session import require
+from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import TenantServices
@@ -43,7 +43,9 @@ from blizzard.wire.finding import (
     FindingView,
 )
 
-router = APIRouter(prefix="/api", tags=["findings"], dependencies=[Depends(reject_runner_principal)])
+router = APIRouter(
+    prefix="/api", tags=["findings"], dependencies=[Depends(reject_runner_principal), Depends(tenant_bound)]
+)
 
 
 def _finding_view_fields(finding: Finding) -> dict[str, object]:

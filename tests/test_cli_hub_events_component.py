@@ -108,4 +108,4 @@ def test_the_auth_triad_returns_the_apis_own_detail(tmp_path: Path, monkeypatch:
     _relay(hub, monkeypatch, seed_session(hub, pending))
     refused = _invoke()
     assert refused.exit_code != 0
-    assert "fleet:view" in refused.output
+    assert "404" in refused.output

@@ -21,9 +21,9 @@ from pydantic import BaseModel
 
 from blizzard.auth_core import Permission, Role
 from blizzard.foundation.roles import dto
-from blizzard.hub.api.auth import reject_runner_principal, runner_signing_in
-from blizzard.hub.api.auth_session import require, resolve_identity
-from blizzard.hub.api.deps import get_services
+from blizzard.hub.api.auth import RunnerSigningIn, reject_runner_principal, runner_signing_in
+from blizzard.hub.api.auth_session import require_hub, resolve_identity
+from blizzard.hub.api.hub_level import hub_services
 from blizzard.hub.auth.service import CLI_CLIENT_ID
 from blizzard.hub.auth.signing import SigningKeyService
 from blizzard.hub.composition import HubServices
@@ -73,7 +73,7 @@ class IdpSurface:
 
     @property
     def services(self) -> HubServices:
-        return get_services(self.request)
+        return hub_services(self.request)
 
     @property
     def signing(self) -> SigningKeyService:  # ast-grep-ignore: bzh:property-delegates
@@ -197,6 +197,7 @@ def authorize(
     signing = surface.signing
 
     is_cli = client == CLI_CLIENT_ID
+    signing_in: RunnerSigningIn | None = None
     if is_cli:
         if not CliRedirect(redirect_uri).valid:
             raise HTTPException(
@@ -211,11 +212,11 @@ def authorize(
     else:
         # One undifferentiated 400 for an unknown client and an unregistered redirect URI, so a caller cannot
         # fingerprint client ids by probing; a retired runner's ``RunnerRetired`` (403) reaches the app handler.
-        registration = runner_signing_in(services, client)
-        unregistered = registration is None
-        if registration is not None:
+        signing_in = runner_signing_in(services, client)
+        unregistered = signing_in is None
+        if signing_in is not None:
             try:
-                registration.refuse_federation(redirect_uri)
+                signing_in.registration.refuse_federation(redirect_uri)
             except UnregisteredRedirect:
                 unregistered = True
         if unregistered:
@@ -254,7 +255,7 @@ def authorize(
         "sub": identity.user_id,
         "username": identity.username,
         "email": email,
-        "role": (identity.role or Role.PENDING).value,
+        "role": (_role_in_runner_tenant(services, signing_in, identity.user_id) or Role.PENDING).value,
         "aud": client,
         "jti": secrets.token_urlsafe(18),
     }
@@ -263,6 +264,13 @@ def authorize(
         redirect_uri=redirect_uri, token=token, state=state, response_mode=response_mode
     )
     return delivery.response()
+
+
+def _role_in_runner_tenant(services: HubServices, signing_in: RunnerSigningIn | None, user_id: str) -> Role | None:
+    """The signing-in person's membership role in the tenant the runner was added in."""
+    if signing_in is None:
+        return None
+    return services.memberships.role_in(signing_in.tenant, user_id)
 
 
 @router.get("/jwks.json")
@@ -303,7 +311,7 @@ def cli_token(request: Request, body: CliTokenRequest) -> CliTokenResponse:
 @router.post(
     "/rotate-signing-key",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(reject_runner_principal), Depends(require(Permission.USER_MANAGE))],
+    dependencies=[Depends(reject_runner_principal), Depends(require_hub(Permission.HUB_ADMIN_GRANT))],
 )
 def rotate_signing_key(request: Request) -> Response:
     """Mint a fresh current signing key, demoting the old current to previous.

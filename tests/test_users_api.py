@@ -210,7 +210,8 @@ def test_role_change_takes_effect_on_the_subjects_next_request_without_re_login(
     admin_token = seed_session(hub, admin)
     pending_token = seed_session(hub, pending)
 
-    assert hub.client.get("/api/chunks", headers=_cookie(pending_token)).status_code == 403
+    # No membership: the tenant is one the newcomer cannot enter.
+    assert hub.client.get("/api/chunks", headers=_cookie(pending_token)).status_code == 404
 
     promote = hub.client.post(
         f"/api/users/{pending.user_id}/role", json={"role": "guest"}, headers=_cookie(admin_token)

@@ -21,7 +21,7 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.work_items import WorkItemPriority
 from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
-from blizzard.hub.api.auth_session import require
+from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.chunk_edit import ChunkPatchBody
 from blizzard.hub.api.chunk_views import ChunkView, blocked_view
 from blizzard.hub.api.deps import Services
@@ -98,7 +98,9 @@ from blizzard.wire.work_source import WorkItemAuthorView
 #: How long a finished ``done`` chunk stays on ``GET /api/chunks?board_window=true``.
 BOARD_DONE_WINDOW = timedelta(hours=48)
 
-router = APIRouter(prefix="/api", tags=["chunks"], dependencies=[Depends(reject_runner_principal)])
+router = APIRouter(
+    prefix="/api", tags=["chunks"], dependencies=[Depends(reject_runner_principal), Depends(tenant_bound)]
+)
 
 #: A delivery the write fence refused — a 409, never ``invalid``, which would write a failure marker.
 _FENCED_DELIVERY_DETAIL = "delivery superseded: the chunk is terminal or was restarted"

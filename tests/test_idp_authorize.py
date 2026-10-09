@@ -192,7 +192,7 @@ def test_rotate_signing_key_requires_user_manage(tmp_path: Path) -> None:
 
 def test_rotate_signing_key_rotates_the_published_jwks(tmp_path: Path) -> None:
     hub = build_hub(tmp_path, auth_mode=AUTH_MODE_OAUTH)
-    admin = seed_user(hub, username="admin1", role=Role.ADMIN, email="admin1@example.com")
+    admin = seed_user(hub, username="admin1", role=Role.SUPERUSER, email="admin1@example.com")
     session = seed_session(hub, admin)
     hub.client.cookies.set("bz_session", session)
 

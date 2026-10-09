@@ -17,7 +17,7 @@ from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
-from blizzard.hub.api.auth_session import require
+from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.domain.chunk.model import DecisionClosed, GateDecision, NotADecisionChoice
@@ -30,7 +30,9 @@ from blizzard.wire.decision import (
     OpenDecisionsResponse,
 )
 
-router = APIRouter(prefix="/api", tags=["decisions"], dependencies=[Depends(reject_runner_principal)])
+router = APIRouter(
+    prefix="/api", tags=["decisions"], dependencies=[Depends(reject_runner_principal), Depends(tenant_bound)]
+)
 
 
 def to_decision_view(row: GateDecision, runner_names: Mapping[str, str]) -> DecisionView:

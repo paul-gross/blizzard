@@ -204,10 +204,9 @@ def test_chunk_defaults_retains_model_and_backfills_no_default_model(tmp_path: P
 # The human-plane auth seam under the default ``auth.mode = "none"``
 
 
-def test_require_grants_the_implicit_operator_with_no_store_wired() -> None:
-    """Under the default ``auth.mode = "none"`` a ``require()``-gated route serves on the
-    store-free app: the gate short-circuits to :data:`IMPLICIT_OPERATOR` without reaching
-    for ``Depends(get_services)``, which would 503 with no store wired."""
+def test_require_reports_the_store_unwired_with_no_store_wired() -> None:
+    """A ``require()``-gated route serves a tenant, and a store-free app has none to resolve: under
+    the default ``auth.mode = "none"`` the gate answers 503, never the implicit operator unscoped."""
     app = FastAPI()
     app.state.config = HubConfig(root=Path("."), db_url="sqlite://")  # `auth.mode` defaults to "none"
     app.state.services = None  # store-free, exactly as the export/unit app is built
@@ -219,8 +218,7 @@ def test_require_grants_the_implicit_operator_with_no_store_wired() -> None:
     with TestClient(app) as client:
         resp = client.get("/_pin_probe")
 
-    assert resp.status_code == 200, resp.text
-    assert resp.json() == {"username": "operator"}
+    assert resp.status_code == 503, resp.text
 
 
 # `hub host`'s early-shutdown server

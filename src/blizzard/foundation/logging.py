@@ -56,6 +56,8 @@ class LogFormat:
     def apply(self) -> None:
         structlog.configure(
             processors=[
+                # A request's bound context — the tenant it acts in — joins every line it logs.
+                structlog.contextvars.merge_contextvars,
                 structlog.processors.add_log_level,
                 structlog.processors.TimeStamper(fmt="iso"),
                 *self.exception_processors(),

@@ -19,7 +19,7 @@ from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, ChunkStatus
 from blizzard.foundation.roles import dto
 from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
-from blizzard.hub.api.auth_session import require
+from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.chunk_views import blocked_view
 from blizzard.hub.api.deps import Services
 from blizzard.hub.composition import TenantServices
@@ -58,7 +58,9 @@ from blizzard.wire.queue import (
 )
 from blizzard.wire.runner import RunnerCapability as WireRunnerCapability
 
-router = APIRouter(prefix="/api", tags=["queue"], dependencies=[Depends(reject_runner_principal)])
+router = APIRouter(
+    prefix="/api", tags=["queue"], dependencies=[Depends(reject_runner_principal), Depends(tenant_bound)]
+)
 
 
 def _blocked_markings(

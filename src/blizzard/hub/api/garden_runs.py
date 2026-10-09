@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
-from blizzard.hub.api.auth_session import require
+from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.graph_names import GraphNames
 from blizzard.hub.domain.garden.runs.history import (
@@ -34,7 +34,9 @@ from blizzard.wire.garden_run import (
     RunRowView,
 )
 
-router = APIRouter(prefix="/api", tags=["garden-runs"], dependencies=[Depends(reject_runner_principal)])
+router = APIRouter(
+    prefix="/api", tags=["garden-runs"], dependencies=[Depends(reject_runner_principal), Depends(tenant_bound)]
+)
 
 
 def _parse_instant(value: str, *, field: str) -> datetime:

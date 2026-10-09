@@ -18,7 +18,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
-from blizzard.hub.api.auth_session import require
+from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import TenantServices
@@ -55,7 +55,7 @@ from blizzard.wire.work_source import WorkSourceDocument
 router = APIRouter(
     prefix="/api/config",
     tags=["config"],
-    dependencies=[Depends(reject_runner_principal)],
+    dependencies=[Depends(reject_runner_principal), Depends(tenant_bound)],
 )
 
 #: The wire name of an outcome row for a named record that needed no write.

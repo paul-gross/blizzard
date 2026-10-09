@@ -10,8 +10,8 @@ from fastapi.responses import JSONResponse
 from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
-from blizzard.hub.api.auth_session import require
-from blizzard.hub.api.deps import Hub
+from blizzard.hub.api.auth_session import require_hub
+from blizzard.hub.api.hub_level import Hub
 from blizzard.hub.domain.observability.tracing.replay import ReplayUnavailable, ReplayWindowRefused
 from blizzard.wire.traces import (
     TraceReplayFailure,
@@ -23,7 +23,7 @@ from blizzard.wire.traces import (
 router = APIRouter(prefix="/api/traces", tags=["traces"], dependencies=[Depends(reject_runner_principal)])
 
 
-@router.get("/status", response_model=TraceStatusResponse, dependencies=[Depends(require(Permission.FLEET_VIEW))])
+@router.get("/status", response_model=TraceStatusResponse, dependencies=[Depends(require_hub(Permission.EXPORT_ADMIN))])
 def trace_status(services: Hub) -> TraceStatusResponse:
     """Tracing on or off, the redacted endpoint, the cursor and its lag, the last export and the last error."""
     read = services.trace_status.read()
@@ -47,7 +47,7 @@ def trace_status(services: Hub) -> TraceStatusResponse:
     "/replay",
     response_model=TraceReplayResponse,
     responses={status.HTTP_502_BAD_GATEWAY: {"model": TraceReplayFailure}},
-    dependencies=[Depends(require(Permission.ANALYTICS_ADMIN))],
+    dependencies=[Depends(require_hub(Permission.EXPORT_ADMIN))],
 )
 def trace_replay(request: TraceReplayRequest, services: Hub) -> TraceReplayResponse | JSONResponse:
     """Tell every step closed and chunk finished in ``[since, until)`` again, without moving the live cursor.

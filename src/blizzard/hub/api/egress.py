@@ -10,8 +10,8 @@ from fastapi.responses import JSONResponse
 from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
-from blizzard.hub.api.auth_session import require
-from blizzard.hub.api.deps import Hub
+from blizzard.hub.api.auth_session import require_hub
+from blizzard.hub.api.hub_level import Hub
 from blizzard.hub.domain.observability.egress.backfill import BackfillUnavailable, BackfillWindowRefused
 from blizzard.hub.domain.observability.egress.reset import ResetRefused, ResetUnavailable
 from blizzard.wire.egress import (
@@ -28,7 +28,9 @@ from blizzard.wire.egress import (
 router = APIRouter(prefix="/api/egress", tags=["egress"], dependencies=[Depends(reject_runner_principal)])
 
 
-@router.get("/status", response_model=EgressStatusResponse, dependencies=[Depends(require(Permission.FLEET_VIEW))])
+@router.get(
+    "/status", response_model=EgressStatusResponse, dependencies=[Depends(require_hub(Permission.EXPORT_ADMIN))]
+)
 def egress_status(services: Hub) -> EgressStatusResponse:
     """Export on, off or rejected, each dataset's cursor and lag, the last pass and file, the last error and the
     free space."""
@@ -58,7 +60,7 @@ def egress_status(services: Hub) -> EgressStatusResponse:
     )
 
 
-@router.post("/reset", response_model=EgressResetResponse, dependencies=[Depends(require(Permission.ANALYTICS_ADMIN))])
+@router.post("/reset", response_model=EgressResetResponse, dependencies=[Depends(require_hub(Permission.EXPORT_ADMIN))])
 def egress_reset(request: EgressResetRequest, services: Hub) -> EgressResetResponse:
     """Move one dataset's cursor to an instant and record the moved window. An unconfigured dataset or a future
     instant is 422, and a reset while the export is off or rejected is 409."""
@@ -80,7 +82,7 @@ def egress_reset(request: EgressResetRequest, services: Hub) -> EgressResetRespo
     "/backfill",
     response_model=EgressBackfillResponse,
     responses={status.HTTP_502_BAD_GATEWAY: {"model": EgressBackfillFailure}},
-    dependencies=[Depends(require(Permission.ANALYTICS_ADMIN))],
+    dependencies=[Depends(require_hub(Permission.EXPORT_ADMIN))],
 )
 def egress_backfill(request: EgressBackfillRequest, services: Hub) -> EgressBackfillResponse | JSONResponse:
     """Write the rows of ``[since, until)`` again as the live export would, without moving a cursor. A bad window

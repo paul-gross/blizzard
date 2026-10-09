@@ -22,7 +22,10 @@ from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
 from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.graphs.scripts import land_common, land_pr_ci
+from blizzard.hub.tenancy import TenantId
 from tests.support import FakeHubCommandRunner, FakeHubWorkdir, HubHarness, build_hub, pointer_token, report_lease
+
+_TENANT = TenantId("ten_marker")
 
 # -- marker_auth: the authority is instance-scoped, never persisted -------------------
 
@@ -33,11 +36,11 @@ def test_a_restarted_processs_fresh_authority_refuses_a_prior_instances_token() 
     minted by a process that no longer exists. The restarted process's authority is empty,
     so that write is refused rather than granted."""
     killed = MarkerAuthority()
-    orphaned_token = killed.issue("ch_1", node_id="nd_1", epoch=1)
+    orphaned_token = killed.issue("ch_1", node_id="nd_1", epoch=1, tenant=_TENANT)
 
     restarted = MarkerAuthority()
 
-    assert restarted.verify(orphaned_token, chunk_id="ch_1", node_id="nd_1", epoch=1) is False
+    assert restarted.verify(orphaned_token, chunk_id="ch_1", node_id="nd_1", epoch=1) is None
 
 
 # -- land_pr_ci: the terminal-failure findings write is unguarded ---------------------

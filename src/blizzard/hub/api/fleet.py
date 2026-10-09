@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response,
 from fastapi.responses import JSONResponse
 
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.roles import collaborator, dto
+from blizzard.foundation.roles import dto
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import chunk_events, node_steps
 from blizzard.hub.api import chunk_statuses as chunk_statuses_api
@@ -35,6 +35,7 @@ from blizzard.hub.api.analytics import (
     spend_response,
 )
 from blizzard.hub.api.auth import RunnerPrincipal, require_runner_principal, require_runner_principal_even_if_retired
+from blizzard.hub.api.auth_session import TenantRequest, resolve_tenant, tenant_bound
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.findings import finding_view
 from blizzard.hub.api.garden_proposals import garden_proposal_view
@@ -70,6 +71,7 @@ from blizzard.hub.domain.runners.registration import (
     RunnerNeverConnected,
     RunnerRetired,
 )
+from blizzard.hub.tenancy import StoreScope
 from blizzard.wire.analytics import AnalyticsCountsResponse, AnalyticsSpendResponse
 from blizzard.wire.chunk import (
     ChunkDetail,
@@ -108,38 +110,47 @@ from blizzard.wire.transcript_segment import LeaseTranscriptView, TranscriptSegm
 
 _log = get_logger("blizzard.hub.fleet")
 
-router = APIRouter(prefix="/api/fleet", tags=["fleet"], dependencies=[Depends(require_runner_principal)])
+router = APIRouter(
+    prefix="/api/fleet", tags=["fleet"], dependencies=[Depends(require_runner_principal), Depends(tenant_bound)]
+)
 
 #: The claim route's own router: gated by the principal *without* the retirement refusal, because a retired
 #: runner's claim is refused in-domain with the paused-denial body older runners parse.
 claim_router = APIRouter(
-    prefix="/api/fleet", tags=["fleet"], dependencies=[Depends(require_runner_principal_even_if_retired)]
+    prefix="/api/fleet",
+    tags=["fleet"],
+    dependencies=[Depends(require_runner_principal_even_if_retired), Depends(tenant_bound)],
 )
 
 
-@collaborator
 @dataclass(frozen=True)
 class FleetRequest:
-    """One fleet-router call: the runner its bearer token names, and the hub policy it is judged under."""
+    """One fleet-router call: the runner its bearer token names, the hub policy it is judged under,
+    and the tenant that runner was added in — with that tenant's services, the only ones the call
+    reaches."""
 
     principal: RunnerPrincipal
     config: HubConfig
+    scope: StoreScope
+    services: TenantServices
 
     @classmethod
     def of(
         cls,
         request: Request,
         principal: Annotated[RunnerPrincipal, Depends(require_runner_principal)],
+        tenant: Annotated[TenantRequest, Depends(resolve_tenant)],
     ) -> FleetRequest:
-        return cls(principal, request.app.state.config)
+        return cls(principal, request.app.state.config, tenant.scope, tenant.services)
 
     @classmethod
     def of_even_if_retired(
         cls,
         request: Request,
         principal: Annotated[RunnerPrincipal, Depends(require_runner_principal_even_if_retired)],
+        tenant: Annotated[TenantRequest, Depends(resolve_tenant)],
     ) -> FleetRequest:
-        return cls(principal, request.app.state.config)
+        return cls(principal, request.app.state.config, tenant.scope, tenant.services)
 
     @property
     def route_token_mode(self) -> str:

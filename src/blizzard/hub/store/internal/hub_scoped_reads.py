@@ -19,7 +19,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import partial
 
-from sqlalchemy import Connection, select
+from sqlalchemy import Connection, exists, select
 
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.hub_scoped_corpus import SweepCorpusReads
@@ -53,6 +53,13 @@ class TenantStateReads:
             raise TenantClosed(tenant)
         if known is None:
             raise UnknownTenant(tenant)
+
+    def open_tenants(self) -> dict[TenantId, str]:
+        """Every tenant with no ``tenant_deletions`` row, by id, with its name."""
+        closed = exists().where(tenant_deletions.c.tenant_id == tenants.c.tenant_id)
+        with hub_scoped_read(self._connections, "read the open tenants") as conn:
+            rows = conn.execute(select(tenants.c.tenant_id, tenants.c.name).where(~closed)).all()
+        return {TenantId(row.tenant_id): row.name for row in rows}
 
 
 @dataclass(frozen=True)

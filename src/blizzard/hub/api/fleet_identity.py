@@ -11,7 +11,7 @@ from fastapi import APIRouter, Request, status
 from fastapi.responses import JSONResponse
 
 from blizzard.hub.api.auth import RunnerAuth
-from blizzard.hub.api.deps import Hub
+from blizzard.hub.api.hub_level import Hub
 from blizzard.hub.domain.runners.registration import RunnerTokenRefused
 from blizzard.wire.runner import RunnerIdentityRefusal, RunnerIdentityView
 

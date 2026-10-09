@@ -76,7 +76,7 @@ def test_pending_reaches_me_but_is_refused_a_fleet_view_read(tmp_path: Path) -> 
     assert me.json()["assignable_roles"] == [r.value for r in Role if r is not Role.SUPERUSER]
 
     denied = hub.client.get("/api/chunks", headers=_cookie(token))
-    assert denied.status_code == 403
+    assert denied.status_code == 404
 
 
 def test_pending_is_refused_on_the_sse_stream(tmp_path: Path) -> None:
@@ -85,7 +85,7 @@ def test_pending_is_refused_on_the_sse_stream(tmp_path: Path) -> None:
     token = seed_session(hub, pending)
 
     resp = hub.client.get("/api/events/stream", headers=_cookie(token))
-    assert resp.status_code == 403
+    assert resp.status_code == 404
 
 
 def test_pending_is_refused_ingest(tmp_path: Path) -> None:
@@ -94,7 +94,7 @@ def test_pending_is_refused_ingest(tmp_path: Path) -> None:
     token = seed_session(hub, pending)
 
     resp = hub.client.post("/api/chunks", json={"tokens": ["default:1"]}, headers=_cookie(token))
-    assert resp.status_code == 403
+    assert resp.status_code == 404
 
 
 # --- guest: every fleet:view read, refused on every mutation -------------------

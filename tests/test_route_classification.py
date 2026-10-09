@@ -1,8 +1,10 @@
 """The exhaustive three-plane route classification guard.
 
-Every mounted route is asserted human (gated by ``require(<permission>)``), fleet
-(mounted under ``/api/fleet/*``, gated at router level), or public (no gate at all). The
-table is exhaustive both ways: every live route must appear, every entry must resolve.
+Every mounted route is asserted human (gated by ``require(<permission>)``, or by
+``require_hub(<permission>)`` when it serves no tenant), fleet (mounted under ``/api/fleet/*``,
+gated at router level), or public (no gate at all). Human tenant routes and fleet routes resolve
+their tenant at router level; hub-level and public routes resolve none. The table is exhaustive
+both ways: every live route must appear, every entry must resolve.
 """
 
 from __future__ import annotations
@@ -42,7 +44,19 @@ _PUBLIC: set[tuple[str, str]] = {
     ("GET", "/api/fleet/identity"),
 }
 
-#: Human plane — ``(method, path) -> permission`` required via ``require(<permission>)``.
+#: The human routes that serve no tenant, gated by ``require_hub(<permission>)``: every other human
+#: route, and every fleet route, resolves its tenant at router level.
+_HUB_LEVEL: set[tuple[str, str]] = {
+    ("POST", "/api/auth/rotate-signing-key"),
+    ("GET", "/api/traces/status"),
+    ("POST", "/api/traces/replay"),
+    ("GET", "/api/egress/status"),
+    ("POST", "/api/egress/reset"),
+    ("POST", "/api/egress/backfill"),
+}
+
+#: Human plane — ``(method, path) -> permission`` required via ``require(<permission>)``, or
+#: ``require_hub(<permission>)`` for a route in :data:`_HUB_LEVEL`.
 _HUMAN: dict[tuple[str, str], Permission] = {
     ("GET", "/api/events/stream"): Permission.FLEET_VIEW,
     ("GET", "/api/events"): Permission.FLEET_VIEW,
@@ -169,9 +183,8 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     ("GET", "/api/spend"): Permission.FLEET_VIEW,
     ("GET", "/api/users"): Permission.USER_MANAGE,
     ("POST", "/api/users/{user_id}/role"): Permission.USER_MANAGE,
-    # Key rotation — the same admin-tier permission the user-management
-    # API uses; no new permission is minted for this one verb.
-    ("POST", "/api/auth/rotate-signing-key"): Permission.USER_MANAGE,
+    # Key rotation — the key signs runner sign-ins in every tenant, so it takes a hub permission.
+    ("POST", "/api/auth/rotate-signing-key"): Permission.HUB_ADMIN_GRANT,
     # Transcript-segment discovery/content reads — above
     # Permission.FLEET_VIEW, since a transcript carries everything a worker saw.
     ("GET", "/api/chunks/{chunk_id}/transcripts"): Permission.TRANSCRIPT_READ,
@@ -179,16 +192,13 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     # Forced transcript-event re-derivation — a mutation, above the
     # read-only Permission.TRANSCRIPT_READ.
     ("POST", "/api/analytics/re-derive"): Permission.ANALYTICS_ADMIN,
-    # Fleet-trace operator surface — status is redacted fleet state.
-    ("GET", "/api/traces/status"): Permission.FLEET_VIEW,
-    # Replay re-sends a window to the exporter — above the read-only tiers.
-    ("POST", "/api/traces/replay"): Permission.ANALYTICS_ADMIN,
-    # Fact-egress operator surface — status is export state and a directory path, fleet-viewer grade.
-    ("GET", "/api/egress/status"): Permission.FLEET_VIEW,
-    # Reset moves the export's cursor — an admin write.
-    ("POST", "/api/egress/reset"): Permission.ANALYTICS_ADMIN,
-    # Backfill writes a past window to the export directory — an admin write.
-    ("POST", "/api/egress/backfill"): Permission.ANALYTICS_ADMIN,
+    # The export surfaces — their cursors and directories are shared by every tenant, so each
+    # takes the hub's export permission.
+    ("GET", "/api/traces/status"): Permission.EXPORT_ADMIN,
+    ("POST", "/api/traces/replay"): Permission.EXPORT_ADMIN,
+    ("GET", "/api/egress/status"): Permission.EXPORT_ADMIN,
+    ("POST", "/api/egress/reset"): Permission.EXPORT_ADMIN,
+    ("POST", "/api/egress/backfill"): Permission.EXPORT_ADMIN,
     # The read-only events/counts surfaces — no grant of their own.
     ("GET", "/api/analytics/events"): Permission.TRANSCRIPT_READ,
     ("GET", "/api/analytics/events/ndjson"): Permission.TRANSCRIPT_READ,
@@ -339,7 +349,7 @@ def _permission_of(call: object) -> Permission | None:
     over, or ``None`` if ``call`` is not one — introspects the closure cell rather
     than trusting a second hand-maintained map, so this cannot silently drift from
     what the route actually enforces."""
-    if getattr(call, "__name__", None) == "_dependency":
+    if getattr(call, "__name__", None) in ("_dependency", "_hub_dependency"):
         freevars = call.__code__.co_freevars  # type: ignore[union-attr]
         closure = call.__closure__ or ()  # type: ignore[union-attr]
         for name, cell in zip(freevars, closure, strict=True):
@@ -429,3 +439,26 @@ def test_fleet_routes_carry_the_runner_principal_gate_not_a_permission(tmp_path:
     assert "require_runner_principal_even_if_retired" in _dependency_names(claim)
     assert "require_runner_principal" not in _dependency_names(claim)
     assert _required_permission(claim) is None
+
+
+def test_human_routes_resolve_their_tenant_unless_hub_level(tmp_path: Path) -> None:
+    """A tenant route resolves its tenant at router level (``tenant_bound``) and gates on a
+    permission in it (``require``); a hub-level route resolves none and gates on a hub permission
+    (``require_hub``)."""
+    by_key = _routes_by_key(build_hub(tmp_path).client.app)
+    for key in _HUMAN:
+        names = _dependency_names(by_key[key])
+        if key in _HUB_LEVEL:
+            assert "tenant_bound" not in names and "_hub_dependency" in names, key
+        else:
+            assert "tenant_bound" in names and "_hub_dependency" not in names, key
+
+
+def test_fleet_routes_resolve_their_tenant_and_public_routes_none(tmp_path: Path) -> None:
+    """A fleet route's tenant is its credential's, resolved at router level; a public route
+    serves no tenant."""
+    by_key = _routes_by_key(build_hub(tmp_path).client.app)
+    for key in _FLEET | {_FLEET_CLAIM}:
+        assert "tenant_bound" in _dependency_names(by_key[key]), key
+    for key in _PUBLIC:
+        assert "tenant_bound" not in _dependency_names(by_key[key]), key

@@ -18,7 +18,7 @@ from blizzard.foundation.garden_proposals import GardenProposalOrigin
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
-from blizzard.hub.api.auth_session import require
+from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.door import RequestDoor, change_context
 from blizzard.hub.auth.models import ResolvedIdentity
@@ -57,7 +57,9 @@ from blizzard.wire.routine import (
     RoutineView,
 )
 
-router = APIRouter(prefix="/api", tags=["routines"], dependencies=[Depends(reject_runner_principal)])
+router = APIRouter(
+    prefix="/api", tags=["routines"], dependencies=[Depends(reject_runner_principal), Depends(tenant_bound)]
+)
 
 
 def _routine_view(routine: Routine) -> RoutineView:

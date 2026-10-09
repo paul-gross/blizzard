@@ -20,7 +20,7 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.work_items import WorkItemPriority
 from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
-from blizzard.hub.api.auth_session import require
+from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.door import RequestDoor, change_context
 from blizzard.hub.auth.models import ResolvedIdentity
@@ -66,7 +66,9 @@ from blizzard.wire.work_source import (
     WorkSourceSummary,
 )
 
-router = APIRouter(prefix="/api", tags=["work-sources"], dependencies=[Depends(reject_runner_principal)])
+router = APIRouter(
+    prefix="/api", tags=["work-sources"], dependencies=[Depends(reject_runner_principal), Depends(tenant_bound)]
+)
 
 
 def _require_editor(source: str, services: TenantServices) -> tuple[IWorkSource, IWorkEditor]:

@@ -928,7 +928,15 @@ def serve_default_tenant(hub: HubHarness, services: TenantServices) -> None:
     """Serve every request in the default tenant from ``services`` — a test's stand-in, usually
     ``hub.services`` with a field replaced by a counting double."""
     assert hub.app is not None
-    hub.app.state.services = replace(hub.hub_services, tenants=replace(hub.hub_services.tenants, sole_tenant=services))
+    tenants = hub.hub_services.tenants
+    default = default_tenant(hub.engine)
+
+    def open_services(scope: StoreScope) -> TenantServices:
+        return services if scope.tenant == default else tenants.open_services(scope)
+
+    hub.app.state.services = replace(
+        hub.hub_services, tenants=replace(tenants, sole_tenant=services, open_services=open_services)
+    )
 
 
 _hub_prototype_lock = threading.Lock()
@@ -1100,6 +1108,7 @@ def build_hub(
     )
     # Pinned now: a second tenant a test adds later leaves the default tenant named.
     _ = core.sole_tenant.connections.scope
+    hub_services.tenants.open_tenants.refresh()
     services = hub_services.tenants.sole_tenant
     app = create_app(config, services=hub_services)
     client = RunnerFleetClient(app, services=services, register_claimants=auto_register_claimants)

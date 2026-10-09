@@ -15,11 +15,13 @@ from blizzard.auth_core import Permission
 from blizzard.foundation.roles import dto
 from blizzard.foundation.store.utc import as_utc
 from blizzard.hub.api.auth import reject_runner_principal
-from blizzard.hub.api.auth_session import require
+from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
 from blizzard.wire.fleet import FleetSpendView
 
-router = APIRouter(prefix="/api", tags=["spend"], dependencies=[Depends(reject_runner_principal)])
+router = APIRouter(
+    prefix="/api", tags=["spend"], dependencies=[Depends(reject_runner_principal), Depends(tenant_bound)]
+)
 
 
 @dto

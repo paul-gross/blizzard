@@ -16,7 +16,7 @@ from fastapi.responses import JSONResponse
 from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
-from blizzard.hub.api.auth_session import require
+from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.documents.codec import YAML_CODEC, ConfigDecodeError
@@ -40,7 +40,9 @@ from blizzard.wire.graph import (
     RotatePolicyView,
 )
 
-router = APIRouter(prefix="/api", tags=["graphs"], dependencies=[Depends(reject_runner_principal)])
+router = APIRouter(
+    prefix="/api", tags=["graphs"], dependencies=[Depends(reject_runner_principal), Depends(tenant_bound)]
+)
 
 
 def _node_view(node: Node) -> GraphNodeView:

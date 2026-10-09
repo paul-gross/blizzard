@@ -16,14 +16,14 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from blizzard.auth_core import Permission, Role
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
-from blizzard.hub.api.auth_session import require
-from blizzard.hub.api.deps import Hub
+from blizzard.hub.api.auth_session import require, tenant_bound
+from blizzard.hub.api.hub_level import Hub
 from blizzard.hub.auth.models import Identity, ResolvedIdentity, wire_role
 from blizzard.hub.auth.service import Member, RoleAssignmentRefused, assignable_roles
 from blizzard.hub.tenancy import TenantId
 from blizzard.wire.user import RoleAssignmentRequest, UserIdentityView, UserView
 
-router = APIRouter(prefix="/api", tags=["auth"], dependencies=[Depends(reject_runner_principal)])
+router = APIRouter(prefix="/api", tags=["auth"], dependencies=[Depends(reject_runner_principal), Depends(tenant_bound)])
 
 
 def _user_view(member: Member, *, identities: list[Identity], actor: ResolvedIdentity) -> UserView:

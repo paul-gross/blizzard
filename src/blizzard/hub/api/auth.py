@@ -19,7 +19,7 @@ from blizzard.foundation.roles import dto
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
 from blizzard.foundation.tokens import TokenHash
 from blizzard.hub.api.bearer import presented_bearer
-from blizzard.hub.api.deps import Hub
+from blizzard.hub.api.hub_level import Hub
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.observability.tracing.attributes import RUNNER_ID, RUNNER_NAME
 from blizzard.hub.domain.runners.registration import RunnerRegistration, RunnerTokenRefused, refuse_runner_token
@@ -39,12 +39,14 @@ _REGISTRATION_SCOPE_KEY = "blizzard.runner_registration"
 @dto
 @dataclass(frozen=True)
 class RunnerPrincipal:
-    """A bearer token resolved to the runner it belongs to: its id, the name it holds, and its
-    workspace — ``None`` until the runner first registers."""
+    """A bearer token resolved to the runner it belongs to: its id, the name it holds, its
+    workspace — ``None`` until the runner first registers — and the tenant it was added in, which is
+    the tenant of every call it makes."""
 
     runner_id: str
     runner_name: str
     workspace_id: str | None
+    tenant_id: TenantId
 
 
 @dataclass(frozen=True)
@@ -84,7 +86,10 @@ class RunnerAuth:
             return None
         self.request.scope[_REGISTRATION_SCOPE_KEY] = registration
         return RunnerPrincipal(
-            runner_id=registration.runner_id, runner_name=registration.name, workspace_id=registration.workspace_id
+            runner_id=registration.runner_id,
+            runner_name=registration.name,
+            workspace_id=registration.workspace_id,
+            tenant_id=resolved.tenant,
         )
 
     def demand(self, *, allow_retired: bool = False) -> RunnerPrincipal:
@@ -157,14 +162,24 @@ def _registration_in_tenant(services: HubServices, tenant: TenantId, runner_id: 
     return registry.get_runner(runner_id)
 
 
-def runner_signing_in(services: HubServices, client: str) -> RunnerRegistration | None:
+@dto
+@dataclass(frozen=True)
+class RunnerSigningIn:
+    """The runner a sign-in names, read in the tenant it was added in."""
+
+    tenant: TenantId
+    registration: RunnerRegistration
+
+
+def runner_signing_in(services: HubServices, client: str) -> RunnerSigningIn | None:
     """The runner a sign-in names as its ``client``, read in the runner's own tenant, or ``None``
     when no open tenant holds a runner of that id. A runner id is hub-minted, so the client alone
     settles the tenant."""
     resolved = services.hub_scoped_reads.credentials.runner_by_id(client)
     if resolved is None:
         return None
-    return _registration_in_tenant(services, resolved.tenant, resolved.runner_id)
+    registration = _registration_in_tenant(services, resolved.tenant, resolved.runner_id)
+    return None if registration is None else RunnerSigningIn(resolved.tenant, registration)
 
 
 def require_runner_principal(request: Request, services: Hub) -> RunnerPrincipal:
