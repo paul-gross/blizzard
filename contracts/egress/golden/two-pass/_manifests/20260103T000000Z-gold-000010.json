@@ -8,9 +8,9 @@
       "dataset": "events",
       "version": 1,
       "partition": "2026-01-01",
-      "rows": 13,
+      "rows": 14,
       "first_position": "2026-01-02T01:00:00.000000Z|seg-upgraded|blizzard-analytics/4",
-      "last_position": "2026-01-02T05:00:00.000000Z|seg-revived|",
+      "last_position": "2026-01-02T09:00:00.000000Z|seg-shared-dropped|",
       "sha256": "<normalized>"
     }
   ]

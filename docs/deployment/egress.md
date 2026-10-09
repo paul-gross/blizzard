@@ -193,13 +193,16 @@ View `events_current`:
 ```sql
 SELECT *
 FROM (
-  SELECT m.*, row_number() OVER (PARTITION BY m.derivation_id, m.kind, m.turn_path, m.occurrence ORDER BY m.exported_at DESC) AS copy_rank
+  SELECT m.*, row_number() OVER (PARTITION BY m.segment_tenant_id, m.derivation_id, m.kind, m.turn_path, m.occurrence ORDER BY m.exported_at DESC) AS copy_rank
   FROM (
     SELECT
-      e.*,
-      max(CASE WHEN e.record_type = 'derivation' THEN e.derived_at END) OVER (PARTITION BY e.segment_id) AS newest_derived_at,
-      max(CASE WHEN e.record_type = 'dropped' THEN e.dropped_at END) OVER (PARTITION BY e.segment_id) AS last_dropped_at
-    FROM events AS e
+      t.*,
+      max(CASE WHEN t.record_type = 'derivation' THEN t.derived_at END) OVER (PARTITION BY t.segment_tenant_id, t.segment_id) AS newest_derived_at,
+      max(CASE WHEN t.record_type = 'dropped' THEN t.dropped_at END) OVER (PARTITION BY t.segment_tenant_id, t.segment_id) AS last_dropped_at
+    FROM (
+      SELECT e.*, coalesce(e.tenant_id, min(e.tenant_id) OVER (PARTITION BY e.segment_id)) AS segment_tenant_id
+      FROM events AS e
+    ) AS t
   ) AS m
   WHERE m.record_type = 'event'
     AND m.derived_at = m.newest_derived_at
@@ -213,13 +216,16 @@ View `events_by_version`:
 ```sql
 SELECT *
 FROM (
-  SELECT m.*, row_number() OVER (PARTITION BY m.derivation_id, m.kind, m.turn_path, m.occurrence ORDER BY m.exported_at DESC) AS copy_rank
+  SELECT m.*, row_number() OVER (PARTITION BY m.segment_tenant_id, m.derivation_id, m.kind, m.turn_path, m.occurrence ORDER BY m.exported_at DESC) AS copy_rank
   FROM (
     SELECT
-      e.*,
-      max(CASE WHEN e.record_type = 'derivation' THEN e.derived_at END) OVER (PARTITION BY e.segment_id, e.extractor_version) AS newest_derived_at,
-      max(CASE WHEN e.record_type = 'dropped' THEN e.dropped_at END) OVER (PARTITION BY e.segment_id) AS last_dropped_at
-    FROM events AS e
+      t.*,
+      max(CASE WHEN t.record_type = 'derivation' THEN t.derived_at END) OVER (PARTITION BY t.segment_tenant_id, t.segment_id, t.extractor_version) AS newest_derived_at,
+      max(CASE WHEN t.record_type = 'dropped' THEN t.dropped_at END) OVER (PARTITION BY t.segment_tenant_id, t.segment_id) AS last_dropped_at
+    FROM (
+      SELECT e.*, coalesce(e.tenant_id, min(e.tenant_id) OVER (PARTITION BY e.segment_id)) AS segment_tenant_id
+      FROM events AS e
+    ) AS t
   ) AS m
   WHERE m.record_type = 'event'
     AND m.derived_at = m.newest_derived_at
@@ -299,6 +305,12 @@ of the segment is later than that derivation. The dictionary's `events_current` 
 one copy of an event delivered twice. A segment dropped and derived again counts again. `events_by_version` is the
 second view: the newest derivation of each segment under each extractor version, for comparing one version against
 another, filtered by `extractor_version`.
+
+Segment ids are minted by runners, so two tenants may each hold a segment with the same id. Both views read a segment
+within its tenant, the view's `segment_tenant_id`: one tenant's derivations and drops never outdate another's events. A
+row from a file written before the upgrade to tenants has no `tenant_id`; it takes the tenant of its segment's later
+rows, the tenant the upgrade carried the hub's data into, so its copies collapse with that tenant's and its newer
+derivations outdate it.
 
 ### Extractor versions
 
@@ -543,8 +555,10 @@ version 1, since the change only adds nullable columns. From the upgrade on:
 - **`_schema/steps.v1.json`, `_schema/invocations.v1.json` and `_schema/events.v1.json` widen in place**, as
   [The directory](#the-directory) describes.
 
-A loader that wants one tenant filters on `tenant_id`. To give history the columns, backfill it window by window, each
-within `backfill_max_window`; a backfill writes every row with its tenant, without moving a cursor:
+A loader that wants one tenant filters on `tenant_id`, or on an events view's `segment_tenant_id`, which also places a
+row written before the upgrade under the tenant its segment's later rows name, and is null where none does. To give
+history the columns, backfill it window by window, each within `backfill_max_window`; a backfill writes every row with
+its tenant, without moving a cursor:
 
 ```sh
 blizzard hub egress backfill --since <t> --until <t>
