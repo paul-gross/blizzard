@@ -112,7 +112,7 @@ def test_a_sink_answering_5xx_makes_export_return_false(sink: OtlpSink) -> None:
 def test_the_sweep_tells_assembled_steps_to_the_sink(tmp_path: Path, sink: OtlpSink) -> None:
     exporter = OtlpTraceExporter(resource=_RESOURCE, **_SCOPE)
     hub, graph = trace_hub(tmp_path, trace_exporter=exporter, tracing=TracingConfig(settle_seconds=0))
-    sweep = hub.services.trace_export
+    sweep = hub.hub_services.trace_export
     assert sweep is not None
     sweep.sweep()
     moved, stopped = transitioned_and_stopped(hub, graph, 1)

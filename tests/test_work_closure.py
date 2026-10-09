@@ -736,7 +736,7 @@ def test_sweep_closes_a_landed_hub_born_chunks_item(tmp_path: Path) -> None:
     chunk_id = created["chunk_id"]
     _land(hub, chunk_id)
 
-    hub.services.close_drain.sweep()
+    hub.hub_services.close_drain.sweep()
 
     row = WorkItemStore(hub_store_connections(hub.engine)).get("hub", created["ref"])
     assert row is not None
@@ -755,8 +755,8 @@ def test_sweep_replayed_over_an_already_delivered_hub_item_is_a_clean_no_op(tmp_
     chunk_id = created["chunk_id"]
     _land(hub, chunk_id)
 
-    hub.services.close_drain.sweep()
-    hub.services.close_drain.sweep()
+    hub.hub_services.close_drain.sweep()
+    hub.hub_services.close_drain.sweep()
 
     pointer = WorkRef(source="hub", ref=created["ref"])
     assert (
@@ -780,7 +780,7 @@ def test_a_chunk_stopped_after_landing_still_closes_its_work_item(tmp_path: Path
     assert hub.client.post(f"/api/chunks/{chunk_id}/stop", json={"by": "alice"}).status_code == 202
 
     assert PendingCloseIntent(chunk_id=chunk_id, ref=pointer) in chunks.delivery.pending_close_intents()
-    hub.services.close_drain.sweep()
+    hub.hub_services.close_drain.sweep()
 
     row = WorkItemStore(hub_store_connections(hub.engine)).get("hub", created["ref"])
     assert row is not None

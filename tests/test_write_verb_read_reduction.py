@@ -82,7 +82,7 @@ class _CountingSessions:
 
 
 def _wire_counting_sessions(hub: HubHarness) -> _CountingSessions:
-    counting = _CountingSessions(hub.services.sessions)
+    counting = _CountingSessions(hub.hub_services.sessions)
     assert hub.app is not None
     hub.app.state.services = replace(hub.services, sessions=counting)
     return counting

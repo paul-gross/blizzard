@@ -112,14 +112,14 @@ def test_the_route_reports_a_not_visible_segment(tmp_path: Path) -> None:
 
 def test_a_sweep_after_a_refused_force_appends_no_drop_fact(tmp_path: Path) -> None:
     hub, chunk_id = _hub_with_one_segment(tmp_path)
-    hub.services.event_derivation.sweep()
+    hub.hub_services.event_derivation.sweep()
     _push(hub, chunk_id, segment_id="sg_2", supersedes="sg_1")
-    hub.services.event_derivation.sweep()
+    hub.hub_services.event_derivation.sweep()
     assert _count(hub, s.transcript_event_drops) == 1
 
     assert _force(hub, "sg_1")["not_visible"] is True
     hub.clock.advance(FORCED_FULL_PASS_FLOOR + timedelta(seconds=1))
-    hub.services.event_derivation.sweep()
+    hub.hub_services.event_derivation.sweep()
 
     assert _count(hub, s.transcript_event_drops) == 1
 

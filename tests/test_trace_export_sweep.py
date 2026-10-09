@@ -49,8 +49,8 @@ _SETTLED = TracingConfig(settle_seconds=0, sweep_seconds=60, max_lag_seconds=360
 
 
 def _sweep(hub: HubHarness) -> TraceExportSweep:
-    assert hub.services.trace_export is not None
-    return hub.services.trace_export
+    assert hub.hub_services.trace_export is not None
+    return hub.hub_services.trace_export
 
 
 def _store(hub: HubHarness) -> TraceStore:
@@ -415,7 +415,7 @@ def test_a_gap_that_closed_nothing_jumps_without_an_event(tmp_path: Path) -> Non
 def test_a_hub_with_tracing_off_has_no_trace_sweep_and_writes_no_cursor(tmp_path: Path) -> None:
     hub, _graph = trace_hub(tmp_path)
     _closed_pair(hub)
-    assert hub.services.trace_export is None
+    assert hub.hub_services.trace_export is None
     assert hub.app is not None
     hub.app.state.shutdown = None
 
@@ -434,7 +434,7 @@ def test_a_hub_with_tracing_on_yields_the_trace_sweep(tmp_path: Path) -> None:
 
     traced = [s for s in Sweep.all(hub.app) if s.logger_name == "blizzard.hub.trace_export"]
 
-    assert [s.reconciler for s in traced] == [hub.services.trace_export]
+    assert [s.reconciler for s in traced] == [hub.hub_services.trace_export]
     assert traced[0].interval_seconds == _SETTLED.sweep_seconds
 
 

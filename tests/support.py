@@ -1356,7 +1356,7 @@ def seed_session(hub: HubHarness, user: User) -> str:
     """Mint a real session for ``user`` via ``AuthService.mint_session`` (#92) and return
     the plaintext session id — a test sets this as the ``bz_session`` cookie or an
     ``Authorization: Bearer`` header."""
-    plaintext, _ = hub.services.auth.mint_session(user)
+    plaintext, _ = hub.hub_services.auth.mint_session(user)
     return plaintext
 
 

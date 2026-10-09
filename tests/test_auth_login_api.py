@@ -206,7 +206,7 @@ def test_callback_rejects_a_bad_state_and_emits_a_login_failed_fact(tmp_path: Pa
     assert resp.status_code == 400
     assert resp.json()["error"] == "login_failed"
 
-    facts = hub.services.auth_facts.list_recent()
+    facts = hub.hub_services.auth_facts.list_recent()
     assert any(f.kind == "login_failed" for f in facts)
 
 
@@ -233,7 +233,7 @@ def test_callback_refuses_a_state_minted_for_a_different_provider(tmp_path: Path
     assert resp.status_code == 400
     assert resp.json()["error"] == "sso_refused"
 
-    facts = hub.services.auth_facts.list_recent()
+    facts = hub.hub_services.auth_facts.list_recent()
     assert any(f.kind == "sso_refused" for f in facts)
 
 

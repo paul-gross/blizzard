@@ -145,7 +145,7 @@ def _push_transcript(hub: HubHarness, *, chunk_id: str, node_id: str, segment_id
     }
     resp = hub.client.post("/api/fleet/transcripts", json={"runner_id": "r1", "records": [record]})
     assert resp.status_code == 200, resp.text
-    hub.services.event_derivation.sweep()
+    hub.hub_services.event_derivation.sweep()
 
 
 def _seeded_hub(tmp_path: Path) -> tuple[HubHarness, str]:

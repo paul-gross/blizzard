@@ -35,7 +35,7 @@ from blizzard.hub.domain.observability.tracing.attributes import (
     PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
     resource_attributes,
 )
-from tests.support import RunnerFleetClient, hub_scoped, seed_runner, seed_user
+from tests.support import RunnerFleetClient, hub_scoped, seed_runner, seed_user, tenant_services_of
 
 pytestmark = pytest.mark.component
 
@@ -169,7 +169,7 @@ _TRACEPARENT = {"traceparent": f"00-{_PLANTED_TRACE:032x}-{_PLANTED_SPAN:016x}-0
 def _registered_runner_token(config: HubConfig, runner_id: str, *, name: str | None = None) -> str:
     """Add and register ``runner_id`` through an untraced app over the same store, so the seeding
     leaves no spans behind."""
-    return seed_runner(hub_app.build_hosted_app(config).state.services, runner_id, name=name, workspace_id="ws-a")
+    return seed_runner(tenant_services_of(hub_app.build_hosted_app(config)), runner_id, name=name, workspace_id="ws-a")
 
 
 def _server_span(spans: list, prefix: str):  # type: ignore[no-untyped-def,type-arg]
@@ -300,7 +300,7 @@ def test_hub_run_steps_parent_on_the_derived_hub_exec_span_and_the_driving_reque
     config = _config(tmp_path)
     handle = _handle(config, exporter)
     app = hub_app.build_hosted_app(config, platform_tracing=handle)
-    with RunnerFleetClient(app, services=app.state.services) as client:
+    with RunnerFleetClient(app, services=tenant_services_of(app)) as client:
         assert client.post("/api/graphs", json={"definition_yaml": _POLLING_GRAPH_YAML}).status_code == 201
         chunk_id = client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"}).json()["chunk_id"]
         assert client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202

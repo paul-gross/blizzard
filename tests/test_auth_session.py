@@ -189,12 +189,12 @@ def test_a_second_read_within_touch_granularity_issues_no_session_write(tmp_path
 
     hub.clock.advance(timedelta(hours=1))  # slide well past the default touch_granularity
     assert hub.client.get("/api/chunks", headers=_cookie(token)).status_code == 200
-    touched = hub.services.sessions.get_by_hash(id_hash)
+    touched = hub.hub_services.sessions.get_by_hash(id_hash)
     assert touched is not None
 
     hub.clock.advance(timedelta(minutes=1))  # under the default touch_granularity
     assert hub.client.get("/api/chunks", headers=_cookie(token)).status_code == 200
-    still = hub.services.sessions.get_by_hash(id_hash)
+    still = hub.hub_services.sessions.get_by_hash(id_hash)
     assert still is not None
     assert still.expires_at == touched.expires_at
     assert still.last_seen_at == touched.last_seen_at

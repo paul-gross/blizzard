@@ -315,7 +315,7 @@ def test_each_pending_role_change_emits_one_user_role_changed_fact(tmp_path: Pat
 
     hub.client.post(f"/api/users/{pending.user_id}/role", json={"role": "guest"}, headers=_cookie(token))
 
-    facts = hub.services.auth_facts.list_recent()
+    facts = hub.hub_services.auth_facts.list_recent()
     assert len(facts) == 1
     assert facts[0].kind == "user_role_changed"
     assert facts[0].actor == "ada"
@@ -350,7 +350,7 @@ def test_each_role_change_emits_a_user_role_changed_fact(tmp_path: Path) -> None
 
     hub.client.post(f"/api/users/{guest.user_id}/role", json={"role": "contributor"}, headers=_cookie(token))
 
-    facts = hub.services.auth_facts.list_recent()
+    facts = hub.hub_services.auth_facts.list_recent()
     assert len(facts) == 1
     assert facts[0].kind == "user_role_changed"
     assert facts[0].actor == "ada"

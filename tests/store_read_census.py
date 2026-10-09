@@ -876,7 +876,7 @@ def _trace_store_of(connections: ScopedConnections, hub: HubHarness) -> TraceSto
         connections,
         hub_events=_hub_events_of(hub),
         tenant=lambda: connections.scope.tenant,
-        corpus=hub.services.hub_scoped_reads.corpus,
+        corpus=hub.hub_services.hub_scoped_reads.corpus,
         graphs=hub.services.graphs,
         names=hub.services.registry,
         label=_label,
@@ -884,7 +884,7 @@ def _trace_store_of(connections: ScopedConnections, hub: HubHarness) -> TraceSto
 
 
 def _egress_store_of(connections: ScopedConnections, hub: HubHarness) -> EgressStore:
-    return EgressStore(connections, hub_events=_hub_events_of(hub), usage=hub.services.hub_scoped_reads.corpus)
+    return EgressStore(connections, hub_events=_hub_events_of(hub), usage=hub.hub_services.hub_scoped_reads.corpus)
 
 
 def _hub_events_of(hub: HubHarness) -> HubEventLogStore:
@@ -1105,7 +1105,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     user_store.create(user_1)
     user_store.create(user_2)
 
-    _plaintext, session_1 = hub.services.auth.mint_session(user_1)
+    _plaintext, session_1 = hub.hub_services.auth.mint_session(user_1)
     session_id_hash = session_1.id_hash
 
     identity_store.link(
@@ -1128,8 +1128,8 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         )
     )
 
-    hub.services.auth_facts.login_failed(actor="anon", subject="alice@example.com", detail="bad state")
-    hub.services.auth_facts.sso_refused(actor="anon", subject="alice@example.com", detail="wrong provider")
+    hub.hub_services.auth_facts.login_failed(actor="anon", subject="alice@example.com", detail="bad state")
+    hub.hub_services.auth_facts.sso_refused(actor="anon", subject="alice@example.com", detail="wrong provider")
 
     superuser_bootstrap_store.upsert(
         SuperuserBootstrap(email="root@example.com", claimed_user_id=None, updated_at=_ht(5))
@@ -1370,7 +1370,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         headers={"Authorization": f"Bearer {runner_token}"},
     )
     assert pushed.status_code == 200, pushed.text
-    hub.services.event_derivation.sweep()
+    hub.hub_services.event_derivation.sweep()
 
     # --- chunk record / queue ----------------------------------------------------------------
     chunk_ready_1 = "ch_hub_ready_1"
@@ -1834,13 +1834,15 @@ HUB_NAMED_READ_SEAMS: tuple[type, ...] = (ISecretCatalog, CredentialReads)
 HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadAuthStateRepository, "get"): lambda w: w.auth_state.get(w.auth_state_value),
     (IReadAuthFactsRepository, "list_recent"): lambda w: w.auth_facts.list_recent(limit=50),
-    (IReadIdentityRepository, "get"): lambda w: w.hub.services.identities.get("github", "12345"),
-    (IReadIdentityRepository, "list_for_user"): lambda w: w.hub.services.identities.list_for_user(w.user_1.user_id),
-    (IReadIdentityRepository, "list_for_users"): lambda w: w.hub.services.identities.list_for_users(
+    (IReadIdentityRepository, "get"): lambda w: w.hub.hub_services.identities.get("github", "12345"),
+    (IReadIdentityRepository, "list_for_user"): lambda w: w.hub.hub_services.identities.list_for_user(w.user_1.user_id),
+    (IReadIdentityRepository, "list_for_users"): lambda w: w.hub.hub_services.identities.list_for_users(
         [w.user_1.user_id, w.user_2.user_id]
     ),
-    (IReadIdentityRepository, "distinct_provider_names"): lambda w: w.hub.services.identities.distinct_provider_names(),
-    (IReadSessionRepository, "get_by_hash"): lambda w: w.hub.services.sessions.get_by_hash(w.session_id_hash),
+    (IReadIdentityRepository, "distinct_provider_names"): lambda w: (
+        w.hub.hub_services.identities.distinct_provider_names()
+    ),
+    (IReadSessionRepository, "get_by_hash"): lambda w: w.hub.hub_services.sessions.get_by_hash(w.session_id_hash),
     (IReadSuperuserBootstrapRepository, "get"): lambda w: w.superuser_bootstrap.get(),
     (IReadUserRepository, "get"): lambda w: w.hub.services.users.get(w.user_1.user_id),
     (IReadUserRepository, "get_by_username"): lambda w: w.hub.services.users.get_by_username("alice"),
@@ -1868,18 +1870,20 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
         [w.transcript_segment_id]
     ),
     (IReadDerivationCorpus, "derivation_signature"): lambda w: (
-        w.hub.services.hub_scoped_reads.corpus.derivation_signature()
+        w.hub.hub_services.hub_scoped_reads.corpus.derivation_signature()
     ),
-    (IReadDerivationCorpus, "candidacy"): lambda w: w.hub.services.hub_scoped_reads.corpus.candidacy(EXTRACTOR_VERSION),
+    (IReadDerivationCorpus, "candidacy"): lambda w: w.hub.hub_services.hub_scoped_reads.corpus.candidacy(
+        EXTRACTOR_VERSION
+    ),
     (IReadDerivationCorpus, "derived_segment_ids"): lambda w: (
-        w.hub.services.hub_scoped_reads.corpus.derived_segment_ids()
+        w.hub.hub_services.hub_scoped_reads.corpus.derived_segment_ids()
     ),
-    (IReadWorkRefsCorpus, "live_work_refs"): lambda w: w.hub.services.hub_scoped_reads.corpus.live_work_refs(),
+    (IReadWorkRefsCorpus, "live_work_refs"): lambda w: w.hub.hub_services.hub_scoped_reads.corpus.live_work_refs(),
     (IReadWorkRefsCorpus, "live_work_refs_signature"): lambda w: (
-        w.hub.services.hub_scoped_reads.corpus.live_work_refs_signature()
+        w.hub.hub_services.hub_scoped_reads.corpus.live_work_refs_signature()
     ),
     (IReadCloseIntentCorpus, "pending_close_intents"): lambda w: (
-        w.hub.services.hub_scoped_reads.corpus.pending_close_intents()
+        w.hub.hub_services.hub_scoped_reads.corpus.pending_close_intents()
     ),
     (IReadOperationalAnalytics, "durations_by_node"): lambda w: w.hub.services.operational_analytics.durations_by_node(
         OperationalCriteria()
@@ -2092,12 +2096,12 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadRunnerRegistry, "get_runner"): lambda w: w.hub.services.registry.get_runner(HUB_RUNNER_ID),
     (IReadRunnerRegistry, "list_runners"): lambda w: w.hub.services.registry.list_runners(),
     (CredentialReads, "runner_for_token_hash"): lambda w: (
-        w.hub.services.hub_scoped_reads.credentials.runner_for_token_hash(w.runner_token_hash)
+        w.hub.hub_services.hub_scoped_reads.credentials.runner_for_token_hash(w.runner_token_hash)
     ),
     (CredentialReads, "revoked_token_runner"): lambda w: (
-        w.hub.services.hub_scoped_reads.credentials.revoked_token_runner(w.runner_token_hash)
+        w.hub.hub_services.hub_scoped_reads.credentials.revoked_token_runner(w.runner_token_hash)
     ),
-    (CredentialReads, "runner_by_id"): lambda w: w.hub.services.hub_scoped_reads.credentials.runner_by_id(
+    (CredentialReads, "runner_by_id"): lambda w: w.hub.hub_services.hub_scoped_reads.credentials.runner_by_id(
         HUB_RUNNER_ID
     ),
     (IReadRunnerRegistry, "list_pause_facts_since"): lambda w: w.hub.services.registry.list_pause_facts_since(
@@ -2170,13 +2174,13 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
             w.chunk_route_a,
         ]
     ),
-    (IReadStepCorpus, "closing_candidates"): lambda w: w.hub.services.hub_scoped_reads.corpus.closing_candidates(
+    (IReadStepCorpus, "closing_candidates"): lambda w: w.hub.hub_services.hub_scoped_reads.corpus.closing_candidates(
         _HUB_BASE, _ht(10_000), 50
     ),
-    (IReadStepCorpus, "step_facts_for"): lambda w: w.hub.services.hub_scoped_reads.corpus.step_facts_for(
+    (IReadStepCorpus, "step_facts_for"): lambda w: w.hub.hub_services.hub_scoped_reads.corpus.step_facts_for(
         [w.chunk_transition, w.chunk_question, w.chunk_dependency_dependent], _label
     ),
-    (IReadUsageCorpus, "usage_after"): lambda w: w.hub.services.hub_scoped_reads.corpus.usage_after(
+    (IReadUsageCorpus, "usage_after"): lambda w: w.hub.hub_services.hub_scoped_reads.corpus.usage_after(
         UsagePosition(_HUB_BASE), _HUB_UNTIL, 50
     ),
     (IReadTraceSteps, "newest_cursor"): lambda w: _trace_store_of(w.store_connections, w.hub).newest_cursor(),
@@ -2197,26 +2201,26 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadHubEventLog, "newest"): lambda w: _hub_events_of(w.hub).newest(
         ("egress-write-failed", "trace-export-failed")
     ),
-    (IReadEgressEvents, "markers_after"): lambda w: w.hub.services.hub_scoped_reads.corpus.markers_after(
+    (IReadEgressEvents, "markers_after"): lambda w: w.hub.hub_services.hub_scoped_reads.corpus.markers_after(
         EventsPosition(_HUB_BASE), _HUB_UNTIL, 50, extractor_version=EXTRACTOR_VERSION
     ),
-    (IReadEgressEvents, "drops_after"): lambda w: w.hub.services.hub_scoped_reads.corpus.drops_after(
+    (IReadEgressEvents, "drops_after"): lambda w: w.hub.hub_services.hub_scoped_reads.corpus.drops_after(
         EventsPosition(_HUB_BASE), _HUB_UNTIL, 50
     ),
     (IReadEgressEvents, "derivations"): lambda w: (
         lambda events: events.derivations(
             events.markers_after(EventsPosition(_HUB_BASE), _HUB_UNTIL, 50, extractor_version=None)
         )
-    )(w.hub.services.hub_scoped_reads.corpus),
+    )(w.hub.hub_services.hub_scoped_reads.corpus),
     (IReadEgressEvents, "epochs_minted_between"): lambda w: (
-        w.hub.services.hub_scoped_reads.corpus.epochs_minted_between(
+        w.hub.hub_services.hub_scoped_reads.corpus.epochs_minted_between(
             _HUB_BASE, _HUB_UNTIL, EpochKey(w.transcript_chunk, 0), 50
         )
     ),
-    (IReadEgressEvents, "epoch_markers"): lambda w: w.hub.services.hub_scoped_reads.corpus.epoch_markers(
+    (IReadEgressEvents, "epoch_markers"): lambda w: w.hub.hub_services.hub_scoped_reads.corpus.epoch_markers(
         [EpochKey(w.transcript_chunk, 1)], extractor_version=EXTRACTOR_VERSION
     ),
-    (IReadEgressEvents, "epoch_drops"): lambda w: w.hub.services.hub_scoped_reads.corpus.epoch_drops(
+    (IReadEgressEvents, "epoch_drops"): lambda w: w.hub.hub_services.hub_scoped_reads.corpus.epoch_drops(
         [EpochKey(w.transcript_chunk, 1)]
     ),
     (IReadTraceStatus, "newest_export_cursor"): lambda w: _trace_store_of(

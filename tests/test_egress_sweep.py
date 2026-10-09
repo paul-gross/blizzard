@@ -171,8 +171,8 @@ def test_no_directory_yields_no_sweep_and_writes_no_cursor_row(tmp_path: Path) -
     hub, graph = _hub(tmp_path)
     _closed_step(hub, graph, 1)
 
-    assert hub.services.egress_export is None
-    assert hub.services.egress_unavailable is None
+    assert hub.hub_services.egress_export is None
+    assert hub.hub_services.egress_unavailable is None
     assert [s.logger_name for s in Sweep.all(_app(hub)) if "egress" in s.logger_name] == []
     assert _cursor_rows(hub) == 0
 
@@ -628,7 +628,7 @@ def test_a_real_directory_holds_files_and_manifests_that_agree(tmp_path: Path) -
     (tmp_path / "out").mkdir()
     config = EgressConfig(directory=tmp_path / "out", settle_seconds=0, min_free_bytes=0)
     hub, graph = _hub(tmp_path, config)
-    sweep = hub.services.egress_export
+    sweep = hub.hub_services.egress_export
     assert sweep is not None
     sweep.sweep()
     _closed_step(hub, graph, 1, usage=2)
@@ -651,7 +651,7 @@ def test_a_real_directory_holds_files_and_manifests_that_agree(tmp_path: Path) -
 def test_a_missing_directory_fails_the_first_write_not_startup(tmp_path: Path) -> None:
     config = EgressConfig(directory=tmp_path / "never-made", settle_seconds=0, min_free_bytes=0)
     hub, graph = _hub(tmp_path, config)
-    sweep = hub.services.egress_export
+    sweep = hub.hub_services.egress_export
     assert sweep is not None
     sweep.sweep()
     _closed_step(hub, graph, 1)
@@ -670,7 +670,7 @@ def test_parquet_without_its_extra_keeps_the_hub_serving_and_records_one_rejecti
     config = EgressConfig(directory=tmp_path / "out", format="parquet")
     hub, _graph = _hub(tmp_path, config)
 
-    assert hub.services.egress_export is None
+    assert hub.hub_services.egress_export is None
     assert [s for s in Sweep.all(_app(hub)) if "egress" in s.logger_name] == []
     hub_app._announce_rejected_egress(config, hub.services)
     assert _kinds(hub) == ["egress-config-rejected"]

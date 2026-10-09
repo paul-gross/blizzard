@@ -55,7 +55,7 @@ def test_a_rejected_export_names_the_setting_and_value(tmp_path: Path, monkeypat
 
 def test_the_cursors_their_lag_the_last_pass_the_last_file_and_the_free_space(tmp_path: Path) -> None:
     hub, graph = _hub(tmp_path, _on(tmp_path))
-    sweep = hub.services.egress_export
+    sweep = hub.hub_services.egress_export
     assert sweep is not None
     sweep.sweep()
     start = _status(hub)
@@ -87,7 +87,7 @@ def test_the_cursors_their_lag_the_last_pass_the_last_file_and_the_free_space(tm
 def test_the_last_error_is_ongoing_until_a_write_recovers(tmp_path: Path) -> None:
     config = EgressConfig(directory=tmp_path / "never-made", settle_seconds=0, min_free_bytes=0)
     hub, graph = _hub(tmp_path, config)
-    sweep = hub.services.egress_export
+    sweep = hub.hub_services.egress_export
     assert sweep is not None
     sweep.sweep()
     assert _status(hub)["last_error_at"] is None
@@ -108,7 +108,7 @@ def test_the_last_error_is_ongoing_until_a_write_recovers(tmp_path: Path) -> Non
 
 def test_the_cli_renders_the_status_and_its_json(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     hub, _ = _hub(tmp_path, _on(tmp_path))
-    sweep = hub.services.egress_export
+    sweep = hub.hub_services.egress_export
     assert sweep is not None
     sweep.sweep()
     monkeypatch.setattr(httpx, "get", lambda url, *, params=None, timeout, **_: hub.client.get(url, params=params))

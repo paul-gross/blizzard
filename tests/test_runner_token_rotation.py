@@ -31,7 +31,7 @@ def _bearer(token: str) -> dict[str, str]:
 
 
 def _revoked(hub: HubHarness, token: str) -> bool:
-    return hub.services.hub_scoped_reads.credentials.revoked_token_runner(TokenHash(token).hex) is not None
+    return hub.hub_services.hub_scoped_reads.credentials.revoked_token_runner(TokenHash(token).hex) is not None
 
 
 def test_a_first_enrollment_revokes_the_token_minted_with_the_runner(tmp_path: Path) -> None:
