@@ -75,6 +75,7 @@ class OidcEntry(ProviderEntry):
             client_id=self.config.client_id,
             client_secret=secret,
             http_client=client,
+            emails_authoritative=self.config.emails_authoritative,
         )
 
 

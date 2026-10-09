@@ -15,6 +15,13 @@ block is the field-by-field reference.
 A provider's `client_secret_env` names an environment variable, never the secret itself; the secret is a deployment
 credential in the hub's runtime env file.
 
+An invitation is accepted only by a person whose provider vouches for the invited address. A `github` provider always
+does: GitHub reports an address as verified only once its owner has proven it. An `oidc` provider does only when its
+entry sets `emails_authoritative = true` (default `false`, so a person signing in through it never accepts an
+invitation). Set it only for a directory you trust for every address it reports as verified — one that lets its users
+claim an address they do not own would let them accept an invitation meant for someone else. The key is refused on a
+`github` entry and must be a boolean.
+
 `blizzard hub rotate-signing-key` mints a fresh current IdP signing key, demoting the old to previous; runners re-fetch
 JWKS on an unknown `kid`, no restart needed; under oauth the verb is gated on `user:manage` and needs a logged-in
 session.
