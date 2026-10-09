@@ -19,12 +19,19 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.chunk.model import WorkRef, WorkRefLabel
 from blizzard.hub.domain.observability.egress.events_window import EventsItem, position_of
-from blizzard.hub.domain.observability.egress.repository import EpochKey, EventsPosition, UsagePosition
+from blizzard.hub.domain.observability.egress.repository import (
+    EgressCheckpoint,
+    EpochKey,
+    EventsPosition,
+    UsagePosition,
+)
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.hub_scoped_corpus import SweepCorpusReads
 from blizzard.hub.store.internal.hub_scoped_reads import hub_scoped_read
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION, TenantId
+from tests.hub_event_rows import hub_events_of
 from tests.support import close_tenant, default_tenant, hub_level_connections, hub_scoped
 
 pytestmark = pytest.mark.component
@@ -267,6 +274,27 @@ def test_a_page_ending_between_two_tenants_at_one_position_resumes_at_the_other(
         assert sorted(item.tenant or "" for item in paged if item.segment_id == "sg_tied") == sorted(
             [world.carried, _OPEN]
         ), name
+
+
+def test_the_recorded_events_cursor_keeps_its_tenant_so_a_tie_split_by_a_pass_resumes_at_the_other(
+    world: _World,
+) -> None:
+    _tie(world)
+    cursor = EgressStore(
+        hub_level_connections(world.engine), hub_events=hub_events_of(world.engine), usage=world.corpus
+    )
+    exported: list[EventsItem] = []
+    position = EventsPosition(_BEFORE)
+    while page := world.corpus.markers_after(position, _AFTER, 1, extractor_version=None):
+        exported += page
+        cursor.append_cursor(
+            EgressCheckpoint("events", None, UsagePosition(_BEFORE), 1, (), _AT, position_of(page[-1]))
+        )
+        recorded = cursor.newest_cursor("events")
+        assert recorded is not None and recorded.events is not None
+        position = recorded.events
+    assert exported == list(world.corpus.markers_after(EventsPosition(_BEFORE), _AFTER, 50, extractor_version=None))
+    assert sorted(m.tenant or "" for m in exported if m.segment_id == "sg_tied") == sorted([world.carried, _OPEN])
 
 
 def test_a_position_recorded_without_its_tenant_resumes_past_every_tenant_at_it(world: _World) -> None:

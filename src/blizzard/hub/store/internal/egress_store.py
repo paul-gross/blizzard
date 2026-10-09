@@ -27,6 +27,7 @@ from blizzard.hub.domain.observability.hub_events import IReadHubEventLog
 from blizzard.hub.domain.observability.tracing.cursor import CursorKey
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
+from blizzard.hub.tenancy import TenantId
 
 _FAILED: HubEventKind = "egress-write-failed"
 _LATCH_KINDS: tuple[HubEventKind, ...] = (_FAILED, "egress-write-recovered")
@@ -92,6 +93,7 @@ class EgressStore:
                     decision_id=step.decision_id if step is not None else None,
                     segment_id=events.segment_id if events is not None else None,
                     extractor_version=events.extractor_version if events is not None else None,
+                    events_tenant_id=events.tenant if events is not None else None,
                     usage_recorded_at=record.usage.recorded_at,
                     usage_id=record.usage.usage_id,
                     row_count=record.row_count,
@@ -103,7 +105,7 @@ class EgressStore:
 
 def _cursor(row) -> EgressCheckpoint:  # type: ignore[no-untyped-def]
     events = (
-        EventsPosition(row.position_at, row.segment_id, row.extractor_version or "")
+        EventsPosition(row.position_at, row.segment_id, row.extractor_version or "", _tenant(row.events_tenant_id))
         if row.segment_id is not None
         else None
     )
@@ -125,3 +127,9 @@ def _cursor(row) -> EgressCheckpoint:  # type: ignore[no-untyped-def]
 
 def _conforms_egress_store(x: EgressStore) -> IWriteEgressCursor:
     return x
+
+
+def _tenant(value: str | None) -> TenantId | None:
+    """The events position's tenant; a position recorded without one stands past every tenant at its time,
+    segment and version."""
+    return TenantId(value) if value is not None else None
