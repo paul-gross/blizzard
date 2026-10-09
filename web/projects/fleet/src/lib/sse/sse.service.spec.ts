@@ -5,6 +5,7 @@ import { vi } from 'vitest';
 import {
   EVENT_SOURCE_FACTORY,
   type EventSourceFactory,
+  FetchEventSource,
   type FleetEventSource,
   SseService,
   backoffDelay,
@@ -192,5 +193,44 @@ describe('SseService', () => {
   it('builds a resume URL that overwrites an existing cursor', () => {
     expect(withLastEventId('/api/events/stream', '9')).toBe('/api/events/stream?last_event_id=9');
     expect(withLastEventId('/api/events/stream?last_event_id=1', '9')).toBe('/api/events/stream?last_event_id=9');
+  });
+});
+
+describe('FetchEventSource', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('sends the headers it was built with beside the stream accept header', async () => {
+    const seen: Headers[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init: RequestInit) => {
+        seen.push(new Headers(init.headers));
+        return new Response(null, { status: 401 });
+      }),
+    );
+
+    const source = new FetchEventSource('/api/events/stream', { 'X-Blizzard-Tenant': 'ten_a' });
+    await vi.waitFor(() => expect(seen).toHaveLength(1));
+    source.close();
+
+    expect(seen[0].get('X-Blizzard-Tenant')).toBe('ten_a');
+    expect(seen[0].get('accept')).toBe('text/event-stream');
+  });
+
+  it('sends only the stream accept header when built without headers', async () => {
+    const seen: Headers[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init: RequestInit) => {
+        seen.push(new Headers(init.headers));
+        return new Response(null, { status: 401 });
+      }),
+    );
+
+    const source = new FetchEventSource('/api/events/stream');
+    await vi.waitFor(() => expect(seen).toHaveLength(1));
+    source.close();
+
+    expect([...seen[0].keys()]).toEqual(['accept']);
   });
 });

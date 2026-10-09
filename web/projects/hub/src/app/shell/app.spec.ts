@@ -14,6 +14,9 @@ import {
   type ProviderSummary,
 } from 'fleet';
 import { provideAuthInterceptor } from '../core/auth/auth.interceptor';
+import { LAST_TENANT_KEY, TAB_TENANT_KEY } from '../core/auth/tenant-context';
+import { provideTenantInterceptor } from '../core/auth/tenant.interceptor';
+import type { MeTenant } from 'fleet/shell';
 import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
 import { vi } from 'vitest';
 import { FLEET_CLOCK } from 'fleet';
@@ -87,6 +90,26 @@ function stubAuthCapturingSpendUrls(): RequestClientStub & { spendUrls: string[]
   };
 }
 
+const OIDC: readonly ProviderSummary[] = [{ name: 'oidc-co', display_name: 'Stub SSO', type: 'oidc' }];
+
+/** A signed-in person holding no membership; specs add theirs through `tenants`. */
+const MEMBERLESS: MeResponse = {
+  user_id: 'usr_1',
+  username: 'newcomer',
+  display_name: 'Newcomer',
+  role: null,
+  permissions: [],
+  tenants: [],
+  hub_admin: false,
+};
+const ACME_ADMIN: MeTenant = {
+  tenant_id: 'ten_a',
+  name: 'Acme',
+  role: 'admin',
+  permissions: ['fleet:view', 'user:manage'],
+};
+const BETA_GUEST: MeTenant = { tenant_id: 'ten_b', name: 'Beta', role: 'guest', permissions: ['fleet:view'] };
+
 describe('hub App', () => {
   let queryClient: QueryClient;
   let authStub: RequestClientStub;
@@ -102,6 +125,7 @@ describe('hub App', () => {
         provideTanStackQuery(queryClient),
         provideRouter(routes),
         provideAuthInterceptor(),
+        provideTenantInterceptor(),
         { provide: EVENT_SOURCE_FACTORY, useValue: factory },
       ],
     }).compileComponents();
@@ -322,16 +346,9 @@ describe('hub App', () => {
       expect(el.querySelector('[data-testid="app-nav"]')).toBeNull();
     });
 
-    it('renders the pending lobby for an authenticated, permissionless identity', async () => {
+    it('renders only the no-access screen for an identity holding no membership', async () => {
       authStub.restore();
-      const pending: MeResponse = {
-        user_id: 'usr_1',
-        username: 'newcomer',
-        display_name: 'Newcomer',
-        role: 'pending',
-        permissions: [],
-      };
-      authStub = stubAuth(pending, [{ name: 'oidc-co', display_name: 'Stub SSO', type: 'oidc' }]);
+      authStub = stubAuth(MEMBERLESS, OIDC);
 
       const fixture = TestBed.createComponent(App);
       const router = TestBed.inject(Router);
@@ -339,23 +356,33 @@ describe('hub App', () => {
       await settle(fixture);
       const el = fixture.nativeElement as HTMLElement;
 
-      expect(el.querySelector('[data-testid="pending-lobby"]')).toBeTruthy();
+      expect(el.querySelector('[data-testid="no-access"]')?.textContent).toContain(
+        'Reach out to your administrator for access.',
+      );
+      expect(el.querySelector('[data-testid="no-access-username"]')?.textContent).toContain('newcomer');
       expect(el.querySelector('[data-testid="board-header"]')).toBeNull();
-      expect(el.querySelector('[data-testid="pending-lobby-username"]')?.textContent).toContain('newcomer');
+      expect(el.querySelector('[data-testid="app-nav"]')).toBeNull();
+      expect(el.querySelector('[data-testid="tenant-picker"]')).toBeNull();
     });
 
-    it('logs out from the pending lobby and lands back on /login', async () => {
+    it('renders the no-access screen for a hub administrator holding no membership', async () => {
       authStub.restore();
-      const pending: MeResponse = {
-        user_id: 'usr_1',
-        username: 'newcomer',
-        display_name: 'Newcomer',
-        role: 'pending',
-        permissions: [],
-      };
+      authStub = stubAuth({ ...MEMBERLESS, hub_admin: true, permissions: ['tenant:admin'] }, OIDC);
+
+      const fixture = TestBed.createComponent(App);
+      await TestBed.inject(Router).navigateByUrl('/');
+      await settle(fixture);
+      const el = fixture.nativeElement as HTMLElement;
+
+      expect(el.querySelector('[data-testid="no-access"]')).toBeTruthy();
+      expect(el.querySelector('[data-testid="board-header"]')).toBeNull();
+    });
+
+    it('logs out from the no-access screen and lands back on /login', async () => {
+      authStub.restore();
       let loggedOut = false;
       authStub = stubRequestClient(hubClient, (method, path) => {
-        if (path === '/api/me') return loggedOut ? stubError(401, { detail: 'not authenticated' }) : pending;
+        if (path === '/api/me') return loggedOut ? stubError(401, { detail: 'not authenticated' }) : MEMBERLESS;
         if (path === '/api/auth/providers') return [];
         if (path === '/api/auth/logout' && method === 'POST') {
           loggedOut = true;
@@ -365,7 +392,7 @@ describe('hub App', () => {
         // active while the redirect to /login lands — same empty-shape need as
         // `stubAuth` above, so that transient render does not crash.
         if (path === '/api/chunks') return { chunks: [], next_cursor: null };
-      if (path === '/api/questions' || path === '/api/graphs') return [];
+        if (path === '/api/questions' || path === '/api/graphs') return [];
         return {};
       });
 
@@ -375,12 +402,110 @@ describe('hub App', () => {
       await settle(fixture);
       const el = fixture.nativeElement as HTMLElement;
 
-      el.querySelector<HTMLElement>('[data-testid="pending-lobby-logout"]')?.click();
+      el.querySelector<HTMLElement>('[data-testid="no-access-logout"]')?.click();
       await settle(fixture);
 
       expect(router.url).toBe('/login');
     });
+  });
 
+  describe('the tenant, settled above the shell', () => {
+    afterEach(() => {
+      sessionStorage.clear();
+      localStorage.clear();
+    });
+
+    it('enters the only membership with no choice, names it on every call and in the header, never in a URL', async () => {
+      authStub.restore();
+      authStub = stubAuth({ ...MEMBERLESS, tenants: [ACME_ADMIN] }, OIDC);
+
+      const fixture = TestBed.createComponent(App);
+      const router = TestBed.inject(Router);
+      await router.navigateByUrl('/');
+      await settle(fixture);
+      await router.navigateByUrl('/graphs');
+      await settle(fixture);
+      const el = fixture.nativeElement as HTMLElement;
+
+      expect(el.querySelector('[data-testid="tenant-picker"]')).toBeNull();
+      expect(el.querySelector('[data-testid="board-header"]')?.textContent).toContain('Acme');
+      expect(sessionStorage.getItem(TAB_TENANT_KEY)).toBe('ten_a');
+      expect(localStorage.getItem(LAST_TENANT_KEY)).toBe('ten_a');
+      const afterSettle = authStub.requests.filter((r) => r.path === '/api/graphs');
+      expect(afterSettle.length).toBeGreaterThan(0);
+      expect(afterSettle.every((r) => r.headers['x-blizzard-tenant'] === 'ten_a')).toBe(true);
+      expect(router.url).not.toContain('ten_a');
+    });
+
+    it('offers the picker, outside the shell, for several memberships with no remembered choice', async () => {
+      authStub.restore();
+      authStub = stubAuth({ ...MEMBERLESS, tenants: [ACME_ADMIN, BETA_GUEST] }, OIDC);
+
+      const fixture = TestBed.createComponent(App);
+      await TestBed.inject(Router).navigateByUrl('/');
+      await settle(fixture);
+      const el = fixture.nativeElement as HTMLElement;
+
+      expect(el.querySelectorAll('[data-testid="tenant-picker-option"]')).toHaveLength(2);
+      expect(el.querySelector('[data-testid="board-header"]')).toBeNull();
+      expect(el.querySelector('[data-testid="app-nav"]')).toBeNull();
+    });
+
+    it("renders the shell in the chosen tenant, with that membership's permissions, and remembers it", async () => {
+      authStub.restore();
+      authStub = stubAuth({ ...MEMBERLESS, tenants: [ACME_ADMIN, BETA_GUEST] }, OIDC);
+
+      const fixture = TestBed.createComponent(App);
+      const router = TestBed.inject(Router);
+      await router.navigateByUrl('/');
+      await settle(fixture);
+      const el = fixture.nativeElement as HTMLElement;
+
+      el.querySelectorAll<HTMLElement>('[data-testid="tenant-picker-option"]')[1]?.click();
+      await settle(fixture);
+
+      expect(el.querySelector('[data-testid="tenant-picker"]')).toBeNull();
+      expect(el.querySelector('[data-testid="board-header"]')?.textContent).toContain('Beta');
+      // A guest in Beta, though an admin in Acme: no Admin tab.
+      expect(el.querySelector('[data-testid="nav-admin"]')).toBeNull();
+      expect(sessionStorage.getItem(TAB_TENANT_KEY)).toBe('ten_b');
+      expect(localStorage.getItem(LAST_TENANT_KEY)).toBe('ten_b');
+      const counts = authStub.requests.filter((r) => r.path === '/api/chunk-counts');
+      expect(counts.at(-1)?.headers['x-blizzard-tenant']).toBe('ten_b');
+    });
+
+    it("opens straight into the browser's last choice while it is still a membership", async () => {
+      localStorage.setItem(LAST_TENANT_KEY, 'ten_a');
+      authStub.restore();
+      authStub = stubAuth({ ...MEMBERLESS, tenants: [ACME_ADMIN, BETA_GUEST] }, OIDC);
+
+      const fixture = TestBed.createComponent(App);
+      await TestBed.inject(Router).navigateByUrl('/');
+      await settle(fixture);
+      const el = fixture.nativeElement as HTMLElement;
+
+      expect(el.querySelector('[data-testid="tenant-picker"]')).toBeNull();
+      expect(el.querySelector('[data-testid="board-header"]')?.textContent).toContain('Acme');
+      expect(el.querySelector('[data-testid="nav-admin"]')).toBeTruthy();
+      expect(authStub.requests.every((r) => r.headers['x-blizzard-tenant'] === 'ten_a')).toBe(true);
+    });
+
+    it('offers the picker when the last choice is no longer a membership', async () => {
+      localStorage.setItem(LAST_TENANT_KEY, 'ten_gone');
+      authStub.restore();
+      authStub = stubAuth({ ...MEMBERLESS, tenants: [ACME_ADMIN, BETA_GUEST] }, OIDC);
+
+      const fixture = TestBed.createComponent(App);
+      await TestBed.inject(Router).navigateByUrl('/');
+      await settle(fixture);
+      const el = fixture.nativeElement as HTMLElement;
+
+      expect(el.querySelector('[data-testid="tenant-picker"]')).toBeTruthy();
+      expect(el.querySelector('[data-testid="board-header"]')).toBeNull();
+    });
+  });
+
+  describe('the Admin nav tab', () => {
     it('shows the Admin nav tab only with user:manage under oauth, and hides it under none', async () => {
       authStub.restore();
       authStub = stubAuth(OPERATOR_ME_RESPONSE, [{ name: 'oidc-co', display_name: 'Stub SSO', type: 'oidc' }]);

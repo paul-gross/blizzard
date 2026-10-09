@@ -10,8 +10,18 @@
       <div class="boot" data-testid="auth-loading"></div>
     }
   }
-  @case ('lobby') {
-    <app-pending-lobby [me]="me()" [logoutPending]="logoutPending()" [logoutError]="logoutError()" (logout)="onLogout()" />
+  @case ('no-access') {
+    <app-no-access [me]="me()" [logoutPending]="logoutPending()" [logoutError]="logoutError()" (logout)="onLogout()" />
+  }
+  @case ('choose') {
+    <app-tenant-picker
+      [tenants]="memberships()"
+      [me]="me()"
+      [logoutPending]="logoutPending()"
+      [logoutError]="logoutError()"
+      (choose)="onChooseTenant($event)"
+      (logout)="onLogout()"
+    />
   }
   @case ('ready') {
     <fleet-app-shell>
@@ -41,6 +51,7 @@
       } @else {
         <fleet-board-header
           shell-header
+          [tagline]="tenantName()"
           [connection]="connection()"
           [counts]="counts()"
           [spendToday]="spendToday.data() ?? null"

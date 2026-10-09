@@ -7,6 +7,7 @@
 export { AppShell } from './lib/shell/app-shell/app-shell';
 export { BoardHeader } from './lib/shell/board-header/board-header';
 export { FleetLiveUpdates } from './lib/sse/fleet-live';
+export { EVENT_SOURCE_FACTORY, FetchEventSource, type EventSourceFactory } from './lib/sse/sse.service';
 export { injectNowSignal } from './lib/core/now-signal';
 
 export { ViewportService } from './lib/core/viewport/viewport-service';
@@ -47,6 +48,7 @@ export type {
   DecisionView,
   FleetSpendView,
   MeResponse,
+  MeTenant,
   ProviderSummary,
   QuestionView,
 } from './lib/api/hub/types.gen';

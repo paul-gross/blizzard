@@ -86,7 +86,9 @@ function parseSseFrame(raw: string): ParsedFrame {
  * see this at all) is detectable and reported via {@link FleetEventSource.onautherror}
  * rather than folded into the generic {@link FleetEventSource.onerror} a transient
  * network blip also uses. `credentials: 'include'` carries the session cookie exactly
- * as the browser did for `EventSource` automatically.
+ * as the browser did for `EventSource` automatically. `headers` ride on the request beside
+ * `accept` — an app that scopes its calls by a request header (the hub board's tenant) builds
+ * the stream through its own {@link EVENT_SOURCE_FACTORY} and passes that header here.
  */
 export class FetchEventSource implements FleetEventSource {
   onopen: (() => void) | null = null;
@@ -99,7 +101,10 @@ export class FetchEventSource implements FleetEventSource {
   private readonly controller = new AbortController();
   private closed = false;
 
-  constructor(private readonly url: string) {
+  constructor(
+    private readonly url: string,
+    private readonly headers: Readonly<Record<string, string>> = {},
+  ) {
     void this.run();
   }
 
@@ -120,7 +125,7 @@ export class FetchEventSource implements FleetEventSource {
     let response: Response;
     try {
       response = await fetch(this.url, {
-        headers: { accept: 'text/event-stream' },
+        headers: { ...this.headers, accept: 'text/event-stream' },
         credentials: 'include',
         signal: this.controller.signal,
       });

@@ -3,6 +3,7 @@ import { provideRouter, withRouterConfig } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { provideAuthInterceptor } from '../core/auth/auth.interceptor';
 import { provideDoorInterceptor } from '../core/auth/door.interceptor';
+import { provideTenantInterceptor } from '../core/auth/tenant.interceptor';
 import { provideViewportRenavigation } from 'fleet/shell';
 
 import { routes } from './app.routes';
@@ -24,5 +25,7 @@ export const appConfig: ApplicationConfig = {
     provideViewportRenavigation(),
     provideAuthInterceptor(),
     provideDoorInterceptor(),
+    // Every hub call — the generated client's and the live stream's — names the board's tenant.
+    provideTenantInterceptor(),
   ],
 };
