@@ -1,8 +1,8 @@
 """The fleet wire under tenancy only gains fields (component tier): against the committed hub spec,
 no ``/api/fleet`` path, request, parameter or enum changes, the only surface responses that grow
 by a tenant are registration's and the identity route's, every other model a fleet path reaches
-grows by optional project fields alone, and a runner's own hub client — whose models know
-nothing of tenants — registers and is identified in a tenant other than the first."""
+grows by optional project fields alone, and a runner's own hub client registers and is identified
+in a tenant other than the first, reading that tenant from both answers."""
 
 from __future__ import annotations
 
@@ -105,6 +105,9 @@ def test_a_runners_own_hub_client_registers_and_is_identified_in_another_tenant(
     reply = runner.register_runner("r-bravo", "w1")
 
     assert (reply.runner_id, reply.runner_name, reply.first_registration) == ("rn-bravo-1", "r-bravo", True)
-    assert runner.identity() == TokenIdentity(runner_id="rn-bravo-1", runner_name="r-bravo")
+    assert (reply.tenant_id, reply.tenant_name) == (bravo, "bravo")
+    assert runner.identity() == TokenIdentity(
+        runner_id="rn-bravo-1", runner_name="r-bravo", tenant_id=bravo, tenant_name="bravo"
+    )
     assert runner.fetch_runner_paused("rn-bravo-1") is False
     assert runner.peek_queue((), policy="pass-over") == []

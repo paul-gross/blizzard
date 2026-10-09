@@ -262,6 +262,8 @@ class HttpHubClient:
             # A hub reply carrying no name leaves the one this registration declared.
             runner_name=reply.runner_name if reply.runner_name is not None else name,
             first_registration=reply.first_registration,
+            tenant_id=reply.tenant_id,
+            tenant_name=reply.tenant_name,
         )
 
     def fetch_runner_paused(self, runner_id: str) -> bool:
@@ -284,7 +286,12 @@ class HttpHubClient:
             view = RunnerIdentityView.model_validate(resp.json())
         except ValueError as exc:
             raise _malformed(operation, exc) from exc
-        return TokenIdentity(runner_id=view.runner_id, runner_name=view.runner_name)
+        return TokenIdentity(
+            runner_id=view.runner_id,
+            runner_name=view.runner_name,
+            tenant_id=view.tenant_id,
+            tenant_name=view.tenant_name,
+        )
 
     def rekey_route_token(self, chunk_id: str) -> str:
         resp = self._post(
