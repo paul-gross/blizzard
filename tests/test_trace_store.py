@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.foundation.event_log import EventLogKind
+from blizzard.foundation.event_log import HubEventKind
 from blizzard.hub.domain.observability.tracing.assembly import assemble_step
 from blizzard.hub.domain.observability.tracing.attributes import RUNNER_ID, RUNNER_NAME
 from blizzard.hub.domain.observability.tracing.cursor import CursorKey
@@ -25,11 +25,13 @@ from blizzard.hub.domain.observability.tracing.steps import StepOutcome, identif
 from blizzard.hub.domain.observability.tracing.window import read_window
 from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
 from blizzard.hub.store.internal.trace_store import TraceStore
+from tests.hub_event_rows import hub_event_log_of, hub_events_of
 from tests.support import (
     SEEDED_CAPABILITIES,
     HubHarness,
     added_runner,
     count_queries,
+    default_tenant,
     hub_level_connections,
     hub_store_connections,
     seed_runner,
@@ -42,7 +44,8 @@ pytestmark = pytest.mark.component
 def _store(hub: HubHarness) -> TraceStore:
     return TraceStore(
         hub_store_connections(hub.engine),
-        events=hub_store_connections(hub.engine),
+        hub_events=hub_events_of(hub.engine),
+        tenant=lambda: default_tenant(hub.engine),
         corpus=build_hub_scoped_reads(hub_level_connections(hub.engine)).corpus,
         graphs=hub.services.graphs,
         names=hub.services.registry,
@@ -235,13 +238,9 @@ def test_the_export_latch_reads_the_newer_of_the_two_kinds(tmp_path: Path) -> No
     store = _store(hub)
     assert store.newest_export_latch() is None
 
-    def record(kind: EventLogKind, seconds: int) -> None:
-        hub.services.event_log.record(
+    def record(kind: HubEventKind, seconds: int) -> None:
+        hub_event_log_of(hub.engine).record(
             kind=kind,
-            runner_id=None,
-            chunk_id=None,
-            lease_id=None,
-            node_name=None,
             message=kind,
             detail=None,
             at=hub.clock.now() + timedelta(seconds=seconds),

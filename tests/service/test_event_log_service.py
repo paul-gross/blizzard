@@ -14,7 +14,10 @@ from pathlib import Path
 import httpx
 import pytest
 
+from blizzard.foundation.store.engine import create_engine_from_url
+from blizzard.hub.config import HubConfig
 from tests.e2e.test_acceptance_loop import _forge, _free_port, _hub
+from tests.hub_event_rows import hub_event_detail, hub_event_rows
 from tests.runner_join import fleet_headers
 from tests.service.support import mock_runner, service_gate, sse_tap
 from tests.service.test_hub_service import _graph_yaml, _ingest, _stack
@@ -216,9 +219,11 @@ def test_a_grpc_tracing_protocol_leaves_the_hub_serving_with_one_rejection(tmp_p
         _hub(tmp_path / "hub", forge_port, hub_port, extra_env=tracing_env) as hub,
     ):
         assert hub.get("/api/health").status_code == 200
-        rejected = [e for e in _events(hub) if e["kind"] == "trace-config-rejected"]
-        assert len(rejected) == 1, rejected
-        assert rejected[0]["severity"] == "warning"
-        assert rejected[0]["chunk_id"] is None
-        assert rejected[0]["runner_id"] is None
-        assert rejected[0]["detail"] == {"setting": protocol_env, "value": "grpc"}
+        assert [e for e in _events(hub) if e["kind"] == "trace-config-rejected"] == []
+        engine = create_engine_from_url(HubConfig.load(tmp_path / "hub").db_url)
+        try:
+            [rejected] = hub_event_rows(engine, "trace-config-rejected")
+        finally:
+            engine.dispose()
+        assert rejected.severity == "warning"
+        assert hub_event_detail(rejected) == {"setting": protocol_env, "value": "grpc"}

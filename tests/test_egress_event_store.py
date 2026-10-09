@@ -26,6 +26,7 @@ from blizzard.hub.store.internal.hub_scoped_corpus import SweepCorpusReads
 from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
+from tests.hub_event_rows import hub_events_of
 from tests.support import (
     count_queries,
     hub_level_connections,
@@ -250,7 +251,7 @@ def test_the_backfill_reads_select_epochs_minted_in_the_window_and_their_markers
 
 def test_the_events_cursor_round_trips(tmp_path: Path) -> None:
     engine = _engine(tmp_path)
-    store = EgressStore(hub_store_connections(engine), events=hub_store_connections(engine), usage=_store(engine))
+    store = EgressStore(hub_store_connections(engine), hub_events=hub_events_of(engine), usage=_store(engine))
     position = EventsPosition(_at(10), "sg_a", _V1)
 
     store.append_cursor(EgressCheckpoint("events", None, UsagePosition(_at(0)), 3, ("a", "m"), _at(11), position))

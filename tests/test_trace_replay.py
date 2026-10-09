@@ -21,6 +21,7 @@ from blizzard.hub.domain.observability.tracing.facts import StepFacts, TracedTra
 from blizzard.hub.domain.observability.tracing.replay import ReplayUnavailable, ReplayWindowRefused, TraceReplay
 from blizzard.hub.domain.observability.tracing.repository import ClosingCandidates, IReadTraceSteps
 from blizzard.hub.store import schema
+from tests.hub_event_rows import hub_event_rows
 from tests.support import HubHarness, InMemoryTraceExporter, hub_scoped
 from tests.test_trace_export_sweep import _closed_pair, _sweep
 from tests.trace_fixtures import make_facts, runner_epoch
@@ -159,8 +160,7 @@ def _cursor_rows(hub: HubHarness) -> list[tuple]:  # type: ignore[type-arg]
 
 
 def _event_count(hub: HubHarness) -> int:
-    with hub.engine.connect() as conn:
-        return conn.execute(hub_scoped(sa.select(sa.func.count()).select_from(schema.event_log))).scalar_one()
+    return len(hub_event_rows(hub.engine))
 
 
 def _told_live(hub: HubHarness) -> None:

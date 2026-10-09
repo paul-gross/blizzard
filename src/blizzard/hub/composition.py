@@ -118,6 +118,7 @@ from blizzard.hub.domain.observability.egress.reset import EgressReset
 from blizzard.hub.domain.observability.egress.status import EgressStatusReader
 from blizzard.hub.domain.observability.egress.sweep import EgressSweep
 from blizzard.hub.domain.observability.forge_status import FULL_PASS_FLOOR_INTERVALS, AnnotationReconciler
+from blizzard.hub.domain.observability.hub_events import HubEventLogService
 from blizzard.hub.domain.observability.tracing.replay import TraceReplay
 from blizzard.hub.domain.observability.tracing.status import TraceStatusReader
 from blizzard.hub.domain.observability.tracing.sweep import TraceExportSweep
@@ -165,6 +166,7 @@ from blizzard.hub.store.internal.garden_run_store import GardenRunStore
 from blizzard.hub.store.internal.garden_sweeps_store import GardenSweepsStore
 from blizzard.hub.store.internal.garden_trend_store import GardenTrendStore
 from blizzard.hub.store.internal.graph_store import GraphStore
+from blizzard.hub.store.internal.hub_event_log_store import HubEventLogStore
 from blizzard.hub.store.internal.hub_scoped_reads import HubScopedReads, build_hub_scoped_reads
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
 from blizzard.hub.store.internal.review_findings_store import ReviewFindingsStore
@@ -243,6 +245,8 @@ class HubServices:
     events: EventBroker
     #: The one event-log recorder every hub-side authoring site shares.
     event_log: EventLogService
+    #: The hub's own occurrences — its exports', its startup — recorded in ``hub_event_log``, published to no stream.
+    hub_event_log: HubEventLogService
     clock: IClock
     default_graph_doc: GraphDoc
     default_graph_yaml: str
@@ -548,6 +552,9 @@ class HubCore:
     hub_scoped_reads: HubScopedReads
     auth_errors: RepoErrorFactory
     users: UserRepository
+    #: The hub's own event log, and the service recording an occurrence in it.
+    hub_events: HubEventLogStore
+    hub_event_log: HubEventLogService
     tenants: TenantCache
     #: The stores of the store's only tenant — the set a single-tenant hub serves, and the one
     #: :meth:`open` returns for that tenant.
@@ -637,6 +644,7 @@ def build_hub_core(engine: Engine, *, clock: IClock) -> HubCore:
     hub_scoped_reads = build_hub_scoped_reads(store_connections)
     sole_tenant = build_tenant_stores(SoleTenantConnections(engine, store_errors), clock=clock)
     auth_errors = RepoErrorFactory(get_logger("blizzard.hub.auth"))
+    hub_events = HubEventLogStore(store_connections)
 
     def build(scope: StoreScope) -> TenantStores:
         return build_tenant_stores(store_connections.scoped(scope), clock=clock)
@@ -646,6 +654,8 @@ def build_hub_core(engine: Engine, *, clock: IClock) -> HubCore:
         hub_scoped_reads=hub_scoped_reads,
         auth_errors=auth_errors,
         users=UserRepository(store_connections, auth_errors),
+        hub_events=hub_events,
+        hub_event_log=HubEventLogService(events=hub_events),
         tenants=TenantCache(build=build, confirm_open=hub_scoped_reads.tenants.confirm_open, resident=sole_tenant),
         sole_tenant=sole_tenant,
         clock=clock,
@@ -766,9 +776,12 @@ def build_services(
     # service, shared by every event-authoring call site below, over the same store and
     # broker instance every other collaborator holds.
     event_log = EventLogService(events=chunk_events, publisher=events)
+    hub_events = core.hub_events
+    hub_event_log = core.hub_event_log
     trace_store = TraceStore(
         store_connections,
-        events=tenant_connections,
+        hub_events=hub_events,
+        tenant=lambda: tenant_connections.scope.tenant,
         corpus=core.hub_scoped_reads.corpus,
         graphs=graph_store,
         names=registry_store,
@@ -779,7 +792,7 @@ def build_services(
         TraceExportSweep(
             steps=trace_store,
             exporter=trace_exporter,
-            events=event_log,
+            events=hub_event_log,
             clock=clock,
             config=trace_config,
         )
@@ -806,7 +819,7 @@ def build_services(
         if egress_config.directory is not None
         else None
     )
-    egress_store = EgressStore(store_connections, events=tenant_connections, usage=core.hub_scoped_reads.corpus)
+    egress_store = EgressStore(store_connections, hub_events=hub_events, usage=core.hub_scoped_reads.corpus)
     egress_event_reads = core.hub_scoped_reads.corpus
     egress_pass_lock = threading.Lock()
     egress_unavailable = egress_writer if isinstance(egress_writer, EgressUnavailable) else None
@@ -829,7 +842,7 @@ def build_services(
             event_reads=egress_event_reads,
             paths=egress_paths,
             writer=egress_writer,
-            events=event_log,
+            events=hub_event_log,
             clock=clock,
             config=egress_config,
             pass_lock=egress_pass_lock,
@@ -839,7 +852,7 @@ def build_services(
     )
     egress_reset = EgressReset(
         egress=egress_store,
-        events=event_log,
+        events=hub_event_log,
         clock=clock,
         config=egress_config,
         active=egress_export is not None,
@@ -1043,6 +1056,7 @@ def build_services(
         marker_authority=marker_authority,
         events=events,
         event_log=event_log,
+        hub_event_log=hub_event_log,
         clock=clock,
         default_graph_doc=PACKAGED.default.doc,
         default_graph_yaml=PACKAGED.default.text,

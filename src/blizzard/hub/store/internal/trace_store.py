@@ -7,15 +7,16 @@ and runner names they name."""
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import replace
 from datetime import datetime
 
 from sqlalchemy import insert, select
 
-from blizzard.foundation.event_log import EventLogKind
+from blizzard.foundation.event_log import HubEventKind
 from blizzard.hub.domain.chunk.model import WorkRefLabel
 from blizzard.hub.domain.graph.model import Graph, IReadManyGraphs
+from blizzard.hub.domain.observability.hub_events import IReadHubEventLog
 from blizzard.hub.domain.observability.tracing.cursor import CursorKey
 from blizzard.hub.domain.observability.tracing.facts import StepFacts
 from blizzard.hub.domain.observability.tracing.repository import (
@@ -29,28 +30,31 @@ from blizzard.hub.domain.observability.tracing.repository import (
 )
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
-from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.tenancy import TenantId
 
-_FAILED: EventLogKind = "trace-export-failed"
-_LATCH_KINDS: tuple[EventLogKind, ...] = (_FAILED, "trace-export-recovered")
+_FAILED: HubEventKind = "trace-export-failed"
+_LATCH_KINDS: tuple[HubEventKind, ...] = (_FAILED, "trace-export-recovered")
 
 
 class TraceStore:
-    """The trace export's reads and its cursor's appends. The cursor is hub-level; the export's failure and recovery
-    events are read from ``events``, the event log its sweep records them in."""
+    """The trace export's reads and its cursor's appends. The cursor is hub-level, and so are the export's failure and
+    recovery events, read from ``hub_events``, the hub's own event log its sweep records them in. ``tenant`` names the
+    tenant whose chunks this store hydrates."""
 
     def __init__(
         self,
         store: HubStoreConnections,
         *,
-        events: ScopedConnections,
+        hub_events: IReadHubEventLog,
+        tenant: Callable[[], TenantId],
         corpus: IReadStepCorpus,
         graphs: IReadManyGraphs,
         names: IReadRunnerNames,
         label: WorkRefLabel,
     ) -> None:
         self._store = store
-        self._events = events
+        self._hub_events = hub_events
+        self._tenant = tenant
         self._corpus = corpus
         self._graphs = graphs
         self._names = names
@@ -62,12 +66,12 @@ class TraceStore:
         return self._corpus.closing_candidates(since, until, limit)
 
     def step_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, StepFacts]:
-        """The corpus's step facts of this store's own tenant — the one its event log, graph and
-        registry reads are scoped to — each with the graphs and runner names its facts reference.
+        """The corpus's step facts of this store's own tenant — the one its graph and registry reads are
+        scoped to — each with the graphs and runner names its facts reference.
         Another tenant's chunk is left out, since its graphs, runner names and work-ref labels are not
         this store's to read: a window or page holding it exports none of its rows, and the cursor
         still passes its closing facts."""
-        tenant = self._events.scope.tenant
+        tenant = self._tenant()
         corpus = self._corpus.step_facts_for(chunk_ids, self._label)
         built = {chunk_id: facts for chunk_id, facts in corpus.items() if facts.tenant == tenant}
         graphs = self._graphs.get_many(sorted({g for facts in built.values() for g in _graph_ids(facts)}))
@@ -97,29 +101,13 @@ class TraceStore:
 
     def newest_export_failure(self) -> TraceExportFailure | None:
         """The newest failure event — filtered in the query, so a later recovery never hides it."""
-        c = s.event_log.c
-        stmt = (
-            self._events.select(s.event_log, c.kind, c.recorded_at, c.message)
-            .where(c.kind == _FAILED)
-            .order_by(c.recorded_at.desc(), c.id.desc())
-            .limit(1)
-        )
-        with self._events.read("newest_export_failure") as conn:
-            row = conn.execute(stmt).first()
-        return TraceExportFailure(row.recorded_at, row.message) if row is not None else None
+        event = self._hub_events.newest((_FAILED,))
+        return TraceExportFailure(event.at, event.message) if event is not None else None
 
-    def newest_export_latch(self) -> EventLogKind | None:
-        """Walks the event log newest-first to the first match — run once per process start, not per pass."""
-        c = s.event_log.c
-        stmt = (
-            self._events.select(s.event_log, c.kind)
-            .where(c.kind.in_(_LATCH_KINDS))
-            .order_by(c.recorded_at.desc(), c.id.desc())
-            .limit(1)
-        )
-        with self._events.read("newest_export_latch") as conn:
-            kind = conn.execute(stmt).scalar_one_or_none()
-        return next((k for k in _LATCH_KINDS if k == kind), None)
+    def newest_export_latch(self) -> HubEventKind | None:
+        """The newer of the two latch kinds' newest events — run once per process start, not per pass."""
+        event = self._hub_events.newest(_LATCH_KINDS)
+        return next((k for k in _LATCH_KINDS if event is not None and k == event.kind), None)
 
     def append_cursor(self, record: TraceCheckpoint) -> None:
         position = record.position

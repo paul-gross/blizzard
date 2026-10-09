@@ -29,7 +29,15 @@ from blizzard.hub.store.internal.trace_store import TraceStore
 from blizzard.hub.store.internal.work_source_record_store import _retired_names
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.tenancy import StoreScope, TenantId
-from tests.support import build_hub, count_rows_read, hub_level_connections, hub_store_connections, stamp
+from tests.hub_event_rows import hub_events_of
+from tests.support import (
+    build_hub,
+    count_rows_read,
+    default_tenant,
+    hub_level_connections,
+    hub_store_connections,
+    stamp,
+)
 
 pytestmark = pytest.mark.component
 
@@ -180,21 +188,31 @@ def test_newest_failure_reads_keep_the_old_failure_after_a_recovery(tmp_path: Pa
             ["egress-write-failed", "egress-write-recovered", "trace-export-failed", "trace-export-recovered"]
         ):
             conn.execute(
-                insert(s.event_log).values(
-                    stamp(
-                        s.event_log, recorded_at=_T0.replace(minute=n), severity="warning", kind=kind, message=f"m{n}"
-                    )
+                insert(s.hub_event_log).values(
+                    recorded_at=_T0.replace(minute=n), severity="warning", kind=kind, message=f"m{n}"
                 )
             )
-    store = hub_store_connections(engine)
+    store = hub_level_connections(engine)
+    events = hub_events_of(engine)
 
-    corpus = build_hub_scoped_reads(hub_level_connections(engine)).corpus
-    egress = EgressStore(store, events=store, usage=corpus).newest_egress_failure()
-    export = TraceStore(store, events=store, corpus=corpus, graphs=None, names=None, label=None).newest_export_failure()  # type: ignore[arg-type]
+    corpus = build_hub_scoped_reads(store).corpus
+    egress = EgressStore(store, hub_events=events, usage=corpus).newest_egress_failure()
+    export = TraceStore(
+        store,
+        hub_events=events,
+        tenant=lambda: default_tenant(engine),
+        corpus=corpus,
+        graphs=None,  # type: ignore[arg-type]
+        names=None,  # type: ignore[arg-type]
+        label=None,  # type: ignore[arg-type]
+    ).newest_export_failure()
 
     assert egress is not None and egress.message == "m0"
     assert export is not None and export.message == "m2"
-    assert count_rows_read(engine, lambda: EgressStore(store, events=store, usage=corpus).newest_egress_failure()) <= 1
+    assert (
+        count_rows_read(engine, lambda: EgressStore(store, hub_events=events, usage=corpus).newest_egress_failure())
+        <= 1
+    )
 
 
 # --- the newest-fact read is confined to its scope, inner group-by included -----------------------

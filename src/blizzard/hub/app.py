@@ -498,6 +498,7 @@ def build_hosted_app(
         # Before the hub serves.
         services.hub_node.release_orphaned_slots()
         Superuser(email=config.auth.superuser, users=services.users, auth=services.auth).ensure()
+        _announce_started(expected, services)
         _announce_rejected_tracing(tracing, services)
         _announce_rejected_egress(config.egress, services)
     app = create_app(config, readiness=readiness, services=services, platform_tracing=platform_tracing)
@@ -506,17 +507,24 @@ def build_hosted_app(
     return app
 
 
+def _announce_started(revision: str | None, services: HubServices) -> None:
+    """Every start that reaches a migrated store records one ``hub-started`` in the hub's own event log, naming the
+    version and the store revision it serves."""
+    services.hub_event_log.record(
+        kind="hub-started",
+        message=f"hub {__version__} started on store revision {revision}",
+        detail={"version": __version__, "revision": revision},
+        at=services.clock.now(),
+    )
+
+
 def _announce_rejected_tracing(tracing: TracingSettings, services: HubServices) -> None:
     """A rejected tracing setting never stops startup: the hub serves with tracing off and
-    records one hub-wide ``trace-config-rejected`` per start, naming the setting."""
+    records one ``trace-config-rejected`` in the hub's own event log per start, naming the setting."""
     if tracing.state != "rejected":
         return
-    services.event_log.record(
+    services.hub_event_log.record(
         kind="trace-config-rejected",
-        runner_id=None,
-        chunk_id=None,
-        lease_id=None,
-        node_name=None,
         message=tracing.rejection_message("hub"),
         detail={"setting": tracing.setting, "value": tracing.value},
         at=services.clock.now(),
@@ -524,10 +532,10 @@ def _announce_rejected_tracing(tracing: TracingSettings, services: HubServices) 
 
 
 def _announce_rejected_egress(egress: EgressConfig, services: HubServices) -> None:
-    """An export the hub cannot fully honor never stops startup, and records one hub-wide ``egress-config-rejected``
-    per start. Without its format's extra the export is off and the event names the format; without the path hash
-    key a hashing file path policy needs, only the events dataset is off and the event names the variable — never
-    a key value."""
+    """An export the hub cannot fully honor never stops startup, and records one ``egress-config-rejected`` in the
+    hub's own event log per start. Without its format's extra the export is off and the event names the format;
+    without the path hash key a hashing file path policy needs, only the events dataset is off and the event names the
+    variable — never a key value."""
     unavailable = services.egress_unavailable
     variable = services.egress_missing_path_key
     if unavailable is not None:
@@ -538,12 +546,8 @@ def _announce_rejected_egress(egress: EgressConfig, services: HubServices) -> No
         detail = {"setting": "egress.path_key_env", "value": variable}
     else:
         return
-    services.event_log.record(
+    services.hub_event_log.record(
         kind="egress-config-rejected",
-        runner_id=None,
-        chunk_id=None,
-        lease_id=None,
-        node_name=None,
         message=message,
         detail=detail,
         at=services.clock.now(),

@@ -9,7 +9,7 @@ from datetime import datetime
 from functools import total_ordering
 from typing import TYPE_CHECKING, Protocol
 
-from blizzard.foundation.event_log import EventLogKind
+from blizzard.foundation.event_log import HubEventKind
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.observability.analytics.events import DerivationMarker, DropFact
 from blizzard.hub.domain.observability.egress.rows import AttributedUsage
@@ -109,7 +109,7 @@ class IReadEgress(Protocol):
         """Up to ``limit`` usage facts past ``position`` and recorded at or before ``until``, in position order."""
         ...
 
-    def newest_egress_latch(self) -> EventLogKind | None:
+    def newest_egress_latch(self) -> HubEventKind | None:
         """The kind of the newest ``egress-write-failed`` or ``egress-write-recovered`` event, or ``None``."""
         ...
 

@@ -20,7 +20,8 @@ from blizzard.hub.domain.observability.egress.event_rows import FilePathPolicy
 from blizzard.hub.egress.writer import EgressFailure, EgressFailureCause
 from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
 from blizzard.hub.store.internal.trace_store import TraceStore
-from tests.support import HubHarness, InMemoryEgressWriter, hub_level_connections, hub_store_connections
+from tests.hub_event_rows import hub_events_of
+from tests.support import HubHarness, InMemoryEgressWriter, default_tenant, hub_level_connections, hub_store_connections
 from tests.test_egress_events_sweep import _OLD_VERSION, _Events
 from tests.test_egress_sweep import _SETTLED, _closed_step, _cursor_rows, _hub, _kinds, _rows, _store, _sweep
 from tests.trace_hub import label, seed_open_tenant_chunk
@@ -46,7 +47,8 @@ def _service(hub: HubHarness, config: EgressConfig, writer: InMemoryEgressWriter
     return EgressBackfill(
         steps=TraceStore(
             connections,
-            events=connections,
+            hub_events=hub_events_of(hub.engine),
+            tenant=lambda: default_tenant(hub.engine),
             corpus=corpus,
             graphs=hub.services.graphs,
             names=hub.services.registry,

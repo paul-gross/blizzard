@@ -43,12 +43,14 @@ from blizzard.hub.store import schema
 from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
 from blizzard.hub.store.internal.trace_store import TraceStore
+from tests.hub_event_rows import hub_event_detail, hub_event_kinds, hub_event_log_of, hub_event_rows, hub_events_of
 from tests.support import (
     HubHarness,
     InMemoryEgressWriter,
     added_runner,
     count_queries,
     count_rows_read,
+    default_tenant,
     hub_level_connections,
     hub_scoped,
     hub_store_connections,
@@ -83,7 +85,7 @@ def _app(hub: HubHarness) -> FastAPI:
 def _store(hub: HubHarness) -> EgressStore:
     return EgressStore(
         hub_store_connections(hub.engine),
-        events=hub_store_connections(hub.engine),
+        hub_events=hub_events_of(hub.engine),
         usage=build_hub_scoped_reads(hub_level_connections(hub.engine)).corpus,
     )
 
@@ -96,17 +98,18 @@ def _sweep(
     return EgressSweep(
         steps=TraceStore(
             connections,
-            events=connections,
+            hub_events=hub_events_of(hub.engine),
+            tenant=lambda: default_tenant(hub.engine),
             corpus=corpus,
             graphs=hub.services.graphs,
             names=hub.services.registry,
             label=label,
         ),
-        egress=store or EgressStore(connections, events=connections, usage=corpus),
+        egress=store or EgressStore(connections, hub_events=hub_events_of(hub.engine), usage=corpus),
         event_reads=corpus,
         paths=_PATHS,
         writer=writer,
-        events=hub.services.event_log,
+        events=hub_event_log_of(hub.engine),
         clock=hub.clock,
         config=config,
     )
@@ -148,9 +151,7 @@ def _closed_step(hub: HubHarness, graph: Graph, ref: int, *, usage: int = 1) -> 
 
 
 def _kinds(hub: HubHarness) -> list[str]:
-    with hub.engine.connect() as conn:
-        rows = conn.execute(hub_scoped(sa.select(schema.event_log.c.kind).order_by(schema.event_log.c.id))).all()
-    return [r.kind for r in rows if r.kind.startswith("egress-")]
+    return hub_event_kinds(hub.engine, "egress-")
 
 
 def _cursor_rows(hub: HubHarness) -> int:
@@ -414,8 +415,8 @@ def test_a_failed_write_holds_the_cursor_backs_off_and_is_announced_once(
     _sweep_once.sweep()
     assert _store(hub).newest_cursor("steps") == start
     assert _kinds(hub) == ["egress-write-failed"]
-    with hub.engine.connect() as conn:
-        detail = json.loads(conn.execute(hub_scoped(sa.select(schema.event_log.c.detail))).scalar_one())
+    [row] = hub_event_rows(hub.engine)
+    detail = hub_event_detail(row)
     assert detail["cause"] == failure.cause.value
     assert detail.get("free_bytes") == failure.free_bytes
 
@@ -596,7 +597,7 @@ def test_a_crash_before_the_cursor_writes_the_same_rows_again_in_new_files(tmp_p
             first,
             store=DiesBeforeCursor(
                 hub_store_connections(hub.engine),
-                events=hub_store_connections(hub.engine),
+                hub_events=hub_events_of(hub.engine),
                 usage=build_hub_scoped_reads(hub_level_connections(hub.engine)).corpus,
             ),
         ).sweep()

@@ -1847,6 +1847,8 @@ hub_event_log = Table(
 )
 
 Index("ix_hub_event_log_recorded_at", hub_event_log.c.recorded_at)
+# The exports' newest-of-a-kind reads (their failure and latch) — each a seek to one kind's newest row.
+Index("ix_hub_event_log_kind_recorded_at", hub_event_log.c.kind, hub_event_log.c.recorded_at)
 
 # --- Trace export cursor (trace_cursor) ---------------------------------------
 # Append-only, one row per advancing sweep; the newest row is the position.

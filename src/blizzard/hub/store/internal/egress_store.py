@@ -12,7 +12,7 @@ from datetime import datetime
 
 from sqlalchemy import insert, select
 
-from blizzard.foundation.event_log import EventLogKind
+from blizzard.foundation.event_log import HubEventKind
 from blizzard.hub.domain.observability.egress.config import EGRESS_DATASETS
 from blizzard.hub.domain.observability.egress.repository import (
     EgressCheckpoint,
@@ -23,23 +23,23 @@ from blizzard.hub.domain.observability.egress.repository import (
     UsagePosition,
 )
 from blizzard.hub.domain.observability.egress.rows import AttributedUsage
+from blizzard.hub.domain.observability.hub_events import IReadHubEventLog
 from blizzard.hub.domain.observability.tracing.cursor import CursorKey
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
-from blizzard.hub.store.scoped import ScopedConnections
 
-_FAILED: EventLogKind = "egress-write-failed"
-_LATCH_KINDS: tuple[EventLogKind, ...] = (_FAILED, "egress-write-recovered")
+_FAILED: HubEventKind = "egress-write-failed"
+_LATCH_KINDS: tuple[HubEventKind, ...] = (_FAILED, "egress-write-recovered")
 _NO_FILES = json.dumps([])
 
 
 class EgressStore:
-    """The egress export's usage reads and its cursor's appends. The cursor is hub-level; the export's failure and
-    recovery events are read from ``events``, the event log its sweep records them in."""
+    """The egress export's usage reads and its cursor's appends. The cursor is hub-level, and so are the export's
+    failure and recovery events, read from ``hub_events``, the hub's own event log its sweep records them in."""
 
-    def __init__(self, store: HubStoreConnections, *, events: ScopedConnections, usage: IReadUsageCorpus) -> None:
+    def __init__(self, store: HubStoreConnections, *, hub_events: IReadHubEventLog, usage: IReadUsageCorpus) -> None:
         self._store = store
-        self._events = events
+        self._hub_events = hub_events
         self._usage = usage
 
     def newest_cursor(self, dataset: str) -> EgressCheckpoint | None:
@@ -68,32 +68,16 @@ class EgressStore:
 
     def newest_egress_failure(self) -> EgressWriteFailure | None:
         """The newest failure event — filtered in the query, so a later recovery never hides it."""
-        c = s.event_log.c
-        stmt = (
-            self._events.select(s.event_log, c.kind, c.recorded_at, c.message)
-            .where(c.kind == _FAILED)
-            .order_by(c.recorded_at.desc(), c.id.desc())
-            .limit(1)
-        )
-        with self._events.read("egress_newest_failure") as conn:
-            row = conn.execute(stmt).first()
-        return EgressWriteFailure(row.recorded_at, row.message) if row is not None else None
+        event = self._hub_events.newest((_FAILED,))
+        return EgressWriteFailure(event.at, event.message) if event is not None else None
 
     def usage_after(self, position: UsagePosition, until: datetime, limit: int) -> Sequence[AttributedUsage]:
         return self._usage.usage_after(position, until, limit)
 
-    def newest_egress_latch(self) -> EventLogKind | None:
-        """Walks the event log newest-first to the first match — run once per process start, not per pass."""
-        c = s.event_log.c
-        stmt = (
-            self._events.select(s.event_log, c.kind)
-            .where(c.kind.in_(_LATCH_KINDS))
-            .order_by(c.recorded_at.desc(), c.id.desc())
-            .limit(1)
-        )
-        with self._events.read("egress_newest_latch") as conn:
-            kind = conn.execute(stmt).scalar_one_or_none()
-        return next((k for k in _LATCH_KINDS if k == kind), None)
+    def newest_egress_latch(self) -> HubEventKind | None:
+        """The newer of the two latch kinds' newest events — run once per process start, not per pass."""
+        event = self._hub_events.newest(_LATCH_KINDS)
+        return next((k for k in _LATCH_KINDS if event is not None and k == event.kind), None)
 
     def append_cursor(self, record: EgressCheckpoint) -> None:
         step = record.step

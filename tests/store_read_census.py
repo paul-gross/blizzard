@@ -89,6 +89,7 @@ from blizzard.hub.domain.observability.egress.repository import (
     UsagePosition,
 )
 from blizzard.hub.domain.observability.forge_status import IReadAnnotatedSources
+from blizzard.hub.domain.observability.hub_events import HubEventLogService, IReadHubEventLog
 from blizzard.hub.domain.observability.tracing.cursor import CursorKey
 from blizzard.hub.domain.observability.tracing.repository import (
     IReadRunnerNames,
@@ -113,6 +114,7 @@ from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStor
 from blizzard.hub.store.internal.garden_run_store import GardenRunStore
 from blizzard.hub.store.internal.garden_sweeps_store import GardenSweepsStore
 from blizzard.hub.store.internal.garden_trend_store import GardenTrendStore
+from blizzard.hub.store.internal.hub_event_log_store import HubEventLogStore
 from blizzard.hub.store.internal.hub_scoped_credentials import CredentialReads
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
 from blizzard.hub.store.internal.secret_store import SecretStore
@@ -162,6 +164,7 @@ from tests.support import (
     added_runner,
     build_hub,
     chunk_stores,
+    hub_level_connections,
     hub_store_connections,
     seed_chunk_record,
     seed_runner,
@@ -871,7 +874,8 @@ def _label(ref: WorkRef) -> str | None:
 def _trace_store_of(connections: ScopedConnections, hub: HubHarness) -> TraceStore:
     return TraceStore(
         connections,
-        events=connections,
+        hub_events=_hub_events_of(hub),
+        tenant=lambda: connections.scope.tenant,
         corpus=hub.services.hub_scoped_reads.corpus,
         graphs=hub.services.graphs,
         names=hub.services.registry,
@@ -880,7 +884,11 @@ def _trace_store_of(connections: ScopedConnections, hub: HubHarness) -> TraceSto
 
 
 def _egress_store_of(connections: ScopedConnections, hub: HubHarness) -> EgressStore:
-    return EgressStore(connections, events=connections, usage=hub.services.hub_scoped_reads.corpus)
+    return EgressStore(connections, hub_events=_hub_events_of(hub), usage=hub.services.hub_scoped_reads.corpus)
+
+
+def _hub_events_of(hub: HubHarness) -> HubEventLogStore:
+    return HubEventLogStore(hub_level_connections(hub.engine))
 
 
 def _ht(offset_seconds: float) -> datetime:
@@ -1750,6 +1758,11 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         EgressCheckpoint("steps", CursorKey.opening(_ht(0)), UsagePosition(_ht(0)), 0, (), _ht(100))
     )
 
+    # --- the hub's own event log ------------------------------------------------------
+    hub_event_log = HubEventLogService(events=_hub_events_of(hub))
+    hub_event_log.record(kind="trace-export-failed", message="failed", detail=None, at=_ht(101))
+    hub_event_log.record(kind="egress-write-recovered", message="recovered", detail=None, at=_ht(102))
+
     return HubWorld(
         hub=hub,
         engine=engine,
@@ -2181,6 +2194,9 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
         w.store_connections, w.hub
     ).newest_egress_failure(),
     (IReadEgress, "newest_egress_latch"): lambda w: _egress_store_of(w.store_connections, w.hub).newest_egress_latch(),
+    (IReadHubEventLog, "newest"): lambda w: _hub_events_of(w.hub).newest(
+        ("egress-write-failed", "trace-export-failed")
+    ),
     (IReadEgressEvents, "markers_after"): lambda w: w.hub.services.hub_scoped_reads.corpus.markers_after(
         EventsPosition(_HUB_BASE), _HUB_UNTIL, 50, extractor_version=EXTRACTOR_VERSION
     ),

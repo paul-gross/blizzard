@@ -28,7 +28,6 @@ from blizzard.hub.domain.observability.analytics.derivation import IReadDerivati
 from blizzard.hub.domain.observability.analytics.events import IReadTranscriptEvents
 from blizzard.hub.domain.observability.analytics.operational import IReadOperationalAnalytics
 from blizzard.hub.domain.observability.analytics.queries import IReadAnalyticsEventQueries
-from blizzard.hub.domain.observability.egress.repository import IReadEgress
 from blizzard.hub.domain.observability.forge_status import IReadAnnotatedSources
 from blizzard.hub.domain.observability.tracing.repository import IReadTraceStatus, IReadTraceSteps
 from blizzard.runner.hub.outbound_buffer import IReadOutboundRepository
@@ -544,8 +543,6 @@ HUB_ALLOWED_SCANS: list[Allowance] = [
     IndexWalkAllowance(
         IReadDerivationCorpus, "derived_segment_ids", ("transcript_event_derivations",), _DERIVATION_SWEEP_REASON
     ),
-    IndexWalkAllowance(IReadEgress, "newest_egress_failure", ("event_log",), _NEWEST_ROW_REASON),
-    IndexWalkAllowance(IReadEgress, "newest_egress_latch", ("event_log",), _NEWEST_ROW_REASON),
     IndexWalkAllowance(IReadFindingRepository, "list_across_routines", ("findings",), _PAGED_LISTING_REASON),
     IndexWalkAllowance(IReadFindingRepository, "list_page", ("findings",), _PAGED_LISTING_REASON),
     IndexWalkAllowance(IReadGardenProposalRepository, "counts_by_class", ("garden_proposals",), _ANALYTICS_REASON),
@@ -571,9 +568,7 @@ HUB_ALLOWED_SCANS: list[Allowance] = [
     IndexWalkAllowance(IReadOperationalAnalytics, "spend_by_graph", ("usage_facts",), _ANALYTICS_REASON),
     IndexWalkAllowance(IReadOperationalAnalytics, "spend_by_node", ("usage_facts",), _ANALYTICS_REASON),
     IndexWalkAllowance(IReadTraceStatus, "newest_export_cursor", ("trace_cursor",), _NEWEST_ROW_REASON),
-    IndexWalkAllowance(IReadTraceStatus, "newest_export_failure", ("event_log",), _NEWEST_ROW_REASON),
     IndexWalkAllowance(IReadTraceSteps, "newest_cursor", ("trace_cursor",), _NEWEST_ROW_REASON),
-    IndexWalkAllowance(IReadTraceSteps, "newest_export_latch", ("event_log",), _NEWEST_ROW_REASON),
     IndexWalkAllowance(
         IReadTranscriptEvents,
         "candidacy",

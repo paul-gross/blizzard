@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
-from blizzard.foundation.event_log import EventLogKind
+from blizzard.foundation.event_log import HubEventKind
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.model import WorkRefLabel
 from blizzard.hub.domain.observability.tracing.cursor import CursorKey
@@ -82,7 +82,7 @@ class IReadTraceSteps(Protocol):
         """The newest ``trace_cursor`` row — the cursor's position — or ``None`` before the first pass."""
         ...
 
-    def newest_export_latch(self) -> EventLogKind | None:
+    def newest_export_latch(self) -> HubEventKind | None:
         """The kind of the newest ``trace-export-failed`` or ``trace-export-recovered`` event, or ``None``."""
         ...
 

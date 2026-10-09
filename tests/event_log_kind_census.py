@@ -1,8 +1,10 @@
 """The event-log kind census — every member of
 :data:`~blizzard.foundation.event_log.EventLogKind` mapped to where it is emitted and
-whether it lands as a stored ``event_log`` row or a synthetic projection, borrowing only
-``tests/runner_event_census.py``'s two-disposition dataclass shape over an unrelated
-vocabulary: this census's subject is :data:`EventLogKind`, not
+whether it lands as a stored ``event_log`` row, a synthetic projection, or a row of the hub's own
+event log alone; and every member of :data:`~blizzard.foundation.event_log.HubEventKind` mapped to
+the sites recording it in ``hub_event_log``. It borrows only
+``tests/runner_event_census.py``'s dataclass-disposition shape over an unrelated
+vocabulary: this census's subject is the event kinds, not
 :class:`~blizzard.runner.stores.IWriteRunnerStore`, and it names no member of
 ``WRITE_PROTOCOL_CENSUS`` or the SSE broker's ``EVENT_TYPES``. Exhaustiveness is carried by
 ``tests/test_event_log_kind_census.py``, this module's only reader — which is also why it
@@ -32,7 +34,16 @@ class Projected:
     severity: str
 
 
-Disposition = Recorded | Projected
+@dataclass(frozen=True)
+class HubOnly:
+    """This kind is the hub's own and never lands as an ``event_log`` row: it is recorded in ``hub_event_log`` from
+    ``where`` (:data:`HUB_EVENT_KIND_CENSUS` names every site)."""
+
+    where: str
+    severity: str
+
+
+Disposition = Recorded | Projected | HubOnly
 
 #: One entry per :data:`~blizzard.foundation.event_log.EventLogKind` member.
 EVENT_LOG_KIND_CENSUS: dict[str, Disposition] = {
@@ -53,28 +64,29 @@ EVENT_LOG_KIND_CENSUS: dict[str, Disposition] = {
     "worker-context-warned": Recorded("runner/loop/steps.py:ContextSample._event", "warning"),
     "attempt-abandoned": Recorded("runner/lifecycle/attempt.py:Attempt.fail", "info"),
     "work-item-closed": Recorded("hub/domain/work_items/closure.py:CloseIntentDrainer.sweep", "info"),
-    "trace-export-failed": Recorded(
-        "hub/domain/observability/tracing/sweep.py:TraceExportSweep.sweep",
-        "warning",
-        ("runner/tracing/sweep.py:LeaseTraceSweep._failed",),
-    ),
-    "trace-export-recovered": Recorded(
-        "hub/domain/observability/tracing/sweep.py:TraceExportSweep.sweep",
-        "info",
-        ("runner/tracing/sweep.py:LeaseTraceSweep._recovered",),
-    ),
-    "trace-window-skipped": Recorded(
-        "hub/domain/observability/tracing/sweep.py:TraceExportSweep.sweep",
-        "warning",
-        ("runner/tracing/sweep.py:LeaseTraceSweep._jump",),
-    ),
-    "trace-config-rejected": Recorded(
-        "hub/app.py:_announce_rejected_tracing",
-        "warning",
-        ("runner/tracing/sweep.py:announce_rejected_tracing",),
-    ),
-    "egress-write-failed": Recorded("hub/domain/observability/egress/sweep.py:EgressSweep._failed", "warning"),
-    "egress-write-recovered": Recorded("hub/domain/observability/egress/sweep.py:EgressSweep._recovered", "info"),
-    "egress-config-rejected": Recorded("hub/app.py:_announce_rejected_egress", "warning"),
-    "egress-cursor-reset": Recorded("hub/domain/observability/egress/reset.py:EgressReset.reset", "info"),
+    "trace-export-failed": Recorded("runner/tracing/sweep.py:LeaseTraceSweep._failed", "warning"),
+    "trace-export-recovered": Recorded("runner/tracing/sweep.py:LeaseTraceSweep._recovered", "info"),
+    "trace-window-skipped": Recorded("runner/tracing/sweep.py:LeaseTraceSweep._jump", "warning"),
+    "trace-config-rejected": Recorded("runner/tracing/sweep.py:announce_rejected_tracing", "warning"),
+    "egress-write-failed": HubOnly("hub/domain/observability/egress/sweep.py:EgressSweep._failed", "warning"),
+    "egress-write-recovered": HubOnly("hub/domain/observability/egress/sweep.py:EgressSweep._recovered", "info"),
+    "egress-config-rejected": HubOnly("hub/app.py:_announce_rejected_egress", "warning"),
+    "egress-cursor-reset": HubOnly("hub/domain/observability/egress/reset.py:EgressReset.reset", "info"),
+}
+
+#: One entry per :data:`~blizzard.foundation.event_log.HubEventKind` member: every site that records it in
+#: ``hub_event_log`` through the hub's event log service. A tenant teardown's kinds have no writer in this hub.
+HUB_EVENT_KIND_CENSUS: dict[str, tuple[str, ...]] = {
+    "trace-export-failed": ("hub/domain/observability/tracing/sweep.py:TraceExportSweep.sweep",),
+    "trace-export-recovered": ("hub/domain/observability/tracing/sweep.py:TraceExportSweep.sweep",),
+    "trace-window-skipped": ("hub/domain/observability/tracing/sweep.py:TraceExportSweep.sweep",),
+    "trace-config-rejected": ("hub/app.py:_announce_rejected_tracing",),
+    "egress-write-failed": ("hub/domain/observability/egress/sweep.py:EgressSweep._failed",),
+    "egress-write-recovered": ("hub/domain/observability/egress/sweep.py:EgressSweep._recovered",),
+    "egress-config-rejected": ("hub/app.py:_announce_rejected_egress",),
+    "egress-cursor-reset": ("hub/domain/observability/egress/reset.py:EgressReset.reset",),
+    "hub-started": ("hub/app.py:_announce_started",),
+    "hub-migrated": ("hub/runtime.py:Runtime.migrate",),
+    "tenant-closed": (),
+    "tenant-deleted": (),
 }

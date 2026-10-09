@@ -4,7 +4,6 @@ told to the in-memory exporter one ``sweep()`` at a time against a fixed clock."
 from __future__ import annotations
 
 import itertools
-import json
 from datetime import timedelta
 from pathlib import Path
 
@@ -30,11 +29,13 @@ from blizzard.hub.domain.observability.tracing.sweep import TraceExportSweep
 from blizzard.hub.store import schema
 from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
 from blizzard.hub.store.internal.trace_store import TraceStore
+from tests.hub_event_rows import hub_event_detail, hub_event_kinds, hub_event_rows, hub_events_of
 from tests.support import (
     HubHarness,
     InMemoryTraceExporter,
     count_queries,
     count_rows_read,
+    default_tenant,
     hub_level_connections,
     hub_scoped,
     hub_store_connections,
@@ -55,7 +56,8 @@ def _sweep(hub: HubHarness) -> TraceExportSweep:
 def _store(hub: HubHarness) -> TraceStore:
     return TraceStore(
         hub_store_connections(hub.engine),
-        events=hub_store_connections(hub.engine),
+        hub_events=hub_events_of(hub.engine),
+        tenant=lambda: default_tenant(hub.engine),
         corpus=build_hub_scoped_reads(hub_level_connections(hub.engine)).corpus,
         graphs=hub.services.graphs,
         names=hub.services.registry,
@@ -69,17 +71,12 @@ def _row_count(hub: HubHarness) -> int:
 
 
 def _kinds(hub: HubHarness) -> list[str]:
-    with hub.engine.connect() as conn:
-        rows = conn.execute(hub_scoped(sa.select(schema.event_log.c.kind).order_by(schema.event_log.c.id))).all()
-    return [r.kind for r in rows if r.kind.startswith("trace-")]
+    return hub_event_kinds(hub.engine, "trace-")
 
 
 def _skipped_detail(hub: HubHarness) -> dict:  # type: ignore[type-arg]
-    with hub.engine.connect() as conn:
-        row = conn.execute(
-            hub_scoped(sa.select(schema.event_log.c.detail).where(schema.event_log.c.kind == "trace-window-skipped"))
-        ).one()
-    return json.loads(row.detail) if isinstance(row.detail, str) else row.detail
+    [row] = hub_event_rows(hub.engine, "trace-window-skipped")
+    return hub_event_detail(row)
 
 
 def _hub(tmp_path: Path, config: TracingConfig = _SETTLED) -> tuple[HubHarness, InMemoryTraceExporter]:

@@ -16,7 +16,8 @@ from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
 from blizzard.hub.store.internal.trace_store import TraceStore
 from tests import trace_fixtures as fx
-from tests.support import HubHarness, hub_level_connections, hub_store_connections, ingest, stamp
+from tests.hub_event_rows import hub_events_of
+from tests.support import HubHarness, default_tenant, hub_level_connections, hub_store_connections, ingest, stamp
 from tests.trace_hub import claim, label, pass_build, trace_hub
 
 pytestmark = pytest.mark.component
@@ -162,7 +163,8 @@ def test_planted_content_hydrated_through_the_store_never_reaches_a_row(tmp_path
 
     facts = TraceStore(
         hub_store_connections(hub.engine),
-        events=hub_store_connections(hub.engine),
+        hub_events=hub_events_of(hub.engine),
+        tenant=lambda: default_tenant(hub.engine),
         corpus=build_hub_scoped_reads(hub_level_connections(hub.engine)).corpus,
         graphs=hub.services.graphs,
         names=hub.services.registry,

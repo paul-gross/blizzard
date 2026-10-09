@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
-from blizzard.foundation.event_log import EventLogKind
+from blizzard.foundation.event_log import HubEventKind
 from blizzard.foundation.lane_retry import OutageLatch
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
@@ -18,7 +18,7 @@ from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.cursor import CursorJump, first_pass_jump, lag_cap_jump
 from blizzard.foundation.trace_export.exporter import ITraceExporter
 from blizzard.foundation.trace_spans import FinishedSpan
-from blizzard.hub.domain.chunk.event_log import EventLogService
+from blizzard.hub.domain.observability.hub_events import HubEventLogService
 from blizzard.hub.domain.observability.tracing.cursor import CursorKey
 from blizzard.hub.domain.observability.tracing.repository import IWriteTraceCursor, TraceCheckpoint
 from blizzard.hub.domain.observability.tracing.window import assemble_window, oldest_unsent, read_window
@@ -32,9 +32,9 @@ _CP_TRACE_AFTER_EXPORT_BEFORE_CURSOR = crashpoint(
     "the exporter accepted the batch; the cursor row that records it is not yet appended",
 )
 
-_FAILED: EventLogKind = "trace-export-failed"
-_RECOVERED: EventLogKind = "trace-export-recovered"
-_SKIPPED: EventLogKind = "trace-window-skipped"
+_FAILED: HubEventKind = "trace-export-failed"
+_RECOVERED: HubEventKind = "trace-export-recovered"
+_SKIPPED: HubEventKind = "trace-window-skipped"
 
 
 def _key_detail(key: CursorKey) -> dict[str, object]:
@@ -49,7 +49,7 @@ class TraceExportSweep:
         *,
         steps: IWriteTraceCursor,
         exporter: ITraceExporter,
-        events: EventLogService,
+        events: HubEventLogService,
         clock: IClock,
         config: TracingConfig,
     ) -> None:
@@ -139,13 +139,9 @@ class TraceExportSweep:
                 {"reason": jump.reason.value, "since": _key_detail(since), "until": iso_utc(jump.to.at)},
             )
 
-    def _record(self, kind: EventLogKind, message: str, detail: dict | None) -> None:  # type: ignore[type-arg]
+    def _record(self, kind: HubEventKind, message: str, detail: dict | None) -> None:  # type: ignore[type-arg]
         self._events.record(
             kind=kind,
-            runner_id=None,
-            chunk_id=None,
-            lease_id=None,
-            node_name=None,
             message=message,
             detail=detail,
             at=self._clock.now(),

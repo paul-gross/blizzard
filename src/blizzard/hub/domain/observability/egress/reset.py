@@ -16,7 +16,6 @@ from typing import Literal
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.event_rows import missing_key_reason
 from blizzard.hub.domain.observability.egress.lifecycle import ExportVerb, export_allows
@@ -27,6 +26,7 @@ from blizzard.hub.domain.observability.egress.repository import (
     UsagePosition,
 )
 from blizzard.hub.domain.observability.egress.schema import EVENTS_SCHEMA, INVOCATIONS_SCHEMA, STEPS_SCHEMA
+from blizzard.hub.domain.observability.hub_events import HubEventLogService
 from blizzard.hub.domain.observability.tracing.cursor import CursorKey
 
 
@@ -55,7 +55,7 @@ class EgressReset:
         self,
         *,
         egress: IWriteEgressCursor,
-        events: EventLogService,
+        events: HubEventLogService,
         clock: IClock,
         config: EgressConfig,
         active: bool,
@@ -88,10 +88,6 @@ class EgressReset:
             self._egress.append_cursor(checkpoint)
         self._events.record(
             kind="egress-cursor-reset",
-            runner_id=None,
-            chunk_id=None,
-            lease_id=None,
-            node_name=None,
             message=f"fact egress {dataset} cursor reset; the window was {result.direction}",
             detail={
                 "dataset": dataset,

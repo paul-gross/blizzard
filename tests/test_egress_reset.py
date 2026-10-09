@@ -17,8 +17,8 @@ from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.repository import UsagePosition
 from blizzard.hub.domain.observability.egress.reset import EgressReset
-from blizzard.hub.store import schema
-from tests.support import HubHarness, InMemoryEgressWriter, hub_scoped
+from tests.hub_event_rows import hub_event_log_of, hub_event_rows
+from tests.support import HubHarness, InMemoryEgressWriter
 from tests.test_egress_sweep import _SETTLED, _closed_step, _cursor_rows, _hub, _rows, _store, _sweep
 
 pytestmark = pytest.mark.component
@@ -31,9 +31,7 @@ def _reset(hub: HubHarness, dataset: str, to: object) -> httpx.Response:
 
 
 def _events(hub: HubHarness) -> list[sa.Row]:  # type: ignore[type-arg]
-    with hub.engine.connect() as conn:
-        stmt = sa.select(schema.event_log).where(schema.event_log.c.kind == "egress-cursor-reset")
-        return list(conn.execute(hub_scoped(stmt.order_by(schema.event_log.c.id))).all())
+    return hub_event_rows(hub.engine, "egress-cursor-reset")
 
 
 def test_a_reset_back_appends_a_cursor_row_the_next_pass_reads_from_and_records_the_repeat(tmp_path: Path) -> None:
@@ -107,7 +105,7 @@ def test_a_reset_waits_for_a_pass_in_flight(tmp_path: Path) -> None:
     lock = threading.Lock()
     reset = EgressReset(
         egress=_store(hub),
-        events=hub.services.event_log,
+        events=hub_event_log_of(hub.engine),
         clock=hub.clock,
         config=_SETTLED,
         active=True,
