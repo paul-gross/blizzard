@@ -106,6 +106,7 @@ from blizzard.hub.runtime import migration_runner
 from blizzard.hub.secrets import KeyCoverage, hub_key_provider, require_hub_key
 from blizzard.hub.secrets.rotation import RotationResult, rotate_keys
 from blizzard.hub.store.tenant_guard import install_tenant_guard
+from blizzard.hub.tenancy import StoreScope, TenantId
 from blizzard.hub.work_sources.internal.factory import WorkSourceEntry
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
 from blizzard.wire.components import HUB_SCHEMA_COMPONENTS
@@ -257,39 +258,58 @@ def open_hub_engine(db_url: str) -> Engine:
 
 
 def rotate_secret_keys(config: HubConfig, environ: Mapping[str, str]) -> RotationResult:
-    """The offline ``rotate-key`` wiring: the store and key source opened directly, no app."""
+    """The offline ``rotate-key`` wiring: the store and key source opened directly, no app; every open
+    tenant's secrets re-sealed."""
     engine = open_hub_engine(config.db_url)
     try:
-        return rotate_keys(build_process_core(engine).secrets, environ, data_dir=config.data_dir)
+        tenants = build_process_core(engine).every_open()
+        return rotate_keys([stores.secrets for stores in tenants], environ, data_dir=config.data_dir)
     finally:
         engine.dispose()
 
 
-def import_legacy_config(config: HubConfig, environ: Mapping[str, str]) -> ImportResult:
+def import_legacy_config(
+    config: HubConfig, environ: Mapping[str, str], *, tenant: TenantId | None = None
+) -> ImportResult:
     """The offline ``import-legacy`` wiring: the hub key's existence checked before a provider is
-    built, then the store and key source opened directly, no app."""
+    built, then the store and key source opened directly, no app. The import writes into ``tenant``,
+    or into the hub's only open tenant when none is named."""
     require_hub_key(environ, data_dir=config.data_dir)
     legacy = read_legacy_keys(config.config_path, environ)
     engine = open_hub_engine(config.db_url)
     try:
         core = build_process_core(engine)
-        authoring = build_config_authoring(
-            core.sole_tenant, secret_keys=hub_key_provider(environ, data_dir=config.data_dir)
-        )
+        target = _legacy_import_tenant(core.open_tenants(), named=tenant)
+        stores = core.open(StoreScope(target))
+        authoring = build_config_authoring(stores, secret_keys=hub_key_provider(environ, data_dir=config.data_dir))
         existing = ExistingConfig(
-            secrets=frozenset(secret.name for secret in core.secrets.list_all()),
-            work_sources=tuple(core.work_source_records.list_all(include_retired=True)),
-            repositories=tuple(core.repository_records.list_all(include_retired=True)),
+            secrets=frozenset(secret.name for secret in stores.secrets.list_all()),
+            work_sources=tuple(stores.work_source_records.list_all(include_retired=True)),
+            repositories=tuple(stores.repository_records.list_all(include_retired=True)),
         )
         return authoring.import_legacy(
             legacy,
             {name: environ[name] for name in legacy.variables},
-            core.config_import.commit_coordinates(),
+            stores.config_import.commit_coordinates(),
             existing,
-            recorded=core.config_import.recorded(),
+            recorded=stores.config_import.recorded(),
         )
     finally:
         engine.dispose()
+
+
+def _legacy_import_tenant(open_tenants: Mapping[TenantId, str], *, named: TenantId | None) -> TenantId:
+    """The tenant an import writes into: the named one, which must be open, else the only open one."""
+    if named is not None:
+        if named not in open_tenants:
+            raise ConfigError(f"no open tenant has the id {named}")
+        return named
+    if len(open_tenants) == 1:
+        return next(iter(open_tenants))
+    if not open_tenants:
+        raise ConfigError("the hub holds no open tenant to import into")
+    listing = "; ".join(f"{tenant} ({name})" for tenant, name in sorted(open_tenants.items()))
+    raise ConfigError(f"the hub holds several tenants — name the one to import into with --tenant: {listing}")
 
 
 async def _validation_error(request: Request, exc: Exception) -> JSONResponse:
@@ -501,14 +521,18 @@ def build_hosted_app(
     # Only once the store is at the expected schema head: a store mid-migration must
     # fail *readiness*, not *boot* (pinned: `test_ready_probe_false_on_unmigrated_store`).
     if readiness.evaluate().ready:
+        tenants = core.every_open()
         try:
-            LegacyStart.of(core.config_import, read_legacy_keys(config.config_path, os.environ)).check()
+            LegacyStart.of(
+                [stores.config_import for stores in tenants], read_legacy_keys(config.config_path, os.environ)
+            ).check()
         except LegacyStartRefused as refusal:
             raise ConfigError(str(refusal)) from refusal
         OrphanedProviders.of(config, services).check()
-        KeyCoverage.of(core.secrets, secret_keys).check()
-        # Before the hub serves.
-        services.tenants.sole_tenant.hub_node.release_orphaned_slots()
+        KeyCoverage.of([stores.secrets for stores in tenants], secret_keys).check()
+        # Before the hub serves, in each open tenant.
+        for stores in tenants:
+            services.tenants.open_services(stores.scope).hub_node.release_orphaned_slots()
         Superuser(email=config.auth.superuser, auth=services.auth).ensure()
         _announce_started(expected, services)
         _announce_rejected_tracing(tracing, services)

@@ -80,11 +80,11 @@ def secret_set(cli: CliContext, name: str) -> None:
     help="Hub runtime directory (overrides $BZ_HUB_DIR).",
 )
 def secret_rotate_key(directory: str) -> None:
-    """Re-seal every secret under the hub's current key — offline, on the hub host.
+    """Re-seal every open tenant's secrets under the hub's current key — offline, on the hub host.
 
-    Directory mode mints and promotes a new generation; env mode re-seals under
-    $BZ_HUB_SECRET_KEY, opening older rows through $BZ_HUB_SECRET_KEY_PREVIOUS. A race
-    with a replace changes nothing and exits non-zero — re-run it."""
+    Directory mode mints a new generation and promotes it once every tenant is re-sealed; env mode
+    re-seals under $BZ_HUB_SECRET_KEY, opening older rows through $BZ_HUB_SECRET_KEY_PREVIOUS. A race
+    with a replace leaves the old key current and exits non-zero — re-run it."""
     from blizzard.hub.app import rotate_secret_keys
     from blizzard.hub.config import ConfigError, HubConfig
     from blizzard.hub.domain.config.secrets import SecretRotationConflict

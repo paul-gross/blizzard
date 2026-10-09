@@ -1118,7 +1118,10 @@ def build_hub(
     # mirroring `WorkSourceEntry.registry`'s production wiring.
     closers: dict[str, IWorkCloser] = {}
     core = build_hub_core(engine, clock=clock)
-    hub_source = HubWorkSource(core.work_item_store, core.work_item_edits, core.users, core.garden_proposal_resolution)
+    resident = core.sole_tenant
+    hub_source = HubWorkSource(
+        resident.work_item_store, resident.work_item_edits, core.users, resident.garden_proposal_resolution
+    )
     built_sources[RESERVED_HUB_SOURCE_NAME] = hub_source
     editors[RESERVED_HUB_SOURCE_NAME] = hub_source
     closers[RESERVED_HUB_SOURCE_NAME] = hub_source

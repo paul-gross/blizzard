@@ -7,7 +7,7 @@ writer commits the plan and the ``config_import`` fact as one transaction, so a 
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
@@ -333,8 +333,10 @@ class LegacyStart:
     keys: LegacyKeys
 
     @classmethod
-    def of(cls, imports: IReadConfigImports, keys: LegacyKeys) -> LegacyStart:
-        return cls(recorded=imports.recorded(), keys=keys)
+    def of(cls, imports: Iterable[IReadConfigImports], keys: LegacyKeys) -> LegacyStart:
+        """``imports`` reads through each open tenant. The import is the hub's, recorded once into the one
+        tenant it wrote, so any tenant's reader answers it; a hub with no open tenant has recorded none."""
+        return cls(recorded=any(tenant.recorded() for tenant in imports), keys=keys)
 
     def check(self) -> None:
         """Refuse to start while a legacy key remains, naming the exact remedy — never a value."""

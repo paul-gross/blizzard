@@ -83,7 +83,8 @@ Carry a file-configured hub across with the hub stopped, on the hub host, with i
 1. Run `blizzard hub migrate --dir <hub-dir>`.
 2. Run `blizzard hub config import-legacy --dir <hub-dir>`. It creates a secret per credential, a work source record per
    block, and a repository record per repo the hub has delivered commits to, in one transaction, and lists what it
-   created. A record the store already holds is skipped, never overwritten; a second run writes nothing.
+   created. It writes into the hub's only tenant; a hub holding several refuses unless `--tenant <tenant_id>` names
+   one. A record the tenant already holds is skipped, never overwritten; a second run writes nothing.
 3. Delete the `[[work_source]]` blocks and unset the variables.
 4. Start the hub.
 

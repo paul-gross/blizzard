@@ -198,7 +198,7 @@ from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecor
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.system_artifacts import PACKAGED as SYSTEM_ARTIFACTS_PACKAGED
 from blizzard.hub.system_artifacts import PackagedSystemArtifacts
-from blizzard.hub.tenancy import StoreScope, TenantId
+from blizzard.hub.tenancy import StoreScope, TenantClosed, TenantId, UnknownTenant
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
 
 
@@ -689,39 +689,21 @@ class HubCore:
         """``scope``'s tenant's services, refused as :meth:`open` refuses."""
         return self.tenants.open_services(scope)
 
-    # The sole tenant's members the hub process reads at boot and wires its work-source registry from.
+    def open_tenants(self) -> dict[TenantId, str]:
+        """Every open tenant's name by id, read from the store."""
+        return self.hub_scoped_reads.tenants.open_tenants()
 
-    @property
-    def tenant_connections(self) -> ScopedConnections:
-        return self.sole_tenant.connections
-
-    @property
-    def secrets(self) -> SecretStore:
-        return self.sole_tenant.secrets
-
-    @property
-    def work_source_records(self) -> WorkSourceRecordStore:
-        return self.sole_tenant.work_source_records
-
-    @property
-    def repository_records(self) -> RepositoryRecordStore:
-        return self.sole_tenant.repository_records
-
-    @property
-    def config_import(self) -> ConfigImportStore:
-        return self.sole_tenant.config_import
-
-    @property
-    def work_item_store(self) -> WorkItemStore:
-        return self.sole_tenant.work_item_store
-
-    @property
-    def work_item_edits(self) -> WorkItemEditService:
-        return self.sole_tenant.work_item_edits
-
-    @property
-    def garden_proposal_resolution(self) -> GardenProposalDeliveryResolution:
-        return self.sole_tenant.garden_proposal_resolution
+    def every_open(self) -> list[TenantStores]:
+        """Every open tenant's stores, in tenant-id order — how a hub-wide job that is not a sweep (a
+        boot check, key rotation) acts in each tenant in turn. A tenant closed since the read is left
+        out: nothing acts in it again."""
+        opened: list[TenantStores] = []
+        for tenant in sorted(self.open_tenants()):
+            try:
+                opened.append(self.open(StoreScope(tenant)))
+            except (TenantClosed, UnknownTenant):
+                continue
+        return opened
 
 
 @dataclass(frozen=True)

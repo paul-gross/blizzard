@@ -2147,8 +2147,9 @@ _COMPOSITION_ROOT_FILES = (
 
 
 # `TranscriptCaps` is a value object; `EventBroker` has a store-free `create_app` fallback; `ConfigError` is a
-# refusal, raised wherever a boot check or the config edge refuses.
-_REPEATABLE_CONSTRUCTIONS = frozenset({"TranscriptCaps", "EventBroker", "ConfigError"})
+# refusal, raised wherever a boot check or the config edge refuses; `StoreScope` is a value object naming one tenant,
+# built wherever a hub-wide job opens that tenant's stores or services.
+_REPEATABLE_CONSTRUCTIONS = frozenset({"TranscriptCaps", "EventBroker", "ConfigError", "StoreScope"})
 
 
 def _blizzard_constructions(path: Path) -> list[tuple[str, int]]:

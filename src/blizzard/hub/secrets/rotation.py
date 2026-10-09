@@ -1,11 +1,12 @@
-"""Offline key rotation — re-seal every stored secret under the hub's current key.
+"""Offline key rotation — re-seal every open tenant's stored secrets under the hub's current key.
 
 Run on the hub host against the store and key source directly: the key is a process
-setting on that host's filesystem, so no API route rotates it."""
+setting on that host's filesystem, so no API route rotates it. The key is the hub's, not
+a tenant's: one rotation covers every open tenant."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -53,25 +54,30 @@ class _Target:
         return self._source.available_ids() | {self._target.key_id}
 
 
-def rotate_keys(repo: IResealSecretRepository, environ: Mapping[str, str], *, data_dir: Path) -> RotationResult:
-    """Re-seal every row not under the target generation, in one transaction.
+def rotate_keys(
+    repos: Sequence[IResealSecretRepository], environ: Mapping[str, str], *, data_dir: Path
+) -> RotationResult:
+    """Re-seal every row not under the target generation — one transaction per tenant, one
+    ``repos`` member per open tenant.
 
     Env mode (``BZ_HUB_SECRET_KEY`` set) mints nothing; older rows open through
-    ``BZ_HUB_SECRET_KEY_PREVIOUS``. Directory mode mints a generation, re-seals into it,
-    then promotes it and prunes any generation file no row references."""
+    ``BZ_HUB_SECRET_KEY_PREVIOUS``. Directory mode mints a generation and re-seals every tenant
+    into it; only once every tenant has does it promote that generation and prune any generation
+    file no row references. A tenant that fails leaves the old generation current: the tenants
+    before it open through the minted file, and a re-run moves every tenant again."""
     if environ.get(ENV_SECRET_KEY):
-        return _rotate(repo, EnvKeyProvider(environ), directory=None)
+        return _rotate(repos, EnvKeyProvider(environ), directory=None)
     if environ.get(ENV_SECRET_KEY_PREVIOUS):
         raise ConfigError(f"{ENV_SECRET_KEY_PREVIOUS} is set without {ENV_SECRET_KEY}")
     directory = DirectoryKeyProvider(secret_keys_dir(data_dir))
-    return _rotate(repo, directory, directory=directory)
+    return _rotate(repos, directory, directory=directory)
 
 
 def _rotate(
-    repo: IResealSecretRepository, keys: IHubKeyProvider, *, directory: DirectoryKeyProvider | None
+    repos: Sequence[IResealSecretRepository], keys: IHubKeyProvider, *, directory: DirectoryKeyProvider | None
 ) -> RotationResult:
-    rows = repo.list_sealed()
-    missing = uncovered_key_ids({row.sealed.key_id for row in rows}, keys.available_ids())
+    rows = [repo.list_sealed() for repo in repos]
+    missing = uncovered_key_ids(_key_ids(rows), keys.available_ids())
     if missing:
         raise ConfigError(
             f"stored secrets are sealed under key generation(s) {sorted(missing)} the key source does not hold — "
@@ -79,12 +85,19 @@ def _rotate(
         )
     target = directory.mint() if directory is not None else keys.current()
     cipher = AesGcmSecretCipher(_Target(keys, target))
-    changes = [_reseal(cipher, row) for row in stale_seals(rows, target.key_id)]
-    repo.reseal(changes)
+    resealed = 0
+    for repo, tenant_rows in zip(repos, rows, strict=True):
+        changes = [_reseal(cipher, row) for row in stale_seals(tenant_rows, target.key_id)]
+        repo.reseal(changes)
+        resealed += len(changes)
     if directory is not None:
         directory.promote(target.key_id)
-        directory.prune(frozenset(row.sealed.key_id for row in repo.list_sealed()))
-    return RotationResult(key_id=target.key_id, resealed=len(changes))
+        directory.prune(_key_ids([repo.list_sealed() for repo in repos]))
+    return RotationResult(key_id=target.key_id, resealed=resealed)
+
+
+def _key_ids(rows: Sequence[Sequence[SealedSecret]]) -> frozenset[str]:
+    return frozenset(row.sealed.key_id for tenant_rows in rows for row in tenant_rows)
 
 
 def _reseal(cipher: AesGcmSecretCipher, row: SealedSecret) -> Reseal:

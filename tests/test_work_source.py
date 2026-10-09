@@ -59,13 +59,13 @@ def _registry_world(
         authoring.create_work_source(name, fields, OP)
     live = build_live_config(core.sole_tenant, secret_keys=keys)
     registry = WorkSourceEntry.registry(
-        records=core.work_source_records,
+        records=core.sole_tenant.work_source_records,
         objects=live.objects,
         secrets=live.secrets,
         users=core.users,
-        work_item_store=core.work_item_store,
-        edits=core.work_item_edits,
-        resolution=core.garden_proposal_resolution,
+        work_item_store=core.sole_tenant.work_item_store,
+        edits=core.sole_tenant.work_item_edits,
+        resolution=core.sole_tenant.garden_proposal_resolution,
         close_forge_writes_enabled=close_forge_writes_enabled,
     )
     return registry, authoring, core
@@ -231,10 +231,10 @@ def test_a_retired_source_whose_secret_cannot_be_revealed_reads_as_absent(tmp_pa
     """Items already ingested from a retired source must stay readable: once its secret is retired too,
     the source reads as absent rather than failing every read path."""
     registry, authoring, core = _registry_world(tmp_path, ("one", _github("acme/one")))
-    record = core.work_source_records.get("one")
+    record = core.sole_tenant.work_source_records.get("one")
     assert record is not None
     authoring.retire_work_source(record, OP)
-    secret = core.secrets.get("gh")
+    secret = core.sole_tenant.secrets.get("gh")
     assert secret is not None
     authoring.retire_secret(secret, OP)
     assert registry.get("one") is None

@@ -138,17 +138,28 @@ def config_export(cli: CliContext, fmt: str) -> None:
     envvar="BZ_HUB_DIR",
     help="Hub runtime directory (overrides $BZ_HUB_DIR).",
 )
-def config_import_legacy(directory: str) -> None:
+@click.option(
+    "--tenant",
+    "tenant",
+    default=None,
+    metavar="TENANT_ID",
+    help="The tenant to import into, by id; required when the hub holds several.",
+)
+def config_import_legacy(directory: str, tenant: str | None) -> None:
     """Carry this hub's [[work_source]] blocks and BZ_FORGE_* variables into records — offline, on the hub host.
 
-    Runs once, in one transaction, against a migrated store and an existing hub key. A record the store
-    already holds is skipped, never overwritten; any refusal writes nothing. A second run writes nothing."""
+    Runs once, in one transaction, against a migrated store and an existing hub key, writing into the hub's
+    only tenant or the one --tenant names. A record the tenant already holds is skipped, never overwritten;
+    any refusal writes nothing. A second run writes nothing."""
     from blizzard.hub.app import import_legacy_config
     from blizzard.hub.config import ConfigError, HubConfig
     from blizzard.hub.domain.config.carry_over import ImportStatus, LegacyImportRefused
+    from blizzard.hub.tenancy import TenantId
 
     try:
-        result = import_legacy_config(HubConfig.load(Path(directory)), os.environ)
+        result = import_legacy_config(
+            HubConfig.load(Path(directory)), os.environ, tenant=TenantId(tenant) if tenant is not None else None
+        )
     except (ConfigError, LegacyImportRefused) as exc:
         raise click.ClickException(str(exc)) from exc
     if result.status is ImportStatus.ALREADY_IMPORTED:

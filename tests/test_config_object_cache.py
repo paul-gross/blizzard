@@ -63,7 +63,7 @@ class _World:
 
         def build() -> _Client:
             self.builds += 1
-            record = self.core.work_source_records.get("demo")
+            record = self.core.sole_tenant.work_source_records.get("demo")
             assert record is not None and record.fields.secret is not None
             token = live.secrets.reveal(SecretName.parse(record.fields.secret)).expose()
             return _Client(record.fields.locator, record.fields.annotate, token)
@@ -71,7 +71,7 @@ class _World:
         return live.objects.get(RecordKind.WORK_SOURCE, "demo", build)
 
     def source(self):  # type: ignore[no-untyped-def]
-        record = self.core.work_source_records.get("demo")
+        record = self.core.sole_tenant.work_source_records.get("demo")
         assert record is not None
         return record
 
@@ -122,7 +122,7 @@ def test_a_retire_rebuilds_and_sets_the_replaced_object_aside(world: _World) -> 
 
 def test_a_secret_replace_rebuilds_with_the_new_value(world: _World) -> None:
     first = world.client()
-    secret = world.core.secrets.get("gh")
+    secret = world.core.sole_tenant.secrets.get("gh")
     assert secret is not None
     world.authoring.replace_secret(secret, "tok-b", OP)
 

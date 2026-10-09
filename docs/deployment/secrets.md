@@ -56,13 +56,14 @@ not hold, and names the missing generation.
 ## Rotating the key
 
 `blizzard hub secret rotate-key [--dir <hub runtime dir>]` runs offline, on the hub host, against the store and key
-source directly. It re-seals every row under the new current key in one transaction, leaving each secret's revision
-unchanged. A concurrent replace between its read and commit rolls the whole rotation back and exits non-zero; run it
-again.
+source directly. The key is the hub's, so it re-seals every open tenant's rows under the new current key, one
+transaction per tenant, leaving each secret's revision unchanged. A concurrent replace between a tenant's read and
+commit rolls that tenant's re-seal back and exits non-zero, leaving the old key current; run it again.
 
-- **Directory source.** The verb mints a new generation, re-seals every row into it, then promotes it to `current` and
-  demotes the old current to `previous`. A running hub reads the key files from disk on use, so it keeps decrypting
-  throughout and needs no restart. The verb deletes a generation file only once no row references it.
+- **Directory source.** The verb mints a new generation, re-seals every tenant's rows into it, then — only once every
+  tenant succeeded — promotes it to `current` and demotes the old current to `previous`. A running hub reads the key
+  files from disk on use, so it keeps decrypting throughout and needs no restart. The verb deletes a generation file
+  only once no row references it.
 - **Environment source.** Set `BZ_HUB_SECRET_KEY` to the new key and `BZ_HUB_SECRET_KEY_PREVIOUS` to the old one, run
   the verb, then restart the hub with the new key. With the previous key absent while rows need it, the verb refuses and
   names the missing generation.

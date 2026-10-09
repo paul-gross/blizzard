@@ -70,7 +70,7 @@ def test_the_cores_tenant_connections_are_scoped_to_the_stores_only_tenant(tmp_p
 
     core = build_hub_core(hub.engine, clock=hub.clock)
 
-    assert core.tenant_connections.scope == StoreScope(default_tenant(hub.engine))
+    assert core.sole_tenant.connections.scope == StoreScope(default_tenant(hub.engine))
 
 
 def test_the_core_names_its_tenant_on_first_use_so_a_stale_store_still_builds(tmp_path: Path) -> None:
@@ -79,4 +79,4 @@ def test_the_core_names_its_tenant_on_first_use_so_a_stale_store_still_builds(tm
     core = build_hub_core(engine, clock=SystemClock())
 
     with pytest.raises(HubStoreError):
-        _ = core.tenant_connections.scope
+        _ = core.sole_tenant.connections.scope
