@@ -50,7 +50,7 @@ def _user_view(member: Member, *, identities: list[Identity], actor: ResolvedIde
 
 @router.get("/users", response_model=list[UserView])
 def list_users(services: Hub, actor: _Manager) -> list[UserView]:
-    """Every member of the request's tenant — :func:`~blizzard.hub.api.members.list_members` in the former shape."""
+    """Every member of the request's tenant, in this listing's former shape; ``GET /api/members`` supersedes it."""
     members = services.members.listing(tenant_of(actor))
     identities = services.identities.list_for_users([m.user.user_id for m in members])
     admins = sum(1 for m in members if m.role is Role.ADMIN)

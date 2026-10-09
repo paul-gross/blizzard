@@ -23886,7 +23886,7 @@
     "/api/users": {
       "get": {
         "deprecated": true,
-        "description": "Every member of the request's tenant \u2014 :func:`~blizzard.hub.api.members.list_members` in the former shape.",
+        "description": "Every member of the request's tenant, in this listing's former shape; ``GET /api/members`` supersedes it.",
         "operationId": "list_users_api_users_get",
         "responses": {
           "200": {

@@ -2164,7 +2164,7 @@ export const traceStatusApiTracesStatusGet = <ThrowOnError extends boolean = fal
 /**
  * List Users
  *
- * Every member of the request's tenant — :func:`~blizzard.hub.api.members.list_members` in the former shape.
+ * Every member of the request's tenant, in this listing's former shape; ``GET /api/members`` supersedes it.
  *
  * @deprecated
  */
