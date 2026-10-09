@@ -14,7 +14,7 @@ import pytest
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.scoped import ScopedConnections
-from tests.support import build_hub, hub_store_connections, ingest
+from tests.support import build_hub, hub_store_connections, ingest, serve_default_tenant
 
 pytestmark = pytest.mark.component
 
@@ -38,7 +38,7 @@ def test_chunk_detail_never_calls_graphs_get_with_no_pending_poll(tmp_path: Path
 
     counting_graphs = _CountingGraphStore(hub_store_connections(hub.engine))
     assert hub.app is not None
-    hub.app.state.services = replace(hub.services, graphs=counting_graphs)
+    serve_default_tenant(hub, replace(hub.services, graphs=counting_graphs))
 
     resp = hub.client.get(f"/api/chunks/{chunk_id}")
 

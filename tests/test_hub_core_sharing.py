@@ -13,7 +13,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.composition import build_hub_core
 from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.tenancy import StoreScope
-from tests.support import build_hub, default_tenant
+from tests.support import add_tenant, build_hub, default_tenant, tenant_services_of
 
 pytestmark = pytest.mark.component
 
@@ -38,6 +38,31 @@ def test_the_garden_proposal_closure_and_the_hub_source_share_one_edit_service(t
     assert hub_editor is not None
 
     assert hub_editor._edits is hub.services.garden_proposal_closure._items  # type: ignore[attr-defined]
+
+
+def test_the_harness_serves_the_default_tenants_cached_services(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    assert hub.app is not None
+
+    assert hub.open_services(default_tenant(hub.engine)) is hub.services
+    assert tenant_services_of(hub.app) is hub.services
+    assert hub.hub_services is hub.app.state.services
+    assert hub.events is hub.services.events
+    assert hub.services.users is hub.hub_services.users
+
+
+def test_a_second_tenant_gets_its_own_services_and_leaves_the_default_one_named(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    tenant = default_tenant(hub.engine)
+
+    second = add_tenant(hub.engine, "second")
+
+    theirs = hub.open_services(second)
+    assert theirs is not hub.services
+    assert theirs.registry is not hub.services.registry
+    assert theirs.events is not hub.services.events
+    assert hub.open_services(tenant) is hub.services
+    assert hub.client.get("/api/chunks").status_code == 200
 
 
 def test_the_cores_tenant_connections_are_scoped_to_the_stores_only_tenant(tmp_path: Path) -> None:

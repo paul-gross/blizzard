@@ -356,6 +356,9 @@ def test_hub_mutation_dropping_an_index_the_census_exercises_is_caught_by_the_cl
 
         with world.engine.begin() as conn:
             conn.exec_driver_sql(f"DROP INDEX {index_name}")
+        # Every other pooled connection still holds the pre-drop schema and its cached prepared statements, and sqlite
+        # plans an ``EXPLAIN QUERY PLAN`` from those without re-reading the schema — so the pool starts over.
+        world.engine.dispose()
         with support.capture_statements(world.engine) as statements:
             recipe(world)
         offenders = support.offending_index_scans(world.engine, statements, tables)

@@ -77,7 +77,7 @@ def test_a_rejected_tracing_setting_is_announced_in_the_hub_log_not_the_tenants(
     hub = build_hub(tmp_path)
 
     hub_app._announce_rejected_tracing(
-        TracingSettings(state="rejected", setting="OTEL_EXPORTER_OTLP_PROTOCOL", value="grpc"), hub.services
+        TracingSettings(state="rejected", setting="OTEL_EXPORTER_OTLP_PROTOCOL", value="grpc"), hub.hub_services
     )
 
     assert hub_event_kinds(hub.engine) == ["trace-config-rejected"]

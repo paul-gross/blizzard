@@ -77,8 +77,9 @@ from blizzard.hub.api.work_sources import router as work_sources_router
 from blizzard.hub.auth.bootstrap import Superuser
 from blizzard.hub.composition import (
     HubServices,
+    LiveConfig,
+    TenantStores,
     build_config_authoring,
-    build_live_config,
     build_process_core,
     build_services,
 )
@@ -101,6 +102,7 @@ from blizzard.hub.secrets import KeyCoverage, hub_key_provider, require_hub_key
 from blizzard.hub.secrets.rotation import RotationResult, rotate_keys
 from blizzard.hub.store.tenant_guard import install_tenant_guard
 from blizzard.hub.work_sources.internal.factory import WorkSourceEntry
+from blizzard.hub.work_sources.source import IWorkSourceRegistry
 from blizzard.wire.components import HUB_SCHEMA_COMPONENTS
 
 #: The transcript-event derivation sweep's own interval — a module
@@ -266,7 +268,9 @@ def import_legacy_config(config: HubConfig, environ: Mapping[str, str]) -> Impor
     engine = open_hub_engine(config.db_url)
     try:
         core = build_process_core(engine)
-        authoring = build_config_authoring(core, secret_keys=hub_key_provider(environ, data_dir=config.data_dir))
+        authoring = build_config_authoring(
+            core.sole_tenant, secret_keys=hub_key_provider(environ, data_dir=config.data_dir)
+        )
         existing = ExistingConfig(
             secrets=frozenset(secret.name for secret in core.secrets.list_all()),
             work_sources=tuple(core.work_source_records.list_all(include_retired=True)),
@@ -338,7 +342,7 @@ def create_app(
     app.state.services = services
     # The event broker is always present (cheap, in-memory) so the SSE stream opens
     # cleanly even on the store-free app.
-    app.state.events = services.events if services is not None else EventBroker()
+    app.state.events = services.tenants.sole_tenant.events if services is not None else EventBroker()
     # Set on shutdown by ``_lifespan``; every SSE stream races it.
     app.state.shutdown = asyncio.Event()
 
@@ -429,18 +433,20 @@ def build_hosted_app(
     core = build_process_core(engine)
     # Minted here on first start when no key source exists yet.
     secret_keys = hub_key_provider(os.environ, data_dir=config.data_dir)
-    live = build_live_config(core, secret_keys=secret_keys)
-    work_source_registry = WorkSourceEntry.registry(
-        records=core.work_source_records,
-        objects=live.objects,
-        secrets=live.secrets,
-        users=core.users,
-        work_item_store=core.work_item_store,
-        edits=core.work_item_edits,
-        resolution=core.garden_proposal_resolution,
-        close_forge_writes_enabled=config.close_forge_writes_enabled,
-        instrument_client=platform_tracing.instrument_client,
-    )
+
+    def work_source_registry(stores: TenantStores, live: LiveConfig) -> IWorkSourceRegistry:
+        return WorkSourceEntry.registry(
+            records=stores.work_source_records,
+            objects=live.objects,
+            secrets=live.secrets,
+            users=core.users,
+            work_item_store=stores.work_item_store,
+            edits=stores.work_item_edits,
+            resolution=stores.garden_proposal_resolution,
+            close_forge_writes_enabled=config.close_forge_writes_enabled,
+            instrument_client=platform_tracing.instrument_client,
+        )
+
     tracing = TracingSettings.of(os.environ)
 
     # The provider-login seam is built only under `oauth`: under `none`
@@ -456,9 +462,7 @@ def build_hosted_app(
 
     services = build_services(
         core,
-        events=EventBroker(),
         work_sources=work_source_registry,
-        secrets=live.secrets,
         hub_workdir_root=config.data_dir / "hub_workdirs",
         hub_marker_callback_base_url=f"http://{config.host}:{config.port}",
         public_url=config.public_url,
@@ -496,7 +500,7 @@ def build_hosted_app(
         OrphanedProviders.of(config, services).check()
         KeyCoverage.of(core.secrets, secret_keys).check()
         # Before the hub serves.
-        services.hub_node.release_orphaned_slots()
+        services.tenants.sole_tenant.hub_node.release_orphaned_slots()
         Superuser(email=config.auth.superuser, users=services.users, auth=services.auth).ensure()
         _announce_started(expected, services)
         _announce_rejected_tracing(tracing, services)

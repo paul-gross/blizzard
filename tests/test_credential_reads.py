@@ -110,7 +110,9 @@ def test_a_sign_in_reads_the_runner_in_its_own_tenant_and_none_in_a_closed_one(t
     signing_in = runner_signing_in(services, "rn_b")
     assert signing_in is not None and (signing_in.runner_id, signing_in.name) == ("rn_b", "bravo")
 
+    # Closing a tenant evicts its cached stores; a cached tenant is answered from memory.
     _close(engine, _SECOND)
+    core.tenants.evict(_SECOND)
     assert runner_signing_in(services, "rn_b") is None
     assert runner_signing_in(services, "rn_a") is not None
 

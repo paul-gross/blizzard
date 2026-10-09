@@ -30,6 +30,7 @@ from tests.support import (
     report_lease,
     seed_chunk,
     seed_graph,
+    serve_default_tenant,
 )
 from tests.test_ingest_and_queue import _BUILD_REVIEW_DELIVER_YAML, _pass
 
@@ -110,8 +111,8 @@ def test_list_chunks_calls_bulk_reads_and_never_load_facts_or_route_of(tmp_path:
     counting_facts = _CountingFactsStore(hub_store_connections(hub.engine), hub.clock)
     counting_route = _CountingRouteStore(hub_store_connections(hub.engine), hub.clock)
     assert hub.app is not None
-    hub.app.state.services = replace(
-        hub.services, chunks=replace(hub.services.chunks, facts=counting_facts, route=counting_route)
+    serve_default_tenant(
+        hub, replace(hub.services, chunks=replace(hub.services.chunks, facts=counting_facts, route=counting_route))
     )
 
     resp = hub.client.get("/api/chunks")
@@ -152,8 +153,9 @@ def test_list_chunks_renders_work_refs_with_no_fact_load_or_live_holders_call(tm
     counting_facts = _CountingFactsStore(hub_store_connections(hub.engine), hub.clock)
     counting_work_refs = _CountingWorkRefsStore(hub_store_connections(hub.engine), hub.clock, facts=counting_facts)
     assert hub.app is not None
-    hub.app.state.services = replace(
-        hub.services, chunks=replace(hub.services.chunks, facts=counting_facts, work_refs=counting_work_refs)
+    serve_default_tenant(
+        hub,
+        replace(hub.services, chunks=replace(hub.services.chunks, facts=counting_facts, work_refs=counting_work_refs)),
     )
 
     resp = hub.client.get("/api/chunks")
@@ -187,7 +189,7 @@ def test_list_chunks_never_calls_graphs_get(tmp_path: Path) -> None:
 
     counting_graphs = _CountingGraphStore(hub_store_connections(hub.engine))
     assert hub.app is not None
-    hub.app.state.services = replace(hub.services, graphs=counting_graphs)
+    serve_default_tenant(hub, replace(hub.services, graphs=counting_graphs))
 
     resp = hub.client.get("/api/chunks")
 

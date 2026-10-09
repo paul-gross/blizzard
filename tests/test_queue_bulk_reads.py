@@ -21,7 +21,14 @@ from blizzard.hub.domain.operations.queue import QueueService
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
 from blizzard.hub.store.scoped import ScopedConnections
-from tests.support import build_hub, capture_statements, count_queries, hub_store_connections, ingest
+from tests.support import (
+    build_hub,
+    capture_statements,
+    count_queries,
+    hub_store_connections,
+    ingest,
+    serve_default_tenant,
+)
 
 pytestmark = pytest.mark.component
 
@@ -129,11 +136,14 @@ def _wire_counting_facts(hub) -> _CountingFactsStore:  # type: ignore[no-untyped
     record = ChunkRecordStore(hub_store_connections(hub.engine), hub.clock)
     assert hub.app is not None
     # The peek reads through the queue service's own store handle, not `services.chunks`.
-    hub.app.state.services = replace(
-        hub.services,
-        chunks=replace(hub.services.chunks, facts=counting, record=record),
-        queue=QueueService(
-            queue=cast(IWriteChunkQueueRepository, hub.services.chunks.queue), record=record, clock=hub.clock
+    serve_default_tenant(
+        hub,
+        replace(
+            hub.services,
+            chunks=replace(hub.services.chunks, facts=counting, record=record),
+            queue=QueueService(
+                queue=cast(IWriteChunkQueueRepository, hub.services.chunks.queue), record=record, clock=hub.clock
+            ),
         ),
     )
     return counting

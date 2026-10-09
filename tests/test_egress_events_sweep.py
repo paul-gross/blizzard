@@ -307,7 +307,7 @@ def test_a_hashing_policy_without_its_key_keeps_exporting_everything_but_events(
 ) -> None:
     world = _Events(tmp_path, file_paths=file_paths)
     hub = world.hub
-    hub_app._announce_rejected_egress(_config(tmp_path, file_paths=file_paths), hub.services)
+    hub_app._announce_rejected_egress(_config(tmp_path, file_paths=file_paths), hub.hub_services)
     world.segment("sg_a")
     world.derive("sg_a", 1)
     world.sweep()
@@ -342,7 +342,7 @@ def test_a_hashing_policy_without_its_key_keeps_exporting_everything_but_events(
 
 def test_a_hashing_policy_with_its_key_exports_events_and_records_no_rejection(tmp_path: Path) -> None:
     world = _Events(tmp_path, file_paths="hashed", path_key=b"k" * 32)
-    hub_app._announce_rejected_egress(_config(tmp_path, file_paths="hashed"), world.hub.services)
+    hub_app._announce_rejected_egress(_config(tmp_path, file_paths="hashed"), world.hub.hub_services)
     world.segment("sg_a")
     world.derive("sg_a", 1)
     world.sweep()

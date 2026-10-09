@@ -56,7 +56,7 @@ class _World:
         self.builds = 0
 
     def second_process(self) -> LiveConfig:
-        return build_live_config(self.core, secret_keys=self.keys)
+        return build_live_config(self.core.sole_tenant, secret_keys=self.keys)
 
     def client(self, live: LiveConfig | None = None) -> _Client | None:
         live = live or self.live

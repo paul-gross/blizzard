@@ -143,8 +143,9 @@ from blizzard.hub.egress.factory import EgressUnavailable, build_egress_writer
 from blizzard.hub.egress.space import free_bytes
 from blizzard.hub.egress.writer import EgressWriterSettings, IEgressWriter, mint_process_token
 from blizzard.hub.events.broker import EventBroker
+from blizzard.hub.events.brokers import TenantBrokers
 from blizzard.hub.forge.internal.commit_resolver import GitHubCommitResolver
-from blizzard.hub.forge.repository_commits import RepositoryCommitResolver
+from blizzard.hub.forge.repository_commits import ICommitForge, RepositoryCommitResolver
 from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.live_config import ConfigObjectCache
 from blizzard.hub.secrets import StoreSecretReader, secret_cipher
@@ -186,13 +187,14 @@ from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecor
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.system_artifacts import PACKAGED as SYSTEM_ARTIFACTS_PACKAGED
 from blizzard.hub.system_artifacts import PackagedSystemArtifacts
-from blizzard.hub.tenancy import StoreScope, TenantClosed, TenantId
+from blizzard.hub.tenancy import StoreScope, TenantId
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
 
 
 @dataclass(frozen=True)
-class HubServices:
-    """The wired fleet collaborators, stashed on ``app.state.services``."""
+class TenantServices:
+    """One tenant's wired services — the bag a tenant's requests are served by, built from its
+    :class:`TenantStores` by :func:`build_tenant_services` and cached beside them."""
 
     #: The controller-facing chunk-seam bundle — every field typed to its
     #: concept's read Protocol only (``bzh:controller-read-only``), so a route handler
@@ -232,21 +234,10 @@ class HubServices:
     enrollment: RunnerEnrollmentService
     #: The fleet registry's read Protocol — the same store instance as ``fleet``'s writes.
     registry: IReadRunnerRegistry
-    #: The hub-scoped reads a runner's credential resolves its tenant through — held only by the
-    #: runner-auth edge (``bzh:hub-scoped-reads-confined``).
-    hub_scoped_reads: HubScopedReads
-    #: The read registry of the tenant a runner credential resolved to; raises ``UnknownTenant`` or
-    #: ``TenantClosed`` for a tenant there are no stores to open for.
-    tenant_registry: Callable[[TenantId], IReadRunnerRegistry]
     hub_node: HubNodeExecutor
-    #: The mid-run marker-write capability authority — one shared instance,
-    #: so every reader agrees on the one live token per (chunk, node, epoch).
-    marker_authority: MarkerAuthority
     events: EventBroker
     #: The one event-log recorder every hub-side authoring site shares.
     event_log: EventLogService
-    #: The hub's own occurrences — its exports', its startup — recorded in ``hub_event_log``, published to no stream.
-    hub_event_log: HubEventLogService
     clock: IClock
     default_graph_doc: GraphDoc
     default_graph_yaml: str
@@ -256,52 +247,11 @@ class HubServices:
     work_sources: IWorkSourceRegistry
     #: Renders a work ref's source-native token.
     work_ref_label: WorkRefLabel
-    #: The close-intent drain sweep — built here because it needs the
-    #: write-capable chunk repository, which only the composition root holds.
-    close_drain: CloseIntentDrainer
-    #: The fleet-trace export sweep — ``None`` when no trace exporter is wired.
-    trace_export: TraceExportSweep | None
-    #: The operator's read of fleet tracing — always composed, so status answers with tracing off.
-    trace_status: TraceStatusReader
-    #: Tells a past window again — always composed; holds the sweep's own exporter, or ``None`` with tracing off.
-    trace_replay: TraceReplay
-    #: The fact-egress export sweep — ``None`` unless ``[egress] directory`` is set and its writer could be built.
-    egress_export: EgressSweep | None
-    #: Why the configured export could not start (Parquet without its extra); ``None`` when it could, or none is set.
-    egress_unavailable: EgressUnavailable | None
-    #: The unset ``path_key_env`` variable that dropped the ``events`` dataset from a running export; else ``None``.
-    egress_missing_path_key: str | None
-    #: The operator's read of the fact export — always composed, so status answers with the export off.
-    egress_status: EgressStatusReader
-    #: Moves a dataset's cursor — always composed; it refuses while the export is off.
-    egress_reset: EgressReset
-    #: Writes a past window — always composed; it refuses while the export is off.
-    egress_backfill: EgressBackfill
-    #: The session read repository — reads only (``bzh:controller-read-only``).
-    sessions: IReadSessionRepository
-    #: The identity-link read repository — a plain read, no domain service.
-    identities: IReadIdentityRepository
     #: The user read repository — every write still goes through ``auth``.
     users: IReadUserRepository
-    #: The identity domain service — sessions, the first-login linking rule, ``state``.
-    auth: AuthService
-    #: The configured OAuth provider registry — empty when none is configured.
-    oauth_providers: IOAuthProviderRegistry
-    #: Per-IP token-bucket throttle shared by the authorize/callback routes.
-    auth_throttle: IpThrottle
-    #: The non-chunk auth/security fact log — ``login_failed``/``sso_refused``.
-    auth_facts: AuthFactsService
-    #: The hub's IdP signing-key lifecycle — ``None`` when no keypair exists.
-    signing: SigningKeyService | None
-    #: The reverse-proxy trust set — empty by default, so forwarded headers
-    #: are ignored from every peer.
-    trusted_proxies: TrustedProxies
     #: The transcript-segment read Protocol — the operator-plane index and
     #: content routes' own seam (``bzh:controller-read-only``).
     transcripts: IReadTranscriptSegments
-    #: The transcript-event derivation reconciler — built here because it
-    #: needs the write-capable event store, which only the composition root holds.
-    event_derivation: EventDerivationReconciler
     #: The same reconciler's own service — the re-derive route's own
     #: scoped, bounded seam, exposed separately from a full sweep pass.
     event_derivation_service: EventDerivationService
@@ -384,13 +334,74 @@ class HubServices:
     garden_sweeps: GardenSweepsService
     #: A routine's runs are readable — the run list and one run's own delta.
     garden_run: GardenRunService
-    #: The forge-status annotation reconciler.
+
+
+@dataclass(frozen=True)
+class HubServices:
+    """The hub-level services — identity, sessions, signing, exports and sweeps — shared by every
+    tenant and stashed on ``app.state.services``; a tenant's own services are opened through
+    :attr:`tenants`."""
+
+    #: Opens a tenant's services — the only way from the hub-level services to a tenant's.
+    tenants: TenantServicesOpener
+    #: The hub-scoped reads a runner's credential resolves its tenant through — held only by the
+    #: runner-auth edge (``bzh:hub-scoped-reads-confined``).
+    hub_scoped_reads: HubScopedReads
+    #: The read registry of the tenant a runner credential resolved to; raises ``UnknownTenant`` or
+    #: ``TenantClosed`` for a tenant there are no stores to open for.
+    tenant_registry: Callable[[TenantId], IReadRunnerRegistry]
+    #: The mid-run marker-write capability authority — one shared instance,
+    #: so every reader agrees on the one live token per (chunk, node, epoch).
+    marker_authority: MarkerAuthority
+    #: The hub's own occurrences — its exports', its startup — recorded in ``hub_event_log``, published to no stream.
+    hub_event_log: HubEventLogService
+    clock: IClock
+    #: The published ``ArtifactScope.SYSTEM`` set — the loader itself, so a read through it
+    #: stays fresh (``bzh:system-scope-reads-live``); injected rather than a module singleton.
+    system_artifacts: PackagedSystemArtifacts
+    #: The close-intent drain sweep, over the sole tenant's services.
+    close_drain: CloseIntentDrainer
+    #: The fleet-trace export sweep — ``None`` when no trace exporter is wired.
+    trace_export: TraceExportSweep | None
+    #: The operator's read of fleet tracing — always composed, so status answers with tracing off.
+    trace_status: TraceStatusReader
+    #: Tells a past window again — always composed; holds the sweep's own exporter, or ``None`` with tracing off.
+    trace_replay: TraceReplay
+    #: The fact-egress export sweep — ``None`` unless ``[egress] directory`` is set and its writer could be built.
+    egress_export: EgressSweep | None
+    #: Why the configured export could not start (Parquet without its extra); ``None`` when it could, or none is set.
+    egress_unavailable: EgressUnavailable | None
+    #: The unset ``path_key_env`` variable that dropped the ``events`` dataset from a running export; else ``None``.
+    egress_missing_path_key: str | None
+    #: The operator's read of the fact export — always composed, so status answers with the export off.
+    egress_status: EgressStatusReader
+    #: Moves a dataset's cursor — always composed; it refuses while the export is off.
+    egress_reset: EgressReset
+    #: Writes a past window — always composed; it refuses while the export is off.
+    egress_backfill: EgressBackfill
+    #: The session read repository — reads only (``bzh:controller-read-only``).
+    sessions: IReadSessionRepository
+    #: The identity-link read repository — a plain read, no domain service.
+    identities: IReadIdentityRepository
+    #: The user read repository — every write still goes through ``auth``.
+    users: IReadUserRepository
+    #: The identity domain service — sessions, the first-login linking rule, ``state``.
+    auth: AuthService
+    #: The configured OAuth provider registry — empty when none is configured.
+    oauth_providers: IOAuthProviderRegistry
+    #: Per-IP token-bucket throttle shared by the authorize/callback routes.
+    auth_throttle: IpThrottle
+    #: The non-chunk auth/security fact log — ``login_failed``/``sso_refused``.
+    auth_facts: AuthFactsService
+    #: The hub's IdP signing-key lifecycle — ``None`` when no keypair exists.
+    signing: SigningKeyService | None
+    #: The reverse-proxy trust set — empty by default, so forwarded headers
+    #: are ignored from every peer.
+    trusted_proxies: TrustedProxies
+    #: The transcript-event derivation sweep, over the sole tenant's services.
+    event_derivation: EventDerivationReconciler
+    #: The forge-status annotation sweep, over the sole tenant's services.
     annotation: AnnotationReconciler | None
-
-
-#: The services one tenant's requests are served by. The hub wires a single bag, so a tenant's
-#: services and the hub-level services are the same instance.
-type TenantServices = HubServices
 
 
 @dataclass(frozen=True)
@@ -484,17 +495,18 @@ def build_tenant_stores(connections: ScopedConnections, *, clock: IClock) -> Ten
 
 
 class TenantCache:
-    """One :class:`TenantStores` per open tenant, built on its first open and kept until
+    """One entry per open tenant — its :class:`TenantStores` and, once the hub serves tenants
+    (:meth:`serve`), the services built over them — built on its first open and kept until
     :meth:`evict` drops it.
 
-    Each open first confirms the tenant exists and is open (``confirm_open`` raises
-    :class:`UnknownTenant` or :class:`TenantClosed`), so a closed tenant is refused whether
-    or not its stores are cached, and a cached entry found closed is dropped. Entries are built
-    under one lock, so two racing opens of a tenant never yield two sets of its stores — nor two of
-    its cycle-check locks — and the tenant is confirmed again under it before its entry is cached,
-    so a tenant closed while an open was under way is never cached. ``resident`` is the set a
-    single-tenant hub serves before it knows its tenant's id; the first open of that tenant adopts
-    it rather than building a second set."""
+    A hit answers from memory and issues no statement: closing a tenant evicts it, and its write
+    paths still refuse a closed tenant. A miss confirms the tenant exists and is open
+    (``confirm_open`` raises :class:`UnknownTenant` or :class:`TenantClosed`) under the cache's one
+    lock before building, so two racing opens of a tenant never yield two entries — nor two of its
+    cycle-check locks — and a deletion's evict, which waits on that lock, drops an entry its close
+    raced. ``resident`` is the set a single-tenant hub serves before it knows its tenant's id; the
+    first open of that tenant adopts it, with the services built for it, rather than building a
+    second set."""
 
     def __init__(
         self,
@@ -506,31 +518,57 @@ class TenantCache:
         self._build = build
         self._confirm_open = confirm_open
         self._resident = resident
-        self._entries: dict[TenantId, TenantStores] = {}
+        self._resident_stores = resident
+        self._serving: TenantServing | None = None
+        self._entries: dict[TenantId, _TenantEntry] = {}
         self._lock = threading.Lock()
+
+    def serve(self, serving: TenantServing) -> None:
+        """Build each open tenant's services through ``serving`` from now on."""
+        with self._lock:
+            self._serving = serving
 
     def open(self, scope: StoreScope) -> TenantStores:
         """The stores of ``scope``'s tenant. Raises :class:`UnknownTenant` or
         :class:`TenantClosed` for a tenant there are no stores to open for."""
-        try:
-            self._confirm_open(scope.tenant)
-        except TenantClosed:
-            self.evict(scope.tenant)
-            raise
+        return self._entry(scope).stores
+
+    def open_services(self, scope: StoreScope) -> TenantServices:
+        """The services of ``scope``'s tenant, refused as :meth:`open` refuses."""
+        served = self._entry(scope).served
+        if served is None:
+            raise RuntimeError("the hub serves no tenant's services: none were wired")
+        return served.services
+
+    def evict(self, tenant: TenantId) -> None:
+        """Drop ``tenant``'s entry, if cached — closing the objects its configured records built and
+        dropping its event broker; the tenant's deletion calls this when it closes."""
+        with self._lock:
+            entry = self._entries.pop(tenant, None)
+            serving = self._serving
+        if serving is not None:
+            serving.brokers.drop(tenant)
+        if entry is not None and entry.served is not None:
+            entry.served.live.objects.close()
+
+    def _entry(self, scope: StoreScope) -> _TenantEntry:
         with self._lock:
             entry = self._entries.get(scope.tenant)
             if entry is None:
                 # A deletion commits its close before it evicts, and evicting waits on this lock: a close
-                # the check above missed is seen here, or its evict runs after this insert and drops it.
+                # this check missed is followed by an evict that drops the entry cached here.
                 self._confirm_open(scope.tenant)
-                entry = self._adopt_resident(scope) or self._build(scope)
+                entry = _TenantEntry(self._adopt_resident(scope) or self._build(scope))
                 self._entries[scope.tenant] = entry
+            if entry.served is None and self._serving is not None:
+                entry.served = self._serve(scope.tenant, entry.stores, self._serving)
             return entry
 
-    def evict(self, tenant: TenantId) -> None:
-        """Drop ``tenant``'s stores, if cached; the tenant's deletion calls this when it closes."""
-        with self._lock:
-            self._entries.pop(tenant, None)
+    def _serve(self, tenant: TenantId, stores: TenantStores, serving: TenantServing) -> ServedTenant:
+        if stores is self._resident_stores:
+            serving.brokers.adopt(tenant, serving.resident.services.events)
+            return serving.resident
+        return serving.build(stores, serving.brokers.for_tenant(tenant))
 
     def _adopt_resident(self, scope: StoreScope) -> TenantStores | None:
         resident = self._resident
@@ -546,6 +584,53 @@ class TenantCache:
             return None
         self._resident = None
         return resident
+
+
+@dataclass
+class _TenantEntry:
+    stores: TenantStores
+    served: ServedTenant | None = None
+
+
+@dataclass(frozen=True)
+class TenantSweeps:
+    """A tenant's sweep reconcilers, built with its services."""
+
+    close_drain: CloseIntentDrainer
+    event_derivation: EventDerivationReconciler
+    annotation: AnnotationReconciler
+
+
+@dataclass(frozen=True)
+class ServedTenant:
+    """What serving one tenant builds over its :class:`TenantStores`: its services, its sweeps, and
+    the live configuration its work sources build through."""
+
+    services: TenantServices
+    sweeps: TenantSweeps
+    live: LiveConfig
+
+
+@dataclass(frozen=True)
+class TenantServing:
+    """How a :class:`TenantCache` serves its tenants: ``build`` wires a tenant's services over its
+    stores and its broker from ``brokers``; ``resident`` is the sole tenant's, wired before its id is
+    known and adopted with the resident stores."""
+
+    build: Callable[[TenantStores, EventBroker], ServedTenant]
+    brokers: TenantBrokers
+    resident: ServedTenant
+
+
+@dataclass(frozen=True)
+class TenantServicesOpener:
+    """Opens a tenant's services — the hub-level services' only way to a tenant's."""
+
+    #: ``scope``'s tenant's services, built once per tenant; raises ``UnknownTenant`` or
+    #: ``TenantClosed`` for a tenant there are none to open for.
+    open_services: Callable[[StoreScope], TenantServices]
+    #: The services of the store's only tenant — the ones a single-tenant hub serves.
+    sole_tenant: TenantServices
 
 
 @dataclass(frozen=True)
@@ -570,6 +655,10 @@ class HubCore:
         """``scope``'s tenant's stores, built once per tenant. Raises :class:`UnknownTenant` or
         :class:`TenantClosed` for a tenant there are no stores to open for."""
         return self.tenants.open(scope)
+
+    def open_services(self, scope: StoreScope) -> TenantServices:
+        """``scope``'s tenant's services, refused as :meth:`open` refuses."""
+        return self.tenants.open_services(scope)
 
     # The sole tenant's members the hub process reads at boot and wires its work-source registry from.
 
@@ -608,24 +697,23 @@ class HubCore:
 
 @dataclass(frozen=True)
 class LiveConfig:
-    """The process's one built-object cache and the one secret reader its builders reveal
+    """One tenant's built-object cache and the one secret reader its builders reveal
     through — the reader reaches nothing else (``bzh:secret-write-only``)."""
 
     objects: ConfigObjectCache
     secrets: ISecretReader
 
 
-def build_live_config(core: HubCore, *, secret_keys: IHubKeyProvider) -> LiveConfig:
-    stores = core.sole_tenant
+def build_live_config(stores: TenantStores, *, secret_keys: IHubKeyProvider) -> LiveConfig:
+    """The :class:`LiveConfig` of the tenant ``stores`` serve."""
     return LiveConfig(
         objects=ConfigObjectCache(ConfigRevisionsStore(stores.connections)),
         secrets=StoreSecretReader(catalog=stores.secrets, sealed=stores.secrets, cipher=secret_cipher(secret_keys)),
     )
 
 
-def build_config_authoring(core: HubCore, *, secret_keys: IHubKeyProvider) -> ConfigAuthoring:
-    """The one configured-record writer, sealing under ``secret_keys``."""
-    stores = core.sole_tenant
+def build_config_authoring(stores: TenantStores, *, secret_keys: IHubKeyProvider) -> ConfigAuthoring:
+    """The one configured-record writer of the tenant ``stores`` serve, sealing under ``secret_keys``."""
     return ConfigAuthoring(
         work_sources=stores.work_source_records,
         repositories=stores.repository_records,
@@ -701,42 +789,36 @@ def _egress_paths(config: EgressConfig, key: bytes | None) -> tuple[EgressConfig
         return kept, None, config.path_key_env
 
 
-def build_services(
-    core: HubCore,
-    *,
-    events: EventBroker,
-    work_sources: IWorkSourceRegistry,
-    secrets: ISecretReader,
-    hub_command_runner: IHubCommandRunner | None = None,
-    hub_workdir: IHubWorkdir | None = None,
-    hub_workdir_root: Path | None = None,
-    hub_marker_callback_base_url: str = "",
-    public_url: str | None = None,
-    forge_http_client: httpx.Client | None = None,
-    oauth_providers: Sequence[OAuthProviderConfig] = (),
-    oauth_http_client: httpx.Client | None = None,
-    oauth_registry: IOAuthProviderRegistry | None = None,
-    signing_keys_dir: Path | None = None,
-    secret_keys: IHubKeyProvider,
-    trusted_proxies: TrustedProxies | None = None,
-    transcript_caps: TranscriptCaps | None = None,
-    system_artifacts: PackagedSystemArtifacts | None = None,
-    trace_exporter: ITraceExporter | None = None,
-    tracing: TracingConfig | None = None,
-    tracing_settings: TracingSettings | None = None,
-    platform_tracer: IPlatformTracer | None = None,
-    egress: EgressConfig | None = None,
-    egress_path_key: bytes | None = None,
-    annotation_interval_seconds: int = 120,
-) -> HubServices:
-    """Construct and wire every fleet service over the shared :class:`HubCore` — each tenant-owned
-    store from the one tenant's :class:`TenantStores` the single-tenant hub serves.
-    ``hub_command_runner``/``hub_workdir`` are the hub command node's mechanism seams,
-    left ``None`` for real adapters; an explicit ``oauth_registry`` wins over
-    ``oauth_providers``."""
-    stores = core.sole_tenant
-    clock = core.clock
-    store_connections = core.store_connections
+#: Builds a tenant's work-source registry over its stores and its live configuration.
+type WorkSourceRegistryFactory = Callable[[TenantStores, LiveConfig], IWorkSourceRegistry]
+
+
+@dataclass(frozen=True)
+class TenantServiceParts:
+    """The process-scoped inputs every tenant's services are wired from — one set, shared by every
+    tenant, so no adapter or client is built twice."""
+
+    clock: IClock
+    hub_scoped_reads: HubScopedReads
+    users: IReadUserRepository
+    secret_keys: IHubKeyProvider
+    work_sources: WorkSourceRegistryFactory
+    marker_authority: MarkerAuthority
+    system_artifacts: PackagedSystemArtifacts
+    commit_forge: ICommitForge
+    hub_command_runner: IHubCommandRunner
+    hub_workdir: IHubWorkdir
+    hub_marker_callback_base_url: str
+    public_url: str | None
+    transcript_caps: TranscriptCaps | None
+    platform_tracer: IPlatformTracer | None
+    annotation_interval_seconds: int
+
+
+def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, events: EventBroker) -> ServedTenant:
+    """Construct and wire one tenant's services, sweeps and live configuration over its
+    :class:`TenantStores`, publishing to ``events`` — the tenant's broker."""
+    clock = parts.clock
     tenant_connections = stores.connections
     chunk_stores = stores.chunk_stores
     work_item_store = stores.work_item_store
@@ -761,119 +843,21 @@ def build_services(
     chunk_hub_exec = chunk_stores.hub_exec
     chunk_dependencies = chunk_stores.dependencies
     chunk_exclusive = chunk_stores.exclusive
+    live = build_live_config(stores, secret_keys=parts.secret_keys)
+    work_sources = parts.work_sources(stores, live)
+    transcript_caps = parts.transcript_caps
     graph_store = GraphStore(tenant_connections)
     transcript_store = TranscriptSegmentStore(tenant_connections)
     event_store = TranscriptEventStore(tenant_connections)
     event_derivation_service = EventDerivationService(
         events=event_store, facts=chunk_facts, record=chunk_record, clock=clock
     )
-    event_derivation = EventDerivationReconciler(
-        corpus=core.hub_scoped_reads.corpus,
-        tenant=lambda: tenant_connections.scope.tenant,
-        service=event_derivation_service,
-        events=event_store,
-        clock=clock,
-    )
     analytics_event_queries = AnalyticsEventQueryStore(tenant_connections)
     operational_analytics = AnalyticsOperationalStore(tenant_connections)
-    marker_authority = MarkerAuthority()
     # Recording an event is what publishes it (``bzh:operational-event-log``) — one
     # service, shared by every event-authoring call site below, over the same store and
     # broker instance every other collaborator holds.
     event_log = EventLogService(events=chunk_events, publisher=events)
-    hub_events = core.hub_events
-    hub_event_log = core.hub_event_log
-    trace_store = TraceStore(
-        store_connections,
-        hub_events=hub_events,
-        tenant=lambda: tenant_connections.scope.tenant,
-        corpus=core.hub_scoped_reads.corpus,
-        graphs=graph_store,
-        names=registry_store,
-        label=_work_ref_label(work_sources),
-    )
-    trace_config = tracing or TracingConfig()
-    trace_export = (
-        TraceExportSweep(
-            steps=trace_store,
-            exporter=trace_exporter,
-            events=hub_event_log,
-            clock=clock,
-            config=trace_config,
-        )
-        if trace_exporter is not None
-        else None
-    )
-    trace_replay = TraceReplay(steps=trace_store, exporter=trace_exporter, clock=clock, config=trace_config)
-    trace_status = TraceStatusReader(
-        settings=tracing_settings or TracingSettings("disabled"),
-        status=trace_store,
-        steps=trace_store,
-        clock=clock,
-        replay_max_window=trace_config.replay_max_window,
-    )
-    egress_config, egress_paths, egress_missing_key = _egress_paths(egress or EgressConfig(), egress_path_key)
-    egress_writer_settings = EgressWriterSettings(egress_config.max_rows_per_file, egress_config.min_free_bytes)
-    egress_writer = (
-        build_egress_writer(
-            egress_config.format,
-            egress_config.directory,
-            egress_writer_settings,
-            mint_process_token(),
-        )
-        if egress_config.directory is not None
-        else None
-    )
-    egress_store = EgressStore(store_connections, hub_events=hub_events, usage=core.hub_scoped_reads.corpus)
-    egress_event_reads = core.hub_scoped_reads.corpus
-    egress_pass_lock = threading.Lock()
-    egress_unavailable = egress_writer if isinstance(egress_writer, EgressUnavailable) else None
-    # The missing key matters only to an export that runs; with it off, nothing would have been written anyway.
-    egress_missing_path_key = egress_missing_key if egress_writer is not None and egress_unavailable is None else None
-    egress_status = EgressStatusReader(
-        config=egress_config,
-        rejected=egress_unavailable is not None,
-        missing_path_key=egress_missing_path_key,
-        egress=egress_store,
-        event_reads=egress_event_reads,
-        steps=trace_store,
-        clock=clock,
-        free_space=lambda: free_bytes(egress_config.directory) if egress_config.directory is not None else None,
-    )
-    egress_export = (
-        EgressSweep(
-            steps=trace_store,
-            egress=egress_store,
-            event_reads=egress_event_reads,
-            paths=egress_paths,
-            writer=egress_writer,
-            events=hub_event_log,
-            clock=clock,
-            config=egress_config,
-            pass_lock=egress_pass_lock,
-        )
-        if egress_writer is not None and not isinstance(egress_writer, EgressUnavailable)
-        else None
-    )
-    egress_reset = EgressReset(
-        egress=egress_store,
-        events=hub_event_log,
-        clock=clock,
-        config=egress_config,
-        active=egress_export is not None,
-        missing_path_key=egress_missing_path_key,
-        pass_lock=egress_pass_lock,
-    )
-    egress_backfill = EgressBackfill(
-        steps=trace_store,
-        egress=egress_store,
-        event_reads=egress_event_reads,
-        paths=egress_paths,
-        clock=clock,
-        config=egress_config,
-        writers=_backfill_writers(egress_config, egress_writer_settings) if egress_export is not None else None,
-        missing_path_key=egress_missing_path_key,
-    )
     hub_node = HubNodeExecutor(
         facts=chunk_facts,
         artifacts=chunk_artifacts,
@@ -881,16 +865,15 @@ def build_services(
         hub_exec=chunk_hub_exec,
         escalations=chunk_escalations,
         events=event_log,
-        runner=hub_command_runner or SubprocessHubCommandRunner(),
-        workdir=hub_workdir
-        or FilesystemHubWorkdir(hub_workdir_root or Path(tempfile.gettempdir()) / "blizzard-hub-workdirs"),
+        runner=parts.hub_command_runner,
+        workdir=parts.hub_workdir,
         clock=clock,
-        marker_authority=marker_authority,
+        marker_authority=parts.marker_authority,
         repositories=stores.repository_records,
-        secrets=secrets,
-        marker_callback_base_url=hub_marker_callback_base_url,
-        tracer=platform_tracer,
-        public_url=public_url,
+        secrets=live.secrets,
+        marker_callback_base_url=parts.hub_marker_callback_base_url,
+        tracer=parts.platform_tracer,
+        public_url=parts.public_url,
         work_sources=work_sources,
     )
     # One fleet service, shared: the API's pause routes and the fact ingest both land
@@ -908,33 +891,6 @@ def build_services(
         clock=clock,
     )
     enrollment = RunnerEnrollmentService(registry=registry_store, clock=clock)
-    # The identity spine — one error factory shared by the SQLAlchemy
-    # adapters, so the same instances back both the Write Protocols and the reads.
-    user_store = core.users
-    auth_errors = core.auth_errors
-    identity_store = IdentityRepository(store_connections, auth_errors)
-    session_store = SessionRepository(store_connections, auth_errors)
-    auth_state_store: IWriteAuthStateRepository = AuthStateRepository(store_connections, auth_errors)
-    superuser_bootstrap_store = SuperuserBootstrapRepository(store_connections)
-    # Built ahead of `auth` below, which records role-change facts through
-    # this service rather than a raw write repository.
-    auth_facts_service = AuthFactsService(facts=AuthFactsRepository(store_connections), clock=clock)
-    auth = AuthService(
-        users=user_store,
-        identities=identity_store,
-        sessions=session_store,
-        auth_state=auth_state_store,
-        clock=clock,
-        superuser_bootstrap=superuser_bootstrap_store,
-        auth_facts=auth_facts_service,
-    )
-    # The provider-login seam — one registry entry per configured
-    # ``[[auth.oauth.provider]]``, empty when no providers are configured.
-    oauth_registry = oauth_registry or ProviderEntry.registry(oauth_providers, http_client=oauth_http_client)
-    # The hub's IdP signing-key lifecycle — constructed only when a keys
-    # directory is passed; `None` otherwise.
-    signing = SigningKeyService(signing_keys_dir) if signing_keys_dir is not None else None
-    auth_throttle = IpThrottle(clock=clock)
     graph_mint = GraphMintService(graphs=graph_store, clock=clock)
     scope_store = ScopeStore(tenant_connections)
     scope_registry = ScopeRegistry(scopes=scope_store, clock=clock)
@@ -953,11 +909,11 @@ def build_services(
     # instance, so `HubServices.commit_resolver` carries no dependency on the concrete class.
     commit_resolver = RepositoryCommitResolver(
         repositories=stores.repository_records,
-        secrets=secrets,
-        forge=GitHubCommitResolver(forge_http_client or httpx.Client(timeout=10.0)),
+        secrets=live.secrets,
+        forge=parts.commit_forge,
     ).resolve
     work_ref_label = _work_ref_label(work_sources)
-    return HubServices(
+    services = TenantServices(
         work_ref_label=work_ref_label,
         chunks=ChunkReadStores(
             facts=chunk_facts,
@@ -1055,48 +1011,16 @@ def build_services(
         fleet=fleet,
         enrollment=enrollment,
         registry=registry_store,
-        hub_scoped_reads=core.hub_scoped_reads,
-        tenant_registry=lambda tenant: core.open(StoreScope(tenant)).registry,
         hub_node=hub_node,
-        marker_authority=marker_authority,
         events=events,
         event_log=event_log,
-        hub_event_log=hub_event_log,
         clock=clock,
         default_graph_doc=PACKAGED.default.doc,
         default_graph_yaml=PACKAGED.default.text,
-        system_artifacts=system_artifacts or SYSTEM_ARTIFACTS_PACKAGED,
+        system_artifacts=parts.system_artifacts,
         work_sources=work_sources,
-        close_drain=CloseIntentDrainer(
-            corpus=core.hub_scoped_reads.corpus,
-            tenant=lambda: tenant_connections.scope.tenant,
-            delivery=chunk_delivery,
-            artifacts=chunk_artifacts,
-            events=event_log,
-            work_sources=work_sources,
-            clock=clock,
-            public_url=public_url,
-        ),
-        trace_export=trace_export,
-        trace_status=trace_status,
-        trace_replay=trace_replay,
-        egress_export=egress_export,
-        egress_unavailable=egress_unavailable,
-        egress_missing_path_key=egress_missing_path_key,
-        egress_status=egress_status,
-        egress_reset=egress_reset,
-        egress_backfill=egress_backfill,
-        sessions=session_store,
-        identities=identity_store,
-        users=user_store,
-        auth=auth,
-        oauth_providers=oauth_registry,
-        auth_throttle=auth_throttle,
-        auth_facts=auth_facts_service,
-        signing=signing,
-        trusted_proxies=trusted_proxies if trusted_proxies is not None else TrustedProxies(),
+        users=parts.users,
         transcripts=transcript_store,
-        event_derivation=event_derivation,
         event_derivation_service=event_derivation_service,
         analytics_events=analytics_event_queries,
         operational_analytics=operational_analytics,
@@ -1105,7 +1029,7 @@ def build_services(
         scope_lifecycle=ScopeLifecycle(scopes=scope_store, clock=clock),
         secret_catalog=stores.secrets,
         secret_references=stores.secret_referrers,
-        config_authoring=build_config_authoring(core, secret_keys=secret_keys),
+        config_authoring=build_config_authoring(stores, secret_keys=parts.secret_keys),
         work_source_records=stores.work_source_records,
         repository_records=stores.repository_records,
         config_changes=stores.config_changes,
@@ -1179,13 +1103,257 @@ def build_services(
             formats=garden_formats,
             clock=clock,
         ),
+    )
+    sweeps = TenantSweeps(
+        close_drain=CloseIntentDrainer(
+            corpus=parts.hub_scoped_reads.corpus,
+            tenant=lambda: tenant_connections.scope.tenant,
+            delivery=chunk_delivery,
+            artifacts=chunk_artifacts,
+            events=event_log,
+            work_sources=work_sources,
+            clock=clock,
+            public_url=parts.public_url,
+        ),
+        event_derivation=EventDerivationReconciler(
+            corpus=parts.hub_scoped_reads.corpus,
+            tenant=lambda: tenant_connections.scope.tenant,
+            service=event_derivation_service,
+            events=event_store,
+            clock=clock,
+        ),
         annotation=AnnotationReconciler(
-            corpus=core.hub_scoped_reads.corpus,
+            corpus=parts.hub_scoped_reads.corpus,
             facts=chunk_facts,
             tenant=lambda: tenant_connections.scope.tenant,
             work_sources=work_sources,
             memory=ForgeAnnotationStore(tenant_connections),
             clock=clock,
-            full_pass_floor=timedelta(seconds=FULL_PASS_FLOOR_INTERVALS * annotation_interval_seconds),
+            full_pass_floor=timedelta(seconds=FULL_PASS_FLOOR_INTERVALS * parts.annotation_interval_seconds),
         ),
+    )
+    return ServedTenant(services=services, sweeps=sweeps, live=live)
+
+
+def build_services(
+    core: HubCore,
+    *,
+    work_sources: WorkSourceRegistryFactory,
+    secret_keys: IHubKeyProvider,
+    brokers: TenantBrokers | None = None,
+    hub_command_runner: IHubCommandRunner | None = None,
+    hub_workdir: IHubWorkdir | None = None,
+    hub_workdir_root: Path | None = None,
+    hub_marker_callback_base_url: str = "",
+    public_url: str | None = None,
+    forge_http_client: httpx.Client | None = None,
+    oauth_providers: Sequence[OAuthProviderConfig] = (),
+    oauth_http_client: httpx.Client | None = None,
+    oauth_registry: IOAuthProviderRegistry | None = None,
+    signing_keys_dir: Path | None = None,
+    trusted_proxies: TrustedProxies | None = None,
+    transcript_caps: TranscriptCaps | None = None,
+    system_artifacts: PackagedSystemArtifacts | None = None,
+    trace_exporter: ITraceExporter | None = None,
+    tracing: TracingConfig | None = None,
+    tracing_settings: TracingSettings | None = None,
+    platform_tracer: IPlatformTracer | None = None,
+    egress: EgressConfig | None = None,
+    egress_path_key: bytes | None = None,
+    annotation_interval_seconds: int = 120,
+) -> HubServices:
+    """Construct and wire the hub-level services over the shared :class:`HubCore`, and have its
+    tenant cache serve each tenant's services (:func:`build_tenant_services`) — the sole tenant's
+    built here, which the sweeps and exports run over. ``work_sources`` builds a tenant's
+    work-source registry; ``hub_command_runner``/``hub_workdir`` are the hub command node's
+    mechanism seams, left ``None`` for real adapters; an explicit ``oauth_registry`` wins over
+    ``oauth_providers``."""
+    clock = core.clock
+    store_connections = core.store_connections
+    brokers = brokers or TenantBrokers()
+    marker_authority = MarkerAuthority()
+    system_artifacts = system_artifacts or SYSTEM_ARTIFACTS_PACKAGED
+    parts = TenantServiceParts(
+        clock=clock,
+        hub_scoped_reads=core.hub_scoped_reads,
+        users=core.users,
+        secret_keys=secret_keys,
+        work_sources=work_sources,
+        marker_authority=marker_authority,
+        system_artifacts=system_artifacts,
+        # Bound as `.resolve` per tenant (a plain `delivery.validation.CommitResolver` callable), so
+        # `TenantServices.commit_resolver` carries no dependency on the concrete class.
+        commit_forge=GitHubCommitResolver(forge_http_client or httpx.Client(timeout=10.0)),
+        hub_command_runner=hub_command_runner or SubprocessHubCommandRunner(),
+        hub_workdir=hub_workdir
+        or FilesystemHubWorkdir(hub_workdir_root or Path(tempfile.gettempdir()) / "blizzard-hub-workdirs"),
+        hub_marker_callback_base_url=hub_marker_callback_base_url,
+        public_url=public_url,
+        transcript_caps=transcript_caps,
+        platform_tracer=platform_tracer,
+        annotation_interval_seconds=annotation_interval_seconds,
+    )
+    # The sole tenant's id is read from the store on first use, so its services publish to a broker
+    # made here, adopted as that tenant's once the cache first opens it.
+    sole = build_tenant_services(core.sole_tenant, parts, events=EventBroker())
+    core.tenants.serve(
+        TenantServing(
+            build=lambda stores, events: build_tenant_services(stores, parts, events=events),
+            brokers=brokers,
+            resident=sole,
+        )
+    )
+    stores = core.sole_tenant
+    tenant_connections = stores.connections
+    registry_store = stores.registry
+    graph_store = sole.services.graphs
+    hub_events = core.hub_events
+    hub_event_log = core.hub_event_log
+    trace_store = TraceStore(
+        store_connections,
+        hub_events=hub_events,
+        tenant=lambda: tenant_connections.scope.tenant,
+        corpus=core.hub_scoped_reads.corpus,
+        graphs=graph_store,
+        names=registry_store,
+        label=sole.services.work_ref_label,
+    )
+    trace_config = tracing or TracingConfig()
+    trace_export = (
+        TraceExportSweep(
+            steps=trace_store,
+            exporter=trace_exporter,
+            events=hub_event_log,
+            clock=clock,
+            config=trace_config,
+        )
+        if trace_exporter is not None
+        else None
+    )
+    trace_replay = TraceReplay(steps=trace_store, exporter=trace_exporter, clock=clock, config=trace_config)
+    trace_status = TraceStatusReader(
+        settings=tracing_settings or TracingSettings("disabled"),
+        status=trace_store,
+        steps=trace_store,
+        clock=clock,
+        replay_max_window=trace_config.replay_max_window,
+    )
+    egress_config, egress_paths, egress_missing_key = _egress_paths(egress or EgressConfig(), egress_path_key)
+    egress_writer_settings = EgressWriterSettings(egress_config.max_rows_per_file, egress_config.min_free_bytes)
+    egress_writer = (
+        build_egress_writer(
+            egress_config.format,
+            egress_config.directory,
+            egress_writer_settings,
+            mint_process_token(),
+        )
+        if egress_config.directory is not None
+        else None
+    )
+    egress_store = EgressStore(store_connections, hub_events=hub_events, usage=core.hub_scoped_reads.corpus)
+    egress_event_reads = core.hub_scoped_reads.corpus
+    egress_pass_lock = threading.Lock()
+    egress_unavailable = egress_writer if isinstance(egress_writer, EgressUnavailable) else None
+    # The missing key matters only to an export that runs; with it off, nothing would have been written anyway.
+    egress_missing_path_key = egress_missing_key if egress_writer is not None and egress_unavailable is None else None
+    egress_status = EgressStatusReader(
+        config=egress_config,
+        rejected=egress_unavailable is not None,
+        missing_path_key=egress_missing_path_key,
+        egress=egress_store,
+        event_reads=egress_event_reads,
+        steps=trace_store,
+        clock=clock,
+        free_space=lambda: free_bytes(egress_config.directory) if egress_config.directory is not None else None,
+    )
+    egress_export = (
+        EgressSweep(
+            steps=trace_store,
+            egress=egress_store,
+            event_reads=egress_event_reads,
+            paths=egress_paths,
+            writer=egress_writer,
+            events=hub_event_log,
+            clock=clock,
+            config=egress_config,
+            pass_lock=egress_pass_lock,
+        )
+        if egress_writer is not None and not isinstance(egress_writer, EgressUnavailable)
+        else None
+    )
+    egress_reset = EgressReset(
+        egress=egress_store,
+        events=hub_event_log,
+        clock=clock,
+        config=egress_config,
+        active=egress_export is not None,
+        missing_path_key=egress_missing_path_key,
+        pass_lock=egress_pass_lock,
+    )
+    egress_backfill = EgressBackfill(
+        steps=trace_store,
+        egress=egress_store,
+        event_reads=egress_event_reads,
+        paths=egress_paths,
+        clock=clock,
+        config=egress_config,
+        writers=_backfill_writers(egress_config, egress_writer_settings) if egress_export is not None else None,
+        missing_path_key=egress_missing_path_key,
+    )
+    # The identity spine — one error factory shared by the SQLAlchemy
+    # adapters, so the same instances back both the Write Protocols and the reads.
+    user_store = core.users
+    auth_errors = core.auth_errors
+    identity_store = IdentityRepository(store_connections, auth_errors)
+    session_store = SessionRepository(store_connections, auth_errors)
+    auth_state_store: IWriteAuthStateRepository = AuthStateRepository(store_connections, auth_errors)
+    superuser_bootstrap_store = SuperuserBootstrapRepository(store_connections)
+    # Built ahead of `auth` below, which records role-change facts through
+    # this service rather than a raw write repository.
+    auth_facts_service = AuthFactsService(facts=AuthFactsRepository(store_connections), clock=clock)
+    auth = AuthService(
+        users=user_store,
+        identities=identity_store,
+        sessions=session_store,
+        auth_state=auth_state_store,
+        clock=clock,
+        superuser_bootstrap=superuser_bootstrap_store,
+        auth_facts=auth_facts_service,
+    )
+    # The provider-login seam — one registry entry per configured
+    # ``[[auth.oauth.provider]]``, empty when no providers are configured.
+    oauth_registry = oauth_registry or ProviderEntry.registry(oauth_providers, http_client=oauth_http_client)
+    # The hub's IdP signing-key lifecycle — constructed only when a keys
+    # directory is passed; `None` otherwise.
+    signing = SigningKeyService(signing_keys_dir) if signing_keys_dir is not None else None
+    auth_throttle = IpThrottle(clock=clock)
+    return HubServices(
+        tenants=TenantServicesOpener(open_services=core.open_services, sole_tenant=sole.services),
+        hub_scoped_reads=core.hub_scoped_reads,
+        tenant_registry=lambda tenant: core.open(StoreScope(tenant)).registry,
+        marker_authority=marker_authority,
+        hub_event_log=hub_event_log,
+        clock=clock,
+        system_artifacts=system_artifacts,
+        close_drain=sole.sweeps.close_drain,
+        trace_export=trace_export,
+        trace_status=trace_status,
+        trace_replay=trace_replay,
+        egress_export=egress_export,
+        egress_unavailable=egress_unavailable,
+        egress_missing_path_key=egress_missing_path_key,
+        egress_status=egress_status,
+        egress_reset=egress_reset,
+        egress_backfill=egress_backfill,
+        sessions=session_store,
+        identities=identity_store,
+        users=user_store,
+        auth=auth,
+        oauth_providers=oauth_registry,
+        auth_throttle=auth_throttle,
+        auth_facts=auth_facts_service,
+        signing=signing,
+        trusted_proxies=trusted_proxies if trusted_proxies is not None else TrustedProxies(),
+        event_derivation=sole.sweeps.event_derivation,
+        annotation=sole.sweeps.annotation,
     )

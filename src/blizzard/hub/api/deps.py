@@ -1,11 +1,11 @@
 """Shared FastAPI dependencies for the fleet routers (``bzh:dependency-injection``).
 
-The composition root stashes the wired :class:`~blizzard.hub.composition.HubServices`
-on ``app.state.services``; routers reach it through these dependencies. A handler
-names the half it serves from: :data:`Services` for the request's tenant's
-services, :data:`Hub` for the hub-level ones (identity, sessions, signing, exports,
-sweeps). With no services wired, a route reports the store is unwired (503) rather
-than serving on none."""
+The composition root stashes the wired hub-level
+:class:`~blizzard.hub.composition.HubServices` on ``app.state.services``; routers reach
+it, and the tenant services it opens, through these dependencies. A handler names the
+half it serves from: :data:`Services` for the request's tenant's services, :data:`Hub`
+for the hub-level ones (identity, sessions, signing, exports, sweeps). With no services
+wired, a route reports the store is unwired (503) rather than serving on none."""
 
 from __future__ import annotations
 
@@ -33,8 +33,8 @@ def hub_services(request: Request) -> HubServices:
 
 
 def tenant_services(request: Request) -> TenantServices:
-    """A dependency: the services of the tenant the request is served in."""
-    return get_services(request)
+    """A dependency: the services of the tenant the request is served in — the store's only tenant."""
+    return get_services(request).tenants.sole_tenant
 
 
 Hub = Annotated[HubServices, Depends(hub_services)]

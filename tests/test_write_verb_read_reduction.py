@@ -18,7 +18,15 @@ from blizzard.hub.auth.sessions import IReadSessionRepository
 from blizzard.hub.domain.chunk.model import ChunkFacts
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.scoped import ScopedConnections
-from tests.support import HubHarness, build_hub, hub_store_connections, ingest, seed_session, seed_user
+from tests.support import (
+    HubHarness,
+    build_hub,
+    hub_store_connections,
+    ingest,
+    seed_session,
+    seed_user,
+    serve_default_tenant,
+)
 from tests.test_decisions_api import _GATE_YAML
 from tests.test_questions_api import _asked
 
@@ -41,7 +49,7 @@ class _CountingFactsStore(ChunkFactsStore):
 def _wire_counting_facts(hub: HubHarness) -> _CountingFactsStore:
     counting = _CountingFactsStore(hub_store_connections(hub.engine), hub.clock)
     assert hub.app is not None
-    hub.app.state.services = replace(hub.services, chunks=replace(hub.services.chunks, facts=counting))
+    serve_default_tenant(hub, replace(hub.services, chunks=replace(hub.services.chunks, facts=counting)))
     return counting
 
 
@@ -64,7 +72,7 @@ class _CountingQuestions:
 def _wire_counting_questions(hub: HubHarness) -> _CountingQuestions:
     counting = _CountingQuestions(hub.services.chunks.questions)
     assert hub.app is not None
-    hub.app.state.services = replace(hub.services, chunks=replace(hub.services.chunks, questions=counting))
+    serve_default_tenant(hub, replace(hub.services, chunks=replace(hub.services.chunks, questions=counting)))
     return counting
 
 
@@ -84,7 +92,7 @@ class _CountingSessions:
 def _wire_counting_sessions(hub: HubHarness) -> _CountingSessions:
     counting = _CountingSessions(hub.hub_services.sessions)
     assert hub.app is not None
-    hub.app.state.services = replace(hub.services, sessions=counting)
+    hub.app.state.services = replace(hub.hub_services, sessions=counting)
     return counting
 
 

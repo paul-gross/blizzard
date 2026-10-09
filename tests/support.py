@@ -21,7 +21,7 @@ import time
 import weakref
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import IO, Any
@@ -51,7 +51,14 @@ from blizzard.hub.app import create_app
 from blizzard.hub.auth.models import User
 from blizzard.hub.auth.oauth.provider import IOAuthProvider
 from blizzard.hub.auth.oauth.registry import OAuthProviderRegistry
-from blizzard.hub.composition import HubServices, build_hub_core, build_live_config, build_services
+from blizzard.hub.composition import (
+    HubServices,
+    LiveConfig,
+    TenantServices,
+    TenantStores,
+    build_hub_core,
+    build_services,
+)
 from blizzard.hub.config import AUTH_MODE_NONE, AUTH_MODE_OAUTH, AuthConfig, HubConfig
 from blizzard.hub.delivery.command_runner import CommandResult, IHubCommandRunner
 from blizzard.hub.delivery.workdir import IHubWorkdir
@@ -133,6 +140,18 @@ def hub_level_connections(engine: Engine) -> HubStoreConnections:
 
 
 _default_tenants: weakref.WeakKeyDictionary[Engine, TenantId] = weakref.WeakKeyDictionary()
+
+
+def add_tenant(engine: Engine, name: str) -> TenantId:
+    """Add a tenant named ``name`` to the store under a freshly minted id, as tenant administration
+    would, and return its id. Once a store holds two tenants, :func:`default_tenant` and :func:`stamp`
+    no longer name one — a test adding one names the tenant on every raw read and write."""
+    tenant = TenantId(Id.mint_at(IdPrefix.TENANT, _GRAPH_T0).value)
+    with engine.begin() as conn:
+        conn.execute(
+            sa.insert(schema.tenants).values(tenant_id=tenant, name=name, created_at=_GRAPH_T0, created_by="test")
+        )
+    return tenant
 
 
 def default_tenant(engine: Engine) -> TenantId:
@@ -776,7 +795,7 @@ SEEDED_CAPABILITIES = (RunnerCapability("claude", default=True),)
 
 
 def seed_runner(
-    target: HubHarness | HubServices,
+    target: HubHarness | TenantServices,
     runner_id: str,
     *,
     name: str | None = None,
@@ -803,7 +822,7 @@ def seed_runner(
     return plaintext
 
 
-def added_runner(target: HubHarness | HubServices, runner_id: str) -> RunnerRegistration:
+def added_runner(target: HubHarness | TenantServices, runner_id: str) -> RunnerRegistration:
     """The registration the hub holds for ``runner_id`` — what an edge resolves before handing a
     runner to the fleet service; fails the test when the hub never added it."""
     services = target.services if isinstance(target, HubHarness) else target
@@ -826,7 +845,7 @@ class RunnerFleetClient(TestClient):
         self,
         app: FastAPI,
         *,
-        services: HubServices,
+        services: TenantServices,
         default_runner_id: str = "r1",
         register_claimants: bool = True,
     ) -> None:
@@ -877,7 +896,10 @@ class HubHarness:
     """A wired hub app plus the collaborators a test drives and asserts against."""
 
     client: TestClient
-    services: HubServices
+    #: The default tenant's services — the tenant every one-tenant test is served in.
+    services: TenantServices
+    #: The hub-level services — identity, sessions, signing, exports and sweeps.
+    hub_services: HubServices
     work_sources: WorkSourceRegistry
     clock: FixedClock
     engine: Engine
@@ -886,22 +908,27 @@ class HubHarness:
     #: address — the forwarded-header trust tests need a concrete IP peer.
     app: FastAPI | None = None
 
-    @property
-    def hub_services(self) -> HubServices:
-        """The hub-level services — identity, sessions, signing, exports and sweeps; the name every
-        test reads a hub-level field through, as ``services`` is the name for a tenant field."""
-        return self.services
+    def open_services(self, tenant: TenantId) -> TenantServices:
+        """``tenant``'s services, opened as a request in that tenant would open them."""
+        return self.hub_services.tenants.open_services(StoreScope(tenant))
 
     def promote(self, chunk_id: str) -> None:
         """Promote ``chunk_id`` through the real ``POST /api/chunks/{id}/promote`` path."""
         assert self.client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
 
 
-def tenant_services_of(app: FastAPI) -> HubServices:
+def tenant_services_of(app: FastAPI) -> TenantServices:
     """The default tenant's services of a wired ``app`` — the name every test reads a tenant field
     of an app through; a hub-level field is read off ``app.state.services`` itself."""
     services: HubServices = app.state.services
-    return services
+    return services.tenants.sole_tenant
+
+
+def serve_default_tenant(hub: HubHarness, services: TenantServices) -> None:
+    """Serve every request in the default tenant from ``services`` — a test's stand-in, usually
+    ``hub.services`` with a field replaced by a counting double."""
+    assert hub.app is not None
+    hub.app.state.services = replace(hub.hub_services, tenants=replace(hub.hub_services.tenants, sole_tenant=services))
 
 
 _hub_prototype_lock = threading.Lock()
@@ -1036,14 +1063,21 @@ def build_hub(
     editors[RESERVED_HUB_SOURCE_NAME] = hub_source
     closers[RESERVED_HUB_SOURCE_NAME] = hub_source
     work_source_registry = WorkSourceRegistry(built_sources, closers=closers, editors=editors)
-    events = EventBroker()
+
+    def tenant_work_sources(stores: TenantStores, _live: LiveConfig) -> IWorkSourceRegistry:
+        # The default tenant reads the fakes; any other tenant holds only its own built-in source.
+        if stores is core.sole_tenant:
+            return work_source_registry
+        source = HubWorkSource(
+            stores.work_item_store, stores.work_item_edits, core.users, stores.garden_proposal_resolution
+        )
+        named = {RESERVED_HUB_SOURCE_NAME: source}
+        return WorkSourceRegistry(dict(named), closers=dict(named), editors=dict(named))
+
     secret_keys = hub_key_provider({}, data_dir=tmp_path)
-    live = build_live_config(core, secret_keys=secret_keys)
-    services = build_services(
+    hub_services = build_services(
         core,
-        events=events,
-        work_sources=work_source_registry,
-        secrets=live.secrets,
+        work_sources=tenant_work_sources,
         hub_command_runner=hub_command_runner,
         hub_workdir=hub_workdir,
         hub_workdir_root=tmp_path / "hub_workdirs",
@@ -1064,7 +1098,10 @@ def build_hub(
         egress_path_key=egress_path_key,
         annotation_interval_seconds=config.annotation_interval_seconds,
     )
-    app = create_app(config, services=services)
+    # Pinned now: a second tenant a test adds later leaves the default tenant named.
+    _ = core.sole_tenant.connections.scope
+    services = hub_services.tenants.sole_tenant
+    app = create_app(config, services=hub_services)
     client = RunnerFleetClient(app, services=services, register_claimants=auto_register_claimants)
     # Warm FastAPI's per-router route-resolution cache: it lazily caches routes on first
     # use, which is thread-unsafe under the component tier's OS-thread races.
@@ -1072,10 +1109,11 @@ def build_hub(
     return HubHarness(
         client=client,
         services=services,
+        hub_services=hub_services,
         work_sources=work_source_registry,
         clock=clock,
         engine=engine,
-        events=events,
+        events=services.events,
         app=app,
     )
 

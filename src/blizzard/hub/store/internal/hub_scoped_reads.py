@@ -2,8 +2,9 @@
 (``bzh:hub-scoped-reads-confined``).
 
 :class:`HubScopedReads` aggregates member groups, one per kind, and its membership is closed to
-these kinds: resolving a credential to its tenant, a sweep's corpus read, tenant administration,
-and the identity reads of memberships and hub administrators. A group reads over the hub-level
+these kinds: resolving a credential to its tenant, a sweep's corpus read, and tenant
+administration. Memberships and hub administrators are global tables, read through their own
+repositories over :class:`HubStoreConnections` rather than through this seam. A group reads over the hub-level
 :class:`HubStoreConnections` and never writes; every statement it issues runs on a connection
 :func:`hub_scoped_read` marks with :data:`HUB_SCOPED_OPTION`, which exempts it from the tenant
 statement guard. A group lives in a module of its own beside this one, named ``hub_scoped_<kind>``,

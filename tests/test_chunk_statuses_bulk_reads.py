@@ -22,7 +22,7 @@ from blizzard.hub.store.internal.chunk_decisions_store import ChunkDecisionsStor
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_route_store import ChunkRouteStore
 from blizzard.hub.store.scoped import ScopedConnections
-from tests.support import build_hub, count_queries, hub_store_connections, ingest, report_lease
+from tests.support import build_hub, count_queries, hub_store_connections, ingest, report_lease, serve_default_tenant
 
 pytestmark = pytest.mark.component
 
@@ -201,9 +201,14 @@ def test_chunk_statuses_calls_bulk_reads_and_never_the_per_chunk_ones(tmp_path: 
     counting_route = _CountingRouteStore(hub_store_connections(hub.engine), hub.clock)
     counting_decisions = _CountingDecisionsStore(hub_store_connections(hub.engine), hub.clock)
     assert hub.app is not None
-    hub.app.state.services = replace(
-        hub.services,
-        chunks=replace(hub.services.chunks, facts=counting_facts, route=counting_route, decisions=counting_decisions),
+    serve_default_tenant(
+        hub,
+        replace(
+            hub.services,
+            chunks=replace(
+                hub.services.chunks, facts=counting_facts, route=counting_route, decisions=counting_decisions
+            ),
+        ),
     )
 
     resp = hub.client.get("/api/fleet/chunk-statuses", params={"chunk_id": chunk_ids})

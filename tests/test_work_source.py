@@ -57,7 +57,7 @@ def _registry_world(
         authoring.create_secret(SecretName.parse(secret), value, OP)
     for name, fields in sources:
         authoring.create_work_source(name, fields, OP)
-    live = build_live_config(core, secret_keys=keys)
+    live = build_live_config(core.sole_tenant, secret_keys=keys)
     registry = WorkSourceEntry.registry(
         records=core.work_source_records,
         objects=live.objects,

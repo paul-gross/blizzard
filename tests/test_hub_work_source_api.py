@@ -29,6 +29,7 @@ from tests.support import (
     make_ready,
     seed_session,
     seed_user,
+    serve_default_tenant,
 )
 
 pytestmark = pytest.mark.component
@@ -163,8 +164,9 @@ def test_list_work_items_resolves_liveness_with_one_bulk_call_regardless_of_item
     counting_facts = _CountingFactsStore(hub_store_connections(hub.engine), hub.clock)
     counting_work_refs = _CountingWorkRefsStore(hub_store_connections(hub.engine), hub.clock, facts=counting_facts)
     assert hub.app is not None
-    hub.app.state.services = replace(
-        hub.services, chunks=replace(hub.services.chunks, facts=counting_facts, work_refs=counting_work_refs)
+    serve_default_tenant(
+        hub,
+        replace(hub.services, chunks=replace(hub.services.chunks, facts=counting_facts, work_refs=counting_work_refs)),
     )
 
     listed = hub.client.get("/api/work-sources/hub/items").json()["items"]

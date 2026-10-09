@@ -17,7 +17,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.model import ChunkFacts
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.scoped import ScopedConnections
-from tests.support import HubHarness, build_hub, count_queries, hub_store_connections, ingest
+from tests.support import HubHarness, build_hub, count_queries, hub_store_connections, ingest, serve_default_tenant
 
 pytestmark = pytest.mark.component
 
@@ -229,7 +229,7 @@ def test_detail_routes_blocked_derivation_never_reaches_load_all_facts(tmp_path:
 
     counting = _CountingFactsStore(hub_store_connections(hub.engine), hub.clock)
     assert hub.app is not None
-    hub.app.state.services = replace(hub.services, chunks=replace(hub.services.chunks, facts=counting))
+    serve_default_tenant(hub, replace(hub.services, chunks=replace(hub.services.chunks, facts=counting)))
 
     resp = hub.client.get(f"/api/chunks/{dependent_id}")
 

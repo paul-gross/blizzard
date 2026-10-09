@@ -672,7 +672,7 @@ def test_parquet_without_its_extra_keeps_the_hub_serving_and_records_one_rejecti
 
     assert hub.hub_services.egress_export is None
     assert [s for s in Sweep.all(_app(hub)) if "egress" in s.logger_name] == []
-    hub_app._announce_rejected_egress(config, hub.services)
+    hub_app._announce_rejected_egress(config, hub.hub_services)
     assert _kinds(hub) == ["egress-config-rejected"]
     assert hub.client.get("/api/health").status_code == 200
 

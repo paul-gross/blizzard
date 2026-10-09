@@ -17,7 +17,15 @@ from blizzard.hub.domain.chunk.model import ChunkFacts
 from blizzard.hub.domain.chunk.ports.dependencies import IWriteChunkDependenciesRepository
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.scoped import ScopedConnections
-from tests.support import HubHarness, build_hub, chunk_stores, count_queries, hub_store_connections, ingest
+from tests.support import (
+    HubHarness,
+    build_hub,
+    chunk_stores,
+    count_queries,
+    hub_store_connections,
+    ingest,
+    serve_default_tenant,
+)
 
 pytestmark = pytest.mark.component
 
@@ -145,7 +153,7 @@ def test_a_chunk_with_no_standing_edges_costs_no_additional_facts_reads(tmp_path
 
     counting = _CountingFactsStore(hub_store_connections(hub.engine), hub.clock)
     assert hub.app is not None
-    hub.app.state.services = replace(hub.services, chunks=replace(hub.services.chunks, facts=counting))
+    serve_default_tenant(hub, replace(hub.services, chunks=replace(hub.services.chunks, facts=counting)))
 
     resp = hub.client.get(f"/api/chunks/{bare_id}")
 
