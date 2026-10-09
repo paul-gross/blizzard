@@ -19,9 +19,9 @@ from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
-from blizzard.hub.api.deps import get_services
+from blizzard.hub.api.deps import Services
 from blizzard.hub.auth.models import ResolvedIdentity
-from blizzard.hub.composition import HubServices
+from blizzard.hub.composition import TenantServices
 from blizzard.hub.documents.codec import ConfigDecodeError, codec_for_media_type
 from blizzard.hub.domain.config.apply import (
     ApplyEntryRefused,
@@ -103,7 +103,7 @@ def get_schema(kind: str) -> dict[str, object]:
 
 @router.get("/changes", response_model=ConfigChangesPage, dependencies=[_VIEW])
 def list_changes(
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     before: Annotated[int | None, Query(ge=1)] = None,
     limit: Annotated[int, Query(ge=1, le=MAX_CHANGES_LIMIT)] = 50,
     record_kind: RecordKind | None = None,
@@ -185,7 +185,7 @@ def _declaration(document: ConfigDocument, clock: IClock) -> ConfigDeclaration:
     )
 
 
-def _stored(declaration: ConfigDeclaration, services: HubServices) -> StoredConfig:
+def _stored(declaration: ConfigDeclaration, services: TenantServices) -> StoredConfig:
     secrets = services.secret_catalog.get_many(list(declaration.secrets))
     retired = services.secret_catalog.retired_names()
     scopes: dict[str, DeclarableRecord] = {scope.slug: scope for scope in services.scopes.list_all()}
@@ -262,7 +262,7 @@ def _document(body: bytes, content_type: str | None) -> ConfigDocument:
 
 
 def _apply(
-    document: ConfigDocument, identity: ResolvedIdentity, services: HubServices, *, dry_run: bool
+    document: ConfigDocument, identity: ResolvedIdentity, services: TenantServices, *, dry_run: bool
 ) -> ConfigApplyResponse:
     declaration = _declaration(document, services.clock)
     apply_id = None if dry_run else Id.mint(IdPrefix.CONFIG_APPLY, services.clock).value
@@ -287,7 +287,7 @@ _APPLY_BODY = {
 async def apply_config(
     request: Request,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     dry_run: bool = False,
 ) -> ConfigApplyResponse:
     """Reconcile a `version: 1` document (YAML or JSON, by `Content-Type`) in one transaction: create what is
@@ -299,7 +299,7 @@ async def apply_config(
 
 
 @router.get("/export", response_model=ConfigDocument, dependencies=[_VIEW])
-def export_config(services: Annotated[HubServices, Depends(get_services)]) -> ConfigDocument:
+def export_config(services: Services) -> ConfigDocument:
     """Every active, non-built-in work source and repository, and every active scope and routine (its linked
     scope set included), with every field, and every active secret name, as a document that applies back as a
     no-op. Retired records are left out, since applying one would enable it."""

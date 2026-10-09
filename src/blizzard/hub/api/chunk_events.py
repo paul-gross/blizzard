@@ -8,7 +8,7 @@ from dataclasses import dataclass
 
 from blizzard.foundation.hub_event_types import ChunkChangeCause
 from blizzard.foundation.roles import dto
-from blizzard.hub.composition import HubServices
+from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.chunk.model import Chunk, ChunkChange, ChunkFacts
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.runners.route import Route
@@ -30,7 +30,7 @@ class ChunkFrameState:
     runner_name: str | None = None
 
     @classmethod
-    def load(cls, services: HubServices, chunk_id: str) -> ChunkFrameState:
+    def load(cls, services: TenantServices, chunk_id: str) -> ChunkFrameState:
         """The singular reads a single-chunk write verb's ``publish`` issues."""
         facts = ChunkFacts.or_default(services.chunks.facts.load_facts(chunk_id))
         chunk = services.chunks.record.get(chunk_id)
@@ -46,7 +46,7 @@ class ChunkFrameState:
         return cls(facts=facts, chunk=chunk, graph=graph, from_graph=from_graph, route=route, runner_name=runner_name)
 
 
-def load_frame_states(services: HubServices, chunk_ids: Sequence[str]) -> dict[str, ChunkFrameState]:
+def load_frame_states(services: TenantServices, chunk_ids: Sequence[str]) -> dict[str, ChunkFrameState]:
     """`ChunkFrameState.load`'s batched sibling (`bzh:bulk-reconstitution`) — one snapshot per distinct
     requested id, through the four plurals. Reads every distinct chunk's facts and
     record once, then the union of pinned and cross-graph newest-transition graph ids
@@ -94,21 +94,21 @@ class ChunkChanged:
     Built before the write, so :attr:`prev_status` is a derivation over the facts as they
     stood then (``bzh:facts-not-status``), and published after."""
 
-    services: HubServices
+    services: TenantServices
     chunk_id: str
     prev_status: str | None
     #: The pre-write facts `before()` loaded, for a domain gate to reuse; unset from `of()`.
     facts: ChunkFacts | None = None
 
     @classmethod
-    def before(cls, services: HubServices, chunk_id: str) -> ChunkChanged:
+    def before(cls, services: TenantServices, chunk_id: str) -> ChunkChanged:
         """The chunk's status right now, and the facts it derives from — ``status`` is
         ``None`` and ``facts`` unset when the chunk does not yet exist."""
         facts = services.chunks.facts.load_facts(chunk_id)
         return cls(services, chunk_id, None if facts is None else facts.status().value, facts)
 
     @classmethod
-    def before_many(cls, services: HubServices, chunk_ids: Sequence[str]) -> dict[str, ChunkChanged]:
+    def before_many(cls, services: TenantServices, chunk_ids: Sequence[str]) -> dict[str, ChunkChanged]:
         """`before`'s batched sibling (`bzh:bulk-reconstitution`) — one snapshot per
         distinct requested id, through the narrowed `status_facts_for`. A snapshot
         carries ``prev_status`` only: ``facts`` stays ``None`` so a narrowed projection is
@@ -123,7 +123,7 @@ class ChunkChanged:
         return result
 
     @classmethod
-    def of(cls, services: HubServices, chunk_id: str, *, prev_status: str | None) -> ChunkChanged:
+    def of(cls, services: TenantServices, chunk_id: str, *, prev_status: str | None) -> ChunkChanged:
         """A frame whose "before" the caller already holds — a mint, or facts already loaded."""
         return cls(services, chunk_id, prev_status)
 

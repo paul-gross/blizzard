@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
@@ -17,8 +16,7 @@ from blizzard.foundation.roles import dto
 from blizzard.foundation.store.utc import as_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
-from blizzard.hub.api.deps import get_services
-from blizzard.hub.composition import HubServices
+from blizzard.hub.api.deps import Services
 from blizzard.wire.fleet import FleetSpendView
 
 router = APIRouter(prefix="/api", tags=["spend"], dependencies=[Depends(reject_runner_principal)])
@@ -51,9 +49,7 @@ def _instant(value: str, *, field: str) -> datetime:
 
 
 @router.get("/spend", response_model=FleetSpendView, dependencies=[Depends(require(Permission.FLEET_VIEW))])
-def fleet_spend(
-    since: str, services: Annotated[HubServices, Depends(get_services)], until: str | None = None
-) -> FleetSpendView:
+def fleet_spend(since: str, services: Services, until: str | None = None) -> FleetSpendView:
     """The fleet's total usage/cost since ``since`` (an ISO-8601 instant) — summed
     over every usage fact recorded at or after it, across every chunk. An optional
     ``until`` bounds the window's other edge, exclusive."""

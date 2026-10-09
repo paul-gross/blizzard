@@ -13,7 +13,7 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.decisions import to_decision_view
 from blizzard.hub.api.graph_names import GraphNames
 from blizzard.hub.api.questions import question_view
-from blizzard.hub.composition import HubServices
+from blizzard.hub.composition import TenantServices
 from blizzard.hub.delivery.hub_node import PollPolicy
 from blizzard.hub.domain.artifact.model import GitCommitArtifact, StoredArtifact
 from blizzard.hub.domain.chunk.delivery_read import DeliveryRead, DeliverySources
@@ -126,7 +126,7 @@ class ChunkView:
     A whole-fleet read hands :meth:`of` one :class:`GraphNames` for every chunk, so the
     graphs a fleet shares are resolved once across the list rather than once per row."""
 
-    services: HubServices
+    services: TenantServices
     chunk: Chunk
     facts: ChunkFacts
     names: GraphNames
@@ -147,7 +147,7 @@ class ChunkView:
     @classmethod
     def of(
         cls,
-        services: HubServices,
+        services: TenantServices,
         chunk: Chunk,
         names: GraphNames | None = None,
         blocked: BlockedView | None = None,
@@ -171,7 +171,7 @@ class ChunkView:
     @classmethod
     def injected(
         cls,
-        services: HubServices,
+        services: TenantServices,
         chunk: Chunk,
         facts: ChunkFacts,
         route: Route | None,

@@ -15,10 +15,10 @@ from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
-from blizzard.hub.api.deps import get_services
+from blizzard.hub.api.deps import Services
 from blizzard.hub.api.door import RequestDoor, change_context
 from blizzard.hub.auth.models import ResolvedIdentity
-from blizzard.hub.composition import HubServices
+from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.config.work_sources import ConfigFieldError, ConfigRevisionConflict
 from blizzard.hub.domain.garden.scopes import Scope, ScopeEdit, ScopeSlug, ScopeSlugError
 from blizzard.wire.scope import ScopeCreateRequest, ScopeEditRequest, ScopeLifecycleRequest, ScopeView
@@ -50,7 +50,7 @@ def _revision_conflict(exc: ConfigRevisionConflict) -> HTTPException:
     return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
 
 
-def _scope_or_404(slug: str, services: HubServices) -> Scope:
+def _scope_or_404(slug: str, services: TenantServices) -> Scope:
     scope = services.scopes.get(slug)
     if scope is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown scope {slug}")
@@ -62,7 +62,7 @@ def create_scope(
     request: ScopeCreateRequest,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.GRAPH_EDIT))],
     door: RequestDoor,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
 ) -> ScopeView:
     """Mint a scope, or no-op onto the existing one of the same slug; 422 on a
     malformed slug, naming the rejected value."""
@@ -75,13 +75,13 @@ def create_scope(
 
 
 @router.get("/scopes", response_model=list[ScopeView], dependencies=[Depends(require(Permission.FLEET_VIEW))])
-def list_scopes(services: Annotated[HubServices, Depends(get_services)]) -> list[ScopeView]:
+def list_scopes(services: Services) -> list[ScopeView]:
     """Every scope, newest first, each marked retired or not."""
     return [scope_view(s) for s in services.scopes.list_all()]
 
 
 @router.get("/scopes/{slug}", response_model=ScopeView, dependencies=[Depends(require(Permission.FLEET_VIEW))])
-def get_scope(slug: str, services: Annotated[HubServices, Depends(get_services)]) -> ScopeView:
+def get_scope(slug: str, services: Services) -> ScopeView:
     """One scope; 404 on an unknown slug."""
     return scope_view(_scope_or_404(slug, services))
 
@@ -91,7 +91,7 @@ def get_scope(slug: str, services: Annotated[HubServices, Depends(get_services)]
     response_model=list[str],
     dependencies=[Depends(require(Permission.FLEET_VIEW))],
 )
-def list_scope_routines(slug: str, services: Annotated[HubServices, Depends(get_services)]) -> list[str]:
+def list_scope_routines(slug: str, services: Services) -> list[str]:
     """Every routine id linked to `slug` — the reverse direction of
     `GET /api/routines/{routine_id}/scopes`. 404 on an unknown slug."""
     scope = _scope_or_404(slug, services)
@@ -104,7 +104,7 @@ def edit_scope(
     request: ScopeEditRequest,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.GRAPH_EDIT))],
     door: RequestDoor,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     if_match: Annotated[int | None, Header()] = None,
 ) -> ScopeView:
     """Apply only the fields present; an edit that changes nothing writes nothing. 422 on a
@@ -131,7 +131,7 @@ def retire_scope(
     request: ScopeLifecycleRequest,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.GRAPH_EDIT))],
     door: RequestDoor,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     if_match: Annotated[int | None, Header()] = None,
 ) -> ScopeView:
     """Retire a scope — a reversible brake; retiring a retired scope writes nothing. 404 on
@@ -152,7 +152,7 @@ def enable_scope(
     request: ScopeLifecycleRequest,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.GRAPH_EDIT))],
     door: RequestDoor,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     if_match: Annotated[int | None, Header()] = None,
 ) -> ScopeView:
     """Re-enable a retired scope; enabling an enabled one writes nothing. 404 on an unknown

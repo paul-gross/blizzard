@@ -35,12 +35,12 @@ from blizzard.hub.api.analytics import (
     spend_response,
 )
 from blizzard.hub.api.auth import RunnerPrincipal, require_runner_principal, require_runner_principal_even_if_retired
-from blizzard.hub.api.deps import get_services
+from blizzard.hub.api.deps import Services
 from blizzard.hub.api.findings import finding_view
 from blizzard.hub.api.garden_proposals import garden_proposal_view
 from blizzard.hub.api.ingest_broadcast import IngestBroadcast, pushed_facts
 from blizzard.hub.api.scopes import scope_view
-from blizzard.hub.composition import HubServices
+from blizzard.hub.composition import TenantServices
 from blizzard.hub.config import HubConfig
 from blizzard.hub.delivery.hub_node import PollPolicy
 from blizzard.hub.domain.chunk.model import (
@@ -186,7 +186,7 @@ def _demand_lease_owner(principal: RunnerPrincipal, owning_runner_id: str | None
 
 
 def _migration_targets(
-    services: HubServices, chunk: Chunk, graph: Graph, completion: Completion, *, follow_latest_default: bool
+    services: TenantServices, chunk: Chunk, graph: Graph, completion: Completion, *, follow_latest_default: bool
 ) -> MigrationTargets:
     """Load the graphs one completion may move the chunk onto; :class:`MigrationTargets` decides."""
     graphs = services.graphs
@@ -208,7 +208,7 @@ def _migration_targets(
 
 
 @router.get("/queue/peek", response_model=QueuePeekResponse)
-def peek_queue(services: Annotated[HubServices, Depends(get_services)]) -> QueuePeekResponse:
+def peek_queue(services: Services) -> QueuePeekResponse:
     """The runner's FILL read — the whole ready-queue order: a filling runner needs every
     ready chunk in one read. Kept as-is for a previous-minor caller;
     ``POST /queue/peek`` below is the matched counterpart."""
@@ -219,7 +219,7 @@ def peek_queue(services: Annotated[HubServices, Depends(get_services)]) -> Queue
 @router.post("/queue/peek", response_model=QueuePeekResponse)
 def peek_matched_queue(
     request: QueuePeekRequest,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     principal: Annotated[RunnerPrincipal, Depends(require_runner_principal)],
 ) -> QueuePeekResponse:
     """The matched fleet peek — at most one ready entry the calling principal can both
@@ -230,35 +230,33 @@ def peek_matched_queue(
 
 
 @router.get("/system-artifacts", response_model=list[SystemArtifactView])
-def list_system_artifacts_route(services: Annotated[HubServices, Depends(get_services)]) -> list[SystemArtifactView]:
+def list_system_artifacts_route(services: Services) -> list[SystemArtifactView]:
     """The full ``system``-scoped artifact set — resolved at call time off the packaged
     set, pinned to no chunk or lease."""
     return system_artifacts_api.list_system_artifacts(services.system_artifacts)
 
 
 @router.get("/system-artifacts/{name:path}", response_model=SystemArtifactView)
-def get_system_artifact_route(name: str, services: Annotated[HubServices, Depends(get_services)]) -> SystemArtifactView:
+def get_system_artifact_route(name: str, services: Services) -> SystemArtifactView:
     """One published system artifact by its slash-bearing name; ``404`` unknown."""
     return system_artifacts_api.get_system_artifact(name, services.system_artifacts)
 
 
 @router.get("/chunks/{chunk_id}", response_model=ChunkDetail)
-def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> ChunkDetail:
+def get_chunk(chunk_id: str, services: Services) -> ChunkDetail:
     """The runner's chunk-status poll — the same aggregate as ``GET /api/chunks/{chunk_id}``."""
     return chunks_api.get_chunk(chunk_id, services)
 
 
 @router.get("/chunk-statuses", response_model=list[ChunkStatusView])
-def get_chunk_statuses(
-    chunk_id: Annotated[list[str], Query()], services: Annotated[HubServices, Depends(get_services)]
-) -> list[ChunkStatusView]:
+def get_chunk_statuses(chunk_id: Annotated[list[str], Query()], services: Services) -> list[ChunkStatusView]:
     """The runner tick's slim batch status read — repeatable ``chunk_id``;
     an unknown or ephemeral id is omitted, never a 404."""
     return chunk_statuses_api.chunk_statuses(chunk_id, services)
 
 
 @router.get("/chunks/{chunk_id}/work-items", response_model=WorkItemsView)
-def get_work_items(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> WorkItemsView:
+def get_work_items(chunk_id: str, services: Services) -> WorkItemsView:
     """The chunk's work items, read with a runner's own bearer token — the same view as
     ``GET /api/chunks/{chunk_id}/work-items``."""
     return chunks_api.get_work_items(chunk_id, services)
@@ -281,28 +279,28 @@ router.add_api_route(
 
 
 @router.post("/chunks/{chunk_id}/pause", response_model=ChunkSummary, status_code=status.HTTP_202_ACCEPTED)
-def pause_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> ChunkSummary:
+def pause_chunk(chunk_id: str, services: Services) -> ChunkSummary:
     """Pause the chunk with a runner's own bearer token — the same transition as the
     operator route, ``by`` defaulting to ``operator``."""
     return chunks_api.pause_chunk(chunk_id, ChunkPauseRequest(), services)
 
 
 @router.post("/chunks/{chunk_id}/resume", response_model=ChunkSummary, status_code=status.HTTP_202_ACCEPTED)
-def resume_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> ChunkSummary:
+def resume_chunk(chunk_id: str, services: Services) -> ChunkSummary:
     """Resume the chunk with a runner's own bearer token. Takes no body, so the
     resume is always recorded as ``operator``."""
     return chunks_api.resume_chunk(chunk_id, ChunkPauseRequest(), services)
 
 
 @router.get("/summary", response_model=FleetSummaryView)
-def fleet_summary(services: Annotated[HubServices, Depends(get_services)]) -> FleetSummaryView:
+def fleet_summary(services: Services) -> FleetSummaryView:
     """The fleet-pulse counts, read with a runner's own bearer token. Fleet-router-only:
     this read has no anonymous counterpart."""
     return chunks_api.FleetPulse(services).view()
 
 
 @router.get("/questions/{question_id}", response_model=QuestionView)
-def get_question(question_id: str, services: Annotated[HubServices, Depends(get_services)]) -> QuestionView:
+def get_question(question_id: str, services: Services) -> QuestionView:
     """The runner's answer poll before it resumes the dormant session."""
     row = services.chunks.questions.get_question(question_id)
     if row is None:
@@ -314,7 +312,7 @@ def get_question(question_id: str, services: Annotated[HubServices, Depends(get_
 
 
 @router.get("/chunks/{chunk_id}/envelope", response_model=NodeEnvelope)
-def get_envelope(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> NodeEnvelope:
+def get_envelope(chunk_id: str, services: Services) -> NodeEnvelope:
     """The chunk's current node envelope, idempotent — the lost-apply re-read."""
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
@@ -332,7 +330,7 @@ def get_envelope(chunk_id: str, services: Annotated[HubServices, Depends(get_ser
     return node_steps.node_envelope(envelope)
 
 
-def _routine_run_or_404(chunk_id: str, services: HubServices) -> RunContext:
+def _routine_run_or_404(chunk_id: str, services: TenantServices) -> RunContext:
     """The run context that gates a worker's fleet-scoped read — 404 both for an
     unknown chunk and for one carrying no run context (not a routine run), returning the
     chunk's :class:`RunContext`."""
@@ -349,7 +347,7 @@ def _routine_run_or_404(chunk_id: str, services: HubServices) -> RunContext:
 
 
 @router.get("/chunks/{chunk_id}/garden/findings", response_model=list[FindingView])
-def get_garden_findings(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> list[FindingView]:
+def get_garden_findings(chunk_id: str, services: Services) -> list[FindingView]:
     """A worker's finding bucket — exactly the findings its delivery may cite; the
     chunk's own run context derives the routine and scope, no caller flag can name another.
     404 for an unknown chunk or one with no run context (not a routine run)."""
@@ -360,7 +358,7 @@ def get_garden_findings(chunk_id: str, services: Annotated[HubServices, Depends(
 @router.get("/chunks/{chunk_id}/garden/proposals", response_model=list[GardenProposalView])
 def get_garden_proposals(
     chunk_id: str,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     state: Annotated[RoutineProposalState, Query()] = RoutineProposalState.OPEN,
 ) -> list[GardenProposalView]:
     """A worker's own routine's garden proposals, filtered by `state` (`open` by
@@ -411,7 +409,7 @@ class AnalyticsWindow:
 @router.get("/chunks/{chunk_id}/analytics/counts/files", response_model=AnalyticsCountsResponse)
 def get_chunk_analytics_counts_files(
     chunk_id: str,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     window: Annotated[AnalyticsWindow, Depends(AnalyticsWindow.of)],
 ) -> AnalyticsCountsResponse:
     """A worker's own routine-run read of ``GET /api/analytics/counts/files`` — the same
@@ -424,7 +422,7 @@ def get_chunk_analytics_counts_files(
 @router.get("/chunks/{chunk_id}/analytics/counts/skills", response_model=AnalyticsCountsResponse)
 def get_chunk_analytics_counts_skills(
     chunk_id: str,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     window: Annotated[AnalyticsWindow, Depends(AnalyticsWindow.of)],
 ) -> AnalyticsCountsResponse:
     """A worker's own routine-run read of ``GET /api/analytics/counts/skills``."""
@@ -435,7 +433,7 @@ def get_chunk_analytics_counts_skills(
 @router.get("/chunks/{chunk_id}/analytics/counts/agent-types", response_model=AnalyticsCountsResponse)
 def get_chunk_analytics_counts_agent_types(
     chunk_id: str,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     window: Annotated[AnalyticsWindow, Depends(AnalyticsWindow.of)],
 ) -> AnalyticsCountsResponse:
     """A worker's own routine-run read of ``GET /api/analytics/counts/agent-types``."""
@@ -446,7 +444,7 @@ def get_chunk_analytics_counts_agent_types(
 @router.get("/chunks/{chunk_id}/analytics/counts/nodes", response_model=AnalyticsCountsResponse)
 def get_chunk_analytics_counts_nodes(
     chunk_id: str,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     window: Annotated[AnalyticsWindow, Depends(AnalyticsWindow.of)],
     by_name: Annotated[bool, Query()] = False,
 ) -> AnalyticsCountsResponse:
@@ -458,7 +456,7 @@ def get_chunk_analytics_counts_nodes(
 @router.get("/chunks/{chunk_id}/analytics/spend/nodes", response_model=AnalyticsSpendResponse)
 def get_chunk_analytics_spend_nodes(
     chunk_id: str,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     window: Annotated[AnalyticsWindow, Depends(AnalyticsWindow.of)],
     by_name: Annotated[bool, Query()] = False,
 ) -> AnalyticsSpendResponse:
@@ -471,7 +469,7 @@ def get_chunk_analytics_spend_nodes(
 @router.get("/chunks/{chunk_id}/analytics/spend/graphs", response_model=AnalyticsSpendResponse)
 def get_chunk_analytics_spend_graphs(
     chunk_id: str,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     window: Annotated[AnalyticsWindow, Depends(AnalyticsWindow.of)],
     by_name: Annotated[bool, Query()] = False,
 ) -> AnalyticsSpendResponse:
@@ -482,13 +480,13 @@ def get_chunk_analytics_spend_graphs(
 
 
 @router.get("/scopes", response_model=list[ScopeView])
-def get_scopes(services: Annotated[HubServices, Depends(get_services)]) -> list[ScopeView]:
+def get_scopes(services: Services) -> list[ScopeView]:
     """Every scope, newest first, each marked retired or not — the
     deployment's scope vocabulary."""
     return [scope_view(s) for s in services.scopes.list_all()]
 
 
-def _answered_findings_or_404(chunk_id: str, services: HubServices) -> list[FindingView]:
+def _answered_findings_or_404(chunk_id: str, services: TenantServices) -> list[FindingView]:
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
@@ -502,7 +500,7 @@ def _answered_findings_or_404(chunk_id: str, services: HubServices) -> list[Find
 
 
 @router.get("/chunks/{chunk_id}/findings", response_model=list[FindingView])
-def get_chunk_findings(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> list[FindingView]:
+def get_chunk_findings(chunk_id: str, services: Services) -> list[FindingView]:
     """The findings the chunk's own accepted, minted garden proposal answers — a worker's
     per-chunk read, distinct from ``get_garden_findings``'s routine-run bucket. 404 both
     for an unknown chunk and for one answering no such proposal."""
@@ -510,9 +508,7 @@ def get_chunk_findings(chunk_id: str, services: Annotated[HubServices, Depends(g
 
 
 @router.get("/chunks/{chunk_id}/findings/{finding_id}", response_model=FindingView)
-def get_chunk_finding(
-    chunk_id: str, finding_id: str, services: Annotated[HubServices, Depends(get_services)]
-) -> FindingView:
+def get_chunk_finding(chunk_id: str, finding_id: str, services: Services) -> FindingView:
     """One finding within the chunk's own answered set — ``get_chunk_findings`` narrowed
     to a single id. An id outside that set is structurally unreachable rather than
     filtered after the fact, so it 404s the same as an id belonging to no proposal at
@@ -529,7 +525,7 @@ def get_chunk_finding(
 @router.post("/chunks/{chunk_id}/hub-advance", response_model=HubAdvanceResponse)
 def hub_advance(
     chunk_id: str,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
 ) -> HubAdvanceResponse:
     """Drive a chunk parked at a generic hub command node one step, running that node's
     hub-side command once under the fleet-wide serialization slot. ``ran=False`` is never an
@@ -580,7 +576,7 @@ def hub_advance(
 @claim_router.post("/routes", response_model=RouteClaimResponse, status_code=status.HTTP_201_CREATED)
 def claim_route(
     claim: RouteClaim,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     fleet: Annotated[FleetRequest, Depends(FleetRequest.of_even_if_retired)],
 ) -> object:
     """Claim a chunk; 403 if the runner is unregistered, paused, or retired at the hub, 409 if already claimed,
@@ -648,7 +644,7 @@ def claim_route(
 @router.post("/chunks/{chunk_id}/route-token", response_model=RouteTokenRekeyResponse)
 def rekey_route_token(
     chunk_id: str,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
 ) -> RouteTokenRekeyResponse:
     """Rotate the chunk's live route capability token — the lost-plaintext recovery for a
@@ -671,7 +667,7 @@ def rekey_route_token(
 def submit_completion(
     chunk_id: str,
     submission: CompletionSubmission,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
 ) -> ApplyResponse:
     """Apply a node-step's completion atomically; reply carries the next envelope; 403 when the
@@ -716,7 +712,7 @@ def submit_completion(
 def submit_decision(
     chunk_id: str,
     submission: DecisionSubmission,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
 ) -> ApplyResponse:
     """Runner-config gate: park the chunk on a decision in place of a transition; 403 when the
@@ -746,7 +742,7 @@ def submit_decision(
 @router.post("/events", response_model=RunnerFactAck)
 def ingest_runner_facts(
     batch: RunnerFactBatch,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
 ) -> RunnerFactAck:
     """Land runner-minted facts — idempotent on the batch's per-runner ``seq`` high-water mark,
@@ -771,7 +767,7 @@ def ingest_runner_facts(
 @router.post("/transcripts", response_model=TranscriptSegmentAck)
 def ingest_transcript_segments(
     batch: TranscriptSegmentBatch,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
 ) -> TranscriptSegmentAck:
     """Land the runner's batched transcript records — the transcript lane's own
@@ -788,7 +784,7 @@ def get_lease_transcript_segments(
     chunk_id: str,
     node_id: str,
     epoch: int,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     principal: Annotated[RunnerPrincipal, Depends(require_runner_principal)],
 ) -> LeaseTranscriptView:
     """A runner's read-back of its own shipped segments — every
@@ -817,7 +813,7 @@ def get_lease_transcript_segments(
 @router.post("/runners", response_model=RunnerRegistrationResponse, status_code=status.HTTP_201_CREATED)
 def register_runner(
     request: RunnerRegistrationRequest,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
 ) -> RunnerRegistrationResponse:
     """Register the calling runner — the one its bearer token names — with its workspace binding
@@ -864,7 +860,7 @@ def register_runner(
 @router.post("/runners/{runner_id}/heartbeats", status_code=status.HTTP_204_NO_CONTENT)
 def heartbeat_runner(
     runner_id: str,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
 ) -> Response:
     """Refresh the calling runner's liveness — the slow runner-level heartbeat. Returns 204; 403 when
@@ -880,7 +876,7 @@ def heartbeat_runner(
 @router.get("/runners/{runner_id}", response_model=RunnerView)
 def get_runner(
     runner_id: str,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
 ) -> RunnerView:
     """The calling runner's own declarative state — its pull read; 403 when retired or when the path

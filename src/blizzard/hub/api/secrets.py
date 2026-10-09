@@ -17,10 +17,10 @@ from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
-from blizzard.hub.api.deps import get_services
+from blizzard.hub.api.deps import Services
 from blizzard.hub.api.door import RequestDoor, change_context
 from blizzard.hub.auth.models import ResolvedIdentity
-from blizzard.hub.composition import HubServices
+from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.config.changes import RecordRef
 from blizzard.hub.domain.config.secrets import (
     SecretAlreadyExists,
@@ -69,7 +69,7 @@ def _parse_name(raw: str) -> SecretName:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
 
 
-def _existing(services: HubServices, raw: str) -> SecretMetadata:
+def _existing(services: TenantServices, raw: str) -> SecretMetadata:
     record = services.secret_catalog.get(_parse_name(raw).value)
     if record is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown secret {raw}")
@@ -81,7 +81,7 @@ def create_secret(
     request: SecretCreateRequest,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
     door: RequestDoor,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
 ) -> SecretView:
     """Store a new secret at revision 1; 409 when the name is taken, 422 on a malformed name
     or a blank value."""
@@ -103,7 +103,7 @@ def replace_secret(
     request: SecretReplaceRequest,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
     door: RequestDoor,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     if_match: Annotated[int | None, Header()] = None,
 ) -> SecretView:
     """Replace a secret's value, advancing its revision. 409 naming the current revision
@@ -124,9 +124,7 @@ def replace_secret(
 
 
 @router.get("", response_model=list[SecretView], dependencies=[Depends(require(Permission.FLEET_VIEW))])
-def list_secrets(
-    services: Annotated[HubServices, Depends(get_services)], include_retired: bool = False
-) -> list[SecretView]:
+def list_secrets(services: Services, include_retired: bool = False) -> list[SecretView]:
     """Every secret's metadata, retired ones hidden unless `include_retired`."""
     retired = services.secret_catalog.retired_names()
     records = listed(services.secret_catalog.list_all(), retired, include_retired=include_retired)
@@ -135,7 +133,7 @@ def list_secrets(
 
 
 @router.get("/{name}", response_model=SecretView, dependencies=[Depends(require(Permission.FLEET_VIEW))])
-def get_secret(name: str, services: Annotated[HubServices, Depends(get_services)]) -> SecretView:
+def get_secret(name: str, services: Services) -> SecretView:
     """One secret's metadata; 404 on an unknown name."""
     record = _existing(services, name)
     return secret_view(
@@ -150,7 +148,7 @@ def retire_secret(
     name: str,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
     door: RequestDoor,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
 ) -> SecretView:
     """Retire a secret — a reversible brake; 404 on an unknown name, 409 naming the active
     records that still reference it."""
@@ -167,7 +165,7 @@ def enable_secret(
     name: str,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
     door: RequestDoor,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
 ) -> SecretView:
     """Re-enable a retired secret; idempotent, 404 on an unknown name."""
     record = _existing(services, name)

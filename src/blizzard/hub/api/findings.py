@@ -19,9 +19,9 @@ from blizzard.foundation.findings import FindingFactKind
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
-from blizzard.hub.api.deps import get_services
+from blizzard.hub.api.deps import Services
 from blizzard.hub.auth.models import ResolvedIdentity
-from blizzard.hub.composition import HubServices
+from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.garden.findings.model import (
     AbsorberNotLive,
     DuplicateFindingError,
@@ -94,7 +94,7 @@ def _fact_view(fact: FindingFact) -> FindingFactView:
     )
 
 
-def _load_or_404(finding_ids: list[str], services: HubServices) -> list[Finding]:
+def _load_or_404(finding_ids: list[str], services: TenantServices) -> list[Finding]:
     """`finding_ids`, in order — one batched read (`get_many`), not one query per id."""
     by_id = services.findings.get_many(finding_ids)
     findings = []
@@ -106,7 +106,7 @@ def _load_or_404(finding_ids: list[str], services: HubServices) -> list[Finding]
     return findings
 
 
-def _reread(findings: list[Finding], services: HubServices) -> list[FindingView]:
+def _reread(findings: list[Finding], services: TenantServices) -> list[FindingView]:
     """Every named finding, re-read post-write, so the response carries the fresh state
     and note an exit verb just recorded rather than the stale pre-call snapshot — one
     batched read (`get_many`), not one query per finding."""
@@ -121,7 +121,7 @@ def _reread(findings: list[Finding], services: HubServices) -> list[FindingView]
 
 @router.get("/findings", response_model=FindingsPageView, dependencies=[Depends(require(Permission.FLEET_VIEW))])
 def list_findings(
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     routine: Annotated[str | None, Query()] = None,
     scope: Annotated[str | None, Query()] = None,
     source: Annotated[str | None, Query()] = None,
@@ -158,7 +158,7 @@ def list_findings(
 @router.get(
     "/findings/{finding_id}", response_model=FindingDetailView, dependencies=[Depends(require(Permission.FLEET_VIEW))]
 )
-def get_finding(finding_id: str, services: Annotated[HubServices, Depends(get_services)]) -> FindingDetailView:
+def get_finding(finding_id: str, services: Services) -> FindingDetailView:
     """One finding's whole record, plus its whole fact chain oldest-first;
     404 on an unknown id."""
     result = services.findings.get_with_facts(finding_id)
@@ -170,7 +170,7 @@ def get_finding(finding_id: str, services: Annotated[HubServices, Depends(get_se
 
 def _exit_verb(
     request: FindingExitRequest,
-    services: HubServices,
+    services: TenantServices,
     identity: ResolvedIdentity,
     verb: Callable[..., None],
 ) -> list[FindingView]:
@@ -198,7 +198,7 @@ def _refusals_mapped() -> Iterator[None]:
 @router.post("/findings/resolve", response_model=list[FindingView])
 def resolve_findings(
     request: FindingExitRequest,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
 ) -> list[FindingView]:
     """Resolve every finding in `finding_ids`, recording NOTE: the work that answers a
@@ -211,7 +211,7 @@ def resolve_findings(
 @router.post("/findings/confirm-gone", response_model=list[FindingView])
 def confirm_gone_findings(
     request: FindingExitRequest,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
 ) -> list[FindingView]:
     """Confirm by hand that every finding in `finding_ids` no longer reproduces,
@@ -223,7 +223,7 @@ def confirm_gone_findings(
 @router.post("/findings/wont-fix", response_model=list[FindingView])
 def wont_fix_findings(
     request: FindingExitRequest,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
 ) -> list[FindingView]:
     """Withdraw every finding in `finding_ids` as won't-fix, recording NOTE: the ground
@@ -235,7 +235,7 @@ def wont_fix_findings(
 @router.post("/findings/not-a-finding", response_model=list[FindingView])
 def not_a_finding_findings(
     request: FindingExitRequest,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
 ) -> list[FindingView]:
     """Withdraw every finding in `finding_ids` as not a finding, recording NOTE. 404 for
@@ -246,7 +246,7 @@ def not_a_finding_findings(
 @router.post("/findings/supersede", response_model=list[FindingView])
 def supersede_findings(
     request: FindingSupersedeRequest,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
 ) -> list[FindingView]:
     """Withdraw every finding in `finding_ids` as superseded by `superseded_by`,
@@ -264,7 +264,7 @@ def supersede_findings(
 @router.post("/findings/reopen", response_model=list[FindingView])
 def reopen_findings(
     request: FindingExitRequest,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
 ) -> list[FindingView]:
     """Reopen every finding in `finding_ids`, undoing whichever exit or `gone` fact was

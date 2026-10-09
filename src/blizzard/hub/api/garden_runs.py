@@ -13,9 +13,8 @@ from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
-from blizzard.hub.api.deps import get_services
+from blizzard.hub.api.deps import Services
 from blizzard.hub.api.graph_names import GraphNames
-from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.garden.runs.history import (
     DeliveredSet,
     DeliveredSetDelta,
@@ -126,7 +125,7 @@ def _run_delta_view(delta: RunDelta, names: GraphNames) -> RunDeltaView:
 
 @router.get("/runs", response_model=list[RunRowView], dependencies=[Depends(require(Permission.FLEET_VIEW))])
 def list_runs(
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     since: Annotated[str | None, Query()] = None,
     until: Annotated[str | None, Query()] = None,
 ) -> list[RunRowView]:
@@ -146,7 +145,7 @@ def list_runs(
 
 
 @router.get("/runs/{chunk_id}", response_model=RunDeltaView, dependencies=[Depends(require(Permission.FLEET_VIEW))])
-def run_delta(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> RunDeltaView:
+def run_delta(chunk_id: str, services: Services) -> RunDeltaView:
     """One run's full detail: its routine, scope, mode, derived outcome, and, per
     finding-set it delivered, the added/observed/gone entries its own artifact
     published. 404 when `chunk_id` names no routine run."""

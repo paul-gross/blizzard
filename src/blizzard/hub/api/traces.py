@@ -4,8 +4,6 @@ holds nothing beyond fleet state — and replay on :attr:`~blizzard.auth_core.Pe
 
 from __future__ import annotations
 
-from typing import Annotated
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 
@@ -13,8 +11,7 @@ from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
-from blizzard.hub.api.deps import get_services
-from blizzard.hub.composition import HubServices
+from blizzard.hub.api.deps import Hub
 from blizzard.hub.domain.observability.tracing.replay import ReplayUnavailable, ReplayWindowRefused
 from blizzard.wire.traces import (
     TraceReplayFailure,
@@ -27,7 +24,7 @@ router = APIRouter(prefix="/api/traces", tags=["traces"], dependencies=[Depends(
 
 
 @router.get("/status", response_model=TraceStatusResponse, dependencies=[Depends(require(Permission.FLEET_VIEW))])
-def trace_status(services: Annotated[HubServices, Depends(get_services)]) -> TraceStatusResponse:
+def trace_status(services: Hub) -> TraceStatusResponse:
     """Tracing on or off, the redacted endpoint, the cursor and its lag, the last export and the last error."""
     read = services.trace_status.read()
     return TraceStatusResponse(
@@ -52,9 +49,7 @@ def trace_status(services: Annotated[HubServices, Depends(get_services)]) -> Tra
     responses={status.HTTP_502_BAD_GATEWAY: {"model": TraceReplayFailure}},
     dependencies=[Depends(require(Permission.ANALYTICS_ADMIN))],
 )
-def trace_replay(
-    request: TraceReplayRequest, services: Annotated[HubServices, Depends(get_services)]
-) -> TraceReplayResponse | JSONResponse:
+def trace_replay(request: TraceReplayRequest, services: Hub) -> TraceReplayResponse | JSONResponse:
     """Tell every step closed and chunk finished in ``[since, until)`` again, without moving the live cursor.
     A bad window — inverted, too wide, or reaching past now — is 422, a replay that must export while tracing
     is off is 409, and an exporter that refuses is 502 with the counts it accepted before."""

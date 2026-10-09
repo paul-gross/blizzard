@@ -21,10 +21,10 @@ from blizzard.foundation.work_items import WorkItemPriority
 from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
-from blizzard.hub.api.deps import get_services
+from blizzard.hub.api.deps import Services
 from blizzard.hub.api.door import RequestDoor, change_context
 from blizzard.hub.auth.models import ResolvedIdentity
-from blizzard.hub.composition import HubServices
+from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.ingest import IngestConflict
 from blizzard.hub.domain.chunk.model import HubWorkItem, WorkItemAuthor, WorkItemAuthorKind, WorkRef
@@ -69,7 +69,7 @@ from blizzard.wire.work_source import (
 router = APIRouter(prefix="/api", tags=["work-sources"], dependencies=[Depends(reject_runner_principal)])
 
 
-def _require_editor(source: str, services: HubServices) -> tuple[IWorkSource, IWorkEditor]:
+def _require_editor(source: str, services: TenantServices) -> tuple[IWorkSource, IWorkEditor]:
     """The named source and its editor, or the refusal: 404 for an unknown source,
     409 for a known one with no editor — a structural refusal for every source but
     ``hub``, since no work-source record field could ever opt a configured source into
@@ -88,7 +88,7 @@ def _blank(exc: WorkItemFieldBlank) -> HTTPException:
     return HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
 
 
-def _runner_names(services: HubServices, authors: Iterable[WorkItemAuthor]) -> dict[str, str]:
+def _runner_names(services: TenantServices, authors: Iterable[WorkItemAuthor]) -> dict[str, str]:
     """The registered names of the fleet authors among ``authors`` — one batched registry read,
     none at all when every author is a person."""
     return services.registry.names_for(author.runner_id for author in authors if author.runner_id is not None)
@@ -127,7 +127,7 @@ def _view(
     )
 
 
-def _summary(record: ConfiguredWorkSource, services: HubServices) -> WorkSourceSummary:
+def _summary(record: ConfiguredWorkSource, services: TenantServices) -> WorkSourceSummary:
     fields = record.fields
     return WorkSourceSummary(
         name=record.name,
@@ -145,7 +145,7 @@ def _summary(record: ConfiguredWorkSource, services: HubServices) -> WorkSourceS
     )
 
 
-def _built_in_summary(services: HubServices) -> WorkSourceSummary:
+def _built_in_summary(services: TenantServices) -> WorkSourceSummary:
     return WorkSourceSummary(
         name=RESERVED_HUB_SOURCE_NAME,
         annotate=services.work_sources.annotator(RESERVED_HUB_SOURCE_NAME) is not None,
@@ -165,7 +165,7 @@ def _conflict(exc: Exception) -> HTTPException:
     return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
 
 
-def _writable(source: str, services: HubServices) -> ConfiguredWorkSource:
+def _writable(source: str, services: TenantServices) -> ConfiguredWorkSource:
     """The stored record for a write: 409 for the built-in ``hub``, 404 for an unknown name."""
     try:
         require_configurable(source)
@@ -178,9 +178,7 @@ def _writable(source: str, services: HubServices) -> ConfiguredWorkSource:
 
 
 @router.get("/work-sources", response_model=WorkSourcesListView, dependencies=[Depends(require(Permission.FLEET_VIEW))])
-def list_work_sources(
-    services: Annotated[HubServices, Depends(get_services)], include_retired: bool = False
-) -> WorkSourcesListView:
+def list_work_sources(services: Services, include_retired: bool = False) -> WorkSourcesListView:
     """The built-in ``hub`` source and every stored work source, retired ones hidden unless
     `include_retired`. No gate beyond `fleet:view`, since a client needs this to know which
     sources gate their items."""
@@ -193,7 +191,7 @@ def create_work_source(
     request: WorkSourceDocument,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
     door: RequestDoor,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
 ) -> WorkSourceSummary:
     """Store a new work source at revision 1. 422 naming the field for a bad name, provider,
     locator, or a missing or retired secret; 409 for a taken name or a taken
@@ -218,7 +216,7 @@ def create_work_source(
 @router.get(
     "/work-sources/{source}", response_model=WorkSourceSummary, dependencies=[Depends(require(Permission.FLEET_VIEW))]
 )
-def get_work_source(source: str, services: Annotated[HubServices, Depends(get_services)]) -> WorkSourceSummary:
+def get_work_source(source: str, services: Services) -> WorkSourceSummary:
     """One work source, retired or not; the built-in `hub` shows as `built_in`. 404 on an unknown name."""
     if is_built_in(source):
         return _built_in_summary(services)
@@ -234,7 +232,7 @@ def patch_work_source(
     request: WorkSourcePatchRequest,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
     door: RequestDoor,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     if_match: Annotated[int | None, Header()] = None,
 ) -> WorkSourceSummary:
     """Apply only the fields present; an explicit `null` clears `api_base`, `web_base`, or
@@ -260,7 +258,7 @@ def retire_work_source(
     source: str,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
     door: RequestDoor,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     if_match: Annotated[int | None, Header()] = None,
 ) -> WorkSourceSummary:
     """Retire a work source — a reversible brake that keeps its locator claim. Retiring a
@@ -280,7 +278,7 @@ def enable_work_source(
     source: str,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
     door: RequestDoor,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     if_match: Annotated[int | None, Header()] = None,
 ) -> WorkSourceSummary:
     """Re-enable a retired work source; enabling an active one changes nothing. 404 unknown,
@@ -304,7 +302,7 @@ def enable_work_source(
 )
 def list_work_items(
     source: str,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     limit: Annotated[int, Query(ge=1, le=1000)] = 200,
 ) -> WorkItemsListView:
     """Up to LIMIT items at SOURCE, newest first, open and closed alike. 404/409 from the source's editor gate."""
@@ -340,7 +338,7 @@ def list_work_items(
 def create_work_item(
     source: str,
     request: WorkItemCreateRequest,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
 ) -> object:
     """Allocate a fresh item at SOURCE, open, authored by the caller, and mint its
@@ -397,7 +395,7 @@ def create_work_item(
     response_model=WorkItemView,
     dependencies=[Depends(require(Permission.FLEET_VIEW))],
 )
-def get_work_item(source: str, ref: str, services: Annotated[HubServices, Depends(get_services)]) -> WorkItemView:
+def get_work_item(source: str, ref: str, services: Services) -> WorkItemView:
     """One item at SOURCE by REF, open or closed. 404 for an unknown source, an
     unallocated ref, or a known source with no editor answered as 409."""
     source_obj, editor = _require_editor(source, services)
@@ -424,7 +422,7 @@ def patch_work_item(
     source: str,
     ref: str,
     request: WorkItemPatchRequest,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
 ) -> WorkItemView:
     """Replace the given fields in place, all-or-nothing. 404 for an unknown source or
     an unallocated ref; 409 for a known source with no editor or an item that
@@ -463,7 +461,7 @@ def patch_work_item(
 def withdraw_work_item(
     source: str,
     ref: str,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
 ) -> WorkItemView:
     """Withdraw the item at SOURCE/REF. 404 for an unknown source, an unallocated ref,
@@ -495,7 +493,7 @@ def withdraw_work_item(
     )
 
 
-def _publish_holder_deletion(services: HubServices, withdrawn: WithdrawnWorkItem, *, by: str) -> None:
+def _publish_holder_deletion(services: TenantServices, withdrawn: WithdrawnWorkItem, *, by: str) -> None:
     """Publish the cascade-deleted holder's frames, if the withdrawal deleted one — whether
     the withdrawal then stood or was refused, the deletion has committed."""
     if withdrawn.deleted_chunk_id is None:

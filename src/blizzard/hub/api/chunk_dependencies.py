@@ -5,8 +5,6 @@ here, which stays #457's to add."""
 
 from __future__ import annotations
 
-from typing import Annotated
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 
@@ -14,8 +12,8 @@ from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
-from blizzard.hub.api.deps import get_services
-from blizzard.hub.composition import HubServices
+from blizzard.hub.api.deps import Services
+from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.chunk.dependencies import (
     DependencyWouldCloseCycle,
     DependentNotEditable,
@@ -37,14 +35,14 @@ from blizzard.wire.chunk import (
 router = APIRouter(prefix="/api", tags=["chunk-dependencies"], dependencies=[Depends(reject_runner_principal)])
 
 
-def _resolve_dependent(services: HubServices, chunk_id: str) -> Chunk:
+def _resolve_dependent(services: TenantServices, chunk_id: str) -> Chunk:
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     return chunk
 
 
-def _resolve_prerequisite(services: HubServices, chunk_id: str) -> Chunk | str:
+def _resolve_prerequisite(services: TenantServices, chunk_id: str) -> Chunk | str:
     """Resolve the named prerequisite to its chunk, or — for an id minted but since gone ephemeral
     (grouped-away or deleted), which has no chunk to load — to the id itself; 404 for an id never
     minted. Whether an ephemeral prerequisite is refused is ``DependencyService``'s to decide, under
@@ -57,7 +55,7 @@ def _resolve_prerequisite(services: HubServices, chunk_id: str) -> Chunk | str:
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
 
 
-def _resolve_standing_edge(services: HubServices, dependent: Chunk, prerequisite_chunk_id: str) -> DependencyEdge:
+def _resolve_standing_edge(services: TenantServices, dependent: Chunk, prerequisite_chunk_id: str) -> DependencyEdge:
     """Resolve the ordered pair to the standing edge a release operates on
     (``bzh:domain-takes-objects``). Nothing about the prerequisite is read: an edge whose
     prerequisite was since deleted still releases, which is the lever that keeps blocked a
@@ -89,7 +87,7 @@ def _edge_view(edge: DependencyEdge) -> ChunkDependencyEdgeView:
 def declare_dependency(
     chunk_id: str,
     request: ChunkDependencyDeclareRequest,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
 ) -> object:
     """Declare that CHUNK depends on ``prerequisite_chunk_id``.
 
@@ -125,7 +123,7 @@ def declare_dependency(
 def release_dependency(
     chunk_id: str,
     request: ChunkDependencyReleaseRequest,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
 ) -> object:
     """Release CHUNK's standing dependency on ``prerequisite_chunk_id``
     — recorded, never deleted. Admitted whenever the edge stands, whatever the

@@ -7,7 +7,6 @@ route answers anything. Gated on :attr:`~blizzard.auth_core.Permission.TRANSCRIP
 from __future__ import annotations
 
 import json
-from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
@@ -15,8 +14,7 @@ from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
-from blizzard.hub.api.deps import get_services
-from blizzard.hub.composition import HubServices
+from blizzard.hub.api.deps import Services
 from blizzard.hub.domain.observability.transcripts import (
     SegmentRecordContent,
     SegmentSummary,
@@ -132,9 +130,7 @@ def lease_content_view(
     response_model=TranscriptSegmentIndexView,
     dependencies=[Depends(require(Permission.TRANSCRIPT_READ))],
 )
-def list_transcript_segments(
-    chunk_id: str, services: Annotated[HubServices, Depends(get_services)]
-) -> TranscriptSegmentIndexView:
+def list_transcript_segments(chunk_id: str, services: Services) -> TranscriptSegmentIndexView:
     """The chunk's segment index — metadata and byte counts only, never turns."""
     if services.chunks.record.get(chunk_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
@@ -147,9 +143,7 @@ def list_transcript_segments(
     response_model=TranscriptSegmentContentView,
     dependencies=[Depends(require(Permission.TRANSCRIPT_READ))],
 )
-def get_transcript_segment(
-    chunk_id: str, segment_id: str, services: Annotated[HubServices, Depends(get_services)]
-) -> TranscriptSegmentContentView:
+def get_transcript_segment(chunk_id: str, segment_id: str, services: Services) -> TranscriptSegmentContentView:
     """One segment's decompressed turns, concatenated across its stored records in
     turn-range order — the lazy per-segment content read."""
     if services.chunks.record.get(chunk_id) is None:

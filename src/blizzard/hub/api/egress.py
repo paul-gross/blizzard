@@ -4,8 +4,6 @@ cannot already see — and the writes on :attr:`~blizzard.auth_core.Permission.A
 
 from __future__ import annotations
 
-from typing import Annotated
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 
@@ -13,8 +11,7 @@ from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
-from blizzard.hub.api.deps import get_services
-from blizzard.hub.composition import HubServices
+from blizzard.hub.api.deps import Hub
 from blizzard.hub.domain.observability.egress.backfill import BackfillUnavailable, BackfillWindowRefused
 from blizzard.hub.domain.observability.egress.reset import ResetRefused, ResetUnavailable
 from blizzard.wire.egress import (
@@ -32,7 +29,7 @@ router = APIRouter(prefix="/api/egress", tags=["egress"], dependencies=[Depends(
 
 
 @router.get("/status", response_model=EgressStatusResponse, dependencies=[Depends(require(Permission.FLEET_VIEW))])
-def egress_status(services: Annotated[HubServices, Depends(get_services)]) -> EgressStatusResponse:
+def egress_status(services: Hub) -> EgressStatusResponse:
     """Export on, off or rejected, each dataset's cursor and lag, the last pass and file, the last error and the
     free space."""
     read = services.egress_status.read()
@@ -62,9 +59,7 @@ def egress_status(services: Annotated[HubServices, Depends(get_services)]) -> Eg
 
 
 @router.post("/reset", response_model=EgressResetResponse, dependencies=[Depends(require(Permission.ANALYTICS_ADMIN))])
-def egress_reset(
-    request: EgressResetRequest, services: Annotated[HubServices, Depends(get_services)]
-) -> EgressResetResponse:
+def egress_reset(request: EgressResetRequest, services: Hub) -> EgressResetResponse:
     """Move one dataset's cursor to an instant and record the moved window. An unconfigured dataset or a future
     instant is 422, and a reset while the export is off or rejected is 409."""
     try:
@@ -87,9 +82,7 @@ def egress_reset(
     responses={status.HTTP_502_BAD_GATEWAY: {"model": EgressBackfillFailure}},
     dependencies=[Depends(require(Permission.ANALYTICS_ADMIN))],
 )
-def egress_backfill(
-    request: EgressBackfillRequest, services: Annotated[HubServices, Depends(get_services)]
-) -> EgressBackfillResponse | JSONResponse:
+def egress_backfill(request: EgressBackfillRequest, services: Hub) -> EgressBackfillResponse | JSONResponse:
     """Write the rows of ``[since, until)`` again as the live export would, without moving a cursor. A bad window
     — inverted, too wide, or reaching past now — or dataset is 422, a wet backfill while the export is off or
     rejected is 409 (a dry run only counts, so it runs), and a writer that refuses is 502 with the counts

@@ -17,9 +17,8 @@ from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
-from blizzard.hub.api.deps import get_services
+from blizzard.hub.api.deps import Services
 from blizzard.hub.auth.models import ResolvedIdentity
-from blizzard.hub.composition import HubServices
 from blizzard.hub.documents.codec import YAML_CODEC, ConfigDecodeError
 from blizzard.hub.domain.graph.model import ChoiceTarget, Graph, GraphDoc, GraphParseError, Mints, Node
 from blizzard.hub.domain.graph.validation import GraphValidationError
@@ -119,7 +118,7 @@ def _graph_view(
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(require(Permission.GRAPH_EDIT))],
 )
-def mint_graph(request: GraphMintRequest, services: Annotated[HubServices, Depends(get_services)]) -> object:
+def mint_graph(request: GraphMintRequest, services: Services) -> object:
     """Validate and mint an immutable graph; 422 on validation errors."""
     try:
         doc = GraphDoc.of(YAML_CODEC.decode(request.definition_yaml.encode("utf-8")))
@@ -138,7 +137,7 @@ def mint_graph(request: GraphMintRequest, services: Annotated[HubServices, Depen
 
 
 @router.post("/graphs/sync", response_model=GraphSyncResponse, dependencies=[Depends(require(Permission.GRAPH_EDIT))])
-def sync_graphs(services: Annotated[HubServices, Depends(get_services)]) -> GraphSyncResponse:
+def sync_graphs(services: Services) -> GraphSyncResponse:
     """Reconcile the packaged graph set against the store, minting only what changed.
 
     Idempotent, so it is safe to run unconditionally. Registered above
@@ -154,7 +153,7 @@ def sync_graphs(services: Annotated[HubServices, Depends(get_services)]) -> Grap
 
 
 @router.get("/graphs", response_model=list[GraphSummaryView], dependencies=[Depends(require(Permission.FLEET_VIEW))])
-def list_graphs(services: Annotated[HubServices, Depends(get_services)]) -> list[GraphSummaryView]:
+def list_graphs(services: Services) -> list[GraphSummaryView]:
     """Every minted graph, newest first, newest non-retired per name marked ``effective``.
 
     Reads the listing-shape projection — nothing here touches nodes,
@@ -176,7 +175,7 @@ def list_graphs(services: Annotated[HubServices, Depends(get_services)]) -> list
 
 
 @router.get("/graphs/{graph_id}", response_model=GraphView, dependencies=[Depends(require(Permission.FLEET_VIEW))])
-def get_graph(graph_id: str, services: Annotated[HubServices, Depends(get_services)]) -> GraphView:
+def get_graph(graph_id: str, services: Services) -> GraphView:
     """One graph's full reified definition; 404 on unknown id."""
     graph = services.graphs.get(graph_id)
     if graph is None:
@@ -193,7 +192,7 @@ def get_graph(graph_id: str, services: Annotated[HubServices, Depends(get_servic
 )
 def retire_graph(
     graph_id: str,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.GRAPH_EDIT))],
 ) -> GraphView:
     """Retire a graph — excludes it from name resolution; the claim on any chunk
@@ -212,7 +211,7 @@ def retire_graph(
 )
 def enable_graph(
     graph_id: str,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.GRAPH_EDIT))],
 ) -> GraphView:
     """Re-enable a retired graph — restores normal newest-per-name derivation.
@@ -228,7 +227,7 @@ def enable_graph(
 def patch_graph(
     graph_id: str,
     request: GraphFlagsPatchRequest,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.GRAPH_EDIT))],
 ) -> GraphView:
     """Sparse-edit this graph's mutable flags; 404 on an unknown id.
@@ -256,7 +255,7 @@ def patch_graph(
 def set_graph_follow_latest(
     graph_id: str,
     request: GraphPolicyRequest,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.GRAPH_EDIT))],
 ) -> GraphView:
     """Deprecated: use ``PATCH /graphs/{graph_id}`` with ``follow_latest``.

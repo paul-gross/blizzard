@@ -21,8 +21,8 @@ from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.chunk_views import blocked_view
-from blizzard.hub.api.deps import get_services
-from blizzard.hub.composition import HubServices
+from blizzard.hub.api.deps import Services
+from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.chunk.dependencies import derive_blocked_prerequisites
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.model import Chunk
@@ -62,7 +62,7 @@ router = APIRouter(prefix="/api", tags=["queue"], dependencies=[Depends(reject_r
 
 
 def _blocked_markings(
-    services: HubServices, statuses: Mapping[str, ChunkStatus], dependent_ids: Sequence[str] | None = None
+    services: TenantServices, statuses: Mapping[str, ChunkStatus], dependent_ids: Sequence[str] | None = None
 ) -> dict[str, list[str]]:
     """Mark only the displayed dependents (or the whole live order for peeks and writes).
     The live status map still resolves on-page and off-page prerequisites; a finished
@@ -76,7 +76,7 @@ def _blocked_markings(
 
 
 def _replace(
-    list_: QueueList, chunk_ids: list[str], services: HubServices, statuses: Mapping[str, ChunkStatus]
+    list_: QueueList, chunk_ids: list[str], services: TenantServices, statuses: Mapping[str, ChunkStatus]
 ) -> list[Chunk]:
     """Replace ``list_``'s order — the body ``PUT /api/queue`` and ``PUT /api/backlog`` share,
     differing only in which list they rank (``bzh:ranking-is-per-list``). ``statuses`` is the
@@ -95,7 +95,7 @@ def _reposition(
     list_: QueueList,
     chunk_id: str,
     after_chunk_id: str | None,
-    services: HubServices,
+    services: TenantServices,
     statuses: Mapping[str, ChunkStatus],
 ) -> None:
     """Move one chunk within ``list_`` — the body ``POST /api/queue/position`` and
@@ -122,7 +122,7 @@ class ReadyQueue:
     markings: dict[str, list[str]]
 
     @classmethod
-    def of(cls, services: HubServices, statuses: Mapping[str, ChunkStatus]) -> ReadyQueue:
+    def of(cls, services: TenantServices, statuses: Mapping[str, ChunkStatus]) -> ReadyQueue:
         return cls(services.queue.ordered_ready(statuses=statuses), _blocked_markings(services, statuses))
 
     @property
@@ -164,7 +164,9 @@ class MatchedPeek:
     entry: MatchedEntry | None
 
     @classmethod
-    def of(cls, services: HubServices, statuses: Mapping[str, ChunkStatus], request: QueuePeekRequest) -> MatchedPeek:
+    def of(
+        cls, services: TenantServices, statuses: Mapping[str, ChunkStatus], request: QueuePeekRequest
+    ) -> MatchedPeek:
         chunks = services.queue.ordered_ready(statuses=statuses)
         markings = _blocked_markings(services, statuses)
         chunk_ids = [chunk.chunk_id for chunk in chunks]
@@ -219,7 +221,7 @@ def _page_view(page: QueuePage, markings: Mapping[str, list[str]]) -> QueuePageV
 
 @router.get("/queue", response_model=QueuePageView, dependencies=[Depends(require(Permission.FLEET_VIEW))])
 def get_queue(
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     cursor: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
 ) -> QueuePageView:
@@ -234,9 +236,7 @@ def get_queue(
 
 
 @router.put("/queue", response_model=QueuePeekResponse, dependencies=[Depends(require(Permission.QUEUE_REORDER))])
-def replace_queue(
-    request: QueueReplaceRequest, services: Annotated[HubServices, Depends(get_services)]
-) -> QueuePeekResponse:
+def replace_queue(request: QueueReplaceRequest, services: Services) -> QueuePeekResponse:
     """Idempotent whole-order replacement of the ready queue.
 
     Resolves every named id against the current ready set: ``409`` names the first id
@@ -252,9 +252,7 @@ def replace_queue(
 @router.post(
     "/queue/position", response_model=QueuePeekResponse, dependencies=[Depends(require(Permission.QUEUE_REORDER))]
 )
-def reposition_queue(
-    request: QueuePositionRequest, services: Annotated[HubServices, Depends(get_services)]
-) -> QueuePeekResponse:
+def reposition_queue(request: QueuePositionRequest, services: Services) -> QueuePeekResponse:
     """Single-chunk fractional reorder.
 
     Resolves both ids against the current ready set: ``409`` names either one if it is
@@ -279,7 +277,7 @@ class Backlog:
     markings: dict[str, list[str]]
 
     @classmethod
-    def of(cls, services: HubServices, statuses: Mapping[str, ChunkStatus]) -> Backlog:
+    def of(cls, services: TenantServices, statuses: Mapping[str, ChunkStatus]) -> Backlog:
         return cls(services.queue.ordered_not_ready(statuses=statuses), _blocked_markings(services, statuses))
 
     @property
@@ -316,7 +314,7 @@ def _backlog_page_view(page: QueuePage, markings: Mapping[str, list[str]]) -> Ba
 
 @router.get("/backlog", response_model=BacklogPageView, dependencies=[Depends(require(Permission.QUEUE_REORDER))])
 def get_backlog(
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     cursor: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
 ) -> BacklogPageView:
@@ -333,9 +331,7 @@ def get_backlog(
 
 
 @router.put("/backlog", response_model=BacklogPeekResponse, dependencies=[Depends(require(Permission.QUEUE_REORDER))])
-def replace_backlog(
-    request: BacklogReplaceRequest, services: Annotated[HubServices, Depends(get_services)]
-) -> BacklogPeekResponse:
+def replace_backlog(request: BacklogReplaceRequest, services: Services) -> BacklogPeekResponse:
     """Idempotent whole-order replacement of the backlog.
 
     Resolves every named id against the current ``not_ready`` set: ``409`` names the
@@ -351,9 +347,7 @@ def replace_backlog(
 @router.post(
     "/backlog/position", response_model=BacklogPeekResponse, dependencies=[Depends(require(Permission.QUEUE_REORDER))]
 )
-def reposition_backlog(
-    request: BacklogPositionRequest, services: Annotated[HubServices, Depends(get_services)]
-) -> BacklogPeekResponse:
+def reposition_backlog(request: BacklogPositionRequest, services: Services) -> BacklogPeekResponse:
     """Single-chunk fractional reorder within the backlog.
 
     Resolves both ids against the current ``not_ready`` set: ``409`` names either one if
@@ -374,7 +368,7 @@ def reposition_backlog(
 def group_chunks(
     chunk_id: str,
     request: ChunkGroupRequest,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
 ) -> object:
     """Merge unacquired chunks into ``chunk_id``. Accepts ``not_ready`` and ``ready``
     participants alike; 409 names the first chunk a runner holds, or one

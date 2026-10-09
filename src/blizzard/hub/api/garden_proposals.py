@@ -16,9 +16,9 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
-from blizzard.hub.api.deps import get_services
+from blizzard.hub.api.deps import Services
 from blizzard.hub.auth.models import ResolvedIdentity
-from blizzard.hub.composition import HubServices
+from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.chunk.ingest import IngestConflict
 from blizzard.hub.domain.garden.findings.model import Finding
 from blizzard.hub.domain.garden.proposals.closure import (
@@ -93,14 +93,14 @@ def garden_proposal_view(proposal: GardenProposal, closure: GardenProposalClosur
     )
 
 
-def _get_or_404(proposal_id: str, services: HubServices) -> GardenProposal:
+def _get_or_404(proposal_id: str, services: TenantServices) -> GardenProposal:
     proposal = services.garden_proposals.get(proposal_id)
     if proposal is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown garden proposal {proposal_id}")
     return proposal
 
 
-def _require_open_for(verb: GardenProposalVerb, proposal: GardenProposal, services: HubServices) -> None:
+def _require_open_for(verb: GardenProposalVerb, proposal: GardenProposal, services: TenantServices) -> None:
     """409 when `verb` is refused as closed — checked before any finding id is resolved,
     since a closed proposal refuses every verb as closed ahead of any other refusal."""
     try:
@@ -109,7 +109,7 @@ def _require_open_for(verb: GardenProposalVerb, proposal: GardenProposal, servic
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
 
-def _resolve_findings_or_422(finding_ids: list[str], services: HubServices) -> list[Finding]:
+def _resolve_findings_or_422(finding_ids: list[str], services: TenantServices) -> list[Finding]:
     """`IReadFindingRepository.get_many` resolved against `finding_ids`, preserving the
     caller's order; 422s naming every id `get_many` dropped — the whole
     call is refused, not the unknown ones alone."""
@@ -127,7 +127,7 @@ def _resolve_findings_or_422(finding_ids: list[str], services: HubServices) -> l
     "/garden-proposals", response_model=GardenProposalsPageView, dependencies=[Depends(require(Permission.FLEET_VIEW))]
 )
 def list_garden_proposals(
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     cursor: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
     origin: Annotated[GardenProposalOrigin | None, Query()] = None,
@@ -150,9 +150,7 @@ def list_garden_proposals(
     response_model=GardenProposalView,
     dependencies=[Depends(require(Permission.FLEET_VIEW))],
 )
-def get_garden_proposal(
-    proposal_id: str, services: Annotated[HubServices, Depends(get_services)]
-) -> GardenProposalView:
+def get_garden_proposal(proposal_id: str, services: Services) -> GardenProposalView:
     """One garden proposal's whole record; 404 on an unknown id."""
     proposal = _get_or_404(proposal_id, services)
     return garden_proposal_view(proposal, services.garden_proposal_closures.get(proposal_id))
@@ -162,7 +160,7 @@ def get_garden_proposal(
 def pass_garden_proposal(
     proposal_id: str,
     request: GardenProposalPassRequest,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
 ) -> GardenProposalView:
     """Pass the proposal at `{proposal_id}`, recording the given reason. Passing is not a
@@ -184,7 +182,7 @@ def pass_garden_proposal(
 def accept_garden_proposal(
     proposal_id: str,
     request: GardenProposalAcceptRequest,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
 ) -> object:
     """Accept the proposal at `{proposal_id}`. When `mint_work_item` is true, mints a linked
@@ -235,7 +233,7 @@ def accept_garden_proposal(
 )
 def create_garden_proposal(
     request: GardenProposalCreateRequest,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
 ) -> GardenProposalView:
     """Mint an operator-authored proposal, naming `routine` when the
@@ -270,7 +268,7 @@ def create_garden_proposal(
     dependencies=[Depends(require(Permission.CHUNK_CONTROL))],
 )
 def edit_garden_proposal(
-    proposal_id: str, request: GardenProposalEditRequest, services: Annotated[HubServices, Depends(get_services)]
+    proposal_id: str, request: GardenProposalEditRequest, services: Services
 ) -> GardenProposalView:
     """Replace the given fields of `{proposal_id}` in place, all-or-nothing
     — works on either origin while open. 404 unknown proposal, 409 already closed,
@@ -298,7 +296,7 @@ def edit_garden_proposal(
 def attach_garden_proposal_findings(
     proposal_id: str,
     request: GardenProposalFindingsRequest,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
 ) -> GardenProposalView:
     """Link the given finding ids to `{proposal_id}` — works on either origin
     while open. 404 unknown proposal, 409 already closed, 422 no finding id, an unknown,
@@ -329,7 +327,7 @@ def attach_garden_proposal_findings(
 def detach_garden_proposal_findings(
     proposal_id: str,
     request: GardenProposalFindingsRequest,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
 ) -> GardenProposalView:
     """Unlink the given finding ids from `{proposal_id}` — works on either
     origin while open. 404 unknown proposal, 409 already closed, 422 no finding id, an

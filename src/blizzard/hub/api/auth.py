@@ -10,9 +10,8 @@ through that tenant's own registry.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Annotated
 
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import HTTPException, Request, status
 
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.attributes import CALLER, annotate
@@ -20,7 +19,7 @@ from blizzard.foundation.roles import dto
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
 from blizzard.foundation.tokens import TokenHash
 from blizzard.hub.api.bearer import presented_bearer
-from blizzard.hub.api.deps import get_services
+from blizzard.hub.api.deps import Hub
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.observability.tracing.attributes import RUNNER_ID, RUNNER_NAME
 from blizzard.hub.domain.runners.registration import RunnerRegistration, RunnerTokenRefused, refuse_runner_token
@@ -168,19 +167,15 @@ def runner_signing_in(services: HubServices, client: str) -> RunnerRegistration 
     return _registration_in_tenant(services, resolved.tenant, resolved.runner_id)
 
 
-def require_runner_principal(
-    request: Request, services: Annotated[HubServices, Depends(get_services)]
-) -> RunnerPrincipal:
+def require_runner_principal(request: Request, services: Hub) -> RunnerPrincipal:
     return RunnerAuth.of(request, services).demand()
 
 
-def require_runner_principal_even_if_retired(
-    request: Request, services: Annotated[HubServices, Depends(get_services)]
-) -> RunnerPrincipal:
+def require_runner_principal_even_if_retired(request: Request, services: Hub) -> RunnerPrincipal:
     """The principal without the retirement refusal — the claim route's, whose retired refusal is the
     paused-denial body a runner parses (``ClaimService`` raises it in-domain)."""
     return RunnerAuth.of(request, services).demand(allow_retired=True)
 
 
-def reject_runner_principal(request: Request, services: Annotated[HubServices, Depends(get_services)]) -> None:
+def reject_runner_principal(request: Request, services: Hub) -> None:
     RunnerAuth.of(request, services).refuse_runner()

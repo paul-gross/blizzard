@@ -24,9 +24,9 @@ from blizzard.foundation.roles import dto
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
-from blizzard.hub.api.deps import get_services
+from blizzard.hub.api.deps import Services
 from blizzard.hub.auth.models import ResolvedIdentity
-from blizzard.hub.composition import HubServices
+from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.chunk.model import ActivityEntry, ActivityFeed, EventFeed, OperationalEvent
 from blizzard.hub.domain.kernel.pagination import DEFAULT_LIMIT
 from blizzard.wire.activity import ActivityResponse, ActivityView
@@ -54,7 +54,7 @@ async def events_stream(
     return StreamingResponse(stream.frames(), media_type="text/event-stream")
 
 
-def _runner_names(services: HubServices, runner_ids: Iterable[str | None]) -> dict[str, str]:
+def _runner_names(services: TenantServices, runner_ids: Iterable[str | None]) -> dict[str, str]:
     """The registered names of the runners a feed's rows name — one batched registry read."""
     return services.registry.names_for(runner_id for runner_id in runner_ids if runner_id is not None)
 
@@ -92,7 +92,7 @@ class Events:
     dependencies=[Depends(reject_runner_principal), Depends(require(Permission.FLEET_VIEW))],
 )
 def list_events(
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     severity: Annotated[EventLogSeverity | None, Query()] = None,
     runner_id: Annotated[str | None, Query()] = None,
     chunk_id: Annotated[str | None, Query()] = None,
@@ -155,7 +155,7 @@ class Activity:
     dependencies=[Depends(reject_runner_principal), Depends(require(Permission.FLEET_VIEW))],
 )
 def list_activity(
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     since: Annotated[datetime | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=FEED_MAX_LIMIT)] = DEFAULT_LIMIT,
 ) -> ActivityResponse:

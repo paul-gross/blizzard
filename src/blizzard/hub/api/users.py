@@ -15,10 +15,9 @@ from blizzard.auth_core import Permission, Role
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
-from blizzard.hub.api.deps import get_services
+from blizzard.hub.api.deps import Hub
 from blizzard.hub.auth.models import Identity, ResolvedIdentity, User
 from blizzard.hub.auth.service import RoleAssignmentRefused, assignable_roles
-from blizzard.hub.composition import HubServices
 from blizzard.wire.user import RoleAssignmentRequest, UserIdentityView, UserView
 
 router = APIRouter(prefix="/api", tags=["auth"], dependencies=[Depends(reject_runner_principal)])
@@ -39,7 +38,7 @@ def _user_view(user: User, *, identities: list[Identity], actor: ResolvedIdentit
 
 @router.get("/users", response_model=list[UserView])
 def list_users(
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Hub,
     actor: Annotated[ResolvedIdentity, Depends(require(Permission.USER_MANAGE))],
 ) -> list[UserView]:
     """Every hub-local account — the admin page's own table."""
@@ -52,7 +51,7 @@ def list_users(
 def assign_role(
     user_id: str,
     body: RoleAssignmentRequest,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Hub,
     actor: Annotated[ResolvedIdentity, Depends(require(Permission.USER_MANAGE))],
 ) -> UserView:
     """Assign ``user_id`` a new role. Three refusals, each a 403: changing your own role;

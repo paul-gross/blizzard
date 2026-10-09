@@ -4,11 +4,11 @@ each of the facts/route/decisions seams."""
 from __future__ import annotations
 
 from blizzard.hub.api.chunk_views import pause_view, usage_total_view
-from blizzard.hub.composition import HubServices
+from blizzard.hub.composition import TenantServices
 from blizzard.wire.chunk import ChunkDecisionStatusView, ChunkStatusView
 
 
-def chunk_statuses(chunk_ids: list[str], services: HubServices) -> list[ChunkStatusView]:
+def chunk_statuses(chunk_ids: list[str], services: TenantServices) -> list[ChunkStatusView]:
     """One :class:`ChunkStatusView` per requested id, de-duplicated preserving order. An
     id unknown to (or ephemeral in) the store is silently omitted, never a 404 — a lazy
     tick read routinely races a chunk's own deletion/grouping."""

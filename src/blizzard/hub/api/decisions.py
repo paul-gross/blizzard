@@ -18,9 +18,8 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
-from blizzard.hub.api.deps import get_services
+from blizzard.hub.api.deps import Services
 from blizzard.hub.auth.models import ResolvedIdentity
-from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.chunk.model import DecisionClosed, GateDecision, NotADecisionChoice
 from blizzard.wire.decision import (
     DecisionChoiceModel,
@@ -57,7 +56,7 @@ def to_decision_view(row: GateDecision, runner_names: Mapping[str, str]) -> Deci
 
 
 @router.get("/decisions", response_model=OpenDecisionsResponse, dependencies=[Depends(require(Permission.FLEET_VIEW))])
-def list_decisions(services: Annotated[HubServices, Depends(get_services)]) -> OpenDecisionsResponse:
+def list_decisions(services: Services) -> OpenDecisionsResponse:
     """The fleet's open (unresolved) decisions — gate surfacing."""
     rows = services.chunks.decisions.list_open_decisions()
     runner_names = services.registry.names_for(
@@ -70,7 +69,7 @@ def list_decisions(services: Annotated[HubServices, Depends(get_services)]) -> O
 def resolve_decision(
     decision_id: str,
     request: DecisionResolutionRequest,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.GATE_RESOLVE))],
 ) -> object:
     """Resolve an open decision, first-write-wins CAS.

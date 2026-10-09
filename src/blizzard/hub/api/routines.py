@@ -19,10 +19,10 @@ from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
-from blizzard.hub.api.deps import get_services
+from blizzard.hub.api.deps import Services
 from blizzard.hub.api.door import RequestDoor, change_context
 from blizzard.hub.auth.models import ResolvedIdentity
-from blizzard.hub.composition import HubServices
+from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.chunk.ingest import IngestConflict
 from blizzard.hub.domain.chunk.model import WorkItemAuthor
 from blizzard.hub.domain.config.work_sources import ConfigFieldError, ConfigRevisionConflict
@@ -86,7 +86,7 @@ def _revision_conflict(exc: ConfigRevisionConflict) -> HTTPException:
     return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
 
 
-def _routine_or_404(routine_id: str, services: HubServices) -> Routine:
+def _routine_or_404(routine_id: str, services: TenantServices) -> Routine:
     routine = services.routines.get(routine_id)
     if routine is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine_id}")
@@ -98,7 +98,7 @@ def create_routine(
     request: RoutineCreateRequest,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.GRAPH_EDIT))],
     door: RequestDoor,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
 ) -> RoutineView:
     """Mint a routine; 422 on a duplicate name, a malformed default scope slug, or a
     graph name with no enabled mint."""
@@ -120,7 +120,7 @@ def create_routine(
 
 @router.get("/routines", response_model=list[RoutineView], dependencies=[Depends(require(Permission.FLEET_VIEW))])
 def list_routines(
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     include_retired: Annotated[bool, Query()] = False,
 ) -> list[RoutineView]:
     """Every routine, newest first — a retired routine excluded by default, included and
@@ -167,7 +167,7 @@ def _trend_view(trend: Trend) -> TrendView:
 
 @router.get("/routines/trend", response_model=TrendView, dependencies=[Depends(require(Permission.FLEET_VIEW))])
 def routine_trend(
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     routine: Annotated[str, Query()],
     since: Annotated[str, Query()],
     until: Annotated[str, Query()],
@@ -216,7 +216,7 @@ def _proposal_counts_row_view(counts: GardenProposalCounts) -> GardenProposalCou
     dependencies=[Depends(require(Permission.FLEET_VIEW))],
 )
 def routine_proposal_counts(
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     since: Annotated[str, Query()],
     until: Annotated[str, Query()],
     routine: Annotated[str | None, Query()] = None,
@@ -250,7 +250,7 @@ def routine_proposal_counts(
 @router.get(
     "/routines/{routine_id}", response_model=RoutineView, dependencies=[Depends(require(Permission.FLEET_VIEW))]
 )
-def get_routine(routine_id: str, services: Annotated[HubServices, Depends(get_services)]) -> RoutineView:
+def get_routine(routine_id: str, services: Services) -> RoutineView:
     """One routine's whole record; 404 on an unknown id."""
     return _routine_view(_routine_or_404(routine_id, services))
 
@@ -272,9 +272,7 @@ def _baseline_view(baseline: RoutineBaseline) -> RoutineBaselineView:
     response_model=list[RoutineBaselineView],
     dependencies=[Depends(require(Permission.FLEET_VIEW))],
 )
-def routine_baselines(
-    routine_id: str, services: Annotated[HubServices, Depends(get_services)]
-) -> list[RoutineBaselineView]:
+def routine_baselines(routine_id: str, services: Services) -> list[RoutineBaselineView]:
     """Every scope `routine_id` has swept; a scope it never swept has no row.
     404 on an unknown routine id."""
     routine = services.routines.get(routine_id)
@@ -288,7 +286,7 @@ def routine_baselines(
     response_model=list[str],
     dependencies=[Depends(require(Permission.FLEET_VIEW))],
 )
-def list_routine_scopes(routine_id: str, services: Annotated[HubServices, Depends(get_services)]) -> list[str]:
+def list_routine_scopes(routine_id: str, services: Services) -> list[str]:
     """Every scope slug linked to `routine_id`, sorted — its own default
     scope is always among them. 404 on an unknown routine id."""
     routine = services.routines.get(routine_id)
@@ -297,7 +295,7 @@ def list_routine_scopes(routine_id: str, services: Annotated[HubServices, Depend
     return services.routine_scopes.list_scopes(routine.routine_id)
 
 
-def _resolve_scope_for_membership(scope_slug: str, services: HubServices) -> Scope:
+def _resolve_scope_for_membership(scope_slug: str, services: TenantServices) -> Scope:
     """Parse and resolve `scope_slug` for a link/unlink write: 422 on a malformed slug,
     404 on a well-formed but unknown one — a management verb never silently mints
     (`hub scope create` is the one deliberate mint path)."""
@@ -317,7 +315,7 @@ def link_routine_scope(
     scope_slug: str,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.GRAPH_EDIT))],
     door: RequestDoor,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     if_match: Annotated[int | None, Header()] = None,
 ) -> Response:
     """Link `scope_slug` into `routine_id`'s own set — a routine edit of its `scopes`;
@@ -338,7 +336,7 @@ def unlink_routine_scope(
     scope_slug: str,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.GRAPH_EDIT))],
     door: RequestDoor,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     if_match: Annotated[int | None, Header()] = None,
 ) -> Response:
     """Unlink `scope_slug` from `routine_id`'s own set — a routine edit of its `scopes`;
@@ -371,7 +369,7 @@ def edit_routine(
     request: RoutineEditRequest,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.GRAPH_EDIT))],
     door: RequestDoor,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     if_match: Annotated[int | None, Header()] = None,
 ) -> RoutineView:
     """Apply only the fields present — the graph, the default scope, and the model, effort,
@@ -399,7 +397,7 @@ def retire_routine(
     request: RoutineLifecycleRequest,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.GRAPH_EDIT))],
     door: RequestDoor,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     if_match: Annotated[int | None, Header()] = None,
 ) -> RoutineView:
     """Retire a routine — a reversible brake; retiring a retired routine writes nothing.
@@ -420,7 +418,7 @@ def enable_routine(
     request: RoutineLifecycleRequest,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.GRAPH_EDIT))],
     door: RequestDoor,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     if_match: Annotated[int | None, Header()] = None,
 ) -> RoutineView:
     """Re-enable a retired routine; enabling an enabled one writes nothing. 404 on an
@@ -465,7 +463,7 @@ def _sweeps_view(sweeps: GardenSweeps) -> GardenSweepsView:
 )
 def routine_sweeps(
     routine_id: str,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     since: Annotated[str, Query()],
     until: Annotated[str, Query()],
 ) -> GardenSweepsView:
@@ -512,7 +510,7 @@ def _run_response(result: RunResult) -> RoutineRunResponse:
 def run_routine(
     routine_id: str,
     request: RoutineRunRequest,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
 ) -> object:
     """Mint and ingest a hub work item from the routine, in one act; its chunk rests ``not_ready``

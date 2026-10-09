@@ -18,9 +18,8 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
-from blizzard.hub.api.deps import get_services
+from blizzard.hub.api.deps import Services
 from blizzard.hub.auth.models import ResolvedIdentity
-from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.chunk.model import ChunkFacts, NodeQuestion, QuestionClosed
 from blizzard.hub.domain.execution.questions import AskedQuestion
 from blizzard.wire.question import AnswerRequest, AnswerResult, QuestionAsked, QuestionView
@@ -71,7 +70,7 @@ def asked_question(fact: QuestionAsked) -> AskedQuestion:
 @router.post(
     "/questions", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require(Permission.QUESTION_ANSWER))]
 )
-def ask_question(fact: QuestionAsked, services: Annotated[HubServices, Depends(get_services)]) -> dict[str, str]:
+def ask_question(fact: QuestionAsked, services: Services) -> dict[str, str]:
     """Land a ``question.asked`` row — the chunk parks ``waiting_on_human``; 409 when fenced out."""
     if services.chunks.record.get(fact.chunk_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {fact.chunk_id}")
@@ -89,7 +88,7 @@ def ask_question(fact: QuestionAsked, services: Annotated[HubServices, Depends(g
 def answer_question(
     question_id: str,
     request: AnswerRequest,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.QUESTION_ANSWER))],
 ) -> object:
     """Answer a question first-write-wins; 409 carries the winning answer.
@@ -128,7 +127,7 @@ def answer_question(
 
 
 @router.get("/questions", response_model=list[QuestionView], dependencies=[Depends(require(Permission.FLEET_VIEW))])
-def list_open_questions(services: Annotated[HubServices, Depends(get_services)]) -> list[QuestionView]:
+def list_open_questions(services: Services) -> list[QuestionView]:
     """Every open (unanswered) question across the fleet — the ``hub status`` surface."""
     rows = services.chunks.questions.list_open_questions()
     runner_names = services.registry.names_for(row.runner_id for row in rows)

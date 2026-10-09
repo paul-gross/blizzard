@@ -19,7 +19,7 @@ from blizzard.foundation.fact_kinds import (
 )
 from blizzard.foundation.hub_event_types import ChunkChangeCause
 from blizzard.hub.api.chunk_events import ChunkChanged, ChunkFrameState, load_frame_states
-from blizzard.hub.composition import HubServices
+from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.execution.facts import FactIngestResult, PushedFact
 from blizzard.wire.facts import RunnerFact, RunnerFactBatch
 
@@ -68,7 +68,7 @@ class IngestBroadcast:
     Built *before* the batch lands, so it carries each touched chunk's prior status, and
     published after, once the ack names which facts were freshly applied."""
 
-    services: HubServices
+    services: TenantServices
     #: The pushing runner — the bearer token's, never a body field.
     runner_id: str
     batch: RunnerFactBatch
@@ -78,7 +78,7 @@ class IngestBroadcast:
 
     @classmethod
     def before_ingest(
-        cls, services: HubServices, runner_id: str, batch: RunnerFactBatch, *, runner_name: str | None = None
+        cls, services: TenantServices, runner_id: str, batch: RunnerFactBatch, *, runner_name: str | None = None
     ) -> IngestBroadcast:
         """One pre-mutation snapshot per distinct chunk, reused across the batch — this is the
         hot path."""
