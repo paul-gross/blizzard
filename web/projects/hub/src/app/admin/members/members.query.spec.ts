@@ -7,23 +7,26 @@ import { settle, type RequestClientStub, stubError, stubRequestClient } from 'fl
 import { injectMembersQuery } from './members.query';
 
 @Component({
-  selector: 'app-test-users-query-host',
+  selector: 'app-test-members-query-host',
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: '',
 })
-class TestUsersQueryHost {
+class TestMembersQueryHost {
   readonly query = injectMembersQuery();
 }
 
-const USERS = [
+const MEMBERS = [
   {
     user_id: 'usr_1',
     username: 'ada',
     display_name: 'Ada',
     email: 'ada@example.com',
     role: 'admin',
+    hub_admin: false,
     created_at: '2026-07-21T00:00:00Z',
     identities: [{ provider_name: 'github', handle: 'ada' }],
+    assignable_roles: [],
+    revocable: false,
   },
 ];
 
@@ -33,26 +36,27 @@ describe('injectMembersQuery', () => {
 
   function mount() {
     TestBed.configureTestingModule({
-      imports: [TestUsersQueryHost],
+      imports: [TestMembersQueryHost],
       providers: [
         provideZonelessChangeDetection(),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
       ],
     });
-    return TestBed.createComponent(TestUsersQueryHost);
+    return TestBed.createComponent(TestMembersQueryHost);
   }
 
-  it('resolves the user list on 200', async () => {
-    stub = stubRequestClient(hubClient, (method, path) => (path === '/api/users' ? USERS : {}));
+  it('reads GET /api/members and resolves its rows', async () => {
+    stub = stubRequestClient(hubClient, (method, path) => (path === '/api/members' ? MEMBERS : {}));
     const fixture = mount();
     await settle(fixture);
 
-    expect(fixture.componentInstance.query.data()).toEqual(USERS);
+    expect(fixture.componentInstance.query.data()).toEqual(MEMBERS);
+    expect(stub.forRoute('/api/users', 'GET')).toHaveLength(0);
   });
 
   it('surfaces a 403 (below user:manage) as the query error state', async () => {
     stub = stubRequestClient(hubClient, (method, path) =>
-      path === '/api/users' ? stubError(403, { detail: "missing permission 'user:manage'" }) : {},
+      path === '/api/members' ? stubError(403, { detail: "missing permission 'user:manage'" }) : {},
     );
     const fixture = mount();
     await settle(fixture);

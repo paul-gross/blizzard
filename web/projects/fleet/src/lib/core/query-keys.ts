@@ -38,9 +38,9 @@ export const hubGraphsKey = ['hub', 'graphs'] as const;
 export const hubMeKey = ['hub', 'me'] as const;
 /** The configured login-provider list — `GET /api/auth/providers`. */
 export const hubAuthProvidersKey = ['hub', 'auth', 'providers'] as const;
-/** The admin page's user listing — `GET /api/users`. Invalidated by the
- * role-assignment mutation directly (no SSE event names a role change). */
-export const hubUsersKey = ['hub', 'users'] as const;
+/** The members page's listing of the tenant's members — `GET /api/members`. Invalidated by
+ * the membership mutations directly (no SSE event names a membership change). */
+export const hubMembersKey = ['hub', 'members'] as const;
 /** The root every live-configuration read shares — work sources, repositories,
  * secrets, and the change log. A config write changes more than its own record (a
  * source retire also moves a secret's references and appends to the change log), so

@@ -165,16 +165,18 @@ export const routes: Routes = [
   // is listed first, so it is never read as a token.
   { path: 'invite/accepted', canActivate: [enterInvitedTenant], children: [] },
   { path: 'invite/:token', loadComponent: () => import('../login/invite-page').then((m) => m.InvitePage) },
-  // The admin surface — the route the permission-gated nav entry points at. Users,
-  // the user listing, is the default child; beside it sit the configured nouns, each
-  // a list route whose detail is a child, the gardening tabs' own nesting, so a pick
-  // swaps only the detail and the list's filter survives in the query string.
+  // The admin surface — the route the permission-gated nav entry points at. Members,
+  // the members of the tenant the board acts in, is the default child, and `users`, its
+  // former path, redirects to it so older links still land; beside it sit the configured
+  // nouns, each a list route whose detail is a child, the gardening tabs' own nesting,
+  // so a pick swaps only the detail and the list's filter survives in the query string.
   {
     path: 'admin',
     loadComponent: () => import('../admin/admin-shell').then((m) => m.AdminShell),
     children: [
-      { path: '', redirectTo: 'users', pathMatch: 'full' },
-      { path: 'users', loadComponent: () => import('../admin/members/members-page').then((m) => m.MembersPage) },
+      { path: '', redirectTo: 'members', pathMatch: 'full' },
+      { path: 'members', loadComponent: () => import('../admin/members/members-page').then((m) => m.MembersPage) },
+      { path: 'users', redirectTo: 'members', pathMatch: 'full' },
       {
         path: 'work-sources',
         loadComponent: () => import('../admin/work-sources/work-sources-page').then((m) => m.WorkSourcesPage),

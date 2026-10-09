@@ -4,10 +4,10 @@ import { KitTab, KitTabStrip } from 'fleet';
 
 /**
  * The `/admin` route — its own second strip over the hub's administration surfaces,
- * each a child route (`app.routes.ts`) so a tab is a deep link: Users (the user
- * listing, unchanged), then one surface per configured noun — work sources,
- * repositories, secrets — and the change log across all of them. Users stays in the
- * strip at every width.
+ * each a child route (`app.routes.ts`) so a tab is a deep link: Members (the members
+ * of the tenant the board acts in), then one surface per configured noun — work
+ * sources, repositories, secrets — and the change log across all of them. Members
+ * stays in the strip at every width.
  */
 @Component({
   selector: 'app-admin-shell',

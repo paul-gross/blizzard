@@ -1,66 +1,91 @@
-import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
-import { MembersTable } from './members-table';
-import { asyncState, injectPendingMutationVariables, KitAsyncState } from 'fleet';
-import { injectAssignRoleMutation, type AssignRoleVars } from './assign-role.mutations';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+
+import { type hubApi, type MemberView, asyncState, injectPendingMutationVariables, KitAsyncState, KitConfirmDialog } from 'fleet';
 import { injectMeQuery } from '../../core/auth/me.query';
+import { TenantContext } from '../../core/auth/tenant-context';
+import { memberRoleMutationKey, revokeMemberMutationKey } from '../../core/mutation-keys';
+import { MembersTable } from './members-table';
 import { injectMembersQuery } from './members.query';
-import { assignRoleMutationKey } from '../../core/mutation-keys';
-import { assignRoleErrorText, pendingRoleUserIds } from './members-page.model';
+import {
+  type MemberRoleVars,
+  type RevokeMemberVars,
+  injectMemberRoleMutation,
+  injectRevokeMemberMutation,
+} from './members.mutations';
+import { memberChangeErrorText, membersLabel, pendingMemberIds, revokePrompt, tenantNameOf } from './members-page.model';
 
 /**
- * The `/admin` route — a container reading `injectMembersQuery()` (`GET /api/users`)
- * and `injectMeQuery()` (the signed-in actor's own identity, for `isSelf` gating and the
- * `assignable_roles` the selectors offer in {@link MembersTable}; each user row carries its own
- * actor-relative `assignable_roles`), composing the presentational table
- * (`bzh:frontend-container-presentational`).
- * Routed behind the `user:manage` nav gate (`app-nav.ts`'s `showAdmin`); this page's own `GET /api/users` read
- * is refused (`403`) hub-side below that permission regardless of the nav gate, so a
- * direct navigation renders that as its own error state rather than a silent stub.
+ * The `/admin/members` route — the members of the tenant the board acts in. A container composing the presentational
+ * {@link MembersTable} (`bzh:frontend-container-presentational`) from `GET /api/members`, `/api/me` (the actor's own
+ * id, so their row stays read-only) and the selected tenant's name, which labels the page.
  *
- * Under `auth.mode = "none"` there are no users to administer — the nav entry itself
- * is hidden (no `user:manage` gate reads meaningfully with the implicit
- * operator/superuser), so this route is unreachable through normal navigation; a
- * direct hit still renders (the API answers an empty list — no users to list).
+ * Every rule about who may change whom is the hub's: each row carries the roles the actor may give it and whether it
+ * may be revoked, and the table offers only those. A change the hub still refuses (a stale listing, the tenant's last
+ * admin) is this page's own error line — without it a refused change would read as a success that only a reload
+ * reveals never happened. A revocation asks first.
  *
- * A role change the hub refuses (`RoleAssignmentRefused`, 403 — self-change,
- * `superuser` grant/revoke, or an `admin` actor touching the `admin` tier) is
- * this page's own error state (`assignRoleError()`): the mutation
- * already rejects on a non-2xx response (`assign-role.mutations.ts`), so
- * without reading `assignRoleMutation.error()` here a refusal would fail
- * silently — the table keeps whatever the `<select>` was last set to, reading
- * as a success that only a reload reveals never happened.
+ * Routed behind the `user:manage` nav gate (`app.ts`'s `canManageUsers`); the hub refuses the listing (`403`) below
+ * that permission whatever the nav shows, so a direct navigation renders that as the error state.
  */
 @Component({
   selector: 'app-members-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MembersTable, KitAsyncState],
+  imports: [MembersTable, KitAsyncState, KitConfirmDialog],
   templateUrl: './members-page.html',
   styleUrl: './members-page.css',
 })
 export class MembersPage {
-  protected readonly usersQuery = injectMembersQuery();
+  protected readonly membersQuery = injectMembersQuery();
   private readonly meQuery = injectMeQuery();
-  private readonly assignRoleMutation = injectAssignRoleMutation();
+  private readonly tenant = inject(TenantContext);
+  private readonly roleMutation = injectMemberRoleMutation();
+  private readonly revokeMutation = injectRevokeMemberMutation();
 
-  private readonly pendingAssignments = injectPendingMutationVariables<AssignRoleVars>(assignRoleMutationKey);
+  private readonly pendingRoles = injectPendingMutationVariables<MemberRoleVars>(memberRoleMutationKey);
+  private readonly pendingRevokes = injectPendingMutationVariables<RevokeMemberVars>(revokeMemberMutationKey);
 
-  /** The user ids a role assignment is in flight for — each row's select disables on its own id. */
-  protected readonly pendingUserIds = computed(() => pendingRoleUserIds(this.pendingAssignments()));
+  /** The user ids a membership change is in flight for — each row's controls disable on their own id. */
+  protected readonly pendingUserIds = computed(() => pendingMemberIds(this.pendingRoles(), this.pendingRevokes()));
 
   protected readonly currentUserId = computed(() => this.meQuery.data()?.user_id ?? null);
-  protected readonly assignableRoles = computed(() => this.meQuery.data()?.assignable_roles ?? []);
 
-  /** `KitAsyncState`'s own triad — `empty` is never reached here (an empty user list
-   * still renders {@link MembersTable}'s own empty state, a distinct message from "no
-   * users administrable at all"), so this collapses to loading/error/ready. */
-  protected readonly triadState = computed(() => asyncState(this.usersQuery, false));
+  /** The selected tenant's name, as the header shows it. */
+  private readonly tenantName = computed(() => tenantNameOf(this.tenant.resolver()(this.meQuery.data()?.tenants ?? [])));
 
-  /** The last {@link assignRoleMutation} refusal's own `detail` (the hub's
-   * `RoleAssignmentRefused` message), or `null` once a fresh `mutate()` call
-   * clears the mutation's error state. */
-  protected readonly assignRoleError = computed<string | null>(() => assignRoleErrorText(this.assignRoleMutation.error()));
+  protected readonly label = computed(() => membersLabel(this.tenantName()));
 
-  protected onAssignRole(vars: { userId: string; role: string }): void {
-    this.assignRoleMutation.mutate(vars);
+  /** `KitAsyncState`'s triad — `empty` is never reached here: an empty listing renders the table's own empty state. */
+  protected readonly triadState = computed(() => asyncState(this.membersQuery, false));
+
+  /** The last refused change's own `detail`, or `null`. Starting either change clears the other's error, so the line
+   * always speaks of the latest attempt. */
+  protected readonly changeError = computed<string | null>(() =>
+    memberChangeErrorText(this.roleMutation.error() ?? this.revokeMutation.error()),
+  );
+
+  /** The member a revocation is waiting on confirmation for. */
+  protected readonly revoking = signal<MemberView | null>(null);
+
+  protected readonly revokeConfirm = computed(() => revokePrompt(this.revoking(), this.tenantName()));
+
+  protected onChangeRole(vars: { userId: string; role: hubApi.Role }): void {
+    this.revokeMutation.reset();
+    this.roleMutation.mutate(vars);
+  }
+
+  protected onRevoke(member: MemberView): void {
+    this.revoking.set(member);
+  }
+
+  protected onRevokeConfirmed(): void {
+    const member = this.revoking();
+    this.revoking.set(null);
+    if (member === null) return;
+    this.roleMutation.reset();
+    this.revokeMutation.mutate({ userId: member.user_id });
+  }
+
+  protected onRevokeCancelled(): void {
+    this.revoking.set(null);
   }
 }

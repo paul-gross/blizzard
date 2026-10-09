@@ -291,3 +291,62 @@ describe('the public pages (sign-in refusals and invitations)', () => {
     expect(el.querySelector('[data-testid="board-header"]')).toBeNull();
   });
 });
+
+/**
+ * The admin surface opens on the members of the tenant the board acts in, and the users page's former path lands
+ * there too, so older links still work.
+ */
+describe('the admin members route', () => {
+  let authStub: RequestClientStub;
+
+  beforeEach(async () => {
+    localStorage.clear();
+    authStub = stubRequestClient(hubClient, (method, path) => {
+      if (path === '/api/me') return OPERATOR_ME_RESPONSE;
+      if (path === '/api/auth/providers') return [];
+      if (path === '/api/members') return [];
+      if (path === '/api/chunks') return { chunks: [], next_cursor: null };
+      if (path === '/api/questions' || path === '/api/graphs') return [];
+      if (path === '/api/runners') return { runners: [] };
+      if (path === '/api/spend') return { cost_usd: 0, cost_partial: false };
+      return {};
+    });
+    await TestBed.configureTestingModule({
+      imports: [App],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+        provideRouter(routes, withRouterConfig({ onSameUrlNavigation: 'reload' })),
+        provideViewportRenavigation(),
+        { provide: EVENT_SOURCE_FACTORY, useValue: (() => new FakeEventSource() as unknown as FleetEventSource) as EventSourceFactory },
+      ],
+    }).compileComponents();
+    TestBed.inject(ViewportService).setOverride('desktop');
+  });
+
+  afterEach(() => authStub.restore());
+
+  async function open(url: string) {
+    const fixture = TestBed.createComponent(App);
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl(url);
+    await settle(fixture);
+    return { router, el: fixture.nativeElement as HTMLElement };
+  }
+
+  it('opens /admin on the members page, reading GET /api/members', async () => {
+    const { router, el } = await open('/admin');
+
+    expect(router.url).toBe('/admin/members');
+    expect(el.querySelector('[data-testid="members-table"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="admin-tab-members"]')?.textContent).toContain('Members');
+    expect(authStub.forRoute('/api/members', 'GET').length).toBeGreaterThan(0);
+  });
+
+  it('lands the former /admin/users on the members page', async () => {
+    const { router, el } = await open('/admin/users');
+
+    expect(router.url).toBe('/admin/members');
+    expect(el.querySelector('[data-testid="members-table"]')).toBeTruthy();
+  });
+});

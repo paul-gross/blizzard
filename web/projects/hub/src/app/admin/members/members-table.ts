@@ -1,68 +1,67 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import { type hubApi, type UserView, KitAsyncState, KitPanel, KitSelect, type KitChipOption, FleetWhen } from 'fleet';
+import { type hubApi, type KitChipOption, type MemberView, FleetWhen, KitAsyncState, KitButton, KitPanel, KitSelect } from 'fleet';
+import { canChangeRole, canRevoke, roleChoices } from './members-page.model';
 
 /**
- * The admin page's user table — presentational: renders `users()` with a role selector per row,
- * gated by what the wire says the signed-in actor may do, so a disabled control never invites a
- * refused request rather than catching the 403 after the fact:
+ * The members page's table — presentational: one row per member of the board's tenant, with a role selector and a
+ * revoke button gated by what the hub says the signed-in actor may do to that row (`assignable_roles`, `revocable`), so
+ * a control is never offered for a change the hub would refuse:
  *
- * - a row naming the signed-in actor (`currentUserId()`) renders its role as plain
- *   text, not a selector, as does a row whose role is not one the API assigns at all
- *   (outside {@link assignableRoles});
- * - every other row's selector offers {@link assignableRoles}, enabling only the roles in
- *   the row's own `assignable_roles` and disabling the whole selector when that list is
- *   empty (an `admin` row before a non-`superuser` actor).
+ * - the actor's own row (`currentUserId()`) shows its role as plain text and no revoke button;
+ * - a row whose role the actor may not change (no other role offered) shows its role as plain text;
+ * - a row the hub marks `revocable` has a revoke button.
  *
- * A `403` the mutation still surfaces despite this (a stale permission between page
- * load and submit) is not this component's concern.
+ * A member who is also a hub administrator carries a `hub admin` tag beside their username.
  */
 @Component({
   selector: 'app-members-table',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitPanel, KitSelect, FleetWhen],
+  imports: [KitAsyncState, KitButton, KitPanel, KitSelect, FleetWhen],
   templateUrl: './members-table.html',
   styleUrl: './members-table.css',
 })
 export class MembersTable {
-  /** `GET /api/users`'s own rows. */
-  readonly users = input<readonly UserView[]>([]);
+  /** `GET /api/members`'s rows. */
+  readonly members = input<readonly MemberView[]>([]);
 
-  /** The signed-in actor's own `user_id` — the row it names renders read-only
-   * (self-role-change is refused hub-side). */
+  /** The panel's label — names the tenant the members belong to. */
+  readonly label = input('Members');
+
+  /** The signed-in actor's own `user_id` — their row renders read-only (the hub refuses changing your own). */
   readonly currentUserId = input<string | null>(null);
 
-  /** The roles a row's selector offers — `GET /api/me`'s `assignable_roles`, every role the
-   * role-assignment API may grant. */
-  readonly assignableRoles = input<readonly hubApi.Role[]>([]);
-
-  /** The user ids whose role assignment is in flight; each row's selector disables on its own id. */
+  /** The user ids a membership change is in flight for; each row's controls disable on its own id. */
   readonly pendingUserIds = input<readonly string[]>([]);
 
-  /** Fired with `{userId, role}` when a row's selector picks a new role. */
-  readonly assignRole = output<{ userId: string; role: string }>();
+  /** Fired with `{userId, role}` when a row's selector picks another role. */
+  readonly changeRole = output<{ userId: string; role: hubApi.Role }>();
 
-  protected isSelf(user: UserView): boolean {
-    return user.user_id === this.currentUserId();
+  /** Fired with the member whose revoke button was pressed. */
+  readonly revoke = output<MemberView>();
+
+  protected canChangeRole(member: MemberView): boolean {
+    return canChangeRole(member, this.currentUserId());
   }
 
-  protected isAssignableRole(role: hubApi.Role): boolean {
-    return this.assignableRoles().includes(role);
+  protected canRevoke(member: MemberView): boolean {
+    return canRevoke(member, this.currentUserId());
   }
 
-  protected isPending(user: UserView): boolean {
-    return this.pendingUserIds().includes(user.user_id);
+  protected isSelf(member: MemberView): boolean {
+    return member.user_id === this.currentUserId();
   }
 
-  protected roleOptions(user: UserView): readonly KitChipOption[] {
-    return this.assignableRoles().map((role) => ({
-      value: role,
-      label: role,
-      disabled: !user.assignable_roles?.includes(role),
-    }));
+  protected isPending(member: MemberView): boolean {
+    return this.pendingUserIds().includes(member.user_id);
   }
 
-  protected onRoleChange(userId: string, role: string): void {
-    this.assignRole.emit({ userId, role });
+  protected roleOptions(member: MemberView): readonly KitChipOption[] {
+    return roleChoices(member).map((role) => ({ value: role, label: role }));
+  }
+
+  protected onRoleChange(member: MemberView, role: string): void {
+    const chosen = roleChoices(member).find((r) => r === role);
+    if (chosen !== undefined && chosen !== member.role) this.changeRole.emit({ userId: member.user_id, role: chosen });
   }
 }

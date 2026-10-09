@@ -1,19 +1,23 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
-import type { UserView } from 'fleet';
-import { OPERATOR_ME_RESPONSE } from 'fleet/testing';
+import type { MemberView } from 'fleet';
 import { MembersTable } from './members-table';
 
-const BASE_USERS: readonly UserView[] = [
+/** The rows of `GET /api/members` as a tenant admin (`usr_admin`) reads them: the hub's own per-row
+ * `assignable_roles` and `revocable`. */
+const MEMBERS: readonly MemberView[] = [
   {
     user_id: 'usr_admin',
     username: 'ada',
     display_name: 'Ada',
     email: 'ada@example.com',
     role: 'admin',
+    hub_admin: true,
     created_at: '2026-07-21T00:00:00Z',
     identities: [{ provider_name: 'github', handle: 'ada' }],
+    assignable_roles: [],
+    revocable: false,
   },
   {
     user_id: 'usr_guest',
@@ -21,41 +25,24 @@ const BASE_USERS: readonly UserView[] = [
     display_name: 'Grace',
     email: null,
     role: 'guest',
+    hub_admin: false,
     created_at: '2026-07-21T00:00:00Z',
     identities: [],
+    assignable_roles: ['guest', 'contributor', 'admin'],
+    revocable: true,
   },
   {
-    user_id: 'usr_pending',
-    username: 'newcomer',
-    display_name: 'Newcomer',
+    user_id: 'usr_last',
+    username: 'lin',
+    display_name: 'Lin',
     email: null,
-    role: 'pending',
+    role: 'admin',
+    hub_admin: false,
     created_at: '2026-07-21T00:00:00Z',
-    identities: [],
-  },
-  {
-    user_id: 'usr_root',
-    username: 'root',
-    display_name: 'Root',
-    email: 'root@example.com',
-    role: 'superuser',
-    created_at: '2026-07-21T00:00:00Z',
+    assignable_roles: ['admin'],
+    revocable: false,
   },
 ];
-
-type Actor = 'admin' | 'superuser';
-
-/** Each row as `GET /api/users` renders it for `actor` — the hub's own per-row `assignable_roles`. */
-function usersFor(actor: Actor): readonly UserView[] {
-  return BASE_USERS.map((user) => {
-    if (user.role === 'superuser') return { ...user, assignable_roles: [] };
-    if (actor === 'superuser') return { ...user, assignable_roles: ['pending', 'guest', 'contributor', 'admin'] };
-    if (user.role === 'admin') return { ...user, assignable_roles: [] };
-    return { ...user, assignable_roles: ['pending', 'guest', 'contributor'] };
-  });
-}
-
-const USERS = usersFor('admin');
 
 describe('MembersTable', () => {
   beforeEach(async () => {
@@ -65,167 +52,115 @@ describe('MembersTable', () => {
     }).compileComponents();
   });
 
-  function mount(inputs: Partial<{ users: readonly UserView[]; currentUserId: string | null; actor: Actor }> = {}) {
+  async function mount(inputs: Partial<{ members: readonly MemberView[]; currentUserId: string | null; label: string }> = {}) {
     const fixture = TestBed.createComponent(MembersTable);
-    fixture.componentRef.setInput('users', inputs.users ?? usersFor(inputs.actor ?? 'admin'));
-    fixture.componentRef.setInput('currentUserId', inputs.currentUserId ?? null);
-    fixture.componentRef.setInput('assignableRoles', OPERATOR_ME_RESPONSE.assignable_roles ?? []);
-    return fixture;
+    fixture.componentRef.setInput('members', inputs.members ?? MEMBERS);
+    fixture.componentRef.setInput('currentUserId', inputs.currentUserId === undefined ? 'usr_admin' : inputs.currentUserId);
+    if (inputs.label !== undefined) fixture.componentRef.setInput('label', inputs.label);
+    await fixture.whenStable();
+    return { fixture, el: fixture.nativeElement as HTMLElement };
   }
 
-  it('renders one row per user with its username, email, identities, and role', async () => {
-    const fixture = mount();
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
+  const row = (el: HTMLElement, id: string) => el.querySelector(`[data-user-id="${id}"]`);
 
-    const rows = el.querySelectorAll('[data-testid="members-table-row"]');
-    expect(rows).toHaveLength(4);
-    const adaRow = el.querySelector('[data-user-id="usr_admin"]');
-    expect(adaRow?.querySelector('[data-testid="members-table-username"]')?.textContent).toContain('ada');
-    expect(adaRow?.querySelector('[data-testid="members-table-email"]')?.textContent).toContain('ada@example.com');
-    expect(adaRow?.querySelector('[data-testid="members-table-identities"]')?.textContent).toContain('github');
-  });
+  it('renders one row per member with its username, email, identities, and created date', async () => {
+    const { el } = await mount();
 
-  it('renders the created column via the shared relative-date component, not a raw ISO string', async () => {
-    const fixture = mount();
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-
-    const adaRow = el.querySelector('[data-user-id="usr_admin"]');
-    const when = adaRow?.querySelector('fleet-when[data-testid="members-table-created-at"]');
+    expect(el.querySelectorAll('[data-testid="members-table-row"]')).toHaveLength(3);
+    const ada = row(el, 'usr_admin');
+    expect(ada?.querySelector('[data-testid="members-table-username"]')?.textContent).toContain('ada');
+    expect(ada?.querySelector('[data-testid="members-table-email"]')?.textContent).toContain('ada@example.com');
+    expect(ada?.querySelector('[data-testid="members-table-identities"]')?.textContent).toContain('github');
+    const when = ada?.querySelector('fleet-when[data-testid="members-table-created-at"]');
     expect(when).toBeTruthy();
-    expect(when?.textContent?.trim()).not.toBe(USERS[0].created_at);
+    expect(when?.textContent?.trim()).not.toBe(MEMBERS[0].created_at);
   });
 
-  it('shows an empty state with no users', async () => {
-    const fixture = mount({ users: [] });
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
+  it('labels the panel with its label input', async () => {
+    const { el } = await mount({ label: 'Members of Acme' });
+
+    expect(el.querySelector('[data-testid="members-table"]')?.getAttribute('aria-label')).toBe('Members of Acme');
+    expect(el.textContent).toContain('Members of Acme');
+  });
+
+  it('tags a member who is a hub administrator', async () => {
+    const { el } = await mount();
+
+    expect(row(el, 'usr_admin')?.querySelector('[data-testid="members-table-hub-admin"]')).toBeTruthy();
+    expect(row(el, 'usr_guest')?.querySelector('[data-testid="members-table-hub-admin"]')).toBeNull();
+  });
+
+  it('shows an empty state with no members', async () => {
+    const { el } = await mount({ members: [] });
 
     expect(el.querySelector('[data-testid="members-table-empty"]')).toBeTruthy();
   });
 
-  it('renders a superuser row as static text, never a selector — bootstrap-only', async () => {
-    const fixture = mount();
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
+  it("renders the actor's own row as static text with no revoke button", async () => {
+    const { el } = await mount();
 
-    const rootRow = el.querySelector('[data-user-id="usr_root"]');
-    expect(rootRow?.querySelector('[data-testid="members-table-role-static"]')?.textContent).toContain('superuser');
-    expect(rootRow?.querySelector('[data-testid="members-table-role-select"]')).toBeNull();
+    const own = row(el, 'usr_admin');
+    expect(own?.querySelector('[data-testid="members-table-role-static"]')?.textContent).toContain('admin (you)');
+    expect(own?.querySelector('[data-testid="members-table-role-select"]')).toBeNull();
+    expect(own?.querySelector('[data-testid="members-table-revoke"]')).toBeNull();
   });
 
-  it("renders the signed-in actor's own row as static text — self-change refused", async () => {
-    const fixture = mount({ currentUserId: 'usr_admin' });
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
+  it('renders a row the hub offers no other role for as static text, without a revoke it does not allow', async () => {
+    const { el } = await mount();
 
-    const adaRow = el.querySelector('[data-user-id="usr_admin"]');
-    expect(adaRow?.querySelector('[data-testid="members-table-role-static"]')?.textContent).toContain('(you)');
-    expect(adaRow?.querySelector('[data-testid="members-table-role-select"]')).toBeNull();
+    const last = row(el, 'usr_last');
+    expect(last?.querySelector('[data-testid="members-table-role-static"]')?.textContent?.trim()).toBe('admin');
+    expect(last?.querySelector('[data-testid="members-table-role-select"]')).toBeNull();
+    expect(last?.querySelector('[data-testid="members-table-revoke"]')).toBeNull();
   });
 
-  it('renders four role options in order for an ordinary row', async () => {
-    const fixture = mount({ currentUserId: 'usr_other', actor: 'superuser' });
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
+  it("offers exactly the hub's assignable roles, in its order", async () => {
+    const { fixture, el } = await mount();
 
-    const guestRow = el.querySelector('[data-user-id="usr_guest"]');
-    guestRow?.querySelector<HTMLButtonElement>('[data-testid="members-table-role-select"]')?.click();
+    row(el, 'usr_guest')?.querySelector<HTMLButtonElement>('[data-testid="members-table-role-select"]')?.click();
     await fixture.whenStable();
-    expect(Array.from(document.querySelectorAll('[role="listbox"] [role="option"]')).map((o) => o.textContent?.trim())).toEqual(['pending', 'guest', 'contributor', 'admin']);
-  });
-
-  it("selects the row's current role by default, for every assignable role", async () => {
-    const fixture = mount({ currentUserId: 'usr_other', actor: 'superuser' });
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-
-    const guestSelect = el.querySelector<HTMLSelectElement>('[data-user-id="usr_guest"] [data-testid="members-table-role-select"]');
-    expect(guestSelect?.getAttribute('aria-label')).toBe('Role for grace: guest');
-    const pendingSelect = el.querySelector<HTMLSelectElement>(
-      '[data-user-id="usr_pending"] [data-testid="members-table-role-select"]',
+    const options = Array.from(document.querySelectorAll('[role="listbox"] [role="option"]'));
+    expect(options.map((o) => o.textContent?.trim())).toEqual(['guest', 'contributor', 'admin']);
+    expect(row(el, 'usr_guest')?.querySelector('[data-testid="members-table-role-select"]')?.getAttribute('aria-label')).toBe(
+      'Role for grace: guest',
     );
-    expect(pendingSelect?.getAttribute('aria-label')).toBe('Role for newcomer: pending');
   });
 
-  it("disables only the selector of a row whose own assignment is in flight", async () => {
-    const fixture = mount({ currentUserId: 'usr_other', actor: 'superuser' });
-    fixture.componentRef.setInput('pendingUserIds', ['usr_pending']);
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-
-    expect(el.querySelector<HTMLButtonElement>('[data-user-id="usr_pending"] [data-testid="members-table-role-select"]')?.disabled).toBe(true);
-    const others = Array.from(el.querySelectorAll<HTMLButtonElement>('[data-testid="members-table-role-select"]')).filter(
-      (select) => select.closest('tr')?.getAttribute('data-user-id') !== 'usr_pending',
-    );
-    expect(others.length).toBeGreaterThan(0);
-    expect(others.some((select) => !select.disabled)).toBe(true);
-  });
-
-  it('renders a pending row with an enabled selector, not as static text', async () => {
-    const fixture = mount({ currentUserId: 'usr_other', actor: 'superuser' });
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-
-    const pendingRow = el.querySelector('[data-user-id="usr_pending"]');
-    const select = pendingRow?.querySelector<HTMLSelectElement>('[data-testid="members-table-role-select"]');
-    expect(select).toBeTruthy();
-    expect(select?.disabled).toBe(false);
-    expect(pendingRow?.querySelector('[data-testid="members-table-role-static"]')).toBeNull();
-
-    select?.click();
-    await fixture.whenStable();
-    expect(document.querySelector('[role="listbox"] [role="option"][title="admin"]')?.getAttribute('aria-disabled')).not.toBe('true');
-  });
-
-  it('disables the admin option a row does not offer the actor', async () => {
-    const fixture = mount({ currentUserId: 'usr_other', actor: 'admin' });
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-
-    const guestRow = el.querySelector('[data-user-id="usr_guest"]');
-    guestRow?.querySelector<HTMLButtonElement>('[data-testid="members-table-role-select"]')?.click();
-    await fixture.whenStable();
-    expect(document.querySelector('[role="listbox"] [role="option"][title="admin"]')?.getAttribute('aria-disabled')).toBe('true');
-  });
-
-  it('enables the admin option for a superuser actor', async () => {
-    const fixture = mount({ currentUserId: 'usr_other', actor: 'superuser' });
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-
-    const guestRow = el.querySelector('[data-user-id="usr_guest"]');
-    guestRow?.querySelector<HTMLButtonElement>('[data-testid="members-table-role-select"]')?.click();
-    await fixture.whenStable();
-    expect(document.querySelector('[role="listbox"] [role="option"][title="admin"]')?.getAttribute('aria-disabled')).not.toBe('true');
-  });
-
-  it('disables the whole selector on a row that offers the actor no role', async () => {
-    const fixture = mount({ currentUserId: 'usr_other', actor: 'admin' });
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-
-    const adaRow = el.querySelector('[data-user-id="usr_admin"]');
-    const select = adaRow?.querySelector<HTMLSelectElement>('[data-testid="members-table-role-select"]');
-    expect(select?.disabled).toBe(true);
-  });
-
-  it('emits assignRole with the userId and the newly selected role', async () => {
-    const fixture = mount({ currentUserId: 'usr_other', actor: 'superuser' });
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
+  it('emits changeRole with the member and the chosen role', async () => {
+    const { fixture, el } = await mount();
     const emitted: { userId: string; role: string }[] = [];
-    fixture.componentInstance.assignRole.subscribe((event) => emitted.push(event));
+    fixture.componentInstance.changeRole.subscribe((event) => emitted.push(event));
 
-    const guestRow = el.querySelector('[data-user-id="usr_guest"]');
-    const select = guestRow?.querySelector<HTMLSelectElement>('[data-testid="members-table-role-select"]');
-    expect(select).toBeTruthy();
-    select!.click();
+    row(el, 'usr_guest')?.querySelector<HTMLButtonElement>('[data-testid="members-table-role-select"]')?.click();
     await fixture.whenStable();
     document.querySelector<HTMLElement>('[role="listbox"] [role="option"][title="contributor"]')?.click();
     await fixture.whenStable();
 
     expect(emitted).toEqual([{ userId: 'usr_guest', role: 'contributor' }]);
+  });
+
+  it('emits revoke with the member whose button was pressed', async () => {
+    const { fixture, el } = await mount();
+    const emitted: MemberView[] = [];
+    fixture.componentInstance.revoke.subscribe((member) => emitted.push(member));
+
+    row(el, 'usr_guest')?.querySelector<HTMLElement>('[data-testid="members-table-revoke"]')?.click();
+    await fixture.whenStable();
+
+    expect(emitted.map((m) => m.user_id)).toEqual(['usr_guest']);
+  });
+
+  it("disables only the controls of a row whose own change is in flight", async () => {
+    const pendingRow = { ...MEMBERS[1], user_id: 'usr_other', username: 'otto' };
+    const { fixture, el } = await mount({ members: [...MEMBERS, pendingRow] });
+    fixture.componentRef.setInput('pendingUserIds', ['usr_guest']);
+    await fixture.whenStable();
+
+    const guest = row(el, 'usr_guest');
+    expect(guest?.querySelector<HTMLButtonElement>('[data-testid="members-table-role-select"]')?.disabled).toBe(true);
+    expect(guest?.querySelector<HTMLButtonElement>('[data-testid="members-table-revoke"]')?.disabled).toBe(true);
+    const other = row(el, 'usr_other');
+    expect(other?.querySelector<HTMLButtonElement>('[data-testid="members-table-role-select"]')?.disabled).toBe(false);
+    expect(other?.querySelector<HTMLButtonElement>('[data-testid="members-table-revoke"]')?.disabled).toBe(false);
   });
 });

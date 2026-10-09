@@ -1,18 +1,31 @@
 <fleet-kit-async-state
   [state]="triadState()"
-  loadingText="Loading users…"
+  loadingText="Loading members…"
   loadingTestid="members-page-loading"
-  errorText="Failed to load users."
+  errorText="Failed to load members."
   errorTestid="members-page-error"
 >
-  @if (assignRoleError(); as message) {
-    <p class="assign-role-error" data-testid="members-page-assign-role-error">{{ message }}</p>
+  @if (changeError(); as message) {
+    <p class="change-error" role="alert" data-testid="members-page-change-error">{{ message }}</p>
   }
   <app-members-table
-    [users]="usersQuery.data() ?? []"
+    [members]="membersQuery.data() ?? []"
+    [label]="label()"
     [currentUserId]="currentUserId()"
-    [assignableRoles]="assignableRoles()"
     [pendingUserIds]="pendingUserIds()"
-    (assignRole)="onAssignRole($event)"
+    (changeRole)="onChangeRole($event)"
+    (revoke)="onRevoke($event)"
   />
 </fleet-kit-async-state>
+@if (revokeConfirm(); as confirm) {
+  <fleet-kit-confirm-dialog
+    [open]="true"
+    [heading]="confirm.heading"
+    [message]="confirm.message"
+    [confirmLabel]="confirm.confirmLabel"
+    [variant]="confirm.variant"
+    testid="members-page-revoke-confirm"
+    (confirmed)="onRevokeConfirmed()"
+    (cancelled)="onRevokeCancelled()"
+  />
+}
