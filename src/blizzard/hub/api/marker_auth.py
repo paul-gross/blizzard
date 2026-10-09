@@ -11,7 +11,7 @@ from fastapi import Request
 
 from blizzard.auth_core import Permission
 from blizzard.foundation.platform_tracing.attributes import annotate_caller
-from blizzard.hub.api.auth_session import IMPLICIT_OPERATOR, require
+from blizzard.hub.api.auth_session import implicit_operator, request_tenant, require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.config import AUTH_MODE_NONE
@@ -31,7 +31,7 @@ def require_marker_authority(request: Request) -> ResolvedIdentity:
     mode = request.app.state.config.auth.mode
     if mode == AUTH_MODE_NONE:
         annotate_caller("operator")
-        return IMPLICIT_OPERATOR
+        return implicit_operator(request_tenant(request))
     token = request.headers.get(_MARKER_TOKEN_HEADER)
     if token:
         chunk_id = request.path_params.get("chunk_id")
@@ -46,5 +46,5 @@ def require_marker_authority(request: Request) -> ResolvedIdentity:
         if isinstance(chunk_id, str) and node_id is not None and epoch is not None:
             services = get_services(request)
             if services.marker_authority.verify(token, chunk_id=chunk_id, node_id=node_id, epoch=epoch):
-                return IMPLICIT_OPERATOR
+                return implicit_operator(request_tenant(request))
     return _require_chunk_control(request)

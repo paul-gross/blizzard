@@ -44,7 +44,7 @@ def test_tables_and_columns_exist_after_upgrading_an_existing_store(tmp_path: Pa
     assert {"users", "identities", "sessions"} <= tables
 
     user_columns = {c["name"] for c in inspector.get_columns("users")}
-    assert user_columns == {"id", "username", "display_name", "email", "role", "created_at"}
+    assert user_columns == {"id", "username", "display_name", "email", "created_at"}
 
     identity_columns = {c["name"] for c in inspector.get_columns("identities")}
     assert identity_columns == {"id", "provider_name", "subject", "user_id", "handle", "created_at"}
@@ -56,16 +56,10 @@ def test_tables_and_columns_exist_after_upgrading_an_existing_store(tmp_path: Pa
 def test_username_is_unique(tmp_path: Path) -> None:
     engine = _upgrade_existing_store_to_head(tmp_path)
     with engine.begin() as conn:
-        conn.execute(
-            insert(s.users).values(
-                id="usr_1", username="ada", display_name="Ada", email=None, role="contributor", created_at=_T0
-            )
-        )
+        conn.execute(insert(s.users).values(id="usr_1", username="ada", display_name="Ada", email=None, created_at=_T0))
     with pytest.raises(IntegrityError), engine.begin() as conn:
         conn.execute(
-            insert(s.users).values(
-                id="usr_2", username="ada", display_name="Ada Two", email=None, role="guest", created_at=_T0
-            )
+            insert(s.users).values(id="usr_2", username="ada", display_name="Ada Two", email=None, created_at=_T0)
         )
 
 
@@ -74,31 +68,21 @@ def test_email_is_unique_only_when_set(tmp_path: Path) -> None:
     ``NULL`` emails coexist, a duplicate non-null email collides."""
     engine = _upgrade_existing_store_to_head(tmp_path)
     with engine.begin() as conn:
+        conn.execute(insert(s.users).values(id="usr_1", username="a", display_name="A", email=None, created_at=_T0))
+        conn.execute(insert(s.users).values(id="usr_2", username="b", display_name="B", email=None, created_at=_T0))
         conn.execute(
-            insert(s.users).values(id="usr_1", username="a", display_name="A", email=None, role="guest", created_at=_T0)
-        )
-        conn.execute(
-            insert(s.users).values(id="usr_2", username="b", display_name="B", email=None, role="guest", created_at=_T0)
-        )
-        conn.execute(
-            insert(s.users).values(
-                id="usr_3", username="c", display_name="C", email="ada@example.com", role="guest", created_at=_T0
-            )
+            insert(s.users).values(id="usr_3", username="c", display_name="C", email="ada@example.com", created_at=_T0)
         )
     with pytest.raises(IntegrityError), engine.begin() as conn:
         conn.execute(
-            insert(s.users).values(
-                id="usr_4", username="d", display_name="D", email="ada@example.com", role="guest", created_at=_T0
-            )
+            insert(s.users).values(id="usr_4", username="d", display_name="D", email="ada@example.com", created_at=_T0)
         )
 
 
 def test_identity_provider_subject_pair_is_unique(tmp_path: Path) -> None:
     engine = _upgrade_existing_store_to_head(tmp_path)
     with engine.begin() as conn:
-        conn.execute(
-            insert(s.users).values(id="usr_1", username="a", display_name="A", email=None, role="guest", created_at=_T0)
-        )
+        conn.execute(insert(s.users).values(id="usr_1", username="a", display_name="A", email=None, created_at=_T0))
         conn.execute(
             insert(s.identities).values(
                 provider_name="github", subject="123", user_id="usr_1", handle="ada", created_at=_T0

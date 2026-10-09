@@ -13,7 +13,7 @@ from types import SimpleNamespace
 import pytest
 
 from blizzard.foundation.events.stream import DEFAULT_KEEPALIVE_SECONDS
-from blizzard.hub.api.auth_session import IMPLICIT_OPERATOR
+from blizzard.hub.api.auth_session import implicit_operator
 from blizzard.hub.api.events import _RESERVED_COMMENT, Cursor, Stream, events_stream
 from blizzard.hub.app import create_app_for_export
 from blizzard.hub.events.broker import EventBroker
@@ -36,7 +36,7 @@ class _FakeRequest:
 async def test_stream_endpoint_returns_an_sse_response() -> None:
     # Direct call bypasses FastAPI's dependency resolution — `identity` (normally
     # resolved via `Depends`) is supplied directly here.
-    response = await events_stream(_FakeRequest(EventBroker()), IMPLICIT_OPERATOR)  # type: ignore[arg-type]
+    response = await events_stream(_FakeRequest(EventBroker()), implicit_operator(None))  # type: ignore[arg-type]
     assert response.status_code == 200
     assert response.media_type == "text/event-stream"
     # The generator opens with the reserved comment so an EventSource connects cleanly.
@@ -60,7 +60,7 @@ async def test_stream_endpoint_binds_the_default_keepalive_cadence(monkeypatch: 
         return instance
 
     monkeypatch.setattr("blizzard.hub.api.events.Stream", _capturing_stream)
-    await events_stream(_FakeRequest(EventBroker()), IMPLICIT_OPERATOR)  # type: ignore[arg-type]
+    await events_stream(_FakeRequest(EventBroker()), implicit_operator(None))  # type: ignore[arg-type]
     assert bound["keepalive_seconds"] == DEFAULT_KEEPALIVE_SECONDS
 
 

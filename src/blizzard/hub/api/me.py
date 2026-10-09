@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from blizzard.auth_core import Permission, Role
 from blizzard.hub.api.auth_session import resolve_identity
 from blizzard.hub.api.deps import get_services
+from blizzard.hub.auth.models import wire_role
 from blizzard.hub.auth.service import ASSIGNABLE_ROLES
 from blizzard.hub.config import AUTH_MODE_NONE
 
@@ -20,7 +21,8 @@ router = APIRouter(prefix="/api", tags=["auth"])
 
 
 class MeResponse(BaseModel):
-    """The resolved identity's wire view."""
+    """The resolved identity's wire view. ``role`` is the membership's role in the request's
+    tenant — ``pending`` with none, ``superuser`` for a hub administrator."""
 
     user_id: str
     username: str
@@ -44,7 +46,7 @@ def me(request: Request) -> MeResponse:
         user_id=identity.user_id,
         username=identity.username,
         display_name=identity.display_name,
-        role=identity.role,
+        role=wire_role(identity.role, hub_admin=identity.hub_admin),
         permissions=sorted(identity.permissions),
         assignable_roles=list(ASSIGNABLE_ROLES),
     )

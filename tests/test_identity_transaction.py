@@ -65,7 +65,7 @@ def _transactions(engine: sa.Engine) -> IdentityTransactions:
 
 def _claim(writes: IdentityWrites, tenant: TenantId) -> None:
     """Every identity table written once, as a first sign-in that claims the hub administrator role does."""
-    writes.users.create(User("usr_a", "ada", "Ada", "ada@example.com", Role.SUPERUSER, _T0))
+    writes.users.create(User("usr_a", "ada", "Ada", "ada@example.com", _T0))
     writes.identities.link(Identity("github", "42", "usr_a", "ada", _T0))
     writes.sessions.create(Session("hash_a", "usr_a", _T0, _T0 + timedelta(days=1), _T0))
     writes.memberships.record(MembershipFact(tenant, "usr_a", Role.ADMIN, _T0, SET_BY_BOOTSTRAP))
@@ -186,7 +186,7 @@ def test_two_units_reading_a_tenants_admins_never_both_act_on_the_count(
     tenant = default_tenant(engine)
     with _transactions(engine).begin() as writes:
         for user_id in ("usr_a", "usr_b"):
-            writes.users.create(User(user_id, user_id, user_id, None, Role.ADMIN, _T0))
+            writes.users.create(User(user_id, user_id, user_id, None, _T0))
             writes.memberships.record(MembershipFact(tenant, user_id, Role.ADMIN, _T0, SET_BY_BOOTSTRAP))
     both_read = threading.Barrier(2, timeout=0.5)
     admin_count = MembershipRepository.admin_count

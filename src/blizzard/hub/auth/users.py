@@ -9,7 +9,6 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Protocol
 
-from blizzard.auth_core import Role
 from blizzard.hub.auth.models import User
 
 
@@ -35,9 +34,3 @@ class IWriteUserRepository(IReadUserRepository, Protocol):
     """Adds the user writes."""
 
     def create(self, user: User) -> None: ...
-
-    def update_role(self, user_id: str, role: Role) -> None:
-        """Set ``user_id``'s stored role in place (the role-assignment API and
-        superuser-bootstrap lifecycle) — the write ``AuthService`` delegates to after
-        its own rule checks have already passed."""
-        ...

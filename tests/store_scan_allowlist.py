@@ -342,6 +342,13 @@ HUB_ALLOWED_SCANS: list[Allowance] = [
         "over the tenant's member list.",
     ),
     IndexWalkAllowance(
+        IReadMembershipRepository,
+        "only_tenant",
+        ("tenants",),
+        "reads at most two tenants to tell whether the hub holds exactly one — a LIMIT 2 read of the key index's "
+        "first entries, never a walk of it, whatever the tenant count.",
+    ),
+    IndexWalkAllowance(
         IReadHubAdminRepository,
         "holders",
         ("hub_admin_facts",),

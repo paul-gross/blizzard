@@ -12,6 +12,7 @@ import os
 import sqlite3
 import subprocess
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
@@ -81,11 +82,15 @@ def _db_path(hub_dir: Path) -> Path:
 
 
 def _set_role(hub_dir: Path, username: str, role: str) -> None:
-    """The stand-in for #94's not-yet-landed role-assignment API — direct store access,
-    the same "mint what the API cannot yet" pattern this suite uses for fixture state."""
+    """Grant ``username`` ``role`` in the store's only tenant by direct store access, the same
+    "mint what the suite cannot reach through a route" pattern this suite uses for fixture state."""
     con = sqlite3.connect(_db_path(hub_dir))
     try:
-        con.execute("UPDATE users SET role = ? WHERE username = ?", (role, username))
+        con.execute(
+            "INSERT INTO membership_facts (tenant_id, user_id, role, set_at, set_by)"
+            " SELECT tenants.tenant_id, users.id, ?, ?, 'operator' FROM tenants, users WHERE users.username = ?",
+            (role, datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S.%f"), username),
+        )
         con.commit()
     finally:
         con.close()

@@ -1104,7 +1104,6 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         username="alice",
         display_name="Alice",
         email="alice@example.com",
-        role=Role.CONTRIBUTOR,
         created_at=_ht(0),
     )
     user_2 = User(
@@ -1112,7 +1111,6 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         username="bob",
         display_name="Bob",
         email="bob@example.com",
-        role=Role.ADMIN,
         created_at=_ht(1),
     )
     user_store.create(user_1)
@@ -2228,6 +2226,7 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadMembershipRepository, "memberships_for"): lambda w: _memberships_of(w.hub).memberships_for(w.user_1.user_id),
     (IReadMembershipRepository, "members"): lambda w: _memberships_of(w.hub).members(default_tenant(w.engine)),
     (IReadMembershipRepository, "admin_count"): lambda w: _memberships_of(w.hub).admin_count(default_tenant(w.engine)),
+    (IReadMembershipRepository, "only_tenant"): lambda w: _memberships_of(w.hub).only_tenant(),
     (IReadHubAdminRepository, "is_hub_admin"): lambda w: _hub_admins_of(w.hub).is_hub_admin(w.user_1.user_id),
     (IReadHubAdminRepository, "holders"): lambda w: _hub_admins_of(w.hub).holders(),
     (IReadHubEventLog, "newest"): lambda w: _hub_events_of(w.hub).newest(

@@ -3,7 +3,8 @@ the human-plane edge seam.
 
 A presented credential is hashed and resolved via the **read** repository; the
 sliding-expiry write is delegated to the domain (``bzh:controller-read-only``).
-``auth.mode = "none"`` (the default) short-circuits to the implicit operator identity."""
+``auth.mode = "none"`` (the default) short-circuits to the implicit operator identity.
+Every principal is resolved for the request's tenant — the store's only one."""
 
 from __future__ import annotations
 
@@ -12,7 +13,7 @@ from dataclasses import dataclass
 
 from fastapi import HTTPException, Request, status
 
-from blizzard.auth_core import Permission, Role, expand
+from blizzard.auth_core import Permission, Role, permissions_for
 from blizzard.foundation.platform_tracing.attributes import Caller, annotate_caller
 from blizzard.hub.api.bearer import presented_bearer
 from blizzard.hub.api.deps import get_services
@@ -20,6 +21,7 @@ from blizzard.hub.auth.hashing import SessionId
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import HubServices
 from blizzard.hub.config import AUTH_MODE_NONE
+from blizzard.hub.tenancy import TenantId
 
 _SESSION_COOKIE_NAME = "bz_session"
 
@@ -27,15 +29,28 @@ _SESSION_COOKIE_NAME = "bz_session"
 #: dependency reuses it — one session lookup and one sliding-expiry touch per request.
 _IDENTITY_SCOPE_KEY = "blizzard.resolved_identity"
 
-#: The implicit identity every request resolves to under ``auth.mode = "none"`` — the
-#: unauthenticated ``"operator"`` singleton, carrying every permission (``superuser``).
-IMPLICIT_OPERATOR = ResolvedIdentity(
-    user_id="operator",
-    username="operator",
-    display_name="operator",
-    role=Role.SUPERUSER,
-    permissions=expand(Role.SUPERUSER),
-)
+#: The user id, username, and display name of the implicit operator.
+OPERATOR = "operator"
+
+
+def implicit_operator(tenant: TenantId | None) -> ResolvedIdentity:
+    """The identity every request resolves to under ``auth.mode = "none"`` — the unauthenticated
+    ``"operator"``: a hub administrator acting as an ``admin`` member of ``tenant``."""
+    return ResolvedIdentity(
+        user_id=OPERATOR,
+        username=OPERATOR,
+        display_name=OPERATOR,
+        tenant=tenant,
+        role=Role.ADMIN,
+        permissions=permissions_for(Role.ADMIN, True),
+        hub_admin=True,
+    )
+
+
+def request_tenant(request: Request) -> TenantId | None:
+    """The tenant ``request`` is served in — the store's only one; ``None`` with no store wired."""
+    services: HubServices | None = getattr(request.app.state, "services", None)
+    return None if services is None else services.tenants.sole_scope().tenant
 
 
 @dataclass(frozen=True)
@@ -61,10 +76,10 @@ def resolve_identity(request: Request, services: HubServices | None) -> Resolved
     no session is presented, it does not resolve, or it has expired.
 
     Under ``auth.mode = "none"`` this never touches ``services`` (``None`` is legal
-    then) and always answers :data:`IMPLICIT_OPERATOR`."""
+    then) and always answers :func:`implicit_operator`."""
     mode = request.app.state.config.auth.mode
     if mode == AUTH_MODE_NONE:
-        return IMPLICIT_OPERATOR
+        return implicit_operator(request_tenant(request))
     assert services is not None  # `require`/`me` already resolved services under oauth
     if _IDENTITY_SCOPE_KEY not in request.scope:
         request.scope[_IDENTITY_SCOPE_KEY] = _resolve_session(request, services)
@@ -78,7 +93,7 @@ def _resolve_session(request: Request, services: HubServices) -> ResolvedIdentit
     session = services.sessions.get_by_hash(id_hash)
     if session is None:
         return None
-    return services.auth.touch_session(session)
+    return services.auth.touch_session(session, tenant=services.tenants.sole_scope().tenant)
 
 
 def require(permission: Permission) -> Callable[[Request], ResolvedIdentity]:
@@ -90,7 +105,7 @@ def require(permission: Permission) -> Callable[[Request], ResolvedIdentity]:
         mode = request.app.state.config.auth.mode
         if mode == AUTH_MODE_NONE:
             annotate_caller("operator")
-            return IMPLICIT_OPERATOR
+            return implicit_operator(request_tenant(request))
         services = get_services(request)
         identity = resolve_identity(request, services)
         if identity is None:

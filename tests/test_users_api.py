@@ -17,7 +17,15 @@ from blizzard.foundation.store import batching as batching_module
 from blizzard.hub.auth.errors import RepoErrorFactory
 from blizzard.hub.auth.internal.identity_repository import IdentityRepository
 from blizzard.hub.auth.models import Identity, User
-from tests.support import HubHarness, build_hub, count_queries, hub_store_connections, seed_session, seed_user
+from tests.support import (
+    HubHarness,
+    build_hub,
+    count_queries,
+    default_tenant,
+    hub_store_connections,
+    seed_session,
+    seed_user,
+)
 
 pytestmark = pytest.mark.component
 
@@ -320,7 +328,7 @@ def test_each_pending_role_change_emits_one_user_role_changed_fact(tmp_path: Pat
     assert facts[0].kind == "user_role_changed"
     assert facts[0].actor == "ada"
     assert facts[0].subject == "newcomer"
-    assert facts[0].detail == "pending -> guest"
+    assert facts[0].detail == f"none -> guest in {default_tenant(hub.engine)}"
 
 
 def test_assign_role_404s_for_an_unknown_user(tmp_path: Path) -> None:
@@ -355,7 +363,7 @@ def test_each_role_change_emits_a_user_role_changed_fact(tmp_path: Path) -> None
     assert facts[0].kind == "user_role_changed"
     assert facts[0].actor == "ada"
     assert facts[0].subject == "grace"
-    assert facts[0].detail == "guest -> contributor"
+    assert facts[0].detail == f"guest -> contributor in {default_tenant(hub.engine)}"
 
 
 # --- auth.mode = "none" ----------------------------------------------------------

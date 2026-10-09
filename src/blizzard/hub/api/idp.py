@@ -19,7 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel
 
-from blizzard.auth_core import Permission
+from blizzard.auth_core import Permission, Role
 from blizzard.foundation.roles import dto
 from blizzard.hub.api.auth import reject_runner_principal, runner_signing_in
 from blizzard.hub.api.auth_session import require, resolve_identity
@@ -254,7 +254,7 @@ def authorize(
         "sub": identity.user_id,
         "username": identity.username,
         "email": email,
-        "role": identity.role.value,
+        "role": (identity.role or Role.PENDING).value,
         "aud": client,
         "jti": secrets.token_urlsafe(18),
     }

@@ -34,7 +34,7 @@ from sqlalchemy import Engine, event
 from sqlalchemy import insert as sa_insert
 from sqlalchemy.sql.base import Executable
 
-from blizzard.auth_core import Role
+from blizzard.auth_core import MEMBERSHIP_ROLES, Role
 from blizzard.foundation.clock import FixedClock, IClock
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.ids import Id, IdPrefix
@@ -1364,18 +1364,21 @@ def seed_user(
     hub: HubHarness, *, username: str, role: Role, email: str | None = None, display_name: str | None = None
 ) -> User:
     """Insert one ``users`` row directly (a raw-write test helper, mirrors
-    ``write_chunk_pause_facts``) and return the domain object.
+    ``write_chunk_pause_facts``) with what ``role`` stands for, and return the domain object:
+    ``guest``, ``contributor`` or ``admin`` a membership of that role in the default tenant,
+    ``superuser`` an ``admin`` membership there and the hub administrator role, ``pending`` neither.
 
-    No login mechanism exists yet, so a test wanting a ``ResolvedIdentity``
-    seeds the row directly rather than through a route."""
+    A test wanting a ``ResolvedIdentity`` seeds the user directly rather than through a
+    sign-in."""
     user = User(
         user_id=Id.mint(IdPrefix.USER, hub.clock).value,
         username=username,
         display_name=display_name or username,
         email=email,
-        role=role,
         created_at=hub.clock.now(),
     )
+    now = hub.clock.now()
+    membership = Role.ADMIN if role is Role.SUPERUSER else role
     with hub.engine.begin() as conn:
         conn.execute(
             sa_insert(schema.users).values(
@@ -1383,10 +1386,25 @@ def seed_user(
                 username=user.username,
                 display_name=user.display_name,
                 email=user.email,
-                role=user.role.value,
                 created_at=user.created_at,
             )
         )
+        if membership in MEMBERSHIP_ROLES:
+            conn.execute(
+                sa_insert(schema.membership_facts).values(
+                    tenant_id=default_tenant(hub.engine),
+                    user_id=user.user_id,
+                    role=membership.value,
+                    set_at=now,
+                    set_by="migration",
+                )
+            )
+        if role is Role.SUPERUSER:
+            conn.execute(
+                sa_insert(schema.hub_admin_facts).values(
+                    user_id=user.user_id, granted=True, set_at=now, set_by="migration"
+                )
+            )
     return user
 
 

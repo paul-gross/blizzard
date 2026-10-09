@@ -13,7 +13,6 @@ import pytest
 import sqlalchemy as sa
 import structlog
 
-from blizzard.auth_core import Role
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.auth.errors import RepoErrorFactory
@@ -43,7 +42,7 @@ def engine(tmp_path: Path) -> sa.Engine:
 
 
 def _user(user_id: str) -> User:
-    return User(user_id, user_id, user_id, None, Role.ADMIN, _T0)
+    return User(user_id, user_id, user_id, None, _T0)
 
 
 def _held_open_after_reading_holders(monkeypatch: pytest.MonkeyPatch) -> None:

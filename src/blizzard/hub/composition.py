@@ -35,7 +35,10 @@ from blizzard.hub.auth.facts import AuthFactsService
 from blizzard.hub.auth.identities import IReadIdentityRepository
 from blizzard.hub.auth.internal.auth_facts_repository import AuthFactsRepository
 from blizzard.hub.auth.internal.auth_state_repository import AuthStateRepository
+from blizzard.hub.auth.internal.hub_admin_repository import HubAdminRepository
 from blizzard.hub.auth.internal.identity_repository import IdentityRepository
+from blizzard.hub.auth.internal.identity_transaction import IdentityTransactions
+from blizzard.hub.auth.internal.membership_repository import MembershipRepository
 from blizzard.hub.auth.internal.session_repository import SessionRepository
 from blizzard.hub.auth.internal.superuser_bootstrap_repository import SuperuserBootstrapRepository
 from blizzard.hub.auth.internal.user_repository import UserRepository
@@ -631,6 +634,8 @@ class TenantServicesOpener:
     open_services: Callable[[StoreScope], TenantServices]
     #: The services of the store's only tenant — the ones a single-tenant hub serves.
     sole_tenant: TenantServices
+    #: The store's only tenant — the one a single-tenant hub serves every request in.
+    sole_scope: Callable[[], StoreScope]
 
 
 @dataclass(frozen=True)
@@ -1319,6 +1324,9 @@ def build_services(
         clock=clock,
         superuser_bootstrap=superuser_bootstrap_store,
         auth_facts=auth_facts_service,
+        memberships=MembershipRepository(store_connections),
+        hub_admins=HubAdminRepository(store_connections),
+        transactions=IdentityTransactions(store_connections, auth_errors),
     )
     # The provider-login seam — one registry entry per configured
     # ``[[auth.oauth.provider]]``, empty when no providers are configured.
@@ -1328,7 +1336,11 @@ def build_services(
     signing = SigningKeyService(signing_keys_dir) if signing_keys_dir is not None else None
     auth_throttle = IpThrottle(clock=clock)
     return HubServices(
-        tenants=TenantServicesOpener(open_services=core.open_services, sole_tenant=sole.services),
+        tenants=TenantServicesOpener(
+            open_services=core.open_services,
+            sole_tenant=sole.services,
+            sole_scope=lambda: core.sole_tenant.scope,
+        ),
         hub_scoped_reads=core.hub_scoped_reads,
         tenant_registry=lambda tenant: core.open(StoreScope(tenant)).registry,
         marker_authority=marker_authority,

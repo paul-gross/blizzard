@@ -28,9 +28,7 @@ _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 def _seed_orphan_identity(config, *, provider_name: str) -> None:  # type: ignore[no-untyped-def]
     engine = create_engine_from_url(config.db_url)
     with engine.begin() as conn:
-        conn.execute(
-            insert(s.users).values(id="usr_1", username="a", display_name="A", email=None, role="guest", created_at=_T0)
-        )
+        conn.execute(insert(s.users).values(id="usr_1", username="a", display_name="A", email=None, created_at=_T0))
         conn.execute(
             insert(s.identities).values(
                 provider_name=provider_name, subject="1", user_id="usr_1", handle="a", created_at=_T0

@@ -11,18 +11,19 @@ from datetime import datetime
 
 from blizzard.auth_core import Permission, Role
 from blizzard.foundation.roles import domain_model
+from blizzard.hub.tenancy import TenantId
 
 
 @domain_model
 @dataclass(frozen=True)
 class User:
-    """A hub-local account row."""
+    """A hub-local account row. What the user may do lives in their memberships and the hub
+    administrator facts, never on the account."""
 
     user_id: str
     username: str
     display_name: str
     email: str | None
-    role: Role
     created_at: datetime
 
 
@@ -116,11 +117,23 @@ class SuperuserBootstrap:
 class ResolvedIdentity:
     """The request principal a human-plane edge resolves to — ``src/blizzard/hub/api/auth_session.py``'s
     ``resolve_identity``/``require()`` return this, never a bare ``User``. It carries the
-    expanded permission set (computed once, by :func:`blizzard.auth_core.expand`) and
-    ``display_name`` so no call site re-expands the role or re-reads the user row."""
+    expanded permission set (computed once, by :func:`blizzard.auth_core.permissions_for`) and
+    ``display_name`` so no call site re-expands the role or re-reads the user row. ``role`` is the
+    membership's role in ``tenant`` (``None`` without one); ``tenant`` is ``None`` only on hub-level
+    routes."""
 
     user_id: str
     username: str
     display_name: str
-    role: Role
+    tenant: TenantId | None
+    role: Role | None
     permissions: frozenset[Permission]
+    hub_admin: bool
+
+
+def wire_role(role: Role | None, *, hub_admin: bool) -> Role:
+    """The single role a client is shown for a principal: ``superuser`` for a hub administrator,
+    else the membership's role, else ``pending`` for no membership at all."""
+    if hub_admin:
+        return Role.SUPERUSER
+    return role if role is not None else Role.PENDING

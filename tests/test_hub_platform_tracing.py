@@ -425,7 +425,9 @@ def test_a_traced_session_request_resolves_its_session_once(tmp_path: Path, monk
         calls: list[str] = []
         lookup, touch = services.sessions.get_by_hash, services.auth.touch_session
         monkeypatch.setattr(services.sessions, "get_by_hash", lambda h: calls.append("get_by_hash") or lookup(h))
-        monkeypatch.setattr(services.auth, "touch_session", lambda s: calls.append("touch_session") or touch(s))
+        monkeypatch.setattr(
+            services.auth, "touch_session", lambda s, **kw: calls.append("touch_session") or touch(s, **kw)
+        )
         response = client.get(
             "/api/chunks",
             headers={"Authorization": f"Bearer {session}", "traceparent": f"00-{'a' * 32}-{'b' * 16}-01"},

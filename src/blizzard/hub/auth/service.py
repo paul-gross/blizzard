@@ -2,25 +2,30 @@
 rule, and collision-free username minting.
 
 Holds the **write** repositories (``bzh:controller-read-only``) and takes already-loaded
-objects (``bzh:domain-takes-objects``). Also holds :meth:`assign_role` and
-the superuser-bootstrap primitives; every role change is recorded via ``auth_facts``."""
+objects (``bzh:domain-takes-objects``). Also holds :meth:`assign_role`, which changes a
+user's membership in one tenant, and the superuser claim; every membership change is
+recorded via ``auth_facts`` in the same identity unit of work."""
 
 from __future__ import annotations
 
 import re
 import secrets
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import timedelta
 
-from blizzard.auth_core import Role, expand
+from blizzard.auth_core import Role, permissions_for
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
+from blizzard.hub.auth import hub_admins, memberships
 from blizzard.hub.auth.auth_state import IWriteAuthStateRepository
 from blizzard.hub.auth.facts import AuthFactsService
 from blizzard.hub.auth.hashing import SessionId
+from blizzard.hub.auth.hub_admins import HubAdminFact, IReadHubAdminRepository
 from blizzard.hub.auth.identities import IWriteIdentityRepository
+from blizzard.hub.auth.identity_transaction import IIdentityTransactions
+from blizzard.hub.auth.memberships import IReadMembershipRepository, MembershipFact
 from blizzard.hub.auth.models import (
     AuthStateEntry,
     Identity,
@@ -29,40 +34,69 @@ from blizzard.hub.auth.models import (
     Session,
     SuperuserBootstrap,
     User,
+    wire_role,
 )
 from blizzard.hub.auth.pkce import Pkce
 from blizzard.hub.auth.sessions import IWriteSessionRepository
 from blizzard.hub.auth.superuser_bootstrap import IWriteSuperuserBootstrapRepository
 from blizzard.hub.auth.users import IWriteUserRepository
+from blizzard.hub.tenancy import TenantId
 
 _log = get_logger("blizzard.hub.auth")
 
 
 class RoleAssignmentRefused(Exception):
-    """A role-change request violated a hub-side rule — self-change,
-    ``superuser`` grant/revoke by a non-``superuser`` actor, or ``superuser`` itself,
-    which is bootstrap-only and not assignable through the API."""
+    """A role-change request violated a hub-side rule — self-change, ``admin``
+    grant/revoke by an actor who is no hub administrator, or a change touching the hub
+    administrator (``superuser``), which is not assignable through the API."""
 
 
-#: Every role the role-assignment API may grant — ``superuser`` is bootstrap-only.
+#: Every role the role-assignment API may assign — ``superuser`` (the hub administrator) is
+#: not one, and ``pending`` revokes the membership.
 ASSIGNABLE_ROLES: tuple[Role, ...] = tuple(r for r in Role if r is not Role.SUPERUSER)
 
 
-def role_assignment_refusal(*, actor: ResolvedIdentity, subject: User, to_role: Role) -> str | None:
+@domain_model
+@dataclass(frozen=True)
+class Member:
+    """A user as one tenant sees them: their membership's role there (``None`` without one) and
+    whether they are a hub administrator."""
+
+    user: User
+    tenant: TenantId
+    role: Role | None
+    hub_admin: bool
+
+
+def principal(user: User, *, tenant: TenantId | None, role: Role | None, hub_admin: bool) -> ResolvedIdentity:
+    """``user`` resolved for ``tenant``: its permissions expanded once, from the membership's role
+    and the hub administrator role."""
+    return ResolvedIdentity(
+        user_id=user.user_id,
+        username=user.username,
+        display_name=user.display_name,
+        tenant=tenant,
+        role=role,
+        permissions=permissions_for(role, hub_admin),
+        hub_admin=hub_admin,
+    )
+
+
+def role_assignment_refusal(*, actor: ResolvedIdentity, subject: Member, to_role: Role) -> str | None:
     """Why the role-change rules refuse ``actor`` moving ``subject`` to ``to_role``, or None when
-    they admit it: changing your own role, touching ``superuser`` (bootstrap-only), and a
-    non-``superuser`` actor granting or revoking ``admin`` are refused."""
-    if actor.user_id == subject.user_id:
+    they admit it: changing your own role, touching a hub administrator (``superuser``), and an
+    actor who is no hub administrator granting or revoking ``admin`` are refused."""
+    if actor.user_id == subject.user.user_id:
         return "cannot change your own role"
-    if subject.role is Role.SUPERUSER or to_role not in ASSIGNABLE_ROLES:
+    if subject.hub_admin or to_role not in ASSIGNABLE_ROLES:
         return "superuser is not assignable through the API (bootstrap-only)"
     touches_admin = subject.role is Role.ADMIN or to_role is Role.ADMIN
-    if touches_admin and actor.role is not Role.SUPERUSER:
+    if touches_admin and not actor.hub_admin:
         return "only superuser may grant or revoke admin"
     return None
 
 
-def assignable_roles(*, actor: ResolvedIdentity, subject: User) -> list[Role]:
+def assignable_roles(*, actor: ResolvedIdentity, subject: Member) -> list[Role]:
     """Every role the role-change rules let ``actor`` assign ``subject`` — empty when they admit no change."""
     return [r for r in ASSIGNABLE_ROLES if role_assignment_refusal(actor=actor, subject=subject, to_role=r) is None]
 
@@ -134,6 +168,9 @@ class AuthService:
         clock: IClock,
         superuser_bootstrap: IWriteSuperuserBootstrapRepository,
         auth_facts: AuthFactsService,
+        memberships: IReadMembershipRepository,
+        hub_admins: IReadHubAdminRepository,
+        transactions: IIdentityTransactions,
         idle_ttl: timedelta = IDLE_TTL,
         absolute_max_age: timedelta = ABSOLUTE_MAX_AGE,
         touch_granularity: timedelta = TOUCH_GRANULARITY,
@@ -145,12 +182,15 @@ class AuthService:
         self._clock = clock
         self._superuser_bootstrap = superuser_bootstrap
         self._auth_facts = auth_facts
+        self._memberships = memberships
+        self._hub_admins = hub_admins
+        self._transactions = transactions
         self._idle_ttl = idle_ttl
         self._absolute_max_age = absolute_max_age
         self._touch_granularity = touch_granularity
 
-    def touch_session(self, session: Session) -> ResolvedIdentity | None:
-        """Slide ``session``'s expiry and resolve its owning user's identity.
+    def touch_session(self, session: Session, *, tenant: TenantId | None) -> ResolvedIdentity | None:
+        """Slide ``session``'s expiry and resolve its owning user's identity for ``tenant``.
 
         ``None`` when idle-expired, past its absolute maximum age, or its user no
         longer exists (takes the already-loaded ``Session``). Skips the write when
@@ -168,13 +208,8 @@ class AuthService:
         if now - session.last_seen_at >= self._touch_granularity:
             new_expires_at = min(session.created_at + self._absolute_max_age, now + self._idle_ttl)
             self._sessions.touch(session.id_hash, last_seen_at=now, expires_at=new_expires_at)
-        return ResolvedIdentity(
-            user_id=user.user_id,
-            username=user.username,
-            display_name=user.display_name,
-            role=user.role,
-            permissions=expand(user.role),
-        )
+        role = self._memberships.role_in(tenant, user.user_id) if tenant is not None else None
+        return principal(user, tenant=tenant, role=role, hub_admin=self._hub_admins.is_hub_admin(user.user_id))
 
     def mint_session(self, user: User) -> tuple[str, Session]:
         """Mint a fresh session for ``user``; returns ``(plaintext_id, session)`` — only
@@ -197,14 +232,16 @@ class AuthService:
         :class:`User` it belongs to, minting one if none exists.
 
         An existing ``(provider_name, subject)`` link wins, its ``handle`` refreshed in place;
-        else a **verified** email match attaches; else a ``role=pending`` user is minted."""
+        else a **verified** email match attaches; else a user with no membership is minted.
+        Whichever user it resolves to claims a configured, still-unclaimed ``auth.superuser``
+        whose email it holds."""
         existing_link = self._identities.get(provider_name, identity.subject)
         if existing_link is not None:
             user = self._users.get(existing_link.user_id)
             assert user is not None, f"identity {provider_name!r}:{identity.subject!r} references a missing user"
             if existing_link.handle != identity.handle:
                 self._identities.update_handle(provider_name, identity.subject, handle=identity.handle)
-            return user
+            return self._claim_superuser(user)
 
         now = self._clock.now()
         if identity.email_verified and identity.email:
@@ -219,14 +256,13 @@ class AuthService:
                         created_at=now,
                     )
                 )
-                return matched
+                return self._claim_superuser(matched)
 
         user = User(
             user_id=Id.mint(IdPrefix.USER, self._clock).value,
             username=self.mint_username(identity.handle),
             display_name=identity.handle,
             email=identity.email if identity.email_verified else None,
-            role=Role.PENDING,
             created_at=now,
         )
         self._users.create(user)
@@ -239,7 +275,7 @@ class AuthService:
                 created_at=now,
             )
         )
-        return self._maybe_claim_superuser_bootstrap(user)
+        return self._claim_superuser(user)
 
     def revoke(self, session: Session) -> None:
         """Delete ``session`` outright — logout (#92)."""
@@ -332,37 +368,50 @@ class AuthService:
             candidate = f"{base}-{suffix}"
         return candidate
 
-    # --- role assignment -----------------------------------------
+    # --- memberships -------------------------------------------
 
-    def assign_role(self, *, actor: ResolvedIdentity, subject: User, to_role: Role) -> User:
-        """Enforce the hub-side role-change rules, then apply the change.
+    def member(self, user: User, *, tenant: TenantId) -> Member:
+        """``user`` as ``tenant`` sees them."""
+        return Member(
+            user=user,
+            tenant=tenant,
+            role=self._memberships.role_in(tenant, user.user_id),
+            hub_admin=self._hub_admins.is_hub_admin(user.user_id),
+        )
 
-        Raises :class:`RoleAssignmentRefused` when the actor is the subject, when either
-        role is ``superuser`` (bootstrap-only), or when a non-``superuser`` actor grants or
-        revokes ``admin``. A no-op request returns ``subject`` unchanged, recording no fact."""
+    def members(self, users: list[User], *, tenant: TenantId) -> list[Member]:
+        """Each of ``users`` as ``tenant`` sees them, in order — two reads however many users."""
+        roles = {m.user_id: m.role for m in self._memberships.members(tenant)}
+        holders = set(self._hub_admins.holders())
+        return [Member(u, tenant, roles.get(u.user_id), u.user_id in holders) for u in users]
+
+    def assign_role(self, *, actor: ResolvedIdentity, subject: Member, to_role: Role) -> Member:
+        """Enforce the role-change rules, then change ``subject``'s membership in its tenant —
+        ``pending`` revokes it.
+
+        Raises :class:`RoleAssignmentRefused` when the actor is the subject, when the subject is a
+        hub administrator or ``to_role`` is ``superuser``, or when an actor who is no hub
+        administrator grants or revokes ``admin``. A no-op request returns ``subject`` unchanged,
+        recording no fact."""
         refusal = role_assignment_refusal(actor=actor, subject=subject, to_role=to_role)
         if refusal is not None:
             raise RoleAssignmentRefused(refusal)
-        if subject.role is to_role:
+        if wire_role(subject.role, hub_admin=subject.hub_admin) is to_role:
             return subject
-        return self._apply_role_change(subject, to_role, actor_username=actor.username)
-
-    def _apply_role_change(self, user: User, to_role: Role, *, actor_username: str) -> User:
-        """Write the role change and record the ``user_role_changed`` fact — the one
-        place either :meth:`assign_role` or a bootstrap promote/demote lands a role
-        write, so the durable row and the fact can never drift apart."""
-        self._users.update_role(user.user_id, to_role)
-        self._auth_facts.user_role_changed(
-            actor=actor_username, subject=user.username, from_role=user.role, to_role=to_role
-        )
-        return User(
-            user_id=user.user_id,
-            username=user.username,
-            display_name=user.display_name,
-            email=user.email,
-            role=to_role,
-            created_at=user.created_at,
-        )
+        role = None if to_role is Role.PENDING else to_role
+        with self._transactions.begin() as writes:
+            writes.memberships.record(
+                MembershipFact(subject.tenant, subject.user.user_id, role, self._clock.now(), actor.user_id)
+            )
+            self._auth_facts.user_role_changed(
+                actor=actor.username,
+                subject=subject.user.username,
+                tenant=subject.tenant,
+                from_role=subject.role,
+                to_role=role,
+                into=writes.auth_facts,
+            )
+        return replace(subject, role=role)
 
     # --- superuser bootstrap -------------------------------------
 
@@ -377,30 +426,41 @@ class AuthService:
             SuperuserBootstrap(email=email, claimed_user_id=claimed_user_id, updated_at=self._clock.now())
         )
 
-    def clear_superuser_bootstrap(self) -> None:
-        """Delete the singleton bootstrap row outright — ``auth.superuser`` was unset."""
-        self._superuser_bootstrap.clear()
-
-    def bootstrap_apply_role(self, user: User, to_role: Role) -> User:
-        """A system-driven role change outside :meth:`assign_role`'s rule engine — the
-        superuser bootstrap's promote/demote. Recorded with ``actor="system"``."""
-        return self._apply_role_change(user, to_role, actor_username="system")
-
     def report_superuser_bootstrap_unclaimed(self, *, email: str) -> None:
         """Surface a still-unclaimed bootstrap target — never a silent dead end."""
         self._auth_facts.superuser_bootstrap_unclaimed(email=email)
 
-    def _maybe_claim_superuser_bootstrap(self, user: User) -> User:
-        """Called only on :meth:`link_or_mint`'s newly-minted-user branch — the one branch
-        a pre-provisioned, still-unclaimed bootstrap target can first resolve through.
+    def _claim_superuser(self, user: User) -> User:
+        """Claim the configured ``auth.superuser`` for ``user`` when its email is the still-unclaimed
+        target, in one identity unit of work: the claim, the hub administrator role (``bootstrap``),
+        and — while the hub holds exactly one tenant and it has no admin — an ``admin`` membership
+        there. A target already claimed is never claimed again. Returns ``user``."""
+        if user.email is None or not _claimable(self._superuser_bootstrap.get(), user.email):
+            return user
+        now = self._clock.now()
+        with self._transactions.begin() as writes:
+            if not _claimable(writes.bootstrap.get(), user.email):
+                return user
+            writes.bootstrap.upsert(SuperuserBootstrap(email=user.email, claimed_user_id=user.user_id, updated_at=now))
+            if not writes.hub_admins.is_hub_admin(user.user_id):
+                writes.hub_admins.record(HubAdminFact(user.user_id, True, now, hub_admins.SET_BY_BOOTSTRAP))
+            tenant = writes.memberships.only_tenant()
+            if tenant is not None and writes.memberships.admin_count(tenant) == 0:
+                from_role = writes.memberships.role_in(tenant, user.user_id)
+                writes.memberships.record(
+                    MembershipFact(tenant, user.user_id, Role.ADMIN, now, memberships.SET_BY_BOOTSTRAP)
+                )
+                self._auth_facts.user_role_changed(
+                    actor="system",
+                    subject=user.username,
+                    tenant=tenant,
+                    from_role=from_role,
+                    to_role=Role.ADMIN,
+                    into=writes.auth_facts,
+                )
+        _log.info("superuser claimed", user_id=user.user_id, email=user.email)
+        return user
 
-        Promotes and marks the row claimed when ``user``'s (already-verified) email matches
-        an unclaimed target; otherwise returns ``user`` unchanged."""
-        if user.email is None:
-            return user
-        bootstrap = self._superuser_bootstrap.get()
-        if bootstrap is None or bootstrap.claimed_user_id is not None or bootstrap.email != user.email:
-            return user
-        promoted = self.bootstrap_apply_role(user, Role.SUPERUSER)
-        self.record_superuser_bootstrap(email=bootstrap.email, claimed_user_id=user.user_id)
-        return promoted
+
+def _claimable(bootstrap: SuperuserBootstrap | None, email: str) -> bool:
+    return bootstrap is not None and bootstrap.claimed_user_id is None and bootstrap.email == email

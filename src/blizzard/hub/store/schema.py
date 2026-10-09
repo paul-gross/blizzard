@@ -1679,7 +1679,7 @@ runner_external_usage_misses = Table(
 Index("ix_runner_external_usage_misses_tenant_id", runner_external_usage_misses.c.tenant_id)
 
 # --- The identity spine: users, provider identities, sessions -----
-# ``role`` is a coarse tag expanded through a static map, never a stored permission list.
+# An account carries no role: what a user may do is their memberships and the hub administrator facts.
 
 users = Table(
     "users",
@@ -1688,7 +1688,6 @@ users = Table(
     Column("username", String, nullable=False, unique=True),
     Column("display_name", String, nullable=False),
     Column("email", String, nullable=True),
-    Column("role", String, nullable=False),  # blizzard.auth_core.Role value
     Column("created_at", UtcDateTime, nullable=False),
 )
 

@@ -77,6 +77,11 @@ class IReadMembershipRepository(Protocol):
         """How many of ``tenant``'s members hold ``admin``."""
         ...
 
+    def only_tenant(self) -> TenantId | None:
+        """The hub's tenant while it holds exactly one, else ``None`` — the one tenant the superuser
+        claim may let its claimer into."""
+        ...
+
 
 class IWriteMembershipRepository(IReadMembershipRepository, Protocol):
     """Adds the membership write."""

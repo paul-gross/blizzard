@@ -12,7 +12,6 @@ from pathlib import Path
 import pytest
 from sqlalchemy import Engine, insert
 
-from blizzard.auth_core import Role
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.garden_proposals import GardenProposalOrigin
 from blizzard.foundation.ids import Id, IdPrefix
@@ -85,7 +84,6 @@ def _user(users: UserRepository, *, username: str) -> User:
         username=username,
         display_name=username,
         email=None,
-        role=Role.CONTRIBUTOR,
         created_at=_T0,
     )
     users.create(user)

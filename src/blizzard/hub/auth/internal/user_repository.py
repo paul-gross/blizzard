@@ -11,7 +11,6 @@ from collections.abc import Sequence
 from sqlalchemy import insert, select
 from sqlalchemy.exc import IntegrityError
 
-from blizzard.auth_core import Role
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.auth.errors import RepoErrorFactory
 from blizzard.hub.auth.models import User
@@ -77,7 +76,6 @@ class UserRepository:
                         username=user.username,
                         display_name=user.display_name,
                         email=user.email,
-                        role=user.role.value,
                         created_at=user.created_at,
                     )
                 )
@@ -85,10 +83,6 @@ class UserRepository:
             raise self._errors.from_integrity_error(
                 exc, f"failed to create user {user.username!r}", operation="create"
             ) from exc
-
-    def update_role(self, user_id: str, role: Role) -> None:
-        with self._store.write("update_role") as conn:
-            conn.execute(s.users.update().where(s.users.c.id == user_id).values(role=role.value))
 
     # --- helpers ------------------------------------------------------------
 
@@ -99,7 +93,6 @@ class UserRepository:
             username=row.username,
             display_name=row.display_name,
             email=row.email,
-            role=Role(row.role),
             created_at=row.created_at,
         )
 

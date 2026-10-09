@@ -61,6 +61,11 @@ class MembershipRepository:
             admins = _in_force(_facts.c.tenant_id == tenant, _facts.c.role == Role.ADMIN.value).subquery()
             return conn.execute(select(sa.func.count()).select_from(admins)).scalar_one()
 
+    def only_tenant(self) -> TenantId | None:
+        with self._store.read("only_tenant") as conn:
+            ids = conn.execute(select(s.tenants.c.tenant_id).limit(2)).scalars().all()
+            return TenantId(ids[0]) if len(ids) == 1 else None
+
     # --- writes -----------------------------------------------------------
 
     def record(self, fact: MembershipFact) -> None:

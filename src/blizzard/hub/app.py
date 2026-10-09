@@ -501,7 +501,7 @@ def build_hosted_app(
         KeyCoverage.of(core.secrets, secret_keys).check()
         # Before the hub serves.
         services.tenants.sole_tenant.hub_node.release_orphaned_slots()
-        Superuser(email=config.auth.superuser, users=services.users, auth=services.auth).ensure()
+        Superuser(email=config.auth.superuser, auth=services.auth).ensure()
         _announce_started(expected, services)
         _announce_rejected_tracing(tracing, services)
         _announce_rejected_egress(config.egress, services)
