@@ -1,18 +1,20 @@
 """tenant keys — every table whose natural key changes is rebuilt keyed by its tenant, and tightened in the same copy.
 
-Each table in :data:`_PLAN` is brought to the shape listed there: its primary key, unique constraints and listing
-indexes led by ``tenant_id``, a foreign key from a child onto a rebuilt parent widened to ``(tenant_id, <key>)``,
-``tenant_id`` made ``NOT NULL`` with a named foreign key to ``tenants``. Every constraint and index the revision creates
-carries its name; the constraints it keeps unchanged keep theirs, or stay unnamed. One batch per table under
-``recreate="auto"`` rebuilds it (SQLite copies the table; other dialects alter it in place), except a foreign key onto
-another rebuilt table: it is dropped in its table's batch, which runs before its parent's, and added back widened in a
-second batch once every parent holds its new key — no dialect has to drop a key a live foreign key still names.
+Each table in :data:`_PLAN` is brought to the shape listed there: its primary key, unique constraints, listing indexes
+and id-lookup indexes led by ``tenant_id``, a foreign key from a child onto a rebuilt parent widened to
+``(tenant_id, <key>)``, ``tenant_id`` made ``NOT NULL`` with a named foreign key to ``tenants``. Every constraint and
+index the revision creates carries its name; the constraints it keeps unchanged keep theirs, or stay unnamed. One batch
+per table under ``recreate="auto"`` rebuilds it (SQLite copies the table; other dialects alter it in place), except a
+foreign key onto another rebuilt table: it is dropped in its table's batch, which runs before its parent's, and added
+back widened in a second batch once every parent holds its new key — no dialect has to drop a key a live foreign key
+still names. ``egress_cursor`` gains ``events_tenant_id``, the tenant of the events position it records, null on every
+existing row.
 
 ``tenant_id`` was stamped on every row by ``20261008_1200_tenant_id_backfill``; while a table still holds a row without
 one the upgrade refuses, naming it, before any table is touched. Re-running the upgrade skips every table already at
 its target shape and adds only the widened foreign keys still missing. The downgrade refuses while more than one tenant
 exists, naming them; with one it restores :data:`_PRIOR` — the keys, names and nullable ``tenant_id`` those tables had
-before.
+before — and drops ``events_tenant_id``.
 Revision ID: 20261008_1300_tenant_keys
 Revises: 20261008_1200_tenant_id_backfill
 """
@@ -30,6 +32,9 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 _TENANT_COLUMN = "tenant_id"
+# Once two tenants may hold the same derivation key, the egress events position names its tenant too.
+_CURSOR = "egress_cursor"
+_CURSOR_TENANT = "events_tenant_id"
 
 # The target shape of every table this revision rebuilds — frozen here, never derived from ``schema.metadata``
 # (``bzh:frozen-revisions``).
@@ -49,7 +54,7 @@ _PLAN: tuple[_TablePlan, ...] = (
             ("fk_answer_deliveries_questions", ("tenant_id", "question_id"), "questions", ("tenant_id", "question_id")),
             ("fk_answer_deliveries_tenant_id", ("tenant_id",), "tenants", ("tenant_id",)),
         ),
-        (("ix_answer_deliveries_tenant_id", ("tenant_id",), False),),
+        (("ix_answer_deliveries_tenant_question_id", ("tenant_id", "question_id"), False),),
         False,
     ),
     (
@@ -61,7 +66,7 @@ _PLAN: tuple[_TablePlan, ...] = (
             ("fk_chunk_work_refs_tenant_id", ("tenant_id",), "tenants", ("tenant_id",)),
         ),
         (
-            ("ix_chunk_work_refs_chunk_id", ("chunk_id",), False),
+            ("ix_chunk_work_refs_tenant_chunk_id", ("tenant_id", "chunk_id"), False),
             ("ix_chunk_work_refs_tenant_source_ref", ("tenant_id", "source", "ref"), False),
         ),
         False,
@@ -113,8 +118,8 @@ _PLAN: tuple[_TablePlan, ...] = (
             ("fk_questions_tenant_id", ("tenant_id",), "tenants", ("tenant_id",)),
         ),
         (
-            ("ix_questions_chunk_id", ("chunk_id",), False),
             ("ix_questions_tenant_asked_at_question_id", ("tenant_id", "asked_at", "question_id"), False),
+            ("ix_questions_tenant_chunk_id", ("tenant_id", "chunk_id"), False),
         ),
         False,
     ),
@@ -182,8 +187,8 @@ _PLAN: tuple[_TablePlan, ...] = (
         (("fk_transcript_event_derivations_tenant_id", ("tenant_id",), "tenants", ("tenant_id",)),),
         (
             (
-                "ix_transcript_event_derivations_derived_at_segment_id_extractor_version",
-                ("derived_at", "segment_id", "extractor_version"),
+                "ix_transcript_event_derivations_egress_order",
+                ("derived_at", "segment_id", "extractor_version", "tenant_id"),
                 False,
             ),
             (
@@ -208,9 +213,8 @@ _PLAN: tuple[_TablePlan, ...] = (
             ("fk_transcript_events_tenant_id", ("tenant_id",), "tenants", ("tenant_id",)),
         ),
         (
-            ("ix_transcript_events_chunk_id", ("chunk_id",), False),
             ("ix_transcript_events_extractor_version_id", ("extractor_version", "id"), False),
-            ("ix_transcript_events_segment_id", ("segment_id",), False),
+            ("ix_transcript_events_tenant_chunk_id", ("tenant_id", "chunk_id"), False),
             ("ix_transcript_events_tenant_subject", ("tenant_id", "subject"), False),
             ("ix_transcript_events_tenant_tool", ("tenant_id", "tool"), False),
         ),
@@ -225,11 +229,14 @@ _PLAN: tuple[_TablePlan, ...] = (
             ("fk_transcript_segments_tenant_id", ("tenant_id",), "tenants", ("tenant_id",)),
         ),
         (
-            ("ix_transcript_segments_chunk_id", ("chunk_id",), False),
             ("ix_transcript_segments_final_chunk_id", ("final", "chunk_id"), False),
-            ("ix_transcript_segments_runner_received_at", ("runner_id", "received_at"), False),
-            ("ix_transcript_segments_segment_id", ("segment_id",), False),
-            ("ix_transcript_segments_supersedes", ("supersedes",), False),
+            (
+                "ix_transcript_segments_tenant_chunk_id",
+                ("tenant_id", "chunk_id", "segment_id", "turn_range_start"),
+                False,
+            ),
+            ("ix_transcript_segments_tenant_runner_received_at", ("tenant_id", "runner_id", "received_at"), False),
+            ("ix_transcript_segments_tenant_supersedes", ("tenant_id", "supersedes"), False),
         ),
         False,
     ),
@@ -471,6 +478,23 @@ def _shape(bind: sa.Connection, table: str, ignored: frozenset[str]) -> _Shape:
     )
 
 
+def _matched(current: _Shape, wanted: _Shape) -> _Shape:
+    """``current`` with every reflected name the plan leaves unnamed read as unnamed, so a plan's ``None`` matches any
+    name on the same columns: SQLite reflects an unnamed constraint with no name, other dialects with the one they
+    assigned it."""
+    (name, columns), uniques, foreign_keys, indexes, nullable = current
+    (wanted_name, wanted_columns), wanted_uniques, wanted_foreign_keys, _, _ = wanted
+    unnamed_uniques = {key for key_name, key in wanted_uniques if key_name is None}
+    unnamed_foreign_keys = {fk[1:] for fk in wanted_foreign_keys if fk[0] is None}
+    return (
+        (None if wanted_name is None and columns == wanted_columns else name, columns),
+        frozenset((None if key in unnamed_uniques else key_name, key) for key_name, key in uniques),
+        frozenset((None, *fk[1:]) if fk[1:] in unnamed_foreign_keys else fk for fk in foreign_keys),
+        indexes,
+        nullable,
+    )
+
+
 def _refuse_unstamped(bind: sa.Connection, plans: tuple[_TablePlan, ...]) -> None:
     """Refuse while a table whose ``tenant_id`` becomes required holds a row without one."""
     for table, *_, nullable in plans:
@@ -480,6 +504,10 @@ def _refuse_unstamped(bind: sa.Connection, plans: tuple[_TablePlan, ...]) -> Non
             raise RuntimeError(
                 f"{table} holds rows without a tenant_id; the tenant_id backfill stamps every row before tenant keys"
             )
+
+
+def _columns(bind: sa.Connection, table: str) -> set[str]:
+    return {column["name"] for column in sa.inspect(bind).get_columns(table)}
 
 
 def _clear_stale_copy(bind: sa.Connection, table: str) -> None:
@@ -516,10 +544,12 @@ def _rebuild(bind: sa.Connection, plan: _TablePlan, ignored: frozenset[str]) -> 
     The batch copies from the reflected table, so a constraint it keeps leaves as it was, unnamed ones included. An
     unnamed constraint to drop is taken out of that structure rather than dropped by a name it does not have, and an
     unnamed one to restore is put into it; a batch that restores one copies the table on every dialect, since only a
-    copy can create a constraint without a name.
+    copy can create a constraint without a name. Only the downgrade restores one, and only on SQLite: there alone does
+    the store hold a constraint without a name.
     """
     table = plan[0]
-    current, wanted = _shape(bind, table, ignored), _wanted(plan, ignored)
+    wanted = _wanted(plan, ignored)
+    current = _matched(_shape(bind, table, ignored), wanted)
     if current == wanted:
         return
     _clear_stale_copy(bind, table)
@@ -606,6 +636,8 @@ def upgrade() -> None:
         _rebuild(bind, plan, linked)
     for plan in _PLAN:
         _link(bind, plan, linked)
+    if _CURSOR_TENANT not in _columns(bind, _CURSOR):
+        op.add_column(_CURSOR, sa.Column(_CURSOR_TENANT, sa.String(), nullable=True))
 
 
 def downgrade() -> None:
@@ -618,3 +650,6 @@ def downgrade() -> None:
         _unlink(bind, plan, linked)
     for prior in reversed(_children_first(_PRIOR)):
         _rebuild(bind, prior, linked)
+    if _CURSOR_TENANT in _columns(bind, _CURSOR):
+        with op.batch_alter_table(_CURSOR) as batch:
+            batch.drop_column(_CURSOR_TENANT)

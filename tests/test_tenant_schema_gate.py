@@ -31,12 +31,7 @@ _GLOBAL_TABLES_CARRYING_TENANT_ID: dict[str, str] = {
 }
 
 # Names longer than the limit that predate it and that no revision renames, each with why it stands.
-_LONG_NAMES_KEPT: dict[str, str] = {
-    "ix_transcript_event_derivations_derived_at_segment_id_extractor_version": (
-        "the egress sweep's hub-wide cursor index, created before the limit was kept; Postgres truncates it, and the"
-        " hub migration chain is verified on SQLite only"
-    ),
-}
+_LONG_NAMES_KEPT: dict[str, str] = {}
 
 # Keys the build check still fails, each naming the revision that rescopes it; that revision deletes its entry.
 _PENDING_KEYS: dict[str, str] = {}

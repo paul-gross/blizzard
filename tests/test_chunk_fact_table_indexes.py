@@ -2,7 +2,8 @@
 (component tier) — migrated-to-head sqlite-on-disk.
 
 Pins *which named index* each plan uses (narrower than ``tests/test_store_read_index_gate.py``'s scan-avoidance gate):
-``ChunkFactsStore.load_facts``/``_route_of_conn`` must plan an index search against ``ix_<table>_chunk_id``, over the
+``ChunkFactsStore.load_facts``/``_route_of_conn`` must plan a tenant-and-chunk search through ``ix_<table>_tenant_chunk_id``,
+over the
 ``20260829_1930_fact_tables_chunk_id_index`` table set plus hot-path reads."""
 
 from __future__ import annotations
@@ -106,6 +107,15 @@ def _plan_uses_index(plan: Sequence[Row[Any]], index_name: str) -> bool:
     return any(pattern.search(str(row)) for row in plan)
 
 
+# One tenant's rows of one chunk — the shape every scoped per-chunk read takes.
+_BY_CHUNK = "SELECT * FROM {table} WHERE tenant_id = 'ten_index' AND chunk_id = 'ch_1'"
+
+
+def _seeks_tenant_and_chunk(plan: Sequence[Row[Any]]) -> bool:
+    """The search names both columns: an index searched by ``tenant_id`` alone walks every row of the tenant."""
+    return any("(tenant_id=? AND chunk_id=?" in str(row) for row in plan)
+
+
 def _no_temp_btree_for_order_by(plan: Sequence[Row[Any]]) -> bool:
     """Neither a full nor a partial (``... FOR LAST TERM OF ORDER BY``) sort — sqlite emits
     the latter when an index covers the leading `ORDER BY` term but not a trailing
@@ -117,47 +127,57 @@ def _no_temp_btree_for_order_by(plan: Sequence[Row[Any]]) -> bool:
 def test_fact_table_chunk_id_read_plans_as_an_index_search(tmp_path: Path, table: str) -> None:
     engine = _engine(tmp_path)
     with engine.connect() as conn:
-        plan = conn.execute(sa.text(f"EXPLAIN QUERY PLAN SELECT * FROM {table} WHERE chunk_id = 'ch_1'")).all()
-    assert _plan_uses_index(plan, f"ix_{table}_chunk_id"), plan
+        plan = conn.execute(sa.text(f"EXPLAIN QUERY PLAN {_BY_CHUNK.format(table=table)}")).all()
+    assert _plan_uses_index(plan, f"ix_{table}_tenant_chunk_id"), plan
+    assert _seeks_tenant_and_chunk(plan), plan
 
 
 @pytest.mark.parametrize("table", _CHUNK_ID_EPOCH_COMPOSITE_TABLES)
 def test_chunk_id_epoch_composite_tables_plan_through_the_exact_composite(tmp_path: Path, table: str) -> None:
-    """`ix_{table}_chunk_id` is dropped in favor of
-    `ix_{table}_chunk_id_epoch`, a strict superset that still serves a plain `chunk_id`
-    equality filter as its leading column."""
+    """No `ix_{table}_tenant_chunk_id`: `ix_{table}_tenant_chunk_id_epoch` is a strict superset that serves a
+    tenant-and-chunk equality filter through its leading columns."""
     engine = _engine(tmp_path)
     with engine.connect() as conn:
-        plan = conn.execute(sa.text(f"EXPLAIN QUERY PLAN SELECT * FROM {table} WHERE chunk_id = 'ch_1'")).all()
-    assert _plan_uses_index(plan, f"ix_{table}_chunk_id_epoch"), plan
-    assert not _plan_uses_index(plan, f"ix_{table}_chunk_id"), plan
+        plan = conn.execute(sa.text(f"EXPLAIN QUERY PLAN {_BY_CHUNK.format(table=table)}")).all()
+    assert _plan_uses_index(plan, f"ix_{table}_tenant_chunk_id_epoch"), plan
+    assert not _plan_uses_index(plan, f"ix_{table}_tenant_chunk_id"), plan
+    assert _seeks_tenant_and_chunk(plan), plan
 
 
 def test_load_facts_answered_question_read_plans_as_an_index_search(tmp_path: Path) -> None:
     """`load_facts`'s `answered` read joins on `questions.chunk_id`, so it
-    plans against `ix_questions_chunk_id` rather than an unfiltered join."""
+    plans against `ix_questions_tenant_chunk_id` rather than an unfiltered join."""
     engine = _engine(tmp_path)
     with engine.connect() as conn:
         plan = conn.execute(
             sa.text(
                 "EXPLAIN QUERY PLAN SELECT question_answers.question_id FROM question_answers "
-                "JOIN questions ON questions.question_id = question_answers.question_id "
-                "WHERE questions.chunk_id = 'ch_1'"
+                "JOIN questions ON questions.tenant_id = question_answers.tenant_id "
+                "AND questions.question_id = question_answers.question_id "
+                "WHERE questions.tenant_id = 'ten_index' AND questions.chunk_id = 'ch_1'"
             )
         ).all()
-    assert any("ix_questions_chunk_id" in str(row) for row in plan), plan
+    assert _plan_uses_index(plan, "ix_questions_tenant_chunk_id"), plan
 
 
 # --- the hot-path reads named in its acceptance criteria --------------
 
 # (label, sql, index name the read must plan through)
 _HOT_PATH_INDEX_SEARCHES = (
-    ("artifacts by chunk", "SELECT * FROM artifacts WHERE chunk_id = 'ch_1'", "ix_artifacts_chunk_id_node_id_epoch"),
-    ("graph_choices by node", "SELECT * FROM graph_choices WHERE node_id = 'nd_1'", "ix_graph_choices_node_id"),
+    (
+        "artifacts by chunk",
+        "SELECT * FROM artifacts WHERE tenant_id = 'ten_index' AND chunk_id = 'ch_1'",
+        "ix_artifacts_tenant_chunk_id_node_id_epoch",
+    ),
+    (
+        "graph_choices by node",
+        "SELECT * FROM graph_choices WHERE tenant_id = 'ten_index' AND node_id = 'nd_1'",
+        "ix_graph_choices_tenant_node_id",
+    ),
     (
         "chunk_work_refs by chunk",
-        "SELECT * FROM chunk_work_refs WHERE chunk_id = 'ch_1'",
-        "ix_chunk_work_refs_chunk_id",
+        "SELECT * FROM chunk_work_refs WHERE tenant_id = 'ten_index' AND chunk_id IN ('ch_1', 'ch_2') ORDER BY id",
+        "ix_chunk_work_refs_tenant_chunk_id",
     ),
     (
         "chunk_work_refs by (tenant_id, source, ref)",
@@ -182,17 +202,23 @@ def test_hot_path_read_plans_as_an_index_search(tmp_path: Path, label: str, sql:
     assert _plan_uses_index(plan, index_name), (label, plan)
 
 
-@pytest.mark.parametrize(
-    "criteria", [OperationalCriteria(), OperationalCriteria(since=_NOW, until=_NOW)], ids=["unfiltered", "windowed"]
-)
-def test_spend_by_node_plans_through_the_tenant_range_index_and_sorts_for_group_by(
-    tmp_path: Path, criteria: OperationalCriteria
-) -> None:
-    """`spend_by_node` searches the tenant's rows through `ix_usage_facts_tenant_recorded_at_id`,
-    windowed or not, and the `GROUP BY` sorts them in a temp B-tree; `ix_usage_facts_node_id`,
-    which would order the groups, spans every tenant and goes unused. Accepted, not fixed: the
-    tenant's equality prefix (and a window's range) is the more selective predicate, and the
-    node index keeps its hub-wide shape because `node_id` is hub-minted."""
+def test_spend_by_node_reads_the_tenant_in_node_order(tmp_path: Path) -> None:
+    """Unwindowed, `spend_by_node` reads the tenant's rows through `ix_usage_facts_tenant_node_id`, which already
+    yields them grouped by node: no sort."""
+    plan = _spend_by_node_plan(tmp_path, OperationalCriteria())
+    assert _plan_uses_index(plan, "ix_usage_facts_tenant_node_id"), plan
+    assert not any("TEMP B-TREE FOR GROUP BY" in str(row) for row in plan), plan
+
+
+def test_spend_by_node_windowed_seeks_the_tenant_range_and_sorts_for_group_by(tmp_path: Path) -> None:
+    """Windowed, `spend_by_node` searches the tenant's window through `ix_usage_facts_tenant_recorded_at_id` and the
+    `GROUP BY` sorts the window's rows in a temp B-tree: the range is the more selective predicate."""
+    plan = _spend_by_node_plan(tmp_path, OperationalCriteria(since=_NOW, until=_NOW))
+    assert _plan_uses_index(plan, "ix_usage_facts_tenant_recorded_at_id"), plan
+    assert any("TEMP B-TREE FOR GROUP BY" in str(row) for row in plan), plan
+
+
+def _spend_by_node_plan(tmp_path: Path, criteria: OperationalCriteria) -> Sequence[Row[Any]]:
     engine = _engine(tmp_path)
     compiled = str(
         _spend_by_node_stmt(hub_store_connections(engine), criteria).compile(
@@ -200,16 +226,14 @@ def test_spend_by_node_plans_through_the_tenant_range_index_and_sorts_for_group_
         )
     )
     with engine.connect() as conn:
-        plan = conn.execute(sa.text(f"EXPLAIN QUERY PLAN {compiled}")).all()
-    assert _plan_uses_index(plan, "ix_usage_facts_tenant_recorded_at_id"), plan
-    assert any("TEMP B-TREE FOR GROUP BY" in str(row) for row in plan), plan
+        return conn.execute(sa.text(f"EXPLAIN QUERY PLAN {compiled}")).all()
 
 
 def test_visible_segment_ids_supersedes_subquery_plans_as_an_index_search(tmp_path: Path) -> None:
     """`_visible_segment_ids_stmt`'s correlated `NOT EXISTS` over `supersedes`
     — the outer read searches the tenant's segments through an index rather than
     scanning the table, and the subquery's own `supersedes` probe plans through
-    `ix_transcript_segments_supersedes`. Compiles the real statement rather than a
+    `ix_transcript_segments_tenant_supersedes`. Compiles the real statement rather than a
     hand-written mirror, so the two can't silently diverge."""
     engine = _engine(tmp_path)
     compiled = str(
@@ -220,7 +244,7 @@ def test_visible_segment_ids_supersedes_subquery_plans_as_an_index_search(tmp_pa
     with engine.connect() as conn:
         plan = conn.execute(sa.text(f"EXPLAIN QUERY PLAN {compiled}")).all()
     assert any(str(row[3]).startswith("SEARCH transcript_segments USING") for row in plan), plan
-    assert _plan_uses_index(plan, "ix_transcript_segments_supersedes"), plan
+    assert _plan_uses_index(plan, "ix_transcript_segments_tenant_supersedes"), plan
 
 
 # --- activity_facts_since's per-source `_bounded` read -------------

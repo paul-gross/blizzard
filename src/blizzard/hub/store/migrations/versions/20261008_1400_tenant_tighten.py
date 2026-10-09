@@ -1,11 +1,11 @@
 """tenant tighten — every tenant-owned table whose key stays as it is made to require its tenant.
 
 Each table in :data:`_PLAN` is brought to the shape listed there: ``tenant_id`` made ``NOT NULL`` with a named foreign
-key to ``tenants``, its listing indexes rebuilt led by ``tenant_id`` (a hub-wide sweep's cursor index kept beside the
-tenant-led one), and a plain ``tenant_id`` index where no index or key leads with it. Every index and foreign key the
-revision creates carries its name; the keys and foreign keys it keeps leave as they were, unnamed ones included. One
-batch per table under ``recreate="auto"`` tightens it (SQLite copies the table; other dialects alter it in place); no
-table's key changes, so the batches run in any order.
+key to ``tenants``, its listing and id-lookup indexes rebuilt led by ``tenant_id`` (a hub-wide sweep's cursor index kept
+beside the tenant-led one), and a plain ``tenant_id`` index where no other index or key leads with it. Every index and
+foreign key the revision creates carries its name; the keys and foreign keys it keeps leave as they were, unnamed ones
+included. One batch per table under ``recreate="auto"`` tightens it (SQLite copies the table; other dialects alter it in
+place); no table's key changes, so the batches run in any order.
 
 ``tenant_id`` was stamped on every row by ``20261008_1200_tenant_id_backfill``; while a table still holds a row without
 one the upgrade refuses, naming it, before any table is touched. Re-running the upgrade skips every table already at
@@ -46,10 +46,7 @@ _PLAN: tuple[_TablePlan, ...] = (
             (None, ("chunk_id",), "chunks", ("chunk_id",)),
             ("fk_artifacts_tenant_id", ("tenant_id",), "tenants", ("tenant_id",)),
         ),
-        (
-            ("ix_artifacts_chunk_id_node_id_epoch", ("chunk_id", "node_id", "epoch"), False),
-            ("ix_artifacts_tenant_id", ("tenant_id",), False),
-        ),
+        (("ix_artifacts_tenant_chunk_id_node_id_epoch", ("tenant_id", "chunk_id", "node_id", "epoch"), False),),
         False,
     ),
     (
@@ -60,10 +57,7 @@ _PLAN: tuple[_TablePlan, ...] = (
             (None, ("chunk_id",), "chunks", ("chunk_id",)),
             ("fk_chunk_bounces_tenant_id", ("tenant_id",), "tenants", ("tenant_id",)),
         ),
-        (
-            ("ix_chunk_bounces_chunk_id_epoch", ("chunk_id", "epoch"), False),
-            ("ix_chunk_bounces_tenant_id", ("tenant_id",), False),
-        ),
+        (("ix_chunk_bounces_tenant_chunk_id_epoch", ("tenant_id", "chunk_id", "epoch"), False),),
         False,
     ),
     (
@@ -75,8 +69,8 @@ _PLAN: tuple[_TablePlan, ...] = (
             ("fk_chunk_completed_tenant_id", ("tenant_id",), "tenants", ("tenant_id",)),
         ),
         (
-            ("ix_chunk_completed_chunk_id", ("chunk_id",), False),
             ("ix_chunk_completed_completed_at_id", ("completed_at", "id"), False),
+            ("ix_chunk_completed_tenant_chunk_id", ("tenant_id", "chunk_id"), False),
             ("ix_chunk_completed_tenant_completed_at_id", ("tenant_id", "completed_at", "id"), False),
         ),
         False,
@@ -102,9 +96,8 @@ _PLAN: tuple[_TablePlan, ...] = (
             ("fk_chunk_dependencies_tenant_id", ("tenant_id",), "tenants", ("tenant_id",)),
         ),
         (
-            ("ix_chunk_dependencies_dependent_chunk_id", ("dependent_chunk_id",), False),
-            ("ix_chunk_dependencies_prerequisite_chunk_id", ("prerequisite_chunk_id",), False),
-            ("ix_chunk_dependencies_tenant_id", ("tenant_id",), False),
+            ("ix_chunk_dependencies_tenant_dependent_chunk_id", ("tenant_id", "dependent_chunk_id"), False),
+            ("ix_chunk_dependencies_tenant_prerequisite_chunk_id", ("tenant_id", "prerequisite_chunk_id"), False),
         ),
         False,
     ),
@@ -129,8 +122,8 @@ _PLAN: tuple[_TablePlan, ...] = (
             ("fk_chunk_migrations_tenant_id", ("tenant_id",), "tenants", ("tenant_id",)),
         ),
         (
-            ("ix_chunk_migrations_chunk_id", ("chunk_id",), False),
             ("ix_chunk_migrations_recorded_at_migration_id", ("recorded_at", "migration_id"), False),
+            ("ix_chunk_migrations_tenant_chunk_id", ("tenant_id", "chunk_id"), False),
             (
                 "ix_chunk_migrations_tenant_recorded_at_migration_id",
                 ("tenant_id", "recorded_at", "migration_id"),
@@ -148,7 +141,7 @@ _PLAN: tuple[_TablePlan, ...] = (
             ("fk_chunk_pause_facts_tenant_id", ("tenant_id",), "tenants", ("tenant_id",)),
         ),
         (
-            ("ix_chunk_pause_facts_chunk_id", ("chunk_id",), False),
+            ("ix_chunk_pause_facts_tenant_chunk_id", ("tenant_id", "chunk_id"), False),
             ("ix_chunk_pause_facts_tenant_set_at_id", ("tenant_id", "set_at", "id"), False),
         ),
         False,
@@ -162,7 +155,7 @@ _PLAN: tuple[_TablePlan, ...] = (
             ("fk_chunk_promoted_tenant_id", ("tenant_id",), "tenants", ("tenant_id",)),
         ),
         (
-            ("ix_chunk_promoted_chunk_id", ("chunk_id",), False),
+            ("ix_chunk_promoted_tenant_chunk_id", ("tenant_id", "chunk_id"), False),
             ("ix_chunk_promoted_tenant_promoted_at_id", ("tenant_id", "promoted_at", "id"), False),
         ),
         False,
@@ -176,8 +169,8 @@ _PLAN: tuple[_TablePlan, ...] = (
             ("fk_chunk_restarts_tenant_id", ("tenant_id",), "tenants", ("tenant_id",)),
         ),
         (
-            ("ix_chunk_restarts_chunk_id", ("chunk_id",), False),
             ("ix_chunk_restarts_recorded_at_id", ("recorded_at", "id"), False),
+            ("ix_chunk_restarts_tenant_chunk_id", ("tenant_id", "chunk_id"), False),
             ("ix_chunk_restarts_tenant_recorded_at_id", ("tenant_id", "recorded_at", "id"), False),
         ),
         False,
@@ -191,8 +184,8 @@ _PLAN: tuple[_TablePlan, ...] = (
             ("fk_chunk_stopped_tenant_id", ("tenant_id",), "tenants", ("tenant_id",)),
         ),
         (
-            ("ix_chunk_stopped_chunk_id", ("chunk_id",), False),
             ("ix_chunk_stopped_stopped_at_id", ("stopped_at", "id"), False),
+            ("ix_chunk_stopped_tenant_chunk_id", ("tenant_id", "chunk_id"), False),
             ("ix_chunk_stopped_tenant_stopped_at_id", ("tenant_id", "stopped_at", "id"), False),
         ),
         False,
@@ -216,10 +209,7 @@ _PLAN: tuple[_TablePlan, ...] = (
             (None, ("intent_id",), "close_intents", ("id",)),
             ("fk_close_intent_attempts_tenant_id", ("tenant_id",), "tenants", ("tenant_id",)),
         ),
-        (
-            ("ix_close_intent_attempts_intent_id", ("intent_id",), False),
-            ("ix_close_intent_attempts_tenant_id", ("tenant_id",), False),
-        ),
+        (("ix_close_intent_attempts_tenant_intent_id", ("tenant_id", "intent_id"), False),),
         False,
     ),
     (
@@ -267,8 +257,8 @@ _PLAN: tuple[_TablePlan, ...] = (
             ("fk_decisions_tenant_id", ("tenant_id",), "tenants", ("tenant_id",)),
         ),
         (
-            ("ix_decisions_chunk_id", ("chunk_id",), False),
             ("ix_decisions_submitted_at_decision_id", ("submitted_at", "decision_id"), False),
+            ("ix_decisions_tenant_chunk_id", ("tenant_id", "chunk_id", "submitted_at", "decision_id"), False),
             ("ix_decisions_tenant_submitted_at_decision_id", ("tenant_id", "submitted_at", "decision_id"), False),
         ),
         False,
@@ -281,10 +271,7 @@ _PLAN: tuple[_TablePlan, ...] = (
             (None, ("chunk_id",), "chunks", ("chunk_id",)),
             ("fk_delivery_landed_tenant_id", ("tenant_id",), "tenants", ("tenant_id",)),
         ),
-        (
-            ("ix_delivery_landed_chunk_id", ("chunk_id",), False),
-            ("ix_delivery_landed_tenant_id", ("tenant_id",), False),
-        ),
+        (("ix_delivery_landed_tenant_chunk_id", ("tenant_id", "chunk_id"), False),),
         False,
     ),
     (
@@ -295,10 +282,7 @@ _PLAN: tuple[_TablePlan, ...] = (
             (None, ("chunk_id",), "chunks", ("chunk_id",)),
             ("fk_delivery_repo_landed_tenant_id", ("tenant_id",), "tenants", ("tenant_id",)),
         ),
-        (
-            ("ix_delivery_repo_landed_chunk_id", ("chunk_id",), False),
-            ("ix_delivery_repo_landed_tenant_id", ("tenant_id",), False),
-        ),
+        (("ix_delivery_repo_landed_tenant_chunk_id", ("tenant_id", "chunk_id"), False),),
         False,
     ),
     (
@@ -311,6 +295,7 @@ _PLAN: tuple[_TablePlan, ...] = (
         ),
         (
             ("ix_epoch_owners_recorded_at_id", ("recorded_at", "id"), False),
+            ("ix_epoch_owners_tenant_chunk_id", ("tenant_id", "chunk_id", "epoch"), False),
             ("ix_epoch_owners_tenant_recorded_at_id", ("tenant_id", "recorded_at", "id"), False),
         ),
         False,
@@ -324,8 +309,8 @@ _PLAN: tuple[_TablePlan, ...] = (
             ("fk_escalations_tenant_id", ("tenant_id",), "tenants", ("tenant_id",)),
         ),
         (
-            ("ix_escalations_chunk_id", ("chunk_id",), False),
             ("ix_escalations_recorded_at_id", ("recorded_at", "id"), False),
+            ("ix_escalations_tenant_chunk_id", ("tenant_id", "chunk_id"), False),
             ("ix_escalations_tenant_recorded_at_id", ("tenant_id", "recorded_at", "id"), False),
         ),
         False,
@@ -353,9 +338,9 @@ _PLAN: tuple[_TablePlan, ...] = (
             ("fk_finding_facts_tenant_id", ("tenant_id",), "tenants", ("tenant_id",)),
         ),
         (
-            ("ix_finding_facts_finding_id_id", ("finding_id", "id"), False),
-            ("ix_finding_facts_finding_set_id", ("finding_set_id",), False),
-            ("ix_finding_facts_tenant_id", ("tenant_id",), False),
+            ("ix_finding_facts_tenant_finding_id_id", ("tenant_id", "finding_id", "id"), False),
+            ("ix_finding_facts_tenant_finding_set_id", ("tenant_id", "finding_set_id"), False),
+            ("ix_finding_facts_tenant_proposal_id", ("tenant_id", "proposal_id"), False),
         ),
         False,
     ),
@@ -370,7 +355,7 @@ _PLAN: tuple[_TablePlan, ...] = (
             ("fk_finding_sets_tenant_id", ("tenant_id",), "tenants", ("tenant_id",)),
         ),
         (
-            ("ix_finding_sets_chunk_id", ("chunk_id",), False),
+            ("ix_finding_sets_tenant_chunk_id", ("tenant_id", "chunk_id"), False),
             ("ix_finding_sets_tenant_routine_scope", ("tenant_id", "routine_name", "scope_slug"), False),
         ),
         False,
@@ -409,8 +394,8 @@ _PLAN: tuple[_TablePlan, ...] = (
             ("fk_garden_proposal_findings_tenant_id", ("tenant_id",), "tenants", ("tenant_id",)),
         ),
         (
-            ("ix_garden_proposal_findings_finding_id", ("finding_id",), False),
-            ("ix_garden_proposal_findings_tenant_id", ("tenant_id",), False),
+            ("ix_garden_proposal_findings_tenant_finding_id", ("tenant_id", "finding_id"), False),
+            ("ix_garden_proposal_findings_tenant_proposal_id", ("tenant_id", "proposal_id", "finding_id"), False),
         ),
         False,
     ),
@@ -433,7 +418,7 @@ _PLAN: tuple[_TablePlan, ...] = (
             (None, ("graph_id",), "graphs", ("graph_id",)),
             ("fk_graph_artifacts_tenant_id", ("tenant_id",), "tenants", ("tenant_id",)),
         ),
-        (("ix_graph_artifacts_tenant_id", ("tenant_id",), False),),
+        (("ix_graph_artifacts_tenant_graph_id", ("tenant_id", "graph_id"), False),),
         False,
     ),
     (
@@ -444,7 +429,7 @@ _PLAN: tuple[_TablePlan, ...] = (
             (None, ("node_id",), "graph_nodes", ("node_id",)),
             ("fk_graph_choices_tenant_id", ("tenant_id",), "tenants", ("tenant_id",)),
         ),
-        (("ix_graph_choices_node_id", ("node_id",), False), ("ix_graph_choices_tenant_id", ("tenant_id",), False)),
+        (("ix_graph_choices_tenant_node_id", ("tenant_id", "node_id"), False),),
         False,
     ),
     (
@@ -456,10 +441,7 @@ _PLAN: tuple[_TablePlan, ...] = (
             (None, ("from_node_id",), "graph_nodes", ("node_id",)),
             ("fk_graph_edges_tenant_id", ("tenant_id",), "tenants", ("tenant_id",)),
         ),
-        (
-            ("ix_graph_edges_from_node_id", ("from_node_id",), False),
-            ("ix_graph_edges_tenant_id", ("tenant_id",), False),
-        ),
+        (("ix_graph_edges_tenant_from_node_id", ("tenant_id", "from_node_id"), False),),
         False,
     ),
     (
@@ -470,10 +452,7 @@ _PLAN: tuple[_TablePlan, ...] = (
             (None, ("graph_id",), "graphs", ("graph_id",)),
             ("fk_graph_lifecycle_facts_tenant_id", ("tenant_id",), "tenants", ("tenant_id",)),
         ),
-        (
-            ("ix_graph_lifecycle_facts_graph_id", ("graph_id",), False),
-            ("ix_graph_lifecycle_facts_tenant_id", ("tenant_id",), False),
-        ),
+        (("ix_graph_lifecycle_facts_tenant_graph_id", ("tenant_id", "graph_id"), False),),
         False,
     ),
     (
@@ -484,7 +463,7 @@ _PLAN: tuple[_TablePlan, ...] = (
             (None, ("graph_id",), "graphs", ("graph_id",)),
             ("fk_graph_nodes_tenant_id", ("tenant_id",), "tenants", ("tenant_id",)),
         ),
-        (("ix_graph_nodes_graph_id", ("graph_id",), False), ("ix_graph_nodes_tenant_id", ("tenant_id",), False)),
+        (("ix_graph_nodes_tenant_graph_id", ("tenant_id", "graph_id"), False),),
         False,
     ),
     (
@@ -506,7 +485,7 @@ _PLAN: tuple[_TablePlan, ...] = (
             (None, ("graph_id",), "graphs", ("graph_id",)),
             ("fk_graph_sessions_tenant_id", ("tenant_id",), "tenants", ("tenant_id",)),
         ),
-        (("ix_graph_sessions_tenant_id", ("tenant_id",), False),),
+        (("ix_graph_sessions_tenant_graph_id", ("tenant_id", "graph_id"), False),),
         False,
     ),
     (
@@ -528,7 +507,7 @@ _PLAN: tuple[_TablePlan, ...] = (
             (None, ("chunk_id",), "chunks", ("chunk_id",)),
             ("fk_hub_node_poll_tenant_id", ("tenant_id",), "tenants", ("tenant_id",)),
         ),
-        (("ix_hub_node_poll_chunk_id", ("chunk_id",), False), ("ix_hub_node_poll_tenant_id", ("tenant_id",), False)),
+        (("ix_hub_node_poll_tenant_chunk_id", ("tenant_id", "chunk_id"), False),),
         False,
     ),
     (
@@ -559,8 +538,8 @@ _PLAN: tuple[_TablePlan, ...] = (
             ("fk_lease_facts_tenant_id", ("tenant_id",), "tenants", ("tenant_id",)),
         ),
         (
-            ("ix_lease_facts_chunk_id_epoch", ("chunk_id", "epoch"), False),
             ("ix_lease_facts_minted_at", ("minted_at",), False),
+            ("ix_lease_facts_tenant_chunk_id_epoch", ("tenant_id", "chunk_id", "epoch"), False),
             ("ix_lease_facts_tenant_minted_at", ("tenant_id", "minted_at"), False),
         ),
         False,
@@ -573,10 +552,7 @@ _PLAN: tuple[_TablePlan, ...] = (
             (None, ("chunk_id",), "chunks", ("chunk_id",)),
             ("fk_queue_positions_tenant_id", ("tenant_id",), "tenants", ("tenant_id",)),
         ),
-        (
-            ("ix_queue_positions_chunk_id", ("chunk_id",), False),
-            ("ix_queue_positions_tenant_id", ("tenant_id",), False),
-        ),
+        (("ix_queue_positions_tenant_chunk_id", ("tenant_id", "chunk_id"), False),),
         False,
     ),
     (
@@ -588,7 +564,7 @@ _PLAN: tuple[_TablePlan, ...] = (
             ("fk_requeues_tenant_id", ("tenant_id",), "tenants", ("tenant_id",)),
         ),
         (
-            ("ix_requeues_chunk_id", ("chunk_id",), False),
+            ("ix_requeues_tenant_chunk_id", ("tenant_id", "chunk_id"), False),
             ("ix_requeues_tenant_requeued_at_id", ("tenant_id", "requeued_at", "id"), False),
         ),
         False,
@@ -602,9 +578,9 @@ _PLAN: tuple[_TablePlan, ...] = (
             ("fk_route_created_tenant_id", ("tenant_id",), "tenants", ("tenant_id",)),
         ),
         (
-            ("ix_route_created_chunk_id", ("chunk_id",), False),
-            ("ix_route_created_runner_id", ("runner_id",), False),
+            ("ix_route_created_tenant_chunk_id", ("tenant_id", "chunk_id", "created_at", "seq"), False),
             ("ix_route_created_tenant_created_at_route_id", ("tenant_id", "created_at", "route_id"), False),
+            ("ix_route_created_tenant_runner_id", ("tenant_id", "runner_id", "chunk_id"), False),
         ),
         False,
     ),
@@ -616,7 +592,7 @@ _PLAN: tuple[_TablePlan, ...] = (
             (None, ("route_id",), "route_created", ("route_id",)),
             ("fk_route_environments_tenant_id", ("tenant_id",), "tenants", ("tenant_id",)),
         ),
-        (("ix_route_environments_tenant_id", ("tenant_id",), False),),
+        (("ix_route_environments_tenant_route_id", ("tenant_id", "route_id"), False),),
         False,
     ),
     (
@@ -628,8 +604,8 @@ _PLAN: tuple[_TablePlan, ...] = (
             ("fk_route_released_tenant_id", ("tenant_id",), "tenants", ("tenant_id",)),
         ),
         (
-            ("ix_route_released_chunk_id", ("chunk_id",), False),
             ("ix_route_released_released_at_id", ("released_at", "id"), False),
+            ("ix_route_released_tenant_chunk_id", ("tenant_id", "chunk_id", "released_at", "seq"), False),
             ("ix_route_released_tenant_released_at_id", ("tenant_id", "released_at", "id"), False),
         ),
         False,
@@ -642,10 +618,7 @@ _PLAN: tuple[_TablePlan, ...] = (
             (None, ("chunk_id",), "chunks", ("chunk_id",)),
             ("fk_route_token_minted_tenant_id", ("tenant_id",), "tenants", ("tenant_id",)),
         ),
-        (
-            ("ix_route_token_minted_chunk_id", ("chunk_id",), False),
-            ("ix_route_token_minted_tenant_id", ("tenant_id",), False),
-        ),
+        (("ix_route_token_minted_tenant_chunk_id", ("tenant_id", "chunk_id"), False),),
         False,
     ),
     (
@@ -668,10 +641,7 @@ _PLAN: tuple[_TablePlan, ...] = (
             (None, ("scope_slug",), "scopes", ("slug",)),
             ("fk_routine_scopes_tenant_id", ("tenant_id",), "tenants", ("tenant_id",)),
         ),
-        (
-            ("ix_routine_scopes_scope_slug", ("scope_slug",), False),
-            ("ix_routine_scopes_tenant_id", ("tenant_id",), False),
-        ),
+        (("ix_routine_scopes_tenant_scope_slug", ("tenant_id", "scope_slug"), False),),
         False,
     ),
     (
@@ -778,8 +748,8 @@ _PLAN: tuple[_TablePlan, ...] = (
         (),
         (("fk_transcript_event_drops_tenant_id", ("tenant_id",), "tenants", ("tenant_id",)),),
         (
-            ("ix_transcript_event_drops_chunk_id_epoch", ("chunk_id", "epoch"), False),
-            ("ix_transcript_event_drops_dropped_at_segment_id", ("dropped_at", "segment_id"), False),
+            ("ix_transcript_event_drops_egress_order", ("dropped_at", "segment_id", "tenant_id"), False),
+            ("ix_transcript_event_drops_tenant_chunk_id_epoch", ("tenant_id", "chunk_id", "epoch"), False),
             (
                 "ix_transcript_event_drops_tenant_dropped_at_segment_id",
                 ("tenant_id", "dropped_at", "segment_id"),
@@ -805,10 +775,10 @@ _PLAN: tuple[_TablePlan, ...] = (
             ("fk_transitions_tenant_id", ("tenant_id",), "tenants", ("tenant_id",)),
         ),
         (
-            ("ix_transitions_chunk_id_epoch", ("chunk_id", "epoch"), False),
             ("ix_transitions_recorded_at_transition_id", ("recorded_at", "transition_id"), False),
+            ("ix_transitions_tenant_chunk_id_epoch", ("tenant_id", "chunk_id", "epoch"), False),
             ("ix_transitions_tenant_recorded_at_transition_id", ("tenant_id", "recorded_at", "transition_id"), False),
-            ("ix_transitions_to_node_id", ("to_node_id",), False),
+            ("ix_transitions_tenant_to_node_id", ("tenant_id", "to_node_id"), False),
         ),
         False,
     ),
@@ -821,9 +791,9 @@ _PLAN: tuple[_TablePlan, ...] = (
             ("fk_usage_facts_tenant_id", ("tenant_id",), "tenants", ("tenant_id",)),
         ),
         (
-            ("ix_usage_facts_chunk_id", ("chunk_id",), False),
-            ("ix_usage_facts_node_id", ("node_id",), False),
             ("ix_usage_facts_recorded_at_id", ("recorded_at", "id"), False),
+            ("ix_usage_facts_tenant_chunk_id", ("tenant_id", "chunk_id"), False),
+            ("ix_usage_facts_tenant_node_id", ("tenant_id", "node_id"), False),
             ("ix_usage_facts_tenant_recorded_at_id", ("tenant_id", "recorded_at", "id"), False),
         ),
         False,
@@ -1401,6 +1371,23 @@ def _shape(bind: sa.Connection, table: str) -> _Shape:
     )
 
 
+def _matched(current: _Shape, wanted: _Shape) -> _Shape:
+    """``current`` with every reflected name the plan leaves unnamed read as unnamed, so a plan's ``None`` matches any
+    name on the same columns: SQLite reflects an unnamed constraint with no name, other dialects with the one they
+    assigned it."""
+    (name, columns), uniques, foreign_keys, indexes, nullable = current
+    (wanted_name, wanted_columns), wanted_uniques, wanted_foreign_keys, _, _ = wanted
+    unnamed_uniques = {key for key_name, key in wanted_uniques if key_name is None}
+    unnamed_foreign_keys = {fk[1:] for fk in wanted_foreign_keys if fk[0] is None}
+    return (
+        (None if wanted_name is None and columns == wanted_columns else name, columns),
+        frozenset((None if key in unnamed_uniques else key_name, key) for key_name, key in uniques),
+        frozenset((None, *fk[1:]) if fk[1:] in unnamed_foreign_keys else fk for fk in foreign_keys),
+        indexes,
+        nullable,
+    )
+
+
 def _refuse_unstamped(bind: sa.Connection, plans: tuple[_TablePlan, ...]) -> None:
     """Refuse while a table whose ``tenant_id`` becomes required holds a row without one."""
     for table, *_, nullable in plans:
@@ -1436,7 +1423,8 @@ def _tighten(bind: sa.Connection, plan: _TablePlan) -> None:
     whose table differs from the plan in any of them is not one this revision can reach, and is refused untouched.
     """
     table = plan[0]
-    current, wanted = _shape(bind, table), _wanted(plan)
+    wanted = _wanted(plan)
+    current = _matched(_shape(bind, table), wanted)
     if current == wanted:
         return
     primary_key, uniques, foreign_keys, indexes, nullable = current

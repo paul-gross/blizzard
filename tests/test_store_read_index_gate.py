@@ -272,8 +272,8 @@ _HUB_WIDE_CURSOR_INDEXES: dict[str, tuple[str, tuple[type, str]]] = {
     "ix_chunk_completed_completed_at_id": ("chunk_completed", (IReadStepCorpus, "closing_candidates")),
     "ix_epoch_owners_recorded_at_id": ("epoch_owners", (IReadStepCorpus, "closing_candidates")),
     "ix_usage_facts_recorded_at_id": ("usage_facts", (IReadUsageCorpus, "usage_after")),
-    "ix_transcript_event_drops_dropped_at_segment_id": ("transcript_event_drops", (IReadEgressEvents, "drops_after")),
-    "ix_transcript_event_derivations_derived_at_segment_id_extractor_version": (
+    "ix_transcript_event_drops_egress_order": ("transcript_event_drops", (IReadEgressEvents, "drops_after")),
+    "ix_transcript_event_derivations_egress_order": (
         "transcript_event_derivations",
         (IReadEgressEvents, "markers_after"),
     ),
@@ -303,18 +303,20 @@ def test_each_hub_wide_cursor_index_serves_the_read_that_pages_across_tenants(
 def test_hub_mutation_dropping_an_index_the_census_exercises_is_caught_by_the_classifier(
     tmp_path_factory: pytest.TempPathFactory,
 ) -> None:
-    """The gate's mutation self-test: drops ``ix_decisions_submitted_at_decision_id`` on a dedicated migrated hub
-    database and asserts ``support.offending_index_scans`` reports ``decisions`` for the hub-scoped read it serves —
+    """The gate's mutation self-test: drops ``ix_transitions_recorded_at_transition_id`` on a dedicated migrated hub
+    database and asserts ``support.offending_index_scans`` reports ``transitions`` for the hub-scoped read it serves —
     load-bearing proof that weakening ``support._offending_table``'s bare-``SCAN``/``AUTOMATIC`` match fails here. A
     scoped read cannot carry this proof: every tenant-owned table has a tenant-led index for it to fall back on."""
     root = tmp_path_factory.mktemp("hub-store-gate-mutation")
     world = build_hub_world(root)
     try:
-        index_name = "ix_decisions_submitted_at_decision_id"
+        index_name = "ix_transitions_recorded_at_transition_id"
 
         with world.engine.begin() as conn:
-            indexes_before = {row[1] for row in conn.exec_driver_sql("PRAGMA index_list(decisions)").all()}
-        assert index_name in indexes_before, f"{index_name} no longer exists on decisions — pick another real hub index"
+            indexes_before = {row[1] for row in conn.exec_driver_sql("PRAGMA index_list(transitions)").all()}
+        assert index_name in indexes_before, (
+            f"{index_name} no longer exists on transitions — pick another real hub index"
+        )
 
         recipe = HUB_CENSUS[(IReadStepCorpus, "closing_candidates")]
         with world.engine.begin() as conn:
@@ -325,8 +327,8 @@ def test_hub_mutation_dropping_an_index_the_census_exercises_is_caught_by_the_cl
             recipe(world)
         offenders = support.offending_index_scans(world.engine, statements, tables)
         offending_tables = {table for table, _row in offenders}
-        assert "decisions" in offending_tables, (
-            f"dropping {index_name} did not surface decisions as an offending scan — "
+        assert "transitions" in offending_tables, (
+            f"dropping {index_name} did not surface transitions as an offending scan — "
             f"closing_candidates's own recipe no longer exercises that index; offenders were {offenders}"
         )
     finally:

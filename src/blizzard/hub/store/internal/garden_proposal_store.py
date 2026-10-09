@@ -336,7 +336,7 @@ class GardenProposalStore:
                     garden_proposal_findings.c.finding_id,
                 )
                 .where(garden_proposal_findings.c.proposal_id.in_(batch))
-                .order_by(garden_proposal_findings.c.finding_id)
+                .order_by(garden_proposal_findings.c.proposal_id, garden_proposal_findings.c.finding_id)
             ).all()
             for row in rows:
                 result[row.proposal_id].append(row.finding_id)

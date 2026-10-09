@@ -371,14 +371,14 @@ class IReadFindingRepository(Protocol):
 
     def list_across_routines(self, scope_slug: str | None = None, *, include_gone: bool = False) -> list[Finding]:
         """Every finding across every routine; `scope_slug=None` reads every
-        scope. Table-scans by construction — `ix_findings_routine_scope` and
-        `ix_findings_routine_class` both lead with `routine_name`, which this never filters
-        on, so neither is usable; the scale question here stays open."""
+        scope. Reads the tenant's whole bucket by construction — `ix_findings_tenant_routine_scope` and
+        `ix_findings_tenant_routine_class` both lead with `tenant_id, routine_name`, and this never filters
+        on `routine_name`, so neither narrows past the tenant; the scale question here stays open."""
         ...
 
     def list_by_source(self, *, scope_slug: str, source: str, include_gone: bool = False) -> list[Finding]:
         """Every finding under `scope_slug` carrying `source` — filtered
-        on `ix_findings_scope_source`, indexed unlike `list_across_routines`."""
+        on `ix_findings_tenant_scope_source`, indexed unlike `list_across_routines`."""
         ...
 
     def count_by_class(self, routine_name: str, class_: str) -> int:
@@ -622,7 +622,7 @@ class IReadFindingSetRepository(Protocol):
     def get(self, finding_set_id: str) -> FindingSet | None: ...
 
     def list_for_chunk(self, chunk_id: str) -> list[FindingSet]:
-        """A run's own delivered sets — filtered on `ix_finding_sets_chunk_id`."""
+        """A run's own delivered sets — filtered on `ix_finding_sets_tenant_chunk_id`."""
         ...
 
     def newest_for_routine_scope(self, routine_name: str, scope_slug: str) -> FindingSet | None:

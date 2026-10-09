@@ -130,8 +130,7 @@ graph_nodes = Table(
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_graph_nodes_tenant_id"), nullable=False),
     # Null/false disallows proposed work items.
 )
-Index("ix_graph_nodes_tenant_id", graph_nodes.c.tenant_id)
-Index("ix_graph_nodes_graph_id", graph_nodes.c.graph_id)
+Index("ix_graph_nodes_tenant_graph_id", graph_nodes.c.tenant_id, graph_nodes.c.graph_id)
 
 graph_choices = Table(
     "graph_choices",
@@ -144,8 +143,7 @@ graph_choices = Table(
     Column("requires_checks", Boolean, nullable=True),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_graph_choices_tenant_id"), nullable=False),
 )
-Index("ix_graph_choices_tenant_id", graph_choices.c.tenant_id)
-Index("ix_graph_choices_node_id", graph_choices.c.node_id)
+Index("ix_graph_choices_tenant_node_id", graph_choices.c.tenant_id, graph_choices.c.node_id)
 
 graph_edges = Table(
     "graph_edges",
@@ -159,8 +157,7 @@ graph_edges = Table(
     Column("to_graph_model", String, nullable=True),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_graph_edges_tenant_id"), nullable=False),
 )
-Index("ix_graph_edges_tenant_id", graph_edges.c.tenant_id)
-Index("ix_graph_edges_from_node_id", graph_edges.c.from_node_id)
+Index("ix_graph_edges_tenant_from_node_id", graph_edges.c.tenant_id, graph_edges.c.from_node_id)
 
 # Named sessions keyed by `(graph_id, name)`.
 graph_sessions = Table(
@@ -182,7 +179,7 @@ graph_sessions = Table(
     Column("harnesses", Text, nullable=True),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_graph_sessions_tenant_id"), nullable=False),
 )
-Index("ix_graph_sessions_tenant_id", graph_sessions.c.tenant_id)
+Index("ix_graph_sessions_tenant_graph_id", graph_sessions.c.tenant_id, graph_sessions.c.graph_id)
 
 # Graph artifacts keyed by `(graph_id, name)`.
 graph_artifacts = Table(
@@ -194,7 +191,7 @@ graph_artifacts = Table(
     Column("content", Text, nullable=False),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_graph_artifacts_tenant_id"), nullable=False),
 )
-Index("ix_graph_artifacts_tenant_id", graph_artifacts.c.tenant_id)
+Index("ix_graph_artifacts_tenant_graph_id", graph_artifacts.c.tenant_id, graph_artifacts.c.graph_id)
 
 # --- Graph lifecycle facts (graph.retired / graph.enabled) -------------------
 
@@ -210,8 +207,7 @@ graph_lifecycle_facts = Table(
         "tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_graph_lifecycle_facts_tenant_id"), nullable=False
     ),
 )
-Index("ix_graph_lifecycle_facts_tenant_id", graph_lifecycle_facts.c.tenant_id)
-Index("ix_graph_lifecycle_facts_graph_id", graph_lifecycle_facts.c.graph_id)
+Index("ix_graph_lifecycle_facts_tenant_graph_id", graph_lifecycle_facts.c.tenant_id, graph_lifecycle_facts.c.graph_id)
 
 # Follow-latest policy: newest fact wins; null inherits the hub setting.
 graph_policy_facts = Table(
@@ -449,9 +445,8 @@ routine_scopes = Table(
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_routine_scopes_tenant_id"), nullable=False),
     PrimaryKeyConstraint("routine_id", "scope_id", name="pk_routine_scopes"),
 )
-Index("ix_routine_scopes_tenant_id", routine_scopes.c.tenant_id)
 
-Index("ix_routine_scopes_scope_id", routine_scopes.c.scope_id)
+Index("ix_routine_scopes_tenant_scope_id", routine_scopes.c.tenant_id, routine_scopes.c.scope_id)
 
 # The routine's reversible retire/enable brake — scope_lifecycle_facts's own shape.
 routine_lifecycle_facts = Table(
@@ -502,7 +497,7 @@ chunk_work_refs = Table(
     Column("ref", String, nullable=False),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_chunk_work_refs_tenant_id"), nullable=False),
 )
-Index("ix_chunk_work_refs_chunk_id", chunk_work_refs.c.chunk_id)
+Index("ix_chunk_work_refs_tenant_chunk_id", chunk_work_refs.c.tenant_id, chunk_work_refs.c.chunk_id)
 # Its (tenant_id, source) prefix also serves a source-only filter within the tenant.
 Index(
     "ix_chunk_work_refs_tenant_source_ref",
@@ -544,7 +539,7 @@ transitions = Table(
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_transitions_tenant_id"), nullable=False),
 )
 # Leading chunk_id also serves chunk-only filters.
-Index("ix_transitions_chunk_id_epoch", transitions.c.chunk_id, transitions.c.epoch)
+Index("ix_transitions_tenant_chunk_id_epoch", transitions.c.tenant_id, transitions.c.chunk_id, transitions.c.epoch)
 
 # (tenant_id, recorded_at, transition_id) for one tenant's ordered reads.
 Index(
@@ -557,7 +552,7 @@ Index(
 Index("ix_transitions_recorded_at_transition_id", transitions.c.recorded_at, transitions.c.transition_id)
 
 # Transitions into a given node.
-Index("ix_transitions_to_node_id", transitions.c.to_node_id)
+Index("ix_transitions_tenant_to_node_id", transitions.c.tenant_id, transitions.c.to_node_id)
 
 # --- Cross-graph migration record (chunk_migrations) ---------------
 # Its own fact, never a ``transitions`` row (``bzh:migration-not-transition``).
@@ -580,7 +575,7 @@ chunk_migrations = Table(
     Column("source", String, nullable=True),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_chunk_migrations_tenant_id"), nullable=False),
 )
-Index("ix_chunk_migrations_chunk_id", chunk_migrations.c.chunk_id)
+Index("ix_chunk_migrations_tenant_chunk_id", chunk_migrations.c.tenant_id, chunk_migrations.c.chunk_id)
 # (tenant_id, recorded_at, migration_id) for one tenant's ordered reads.
 Index(
     "ix_chunk_migrations_tenant_recorded_at_migration_id",
@@ -611,9 +606,14 @@ artifacts = Table(
     Column("seq", Integer, nullable=False),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_artifacts_tenant_id"), nullable=False),
 )
-Index("ix_artifacts_tenant_id", artifacts.c.tenant_id)
 # Leading chunk_id also serves chunk-only artifact reads.
-Index("ix_artifacts_chunk_id_node_id_epoch", artifacts.c.chunk_id, artifacts.c.node_id, artifacts.c.epoch)
+Index(
+    "ix_artifacts_tenant_chunk_id_node_id_epoch",
+    artifacts.c.tenant_id,
+    artifacts.c.chunk_id,
+    artifacts.c.node_id,
+    artifacts.c.epoch,
+)
 
 # --- Findings and finding sets -----------------------------------
 # Finding liveness and observation counts derive from append-only finding_facts.
@@ -695,12 +695,14 @@ finding_facts = Table(
         name="ck_finding_facts_kind",
     ),
 )
-Index("ix_finding_facts_tenant_id", finding_facts.c.tenant_id)
 
-Index("ix_finding_facts_finding_id_id", finding_facts.c.finding_id, finding_facts.c.id)
+Index(
+    "ix_finding_facts_tenant_finding_id_id", finding_facts.c.tenant_id, finding_facts.c.finding_id, finding_facts.c.id
+)
 
 # Facts by finding_set_id.
-Index("ix_finding_facts_finding_set_id", finding_facts.c.finding_set_id)
+Index("ix_finding_facts_tenant_finding_set_id", finding_facts.c.tenant_id, finding_facts.c.finding_set_id)
+Index("ix_finding_facts_tenant_proposal_id", finding_facts.c.tenant_id, finding_facts.c.proposal_id)
 
 # One delivered set per artifact, holding scope, revisions and measurement.
 
@@ -720,7 +722,7 @@ finding_sets = Table(
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_finding_sets_tenant_id"), nullable=False),
 )
 
-Index("ix_finding_sets_chunk_id", finding_sets.c.chunk_id)
+Index("ix_finding_sets_tenant_chunk_id", finding_sets.c.tenant_id, finding_sets.c.chunk_id)
 Index(
     "ix_finding_sets_tenant_routine_scope",
     finding_sets.c.tenant_id,
@@ -784,9 +786,19 @@ garden_proposal_findings = Table(
         nullable=False,
     ),
 )
-Index("ix_garden_proposal_findings_tenant_id", garden_proposal_findings.c.tenant_id)
 
-Index("ix_garden_proposal_findings_finding_id", garden_proposal_findings.c.finding_id)
+Index(
+    "ix_garden_proposal_findings_tenant_finding_id",
+    garden_proposal_findings.c.tenant_id,
+    garden_proposal_findings.c.finding_id,
+)
+# (tenant_id, proposal_id, finding_id): one proposal's findings, already in finding order.
+Index(
+    "ix_garden_proposal_findings_tenant_proposal_id",
+    garden_proposal_findings.c.tenant_id,
+    garden_proposal_findings.c.proposal_id,
+    garden_proposal_findings.c.finding_id,
+)
 
 # --- Garden proposal closures (terminal, unique per proposal) -----
 
@@ -834,7 +846,7 @@ lease_facts = Table(
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_lease_facts_tenant_id"), nullable=False),
 )
 # Leading chunk_id also serves chunk-only filters.
-Index("ix_lease_facts_chunk_id_epoch", lease_facts.c.chunk_id, lease_facts.c.epoch)
+Index("ix_lease_facts_tenant_chunk_id_epoch", lease_facts.c.tenant_id, lease_facts.c.chunk_id, lease_facts.c.epoch)
 # (tenant_id, minted_at) for one tenant's ordered reads.
 Index("ix_lease_facts_tenant_minted_at", lease_facts.c.tenant_id, lease_facts.c.minted_at)
 # The hub-wide twin: the egress backfill reads every open tenant's epochs minted in a window.
@@ -854,6 +866,7 @@ epoch_owners = Table(
 )
 # (tenant_id, recorded_at, id) for one tenant's ordered reads.
 Index("ix_epoch_owners_tenant_recorded_at_id", epoch_owners.c.tenant_id, epoch_owners.c.recorded_at, epoch_owners.c.id)
+Index("ix_epoch_owners_tenant_chunk_id", epoch_owners.c.tenant_id, epoch_owners.c.chunk_id, epoch_owners.c.epoch)
 # The hub-wide twin: the trace sweep's closing-candidates read pages every open tenant's rows in this order.
 Index("ix_epoch_owners_recorded_at_id", epoch_owners.c.recorded_at, epoch_owners.c.id)
 
@@ -872,9 +885,19 @@ route_created = Table(
     Column("seq", Integer, nullable=False),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_route_created_tenant_id"), nullable=False),
 )
-Index("ix_route_created_chunk_id", route_created.c.chunk_id)
+# One chunk's routes, already in creation order.
+Index(
+    "ix_route_created_tenant_chunk_id",
+    route_created.c.tenant_id,
+    route_created.c.chunk_id,
+    route_created.c.created_at,
+    route_created.c.seq,
+)
 # Routes by runner_id.
-Index("ix_route_created_runner_id", route_created.c.runner_id)
+# One runner's routed chunks, each once.
+Index(
+    "ix_route_created_tenant_runner_id", route_created.c.tenant_id, route_created.c.runner_id, route_created.c.chunk_id
+)
 # (tenant_id, created_at, route_id) for newest-first bounded reads since a timestamp.
 Index(
     "ix_route_created_tenant_created_at_route_id",
@@ -893,7 +916,7 @@ route_environments = Table(
         "tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_route_environments_tenant_id"), nullable=False
     ),
 )
-Index("ix_route_environments_tenant_id", route_environments.c.tenant_id)
+Index("ix_route_environments_tenant_route_id", route_environments.c.tenant_id, route_environments.c.route_id)
 
 route_released = Table(
     "route_released",
@@ -906,7 +929,14 @@ route_released = Table(
     Column("seq", Integer, nullable=False),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_route_released_tenant_id"), nullable=False),
 )
-Index("ix_route_released_chunk_id", route_released.c.chunk_id)
+# One chunk's releases, already in release order.
+Index(
+    "ix_route_released_tenant_chunk_id",
+    route_released.c.tenant_id,
+    route_released.c.chunk_id,
+    route_released.c.released_at,
+    route_released.c.seq,
+)
 # (tenant_id, released_at, id) for one tenant's ordered reads.
 Index(
     "ix_route_released_tenant_released_at_id",
@@ -931,8 +961,7 @@ route_token_minted = Table(
         "tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_route_token_minted_tenant_id"), nullable=False
     ),
 )
-Index("ix_route_token_minted_tenant_id", route_token_minted.c.tenant_id)
-Index("ix_route_token_minted_chunk_id", route_token_minted.c.chunk_id)
+Index("ix_route_token_minted_tenant_chunk_id", route_token_minted.c.tenant_id, route_token_minted.c.chunk_id)
 
 # --- Delivery landing facts (per-repo, then whole-chunk) ----------------------
 
@@ -948,8 +977,7 @@ delivery_repo_landed = Table(
         "tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_delivery_repo_landed_tenant_id"), nullable=False
     ),
 )
-Index("ix_delivery_repo_landed_tenant_id", delivery_repo_landed.c.tenant_id)
-Index("ix_delivery_repo_landed_chunk_id", delivery_repo_landed.c.chunk_id)
+Index("ix_delivery_repo_landed_tenant_chunk_id", delivery_repo_landed.c.tenant_id, delivery_repo_landed.c.chunk_id)
 
 delivery_landed = Table(
     "delivery_landed",
@@ -959,8 +987,7 @@ delivery_landed = Table(
     Column("landed_at", UtcDateTime, nullable=False),  # terminal: all repos landed
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_delivery_landed_tenant_id"), nullable=False),
 )
-Index("ix_delivery_landed_tenant_id", delivery_landed.c.tenant_id)
-Index("ix_delivery_landed_chunk_id", delivery_landed.c.chunk_id)
+Index("ix_delivery_landed_tenant_chunk_id", delivery_landed.c.tenant_id, delivery_landed.c.chunk_id)
 
 # --- Delivery closure facts (work_item_closures) -----------------
 # One row per close-attempt outcome; `closed`/`gone` are terminal, `failed` is retried.
@@ -1016,8 +1043,7 @@ close_intent_attempts = Table(
         "tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_close_intent_attempts_tenant_id"), nullable=False
     ),
 )
-Index("ix_close_intent_attempts_tenant_id", close_intent_attempts.c.tenant_id)
-Index("ix_close_intent_attempts_intent_id", close_intent_attempts.c.intent_id)
+Index("ix_close_intent_attempts_tenant_intent_id", close_intent_attempts.c.tenant_id, close_intent_attempts.c.intent_id)
 
 # --- Delivery kick-backs (chunk_bounces — #64) --------------------------------
 # Contention, not failure: consumes no node retry, natural-keyed ``(chunk_id, epoch)``.
@@ -1033,10 +1059,11 @@ chunk_bounces = Table(
     Column("recorded_at", UtcDateTime, nullable=False),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_chunk_bounces_tenant_id"), nullable=False),
 )
-Index("ix_chunk_bounces_tenant_id", chunk_bounces.c.tenant_id)
 # (chunk_id, epoch) serves both a plain chunk_id filter and a per-attempt (chunk_id,
 # epoch) anti-join, at no extra write cost over a single-column index.
-Index("ix_chunk_bounces_chunk_id_epoch", chunk_bounces.c.chunk_id, chunk_bounces.c.epoch)
+Index(
+    "ix_chunk_bounces_tenant_chunk_id_epoch", chunk_bounces.c.tenant_id, chunk_bounces.c.chunk_id, chunk_bounces.c.epoch
+)
 
 # --- The fleet-wide hub-execution serialization slot (#65) -------------------
 # A live slot has ``released_at IS NULL``; one at a time, reclaimable past its TTL.
@@ -1066,8 +1093,7 @@ hub_node_poll = Table(
     Column("polled_at", UtcDateTime, nullable=False),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_hub_node_poll_tenant_id"), nullable=False),
 )
-Index("ix_hub_node_poll_tenant_id", hub_node_poll.c.tenant_id)
-Index("ix_hub_node_poll_chunk_id", hub_node_poll.c.chunk_id)
+Index("ix_hub_node_poll_tenant_chunk_id", hub_node_poll.c.tenant_id, hub_node_poll.c.chunk_id)
 
 # --- Readiness: the not-ready resting state and its promotion --------
 # A chunk with no ``chunk_promoted`` row derives ``not_ready`` and is never claimed.
@@ -1080,7 +1106,7 @@ chunk_promoted = Table(
     Column("promoted_at", UtcDateTime, nullable=False),  # not_ready -> ready
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_chunk_promoted_tenant_id"), nullable=False),
 )
-Index("ix_chunk_promoted_chunk_id", chunk_promoted.c.chunk_id)
+Index("ix_chunk_promoted_tenant_chunk_id", chunk_promoted.c.tenant_id, chunk_promoted.c.chunk_id)
 # Explicit id tie-break for portable newest-first reads.
 Index(
     "ix_chunk_promoted_tenant_promoted_at_id",
@@ -1101,7 +1127,7 @@ chunk_stopped = Table(
     Column("stopped_by", String, nullable=True),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_chunk_stopped_tenant_id"), nullable=False),
 )
-Index("ix_chunk_stopped_chunk_id", chunk_stopped.c.chunk_id)
+Index("ix_chunk_stopped_tenant_chunk_id", chunk_stopped.c.tenant_id, chunk_stopped.c.chunk_id)
 # (tenant_id, stopped_at, id) for one tenant's ordered reads.
 Index(
     "ix_chunk_stopped_tenant_stopped_at_id",
@@ -1123,7 +1149,7 @@ chunk_completed = Table(
     Column("completed_by", String, nullable=False),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_chunk_completed_tenant_id"), nullable=False),
 )
-Index("ix_chunk_completed_chunk_id", chunk_completed.c.chunk_id)
+Index("ix_chunk_completed_tenant_chunk_id", chunk_completed.c.tenant_id, chunk_completed.c.chunk_id)
 # (tenant_id, completed_at, id) for one tenant's ordered reads.
 Index(
     "ix_chunk_completed_tenant_completed_at_id",
@@ -1170,9 +1196,16 @@ chunk_dependencies = Table(
         "tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_chunk_dependencies_tenant_id"), nullable=False
     ),
 )
-Index("ix_chunk_dependencies_tenant_id", chunk_dependencies.c.tenant_id)
-Index("ix_chunk_dependencies_dependent_chunk_id", chunk_dependencies.c.dependent_chunk_id)
-Index("ix_chunk_dependencies_prerequisite_chunk_id", chunk_dependencies.c.prerequisite_chunk_id)
+Index(
+    "ix_chunk_dependencies_tenant_dependent_chunk_id",
+    chunk_dependencies.c.tenant_id,
+    chunk_dependencies.c.dependent_chunk_id,
+)
+Index(
+    "ix_chunk_dependencies_tenant_prerequisite_chunk_id",
+    chunk_dependencies.c.tenant_id,
+    chunk_dependencies.c.prerequisite_chunk_id,
+)
 
 escalations = Table(
     "escalations",
@@ -1192,7 +1225,7 @@ escalations = Table(
     Column("recorded_at", UtcDateTime, nullable=False),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_escalations_tenant_id"), nullable=False),
 )
-Index("ix_escalations_chunk_id", escalations.c.chunk_id)
+Index("ix_escalations_tenant_chunk_id", escalations.c.tenant_id, escalations.c.chunk_id)
 # (tenant_id, recorded_at, id) for one tenant's ordered reads.
 Index("ix_escalations_tenant_recorded_at_id", escalations.c.tenant_id, escalations.c.recorded_at, escalations.c.id)
 # The hub-wide twin: the trace sweep's closing-candidates read pages every open tenant's rows in this order.
@@ -1226,9 +1259,9 @@ usage_facts = Table(
     Column("recorded_at", UtcDateTime, nullable=False),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_usage_facts_tenant_id"), nullable=False),
 )
-Index("ix_usage_facts_chunk_id", usage_facts.c.chunk_id)
+Index("ix_usage_facts_tenant_chunk_id", usage_facts.c.tenant_id, usage_facts.c.chunk_id)
 # The analytics spend-by-node grouping — otherwise a temp B-tree.
-Index("ix_usage_facts_node_id", usage_facts.c.node_id)
+Index("ix_usage_facts_tenant_node_id", usage_facts.c.tenant_id, usage_facts.c.node_id)
 # (tenant_id, recorded_at, id) for one tenant's ordered reads.
 Index("ix_usage_facts_tenant_recorded_at_id", usage_facts.c.tenant_id, usage_facts.c.recorded_at, usage_facts.c.id)
 # The hub-wide twin: the egress sweep pages every open tenant's usage in this order.
@@ -1253,7 +1286,7 @@ questions = Table(
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_questions_tenant_id"), nullable=False),
     PrimaryKeyConstraint("tenant_id", "question_id", name="pk_questions"),
 )
-Index("ix_questions_chunk_id", questions.c.chunk_id)
+Index("ix_questions_tenant_chunk_id", questions.c.tenant_id, questions.c.chunk_id)
 # (tenant_id, asked_at, question_id) for newest-first bounded reads since a timestamp.
 Index(
     "ix_questions_tenant_asked_at_question_id",
@@ -1304,7 +1337,7 @@ answer_deliveries = Table(
         name="fk_answer_deliveries_questions",
     ),
 )
-Index("ix_answer_deliveries_tenant_id", answer_deliveries.c.tenant_id)
+Index("ix_answer_deliveries_tenant_question_id", answer_deliveries.c.tenant_id, answer_deliveries.c.question_id)
 
 # --- Human gates: decisions and their resolutions -------------
 # Resolved-ness derives: a decision with a resolution row is resolved.
@@ -1323,7 +1356,14 @@ decisions = Table(
     Column("imposed_by_runner_id", String, nullable=True),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_decisions_tenant_id"), nullable=False),
 )
-Index("ix_decisions_chunk_id", decisions.c.chunk_id)
+# (tenant_id, chunk_id, submitted_at, decision_id): one chunk's decisions, already in submission order.
+Index(
+    "ix_decisions_tenant_chunk_id",
+    decisions.c.tenant_id,
+    decisions.c.chunk_id,
+    decisions.c.submitted_at,
+    decisions.c.decision_id,
+)
 # (tenant_id, submitted_at, decision_id) for one tenant's ordered reads.
 Index(
     "ix_decisions_tenant_submitted_at_decision_id",
@@ -1367,7 +1407,7 @@ requeues = Table(
     Column("requeued_at", UtcDateTime, nullable=False),  # supersedes an earlier escalation
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_requeues_tenant_id"), nullable=False),
 )
-Index("ix_requeues_chunk_id", requeues.c.chunk_id)
+Index("ix_requeues_tenant_chunk_id", requeues.c.tenant_id, requeues.c.chunk_id)
 # (tenant_id, requeued_at, id) for newest-first bounded reads since a timestamp, portable
 # across sqlite and postgres (`bzh:sql-portable`; only sqlite implicitly appends the
 # rowid as a tie-break).
@@ -1395,7 +1435,7 @@ chunk_restarts = Table(
     Column("recorded_at", UtcDateTime, nullable=False),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_chunk_restarts_tenant_id"), nullable=False),
 )
-Index("ix_chunk_restarts_chunk_id", chunk_restarts.c.chunk_id)
+Index("ix_chunk_restarts_tenant_chunk_id", chunk_restarts.c.tenant_id, chunk_restarts.c.chunk_id)
 # (tenant_id, recorded_at, id) for one tenant's ordered reads.
 Index(
     "ix_chunk_restarts_tenant_recorded_at_id",
@@ -1419,7 +1459,7 @@ chunk_pause_facts = Table(
     Column("set_by", String, nullable=False),  # who flipped it — recorded on the fact
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_chunk_pause_facts_tenant_id"), nullable=False),
 )
-Index("ix_chunk_pause_facts_chunk_id", chunk_pause_facts.c.chunk_id)
+Index("ix_chunk_pause_facts_tenant_chunk_id", chunk_pause_facts.c.tenant_id, chunk_pause_facts.c.chunk_id)
 # (tenant_id, set_at, id) for newest-first bounded reads since a timestamp, portable across
 # sqlite and postgres (`bzh:sql-portable`; only sqlite implicitly appends the rowid as
 # a tie-break).
@@ -1455,9 +1495,8 @@ queue_positions = Table(
     Column("set_at", UtcDateTime, nullable=False),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_queue_positions_tenant_id"), nullable=False),
 )
-Index("ix_queue_positions_tenant_id", queue_positions.c.tenant_id)
 # Live-set reads look positions up by candidate chunk id (`bzh:live-set-read`).
-Index("ix_queue_positions_chunk_id", queue_positions.c.chunk_id)
+Index("ix_queue_positions_tenant_chunk_id", queue_positions.c.tenant_id, queue_positions.c.chunk_id)
 
 # --- Queue shaping: grouping (chunk.grouped) -----------------------------------
 # A grouped chunk is EPHEMERAL: removed from every listing, deriving no status at all.
@@ -1848,6 +1887,9 @@ egress_cursor = Table(
     # The events position after ``position_at``; a drop's version is empty. Null for the other datasets.
     Column("segment_id", String, nullable=True),
     Column("extractor_version", String, nullable=True),
+    # The events position's tenant: null for the other datasets, and for an events position recorded without one,
+    # which stands past every tenant at its time, segment and version.
+    Column("events_tenant_id", String, nullable=True),
 )
 Index(
     "ix_egress_cursor_dataset_recorded_at_id", egress_cursor.c.dataset, egress_cursor.c.recorded_at, egress_cursor.c.id
@@ -1907,11 +1949,22 @@ transcript_segments = Table(
     ),
 )
 
-Index("ix_transcript_segments_chunk_id", transcript_segments.c.chunk_id)
-Index("ix_transcript_segments_runner_received_at", transcript_segments.c.runner_id, transcript_segments.c.received_at)
-Index("ix_transcript_segments_segment_id", transcript_segments.c.segment_id)
+# (tenant_id, chunk_id, segment_id, turn_range_start): one chunk's segments, already in reading order.
+Index(
+    "ix_transcript_segments_tenant_chunk_id",
+    transcript_segments.c.tenant_id,
+    transcript_segments.c.chunk_id,
+    transcript_segments.c.segment_id,
+    transcript_segments.c.turn_range_start,
+)
+Index(
+    "ix_transcript_segments_tenant_runner_received_at",
+    transcript_segments.c.tenant_id,
+    transcript_segments.c.runner_id,
+    transcript_segments.c.received_at,
+)
 # A visible-segment read's `NOT IN (SELECT supersedes ...)` anti-join.
-Index("ix_transcript_segments_supersedes", transcript_segments.c.supersedes)
+Index("ix_transcript_segments_tenant_supersedes", transcript_segments.c.tenant_id, transcript_segments.c.supersedes)
 # (final, chunk_id): the hub-wide visible-segment read's outer `WHERE final = TRUE`,
 # `final` leading because it is the more selective predicate; `chunk_id` second lets an
 # `IN (chunks)` probe and a `DISTINCT` ride the same index.
@@ -1984,8 +2037,7 @@ transcript_events = Table(
     ),
 )
 
-Index("ix_transcript_events_chunk_id", transcript_events.c.chunk_id)
-Index("ix_transcript_events_segment_id", transcript_events.c.segment_id)
+Index("ix_transcript_events_tenant_chunk_id", transcript_events.c.tenant_id, transcript_events.c.chunk_id)
 Index("ix_transcript_events_tenant_subject", transcript_events.c.tenant_id, transcript_events.c.subject)
 Index("ix_transcript_events_tenant_tool", transcript_events.c.tenant_id, transcript_events.c.tool)
 # (extractor_version, id) for a per-extractor cursor read: `extractor_version = ? AND
@@ -2027,10 +2079,11 @@ Index(
 )
 # The hub-wide twin: the egress sweep pages every open tenant's markers in this order.
 Index(
-    "ix_transcript_event_derivations_derived_at_segment_id_extractor_version",
+    "ix_transcript_event_derivations_egress_order",
     transcript_event_derivations.c.derived_at,
     transcript_event_derivations.c.segment_id,
     transcript_event_derivations.c.extractor_version,
+    transcript_event_derivations.c.tenant_id,
 )
 
 # --- Transcript segment drops — append-only: one row per time a segment's derived events and
@@ -2061,12 +2114,18 @@ Index(
 )
 # The hub-wide twin: the egress sweep pages every open tenant's drops in this order.
 Index(
-    "ix_transcript_event_drops_dropped_at_segment_id",
+    "ix_transcript_event_drops_egress_order",
     transcript_event_drops.c.dropped_at,
     transcript_event_drops.c.segment_id,
+    transcript_event_drops.c.tenant_id,
 )
 # Drops by (chunk_id, epoch).
-Index("ix_transcript_event_drops_chunk_id_epoch", transcript_event_drops.c.chunk_id, transcript_event_drops.c.epoch)
+Index(
+    "ix_transcript_event_drops_tenant_chunk_id_epoch",
+    transcript_event_drops.c.tenant_id,
+    transcript_event_drops.c.chunk_id,
+    transcript_event_drops.c.epoch,
+)
 
 # --- Work items (hub-owned work items) ---------------------------
 # A mutable entity row, not a fact table: title/body/edited_at change in place, and

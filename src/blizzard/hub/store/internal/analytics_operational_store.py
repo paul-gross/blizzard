@@ -208,7 +208,7 @@ def _spend_by_chunk_stmt(
     stmts: ScopedStatements, criteria: OperationalCriteria, *, cursor: str | None, limit: int
 ) -> Select[Any]:
     """Each page re-runs a full ``GROUP BY chunk_id`` — served by the existing
-    ``ix_usage_facts_chunk_id``, which already covers both the grouping and the
+    ``ix_usage_facts_tenant_chunk_id``, which already covers both the grouping and the
     ``ORDER BY`` with no temp B-tree."""
     u = s.usage_facts
     stmt = _spend_group_stmt(stmts, criteria, group_col=u.c.chunk_id)

@@ -246,6 +246,16 @@ def test_egress_cursor_table_and_usage_index_survive_migration_roundtrip(tmp_pat
     assert _shape() == (True, True)
 
 
+# The egress indexes under the name each carries at head; between their own revision and the tenant keys they carry
+# the name that revision gave them.
+_DROPS_EGRESS_ORDER = "ix_transcript_event_drops_egress_order"
+_DERIVATIONS_EGRESS_ORDER = {
+    "ix_transcript_event_derivations_derived_at_segment_id_extractor_version",
+    "ix_transcript_event_derivations_egress_order",
+}
+_DROPS_BY_CHUNK = {"ix_transcript_event_drops_chunk_id_epoch", "ix_transcript_event_drops_tenant_chunk_id_epoch"}
+
+
 def test_transcript_event_drops_table_survives_migration_roundtrip(tmp_path: Path) -> None:
     """Hub-only — downgrades to the revision's own parent, so the dropped table is asserted
     rather than inferred from a revision marker."""
@@ -259,7 +269,8 @@ def test_transcript_event_drops_table_survives_migration_roundtrip(tmp_path: Pat
             if "transcript_event_drops" not in inspector.get_table_names():
                 return False, False
             indexes = {i["name"] for i in inspector.get_indexes("transcript_event_drops")}
-            return True, "ix_transcript_event_drops_dropped_at_segment_id" in indexes
+            # The egress twin as the revision that last built it names it.
+            return True, bool(indexes & {"ix_transcript_event_drops_dropped_at_segment_id", _DROPS_EGRESS_ORDER})
         finally:
             engine.dispose()
 
@@ -287,10 +298,9 @@ def test_egress_events_indexes_and_cursor_columns_survive_migration_roundtrip(tm
 
             columns = {c["name"] for c in inspector.get_columns("egress_cursor")}
             return (
-                "ix_transcript_event_derivations_derived_at_segment_id_extractor_version"
-                in indexes("transcript_event_derivations"),
+                bool(indexes("transcript_event_derivations") & _DERIVATIONS_EGRESS_ORDER),
                 "ix_lease_facts_minted_at" in indexes("lease_facts"),
-                "ix_transcript_event_drops_chunk_id_epoch" in indexes("transcript_event_drops"),
+                bool(indexes("transcript_event_drops") & _DROPS_BY_CHUNK),
                 columns & {"segment_id", "extractor_version"},
             )
         finally:

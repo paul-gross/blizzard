@@ -196,8 +196,10 @@ def test_after_the_upgrade_a_slug_is_unique_within_its_tenant_and_every_link_is_
             "name": "pk_routine_scopes",
             "constrained_columns": ["routine_id", "scope_id"],
         }
-        assert {"ix_routine_scopes_scope_id", "ix_routine_scopes_tenant_id"} <= _index_names(engine, "routine_scopes")
-        assert "ix_routine_scopes_scope_slug" not in _index_names(engine, "routine_scopes")
+        assert "ix_routine_scopes_tenant_scope_id" in _index_names(engine, "routine_scopes")
+        assert not {"ix_routine_scopes_tenant_scope_slug", "ix_routine_scopes_tenant_id"} & _index_names(
+            engine, "routine_scopes"
+        )
         for table, _, id_column in _CHILDREN:
             onto_scopes = [fk for fk in inspector.get_foreign_keys(table) if fk["referred_table"] == "scopes"]
             assert [(fk["name"], fk["constrained_columns"], fk["referred_columns"]) for fk in onto_scopes] == [

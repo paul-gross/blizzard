@@ -11,8 +11,8 @@ dialect accepts: each child drops its foreign key onto ``scopes.slug`` and, exce
 (which keep ``scope_slug`` as their label), the slug column, its id becoming required; ``scopes`` is rekeyed —
 ``pk_scopes (scope_id)``, ``uq_scopes_tenant_slug (tenant_id, slug)``, no ``ix_scopes_tenant_id`` (the unique
 constraint leads with ``tenant_id``); each child gains ``fk_<child>_scopes`` onto the id. ``routine_scopes`` is keyed
-``pk_routine_scopes (routine_id, scope_id)`` with ``ix_routine_scopes_scope_id``. Backfills page along a key in bounded
-batches; every step inspects first and skips what a stopped run already did.
+``pk_routine_scopes (routine_id, scope_id)`` with ``ix_routine_scopes_tenant_scope_id (tenant_id, scope_id)``.
+Backfills page along a key in bounded batches; every step inspects first and skips what a stopped run already did.
 
 The downgrade refuses while more than one tenant exists, naming them; with one it restores the slug links, deletes the
 stand-in scopes, restores the unnamed slug keys and foreign keys and the indexes those tables had before, and drops
@@ -61,7 +61,8 @@ _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 # Each table naming a scope, as this revision relinks it — frozen here, never derived from ``schema.metadata``: the
 # table; the column naming the scope by slug before this revision; the column naming it by id after; the primary key's
 # columns besides the link, which the backfills page by; the rebuilt primary key's name, where the link is part of it;
-# the index on the link column, named before and after; whether the slug stays beside the id as the row's label.
+# the tenant-led index on the link column, named before and after; whether the slug stays beside the id as the row's
+# label.
 _Link = tuple[str, str, str, tuple[str, ...], str | None, tuple[str, str] | None, bool]
 _LINKS: tuple[_Link, ...] = (
     ("scope_lifecycle_facts", "slug", "scope_id", ("id",), None, None, False),
@@ -72,7 +73,7 @@ _LINKS: tuple[_Link, ...] = (
         "scope_id",
         ("routine_id",),
         "pk_routine_scopes",
-        ("ix_routine_scopes_scope_slug", "ix_routine_scopes_scope_id"),
+        ("ix_routine_scopes_tenant_scope_slug", "ix_routine_scopes_tenant_scope_id"),
         False,
     ),
     ("work_item_runs", "scope_slug", "scope_id", ("work_item_id",), None, None, False),
@@ -362,7 +363,7 @@ def _detach(bind: sa.Connection, link: _Link) -> None:
         if columns[id_column]:
             batch.alter_column(id_column, existing_type=sa.String(), nullable=False)
         if create_index and index is not None:
-            batch.create_index(index[1], [id_column])
+            batch.create_index(index[1], [_TENANT_COLUMN, id_column])
 
 
 def _rekey_scopes(bind: sa.Connection) -> None:
@@ -524,7 +525,7 @@ def _reattach(bind: sa.Connection, link: _Link) -> None:
         if columns[slug]:
             batch.alter_column(slug, existing_type=sa.String(), nullable=False)
         if create_index and index is not None:
-            batch.create_index(index[0], [slug])
+            batch.create_index(index[0], [_TENANT_COLUMN, slug])
 
 
 def downgrade() -> None:

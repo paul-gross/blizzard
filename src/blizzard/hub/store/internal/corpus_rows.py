@@ -70,6 +70,14 @@ def open_tenant(table: Any) -> ColumnElement[bool]:
     return and_(tenant.is_not(None), tenant.not_in(select(s.tenant_deletions.c.tenant_id)))
 
 
+def of_chunks(table: Table, chunk_id: Column, chunk_ids: Sequence[str]) -> ColumnElement[bool]:  # type: ignore[type-arg]
+    """``table``'s open-tenant rows naming one of ``chunk_ids`` by ``chunk_id``, qualified by those chunks' own
+    tenants: a chunk's rows share its tenant, and naming it lets the read seek the table's tenant-led chunk index
+    rather than walk the table."""
+    chunk_tenants = select(s.chunks.c.tenant_id).where(s.chunks.c.chunk_id.in_(chunk_ids))
+    return and_(open_tenant(table), table.c.tenant_id.in_(chunk_tenants), chunk_id.in_(chunk_ids))
+
+
 # --- closing candidates --------------------------------------------------------------
 
 #: Closing-fact tables, (time, id)-indexed (blizzard-product:/delivered/tracing/fleet-spans/spec/spans.md §Closing).
@@ -132,7 +140,7 @@ def step_facts_for(conn: Connection, chunk_ids: Sequence[str], label: WorkRefLab
 
 def _by_chunk(conn: Connection, table: Table, batch: Sequence[str], *order: Column) -> dict[str, list]:  # type: ignore[type-arg]
     grouped: dict[str, list] = defaultdict(list)  # type: ignore[type-arg]
-    stmt = select(table).where(open_tenant(table), table.c.chunk_id.in_(batch)).order_by(*order)
+    stmt = select(table).where(of_chunks(table, table.c.chunk_id, batch)).order_by(*order)
     for row in conn.execute(stmt).all():
         grouped[row.chunk_id].append(row)
     return grouped
@@ -218,7 +226,7 @@ def _resolutions(conn: Connection, ids: Sequence[str]) -> dict[str, list[TracedD
     stmt = (
         select(s.decisions.c.chunk_id, s.decision_resolutions)
         .join(s.decisions, s.decisions.c.decision_id == s.decision_resolutions.c.decision_id)
-        .where(open_tenant(s.decision_resolutions), s.decisions.c.chunk_id.in_(ids))
+        .where(open_tenant(s.decision_resolutions), of_chunks(s.decisions, s.decisions.c.chunk_id, ids))
     )
     grouped: dict[str, list[TracedDecisionResolution]] = defaultdict(list)
     for r in conn.execute(stmt).all():
@@ -234,7 +242,7 @@ def _questions(conn: Connection, ids: Sequence[str]) -> dict[str, list[TracedQue
             answer,
             and_(answer.c.question_id == question.c.question_id, answer.c.tenant_id == question.c.tenant_id),
         )
-        .where(open_tenant(question), question.c.chunk_id.in_(ids))
+        .where(of_chunks(question, question.c.chunk_id, ids))
         .order_by(question.c.asked_at)
     )
     grouped: dict[str, list[TracedQuestion]] = defaultdict(list)
@@ -258,7 +266,7 @@ def _prerequisites_met(conn: Connection, ids: Sequence[str]) -> dict[str, list[T
     edge = s.chunk_dependencies.c
     edges = conn.execute(
         select(edge.dependent_chunk_id, edge.prerequisite_chunk_id).where(
-            open_tenant(s.chunk_dependencies), edge.dependent_chunk_id.in_(ids)
+            of_chunks(s.chunk_dependencies, edge.dependent_chunk_id, ids)
         )
     ).all()
     prerequisites = sorted({e.prerequisite_chunk_id for e in edges})
@@ -266,10 +274,10 @@ def _prerequisites_met(conn: Connection, ids: Sequence[str]) -> dict[str, list[T
     transition, completion = s.transitions.c, s.chunk_completed.c
     for batch in id_batches(prerequisites):
         terminal = select(transition.chunk_id, func.min(transition.recorded_at).label("at")).where(
-            open_tenant(s.transitions), transition.chunk_id.in_(batch), transition.to_node_id == RESERVED_TERMINAL
+            of_chunks(s.transitions, transition.chunk_id, batch), transition.to_node_id == RESERVED_TERMINAL
         )
         completed = select(completion.chunk_id, func.min(completion.completed_at).label("at")).where(
-            open_tenant(s.chunk_completed), completion.chunk_id.in_(batch)
+            of_chunks(s.chunk_completed, completion.chunk_id, batch)
         )
         for stmt in (terminal.group_by(transition.chunk_id), completed.group_by(completion.chunk_id)):
             for r in conn.execute(stmt).all():
@@ -527,7 +535,7 @@ def _epoch_markers_stmt(chunk_ids: Sequence[str], extractor_version: str | None)
     stmt = (
         select(s.transcript_event_derivations, _g.chunk_id, _g.epoch)
         .join(segment, and_(_g.segment_id == _d.segment_id, _g.tenant_id == _d.tenant_id))
-        .where(open_tenant(s.transcript_event_derivations), _g.chunk_id.in_(chunk_ids))
+        .where(open_tenant(s.transcript_event_derivations), of_chunks(segment, _g.chunk_id, chunk_ids))
     )
     if extractor_version is not None:
         stmt = stmt.where(_d.extractor_version == extractor_version)
@@ -540,7 +548,7 @@ def epoch_drops(conn: Connection, epochs: Sequence[EpochKey]) -> list[DropFact]:
     for batch in id_batches(sorted({epoch.chunk_id for epoch in epochs})):
         stmt = (
             select(s.transcript_event_drops)
-            .where(open_tenant(s.transcript_event_drops), _x.chunk_id.in_(batch))
+            .where(of_chunks(s.transcript_event_drops, _x.chunk_id, batch))
             .order_by(_x.dropped_at, _x.segment_id, _x.id)
         )
         drops.extend(_drop(row) for row in conn.execute(stmt) if EpochKey(row.chunk_id, row.epoch) in wanted)

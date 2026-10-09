@@ -176,7 +176,7 @@ class GardenRunStore:
     def _fact_counts_by_set(conn, finding_set_ids: list[str]) -> dict[str, dict[str, int]]:  # type: ignore[no-untyped-def]
         """How many `add`/`observed`/`gone` facts each delivered set's own delivery
         recorded — one `GROUP BY` query for every id in `finding_set_ids`
-        (index-backed on `ix_finding_facts_finding_set_id`), the `FindingStore._facts_for_many`
+        (index-backed on `ix_finding_facts_tenant_finding_set_id`), the `FindingStore._facts_for_many`
         shape, so the list read never issues one count query per row. `add`/`observed`/`gone`
         are named explicitly rather than left to whatever `finding_set_id` happens to
         carry, so an exit or `reopened` fact — which src/blizzard/hub/store/schema.py records with no
@@ -199,7 +199,7 @@ class GardenRunStore:
     @staticmethod
     def _add_finding_ids_by_set(conn, finding_set_ids: list[str]) -> dict[str, list[str]]:  # type: ignore[no-untyped-def]
         """Every listed set's own `add` facts' finding ids, in insertion order, read in one
-        query (index-backed on `ix_finding_facts_finding_set_id`). A set with no linked `add`
+        query (index-backed on `ix_finding_facts_tenant_finding_set_id`). A set with no linked `add`
         fact maps to an empty list."""
         grouped: dict[str, list[str]] = {finding_set_id: [] for finding_set_id in finding_set_ids}
         if not finding_set_ids:

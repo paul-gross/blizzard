@@ -89,14 +89,10 @@ def _records_for_segment_stmt(stmts: ScopedStatements, chunk_id: str, segment_id
 
 
 def _lease_runner_ids_stmt(stmts: ScopedStatements, chunk_id: str, node_id: str, epoch: int) -> Select[Any]:
-    return (
-        stmts.select(s.transcript_segments, s.transcript_segments.c.runner_id)
-        .where(
-            s.transcript_segments.c.chunk_id == chunk_id,
-            s.transcript_segments.c.node_id == node_id,
-            s.transcript_segments.c.epoch == epoch,
-        )
-        .distinct()
+    return stmts.select(s.transcript_segments, s.transcript_segments.c.runner_id).where(
+        s.transcript_segments.c.chunk_id == chunk_id,
+        s.transcript_segments.c.node_id == node_id,
+        s.transcript_segments.c.epoch == epoch,
     )
 
 

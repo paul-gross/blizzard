@@ -95,7 +95,7 @@ def moved_findings(conn: Connection, expect: Mapping[str, str]) -> list[str]:
 
 def facts_by_finding(conn: Connection, finding_ids: list[str]) -> dict[str, list[FindingFact]]:
     """One query per `id_batches` batch over `finding_ids` (index-backed on
-    `ix_finding_facts_finding_id_id`), each finding's facts oldest first — `list_across_routines`
+    `ix_finding_facts_tenant_finding_id_id`), each finding's facts oldest first — `list_across_routines`
     can hand this an unbounded id list, and one unbatched `IN (...)` would eventually exceed
     the driver's own per-statement bind-parameter ceiling."""
     grouped: dict[str, list[FindingFact]] = {finding_id: [] for finding_id in finding_ids}
@@ -454,7 +454,7 @@ class FindingSetStore:
         return self._of(row) if row is not None else None
 
     def list_for_chunk(self, chunk_id: str) -> list[FindingSet]:
-        """A run's own delivered sets — filtered on `ix_finding_sets_chunk_id`."""
+        """A run's own delivered sets — filtered on `ix_finding_sets_tenant_chunk_id`."""
         with self._store.read("list_for_chunk") as conn:
             rows = conn.execute(self._store.select(finding_sets).where(finding_sets.c.chunk_id == chunk_id)).all()
         return [self._of(row) for row in rows]

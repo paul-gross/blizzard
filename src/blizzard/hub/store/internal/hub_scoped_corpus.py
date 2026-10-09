@@ -140,17 +140,10 @@ class SweepCorpusReads:
     def pending_close_intents(self) -> list[TenantCloseIntent]:
         """Every open tenant's unretired close intent whose chunk is neither grouped away nor
         deleted, with its attempt history, in intent order."""
-        attempt = s.close_intent_attempts
-        attempts = (
-            select(
-                attempt.c.intent_id,
-                func.count(attempt.c.id).label("attempt_count"),
-                func.max(attempt.c.attempted_at).label("last_attempt_at"),
-            )
-            .group_by(attempt.c.intent_id)
-            .subquery()
-        )
-        intent = s.close_intents
+        attempt, intent = s.close_intent_attempts, s.close_intents
+        of_intent = and_(attempt.c.tenant_id == intent.c.tenant_id, attempt.c.intent_id == intent.c.id)
+        attempt_count = select(func.count(attempt.c.id)).where(of_intent).scalar_subquery()
+        last_attempt_at = select(func.max(attempt.c.attempted_at)).where(of_intent).scalar_subquery()
         with self._read("corpus pending close intents") as conn:
             rows = conn.execute(
                 select(
@@ -159,10 +152,9 @@ class SweepCorpusReads:
                     intent.c.chunk_id,
                     intent.c.source,
                     intent.c.ref,
-                    attempts.c.attempt_count,
-                    attempts.c.last_attempt_at,
+                    attempt_count.label("attempt_count"),
+                    last_attempt_at.label("last_attempt_at"),
                 )
-                .select_from(intent.outerjoin(attempts, attempts.c.intent_id == intent.c.id))
                 .where(open_tenant(intent), intent.c.retired_at.is_(None))
                 .where(intent.c.chunk_id.not_in(_ephemeral_chunk_ids()))
                 .order_by(intent.c.id)
