@@ -177,7 +177,7 @@ def test_pending_is_refused_every_route_but_me(tmp_path: Path) -> None:
 
     me = hub.client.get("/api/me", headers=_cookie(token))
     assert me.status_code == 200, me.text
-    assert me.json()["role"] == "pending"
+    assert (me.json()["role"], me.json()["tenants"]) == (None, [])
     assert me.json()["permissions"] == []
 
     for method, path in _reads(ids):

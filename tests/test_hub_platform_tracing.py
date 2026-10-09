@@ -23,6 +23,7 @@ from blizzard.auth_core import Role
 from blizzard.cli.collaborators import CliCollaborators
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.operator_sessions.internal.session_file import SessionFile
+from blizzard.foundation.platform_tracing.attributes import TENANT, TENANT_NAME
 from blizzard.foundation.platform_tracing.handle import IPlatformTracing, build_platform_tracing
 from blizzard.foundation.span_clock import Clock
 from blizzard.foundation.trace_export.config import TracingConfig
@@ -102,6 +103,35 @@ def test_a_sweep_pass_opens_its_own_root(tmp_path: Path) -> None:
     roots = [s for s in _spans(handle, exporter) if s.name == "sweep work_closure"]
     assert roots
     assert all(s.parent is None for s in roots)
+
+
+def test_sweep_spans_carry_no_tenant_and_a_tenant_routes_request_span_carries_its_own(tmp_path: Path) -> None:
+    exporter = InMemorySpanExporter()
+    config = _config(tmp_path)
+    handle = _handle(config, exporter)
+    app = hub_app.build_hosted_app(config, platform_tracing=handle)
+    app.state.shutdown = asyncio.Event()
+    sweeps = list(hub_app.Sweep.all(app))
+    with TestClient(app) as client:
+        assert client.get("/api/chunks").status_code == 200
+
+    async def one_pass_each() -> None:
+        tasks = [asyncio.create_task(sweep.run()) for sweep in sweeps]
+        await asyncio.sleep(0.5)
+        app.state.shutdown.set()
+        await asyncio.gather(*tasks)
+
+    asyncio.run(one_pass_each())
+    spans = _spans(handle, exporter)
+    (server,) = [s for s in spans if s.name == "GET /api/chunks"]
+    assert server.attributes is not None
+    assert server.attributes[TENANT] == app.state.services.tenants.open_tenants.only()
+    sweep_traces = {s.context.trace_id for s in spans if s.name.startswith("sweep ")}
+    assert {s.name for s in spans if s.parent is None and s.context.trace_id in sweep_traces} == {
+        f"sweep {sweep.name}" for sweep in sweeps
+    }
+    in_sweeps = [s for s in spans if s.context.trace_id in sweep_traces]
+    assert not [s.name for s in in_sweeps if {TENANT, TENANT_NAME} & set(s.attributes or {})]
 
 
 def test_a_runner_bearer_stamps_caller_runner_id_and_name_and_a_forged_caller_header_changes_nothing(

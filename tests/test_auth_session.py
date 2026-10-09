@@ -71,7 +71,7 @@ def test_pending_reaches_me_but_is_refused_a_fleet_view_read(tmp_path: Path) -> 
 
     me = hub.client.get("/api/me", headers=_cookie(token))
     assert me.status_code == 200, me.text
-    assert me.json()["role"] == "pending"
+    assert (me.json()["role"], me.json()["tenants"], me.json()["hub_admin"]) == (None, [], False)
     assert me.json()["permissions"] == []
     assert me.json()["assignable_roles"] == [r.value for r in Role if r is not Role.SUPERUSER]
 

@@ -91,7 +91,7 @@ def test_oidc_login_dance_against_the_stub_idp_ends_authenticated(tmp_path: Path
             assert me_resp.status_code == 200
             body = me_resp.json()
             assert body["username"] == "octocat"
-            assert body["role"] == "pending"
+            assert (body["role"], body["tenants"]) == (None, [])
 
 
 def test_github_login_dance_against_the_stub_idp_ends_authenticated(tmp_path: Path) -> None:
@@ -243,4 +243,4 @@ def test_named_superuser_email_lands_superuser_on_first_verified_login(tmp_path:
             assert me_resp.status_code == 200
             body = me_resp.json()
             assert body["username"] == "root"
-            assert body["role"] == "superuser"
+            assert (body["role"], body["hub_admin"]) == ("admin", True)

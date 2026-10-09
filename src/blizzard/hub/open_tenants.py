@@ -28,6 +28,10 @@ class OpenTenants:
         known = self._held()
         return next(iter(known)) if len(known) == 1 else None
 
+    def every(self) -> Mapping[TenantId, str]:
+        """Every open tenant's name by id, as held in memory."""
+        return self._held()
+
     def refresh(self) -> Mapping[TenantId, str]:
         """Read the open tenants again, and hold that copy from now on."""
         # One reference swap: a concurrent reader holds either the old copy or the new one, whole.
