@@ -1,6 +1,6 @@
 """The identity unit of work over a migrated store: every identity write in one block commits together, a block that
 raises leaves nothing behind, a read inside the block sees the block's own writes, a tenant-owned write joins the
-same transaction through that tenant's builders, and units of work serialize from their first statement, so a rule one
+same transaction through that tenant's builders and lands or rolls back with it, and units of work serialize from their first statement, so a rule one
 reads still holds when its writes commit."""
 
 from __future__ import annotations
@@ -24,16 +24,14 @@ from blizzard.hub.auth.identity_transaction import IdentityWrites
 from blizzard.hub.auth.internal.identity_transaction import (
     IdentityLockMissing,
     IdentityTransactions,
-    _TransactionConnections,
 )
 from blizzard.hub.auth.internal.membership_repository import MembershipRepository
 from blizzard.hub.auth.memberships import MembershipFact
 from blizzard.hub.auth.models import AuthFact, Identity, Session, SuperuserBootstrap, User
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.errors import HubStoreErrorFactory
 from blizzard.hub.store.scoped import statements_of
-from blizzard.hub.tenancy import StoreScope, TenantId
-from tests.support import default_tenant, hub_level_connections, hub_migration_prototype
+from blizzard.hub.tenancy import StoreScope, TenantId, UnknownTenant
+from tests.support import default_tenant, hub_level_connections, hub_migration_prototype, seed_invitation
 
 pytestmark = pytest.mark.component
 
@@ -111,45 +109,52 @@ def test_a_read_inside_the_block_sees_its_own_writes(engine: sa.Engine) -> None:
         assert writes.hub_admins.holders() == ["usr_a"]
 
 
-@pytest.mark.parametrize("abandoned", [False, True])
-def test_a_tenant_owned_write_joins_the_same_transaction(engine: sa.Engine, abandoned: bool) -> None:
-    tenant = default_tenant(engine)
-    store = hub_level_connections(engine)
+def _accept(writes: IdentityWrites, tenant: TenantId, invitation_id: str) -> None:
+    """An invitation's acceptance: the person and their membership, then the tenant-owned fact that it was used."""
+    writes.users.create(User("usr_a", "ada", "Ada", "ada@example.com", _T0))
+    writes.memberships.record(MembershipFact(tenant, "usr_a", Role.GUEST, _T0, invitation_id))
+    with writes.tenant_connections(StoreScope(tenant)).write("accept_invitation") as conn:
+        conn.execute(
+            statements_of(conn)
+            .insert(s.invitation_facts)
+            .values(invitation_id=invitation_id, kind="accepted", actor_user_id="usr_a", recorded_at=_T0)
+        )
 
-    with pytest.raises(_Abandoned) if abandoned else nullcontext(), store.write("accept") as conn:
-        pinned = _TransactionConnections(conn, HubStoreErrorFactory(structlog.get_logger("test")))
-        with pinned.scoped(StoreScope(tenant)).write("invite") as scoped:
-            assert scoped is conn
-            scoped.execute(
-                statements_of(scoped)
-                .insert(s.invitations)
-                .values(
-                    invitation_id="inv_1",
-                    email="ada@example.com",
-                    role="guest",
-                    token_hash="h",
-                    created_by="usr_a",
-                    created_at=_T0,
-                    expires_at=_T0 + timedelta(days=7),
-                )
-            )
-        with pinned.write("admit") as same:
-            same.execute(
-                sa.insert(s.membership_facts).values(
-                    tenant_id=tenant, user_id="usr_a", role="guest", set_at=_T0, set_by="inv_1"
-                )
-            )
+
+def _accepted(engine: sa.Engine, tenant: TenantId) -> tuple[list[str], list[str], list[str]]:
+    with engine.connect() as conn:
+        facts = conn.execute(
+            sa.select(s.invitation_facts.c.invitation_id).where(s.invitation_facts.c.tenant_id == tenant)
+        ).scalars()
+        users = conn.execute(sa.select(s.users.c.id)).scalars()
+        memberships = conn.execute(sa.select(s.membership_facts.c.set_by)).scalars()
+        return list(facts), list(users), list(memberships)
+
+
+@pytest.mark.parametrize("abandoned", [False, True])
+def test_a_tenant_owned_write_commits_or_rolls_back_with_the_identity_writes(
+    engine: sa.Engine, abandoned: bool
+) -> None:
+    tenant = default_tenant(engine)
+    invitation_id, _ = seed_invitation(engine, tenant, "ada@example.com", Role.GUEST)
+
+    with pytest.raises(_Abandoned) if abandoned else nullcontext(), _transactions(engine).begin() as writes:
+        _accept(writes, tenant, invitation_id)
         if abandoned:
             raise _Abandoned
 
-    with engine.connect() as conn:
-        invitations = (
-            conn.execute(sa.select(s.invitations.c.invitation_id).where(s.invitations.c.tenant_id == tenant))
-            .scalars()
-            .all()
-        )
-        memberships = conn.execute(sa.select(s.membership_facts.c.set_by)).scalars().all()
-    assert (invitations, memberships) == (([], []) if abandoned else (["inv_1"], ["inv_1"]))
+    written = ([invitation_id], ["usr_a"], [invitation_id])
+    assert _accepted(engine, tenant) == (([], [], []) if abandoned else written)
+
+
+def test_a_tenant_that_does_not_exist_refuses_the_whole_unit(engine: sa.Engine) -> None:
+    tenant = default_tenant(engine)
+    invitation_id, _ = seed_invitation(engine, tenant, "ada@example.com", Role.GUEST)
+
+    with pytest.raises(UnknownTenant), _transactions(engine).begin() as writes:
+        _accept(writes, TenantId("ten_00000000000000000000000000"), invitation_id)
+
+    assert _accepted(engine, tenant) == ([], [], [])
 
 
 def test_the_identity_lock_is_the_units_first_statement(engine: sa.Engine) -> None:

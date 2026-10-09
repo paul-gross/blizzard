@@ -32,7 +32,8 @@ from blizzard.hub.auth.models import (
     User,
 )
 from blizzard.hub.auth.service import PROVIDER_LOGIN_STATE_KIND, AuthService, RoleAssignmentRefused, principal
-from blizzard.hub.tenancy import TenantId
+from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.tenancy import StoreScope, TenantId
 
 pytestmark = pytest.mark.unit
 
@@ -212,6 +213,10 @@ class _FakeHubAdminRepository:
         self.facts.append(fact)
 
 
+def _joins_no_tenant(scope: StoreScope) -> ScopedConnections:
+    raise AssertionError(f"the auth service writes nothing tenant-owned; it opened {scope.tenant}")
+
+
 class _FakeTransactions:
     """Hands out the same fakes as every unit of work's writes — the fakes commit as they go."""
 
@@ -276,6 +281,7 @@ def _service(
         hub_admins=identity.hub_admins,
         bootstrap=superuser_bootstrap,
         auth_facts=facts,
+        tenant_connections=_joins_no_tenant,
     )
     service = AuthService(
         users=users,

@@ -4,8 +4,9 @@
 builds every identity repository over connections pinned to it: their ``read`` and ``write`` hand back that one
 connection rather than opening their own, so nothing commits until the unit of work does. Every read a repository makes
 follows the lock, so a check the unit reads — the hub administrators, a tenant's admins — still holds when its writes
-commit. A tenant-owned write joins the same transaction through :meth:`_TransactionConnections.scoped`, whose
-connections are that tenant's builders over the one connection, opened under the tenant's lock as any scoped write is.
+commit. A tenant-owned write joins the same transaction through :meth:`_TransactionConnections.scoped` — handed out as
+``IdentityWrites.tenant_connections`` — whose connections are that tenant's builders over the one connection, opened
+under the tenant's lock as any scoped write is.
 
 The identity lock is a no-op ``UPDATE`` of the store's revision row (``bzh:sql-portable``): the one hub-level row every
 store the hub serves holds, since the hub refuses to start on a store whose revision is not at head, and no identity
@@ -97,7 +98,7 @@ class IdentityTransactions:
             _lock_identities(conn)
             yield self._writes(_TransactionConnections(conn, self._store_errors))
 
-    def _writes(self, connections: HubStoreConnections) -> IdentityWrites:
+    def _writes(self, connections: _TransactionConnections) -> IdentityWrites:
         return IdentityWrites(
             users=UserRepository(connections, self._errors),
             identities=IdentityRepository(connections, self._errors),
@@ -106,6 +107,7 @@ class IdentityTransactions:
             hub_admins=HubAdminRepository(connections),
             bootstrap=SuperuserBootstrapRepository(connections),
             auth_facts=AuthFactsRepository(connections),
+            tenant_connections=connections.scoped,
         )
 
 
