@@ -177,6 +177,23 @@ export type AddedFindingView = {
 };
 
 /**
+ * AdminGraphSyncResponse
+ *
+ * ``POST /api/admin/graphs/sync``'s report — one reconciliation per open tenant. ``ok`` is false iff any tenant's
+ * is.
+ */
+export type AdminGraphSyncResponse = {
+    /**
+     * Ok
+     */
+    ok: boolean;
+    /**
+     * Tenants
+     */
+    tenants?: Array<TenantGraphSync>;
+};
+
+/**
  * AnalyticsChunkSpendResponse
  *
  * A bounded page — ``next_cursor`` is ``None`` exactly when this
@@ -3961,6 +3978,30 @@ export type HttpValidationError = {
 };
 
 /**
+ * HubAdminView
+ *
+ * One hub administrator.
+ */
+export type HubAdminView = {
+    /**
+     * Display Name
+     */
+    display_name: string;
+    /**
+     * Email
+     */
+    email: string | null;
+    /**
+     * User Id
+     */
+    user_id: string;
+    /**
+     * Username
+     */
+    username: string;
+};
+
+/**
  * HubAdvanceResponse
  *
  * The result of one on-demand hub-advance. A generic hub command node runs ``run:`` to
@@ -4014,6 +4055,40 @@ export const HubEventType = {
  * Every hub SSE frame kind — the ``event:`` name a frame carries.
  */
 export type HubEventType = typeof HubEventType[keyof typeof HubEventType];
+
+/**
+ * HubEventView
+ *
+ * One row of the hub's own event log.
+ */
+export type HubEventView = {
+    /**
+     * Detail
+     */
+    detail?: {
+        [key: string]: unknown;
+    } | null;
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Kind
+     */
+    kind: string;
+    /**
+     * Message
+     */
+    message: string;
+    /**
+     * Recorded At
+     */
+    recorded_at: string;
+    /**
+     * Severity
+     */
+    severity: string;
+};
 
 /**
  * HubMarkerRequest
@@ -4136,6 +4211,102 @@ export type IntendedMigrationView = {
 };
 
 /**
+ * InvitationCreateRequest
+ *
+ * Invite ``email`` into the request's tenant as ``role``, for ``expires_in`` whole days.
+ */
+export type InvitationCreateRequest = {
+    /**
+     * Email
+     */
+    email: string;
+    /**
+     * Expires In
+     */
+    expires_in?: number;
+    role: Role;
+};
+
+/**
+ * InvitationCreateResponse
+ *
+ * The issued invitation and its link's token. ``token`` is visible only here, once — only its sha256 is kept;
+ * the link handed to the invited person ends ``/invite/<token>``.
+ */
+export type InvitationCreateResponse = {
+    invitation: InvitationView;
+    /**
+     * Token
+     */
+    token: string;
+};
+
+/**
+ * InvitationListResponse
+ *
+ * Every invitation of the request's tenant, oldest first.
+ */
+export type InvitationListResponse = {
+    /**
+     * Invitations
+     */
+    invitations: Array<InvitationView>;
+};
+
+/**
+ * InvitationState
+ *
+ * What became of an invitation: ``live`` until it is accepted, revoked, or expires, whichever comes first.
+ */
+export const InvitationState = {
+    LIVE: 'live',
+    ACCEPTED: 'accepted',
+    EXPIRED: 'expired',
+    REVOKED: 'revoked'
+} as const;
+
+/**
+ * InvitationState
+ *
+ * What became of an invitation: ``live`` until it is accepted, revoked, or expires, whichever comes first.
+ */
+export type InvitationState = typeof InvitationState[keyof typeof InvitationState];
+
+/**
+ * InvitationView
+ *
+ * One invitation as its tenant's admins see it — never its token.
+ */
+export type InvitationView = {
+    /**
+     * Accepted By
+     */
+    accepted_by?: string | null;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Created By
+     */
+    created_by: string;
+    /**
+     * Email
+     */
+    email: string;
+    /**
+     * Expires At
+     */
+    expires_at: string;
+    /**
+     * Invitation Id
+     */
+    invitation_id: string;
+    role: Role;
+    state: InvitationState;
+};
+
+/**
  * JudgedBy
  *
  * Who issues a node's exit judgement — the structural gate marker.
@@ -4203,8 +4374,10 @@ export type LeaseTranscriptView = {
 /**
  * MeResponse
  *
- * The resolved identity's wire view. ``role`` is the membership's role in the request's
- * tenant — ``pending`` with none, ``superuser`` for a hub administrator.
+ * The resolved identity's wire view. ``role`` and ``permissions`` are those of the tenant
+ * the request resolves — the one ``X-Blizzard-Tenant`` names among ``tenants``, else the
+ * caller's only membership. With no such tenant ``role`` is null and ``permissions`` holds
+ * only the hub-level permissions of a hub administrator.
  */
 export type MeResponse = {
     /**
@@ -4216,10 +4389,18 @@ export type MeResponse = {
      */
     display_name: string;
     /**
+     * Hub Admin
+     */
+    hub_admin?: boolean;
+    /**
      * Permissions
      */
     permissions: Array<Permission>;
-    role: Role;
+    role: Role | null;
+    /**
+     * Tenants
+     */
+    tenants?: Array<MeTenant>;
     /**
      * User Id
      */
@@ -4228,6 +4409,29 @@ export type MeResponse = {
      * Username
      */
     username: string;
+};
+
+/**
+ * MeTenant
+ *
+ * One tenant the caller holds a membership in: its id (the value an
+ * ``X-Blizzard-Tenant`` header names), its name, the membership's role, and every
+ * permission the caller holds there.
+ */
+export type MeTenant = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Permissions
+     */
+    permissions: Array<Permission>;
+    role: Role;
+    /**
+     * Tenant Id
+     */
+    tenant_id: string;
 };
 
 /**
@@ -4246,6 +4450,60 @@ export type MeasurementReadingView = {
      * Scope Slug
      */
     scope_slug: string;
+};
+
+/**
+ * MemberRoleRequest
+ *
+ * ``PUT /api/members/{user_id}`` body — the membership role to grant: ``guest``, ``contributor`` or ``admin``.
+ */
+export type MemberRoleRequest = {
+    role: Role;
+};
+
+/**
+ * MemberView
+ *
+ * One member of the request's tenant.
+ */
+export type MemberView = {
+    /**
+     * Assignable Roles
+     */
+    assignable_roles?: Array<Role>;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Display Name
+     */
+    display_name: string;
+    /**
+     * Email
+     */
+    email: string | null;
+    /**
+     * Hub Admin
+     */
+    hub_admin: boolean;
+    /**
+     * Identities
+     */
+    identities?: Array<UserIdentityView>;
+    /**
+     * Revocable
+     */
+    revocable?: boolean;
+    role: Role;
+    /**
+     * User Id
+     */
+    user_id: string;
+    /**
+     * Username
+     */
+    username: string;
 };
 
 /**
@@ -5268,7 +5526,7 @@ export type Role = typeof Role[keyof typeof Role];
 /**
  * RoleAssignmentRequest
  *
- * ``POST /api/users/{id}/role`` body — the target role, by its wire value.
+ * ``POST /api/users/{id}/role`` body — the target role, by its wire value; ``pending`` revokes.
  */
 export type RoleAssignmentRequest = {
     /**
@@ -6033,8 +6291,8 @@ export type RunnerIdentityRefusal = {
 /**
  * RunnerIdentityView
  *
- * Who the presented runner bearer token belongs to — its hub-minted id and current name.
- * Answering records nothing: no registration, no liveness.
+ * Who the presented runner bearer token belongs to — its hub-minted id and current name, and
+ * the tenant it was added in. Answering records nothing: no registration, no liveness.
  */
 export type RunnerIdentityView = {
     /**
@@ -6045,6 +6303,14 @@ export type RunnerIdentityView = {
      * Runner Name
      */
     runner_name: string;
+    /**
+     * Tenant Id
+     */
+    tenant_id?: string | null;
+    /**
+     * Tenant Name
+     */
+    tenant_name?: string | null;
 };
 
 /**
@@ -6116,8 +6382,9 @@ export type RunnerRegistrationRequest = {
 /**
  * RunnerRegistrationResponse
  *
- * The registered runner's hub-minted id and current name, and whether this call was its
- * first registration since it was added.
+ * The registered runner's hub-minted id and current name, whether this call was its first
+ * registration since it was added, and the tenant it serves. Registration doubles as the
+ * heartbeat, so a renamed tenant reaches the runner on its next tick.
  */
 export type RunnerRegistrationResponse = {
     /**
@@ -6132,6 +6399,14 @@ export type RunnerRegistrationResponse = {
      * Runner Name
      */
     runner_name?: string | null;
+    /**
+     * Tenant Id
+     */
+    tenant_id?: string | null;
+    /**
+     * Tenant Name
+     */
+    tenant_name?: string | null;
 };
 
 /**
@@ -6752,6 +7027,87 @@ export type SystemArtifactView = {
      * Name
      */
     name: string;
+};
+
+/**
+ * TenantCreateRequest
+ *
+ * ``POST /api/admin/tenants``: the new tenant's name — a label, never refused for being taken — and, optionally,
+ * the user to make its first admin.
+ */
+export type TenantCreateRequest = {
+    /**
+     * Admin User Id
+     */
+    admin_user_id?: string | null;
+    /**
+     * Name
+     */
+    name: string;
+};
+
+/**
+ * TenantGraphSync
+ *
+ * One tenant's packaged-graph reconciliation: ``ok`` is false iff any of its entries failed.
+ */
+export type TenantGraphSync = {
+    /**
+     * Entries
+     */
+    entries?: Array<GraphSyncEntry>;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Ok
+     */
+    ok: boolean;
+    /**
+     * Tenant Id
+     */
+    tenant_id: string;
+};
+
+/**
+ * TenantRenameRequest
+ *
+ * ``PATCH /api/admin/tenants/{tenant_id}``: the tenant's new name.
+ */
+export type TenantRenameRequest = {
+    /**
+     * Name
+     */
+    name: string;
+};
+
+/**
+ * TenantView
+ *
+ * One tenant: its id, its name, when and by whom it was created, and whether it is ``open`` or ``deleting``.
+ */
+export type TenantView = {
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Created By
+     */
+    created_by: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * State
+     */
+    state: 'open' | 'deleting';
+    /**
+     * Tenant Id
+     */
+    tenant_id: string;
 };
 
 /**
@@ -7401,7 +7757,8 @@ export type UserIdentityView = {
 /**
  * UserView
  *
- * One ``users`` row — the listing/assignment response shape.
+ * One member as the deprecated ``/api/users`` routes render them — ``role`` is ``superuser`` for a hub
+ * administrator, else the membership's role, ``pending`` once revoked.
  */
 export type UserView = {
     /**
@@ -8004,6 +8361,205 @@ export type ListActivityApiActivityGetResponses = {
 };
 
 export type ListActivityApiActivityGetResponse = ListActivityApiActivityGetResponses[keyof ListActivityApiActivityGetResponses];
+
+export type HubEventsApiAdminEventsGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/admin/events';
+};
+
+export type HubEventsApiAdminEventsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type HubEventsApiAdminEventsGetError = HubEventsApiAdminEventsGetErrors[keyof HubEventsApiAdminEventsGetErrors];
+
+export type HubEventsApiAdminEventsGetResponses = {
+    /**
+     * Response Hub Events Api Admin Events Get
+     *
+     * Successful Response
+     */
+    200: Array<HubEventView>;
+};
+
+export type HubEventsApiAdminEventsGetResponse = HubEventsApiAdminEventsGetResponses[keyof HubEventsApiAdminEventsGetResponses];
+
+export type SyncEveryTenantApiAdminGraphsSyncPostData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/admin/graphs/sync';
+};
+
+export type SyncEveryTenantApiAdminGraphsSyncPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminGraphSyncResponse;
+};
+
+export type SyncEveryTenantApiAdminGraphsSyncPostResponse = SyncEveryTenantApiAdminGraphsSyncPostResponses[keyof SyncEveryTenantApiAdminGraphsSyncPostResponses];
+
+export type ListHubAdminsApiAdminHubAdminsGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/admin/hub-admins';
+};
+
+export type ListHubAdminsApiAdminHubAdminsGetResponses = {
+    /**
+     * Response List Hub Admins Api Admin Hub Admins Get
+     *
+     * Successful Response
+     */
+    200: Array<HubAdminView>;
+};
+
+export type ListHubAdminsApiAdminHubAdminsGetResponse = ListHubAdminsApiAdminHubAdminsGetResponses[keyof ListHubAdminsApiAdminHubAdminsGetResponses];
+
+export type RevokeHubAdminApiAdminHubAdminsUserIdDeleteData = {
+    body?: never;
+    path: {
+        /**
+         * User Id
+         */
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/admin/hub-admins/{user_id}';
+};
+
+export type RevokeHubAdminApiAdminHubAdminsUserIdDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RevokeHubAdminApiAdminHubAdminsUserIdDeleteError = RevokeHubAdminApiAdminHubAdminsUserIdDeleteErrors[keyof RevokeHubAdminApiAdminHubAdminsUserIdDeleteErrors];
+
+export type RevokeHubAdminApiAdminHubAdminsUserIdDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type RevokeHubAdminApiAdminHubAdminsUserIdDeleteResponse = RevokeHubAdminApiAdminHubAdminsUserIdDeleteResponses[keyof RevokeHubAdminApiAdminHubAdminsUserIdDeleteResponses];
+
+export type GrantHubAdminApiAdminHubAdminsUserIdPutData = {
+    body?: never;
+    path: {
+        /**
+         * User Id
+         */
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/admin/hub-admins/{user_id}';
+};
+
+export type GrantHubAdminApiAdminHubAdminsUserIdPutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GrantHubAdminApiAdminHubAdminsUserIdPutError = GrantHubAdminApiAdminHubAdminsUserIdPutErrors[keyof GrantHubAdminApiAdminHubAdminsUserIdPutErrors];
+
+export type GrantHubAdminApiAdminHubAdminsUserIdPutResponses = {
+    /**
+     * Successful Response
+     */
+    200: HubAdminView;
+};
+
+export type GrantHubAdminApiAdminHubAdminsUserIdPutResponse = GrantHubAdminApiAdminHubAdminsUserIdPutResponses[keyof GrantHubAdminApiAdminHubAdminsUserIdPutResponses];
+
+export type ListTenantsApiAdminTenantsGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/admin/tenants';
+};
+
+export type ListTenantsApiAdminTenantsGetResponses = {
+    /**
+     * Response List Tenants Api Admin Tenants Get
+     *
+     * Successful Response
+     */
+    200: Array<TenantView>;
+};
+
+export type ListTenantsApiAdminTenantsGetResponse = ListTenantsApiAdminTenantsGetResponses[keyof ListTenantsApiAdminTenantsGetResponses];
+
+export type CreateTenantApiAdminTenantsPostData = {
+    body: TenantCreateRequest;
+    path?: never;
+    query?: never;
+    url: '/api/admin/tenants';
+};
+
+export type CreateTenantApiAdminTenantsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateTenantApiAdminTenantsPostError = CreateTenantApiAdminTenantsPostErrors[keyof CreateTenantApiAdminTenantsPostErrors];
+
+export type CreateTenantApiAdminTenantsPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: TenantView;
+};
+
+export type CreateTenantApiAdminTenantsPostResponse = CreateTenantApiAdminTenantsPostResponses[keyof CreateTenantApiAdminTenantsPostResponses];
+
+export type RenameTenantApiAdminTenantsTenantIdPatchData = {
+    body: TenantRenameRequest;
+    path: {
+        /**
+         * Tenant Id
+         */
+        tenant_id: string;
+    };
+    query?: never;
+    url: '/api/admin/tenants/{tenant_id}';
+};
+
+export type RenameTenantApiAdminTenantsTenantIdPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RenameTenantApiAdminTenantsTenantIdPatchError = RenameTenantApiAdminTenantsTenantIdPatchErrors[keyof RenameTenantApiAdminTenantsTenantIdPatchErrors];
+
+export type RenameTenantApiAdminTenantsTenantIdPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: TenantView;
+};
+
+export type RenameTenantApiAdminTenantsTenantIdPatchResponse = RenameTenantApiAdminTenantsTenantIdPatchResponses[keyof RenameTenantApiAdminTenantsTenantIdPatchResponses];
 
 export type CountsByAgentTypeApiAnalyticsCountsAgentTypesGetData = {
     body?: never;
@@ -8956,6 +9512,10 @@ export type AuthorizeApiAuthNameAuthorizeGetData = {
          * Return To
          */
         return_to?: string | null;
+        /**
+         * Invite
+         */
+        invite?: string | null;
     };
     url: '/api/auth/{name}/authorize';
 };
@@ -11922,6 +12482,77 @@ export type HealthApiHealthGetResponses = {
 
 export type HealthApiHealthGetResponse = HealthApiHealthGetResponses[keyof HealthApiHealthGetResponses];
 
+export type ListInvitationsApiInvitationsGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/invitations';
+};
+
+export type ListInvitationsApiInvitationsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: InvitationListResponse;
+};
+
+export type ListInvitationsApiInvitationsGetResponse = ListInvitationsApiInvitationsGetResponses[keyof ListInvitationsApiInvitationsGetResponses];
+
+export type CreateInvitationApiInvitationsPostData = {
+    body: InvitationCreateRequest;
+    path?: never;
+    query?: never;
+    url: '/api/invitations';
+};
+
+export type CreateInvitationApiInvitationsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateInvitationApiInvitationsPostError = CreateInvitationApiInvitationsPostErrors[keyof CreateInvitationApiInvitationsPostErrors];
+
+export type CreateInvitationApiInvitationsPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: InvitationCreateResponse;
+};
+
+export type CreateInvitationApiInvitationsPostResponse = CreateInvitationApiInvitationsPostResponses[keyof CreateInvitationApiInvitationsPostResponses];
+
+export type RevokeInvitationApiInvitationsInvitationIdRevocationsPostData = {
+    body?: never;
+    path: {
+        /**
+         * Invitation Id
+         */
+        invitation_id: string;
+    };
+    query?: never;
+    url: '/api/invitations/{invitation_id}/revocations';
+};
+
+export type RevokeInvitationApiInvitationsInvitationIdRevocationsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RevokeInvitationApiInvitationsInvitationIdRevocationsPostError = RevokeInvitationApiInvitationsInvitationIdRevocationsPostErrors[keyof RevokeInvitationApiInvitationsInvitationIdRevocationsPostErrors];
+
+export type RevokeInvitationApiInvitationsInvitationIdRevocationsPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: InvitationView;
+};
+
+export type RevokeInvitationApiInvitationsInvitationIdRevocationsPostResponse = RevokeInvitationApiInvitationsInvitationIdRevocationsPostResponses[keyof RevokeInvitationApiInvitationsInvitationIdRevocationsPostResponses];
+
 export type MeApiMeGetData = {
     body?: never;
     path?: never;
@@ -11937,6 +12568,84 @@ export type MeApiMeGetResponses = {
 };
 
 export type MeApiMeGetResponse = MeApiMeGetResponses[keyof MeApiMeGetResponses];
+
+export type ListMembersApiMembersGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/members';
+};
+
+export type ListMembersApiMembersGetResponses = {
+    /**
+     * Response List Members Api Members Get
+     *
+     * Successful Response
+     */
+    200: Array<MemberView>;
+};
+
+export type ListMembersApiMembersGetResponse = ListMembersApiMembersGetResponses[keyof ListMembersApiMembersGetResponses];
+
+export type RevokeMembershipApiMembersUserIdDeleteData = {
+    body?: never;
+    path: {
+        /**
+         * User Id
+         */
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/members/{user_id}';
+};
+
+export type RevokeMembershipApiMembersUserIdDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RevokeMembershipApiMembersUserIdDeleteError = RevokeMembershipApiMembersUserIdDeleteErrors[keyof RevokeMembershipApiMembersUserIdDeleteErrors];
+
+export type RevokeMembershipApiMembersUserIdDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type RevokeMembershipApiMembersUserIdDeleteResponse = RevokeMembershipApiMembersUserIdDeleteResponses[keyof RevokeMembershipApiMembersUserIdDeleteResponses];
+
+export type GrantMembershipApiMembersUserIdPutData = {
+    body: MemberRoleRequest;
+    path: {
+        /**
+         * User Id
+         */
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/members/{user_id}';
+};
+
+export type GrantMembershipApiMembersUserIdPutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GrantMembershipApiMembersUserIdPutError = GrantMembershipApiMembersUserIdPutErrors[keyof GrantMembershipApiMembersUserIdPutErrors];
+
+export type GrantMembershipApiMembersUserIdPutResponses = {
+    /**
+     * Successful Response
+     */
+    200: MemberView;
+};
+
+export type GrantMembershipApiMembersUserIdPutResponse = GrantMembershipApiMembersUserIdPutResponses[keyof GrantMembershipApiMembersUserIdPutResponses];
 
 export type ListOpenQuestionsApiQuestionsGetData = {
     body?: never;

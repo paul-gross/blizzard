@@ -323,6 +323,28 @@
         "title": "AddedFindingView",
         "type": "object"
       },
+      "AdminGraphSyncResponse": {
+        "description": "``POST /api/admin/graphs/sync``'s report \u2014 one reconciliation per open tenant. ``ok`` is false iff any tenant's\nis.",
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "tenants": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/TenantGraphSync"
+            },
+            "title": "Tenants",
+            "type": "array"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "title": "AdminGraphSyncResponse",
+        "type": "object"
+      },
       "AnalyticsChunkSpendResponse": {
         "description": "A bounded page \u2014 ``next_cursor`` is ``None`` exactly when this\nis the last page. Not a point-in-time snapshot: each page's sums are recomputed at\nfetch time, so an earlier page's chunk can be invalidated by a usage fact recorded\nwhile a later page still streams.",
         "properties": {
@@ -6223,6 +6245,42 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "HubAdminView": {
+        "description": "One hub administrator.",
+        "properties": {
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "username",
+          "display_name",
+          "email"
+        ],
+        "title": "HubAdminView",
+        "type": "object"
+      },
       "HubAdvanceResponse": {
         "description": "The result of one on-demand hub-advance. A generic hub command node runs ``run:`` to\ncompletion, one call at a time, behind the fleet-wide serialization slot: ``ran=False`` means the\nslot was held by a different chunk and this call deferred without touching anything \u2014 not an\nerror.",
         "properties": {
@@ -6287,6 +6345,52 @@
         ],
         "title": "HubEventType",
         "type": "string"
+      },
+      "HubEventView": {
+        "description": "One row of the hub's own event log.",
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "recorded_at": {
+            "title": "Recorded At",
+            "type": "string"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "severity",
+          "kind",
+          "recorded_at",
+          "message"
+        ],
+        "title": "HubEventView",
+        "type": "object"
       },
       "HubMarkerRequest": {
         "description": "The mid-run marker callback's body.",
@@ -6429,6 +6533,131 @@
         "title": "IntendedMigrationView",
         "type": "object"
       },
+      "InvitationCreateRequest": {
+        "description": "Invite ``email`` into the request's tenant as ``role``, for ``expires_in`` whole days.",
+        "properties": {
+          "email": {
+            "pattern": "^[^@\\s]+@[^@\\s]+$",
+            "title": "Email",
+            "type": "string"
+          },
+          "expires_in": {
+            "default": 7,
+            "maximum": 30.0,
+            "minimum": 1.0,
+            "title": "Expires In",
+            "type": "integer"
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          }
+        },
+        "required": [
+          "email",
+          "role"
+        ],
+        "title": "InvitationCreateRequest",
+        "type": "object"
+      },
+      "InvitationCreateResponse": {
+        "description": "The issued invitation and its link's token. ``token`` is visible only here, once \u2014 only its sha256 is kept;\nthe link handed to the invited person ends ``/invite/<token>``.",
+        "properties": {
+          "invitation": {
+            "$ref": "#/components/schemas/InvitationView"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "invitation",
+          "token"
+        ],
+        "title": "InvitationCreateResponse",
+        "type": "object"
+      },
+      "InvitationListResponse": {
+        "description": "Every invitation of the request's tenant, oldest first.",
+        "properties": {
+          "invitations": {
+            "items": {
+              "$ref": "#/components/schemas/InvitationView"
+            },
+            "title": "Invitations",
+            "type": "array"
+          }
+        },
+        "required": [
+          "invitations"
+        ],
+        "title": "InvitationListResponse",
+        "type": "object"
+      },
+      "InvitationState": {
+        "description": "What became of an invitation: ``live`` until it is accepted, revoked, or expires, whichever comes first.",
+        "enum": [
+          "live",
+          "accepted",
+          "expired",
+          "revoked"
+        ],
+        "title": "InvitationState",
+        "type": "string"
+      },
+      "InvitationView": {
+        "description": "One invitation as its tenant's admins see it \u2014 never its token.",
+        "properties": {
+          "accepted_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accepted By"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "expires_at": {
+            "title": "Expires At",
+            "type": "string"
+          },
+          "invitation_id": {
+            "title": "Invitation Id",
+            "type": "string"
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          },
+          "state": {
+            "$ref": "#/components/schemas/InvitationState"
+          }
+        },
+        "required": [
+          "invitation_id",
+          "email",
+          "role",
+          "created_by",
+          "created_at",
+          "expires_at",
+          "state"
+        ],
+        "title": "InvitationView",
+        "type": "object"
+      },
       "JudgedBy": {
         "description": "Who issues a node's exit judgement \u2014 the structural gate marker.",
         "enum": [
@@ -6506,7 +6735,7 @@
         "type": "object"
       },
       "MeResponse": {
-        "description": "The resolved identity's wire view. ``role`` is the membership's role in the request's\ntenant \u2014 ``pending`` with none, ``superuser`` for a hub administrator.",
+        "description": "The resolved identity's wire view. ``role`` and ``permissions`` are those of the tenant\nthe request resolves \u2014 the one ``X-Blizzard-Tenant`` names among ``tenants``, else the\ncaller's only membership. With no such tenant ``role`` is null and ``permissions`` holds\nonly the hub-level permissions of a hub administrator.",
         "properties": {
           "assignable_roles": {
             "default": [],
@@ -6520,6 +6749,11 @@
             "title": "Display Name",
             "type": "string"
           },
+          "hub_admin": {
+            "default": false,
+            "title": "Hub Admin",
+            "type": "boolean"
+          },
           "permissions": {
             "items": {
               "$ref": "#/components/schemas/Permission"
@@ -6528,7 +6762,22 @@
             "type": "array"
           },
           "role": {
-            "$ref": "#/components/schemas/Role"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Role"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tenants": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/MeTenant"
+            },
+            "title": "Tenants",
+            "type": "array"
           },
           "user_id": {
             "title": "User Id",
@@ -6547,6 +6796,37 @@
           "permissions"
         ],
         "title": "MeResponse",
+        "type": "object"
+      },
+      "MeTenant": {
+        "description": "One tenant the caller holds a membership in: its id (the value an\n``X-Blizzard-Tenant`` header names), its name, the membership's role, and every\npermission the caller holds there.",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "permissions": {
+            "items": {
+              "$ref": "#/components/schemas/Permission"
+            },
+            "title": "Permissions",
+            "type": "array"
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "name",
+          "role",
+          "permissions"
+        ],
+        "title": "MeTenant",
         "type": "object"
       },
       "MeasurementReadingView": {
@@ -6570,6 +6850,90 @@
           "measurement"
         ],
         "title": "MeasurementReadingView",
+        "type": "object"
+      },
+      "MemberRoleRequest": {
+        "description": "``PUT /api/members/{user_id}`` body \u2014 the membership role to grant: ``guest``, ``contributor`` or ``admin``.",
+        "properties": {
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          }
+        },
+        "required": [
+          "role"
+        ],
+        "title": "MemberRoleRequest",
+        "type": "object"
+      },
+      "MemberView": {
+        "description": "One member of the request's tenant.",
+        "properties": {
+          "assignable_roles": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/Role"
+            },
+            "title": "Assignable Roles",
+            "type": "array"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "hub_admin": {
+            "title": "Hub Admin",
+            "type": "boolean"
+          },
+          "identities": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/UserIdentityView"
+            },
+            "title": "Identities",
+            "type": "array"
+          },
+          "revocable": {
+            "default": false,
+            "title": "Revocable",
+            "type": "boolean"
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "username",
+          "display_name",
+          "email",
+          "role",
+          "hub_admin",
+          "created_at"
+        ],
+        "title": "MemberView",
         "type": "object"
       },
       "MigrationMode": {
@@ -8113,7 +8477,7 @@
         "type": "string"
       },
       "RoleAssignmentRequest": {
-        "description": "``POST /api/users/{id}/role`` body \u2014 the target role, by its wire value.",
+        "description": "``POST /api/users/{id}/role`` body \u2014 the target role, by its wire value; ``pending`` revokes.",
         "properties": {
           "role": {
             "title": "Role",
@@ -9222,7 +9586,7 @@
         "type": "object"
       },
       "RunnerIdentityView": {
-        "description": "Who the presented runner bearer token belongs to \u2014 its hub-minted id and current name.\nAnswering records nothing: no registration, no liveness.",
+        "description": "Who the presented runner bearer token belongs to \u2014 its hub-minted id and current name, and\nthe tenant it was added in. Answering records nothing: no registration, no liveness.",
         "properties": {
           "runner_id": {
             "title": "Runner Id",
@@ -9231,6 +9595,28 @@
           "runner_name": {
             "title": "Runner Name",
             "type": "string"
+          },
+          "tenant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Id"
+          },
+          "tenant_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Name"
           }
         },
         "required": [
@@ -9350,7 +9736,7 @@
         "type": "object"
       },
       "RunnerRegistrationResponse": {
-        "description": "The registered runner's hub-minted id and current name, and whether this call was its\nfirst registration since it was added.",
+        "description": "The registered runner's hub-minted id and current name, whether this call was its first\nregistration since it was added, and the tenant it serves. Registration doubles as the\nheartbeat, so a renamed tenant reaches the runner on its next tick.",
         "properties": {
           "first_registration": {
             "title": "First Registration",
@@ -9370,6 +9756,28 @@
               }
             ],
             "title": "Runner Name"
+          },
+          "tenant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Id"
+          },
+          "tenant_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Name"
           }
         },
         "required": [
@@ -10327,6 +10735,117 @@
           "content"
         ],
         "title": "SystemArtifactView",
+        "type": "object"
+      },
+      "TenantCreateRequest": {
+        "description": "``POST /api/admin/tenants``: the new tenant's name \u2014 a label, never refused for being taken \u2014 and, optionally,\nthe user to make its first admin.",
+        "properties": {
+          "admin_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Admin User Id"
+          },
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "TenantCreateRequest",
+        "type": "object"
+      },
+      "TenantGraphSync": {
+        "description": "One tenant's packaged-graph reconciliation: ``ok`` is false iff any of its entries failed.",
+        "properties": {
+          "entries": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/GraphSyncEntry"
+            },
+            "title": "Entries",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "name",
+          "ok"
+        ],
+        "title": "TenantGraphSync",
+        "type": "object"
+      },
+      "TenantRenameRequest": {
+        "description": "``PATCH /api/admin/tenants/{tenant_id}``: the tenant's new name.",
+        "properties": {
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "TenantRenameRequest",
+        "type": "object"
+      },
+      "TenantView": {
+        "description": "One tenant: its id, its name, when and by whom it was created, and whether it is ``open`` or ``deleting``.",
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "open",
+              "deleting"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "name",
+          "created_at",
+          "created_by",
+          "state"
+        ],
+        "title": "TenantView",
         "type": "object"
       },
       "ToolCallSegmentView": {
@@ -11376,7 +11895,7 @@
         "type": "object"
       },
       "UserView": {
-        "description": "One ``users`` row \u2014 the listing/assignment response shape.",
+        "description": "One member as the deprecated ``/api/users`` routes render them \u2014 ``role`` is ``superuser`` for a hub\nadministrator, else the membership's role, ``pending`` once revoked.",
         "properties": {
           "assignable_roles": {
             "default": [],
@@ -12390,6 +12909,300 @@
         "summary": "List Activity",
         "tags": [
           "meta"
+        ]
+      }
+    },
+    "/api/admin/events": {
+      "get": {
+        "description": "The newest ``limit`` rows of the hub's own event log, newest first.",
+        "operationId": "hub_events_api_admin_events_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/HubEventView"
+                  },
+                  "title": "Response Hub Events Api Admin Events Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Hub Events",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/admin/graphs/sync": {
+      "post": {
+        "description": "Reconcile the packaged graph set into every open tenant, each through its own stores, and answer per tenant.\nAlways ``200``: a graph that fails is a ``failed`` row, and each ``ok`` carries its verdict.",
+        "operationId": "sync_every_tenant_api_admin_graphs_sync_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminGraphSyncResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Sync Every Tenant",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/admin/hub-admins": {
+      "get": {
+        "description": "Every hub administrator.",
+        "operationId": "list_hub_admins_api_admin_hub_admins_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/HubAdminView"
+                  },
+                  "title": "Response List Hub Admins Api Admin Hub Admins Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Hub Admins",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/admin/hub-admins/{user_id}": {
+      "delete": {
+        "description": "Revoke ``user_id``'s hub administrator role; revoking one who holds none writes nothing, and revoking the last\none answers ``409``.",
+        "operationId": "revoke_hub_admin_api_admin_hub_admins__user_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke Hub Admin",
+        "tags": [
+          "admin"
+        ]
+      },
+      "put": {
+        "description": "Make ``user_id`` a hub administrator; granting a holder writes nothing.",
+        "operationId": "grant_hub_admin_api_admin_hub_admins__user_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HubAdminView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Grant Hub Admin",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/admin/tenants": {
+      "get": {
+        "description": "Every tenant the hub holds, open or with its deletion underway, by id \u2014 creation order to the millisecond.",
+        "operationId": "list_tenants_api_admin_tenants_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TenantView"
+                  },
+                  "title": "Response List Tenants Api Admin Tenants Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Tenants",
+        "tags": [
+          "admin"
+        ]
+      },
+      "post": {
+        "description": "Create a tenant in one transaction, its packaged graphs minted and, when named, its first admin granted; it is\nusable the moment this answers. ``404`` when ``admin_user_id`` names no user \u2014 nothing is created.",
+        "operationId": "create_tenant_api_admin_tenants_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TenantCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Tenant",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/admin/tenants/{tenant_id}": {
+      "patch": {
+        "description": "Rename an open tenant; ``404`` when no open tenant has the id.",
+        "operationId": "rename_tenant_api_admin_tenants__tenant_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenant_id",
+            "required": true,
+            "schema": {
+              "title": "Tenant Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TenantRenameRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rename Tenant",
+        "tags": [
+          "admin"
         ]
       }
     },
@@ -14851,6 +15664,22 @@
                 }
               ],
               "title": "Return To"
+            }
+          },
+          {
+            "in": "query",
+            "name": "invite",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Invite"
             }
           }
         ],
@@ -18533,7 +19362,7 @@
     },
     "/api/fleet/identity": {
       "get": {
-        "description": "The id and name of the runner the presented bearer token names, or a 401 saying why the hub\nrefuses it: ``missing``, ``unknown``, ``revoked`` or ``retired``, the last two naming the runner\nthe token was issued to. Registers nothing and records no liveness.",
+        "description": "The id and name of the runner the presented bearer token names, and the tenant it was added\nin, or a 401 saying why the hub refuses it: ``missing``, ``unknown``, ``revoked`` or\n``retired``, the last two naming the runner the token was issued to. Registers nothing and\nrecords no liveness.",
         "operationId": "get_runner_identity_api_fleet_identity_get",
         "responses": {
           "200": {
@@ -18712,7 +19541,7 @@
     },
     "/api/fleet/runners": {
       "post": {
-        "description": "Register the calling runner \u2014 the one its bearer token names \u2014 with its workspace binding\nand the name it declares; idempotent.\n\nThe hub never rejects a registration over its roster \u2014 it doubles as the heartbeat every tick.\nA body ``runner_id`` from an older runner is ignored. A retired runner is refused 403.",
+        "description": "Register the calling runner \u2014 the one its bearer token names \u2014 with its workspace binding\nand the name it declares; idempotent.\n\nThe hub never rejects a registration over its roster \u2014 it doubles as the heartbeat every tick,\nso the tenant it answers, named as the hub holds it now, carries a rename on the next tick. A\nbody ``runner_id`` from an older runner is ignored. A retired runner is refused 403.",
         "operationId": "register_runner_api_fleet_runners_post",
         "requestBody": {
           "content": {
@@ -19482,7 +20311,8 @@
     },
     "/api/graphs/sync": {
       "post": {
-        "description": "Reconcile the packaged graph set against the store, minting only what changed.\n\nIdempotent, so it is safe to run unconditionally. Registered above\n``/graphs/{graph_id}`` so ``sync`` is not matched as a graph id. Always ``200``: a\ngraph that fails to load is a ``failed`` report row, and ``ok`` carries the verdict.",
+        "deprecated": true,
+        "description": "Reconcile the packaged graph set against the request's tenant, minting only what changed \u2014 superseded by\n``POST /api/admin/graphs/sync``, which reconciles every open tenant.\n\nIdempotent, so it is safe to run unconditionally. Registered above\n``/graphs/{graph_id}`` so ``sync`` is not matched as a graph id. Always ``200``: a\ngraph that fails to load is a ``failed`` report row, and ``ok`` carries the verdict.",
         "operationId": "sync_graphs_api_graphs_sync_post",
         "responses": {
           "200": {
@@ -19761,9 +20591,114 @@
         ]
       }
     },
+    "/api/invitations": {
+      "get": {
+        "description": "Every invitation of the tenant with its state \u2014 never a link.",
+        "operationId": "list_invitations_api_invitations_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvitationListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Invitations",
+        "tags": [
+          "invitations"
+        ]
+      },
+      "post": {
+        "description": "Invite ``email`` into the tenant as ``role``. The link's token is returned this once; only its hash is kept.",
+        "operationId": "create_invitation_api_invitations_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InvitationCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvitationCreateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Invitation",
+        "tags": [
+          "invitations"
+        ]
+      }
+    },
+    "/api/invitations/{invitation_id}/revocations": {
+      "post": {
+        "description": "Revoke a live or expired invitation: 404 for one the tenant does not hold, 409 for one already accepted or\nrevoked.",
+        "operationId": "revoke_invitation_api_invitations__invitation_id__revocations_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "invitation_id",
+            "required": true,
+            "schema": {
+              "title": "Invitation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvitationView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke Invitation",
+        "tags": [
+          "invitations"
+        ]
+      }
+    },
     "/api/me": {
       "get": {
-        "description": "Under ``auth.mode = \"none\"`` the implicit operator/superuser; under ``oauth``\nwith a resolving session, the session's identity; under ``oauth`` with none, 401.\n``role`` and ``permissions`` are those of the tenant the request names in\n``X-Blizzard-Tenant``, else of the caller's one membership, else the hub-level ones.",
+        "description": "Under ``auth.mode = \"none\"`` the implicit operator, a member of every open tenant; under\n``oauth`` with a resolving session, the session's person; under ``oauth`` with none, 401.\nA header naming a tenant the caller cannot enter resolves no tenant \u2014 never a 404 here.",
         "operationId": "me_api_me_get",
         "responses": {
           "200": {
@@ -19780,6 +20715,119 @@
         "summary": "Me",
         "tags": [
           "auth"
+        ]
+      }
+    },
+    "/api/members": {
+      "get": {
+        "description": "Every member of the request's tenant, with the changes the actor may make to each.",
+        "operationId": "list_members_api_members_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MemberView"
+                  },
+                  "title": "Response List Members Api Members Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Members",
+        "tags": [
+          "members"
+        ]
+      }
+    },
+    "/api/members/{user_id}": {
+      "delete": {
+        "description": "Revoke ``user_id``'s membership in the request's tenant. Refused as a grant is: a user that is no member\n(``404``, unless the actor holds ``membership:grant-any``, for whom it writes nothing), your own (``403``), and the\ntenant's last admin (``409``).",
+        "operationId": "revoke_membership_api_members__user_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke Membership",
+        "tags": [
+          "members"
+        ]
+      },
+      "put": {
+        "description": "Grant ``user_id`` ``role`` in the request's tenant, or change the role they hold there. A role equal to the one\nin force writes nothing. Refused: a role that is no membership role (``422``), a user that does not exist or \u2014\nwithout ``membership:grant-any`` \u2014 is no member (``404``, alike), your own role (``403``), and demoting the\ntenant's last admin (``409``).",
+        "operationId": "grant_membership_api_members__user_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemberRoleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Grant Membership",
+        "tags": [
+          "members"
         ]
       }
     },
@@ -22837,7 +23885,8 @@
     },
     "/api/users": {
       "get": {
-        "description": "Every hub-local account \u2014 the admin page's own table.",
+        "deprecated": true,
+        "description": "Every member of the request's tenant \u2014 :func:`~blizzard.hub.api.members.list_members` in the former shape.",
         "operationId": "list_users_api_users_get",
         "responses": {
           "200": {
@@ -22863,7 +23912,8 @@
     },
     "/api/users/{user_id}/role": {
       "post": {
-        "description": "Assign ``user_id`` a new role in the actor's tenant \u2014 ``pending`` revokes their\nmembership. Three refusals, each a 403: changing your own role; any change touching\n``superuser`` (a hub administrator); and granting or revoking ``admin`` as anyone but a\nhub administrator. A no-op change is accepted and records\nnothing. A real one records a ``user_role_changed`` fact and takes effect on the\nsubject's next request, with no re-login.",
+        "deprecated": true,
+        "description": "Give ``user_id`` ``role`` in the request's tenant \u2014 ``pending`` revokes the membership \u2014 under the members\nroutes' rules and answers. ``superuser`` names the hub administrator role, which no membership change grants\n(``403``); an unknown role string answers ``400``.",
         "operationId": "assign_role_api_users__user_id__role_post",
         "parameters": [
           {
