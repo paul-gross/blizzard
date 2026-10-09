@@ -22,7 +22,7 @@ import weakref
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import IO, Any
 
@@ -37,6 +37,7 @@ from sqlalchemy.sql.base import Executable
 from blizzard.auth_core import MEMBERSHIP_ROLES, Role
 from blizzard.foundation.clock import FixedClock, IClock
 from blizzard.foundation.forwarded import TrustedProxies
+from blizzard.foundation.hashing import Sha256Hex
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
@@ -47,6 +48,7 @@ from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.exporter import ITraceExporter
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.foundation.trace_spans import FinishedSpan
+from blizzard.hub.api.auth_session import TENANT_HEADER
 from blizzard.hub.app import create_app
 from blizzard.hub.auth.models import User
 from blizzard.hub.auth.oauth.provider import IOAuthProvider
@@ -839,7 +841,11 @@ class RunnerFleetClient(TestClient):
     """The hub harness's client: a call under ``/api/fleet/`` that carries no ``Authorization`` header presents
     the bearer token (:func:`runner_token`) of the runner it names, adding that runner, never connected, when the
     hub does not hold it, and registers a never-connected claimant before a claim unless ``register_claimants=False``.
-    A test pinning a tokenless refusal uses a plain ``TestClient``."""
+    A test pinning a tokenless refusal uses a plain ``TestClient``.
+
+    Runner ids are unique across the hub, so a client serving a tenant other than the default one carries a
+    ``runner_prefix``: its default runner is the prefixed ``default_runner_id``, and it refuses to add a runner whose
+    id lacks the prefix rather than collide with another tenant's."""
 
     def __init__(
         self,
@@ -848,9 +854,11 @@ class RunnerFleetClient(TestClient):
         services: TenantServices,
         default_runner_id: str = "r1",
         register_claimants: bool = True,
+        runner_prefix: str = "",
     ) -> None:
         super().__init__(app)
-        self.default_runner_id = default_runner_id
+        self.default_runner_id = f"{runner_prefix}{default_runner_id}"
+        self._runner_prefix = runner_prefix
         self._services = services
         self._register_claimants = register_claimants
         self._seeding = threading.Lock()
@@ -883,6 +891,9 @@ class RunnerFleetClient(TestClient):
         known = self._connected if connect else self._present
         if runner_id in known:
             return
+        assert runner_id.startswith(self._runner_prefix), (
+            f"runner ids are unique across the hub: name {runner_id!r} with this tenant's {self._runner_prefix!r} prefix"
+        )
         with self._seeding:
             workspace_id = body.get("workspace_id") if isinstance(body, dict) else None
             seed_runner(self._services, runner_id, workspace_id=str(workspace_id or "w1"), register=connect)
@@ -912,9 +923,40 @@ class HubHarness:
         """``tenant``'s services, opened as a request in that tenant would open them."""
         return self.hub_services.tenants.open_services(StoreScope(tenant))
 
+    def add_tenant(self, name: str) -> TenantHarness:
+        """Add a tenant named ``name`` beside the default one and hand back what a test drives it with: its
+        services, and a client that names it in ``X-Blizzard-Tenant`` on every call and seeds runners as
+        ``<name>-<id>``. The default tenant stays named; the hub's open-tenant set is refreshed, as tenant
+        administration refreshes it."""
+        assert self.app is not None
+        default_tenant(self.engine)
+        tenant = add_tenant(self.engine, name)
+        self.hub_services.tenants.open_tenants.refresh()
+        services = self.open_services(tenant)
+        prefix = f"{name}-"
+        client = RunnerFleetClient(self.app, services=services, runner_prefix=prefix)
+        client.headers[TENANT_HEADER] = tenant
+        return TenantHarness(tenant=tenant, name=name, services=services, client=client, runner_prefix=prefix)
+
     def promote(self, chunk_id: str) -> None:
         """Promote ``chunk_id`` through the real ``POST /api/chunks/{id}/promote`` path."""
         assert self.client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
+
+
+@dataclass(frozen=True)
+class TenantHarness:
+    """A tenant :meth:`HubHarness.add_tenant` added: its id and name, its services, and a client acting in it."""
+
+    tenant: TenantId
+    name: str
+    services: TenantServices
+    #: Names the tenant on every call; a fleet call's runner is seeded in this tenant under :attr:`runner_prefix`.
+    client: RunnerFleetClient
+    runner_prefix: str
+
+    def runner_id(self, local: str) -> str:
+        """The hub-unique id this tenant's runner ``local`` is seeded under."""
+        return f"{self.runner_prefix}{local}"
 
 
 def tenant_services_of(app: FastAPI) -> TenantServices:
@@ -1415,6 +1457,69 @@ def seed_user(
                 )
             )
     return user
+
+
+#: When the seeding helpers below record a fact unless a test names its own time: the harness clock's start.
+_SEEDED_AT = datetime(2026, 7, 13, tzinfo=UTC)
+
+#: How long a seeded invitation stays live unless a test names its own lifetime — the hub's default.
+_INVITATION_LIFETIME = timedelta(days=7)
+
+
+def seed_membership(
+    engine: Engine, tenant: TenantId, user_id: str, role: Role, *, set_by: str = "test", at: datetime = _SEEDED_AT
+) -> None:
+    """Record ``user_id`` as a ``role`` member of ``tenant`` — a raw ``membership_facts`` row, as a grant writes."""
+    assert role in MEMBERSHIP_ROLES, f"{role} is not a membership role"
+    with engine.begin() as conn:
+        conn.execute(
+            sa_insert(schema.membership_facts).values(
+                tenant_id=tenant, user_id=user_id, role=role.value, set_at=at, set_by=set_by
+            )
+        )
+
+
+def seed_hub_admin(engine: Engine, user_id: str, *, set_by: str = "test", at: datetime = _SEEDED_AT) -> None:
+    """Grant ``user_id`` the hub administrator role — a raw ``hub_admin_facts`` row, holding no membership."""
+    with engine.begin() as conn:
+        conn.execute(sa_insert(schema.hub_admin_facts).values(user_id=user_id, granted=True, set_at=at, set_by=set_by))
+
+
+def _invitation_token_hash(token: str) -> str:
+    """The digest an invitation's link token is stored and looked up as: its sha256 hex — the token is never stored."""
+    return Sha256Hex(token).hex
+
+
+def seed_invitation(
+    engine: Engine,
+    tenant: TenantId,
+    email: str,
+    role: Role,
+    *,
+    created_by: str = "test",
+    at: datetime = _SEEDED_AT,
+    lifetime: timedelta = _INVITATION_LIFETIME,
+) -> tuple[str, str]:
+    """Record a live invitation admitting ``email`` into ``tenant`` as ``role``, issued by ``created_by`` at ``at``
+    and expiring ``lifetime`` later, as the hub stores one: the address lowercased, the token only as its hash.
+    Returns the invitation's id and the link's plaintext token."""
+    assert role in MEMBERSHIP_ROLES, f"{role} is not a membership role"
+    invitation_id = Id.mint_at(IdPrefix.INVITATION, at).value
+    token = f"test-invitation-{invitation_id}"
+    with engine.begin() as conn:
+        conn.execute(
+            sa_insert(schema.invitations).values(
+                invitation_id=invitation_id,
+                tenant_id=tenant,
+                email=email.lower(),
+                role=role.value,
+                token_hash=_invitation_token_hash(token),
+                created_by=created_by,
+                created_at=at,
+                expires_at=at + lifetime,
+            )
+        )
+    return invitation_id, token
 
 
 def seed_session(hub: HubHarness, user: User) -> str:
