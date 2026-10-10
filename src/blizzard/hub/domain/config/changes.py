@@ -187,9 +187,16 @@ class RecordRef:
 
 class IReadConfigChanges(Protocol):
     def page(
-        self, *, before: int | None, limit: int, record_kind: RecordKind | None, record_key: str | None
+        self,
+        *,
+        before: int | None,
+        limit: int,
+        record_kind: RecordKind | None,
+        record_key: str | None,
+        project_id: str | None = None,
     ) -> list[ConfigChange]:
-        """Newest-first by ``id``, strictly below ``before`` when given, at most ``limit`` rows."""
+        """Newest-first by ``id``, strictly below ``before`` when given, at most ``limit`` rows; only the rows of
+        ``project_id`` when given."""
         ...
 
 

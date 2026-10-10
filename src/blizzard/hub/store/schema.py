@@ -225,7 +225,40 @@ graph_policy_facts = Table(
 )
 Index("ix_graph_policy_facts_tenant_id", graph_policy_facts.c.tenant_id)
 
-# --- Scopes (operator-authored buckets: a surrogate id, a slug named per tenant) ---
+# --- Projects (configured records inside a tenant; a hub-minted id, a slug named per tenant) ---
+# A project is named by its id everywhere; ``slug`` is the handle people type, unique within the
+# tenant and editable, and ``name`` a display label, unique nowhere and never resolved.
+
+projects = Table(
+    "projects",
+    metadata,
+    Column("project_id", String, nullable=False, info={"hub_unique": True}),  # proj_<ulid>
+    Column("slug", String, nullable=False),
+    Column("name", String, nullable=False),
+    Column("description", Text, nullable=False),
+    Column("revision", Integer, nullable=False),
+    Column("created_at", UtcDateTime, nullable=False),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_projects_tenant_id"), nullable=False),
+    PrimaryKeyConstraint("project_id", name="pk_projects"),
+    UniqueConstraint("tenant_id", "slug", name="uq_projects_tenant_slug"),
+)
+
+# A slug a project moved away from; at most one project holds a given former slug.
+project_former_slugs = Table(
+    "project_former_slugs",
+    metadata,
+    Column("slug", String, nullable=False),
+    Column(
+        "project_id", String, ForeignKey("projects.project_id", name="fk_project_former_slugs_projects"), nullable=False
+    ),
+    Column("left_at", UtcDateTime, nullable=False),
+    Column(
+        "tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_project_former_slugs_tenant_id"), nullable=False
+    ),
+    PrimaryKeyConstraint("tenant_id", "slug", name="pk_project_former_slugs"),
+)
+
+# --- Scopes (operator-authored buckets: a surrogate id, a slug named per project) ---
 
 scopes = Table(
     "scopes",
@@ -236,9 +269,13 @@ scopes = Table(
     Column("created_at", UtcDateTime, nullable=False),
     Column("revision", Integer, nullable=False, server_default="1"),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_scopes_tenant_id"), nullable=False),
+    Column("project_id", String, ForeignKey("projects.project_id", name="fk_scopes_projects"), nullable=False),
     PrimaryKeyConstraint("scope_id", name="pk_scopes"),
-    UniqueConstraint("tenant_id", "slug", name="uq_scopes_tenant_slug"),
+    UniqueConstraint("project_id", "slug", name="uq_scopes_project_slug"),
 )
+
+# A scope by slug across the tenant's projects, for the reads that name no project.
+Index("ix_scopes_tenant_slug", scopes.c.tenant_id, scopes.c.slug)
 
 # Scope retire/enable facts: append-only, newest wins.
 scope_lifecycle_facts = Table(
@@ -381,6 +418,124 @@ repository_lifecycle_facts = Table(
 )
 Index("ix_repository_lifecycle_facts_tenant_id", repository_lifecycle_facts.c.tenant_id)
 
+# --- Project links (a project's work sources and the repositories it may land in) ---
+
+# A project draws from a work source through a link: a configured record of its own, with a revision and
+# change facts; unlinking is its retirement, and linked/unlinked derives from the newest fact.
+project_source_links = Table(
+    "project_source_links",
+    metadata,
+    Column(
+        "project_id", String, ForeignKey("projects.project_id", name="fk_project_source_links_projects"), nullable=False
+    ),
+    Column("source_name", String, nullable=False),
+    Column("revision", Integer, nullable=False),
+    Column(
+        "tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_project_source_links_tenant_id"), nullable=False
+    ),
+    PrimaryKeyConstraint("project_id", "source_name", name="pk_project_source_links"),
+    ForeignKeyConstraint(
+        ["tenant_id", "source_name"],
+        ["work_sources.tenant_id", "work_sources.name"],
+        name="fk_project_source_links_work_sources",
+    ),
+)
+# Which projects link source X.
+Index("ix_project_source_links_tenant_source", project_source_links.c.tenant_id, project_source_links.c.source_name)
+
+project_source_link_facts = Table(
+    "project_source_link_facts",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("project_id", String, nullable=False),
+    Column("source_name", String, nullable=False),
+    Column("linked", Boolean, nullable=False),
+    Column("set_at", UtcDateTime, nullable=False),
+    Column("set_by", String, nullable=False),
+    Column(
+        "tenant_id",
+        String,
+        ForeignKey("tenants.tenant_id", name="fk_project_source_link_facts_tenant_id"),
+        nullable=False,
+    ),
+    ForeignKeyConstraint(
+        ["project_id", "source_name"],
+        ["project_source_links.project_id", "project_source_links.source_name"],
+        name="fk_project_source_link_facts_links",
+    ),
+)
+# A link's newest fact.
+Index(
+    "ix_project_source_link_facts_tenant_link",
+    project_source_link_facts.c.tenant_id,
+    project_source_link_facts.c.project_id,
+    project_source_link_facts.c.source_name,
+    project_source_link_facts.c.id,
+)
+
+# A project may land in a repository through a link: a configured record of its own, with a revision and
+# change facts; unlinking is its retirement, and linked/unlinked derives from the newest fact.
+project_repository_links = Table(
+    "project_repository_links",
+    metadata,
+    Column(
+        "project_id",
+        String,
+        ForeignKey("projects.project_id", name="fk_project_repository_links_projects"),
+        nullable=False,
+    ),
+    Column("repository_name", String, nullable=False),
+    Column("revision", Integer, nullable=False),
+    Column(
+        "tenant_id",
+        String,
+        ForeignKey("tenants.tenant_id", name="fk_project_repository_links_tenant_id"),
+        nullable=False,
+    ),
+    PrimaryKeyConstraint("project_id", "repository_name", name="pk_project_repository_links"),
+    ForeignKeyConstraint(
+        ["tenant_id", "repository_name"],
+        ["repositories.tenant_id", "repositories.name"],
+        name="fk_project_repository_links_repositories",
+    ),
+)
+# Which projects link repository X.
+Index(
+    "ix_project_repository_links_tenant_repository",
+    project_repository_links.c.tenant_id,
+    project_repository_links.c.repository_name,
+)
+
+project_repository_link_facts = Table(
+    "project_repository_link_facts",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("project_id", String, nullable=False),
+    Column("repository_name", String, nullable=False),
+    Column("linked", Boolean, nullable=False),
+    Column("set_at", UtcDateTime, nullable=False),
+    Column("set_by", String, nullable=False),
+    Column(
+        "tenant_id",
+        String,
+        ForeignKey("tenants.tenant_id", name="fk_project_repository_link_facts_tenant_id"),
+        nullable=False,
+    ),
+    ForeignKeyConstraint(
+        ["project_id", "repository_name"],
+        ["project_repository_links.project_id", "project_repository_links.repository_name"],
+        name="fk_project_repository_link_facts_links",
+    ),
+)
+# A link's newest fact.
+Index(
+    "ix_project_repository_link_facts_tenant_link",
+    project_repository_link_facts.c.tenant_id,
+    project_repository_link_facts.c.project_id,
+    project_repository_link_facts.c.repository_name,
+    project_repository_link_facts.c.id,
+)
+
 # --- Configuration change log (one fact row per committed write to a configured record) ---
 
 config_changes = Table(
@@ -397,6 +552,9 @@ config_changes = Table(
     Column("diff", Text, nullable=False),  # JSON [{field, old, new}]; never a secret value
     Column("apply_id", String, nullable=True),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_config_changes_tenant_id"), nullable=False),
+    # The project the changed record belongs to — a project, its links, a scope, a routine; null for a
+    # tenant-wide record (a work source, a repository, a secret).
+    Column("project_id", String, ForeignKey("projects.project_id", name="fk_config_changes_projects"), nullable=True),
 )
 Index(
     "ix_config_changes_tenant_record",
@@ -404,6 +562,9 @@ Index(
     config_changes.c.record_kind,
     config_changes.c.record_key,
     config_changes.c.id,
+)
+Index(
+    "ix_config_changes_tenant_project_id", config_changes.c.tenant_id, config_changes.c.project_id, config_changes.c.id
 )
 
 # One append-only fact per carry-over of a file-configured hub into its records.
@@ -433,8 +594,12 @@ routines = Table(
     Column("created_at", UtcDateTime, nullable=False),
     Column("revision", Integer, nullable=False, server_default="1"),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_routines_tenant_id"), nullable=False),
-    UniqueConstraint("tenant_id", "name", name="uq_routines_tenant_name"),
+    Column("project_id", String, ForeignKey("projects.project_id", name="fk_routines_projects"), nullable=False),
+    UniqueConstraint("project_id", "name", name="uq_routines_project_name"),
 )
+
+# A routine by name across the tenant's projects, for the reads that name no project.
+Index("ix_routines_tenant_name", routines.c.tenant_id, routines.c.name)
 
 # Mutable routine-to-scope membership.
 
@@ -485,9 +650,19 @@ chunks = Table(
     # Next-transition migration intent, JSON; null while unset.
     Column("intended_migration", Text, nullable=True),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_chunks_tenant_id"), nullable=False),
+    # Set once at mint; every chunk-owned fact reaches its project through it.
+    Column("project_id", String, ForeignKey("projects.project_id", name="fk_chunks_projects"), nullable=False),
 )
 # (tenant_id, minted_at, chunk_id) for newest-first bounded reads since a timestamp.
 Index("ix_chunks_tenant_minted_at_chunk_id", chunks.c.tenant_id, chunks.c.minted_at, chunks.c.chunk_id)
+# The same, within one project — and the join a project's chunk-owned rows are read through.
+Index(
+    "ix_chunks_tenant_project_minted_at_chunk_id",
+    chunks.c.tenant_id,
+    chunks.c.project_id,
+    chunks.c.minted_at,
+    chunks.c.chunk_id,
+)
 
 chunk_work_refs = Table(
     "chunk_work_refs",
@@ -646,13 +821,36 @@ findings = Table(
         nullable=True,
     ),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_findings_tenant_id"), nullable=False),
+    Column("project_id", String, ForeignKey("projects.project_id", name="fk_findings_projects"), nullable=False),
     CheckConstraint("source IN ('routine', 'review')", name="ck_findings_source"),
 )
 
+# Each tenant-led index serves the reads that name no project; the project-led one beside it, the reads that do.
 Index("ix_findings_tenant_routine_scope", findings.c.tenant_id, findings.c.routine_name, findings.c.scope_slug)
 Index("ix_findings_tenant_routine_class", findings.c.tenant_id, findings.c.routine_name, findings.c.class_)
+Index(
+    "ix_findings_tenant_project_routine_scope",
+    findings.c.tenant_id,
+    findings.c.project_id,
+    findings.c.routine_name,
+    findings.c.scope_slug,
+)
+Index(
+    "ix_findings_tenant_project_routine_class",
+    findings.c.tenant_id,
+    findings.c.project_id,
+    findings.c.routine_name,
+    findings.c.class_,
+)
 # Findings by (scope_slug, source), across routines.
 Index("ix_findings_tenant_scope_source", findings.c.tenant_id, findings.c.scope_slug, findings.c.source)
+Index(
+    "ix_findings_tenant_project_scope_source",
+    findings.c.tenant_id,
+    findings.c.project_id,
+    findings.c.scope_slug,
+    findings.c.source,
+)
 
 # Append-only finding changes; first/last seen and counts derive here.
 
@@ -721,12 +919,20 @@ finding_sets = Table(
     Column("revisions", Text, nullable=False),  # JSON {repo: revision} (`bzh:sql-portable`)
     Column("measurement", Text, nullable=True),  # opaque, routine-strategy-defined; null when none was recorded
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_finding_sets_tenant_id"), nullable=False),
+    Column("project_id", String, ForeignKey("projects.project_id", name="fk_finding_sets_projects"), nullable=False),
 )
 
 Index("ix_finding_sets_tenant_chunk_id", finding_sets.c.tenant_id, finding_sets.c.chunk_id)
 Index(
     "ix_finding_sets_tenant_routine_scope",
     finding_sets.c.tenant_id,
+    finding_sets.c.routine_name,
+    finding_sets.c.scope_slug,
+)
+Index(
+    "ix_finding_sets_tenant_project_routine_scope",
+    finding_sets.c.tenant_id,
+    finding_sets.c.project_id,
     finding_sets.c.routine_name,
     finding_sets.c.scope_slug,
 )
@@ -751,6 +957,9 @@ garden_proposals = Table(
     Column("source_artifact_id", String, nullable=True, info={"hub_unique": True}),
     Column("ref", String, nullable=True),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_garden_proposals_tenant_id"), nullable=False),
+    Column(
+        "project_id", String, ForeignKey("projects.project_id", name="fk_garden_proposals_projects"), nullable=False
+    ),
     CheckConstraint("origin IN ('routine-run', 'operator')", name="ck_garden_proposals_origin"),
     CheckConstraint(
         "origin != 'routine-run' OR routine_name IS NOT NULL", name="ck_garden_proposals_routine_run_has_routine"
@@ -763,6 +972,13 @@ garden_proposals = Table(
 Index(
     "ix_garden_proposals_tenant_routine_class",
     garden_proposals.c.tenant_id,
+    garden_proposals.c.routine_name,
+    garden_proposals.c.class_,
+)
+Index(
+    "ix_garden_proposals_tenant_project_routine_class",
+    garden_proposals.c.tenant_id,
+    garden_proposals.c.project_id,
     garden_proposals.c.routine_name,
     garden_proposals.c.class_,
 )
@@ -2200,6 +2416,7 @@ work_items = Table(
     Column("scope_slug", String, nullable=True),
     Column("run_mode", String, nullable=True),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_work_items_tenant_id"), nullable=False),
+    Column("project_id", String, ForeignKey("projects.project_id", name="fk_work_items_projects"), nullable=False),
     UniqueConstraint("tenant_id", "source", "ref", name="uq_work_items_tenant_source_ref"),
 )
 
@@ -2218,6 +2435,7 @@ work_item_runs = Table(
     Column("scope_id", String, ForeignKey("scopes.scope_id", name="fk_work_item_runs_scopes"), nullable=False),
     Column("mode", String, nullable=False),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_work_item_runs_tenant_id"), nullable=False),
+    Column("project_id", String, ForeignKey("projects.project_id", name="fk_work_item_runs_projects"), nullable=False),
 )
 Index("ix_work_item_runs_tenant_id", work_item_runs.c.tenant_id)
 

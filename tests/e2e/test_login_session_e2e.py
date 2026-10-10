@@ -104,7 +104,8 @@ def _seed_not_ready_chunk(hub_dir: Path, *, chunk_id: str, graph_id: str) -> Non
     """One bare fixture chunk — no route, no facts — so the read-only board claim
     that a guest's Promote control stays hidden has a concrete card to assert against. Derives
     ``not_ready`` by construction: a chunk with no promote fact rests there. Both rows belong to
-    the store's only tenant, stamped the way ``_set_role`` stamps a membership."""
+    the store's only tenant (the chunk to its only project), stamped the way ``_set_role`` stamps a
+    membership."""
     con = sqlite3.connect(_db_path(hub_dir))
     try:
         con.execute(
@@ -113,7 +114,8 @@ def _seed_not_ready_chunk(hub_dir: Path, *, chunk_id: str, graph_id: str) -> Non
             (graph_id, "g", "nd_1", "", "2026-07-13 00:00:00.000000"),
         )
         con.execute(
-            "INSERT INTO chunks (tenant_id, chunk_id, graph_id, minted_at) SELECT tenants.tenant_id, ?, ?, ? FROM tenants",
+            "INSERT INTO chunks (tenant_id, project_id, chunk_id, graph_id, minted_at)"
+            " SELECT projects.tenant_id, projects.project_id, ?, ?, ? FROM projects",
             (chunk_id, graph_id, "2026-07-13 00:00:00.000000"),
         )
         con.commit()

@@ -404,6 +404,13 @@ def _tenants_of(engine: sa.Engine, table: str) -> list[str | None]:
         return list(conn.execute(sa.select(sa.column("tenant_id")).select_from(sa.table(table))).scalars())
 
 
+def _project_change_rows(engine: sa.Engine) -> int:
+    """The change rows the projects revision writes: the default project's and its links'."""
+    kinds = "('project', 'project_source_link', 'project_repository_link')"
+    with engine.connect() as conn:
+        return conn.execute(sa.text(f"SELECT count(*) FROM config_changes WHERE record_kind IN {kinds}")).scalar_one()
+
+
 def test_a_carried_over_store_reaches_head_with_every_row_in_the_first_tenant(tmp_path: Path) -> None:
     db_url, engine = _store(tmp_path)
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
@@ -417,7 +424,9 @@ def test_a_carried_over_store_reaches_head_with_every_row_in_the_first_tenant(tm
         [(tenant_id, *_)] = _tenant_rows(engine)
         assert _keyed_tables(engine) == dict.fromkeys(_tables(engine) - GLOBAL_TABLES, True)
         assert seeded == set(before) - GLOBAL_TABLES
-        assert {table: _row_counts(engine)[table] for table in seeded} == {table: before[table] for table in seeded}
+        after = _row_counts(engine)
+        after["config_changes"] -= _project_change_rows(engine)
+        assert {table: after[table] for table in seeded} == {table: before[table] for table in seeded}
         assert {table: set(_tenants_of(engine, table)) for table in seeded} == {table: {tenant_id} for table in seeded}
         assert _tenant_keys(engine) == {
             table: (False, f"fk_{table}_tenant_id") for table in _tables(engine) - GLOBAL_TABLES

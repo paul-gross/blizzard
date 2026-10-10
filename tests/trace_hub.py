@@ -144,7 +144,7 @@ def _node(graph_id: str, node_id: str, name: str) -> Node:
 
 
 def seed_open_tenant_chunk(hub: HubHarness, tenant: str, chunk_id: str, at: datetime) -> None:
-    """A second open tenant ``tenant``, named as its id, whose chunk, on a graph of its own minted in that
+    """A second open tenant ``tenant``, named as its id and holding one project, whose chunk, on a graph of its own minted in that
     tenant, closes a step one second after ``at`` with usage billed and a transcript segment dropped, then
     completes a second later."""
 
@@ -157,12 +157,25 @@ def seed_open_tenant_chunk(hub: HubHarness, tenant: str, chunk_id: str, at: date
         conn.execute(
             hub_scoped(sa.insert(s.tenants).values(tenant_id=tenant, name=tenant, created_at=at, created_by="test"))
         )
+        conn.execute(
+            hub_scoped(
+                sa.insert(s.projects).values(
+                    project_id=f"proj_{tenant}",
+                    tenant_id=tenant,
+                    slug="default",
+                    name="Default",
+                    description="",
+                    revision=1,
+                    created_at=at,
+                )
+            )
+        )
     nodes = [_node(graph_id, node_id, name) for node_id, name in (("nd_1", "build"), ("nd_2", "review"))]
     graph = make_graph(graph_id, "g", entry_node_id="nd_1", nodes=nodes, created_at=at)
     GraphStore(hub_level_connections(hub.engine).scoped(StoreScope(TenantId(tenant)))).mint(
         graph, definition_yaml="", at=at
     )
-    insert(s.chunks, chunk_id=chunk_id, graph_id=graph_id, minted_at=at, model="")
+    insert(s.chunks, project_id=f"proj_{tenant}", chunk_id=chunk_id, graph_id=graph_id, minted_at=at, model="")
     insert(s.lease_facts, chunk_id=chunk_id, epoch=1, runner_id="r1", minted_at=at)
     insert(s.epoch_owners, chunk_id=chunk_id, epoch=1, runner_id="r1", recorded_at=at)
     step_closed = at + timedelta(seconds=1)

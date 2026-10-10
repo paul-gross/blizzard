@@ -32,7 +32,7 @@ from blizzard.hub.store.internal.hub_scoped_corpus import SweepCorpusReads
 from blizzard.hub.store.internal.hub_scoped_reads import hub_scoped_read
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION, TenantId
 from tests.hub_event_rows import hub_events_of
-from tests.support import close_tenant, default_tenant, hub_level_connections, hub_scoped
+from tests.support import close_tenant, default_project, default_tenant, hub_level_connections, hub_scoped
 
 pytestmark = pytest.mark.component
 
@@ -53,6 +53,16 @@ class _World:
         self.corpus = SweepCorpusReads(partial(hub_scoped_read, hub_level_connections(self.engine)))
         for tenant in (_OPEN, _CLOSED):
             self.insert(s.tenants, tenant_id=tenant, name=tenant, created_at=_AT, created_by="test")
+            self.insert(
+                s.projects,
+                project_id=f"proj_{tenant}",
+                tenant_id=tenant,
+                slug="default",
+                name="Default",
+                description="",
+                revision=1,
+                created_at=_AT,
+            )
         for tenant in (self.carried, _OPEN, _CLOSED):
             self._seed_tenant(tenant)
 
@@ -73,7 +83,15 @@ class _World:
             created_at=_AT,
         )
         for chunk_id in (_live(tenant), _gone(tenant)):
-            self.insert(s.chunks, tenant_id=tenant, chunk_id=chunk_id, graph_id=f"gr_{tenant}", minted_at=_AT, model="")
+            self.insert(
+                s.chunks,
+                tenant_id=tenant,
+                project_id=default_project(self.engine, tenant),
+                chunk_id=chunk_id,
+                graph_id=f"gr_{tenant}",
+                minted_at=_AT,
+                model="",
+            )
             self.insert(s.chunk_work_refs, tenant_id=tenant, chunk_id=chunk_id, source="src", ref=chunk_id)
             self.insert(
                 s.close_intents, tenant_id=tenant, chunk_id=chunk_id, source="src", ref=chunk_id, enqueued_at=_AT

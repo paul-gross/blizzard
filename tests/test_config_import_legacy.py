@@ -97,12 +97,22 @@ def hub(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> HubConfig:
     return config
 
 
+def _past_the_default_project(query: sa.Select[tuple[object, ...]]) -> sa.Select[tuple[object, ...]]:
+    """``query``, leaving out the store's default project's ``create`` row, which the migration wrote."""
+    if query.get_final_froms() == [config_changes]:
+        return query.where(config_changes.c.record_kind != "project")
+    return query
+
+
 def _rows(config: HubConfig) -> dict[str, list[dict[str, object]]]:
     engine = create_engine_from_url(config.db_url)
     try:
         store = hub_store_connections(engine)
         with engine.connect() as conn:
-            return {t.name: [dict(r._mapping) for r in conn.execute(store.select(t)).all()] for t in _TABLES}
+            return {
+                t.name: [dict(r._mapping) for r in conn.execute(_past_the_default_project(store.select(t)))]
+                for t in _TABLES
+            }
     finally:
         engine.dispose()
 

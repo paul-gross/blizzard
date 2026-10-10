@@ -2016,7 +2016,8 @@ def test_a_membership_naming_a_tenant_absent_from_tenants_is_a_violation(tmp_pat
     breaches = [v for v in HubInvariants(engine).run() if v.invariant == "hub:no-row-of-a-deleted-tenant"]
 
     assert [v.detail for v in breaches] == [
-        f"membership_facts holds 1 row(s) of tenant {second}, which is not in tenants"
+        f"membership_facts holds 1 row(s) of tenant {second}, which is not in tenants",
+        f"projects holds 1 row(s) of tenant {second}, which is not in tenants",
     ]
 
 
@@ -2046,4 +2047,7 @@ def test_a_row_naming_a_tenant_absent_from_tenants_is_a_violation(tmp_path: Path
 
     breaches = [v for v in HubInvariants(engine).run() if v.invariant == "hub:no-row-of-a-deleted-tenant"]
 
-    assert [v.detail for v in breaches] == [f"graphs holds 1 row(s) of tenant {second}, which is not in tenants"]
+    assert [v.detail for v in breaches] == [
+        f"graphs holds 1 row(s) of tenant {second}, which is not in tenants",
+        f"projects holds 1 row(s) of tenant {second}, which is not in tenants",
+    ]

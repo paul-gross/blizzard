@@ -68,7 +68,8 @@ class _Tenants:
 
 @pytest.fixture
 def tenants(tmp_path: Path) -> _Tenants:
-    """A store migrated to head: its carried-over tenant, plus a second tenant registered beside it."""
+    """A store migrated to head: its carried-over tenant, plus a second tenant registered beside it, each
+    holding one project."""
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
     engine = create_engine_from_url(db_url)
@@ -76,6 +77,17 @@ def tenants(tmp_path: Path) -> _Tenants:
     with engine.begin() as conn:
         conn.execute(
             sa.insert(schema.tenants).values(tenant_id=_SECOND, name="second", created_at=_AT, created_by="usr_test")
+        )
+        conn.execute(
+            sa.insert(schema.projects).values(
+                project_id="proj_second",
+                tenant_id=_SECOND,
+                slug="default",
+                name="Default",
+                description="",
+                revision=1,
+                created_at=_AT,
+            )
         )
     return _Tenants(engine=engine, first=first, second=_SECOND, tmp_path=tmp_path)
 
@@ -94,11 +106,11 @@ def _filler(column: sa.Column[Any], n: int) -> object:
 
 def _row(table: sa.Table, key: Mapping[str, object], n: int) -> dict[str, object]:
     """A row of ``table`` holding ``key`` and a filler in every other column a row must carry; the scoped
-    insert stamps ``tenant_id``."""
+    insert stamps ``tenant_id``, and ``project_id`` from the tenant's only project."""
     required = (
         c
         for c in table.c
-        if c.name != "tenant_id"
+        if c.name not in ("tenant_id", "project_id")
         and not c.nullable
         and c.default is None
         and c.server_default is None

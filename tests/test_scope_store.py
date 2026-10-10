@@ -55,8 +55,12 @@ def _ensure(store: ScopeStore, slug: str, *, description: str = "", at: datetime
 
 
 def _changes(engine: Engine) -> list[tuple[str, str, int, str]]:
+    """The change log past the store's default project, whose ``create`` row the migration wrote."""
+    past_the_project = config_changes.c.record_kind != "project"
     with engine.connect() as conn:
-        rows = conn.execute(hub_store_connections(engine).select(config_changes).order_by(config_changes.c.id)).all()
+        rows = conn.execute(
+            hub_store_connections(engine).select(config_changes).where(past_the_project).order_by(config_changes.c.id)
+        ).all()
     return [(row.record_kind, row.record_key, row.revision, row.op) for row in rows]
 
 

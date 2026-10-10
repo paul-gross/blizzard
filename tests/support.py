@@ -110,7 +110,7 @@ from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStor
 from blizzard.hub.store.internal.scope_store import ScopeStore
 from blizzard.hub.store.internal.secret_store import SecretStore
 from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
-from blizzard.hub.store.scoped import ScopedConnections, is_tenant_owned
+from blizzard.hub.store.scoped import SOLE_PROJECT_FALLBACK_TABLES, ScopedConnections, is_tenant_owned
 from blizzard.hub.system_artifacts import PackagedSystemArtifacts
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION, StoreScope, TenantId
 from blizzard.hub.work_sources.annotator import IWorkAnnotator, WorkAnnotateError, WorkStatusMarker
@@ -145,13 +145,25 @@ _default_tenants: weakref.WeakKeyDictionary[Engine, TenantId] = weakref.WeakKeyD
 
 
 def add_tenant(engine: Engine, name: str) -> TenantId:
-    """Add a tenant named ``name`` to the store under a freshly minted id, as tenant administration
-    would, and return its id. Once a store holds two tenants, :func:`default_tenant` and :func:`stamp`
+    """Add a tenant named ``name`` to the store under a freshly minted id, holding its ``default``
+    project, as tenant administration would, and return its id. Once a store holds two tenants, :func:`default_tenant` and :func:`stamp`
     no longer name one — a test adding one names the tenant on every raw read and write."""
     tenant = TenantId(Id.mint_at(IdPrefix.TENANT, _GRAPH_T0).value)
+    project = Id.mint_at(IdPrefix.PROJECT, _GRAPH_T0).value
     with engine.begin() as conn:
         conn.execute(
             sa.insert(schema.tenants).values(tenant_id=tenant, name=name, created_at=_GRAPH_T0, created_by="test")
+        )
+        conn.execute(
+            sa.insert(schema.projects).values(
+                project_id=project,
+                tenant_id=tenant,
+                slug="default",
+                name="Default",
+                description="",
+                revision=1,
+                created_at=_GRAPH_T0,
+            )
         )
     return tenant
 
@@ -188,13 +200,19 @@ def default_tenant(engine: Engine) -> TenantId:
 
 def stamp(table: sa.Table, /, **values: Any) -> dict[str, Any]:
     """``values`` for a raw test insert into ``table``, carrying the store's tenant when the table is
-    tenant-owned and the caller named none — what the scoped insert stamps in production.
+    tenant-owned and the caller named none, and the row's tenant's project when the table is one the
+    scoped insert falls back to it for and the caller named none — what the scoped insert stamps in
+    production.
 
     The tenant is a scalar subquery over ``tenants``, so a raw write needs no engine in hand; it names
     the store's only tenant, the same one ``default_tenant`` reads, and ``NULL`` when the store holds
-    none or several — never one picked from many: a test with a second tenant names the one it means."""
+    none or several — never one picked from many: a test with a second tenant names the one it means.
+    The project is :func:`only_project_subquery` of the row's tenant, ``NULL`` unless it holds exactly one."""
     if is_tenant_owned(table) and "tenant_id" not in values:
         values["tenant_id"] = only_tenant_subquery()
+    if table.name in SOLE_PROJECT_FALLBACK_TABLES and "project_id" not in values:
+        tenant = values.get("tenant_id")
+        values["project_id"] = only_project_subquery(tenant if isinstance(tenant, str) else None)
     return _with_scope_id(table, values)
 
 
@@ -227,16 +245,56 @@ def _with_scope_id(table: sa.Table, values: dict[str, Any]) -> dict[str, Any]:
     slug = values[slug_column] if keeps_slug else values.pop(slug_column)
     tenant = values["tenant_id"]
     named = isinstance(tenant, str)
+    project = values.get("project_id")
     # Raw SQL, which the tenant guard does not walk: the row's tenant may itself be the only-tenant
-    # subquery, which the guard does not read as naming a tenant.
+    # subquery, which the guard does not read as naming a tenant. The slug is looked up within the
+    # row's project — the one it names, else its tenant's only one.
     tenant_sql = ":seed_scope_tenant" if named else _ONLY_TENANT_SQL
-    lookup = sa.text(f"SELECT scope_id FROM scopes WHERE slug = :seed_scope_slug AND tenant_id = ({tenant_sql})")
-    lookup = lookup.bindparams(seed_scope_slug=slug, **({"seed_scope_tenant": tenant} if named else {}))
+    project_sql = ":seed_scope_project" if isinstance(project, str) else _only_project_sql(tenant_sql)
+    lookup = sa.text(
+        f"SELECT scope_id FROM scopes WHERE slug = :seed_scope_slug AND tenant_id = ({tenant_sql})"
+        f" AND project_id = ({project_sql})"
+    )
+    lookup = lookup.bindparams(
+        seed_scope_slug=slug,
+        **({"seed_scope_tenant": tenant} if named else {}),
+        **({"seed_scope_project": project} if isinstance(project, str) else {}),
+    )
     values[id_column] = lookup.columns(sa.column("scope_id", sa.String)).scalar_subquery()
     return values
 
 
 _ONLY_TENANT_SQL = "SELECT tenant_id FROM tenants WHERE (SELECT count(*) FROM tenants) = 1"
+
+
+def _only_project_sql(tenant_sql: str) -> str:
+    """The project of the tenant ``tenant_sql`` selects, ``NULL`` unless that tenant holds exactly one."""
+    return f"SELECT max(project_id) FROM projects WHERE tenant_id = ({tenant_sql}) HAVING count(*) = 1"
+
+
+def only_project_subquery(tenant: str | None = None) -> sa.ScalarSelect[Any]:
+    """``tenant``'s project as a scalar subquery — the store's only tenant's when ``tenant`` is ``None`` —
+    ``NULL`` unless that tenant holds exactly one project.
+
+    Raw SQL, which the tenant guard does not walk: the store's only tenant is itself a subquery, which
+    the guard does not read as naming a tenant."""
+    lookup = sa.text(_only_project_sql(":only_project_tenant" if tenant is not None else _ONLY_TENANT_SQL))
+    if tenant is not None:
+        lookup = lookup.bindparams(only_project_tenant=tenant)
+    return lookup.columns(sa.column("project_id", sa.String)).scalar_subquery()
+
+
+def default_project(engine: Engine, tenant: TenantId | None = None) -> str:
+    """The id of ``tenant``'s only project — the store's only tenant's when ``tenant`` is ``None``.
+
+    Raises when the tenant holds none or several: a test with a second project names the one it means."""
+    tenant = tenant if tenant is not None else default_tenant(engine)
+    projects = schema.projects
+    with engine.connect() as conn:
+        ids = list(conn.execute(sa.select(projects.c.project_id).where(projects.c.tenant_id == tenant)).scalars())
+    if len(ids) != 1:
+        raise AssertionError(f"default_project needs a tenant holding exactly one project; {tenant} holds {len(ids)}")
+    return ids[0]
 
 
 def seed_scope(conns: ScopedConnections, slug: str, *, at: datetime) -> str:
@@ -1667,7 +1725,7 @@ def chunk_rows(hub: HubHarness, table: sa.Table, chunk_id: str) -> int:
 
 # Migration-test scaffolding: `graphs`/`chunks` carry no revision-pinned shape, so these
 # seeds are shared. A revision's own frozen table-under-test must NOT move here. `tenant_id`
-# is written only when the store the seed runs against has the column.
+# and `project_id` are written only when the store the seed runs against has the column.
 
 _GRAPHS = sa.Table(
     "graphs",
@@ -1687,14 +1745,19 @@ _CHUNKS = sa.Table(
     sa.Column("graph_id", sa.String, nullable=False),
     sa.Column("minted_at", sa.DateTime, nullable=False),
     sa.Column("tenant_id", sa.String),
+    sa.Column("project_id", sa.String),
 )
 
 
 def _stamp_as_stored(conn: sa.Connection, table: sa.Table, values: dict[str, Any]) -> dict[str, Any]:
     """``values`` carrying the store's only tenant when the store's own ``table`` has a ``tenant_id``
-    column — decided by the store's revision, not today's schema, so the seed fits any revision."""
-    if any(column["name"] == "tenant_id" for column in sa.inspect(conn).get_columns(table.name)):
+    column, and that tenant's only project when it has a ``project_id`` column — decided by the
+    store's revision, not today's schema, so the seed fits any revision."""
+    stored = {column["name"] for column in sa.inspect(conn).get_columns(table.name)}
+    if "tenant_id" in stored:
         values["tenant_id"] = only_tenant_subquery()
+    if "project_id" in stored:
+        values["project_id"] = only_project_subquery()
     return values
 
 
@@ -2006,7 +2069,7 @@ def seed_drainable_history(
         ),
     ]
     for table, values in rows:
-        conn.execute(hub_scoped(sa.insert(table)).values(tenant_id=tenant, **values))
+        conn.execute(hub_scoped(sa.insert(table)).values(stamp(table, tenant_id=tenant, **values)))
     if open_refs:
         conn.execute(
             hub_scoped(sa.insert(schema.chunk_work_refs)),

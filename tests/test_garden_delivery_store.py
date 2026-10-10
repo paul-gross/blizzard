@@ -34,7 +34,15 @@ from blizzard.hub.store.schema import (
     garden_proposal_findings,
     garden_proposals,
 )
-from tests.support import default_tenant, hub_scoped, hub_store_connections, seed_chunk, seed_graph, stamp
+from tests.support import (
+    default_project,
+    default_tenant,
+    hub_scoped,
+    hub_store_connections,
+    seed_chunk,
+    seed_graph,
+    stamp,
+)
 
 pytestmark = pytest.mark.component
 
@@ -58,10 +66,10 @@ def _store_and_engine(tmp_path: Path, *, enforce_foreign_keys: bool = False) -> 
     with engine.begin() as conn:
         conn.execute(
             sa.text(
-                "INSERT INTO scopes (scope_id, slug, description, created_at, tenant_id)"
-                " VALUES ('scp_blizzard', 'blizzard', '', :now, :tenant)"
+                "INSERT INTO scopes (scope_id, slug, description, created_at, tenant_id, project_id)"
+                " VALUES ('scp_blizzard', 'blizzard', '', :now, :tenant, :project)"
             ),
-            {"now": _NOW, "tenant": default_tenant(engine)},
+            {"now": _NOW, "tenant": default_tenant(engine), "project": default_project(engine)},
         )
         seed_graph(conn, "gr_1", at=_NOW)
         seed_chunk(conn, "ch_1", graph_id="gr_1", at=_NOW)

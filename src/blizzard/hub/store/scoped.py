@@ -17,6 +17,13 @@ tenant to every tenant-owned table they name:
   column; a caller never supplies the key itself. ``update``/``delete`` are confined to the
   tenant's rows.
 
+An insert into a table on :data:`SOLE_PROJECT_FALLBACK_TABLES` whose caller names no ``project_id``
+gets the tenant's project when the tenant holds exactly one, and ``NULL`` — which the column refuses —
+when it holds none or several (:meth:`ScopedStatements.sole_project_fallback`). A ``project_id`` the
+caller names in the values always wins; one named among an insert's execute-time parameters is
+refused. The fallback is an interim for the writers that do not name their project yet; no other
+table and no other column is ever filled.
+
 Everything else composes from these: an alias is scoped like its table, a grouped subquery or a
 ``UNION`` arm is a scoped ``select``, and a FROM-less select wraps scoped subqueries.
 
@@ -45,7 +52,7 @@ deletion fact instead, on the condition that the deletion is still underway."""
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from datetime import datetime
 from typing import Any
@@ -59,6 +66,22 @@ from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.tenancy import StoreScope, TenantClosed, UnknownTenant
 
 TENANT_COLUMN = "tenant_id"
+PROJECT_COLUMN = "project_id"
+
+#: The project-owned tables whose ``project_id`` a scoped insert naming none fills with the tenant's only project.
+#: ``config_changes`` is not among them: its ``project_id`` is null for a tenant-wide record.
+SOLE_PROJECT_FALLBACK_TABLES: frozenset[str] = frozenset(
+    {
+        "chunks",
+        "scopes",
+        "routines",
+        "findings",
+        "finding_sets",
+        "garden_proposals",
+        "work_item_runs",
+        "work_items",
+    }
+)
 
 # The execution-option key a scoped ``read``/``write`` sets on the ``Connection`` it yields.
 _SCOPE_OPTION = "blizzard_store_scope"
@@ -84,6 +107,16 @@ class TenantKeySupplied(ValueError):
 
     def __init__(self, table: str) -> None:
         super().__init__(f"tenant_id supplied for {table}; the scoped insert stamps it")
+        self.table = table
+
+
+class ProjectKeyAtExecute(ValueError):
+    """Raised when a scoped insert into a table on :data:`SOLE_PROJECT_FALLBACK_TABLES` carries ``project_id``
+    among its execute-time parameters: the sole-project fallback in the statement's values would override it, so a
+    caller names its project in ``values()`` or in ``insert_rows``' rows instead."""
+
+    def __init__(self, table: str) -> None:
+        super().__init__(f"project_id supplied at execute for {table}; name it in the insert's values")
         self.table = table
 
 
@@ -155,10 +188,31 @@ class ScopedStatements:
         :meth:`select` that reads the join."""
         return sa.join(left, right, sa.and_(onclause, *self.tenant_predicates(right)), isouter=isouter)
 
+    def sole_project_fallback(self, table: TableClause, named: Iterable[str] = ()) -> dict[str, ColumnElement[Any]]:
+        """The ``project_id`` an insert into ``table`` naming the columns ``named`` falls back to: the tenant's
+        project as a scalar subquery — ``NULL`` unless the tenant holds exactly one — when ``table`` is on
+        :data:`SOLE_PROJECT_FALLBACK_TABLES` and ``named`` lacks ``project_id``; nothing otherwise."""
+        base = _base_table(table)
+        if base is None or base.name not in SOLE_PROJECT_FALLBACK_TABLES or PROJECT_COLUMN not in base.c:
+            return {}
+        if PROJECT_COLUMN in named:
+            return {}
+        projects = s.projects
+        only = (
+            sa.select(sa.func.max(projects.c.project_id))
+            .where(projects.c.tenant_id == self._scope.tenant)
+            .having(sa.func.count() == 1)
+            .scalar_subquery()
+        )
+        return {PROJECT_COLUMN: only}
+
     def insert(self, table: TableClause) -> Insert:
-        """``INSERT INTO table`` with ``tenant_id`` stamped into every row's values."""
+        """``INSERT INTO table`` with ``tenant_id`` stamped into every row's values, and the sole-project fallback
+        beneath them — a ``project_id`` in a later ``values()`` or among the execute-time parameters wins."""
         stmt = sa.insert(table)
-        return stmt.values({TENANT_COLUMN: self._scope.tenant}) if is_tenant_owned(table) else stmt
+        if not is_tenant_owned(table):
+            return stmt
+        return stmt.values({TENANT_COLUMN: self._scope.tenant, **self.sole_project_fallback(table)})
 
     def insert_rows(self, table: TableClause, rows: Sequence[Mapping[Any, Any]]) -> Insert:
         """``INSERT INTO table VALUES (row), (row), …`` — one statement for all ``rows``, with
@@ -170,9 +224,11 @@ class ScopedStatements:
         if any(_key_name(key) == TENANT_COLUMN for row in rows for key in row):
             raise TenantKeySupplied(table.name)
         tenant = self._scope.tenant
-        return sa.insert(table).values(
-            [{**{_key_name(k): v for k, v in row.items()}, TENANT_COLUMN: tenant} for row in rows]
-        )
+        stamped = []
+        for row in rows:
+            named = {_key_name(k): v for k, v in row.items()}
+            stamped.append({**self.sole_project_fallback(table, named), **named, TENANT_COLUMN: tenant})
+        return sa.insert(table).values(stamped)
 
     def insert_from_select(self, table: TableClause, names: Sequence[str], select: Select[Any]) -> Insert:
         """``INSERT INTO table (names…, tenant_id) SELECT …, <tenant>`` — ``select``'s columns fill
@@ -184,7 +240,10 @@ class ScopedStatements:
         if TENANT_COLUMN in names:
             raise TenantKeySupplied(table.name)
         tenant = sa.literal(self._scope.tenant, type_=table.c[TENANT_COLUMN].type)
-        return sa.insert(table).from_select([*names, TENANT_COLUMN], select.add_columns(tenant))
+        fallback = self.sole_project_fallback(table, names)
+        return sa.insert(table).from_select(
+            [*names, TENANT_COLUMN, *fallback], select.add_columns(tenant, *fallback.values())
+        )
 
     def update(self, table: TableClause) -> Update:
         """``UPDATE table`` confined to the tenant's rows."""
@@ -223,12 +282,22 @@ def _refuse_execute_time_tenant(
     execution_options: Mapping[str, Any],
 ) -> None:
     """A ``before_execute`` listener on one scoped ``Connection``: an insert or update of a
-    tenant-owned table may not carry ``tenant_id`` among its execute-time parameters."""
+    tenant-owned table may not carry ``tenant_id`` among its execute-time parameters, nor an insert
+    into a table on :data:`SOLE_PROJECT_FALLBACK_TABLES` ``project_id`` — the fallback in its values
+    would override it."""
     if not isinstance(clauseelement, Insert | Update) or not is_tenant_owned(clauseelement.table):
         return
-    if any(TENANT_COLUMN in row for row in _execute_time_rows(multiparams, params)):
-        table = _base_table(clauseelement.table)
+    rows = list(_execute_time_rows(multiparams, params))
+    table = _base_table(clauseelement.table)
+    if any(TENANT_COLUMN in row for row in rows):
         raise TenantKeySupplied(table.name if table is not None else str(clauseelement.table))
+    if (
+        isinstance(clauseelement, Insert)
+        and table is not None
+        and table.name in SOLE_PROJECT_FALLBACK_TABLES
+        and any(PROJECT_COLUMN in row for row in rows)
+    ):
+        raise ProjectKeyAtExecute(table.name)
 
 
 class ScopedConnections(HubStoreConnections, ScopedStatements):

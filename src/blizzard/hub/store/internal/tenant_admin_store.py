@@ -19,9 +19,12 @@ from sqlalchemy import exists, select, update
 from blizzard.auth_core import Role
 from blizzard.hub.auth.identity_transaction import IdentityWrites, IIdentityTransactions
 from blizzard.hub.auth.memberships import MembershipFact
+from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, ConfigChange, Door, FieldChange, RecordKind
 from blizzard.hub.domain.graph.model import IWriteGraphRepository
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.tenancy.administration import (
+    DEFAULT_PROJECT_NAME,
+    DEFAULT_PROJECT_SLUG,
     ITenantCreation,
     IWriteTenantDirectory,
     Tenant,
@@ -30,6 +33,7 @@ from blizzard.hub.domain.tenancy.administration import (
 )
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
+from blizzard.hub.store.internal.config_change_store import append_change
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.tenancy import StoreScope, TenantId
@@ -73,6 +77,24 @@ class _TenantCreation:
             conn.execute(
                 self._connections.insert(s.work_item_sequence).values(source=RESERVED_HUB_SOURCE_NAME, next_ref=1)
             )
+
+    def seed_default_project(self, project_id: str, *, by: str, door: Door, at: datetime) -> None:
+        fields = {"slug": DEFAULT_PROJECT_SLUG, "name": DEFAULT_PROJECT_NAME, "description": ""}
+        change = ConfigChange.of(
+            ChangeContext(actor=by, door=door),
+            RecordKind.PROJECT,
+            project_id,
+            1,
+            ChangeOp.CREATE,
+            tuple(FieldChange(field, None, value) for field, value in fields.items()),
+            at,
+            project_id=project_id,
+        )
+        with self._connections.write("seed_default_project") as conn:
+            conn.execute(
+                self._connections.insert(s.projects).values(project_id=project_id, revision=1, created_at=at, **fields)
+            )
+            append_change(conn, change)
 
     def grant_admin(self, user_id: str, *, by: str, at: datetime) -> None:
         if self._writes.users.get(user_id) is None:

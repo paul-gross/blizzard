@@ -36,6 +36,7 @@ def append_change(conn: Connection, change: ConfigChange) -> None:
             op=change.op.value,
             diff=json.dumps([{"field": d.field, "old": d.old, "new": d.new} for d in change.diff]),
             apply_id=change.apply_id,
+            project_id=change.project_id,
         )
     )
 
@@ -47,7 +48,13 @@ class ConfigChangeStore:
         self._store = store
 
     def page(
-        self, *, before: int | None, limit: int, record_kind: RecordKind | None, record_key: str | None
+        self,
+        *,
+        before: int | None,
+        limit: int,
+        record_kind: RecordKind | None,
+        record_key: str | None,
+        project_id: str | None = None,
     ) -> list[ConfigChange]:
         query = self._store.select(config_changes).order_by(config_changes.c.id.desc()).limit(limit)
         if before is not None:
@@ -56,6 +63,8 @@ class ConfigChangeStore:
             query = query.where(config_changes.c.record_kind == record_kind.value)
         if record_key is not None:
             query = query.where(config_changes.c.record_key == record_key)
+        if project_id is not None:
+            query = query.where(config_changes.c.project_id == project_id)
         with self._store.read("page") as conn:
             rows = conn.execute(query).all()
         return [self._of(row) for row in rows]
@@ -73,6 +82,7 @@ class ConfigChangeStore:
             op=ChangeOp(row.op),
             diff=tuple(FieldChange(d["field"], d["old"], d["new"]) for d in json.loads(row.diff)),
             apply_id=row.apply_id,
+            project_id=row.project_id,
         )
 
 

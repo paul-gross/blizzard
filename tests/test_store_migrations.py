@@ -1496,6 +1496,15 @@ _HISTORICAL_RESHAPES: list[tuple[str, str, str, tuple[str, ...]] | tuple[str, st
     ("hub", "20261006_0900_config_import_facts", "runner_registrations", ("name", "added_at", "added_by")),
     ("hub", "20261008_1700_tenant_identity_move", "auth_state", ("invitation_token_hash",)),
     ("hub", "20261008_1710_auth_state_invitation", "tenant_deletions", ("closed_at",)),
+    ("hub", "20261008_1720_tenant_deletion_closed_at", "chunks", ("project_id",)),
+    ("hub", "20261008_1720_tenant_deletion_closed_at", "scopes", ("project_id",)),
+    ("hub", "20261008_1720_tenant_deletion_closed_at", "routines", ("project_id",)),
+    ("hub", "20261008_1720_tenant_deletion_closed_at", "findings", ("project_id",)),
+    ("hub", "20261008_1720_tenant_deletion_closed_at", "finding_sets", ("project_id",)),
+    ("hub", "20261008_1720_tenant_deletion_closed_at", "garden_proposals", ("project_id",)),
+    ("hub", "20261008_1720_tenant_deletion_closed_at", "work_item_runs", ("project_id",)),
+    ("hub", "20261008_1720_tenant_deletion_closed_at", "work_items", ("project_id",)),
+    ("hub", "20261008_1720_tenant_deletion_closed_at", "config_changes", ("project_id",)),
     # runner tree — instance 6
     (
         "runner",

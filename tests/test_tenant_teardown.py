@@ -5,6 +5,7 @@ removes the tenant itself and records the count, and the ``tenant_teardown`` swe
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -35,8 +36,10 @@ from tests.support import (
     added_runner,
     build_hub,
     capture_statements,
+    default_project,
     default_tenant,
     hub_level_connections,
+    hub_scoped,
     scoped_connections,
     seed_hub_admin,
     seed_membership,
@@ -327,6 +330,50 @@ def test_a_delete_removes_every_row_of_the_tenant_and_nothing_of_another(hub: Hu
     assert fact.deleted_at is not None and fact.rows_removed == progress.rows_removed
     assert [kind for kind, _ in _hub_events(hub)] == ["tenant-closed", "tenant-deleted"]
     assert _hub_events(hub)[-1][1] == {"tenant_id": tenant, "rows_removed": progress.rows_removed}
+
+
+_PROJECT_TABLES = (
+    "projects",
+    "project_former_slugs",
+    "project_source_links",
+    "project_source_link_facts",
+    "project_repository_links",
+    "project_repository_link_facts",
+)
+
+
+def test_a_delete_removes_the_tenants_projects_their_former_slugs_and_their_links(hub: HubHarness) -> None:
+    tenant = _created(hub)
+    project = default_project(hub.engine, tenant)
+    at = datetime(2026, 1, 1, tzinfo=UTC)
+    t = {"tenant_id": tenant}
+    linked = {**t, "project_id": project}
+    made = {"revision": 1, "created_at": at, "created_by": "usr_creator"}
+    fact = {"linked": True, "set_at": at, "set_by": "usr_creator"}
+    rows = [
+        (
+            schema.work_sources,
+            {**t, **made, "name": "github", "provider": "github", "locator": "o/r", "annotate": False},
+        ),
+        (
+            schema.repositories,
+            {**t, **made, "name": "blizzard", "forge_api_url": "u", "owner": "o", "repo": "r", "base_branch": "main"}
+            | {"secret_name": "token"},
+        ),
+        (schema.project_former_slugs, {**linked, "slug": "old", "left_at": at}),
+        (schema.project_source_links, {**linked, "source_name": "github", "revision": 1}),
+        (schema.project_source_link_facts, {**linked, **fact, "source_name": "github"}),
+        (schema.project_repository_links, {**linked, "repository_name": "blizzard", "revision": 1}),
+        (schema.project_repository_link_facts, {**linked, **fact, "repository_name": "blizzard"}),
+    ]
+    with hub.engine.begin() as conn:
+        for table, values in rows:
+            conn.execute(hub_scoped(sa.insert(table)).values(values))
+    assert set(_PROJECT_TABLES) <= set(_rows_of(hub, tenant))
+
+    hub.hub_services.tenant_teardown.delete(tenant, by="usr_closer")
+
+    assert _rows_of(hub, tenant) == {}
 
 
 def test_a_budget_cut_short_leaves_the_deletion_underway_for_the_sweep_to_finish(hub: HubHarness) -> None:

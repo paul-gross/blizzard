@@ -20,6 +20,7 @@ from typing import Protocol
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.roles import domain_model
+from blizzard.hub.domain.config.changes import Door
 from blizzard.hub.domain.graph.model import IWriteGraphRepository
 from blizzard.hub.tenancy import TenantId, UnknownTenant
 
@@ -103,6 +104,12 @@ class ITenantCreation(Protocol):
         exists."""
         ...
 
+    def seed_default_project(self, project_id: str, *, by: str, door: Door, at: datetime) -> None:
+        """Give the new tenant its first project, ``project_id`` — slug :data:`DEFAULT_PROJECT_SLUG`, name
+        :data:`DEFAULT_PROJECT_NAME`, no description, revision 1 — with its ``create`` change row, attributed to
+        ``by`` through ``door``."""
+        ...
+
 
 class IWriteTenantDirectory(IReadTenantDirectory, Protocol):
     """Adds the tenant writes."""
@@ -115,6 +122,11 @@ class IWriteTenantDirectory(IReadTenantDirectory, Protocol):
     def rename(self, tenant: TenantId, name: str) -> Tenant | None:
         """Rename an open tenant and answer it renamed; ``None`` when no open tenant has the id."""
         ...
+
+
+#: The slug and display name of the project every tenant starts with.
+DEFAULT_PROJECT_SLUG = "default"
+DEFAULT_PROJECT_NAME = "Default"
 
 
 class TenantAdministration:
@@ -137,16 +149,18 @@ class TenantAdministration:
         self._changed = changed
         self._clock = clock
 
-    def create(self, name: str, *, admin_user_id: str | None, by: str) -> Tenant:
-        """Create a tenant named ``name`` in one transaction, ``admin_user_id`` its first admin when named. The
-        creator is granted nothing they did not name themselves for. :class:`TenantNameRefused` when ``name`` is not a
-        tenant name's shape — nothing is created."""
+    def create(self, name: str, *, admin_user_id: str | None, by: str, door: Door = Door.API) -> Tenant:
+        """Create a tenant named ``name`` in one transaction, holding its default project, ``admin_user_id`` its first
+        admin when named. The creator is granted nothing they did not name themselves for; the project's change row
+        names the creator and ``door``. :class:`TenantNameRefused` when ``name`` is not a tenant name's shape —
+        nothing is created."""
         name = tenant_name(name)
         at = self._clock.now()
         tenant = TenantId(Id.mint(IdPrefix.TENANT, self._clock).value)
         with self._tenants.create(tenant, name=name, at=at, by=by) as creation:
             self._mint_packaged(creation.graphs)
             creation.seed_hub_sequence()
+            creation.seed_default_project(Id.mint(IdPrefix.PROJECT, self._clock).value, by=by, door=door, at=at)
             if admin_user_id is not None:
                 creation.grant_admin(admin_user_id, by=by, at=at)
         self._changed()
@@ -166,6 +180,8 @@ class TenantAdministration:
 
 
 __all__ = [
+    "DEFAULT_PROJECT_NAME",
+    "DEFAULT_PROJECT_SLUG",
     "TENANT_NAME_MAX_LENGTH",
     "IReadTenantDirectory",
     "ITenantCreation",

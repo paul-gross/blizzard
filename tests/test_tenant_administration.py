@@ -1,5 +1,5 @@
 """Tenant administration driven through the hub's wired service: a tenant is created whole in one transaction — its
-row, the packaged graphs, its ``hub`` sequence and its first admin — or not at all; it is usable, and the hub's
+row, the packaged graphs, its ``hub`` sequence, its ``default`` project and its first admin — or not at all; it is usable, and the hub's
 in-memory set of open tenants knows it, the moment its creation commits; names are labels of 1 to 64 characters with no
 leading or trailing whitespace; a rename reaches the in-memory set; the list shows every tenant with its state."""
 
@@ -15,6 +15,7 @@ from blizzard.auth_core import Permission, Role
 from blizzard.foundation.store.utc import as_utc
 from blizzard.hub.auth.errors import RepoErrorFactory
 from blizzard.hub.auth.internal.identity_transaction import IdentityTransactions
+from blizzard.hub.domain.config.changes import Door
 from blizzard.hub.domain.graph.model import IWriteGraphRepository
 from blizzard.hub.domain.tenancy.administration import (
     TenantAdministration,
@@ -43,7 +44,14 @@ def _row_counts(hub: HubHarness) -> dict[str, int]:
         conn = conn.execution_options(**{HUB_SCOPED_OPTION: True})
         return {
             table.name: conn.execute(sa.select(sa.func.count()).select_from(table)).scalar_one()
-            for table in (schema.tenants, schema.graphs, schema.work_item_sequence, schema.membership_facts)
+            for table in (
+                schema.tenants,
+                schema.graphs,
+                schema.work_item_sequence,
+                schema.projects,
+                schema.config_changes,
+                schema.membership_facts,
+            )
         }
 
 
@@ -72,6 +80,33 @@ def test_a_created_tenant_starts_with_the_packaged_graphs_and_its_hub_sequence_a
     assert (created.name, created.created_by, created.state) == ("acme", "usr_creator", TenantState.OPEN)
     assert _graph_names(hub, created.tenant_id) == _PACKAGED_NAMES
     assert _hub_sequence(hub, created.tenant_id) == [("hub", 1)]
+
+
+def _projects_and_changes(hub: HubHarness, tenant: TenantId) -> tuple[list[tuple], list[tuple]]:
+    p, c = schema.projects.c, schema.config_changes.c
+    with hub.engine.connect() as conn:
+        projects = conn.execute(
+            sa.select(p.project_id, p.slug, p.name, p.description, p.revision).where(p.tenant_id == tenant)
+        ).all()
+        changes = conn.execute(
+            sa.select(c.record_kind, c.record_key, c.project_id, c.actor, c.door, c.op, c.revision).where(
+                c.tenant_id == tenant
+            )
+        ).all()
+    return [tuple(row) for row in projects], [tuple(row) for row in changes]
+
+
+@pytest.mark.parametrize("door", [Door.API, Door.CLI])
+def test_a_created_tenant_holds_its_default_project_created_by_its_creator_through_the_door(
+    hub: HubHarness, door: Door
+) -> None:
+    created = hub.hub_services.tenant_admin.create("acme", admin_user_id=None, by="usr_creator", door=door)
+
+    [project], changes = _projects_and_changes(hub, created.tenant_id)
+    project_id = project[0]
+    assert project_id.startswith("proj_")
+    assert project[1:] == ("default", "Default", "", 1)
+    assert changes == [("project", project_id, project_id, "usr_creator", door.value, "create", 1)]
 
 
 def test_the_named_admin_is_granted_admin_and_the_creator_nothing(hub: HubHarness) -> None:

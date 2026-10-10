@@ -136,6 +136,17 @@ def store(tmp_path: Path) -> _Store:
         conn.execute(
             sa.insert(s.tenants).values(tenant_id=_SECOND, name="second", created_at=_AT, created_by="usr_test")
         )
+        conn.execute(
+            sa.insert(s.projects).values(
+                project_id="proj_second",
+                tenant_id=_SECOND,
+                slug="default",
+                name="Default",
+                description="",
+                revision=1,
+                created_at=_AT,
+            )
+        )
     return _Store(engine=engine, first=_tenant(engine, first, "first"), second=_tenant(engine, _SECOND, "second"))
 
 
@@ -155,7 +166,7 @@ def test_each_tenant_holds_its_own_scope_of_one_slug(store: _Store) -> None:
         assert [scope.scope_id for scope in ScopeStore(tenant.conns).list_all()] == [tenant.scope.scope_id]
 
 
-def test_a_slug_stays_unique_within_its_tenant(store: _Store) -> None:
+def test_a_slug_stays_unique_within_its_project(store: _Store) -> None:
     again = _mint_scope(store.first.conns, _SLUG, "a later description")
     assert again == ScopeStore(store.first.conns).get(_SLUG)
     assert again.scope_id == store.first.scope.scope_id

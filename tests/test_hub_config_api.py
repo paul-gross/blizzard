@@ -196,7 +196,13 @@ def test_the_change_log_pages_newest_first_and_filters(hub: HubHarness) -> None:
     _create(hub)
     hub.client.patch("/api/work-sources/demo", json={"annotate": False})
     full = hub.client.get("/api/config/changes").json()
-    assert [c["op"] for c in full["changes"]] == ["edit", "create", "create"]
+    # The oldest row is the store's default project's, which the migration wrote.
+    assert [(c["record_kind"], c["op"]) for c in full["changes"]] == [
+        ("work_source", "edit"),
+        ("work_source", "create"),
+        ("secret", "create"),
+        ("project", "create"),
+    ]
     assert full["next_before"] is None
     edit = full["changes"][0]
     assert edit["diff"] == [{"field": "annotate", "old": True, "new": False}]
@@ -211,7 +217,7 @@ def test_the_change_log_pages_newest_first_and_filters(hub: HubHarness) -> None:
     assert len(first["changes"]) == 2
     assert first["next_before"] == first["changes"][-1]["id"]
     rest = hub.client.get("/api/config/changes", params={"limit": 2, "before": first["next_before"]}).json()
-    assert [c["op"] for c in rest["changes"]] == ["create"]
+    assert [c["op"] for c in rest["changes"]] == ["create", "create"]
     assert rest["next_before"] is None
     assert len(_changes(hub, record_key="gh")) == 1
     assert hub.client.get("/api/config/changes", params={"limit": 201}).status_code == 422

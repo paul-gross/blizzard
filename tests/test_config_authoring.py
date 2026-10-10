@@ -86,11 +86,18 @@ class _World:
         self.authoring.create_secret(SecretName.parse("gh"), "tok-planted", OP)
 
     def changes(self) -> list:  # type: ignore[type-arg]
-        return list(reversed(self.log.page(before=None, limit=100, record_kind=None, record_key=None)))
+        """The change log past the store's default project, whose ``create`` row the migration wrote."""
+        page = self.log.page(before=None, limit=100, record_kind=None, record_key=None)
+        return [change for change in reversed(page) if change.record_kind is not RecordKind.PROJECT]
 
     def count(self) -> int:
+        """How many change rows the log holds past the store's default project's."""
         with self.engine.connect() as conn:
-            return conn.execute(hub_store_connections(self.engine).select(config_changes, func.count())).scalar_one()
+            return conn.execute(
+                hub_store_connections(self.engine)
+                .select(config_changes, func.count())
+                .where(config_changes.c.record_kind != RecordKind.PROJECT.value)
+            ).scalar_one()
 
     def source(self, name: str = "demo") -> ConfiguredWorkSource:
         record = self.sources.get(name)
@@ -301,7 +308,7 @@ def test_the_log_pages_newest_first_and_filters_by_record(world: _World) -> None
     everything = world.log.page(before=None, limit=100, record_kind=None, record_key=None)
     ids = [c.id for c in everything if c.id is not None]
     assert ids == sorted(ids, reverse=True)
-    assert len(everything) == 3
+    assert len(everything) == 3 + 1  # and the store's default project's, which the migration wrote
     older = world.log.page(before=ids[0], limit=1, record_kind=None, record_key=None)
     assert [c.id for c in older] == [ids[1]]
     only = world.log.page(before=None, limit=100, record_kind=RecordKind.WORK_SOURCE, record_key="demo")

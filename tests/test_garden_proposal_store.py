@@ -23,7 +23,7 @@ from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_closure_store import insert_garden_proposal_closure_row
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
-from tests.support import count_queries, count_rows_read, default_tenant, hub_store_connections
+from tests.support import count_queries, count_rows_read, default_project, default_tenant, hub_store_connections
 
 pytestmark = pytest.mark.component
 
@@ -82,10 +82,10 @@ def _store_and_engine(tmp_path: Path) -> tuple[GardenProposalStore, Engine]:
     with engine.begin() as conn:
         conn.execute(
             sa.text(
-                "INSERT INTO scopes (scope_id, slug, description, created_at, tenant_id)"
-                " VALUES ('scp_blizzard', 'blizzard', '', :now, :tenant)"
+                "INSERT INTO scopes (scope_id, slug, description, created_at, tenant_id, project_id)"
+                " VALUES ('scp_blizzard', 'blizzard', '', :now, :tenant, :project)"
             ),
-            {"now": _NOW, "tenant": default_tenant(engine)},
+            {"now": _NOW, "tenant": default_tenant(engine), "project": default_project(engine)},
         )
     store_connections = hub_store_connections(engine)
     findings = FindingStore(store_connections)
