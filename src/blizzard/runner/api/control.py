@@ -20,6 +20,7 @@ from blizzard.wire.runner_status import (
     IdentityVerdictView,
     PauseStateView,
     RunnerStatusView,
+    ServedProjectStatusView,
 )
 
 router = APIRouter(prefix="/api", tags=["runner"])
@@ -97,6 +98,21 @@ def _runner_status_view(service: RunnerStatusService) -> RunnerStatusView:
         last_tick_at=iso_utc(summary.last_tick_at) if summary.last_tick_at is not None else None,
         gates=list(summary.gates),
         identity=_identity_view(summary.identity) if summary.identity is not None else None,
+        served_projects=(
+            [
+                ServedProjectStatusView(
+                    entry=p.entry,
+                    project_id=p.project_id,
+                    slug=p.slug,
+                    name=p.name,
+                    resolved=p.resolved(),
+                    answered=p.answered,
+                )
+                for p in summary.served_projects
+            ]
+            if summary.served_projects is not None
+            else None
+        ),
     )
 
 

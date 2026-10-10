@@ -1,7 +1,7 @@
 """``GET /api/leases/{id}/scopes`` — the lease-scoped, hub-proxying route
 (component tier). Authorization mirrors ``tests/test_runner_garden_findings_api.py``'s
-own shape: the hub is never consulted for an unauthorized caller. The read names no
-chunk — a scope is global, not per-run."""
+own shape: the hub is never consulted for an unauthorized caller. The read names the
+lease's chunk, so the hub answers that chunk's project's scopes."""
 
 from __future__ import annotations
 
@@ -131,7 +131,7 @@ def test_forwards_to_the_hub_fleet_scopes_route_and_returns_the_vocabulary(tmp_p
     with TestClient(app) as client:
         resp = client.get("/api/leases/lease_1/scopes", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 200, resp.text
-    assert seen == [f"{_HUB_URL}/api/fleet/scopes"]
+    assert seen == [f"{_HUB_URL}/api/fleet/scopes?chunk_id={_CHUNK}"]
     assert resp.json() == [
         {**scope, "revision": None, "project_id": None, "project_slug": None, "project_name": None} for scope in _SCOPES
     ]

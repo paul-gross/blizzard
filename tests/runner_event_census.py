@@ -179,6 +179,10 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
         "mirrors the hub's pause brake locally; no kind in the vocabulary represents it — "
         "backstop-bounded staleness, `polling.ts`'s own claim to state (`bzh:one-prose-home`)."
     ),
+    "record_served_projects": Silent(
+        "records the hub's answer to the projects a registration the PULL already made declared; no kind "
+        "in the vocabulary represents it — status reads it on its next poll, as it reads the identity row."
+    ),
     "record_runner_identity": Silent(
         "records the id and name of a registration the PULL already made; no kind in the vocabulary "
         "represents it — the panel reads it on its next poll, as it reads the mirrored hub pause."

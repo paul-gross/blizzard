@@ -46,22 +46,26 @@ class FakeTokenIdentityReader:
 class FakeHubRunnerAdmin:
     """Answers every add with ``issued`` — or, unscripted, a fresh ``rn_init<n>`` id and token per
     add — and raises ``refusal`` (a ``RunnerAddRefused`` or ``HubClientError``) instead when set.
-    ``added`` holds every identity it handed out, oldest first, and ``named`` the tenant each add
-    named. The tenant listing answers ``tenants``, raising it when it is a ``HubClientError``."""
+    ``added`` holds every identity it handed out, oldest first, ``named`` the tenant each add
+    named and ``declared`` the projects it named. The tenant listing answers ``tenants``, raising it when it is a ``HubClientError``."""
 
     issued: IssuedIdentity | None = None
     refusal: HubClientError | None = None
     added: list[IssuedIdentity] = field(default_factory=list)
     named: list[str | None] = field(default_factory=list)
+    declared: list[tuple[str, ...] | None] = field(default_factory=list)
     tenants_answer: list[OperatorTenant] | HubClientError = field(default_factory=list)
 
-    def add_runner(self, name: str, *, tenant_id: str | None = None) -> IssuedIdentity:
+    def add_runner(
+        self, name: str, *, tenant_id: str | None = None, projects: tuple[str, ...] | None = None
+    ) -> IssuedIdentity:
         if self.refusal is not None:
             raise self.refusal
         n = len(self.added) + 1
         issued = self.issued or IssuedIdentity(runner_id=f"rn_init{n}", runner_name=name, token=f"init-token-{n}")
         self.added.append(issued)
         self.named.append(tenant_id)
+        self.declared.append(projects)
         return issued
 
     def tenants(self) -> list[OperatorTenant]:

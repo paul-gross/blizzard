@@ -80,9 +80,11 @@ class _LoggedIdentity(FakeTokenIdentityReader):
 class _LoggedAdmin(FakeHubRunnerAdmin):
     log: _Log = field(default_factory=_Log)
 
-    def add_runner(self, name: str, *, tenant_id: str | None = None) -> IssuedIdentity:
+    def add_runner(
+        self, name: str, *, tenant_id: str | None = None, projects: tuple[str, ...] | None = None
+    ) -> IssuedIdentity:
         self.log.calls.append("add")
-        return super().add_runner(name, tenant_id=tenant_id)
+        return super().add_runner(name, tenant_id=tenant_id, projects=projects)
 
 
 class _Tokens:

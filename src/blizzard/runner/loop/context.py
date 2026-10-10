@@ -84,6 +84,9 @@ class LoopConfig:
     #: Node NAMES this runner imposes a human gate on — matched across all graphs and read
     #: at context build, so a config edit needs a restart, not just a new tick.
     gates: tuple[str, ...] = ()
+    #: The projects this runner serves, by id or slug, declared at every registration; ``None`` declares
+    #: none, so the hub keeps the declaration it holds. Read at context build, like :attr:`gates`.
+    projects: tuple[str, ...] | None = None
     #: The directory the per-lease harness-stdout files live in; empty means
     #: no redirect. A worker's envelope survives the process there for later read-back.
     worker_stdout_dir: str = ""

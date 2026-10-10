@@ -17,6 +17,7 @@ import pytest
 from structlog.testing import capture_logs
 
 from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.foundation.claim_denials import ClaimDenialReason
 from blizzard.foundation.fact_kinds import RUNNER_LOCALLY_PAUSED
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.hub.chunk_status_cache import ReadThroughChunkViews
@@ -99,6 +100,9 @@ def _not_claimable(chunk_id: str = "ch_1") -> RouteClaimOutcome:
 
 def _dependency(chunk_id: str = "ch_1") -> RouteClaimOutcome:
     return RouteClaimOutcome(denied_dependency=DependencyDenial(chunk_id=chunk_id, prerequisite_chunk_id="ch_0"))
+
+
+_INCOMPATIBLE_FIELDS = {"reason": ClaimDenialReason.CAPABILITY, "detail": IncompatibleDenial("", "").detail}
 
 
 def _incompatible(chunk_id: str = "ch_1") -> RouteClaimOutcome:
@@ -187,7 +191,7 @@ def _records(logs: Sequence[MutableMapping[str, Any]], event: str) -> list[Mutab
             True,
             "ch_2",
             True,
-            ("route claim denied — runner incompatible with chunk", {}),
+            ("route claim denied — runner incompatible with chunk", _INCOMPATIBLE_FIELDS),
             id="incompatible",
         ),
     ],
@@ -310,7 +314,9 @@ def test_reconcile_holds_a_binding_without_claiming(view: ChunkState, requeued: 
             id="not-claimable",
         ),
         pytest.param(_dependency, "interrupted claim not won — releasing binding", {}, id="dependency"),
-        pytest.param(_incompatible, "interrupted claim not won — releasing binding", {}, id="incompatible"),
+        pytest.param(
+            _incompatible, "interrupted claim not won — releasing binding", _INCOMPATIBLE_FIELDS, id="incompatible"
+        ),
     ],
 )
 def test_reconcile_releases_a_reclaim_that_is_not_won(  # type: ignore[no-untyped-def]

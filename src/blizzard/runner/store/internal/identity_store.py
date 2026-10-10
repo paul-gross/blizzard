@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.hub.identity import IWriteRunnerIdentityRepository, RunnerIdentity
@@ -42,17 +42,21 @@ class RunnerIdentityStore:
         )
 
     def record_runner_identity(self, identity: RunnerIdentity) -> None:
+        values = {
+            "runner_name": identity.runner_name,
+            "registered_at": identity.registered_at,
+            "tenant_id": identity.tenant_id,
+            "tenant_name": identity.tenant_name,
+        }
         with self._store.begin() as conn:
-            conn.execute(delete(runner_identity))
-            conn.execute(
-                runner_identity.insert().values(
-                    runner_id=identity.runner_id,
-                    runner_name=identity.runner_name,
-                    registered_at=identity.registered_at,
-                    tenant_id=identity.tenant_id,
-                    tenant_name=identity.tenant_name,
-                )
-            )
+            # A row naming the same runner is updated in place, so the served-projects answer's marker on it
+            # stays; any other row goes, and the new row holds no answer.
+            conn.execute(delete(runner_identity).where(runner_identity.c.runner_id != identity.runner_id))
+            kept = conn.execute(
+                update(runner_identity).where(runner_identity.c.runner_id == identity.runner_id).values(**values)
+            ).rowcount
+            if not kept:
+                conn.execute(runner_identity.insert().values(runner_id=identity.runner_id, **values))
         _log.debug(
             "runner identity recorded",
             runner_id=identity.runner_id,

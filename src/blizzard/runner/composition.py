@@ -70,6 +70,7 @@ from blizzard.runner.store.internal.lease_trace_facts_store import LeaseTraceFac
 from blizzard.runner.store.internal.outbound_store import OutboundStore
 from blizzard.runner.store.internal.overload_store import OverloadStore
 from blizzard.runner.store.internal.pause_store import PauseStore
+from blizzard.runner.store.internal.projects_answer_store import ServedProjectsStore
 from blizzard.runner.store.internal.requeue_store import RequeueStore
 from blizzard.runner.store.internal.selftest_result_store import SelfTestResultStore
 from blizzard.runner.store.internal.takeover_store import TakeoverStore
@@ -400,6 +401,7 @@ def _build_stores(connections: RunnerStoreConnections) -> RunnerStores:
         asks=AskStore(connections),
         pause=PauseStore(connections),
         identity=RunnerIdentityStore(connections),
+        served_projects=ServedProjectsStore(connections),
         takeover=TakeoverStore(connections),
         requeue=RequeueStore(connections),
         escalations=EscalationStore(connections),

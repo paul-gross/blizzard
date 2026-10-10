@@ -72,6 +72,7 @@ from blizzard.runner.hub.client import (
 )
 from blizzard.runner.hub.held_token import HubTokenHolder
 from blizzard.runner.hub.identity import IdentityState, IdentityVerdictHolder, RunnerIdentity, RunnerIdentityHolder
+from blizzard.runner.hub.served_projects import ServedProject
 from blizzard.runner.hub.verified import VerifiedHubClient
 from blizzard.runner.leases.internal.worker_stdout_files import WorkerStdoutFiles
 from blizzard.runner.lifecycle.env_release import EnvironmentRelease
@@ -105,6 +106,7 @@ from blizzard.runner.store.internal.lease_trace_facts_store import LeaseTraceFac
 from blizzard.runner.store.internal.outbound_store import OutboundStore
 from blizzard.runner.store.internal.overload_store import OverloadStore
 from blizzard.runner.store.internal.pause_store import PauseStore
+from blizzard.runner.store.internal.projects_answer_store import ServedProjectsStore
 from blizzard.runner.store.internal.requeue_store import RequeueStore
 from blizzard.runner.store.internal.selftest_result_store import SelfTestResultStore
 from blizzard.runner.store.internal.takeover_store import TakeoverStore
@@ -149,6 +151,7 @@ class SqlAlchemyRunnerStore(
     AskStore,
     PauseStore,
     RunnerIdentityStore,
+    ServedProjectsStore,
     TakeoverStore,
     RequeueStore,
     EscalationStore,
@@ -183,6 +186,7 @@ class SqlAlchemyRunnerStore(
         AskStore.__init__(self, store)
         PauseStore.__init__(self, store)
         RunnerIdentityStore.__init__(self, store)
+        ServedProjectsStore.__init__(self, store)
         TakeoverStore.__init__(self, store)
         RequeueStore.__init__(self, store)
         EscalationStore.__init__(self, store)
@@ -284,6 +288,7 @@ def make_stores(store: IWriteRunnerStore) -> RunnerStores:
         asks=store,
         pause=store,
         identity=store,
+        served_projects=store,
         takeover=store,
         requeue=store,
         escalations=store,
@@ -418,6 +423,8 @@ class FakeHub:
         # The tenant registration and the identity read answer with; ``None`` plays a hub that predates tenants.
         self.tenant_id: str | None = None
         self.tenant_name: str | None = None
+        # The served projects every registration answers with; `None` is a hub that predates projects.
+        self.served_projects: tuple[ServedProject, ...] | None = None
         self.queue: list[QueueEntry] = []
         # A per-call scripted sequence: when set, each `peek_queue`
         # call pops its own response instead of reading the static `queue` above.
@@ -462,6 +469,7 @@ class FakeHub:
         # subscriptions per register call
         self.registered_subscriptions: list[tuple[SubscriptionDeclaration, ...]] = []
         self.registered_gates: list[tuple[str, ...]] = []
+        self.registered_projects: list[tuple[str, ...] | None] = []
         self.paused = False  # the hub-side pause brake this fake reports back
         self.down = False
         # chunk ids `get_envelope` 404s for; `chunk_statuses` never raises for
@@ -636,6 +644,7 @@ class FakeHub:
         capabilities: tuple[HarnessCapability, ...] = (),
         subscriptions: tuple[SubscriptionDeclaration, ...] = (),
         gates: tuple[str, ...] = (),
+        projects: tuple[str, ...] | None = None,
     ) -> RegistrationReply:
         if self.down:
             raise HubClientError("fake hub is down")
@@ -647,12 +656,14 @@ class FakeHub:
         self.registered_capabilities.append(capabilities)
         self.registered_subscriptions.append(subscriptions)
         self.registered_gates.append(gates)
+        self.registered_projects.append(projects)
         return RegistrationReply(
             runner_id=runner_id,
             runner_name=name,
             first_registration=len(self.registered) == 1,
             tenant_id=self.tenant_id,
             tenant_name=self.tenant_name,
+            projects=self.served_projects,
         )
 
     def identity(self) -> TokenIdentity | TokenRefusal:

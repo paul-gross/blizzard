@@ -21,6 +21,11 @@ from blizzard.runner.environments.repository import (
 from blizzard.runner.harness.registry import IHarnessLifecycleRegistry, UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.hub.identity import ICurrentIdentityVerdict, ICurrentRunnerIdentity, IdentityVerdict
 from blizzard.runner.hub.outbound_buffer import IReadOutboundRepository, OutboundFactEntry
+from blizzard.runner.hub.served_projects import (
+    IReadServedProjectsRepository,
+    ServedProjectStatus,
+    served_projects_status,
+)
 from blizzard.runner.leases.asks import IReadAskRepository, OpenAsk
 from blizzard.runner.leases.escalations import IReadEscalationRepository
 from blizzard.runner.leases.record import IReadLeaseRecordRepository
@@ -138,6 +143,9 @@ class RunnerStatusSummary:
     tenant_id: str | None = None
     #: That tenant's name, as of the same answer.
     tenant_name: str | None = None
+    #: The projects the runner serves, as its hub last answered, then each configured entry it has not
+    #: answered yet; ``None`` when neither the configuration nor an answer names any.
+    served_projects: tuple[ServedProjectStatus, ...] | None = None
 
 
 @domain_model
@@ -241,6 +249,8 @@ class RunnerStatusService:
         escalations: IReadEscalationRepository,
         identity: ICurrentRunnerIdentity,
         identity_verdict: ICurrentIdentityVerdict | None = None,
+        served_projects: IReadServedProjectsRepository | None = None,
+        projects: tuple[str, ...] | None = None,
         runner_name: str,
         workspace_id: str,
         max_agents: int,
@@ -264,6 +274,8 @@ class RunnerStatusService:
         self._harnesses = harnesses
         self._identity = identity
         self._identity_verdict = identity_verdict
+        self._served_projects = served_projects
+        self._projects = projects
         self._runner_name = runner_name
         self._workspace_id = workspace_id
         self._max_agents = max_agents
@@ -296,6 +308,10 @@ class RunnerStatusService:
             identity=self._identity_verdict.verdict() if self._identity_verdict is not None else None,
             tenant_id=identity.tenant_id if identity is not None else None,
             tenant_name=identity.tenant_name if identity is not None else None,
+            served_projects=served_projects_status(
+                self._projects,
+                self._served_projects.served_projects_answer() if self._served_projects is not None else None,
+            ),
         )
 
     def environments(self) -> list[EnvironmentSlot]:

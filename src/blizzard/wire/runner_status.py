@@ -59,6 +59,20 @@ class IdentityVerdictView(BaseModel):
     reset_command: str
 
 
+class ServedProjectStatusView(BaseModel):
+    """One project the runner serves, as its hub last answered: the ``entry`` as configured — a project id
+    or slug — and the project it resolved to. ``resolved`` is false for an entry no project answers to, and
+    ``answered`` false for a configured entry the hub has not answered yet; either way ``project_id``,
+    ``slug`` and ``name`` are ``None``."""
+
+    entry: str
+    project_id: str | None = None
+    slug: str | None = None
+    name: str | None = None
+    resolved: bool
+    answered: bool = True
+
+
 class RunnerStatusView(BaseModel):
     """``GET /api/runner`` — identity, pause states, capacities, hub connectivity, last tick."""
 
@@ -79,6 +93,9 @@ class RunnerStatusView(BaseModel):
     gates: list[str] = []
     #: The identity verdict; ``None`` from a runner with no loop checking it.
     identity: IdentityVerdictView | None = None
+    #: The projects the runner serves, read from its store with no hub call; ``None`` when neither its
+    #: configuration nor its hub has named any.
+    served_projects: list[ServedProjectStatusView] | None = None
 
 
 class EnvironmentView(BaseModel):

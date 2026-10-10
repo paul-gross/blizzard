@@ -123,19 +123,36 @@ class InitCollaborators:
     metavar="TENANT_ID",
     help="Add the runner in this tenant, by id; needed only when you may enter several.",
 )
+@click.option(
+    "--project",
+    "projects",
+    multiple=True,
+    metavar="PROJECT",
+    help="A project the runner serves, by id or slug; repeat for several. Default: `default` in a fresh config.",
+)
 @click.pass_context
-def init(ctx: click.Context, directory: str, hub_url: str | None, allow_readd: bool, tenant_id: str | None) -> None:
+def init(
+    ctx: click.Context,
+    directory: str,
+    hub_url: str | None,
+    allow_readd: bool,
+    tenant_id: str | None,
+    projects: tuple[str, ...],
+) -> None:
     """Scaffold config + data dir + a migrated store under DIRECTORY, then join the runner to its
     hub. Idempotent.
 
     A runner holding no token is added at the hub — under your `blizzard hub login` session when you
     hold one, in the tenant --tenant names or else the only one you may enter — and its token
     written to DIRECTORY/.env. A held token whose runner serves another tenant than --tenant names stops: a
-    runner never moves between tenants. DIRECTORY defaults to $BZ_RUNNER_DIR, then the cwd."""
+    runner never moves between tenants. A fresh config serves the projects --project names, else
+    `default`; the runner is added serving them, or, with none named, the tenant's only project.
+    DIRECTORY defaults to $BZ_RUNNER_DIR, then the cwd."""
+    named = projects or None
     run_init(
         Path(directory),
         "runner",
-        init_environment=functools.partial(init_environment, hub_url=hub_url),
+        init_environment=functools.partial(init_environment, hub_url=hub_url, projects=named),
         migration_runner=migration_runner,
         config_error=ConfigError,
     )
@@ -148,43 +165,47 @@ def init(ctx: click.Context, directory: str, hub_url: str | None, allow_readd: b
             identity,
             admin,
             _RuntimeStore(config, OperatorTrace.source(ctx)),
-            _Rerun(config.root, tenant_id=tenant_id, allow_readd=allow_readd),
+            _Rerun(config.root, tenant_id=tenant_id, allow_readd=allow_readd, projects=named),
         )
 
 
 @dto
 @dataclass(frozen=True)
 class _Rerun:
-    """How this init was asked to join — the tenant it names and whether a re-add is allowed — and
-    the init command it suggests re-running, which carries the same tenant."""
+    """How this init was asked to join — the tenant and projects it names and whether a re-add is
+    allowed — and the init command it suggests re-running, which carries the same tenant and projects."""
 
     root: Path
     tenant_id: str | None
     allow_readd: bool
+    projects: tuple[str, ...] | None = None
 
     def again(self) -> str:
-        """This init's own command, its tenant and flags kept."""
-        return _init_command(self.root, tenant_id=self.tenant_id, allow_readd=self.allow_readd)
+        """This init's own command, its tenant, projects and flags kept."""
+        return _init_command(self.root, tenant_id=self.tenant_id, allow_readd=self.allow_readd, projects=self.projects)
 
     def readding(self) -> str:
-        """This init's command with a re-add allowed, its tenant kept."""
-        return _init_command(self.root, tenant_id=self.tenant_id, allow_readd=True)
+        """This init's command with a re-add allowed, its tenant and projects kept."""
+        return _init_command(self.root, tenant_id=self.tenant_id, allow_readd=True, projects=self.projects)
 
     def naming_a_tenant(self) -> str:
         """This init's command with a placeholder for the tenant id the operator picks."""
-        return _init_command(self.root, tenant_id="<tenant_id>", allow_readd=self.allow_readd)
+        return _init_command(self.root, tenant_id="<tenant_id>", allow_readd=self.allow_readd, projects=self.projects)
 
     def keeping_the_runner(self) -> str:
         """This init's command naming no tenant and allowing no re-add — the one that keeps the held runner."""
-        return _init_command(self.root, tenant_id=None, allow_readd=False)
+        return _init_command(self.root, tenant_id=None, allow_readd=False, projects=self.projects)
 
 
-def _init_command(root: Path, *, tenant_id: str | None, allow_readd: bool) -> str:
-    """``blizzard runner init`` for ``root``, naming ``tenant_id`` when given and passing
-    ``--allow-readd`` when ``allow_readd``."""
+def _init_command(
+    root: Path, *, tenant_id: str | None, allow_readd: bool, projects: tuple[str, ...] | None = None
+) -> str:
+    """``blizzard runner init`` for ``root``, naming ``tenant_id`` when given, each of ``projects``,
+    and passing ``--allow-readd`` when ``allow_readd``."""
     return " ".join(
         [f"blizzard runner init {root}"]
         + ([f"--tenant {tenant_id}"] if tenant_id else [])
+        + [f"--project {project}" for project in projects or ()]
         + (["--allow-readd"] if allow_readd else [])
     )
 
@@ -227,7 +248,7 @@ def _join_hub(
     hub = config.hub_url
     try:
         joined = RunnerBootstrap(identity, admin, token_file, store).join(
-            config.name, held=held, allow_readd=rerun.allow_readd, tenant_id=rerun.tenant_id
+            config.name, held=held, allow_readd=rerun.allow_readd, tenant_id=rerun.tenant_id, projects=rerun.projects
         )
     except BootstrapStopped as exc:
         from_env = held is not None and held.from_process_env
@@ -369,6 +390,11 @@ def _add_refused(exc: RunnerAddRefused, hub: str, rerun: _Rerun) -> str:
             return f"the hub at {hub} predates `hub runner add`; upgrade it, then re-run `{rerun.again()}`"
         case RunnerAddRefusalReason.TENANT_REQUIRED | RunnerAddRefusalReason.NO_SUCH_TENANT:
             return f"the hub at {hub} could not settle the tenant to add this runner in: {exc.detail}"
+        case RunnerAddRefusalReason.NO_SUCH_PROJECT:
+            return (
+                f"the hub at {hub} holds no project answering to every --project named, so nothing was added: "
+                f"{exc.detail}"
+            )
 
 
 @click.command("migrate")

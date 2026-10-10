@@ -88,6 +88,7 @@ class VerifiedHubClient:
         capabilities: tuple[HarnessCapability, ...] = (),
         subscriptions: tuple[SubscriptionDeclaration, ...] = (),
         gates: tuple[str, ...] = (),
+        projects: tuple[str, ...] | None = None,
     ) -> RegistrationReply:
         hub = self._inner if self._verdict.registration_checks() else self._verified()
         return hub.register_runner(
@@ -99,6 +100,7 @@ class VerifiedHubClient:
             capabilities=capabilities,
             subscriptions=subscriptions,
             gates=gates,
+            projects=projects,
         )
 
     def fetch_runner_paused(self, runner_id: str) -> bool:

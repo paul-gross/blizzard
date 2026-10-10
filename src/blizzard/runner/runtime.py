@@ -110,6 +110,9 @@ class Runtime:
     root: Path
     #: The hub a fresh config names, over ``BZ_HUB_URL``; an existing config naming another is refused.
     hub_url: str | None = None
+    #: The projects a fresh config serves, over the scaffold's ``default``; an existing config naming
+    #: others is refused.
+    projects: tuple[str, ...] | None = None
 
     def init(self) -> RunnerConfig:
         """Scaffold config + data dir + a migrated store. Idempotent.
@@ -124,9 +127,18 @@ class Runtime:
             # An existing file is authoritative and the environment is discarded, so `scaffold` — which
             # reads the environment and rejects a malformed value — must not run on that path.
             scaffolding = not (root / CONFIG_FILENAME).exists()
-            config = RunnerConfig.scaffold(root, hub_url=self.hub_url) if scaffolding else RunnerConfig.load(root)
+            config = (
+                RunnerConfig.scaffold(root, hub_url=self.hub_url, projects=self.projects)
+                if scaffolding
+                else RunnerConfig.load(root)
+            )
             if self.hub_url is not None and config.hub_url.rstrip("/") != self.hub_url.rstrip("/"):
                 raise ConfigError(f"{config.config_path} names the hub {config.hub_url}, not {self.hub_url}")
+            if self.projects is not None and config.projects != self.projects:
+                held = "no `projects` key" if config.projects is None else f"projects = {list(config.projects)}"
+                raise ConfigError(
+                    f"{config.config_path} holds {held}, not the projects {list(self.projects)}; edit its `projects`"
+                )
             config.data_dir.mkdir(parents=True, exist_ok=True)
             if scaffolding:
                 config.config_path.write_text(config.to_toml())
@@ -173,8 +185,10 @@ def migration_runner(config: RunnerConfig) -> MigrationRunner:
     return Migrations(config).runner
 
 
-def init_environment(root: Path, *, hub_url: str | None = None) -> RunnerConfig:
-    return Runtime(root, hub_url=hub_url).init()
+def init_environment(
+    root: Path, *, hub_url: str | None = None, projects: tuple[str, ...] | None = None
+) -> RunnerConfig:
+    return Runtime(root, hub_url=hub_url, projects=projects).init()
 
 
 def migrate(root: Path, *, down: str | None = None) -> None:

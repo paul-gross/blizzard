@@ -179,10 +179,18 @@ class RunnerBootstrap:
         self._store = store
 
     def join(
-        self, name: str, *, held: HeldToken | None, allow_readd: bool, tenant_id: str | None = None
+        self,
+        name: str,
+        *,
+        held: HeldToken | None,
+        allow_readd: bool,
+        tenant_id: str | None = None,
+        projects: tuple[str, ...] | None = None,
     ) -> JoinedRunner:
         """Keep the runner ``held`` names, or add one under ``name`` — in the tenant ``tenant_id``
-        names, else the one the hub resolves for the operator — and write its token. An unreachable
+        names, else the one the hub resolves for the operator, serving the projects ``projects``
+        names, else the tenant's only one — and write its token. A kept runner keeps the
+        declaration the hub holds for it. An unreachable
         hub, a server error, or a refused add raises
         :class:`~blizzard.runner.hub.client.HubClientError` with nothing added."""
         if held is not None:
@@ -201,18 +209,18 @@ class RunnerBootstrap:
             if not allow_readd:
                 raise BootstrapStopped(BootstrapStop.STORE_NAMES_A_RUNNER, runner_id=stored)
             self._store.set_aside()
-        issued = self._add(name, tenant_id)
+        issued = self._add(name, tenant_id, projects)
         try:
             self._tokens.write(issued.token)
         except OSError as exc:
             raise TokenNotWritten(issued.runner_id, exc) from exc
         return JoinedRunner(runner_id=issued.runner_id, runner_name=issued.runner_name, added=True, tenant_id=tenant_id)
 
-    def _add(self, name: str, tenant_id: str | None) -> IssuedIdentity:
+    def _add(self, name: str, tenant_id: str | None, projects: tuple[str, ...] | None) -> IssuedIdentity:
         """The add under the operator's credential; a refusal that leaves the tenant unsettled stops,
         listing the tenants the operator may enter."""
         try:
-            return self._admin.add_runner(name, tenant_id=tenant_id)
+            return self._admin.add_runner(name, tenant_id=tenant_id, projects=projects)
         except RunnerAddRefused as exc:
             stop = _TENANT_STOPS.get(exc.reason)
             if stop is None:

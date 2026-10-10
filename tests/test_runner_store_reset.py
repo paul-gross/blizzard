@@ -45,9 +45,19 @@ def _identity_ids(database: Path) -> list[str]:
 def _seed_identity(database: Path, runner_id: str) -> None:
     with closing(sqlite3.connect(database)) as conn, conn:
         conn.execute(
-            "INSERT INTO runner_identity (runner_id, runner_name, registered_at) VALUES (?, 'r', ?)",
-            (runner_id, _NOW.isoformat()),
+            "INSERT INTO runner_identity (runner_id, runner_name, registered_at, projects_answered_at) "
+            "VALUES (?, 'r', ?, ?)",
+            (runner_id, _NOW.isoformat(), _NOW.isoformat()),
         )
+        conn.execute(
+            "INSERT INTO hub_served_projects (position, entry, answered_at) VALUES (0, 'old-slug', ?)",
+            (_NOW.isoformat(),),
+        )
+
+
+def _served_entries(database: Path) -> list[str]:
+    with closing(sqlite3.connect(database)) as conn:
+        return [row[0] for row in conn.execute("SELECT entry FROM hub_served_projects")]
 
 
 @pytest.mark.unit
@@ -79,6 +89,8 @@ def test_reset_moves_the_store_aside_keeping_its_rows_and_migrates_a_fresh_one(t
     assert [bool(re.fullmatch(r"runner\.db\.\d{8}T\d{6}Z", p.name)) for p in aside] == [True]
     assert _identity_ids(aside[0]) == ["rn_old"]
     assert _identity_ids(database) == []
+    assert _served_entries(aside[0]) == ["old-slug"]
+    assert _served_entries(database) == []
     assert migration_runner(config).current_revision() == migration_runner(config).script_head()
 
 

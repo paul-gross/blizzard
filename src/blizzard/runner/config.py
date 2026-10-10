@@ -57,6 +57,8 @@ ENV_WORKSPACE_ROOT = "BZ_WORKSPACE_ROOT"
 ENV_WORKSPACE_ENVS = "BZ_WORKSPACE_ENVS"  # comma-separated env-id pool
 ENV_BASE_BRANCH = "BZ_BASE_BRANCH"
 ENV_GATES = "BZ_RUNNER_GATES"  # comma-separated node names this runner gates
+#: What a freshly scaffolded runner serves: the project every tenant holds from its creation.
+SCAFFOLD_PROJECTS: tuple[str, ...] = ("default",)
 ENV_WORKSPACE_PROMPT = "BZ_WORKSPACE_PROMPT"  # the runner-owned workspace prompt, inline
 ENV_WORKSPACE_PROMPT_PACKAGE = "BZ_WORKSPACE_PROMPT_PACKAGE"  # a packaged workspace-prompt sample, by name (#344)
 ENV_RUNNER_PROMPT = "BZ_RUNNER_PROMPT"  # the blizzard-preamble override, inline
@@ -212,6 +214,29 @@ def _expanded_path_prepend(raw: tuple[str, ...]) -> tuple[str, ...]:
             raise ConfigError(f"[worker] path_prepend entries must be absolute (~ allowed), got {entry!r}")
         expanded.append(str(path))
     return tuple(expanded)
+
+
+def _projects(raw: dict[str, object], path: Path) -> tuple[str, ...] | None:
+    """The configured ``projects``: ``None`` when the key is absent — never an empty tuple, which is
+    an explicit ``projects = []`` — else each entry, a project id or slug."""
+    if "projects" not in raw:
+        return None
+    value = raw["projects"]
+    if not isinstance(value, list) or not all(isinstance(entry, str) and entry.strip() for entry in value):
+        raise ConfigError(f"{path}: projects must be a list of project ids or slugs, got {value!r}")
+    return tuple(str(entry).strip() for entry in value)
+
+
+def _projects_toml(projects: tuple[str, ...] | None) -> str:
+    """The ``projects`` key and its comment — written only when set, so a config naming none still names
+    none after a round trip, unchanged."""
+    if projects is None:
+        return ""
+    return (
+        "\n# The projects this runner serves, by id or slug. Without this key the runner declares\n"
+        "# none and its hub keeps the projects it already holds for it; [] serves none.\n"
+        f"projects = [{', '.join(json.dumps(p) for p in projects)}]\n"
+    )
 
 
 def _cap_line(key: str, value: int | None, default: int) -> str:
@@ -504,6 +529,10 @@ class RunnerConfig:
     base_branch: str = DEFAULT_BASE_BRANCH
     #: Node NAMES this runner imposes a human gate on; reloaded every tick.
     gates: tuple[str, ...] = ()
+    #: The projects this runner serves, by id or slug, sent at every registration. ``None`` — no
+    #: ``projects`` key — declares nothing, so the hub keeps the declaration it holds; ``()`` — an
+    #: explicit ``projects = []`` — serves none.
+    projects: tuple[str, ...] | None = None
     #: The workspace prompt prepended to a worker spawn — two source knobs,
     #: one effective value (:meth:`resolved_workspace_prompt`); the file wins when set.
     workspace_prompt: str = ""
@@ -777,12 +806,15 @@ class RunnerConfig:
         return bool(os.environ.get(self.token_env))
 
     @classmethod
-    def scaffold(cls, root: Path, *, hub_url: str | None = None) -> RunnerConfig:
+    def scaffold(
+        cls, root: Path, *, hub_url: str | None = None, projects: tuple[str, ...] | None = None
+    ) -> RunnerConfig:
         """The default config for a fresh runtime root (used by ``init``).
 
         The loop seams are read from the injected environment when present, so ``init``
         produces a runnable config; each falls back to its dataclass default. ``hub_url``,
-        when given, wins over ``BZ_HUB_URL``."""
+        when given, wins over ``BZ_HUB_URL``. A fresh runner serves ``projects``, else the
+        ``default`` project every tenant holds."""
         envs = os.environ.get(ENV_WORKSPACE_ENVS)
         gates = os.environ.get(ENV_GATES)
         passthrough = os.environ.get(ENV_ENV_PASSTHROUGH, "")
@@ -800,6 +832,7 @@ class RunnerConfig:
             workspace_envs=tuple(e.strip() for e in envs.split(",") if e.strip()) if envs else DEFAULT_ENV_POOL,
             base_branch=os.environ.get(ENV_BASE_BRANCH, DEFAULT_BASE_BRANCH),
             gates=tuple(g.strip() for g in gates.split(",") if g.strip()) if gates else (),
+            projects=projects if projects is not None else SCAFFOLD_PROJECTS,
             harness_sections=HarnessSections.scaffold(root, os.environ),
             # Empty on a fresh scaffold; seeded from the environment so `init` can inject
             # a default without hand-editing.
@@ -869,7 +902,8 @@ class RunnerConfig:
             f'base_branch = "{self.base_branch}"\n'
             "\n# Human gates this runner imposes by node name; empty = none.\n"
             f"gates = [{gates}]\n"
-            "\n# The runner-owned workspace prompt prepended to a worker spawn.\n"
+            + _projects_toml(self.projects)
+            + "\n# The runner-owned workspace prompt prepended to a worker spawn.\n"
             "# `workspace_prompt` is inline text; `workspace_prompt_file` (a path) wins when set.\n"
             "# `workspace_prompt_package` names a sample shipped in the wheel and may not be\n"
             "# combined with either (`blizzard runner prompt list` names them).\n"
@@ -1071,6 +1105,7 @@ class RunnerConfig:
             max_agents=int(raw.get("max_agents", DEFAULT_MAX_AGENTS)),
             base_branch=str(raw.get("base_branch", DEFAULT_BASE_BRANCH)),
             gates=tuple(str(g) for g in raw.get("gates", ())),
+            projects=_projects(raw, path),
             workspace_prompt=str(raw.get("workspace_prompt", "")),
             workspace_prompt_file=str(raw.get("workspace_prompt_file", "")),
             workspace_prompt_package=str(raw.get("workspace_prompt_package", "")),

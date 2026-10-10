@@ -1,12 +1,15 @@
-"""The registration step — register at the hub, keep the identity its reply names, mirror the hub's
-pause brake.
+"""The registration step — register at the hub, keep the identity and the served projects its reply
+names, mirror the hub's pause brake.
 
 The hub resolves who this runner is from its bearer token; the runner only declares its configured
 name. The store's identity row keeps the id of the runner the store belongs to: a registration adopts
 the reply's id only into a store that names none, and otherwise refreshes the name and the tenant
 the reply names (a reply naming none, from a hub that predates tenants, keeps the row's). A reply
 naming another runner — a token rotated since the tick's identity check, or a hub with no identity
-read — turns the verdict to a mismatch and mirrors no brake. A failed registration leaves the row,
+read — turns the verdict to a mismatch and mirrors no brake. The registration declares the configured
+projects (``None`` when the configuration names none, so the hub keeps its declaration), and a reply
+answering them replaces the stored answer whole once the identity row is recorded; a reply answering
+none, from a hub that predates projects, keeps it. A failed registration leaves the row, the answer,
 the holder and the mirrored brake as they stood."""
 
 from __future__ import annotations
@@ -29,6 +32,7 @@ from blizzard.runner.hub.identity import (
     RunnerIdentityHolder,
     answered_tenant,
 )
+from blizzard.runner.hub.served_projects import IWriteServedProjectsRepository
 from blizzard.runner.lifecycle.identity_check import log_transition
 from blizzard.runner.throttle.pause import IWritePauseRepository
 
@@ -57,6 +61,8 @@ class RegistrationStores(Protocol):
     @property
     def identity(self) -> IWriteRunnerIdentityRepository: ...
     @property
+    def served_projects(self) -> IWriteServedProjectsRepository: ...
+    @property
     def pause(self) -> IWritePauseRepository: ...
 
 
@@ -73,6 +79,8 @@ class RegistrationConfig(Protocol):
     def redirect_uris(self) -> tuple[str, ...]: ...
     @property
     def gates(self) -> tuple[str, ...]: ...
+    @property
+    def projects(self) -> tuple[str, ...] | None: ...
 
 
 class RegistrationContext(Protocol):
@@ -118,6 +126,7 @@ class Registration:
                     SubscriptionDeclaration(slug=s.slug, name=s.name, provider=s.provider) for s in ctx.subscriptions
                 ),
                 gates=ctx.config.gates,
+                projects=ctx.config.projects,
             )
         except HubClientError:
             return  # hub unreachable — the last identity and the last-mirrored brake hold
@@ -143,6 +152,8 @@ class Registration:
         # The row first, then the holder: a crash between them leaves the holder to be rebuilt from the row.
         ctx.stores.identity.record_runner_identity(identity)
         ctx.identity.hold(identity)
+        if reply.projects is not None:
+            ctx.stores.served_projects.record_served_projects(reply.projects, at=now)
         if stored is None or (stored.runner_name, stored.tenant_name) != (identity.runner_name, identity.tenant_name):
             _log.info(
                 "runner identity recorded",

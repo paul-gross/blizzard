@@ -484,6 +484,8 @@ def _wire_hosted_app(
         escalations=read_stores.escalations,
         identity=graph.identity,
         identity_verdict=graph.identity_verdict,
+        served_projects=read_stores.served_projects,
+        projects=config.projects,
         runner_name=config.name,
         workspace_id=config.workspace_id,
         max_agents=config.max_agents,

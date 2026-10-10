@@ -159,6 +159,7 @@ class LoopWiring:
             redirect_uris=config.redirect_uris,
             local_api_url=config.local_api_url,
             gates=config.gates,
+            projects=config.projects,
             workspace_root=provider.spawn_root(),
             workspace_prompt=self.workspace_prompt,
             runner_prompt=self.runner_prompt,

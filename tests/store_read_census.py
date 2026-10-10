@@ -155,6 +155,7 @@ from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.harness.workspace_prompts import IReadWorkspacePromptRepository
 from blizzard.runner.hub.identity import IReadRunnerIdentityRepository, RunnerIdentity
 from blizzard.runner.hub.outbound_buffer import IReadOutboundRepository
+from blizzard.runner.hub.served_projects import IReadServedProjectsRepository, ServedProject
 from blizzard.runner.leases.asks import IReadAskRepository
 from blizzard.runner.leases.elicitation import IReadElicitationRepository
 from blizzard.runner.leases.escalations import IReadEscalationRepository
@@ -594,6 +595,7 @@ def build_runner_world(engine: Engine) -> RunnerWorld:
         paused=False, at=_t(82), by="operator", report_kind="runner.locally_resumed", report_payload="{}"
     )
     stores.identity.record_runner_identity(RunnerIdentity(RUNNER_ID, "runner-local", _t(82)))
+    stores.served_projects.record_served_projects((ServedProject("default", "prj_1", "default", "Default"),), at=_t(82))
     stores.resume_intent.record_resume_intent(lease_id=lease_8, marked_at=_t(83))
     workspace_id = "ws_1"
     stores.workspace_prompt.set_workspace_prompt(workspace_id, prompt="hello", at=_t(84))
@@ -766,6 +768,9 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     (IReadPauseRepository, "local_paused"): lambda w: w.read.pause.local_paused(),
     (IReadPauseRepository, "local_pause_reason"): lambda w: w.read.pause.local_pause_reason(),
     (IReadRunnerIdentityRepository, "runner_identity"): lambda w: w.read.identity.runner_identity(),
+    (IReadServedProjectsRepository, "served_projects_answer"): lambda w: (
+        w.read.served_projects.served_projects_answer()
+    ),
     (IReadPauseRepository, "last_daemon_liveness"): lambda w: w.read.pause.last_daemon_liveness(),
     (IReadPauseRepository, "pause_parked_lease_ids"): lambda w: w.read.pause.pause_parked_lease_ids(),
     (IReadPauseRepository, "open_pause_parks"): lambda w: w.read.pause.open_pause_parks(),

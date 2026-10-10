@@ -26,6 +26,7 @@ from blizzard.runner.cli.daemon import RunnerDaemon
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.hub.identity import IdentityState, RunnerIdentity
+from blizzard.runner.hub.served_projects import ServedProject
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.listeners import Listeners, Uds
 from blizzard.runner.subscriptions.credential_renewer import (
@@ -271,6 +272,41 @@ def test_status_headline_names_the_tenant_beside_the_runner(tmp_path: Path, monk
 
     assert result.exit_code == 0, result.output
     assert result.output.splitlines()[0].startswith("runner r-one (rn_1)  tenant=bravo (tn_bravo)  workspace=")
+
+
+@pytest.mark.component
+def test_status_names_the_served_projects_unresolved_and_not_yet_answered_with_the_hub_unreachable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _init_runner(tmp_path)
+    config_path = root / "blizzard-runner.toml"
+    config_path.write_text(
+        config_path.read_text().replace(
+            'projects = ["default"]', 'projects = ["blizzard", "old-slug", "blizzard-context"]'
+        )
+    )
+    _no_hub(monkeypatch)
+    store = _store(root)
+    store.record_runner_identity(RunnerIdentity(runner_id="rn_1", runner_name="r-one", registered_at=_NOW))
+    store.record_served_projects(
+        (ServedProject("blizzard", "prj_1", "blizzard", "Blizzard"), ServedProject("old-slug")), at=_NOW
+    )
+    with _serve_local_api(root):
+        result = CliRunner().invoke(runner_group, ["status", "--dir", str(root)])
+
+    assert result.exit_code == 0, result.output
+    assert '  serves: blizzard; unresolved: "old-slug"; not yet answered: "blizzard-context"' in result.output
+
+
+@pytest.mark.component
+def test_status_marks_a_fresh_runners_default_not_yet_answered(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = _init_runner(tmp_path)
+    _no_hub(monkeypatch)
+    with _serve_local_api(root):
+        result = CliRunner().invoke(runner_group, ["status", "--dir", str(root)])
+
+    assert result.exit_code == 0, result.output
+    assert '  serves: not yet answered: "default"' in result.output
 
 
 @pytest.mark.component

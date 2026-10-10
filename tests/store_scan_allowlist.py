@@ -207,6 +207,12 @@ RUNNER_ALLOWED_SCANS: list[Allowance] = [
     # --- singletons ---------------------------------------------------------------------
     TableWideAllowance("hub_control", 1, _RUNNER_SINGLETON_REASON),
     TableWideAllowance("runner_identity", 1, _RUNNER_SINGLETON_REASON),
+    TableWideAllowance(
+        "hub_served_projects",
+        20,
+        "schema.py's comment beside `hub_served_projects`: the hub's latest answer, replaced whole — one row "
+        "per project the runner's configuration declares, a handful at most; every read takes the whole answer.",
+    ),
     # --- the transcript lane's own pending-delivery buffer ------------------------------
     TableWideAllowance(
         "transcript_outbound_buffer",
