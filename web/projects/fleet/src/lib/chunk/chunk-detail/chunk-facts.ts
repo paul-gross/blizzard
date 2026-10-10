@@ -8,6 +8,7 @@ import { KitButton } from '../../kit/kit-button';
 import { KitTextInput } from '../../kit/kit-text-input';
 import { KitFactList, type KitFact } from '../../kit/kit-fact-list';
 import { formatUtcYmd } from '../../core/when';
+import { LensLink } from '../../core/lens-link';
 
 /** Emitted when the operator repins a not-ready chunk's graph from the dock. */
 export interface EditGraphEvent {
@@ -31,7 +32,7 @@ export interface EditGraphEvent {
 @Component({
   selector: 'fleet-chunk-detail-facts',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitButton, KitFactList, KitTextInput, RouterLink],
+  imports: [KitButton, KitFactList, KitTextInput, RouterLink, LensLink],
   templateUrl: './chunk-facts.html',
   styleUrl: './chunk-facts.css',
 })

@@ -5,6 +5,7 @@ import type { WorkItemAuthorView, WorkItemEntry, WorkItemPriority } from '../../
 import { KitAccordionSection, KitAsyncState, KitBadge, KitMarkdown } from '../../kit';
 import type { Tone } from '../../kit';
 import { runnerDisplayName } from '../../core/runner-display-name';
+import { LensLink } from '../../core/lens-link';
 
 /** A stated priority's badge tone — advice for the triaging human, never
  * a queue position, so it borrows the shared urgency ladder rather than inventing one. */
@@ -45,7 +46,7 @@ const PRIORITY_TONE: Record<WorkItemPriority, Tone> = {
 @Component({
   selector: 'fleet-chunk-issue-list',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAccordionSection, KitAsyncState, KitBadge, KitMarkdown, RouterLink],
+  imports: [KitAccordionSection, KitAsyncState, KitBadge, KitMarkdown, RouterLink, LensLink],
   templateUrl: './chunk-issue-list.html',
   styleUrl: './chunk-issue-list.css',
 })

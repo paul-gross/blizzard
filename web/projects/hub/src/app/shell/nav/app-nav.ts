@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 
-import { KitTab, KitTabStrip } from 'fleet/shell';
+import { KitTab, KitTabStrip, LensLink } from 'fleet/shell';
 
 import { ProjectLensControl } from './project-lens-control';
 
@@ -25,7 +25,7 @@ import { ProjectLensControl } from './project-lens-control';
 @Component({
   selector: 'app-nav',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitTab, KitTabStrip, ProjectLensControl, RouterLink, RouterLinkActive],
+  imports: [KitTab, KitTabStrip, ProjectLensControl, RouterLink, RouterLinkActive, LensLink],
   templateUrl: './app-nav.html',
   styleUrl: './app-nav.css',
 })

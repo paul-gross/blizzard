@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output, signal } f
 import { RouterLink } from '@angular/router';
 
 import { type ChunkDetail, type ChunkStatus, type PauseView, type WorkRefView, type RouteView, compactRef, runnerDisplayName, runnerTitle, KitButton, KitConfirmDialog, type KitConfirmDialogPrompt, KitMenu, KitMenuPanel, KitMenuItem, KitMenuItemSubtitle, KitTooltip, completeCopy, deleteCopy, detachCopy, pauseCopy, resumeCopy } from 'fleet';
+import { LensLink } from 'fleet/shell';
 
 /**
  * The chunk detail dock's header — the chunk's identity (short name, work item, state,
@@ -15,7 +16,7 @@ import { type ChunkDetail, type ChunkStatus, type PauseView, type WorkRefView, t
 @Component({
   selector: 'app-chunk-detail-header',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitButton, KitConfirmDialog, KitMenu, KitMenuItem, KitMenuItemSubtitle, KitMenuPanel, KitTooltip, RouterLink],
+  imports: [KitButton, KitConfirmDialog, KitMenu, KitMenuItem, KitMenuItemSubtitle, KitMenuPanel, KitTooltip, RouterLink, LensLink],
   templateUrl: './chunk-detail-header.html',
   styleUrl: './chunk-detail-header.css',
 })

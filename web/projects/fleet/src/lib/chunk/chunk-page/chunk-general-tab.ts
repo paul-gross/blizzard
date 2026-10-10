@@ -17,6 +17,7 @@ import {
 import { isPendingFor } from '../../core/mutation-pending';
 import { KitPanel, KitPanelHeader } from '../../kit/kit-panel';
 import { ChunkDelivery } from '../chunk-detail/chunk-delivery';
+import { LensLink } from '../../core/lens-link';
 
 /**
  * The chunk detail page's General tab.
@@ -40,7 +41,7 @@ import { ChunkDelivery } from '../chunk-detail/chunk-delivery';
 @Component({
   selector: 'fleet-chunk-general-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ChunkAwaitingHuman, ChunkFacts, ChunkIssuePane, ChunkTimeline, ChunkTokenBreakdown, ChunkDelivery, KitPanel, KitPanelHeader, NgTemplateOutlet, RouterLink],
+  imports: [ChunkAwaitingHuman, ChunkFacts, ChunkIssuePane, ChunkTimeline, ChunkTokenBreakdown, ChunkDelivery, KitPanel, KitPanelHeader, NgTemplateOutlet, RouterLink, LensLink],
   templateUrl: './chunk-general-tab.html',
   styleUrl: './chunk-general-tab.css',
 })

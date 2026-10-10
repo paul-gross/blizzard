@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { ViewportService } from 'fleet';
 import { EventsPanel } from './events-panel';
+import { ProjectLens } from '../core/project-lens';
 
 /**
  * The `/events` route — the board's Events tab: the hub's
@@ -23,15 +24,17 @@ import { EventsPanel } from './events-panel';
   styleUrl: './events-page.css',
 })
 export class EventsPage {
+  private readonly lens = inject(ProjectLens);
+
   private readonly router = inject(Router);
   private readonly viewport = inject(ViewportService);
 
   /** Open the selected chunk in the shell the current viewport actually renders. */
   protected openChunk(chunkId: string): void {
     if (this.viewport.mode() === 'mobile') {
-      void this.router.navigate(['/board', 'chunk', chunkId]);
+      void this.router.navigate(this.lens.link(['/board', 'chunk', chunkId]));
     } else {
-      void this.router.navigate(['/board'], { queryParams: { chunk: chunkId } });
+      void this.router.navigate(this.lens.link(['/board']), { queryParams: { chunk: chunkId } });
     }
   }
 }

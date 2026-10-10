@@ -38,7 +38,7 @@
       <ul class="rows">
         @for (row of needsYou(); track row.chunkId) {
           <li class="row" data-testid="needs-you-row" [attr.data-chunk]="row.chunkId">
-            <a class="hit" [routerLink]="['/board', 'chunk', row.chunkId]" [attr.aria-label]="'Open chunk ' + row.shortId"></a>
+            <a class="hit" [routerLink]="['/board', 'chunk', row.chunkId] | lensLink" [attr.aria-label]="'Open chunk ' + row.shortId"></a>
             <fleet-kit-badge class="pill" [tone]="row.tone" variant="soft">{{ row.pillLabel }}</fleet-kit-badge>
             <span class="grow">
               <span class="cid">{{ row.shortId }}</span>
@@ -73,7 +73,7 @@
       <ul class="rows">
         @for (row of inMotion(); track row.chunkId) {
           <li class="row" data-testid="in-motion-row" [attr.data-chunk]="row.chunkId">
-            <a class="hit" [routerLink]="['/board', 'chunk', row.chunkId]" [attr.aria-label]="'Open chunk ' + row.shortId"></a>
+            <a class="hit" [routerLink]="['/board', 'chunk', row.chunkId] | lensLink" [attr.aria-label]="'Open chunk ' + row.shortId"></a>
             <fleet-kit-badge class="pill" tone="running" variant="soft">{{ row.pillLabel }}</fleet-kit-badge>
             <span class="grow">
               <span class="cid">{{ row.shortId }}</span>
@@ -110,7 +110,7 @@
       <ul class="rows">
         @for (row of upNext(); track row.chunkId) {
           <li class="row" data-testid="up-next-row" [attr.data-chunk]="row.chunkId">
-            <a class="hit" [routerLink]="['/board', 'chunk', row.chunkId]" [attr.aria-label]="'Open chunk ' + row.shortId"></a>
+            <a class="hit" [routerLink]="['/board', 'chunk', row.chunkId] | lensLink" [attr.aria-label]="'Open chunk ' + row.shortId"></a>
             <fleet-kit-badge class="pill" tone="idle" variant="soft">ready</fleet-kit-badge>
             <span class="grow">
               <span class="cid">{{ row.shortId }}</span>
@@ -142,7 +142,7 @@
       <ul class="rows">
         @for (row of doneToday(); track row.chunkId) {
           <li class="row" data-testid="done-today-row" [attr.data-chunk]="row.chunkId">
-            <a class="hit" [routerLink]="['/board', 'chunk', row.chunkId]" [attr.aria-label]="'Open chunk ' + row.shortId"></a>
+            <a class="hit" [routerLink]="['/board', 'chunk', row.chunkId] | lensLink" [attr.aria-label]="'Open chunk ' + row.shortId"></a>
             <fleet-kit-badge class="pill" tone="done" variant="soft">done</fleet-kit-badge>
             <span class="grow">
               <span class="cid">{{ row.shortId }}</span>

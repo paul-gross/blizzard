@@ -1,5 +1,5 @@
 <fleet-chunk-page-shell>
-  <a chunk-page-back class="back-row" routerLink="/board" [queryParams]="{ chunk: chunkId() }" data-testid="mobile-chunk-back">
+  <a chunk-page-back class="back-row" [routerLink]="'/board' | lensLink" [queryParams]="{ chunk: chunkId() }" data-testid="mobile-chunk-back">
     <fleet-kit-back-bar label="Board" />
   </a>
   @if (actionError(); as err) {

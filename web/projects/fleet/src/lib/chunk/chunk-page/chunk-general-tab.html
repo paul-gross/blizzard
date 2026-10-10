@@ -53,7 +53,7 @@
      node history when General shows it, on a line of its own otherwise. -->
 <ng-template #eventsLink>
   @if (eventsLinkBase(); as base) {
-    <a class="events-link" data-testid="chunk-events-link" [routerLink]="base" [queryParams]="{ chunk: detail().chunk_id }"
+    <a class="events-link" data-testid="chunk-events-link" [routerLink]="base | lensLink" [queryParams]="{ chunk: detail().chunk_id }"
       >events →</a
     >
   }

@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 
 import { KitCountBadge } from '../../kit/kit-count-badge';
+import { LensLink } from '../../core/lens-link';
 
 /**
  * One tab the {@link MobileTabBar} renders — the minimal shape both the
@@ -55,7 +56,7 @@ export interface MobileTabItem {
 @Component({
   selector: 'fleet-mobile-tab-bar',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitCountBadge, RouterLink, RouterLinkActive],
+  imports: [KitCountBadge, RouterLink, RouterLinkActive, LensLink],
   templateUrl: './mobile-tab-bar.html',
   styleUrl: './mobile-tab-bar.css',
 })

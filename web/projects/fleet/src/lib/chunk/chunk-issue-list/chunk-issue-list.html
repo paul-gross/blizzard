@@ -20,7 +20,7 @@
            `target="_blank"` anchor; a hub pointer's is its own in-app route, so it
            navigates through the router rather than a full page load. -->
       @if (isHubEntry(item)) {
-        <a accordionAside class="i-ref" data-testid="issue-ref" [routerLink]="item.web_url" [attr.title]="item.web_url"
+        <a accordionAside class="i-ref" data-testid="issue-ref" [routerLink]="item.web_url | lensLink" [attr.title]="item.web_url"
           >- {{ refText(item) }}</a
         >
       } @else {
@@ -55,7 +55,7 @@
                   @case ('fleet') {
                     <span
                       >Proposed by runner {{ runnerLabel(author) }}, chunk
-                      <a [routerLink]="[...linkBase(), author.chunk_id]" data-testid="issue-author-chunk">{{
+                      <a [routerLink]="[...linkBase(), author.chunk_id] | lensLink" data-testid="issue-author-chunk">{{
                         author.chunk_id
                       }}</a>, node {{ author.node_name }}</span
                     >

@@ -20,6 +20,7 @@ import { CHUNK_PAGE_DAEMON } from './chunk-page-daemon';
 import { chunkTabOptions, openEdgeIds, preDetailState } from './chunk-page.model';
 import { ChunkPageHeader } from './chunk-page-header';
 import { ChunkPageShell } from './chunk-page-shell';
+import { LensLink } from '../../core/lens-link';
 
 /**
  * The chunk detail page (`/board/chunk/:chunkId`), written once for both daemons — the
@@ -61,7 +62,7 @@ import { ChunkPageShell } from './chunk-page-shell';
     KitAsyncState,
     KitBackBar,
     KitTabs,
-    RouterLink,
+    RouterLink, LensLink,
   ],
   templateUrl: './chunk-page.html',
   styleUrl: './chunk-page.css',

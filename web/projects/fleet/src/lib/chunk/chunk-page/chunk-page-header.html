@@ -23,13 +23,13 @@
     @for (id of blockedBy(); track id) {
       <span class="sep" aria-hidden="true">·</span>
       <span class="st edge" data-testid="mobile-chunk-blocked-by"
-        >blocked by <a class="edge-ref" [routerLink]="[...linkBase(), id]" [attr.title]="id">{{ shortId(id) }}</a></span
+        >blocked by <a class="edge-ref" [routerLink]="[...linkBase(), id] | lensLink" [attr.title]="id">{{ shortId(id) }}</a></span
       >
     }
     @for (id of blocking(); track id) {
       <span class="sep" aria-hidden="true">·</span>
       <span class="st edge" data-testid="mobile-chunk-blocking"
-        >blocking <a class="edge-ref" [routerLink]="[...linkBase(), id]" [attr.title]="id">{{ shortId(id) }}</a></span
+        >blocking <a class="edge-ref" [routerLink]="[...linkBase(), id] | lensLink" [attr.title]="id">{{ shortId(id) }}</a></span
       >
     }
   </span>

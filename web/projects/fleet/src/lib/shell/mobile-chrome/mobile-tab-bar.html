@@ -3,7 +3,7 @@
     @if (item.route && !item.inert) {
       <a
         class="tab"
-        [routerLink]="item.route"
+        [routerLink]="item.route | lensLink"
         [queryParamsHandling]="item.queryParamsHandling ?? ''"
         routerLinkActive="on"
         [attr.data-testid]="item.testid"

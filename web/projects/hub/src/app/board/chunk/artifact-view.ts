@@ -7,6 +7,7 @@ import {
   type KitAsyncStateValue,
   KitBackBar,
 } from 'fleet';
+import { LensLink } from 'fleet/shell';
 
 /**
  * The single-artifact screen, presentational — the back affordance over one
@@ -19,7 +20,7 @@ import {
 @Component({
   selector: 'app-artifact-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ChunkArtifactBody, KitAsyncState, KitBackBar, RouterLink],
+  imports: [ChunkArtifactBody, KitAsyncState, KitBackBar, RouterLink, LensLink],
   templateUrl: './artifact-view.html',
   styleUrl: './artifact-view.css',
 })

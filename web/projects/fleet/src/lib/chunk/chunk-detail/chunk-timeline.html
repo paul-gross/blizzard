@@ -29,7 +29,7 @@
             <a
               class="step-link"
               data-testid="history-link"
-              [routerLink]="[...linkBase(), chunkId()]"
+              [routerLink]="[...linkBase(), chunkId()] | lensLink"
               [queryParams]="{ tab: 'node-history', step: row.key }"
               [attr.aria-label]="'Open ' + row.nodeName + ', epoch ' + row.epoch"
             ></a>
@@ -48,7 +48,7 @@
                   <a
                     class="gr"
                     data-testid="history-graph"
-                    [routerLink]="[...linkBase, graphId]"
+                    [routerLink]="[...linkBase, graphId] | lensLink"
                     (click)="$event.stopPropagation()"
                     >{{ row.graphName }}/</a
                   >
@@ -123,7 +123,7 @@
             <a
               class="step-link"
               data-testid="history-link"
-              [routerLink]="[...linkBase(), chunkId()]"
+              [routerLink]="[...linkBase(), chunkId()] | lensLink"
               [queryParams]="{ tab: 'node-history', step: a.key }"
               [attr.aria-label]="'Open ' + a.nodeName + ', epoch ' + (a.epoch ?? '·')"
             ></a>
