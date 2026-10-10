@@ -45,7 +45,15 @@ from blizzard.hub.secrets.rotation import rotate_keys
 from blizzard.hub.store import schema
 from blizzard.hub.store.internal.chunk_hub_exec_store import ChunkHubExecStore
 from blizzard.hub.tenancy import StoreScope, TenantId
-from tests.support import OP, add_tenant, close_tenant, default_tenant, hub_scoped, scoped_connections
+from tests.support import (
+    OP,
+    add_tenant,
+    close_tenant,
+    default_project,
+    default_tenant,
+    hub_scoped,
+    scoped_connections,
+)
 
 pytestmark = pytest.mark.component
 
@@ -123,7 +131,11 @@ def _orphan_a_slot(hub: _Hub, tenant: TenantId, suffix: str) -> None:
         )
         conn.execute(
             conns.insert(schema.chunks).values(
-                chunk_id=f"ch_{suffix}", graph_id=f"gr_{suffix}", minted_at=_NOW, model="m"
+                chunk_id=f"ch_{suffix}",
+                graph_id=f"gr_{suffix}",
+                minted_at=_NOW,
+                model="m",
+                project_id=default_project(hub.engine, tenant),
             )
         )
         conn.execute(

@@ -122,7 +122,13 @@ def test_a_failing_write_rolls_back_the_whole_composite(tmp_path: Path) -> None:
     with engine.begin() as conn:
         seed_chunk(conn, "ch_collide", graph_id="gr_1", at=_NOW)
     pointer = WorkRef(source="hub", ref=items.allocate_ref("hub"))
-    colliding_chunk = Chunk(chunk_id="ch_collide", graph_id="gr_1", work_refs=[pointer], minted_at=_NOW)
+    colliding_chunk = Chunk(
+        chunk_id="ch_collide",
+        graph_id="gr_1",
+        work_refs=[pointer],
+        minted_at=_NOW,
+        project_id=ProjectId(default_project(engine)),
+    )
 
     with pytest.raises(HubStoreError):
         items.create_run_with_chunk(

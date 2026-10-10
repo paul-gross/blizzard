@@ -1,6 +1,6 @@
 """The scoped store seam (``src/blizzard/hub/store/scoped.py``): every builder shape confines a statement to
-the scope's tenant, the insert stamps the key and falls back to the tenant's only project, an execute-time ``tenant_id`` is refused, a write
-on a closed tenant is refused inside its transaction, and a global table passes through untouched.
+the scope's tenant, the insert stamps the key, an insert into a project-keyed table naming no project and an
+execute-time ``tenant_id`` are refused, a write on a closed tenant is refused inside its transaction, and a global table passes through untouched.
 
 The seam is exercised over synthetic tables that carry ``tenant_id``, each statement run against
 rows of two tenants so a missing or misplaced predicate shows up as a wrong row, not just as SQL."""
@@ -23,7 +23,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreError, HubStoreErrorFactory
 from blizzard.hub.store.scoped import (
-    ProjectKeyAtExecute,
+    ProjectKeyMissing,
     ScopedConnections,
     TenantKeySupplied,
     UnscopedConnection,
@@ -494,16 +494,15 @@ def test_a_close_cannot_commit_while_an_open_write_is_in_flight(
         pass
 
 
-# --- The sole-project fallback, over the hub's own project-keyed tables ---
+# --- The project key, over the hub's own project-keyed tables ---
 
 TEN_ONE = TenantId("ten_one")
 TEN_SEVERAL = TenantId("ten_several")
-TEN_NONE = TenantId("ten_none")
 
 
 @pytest.fixture
 def projected(tmp_path: Path) -> Iterator[HubStoreConnections]:
-    """Three tenants over the hub's ``scopes`` and change log: one holding a project, one holding two, one none."""
+    """Two tenants over the hub's ``scopes`` and change log: one holding a project, one holding two."""
     eng = create_engine_from_url(f"sqlite:///{tmp_path / 'projected.db'}")
     for table in (s.tenants, s.tenant_deletions, s.projects, s.scopes, s.config_changes):
         table.create(eng)
@@ -512,7 +511,7 @@ def projected(tmp_path: Path) -> Iterator[HubStoreConnections]:
             sa.insert(s.tenants),
             [
                 {"tenant_id": tenant, "name": tenant, "created_at": CREATED_AT, "created_by": "usr_test"}
-                for tenant in (TEN_ONE, TEN_SEVERAL, TEN_NONE)
+                for tenant in (TEN_ONE, TEN_SEVERAL)
             ],
         )
         conn.execute(
@@ -551,63 +550,73 @@ def _scope_projects(hub: HubStoreConnections) -> dict[str, str]:
 _HUB_WIDE = {HUB_SCOPED_OPTION: True}
 
 
-def test_an_insert_naming_no_project_takes_the_tenants_only_project_through_every_builder(
-    projected: HubStoreConnections,
+_SCOPE_NAMES = ["scope_id", "slug", "description", "created_at"]
+
+
+def _selected_scope(*project: str) -> sa.Select[Any]:
+    return sa.select(
+        sa.literal("scp_selected"),
+        sa.literal("selected"),
+        sa.literal(""),
+        sa.literal(CREATED_AT, s.scopes.c.created_at.type),
+        *(sa.literal(p) for p in project),
+    )
+
+
+@pytest.mark.parametrize(
+    "params",
+    [None, [{**_scope("many-a"), "project_id": "proj_one"}, _scope("many-b")]],
+    ids=["values", "executemany-row"],
+)
+def test_insert_naming_no_project_is_refused_at_execute_even_for_a_tenant_with_one_project(
+    projected: HubStoreConnections, params: list[dict[str, Any]] | None
 ) -> None:
     conns = projected.scoped(StoreScope(TEN_ONE))
-    with conns.write("insert") as conn:
-        conn.execute(conns.insert(s.scopes).values(_scope("one")))
-        conn.execute(conns.insert(s.scopes), [_scope("many-a"), _scope("many-b")])
-        conn.execute(conns.insert_rows(s.scopes, [_scope("rows")]))
-        source = sa.select(
-            sa.literal("scp_selected"),
-            sa.literal("selected"),
-            sa.literal(""),
-            sa.literal(CREATED_AT, s.scopes.c.created_at.type),
-        )
-        conn.execute(conns.insert_from_select(s.scopes, ["scope_id", "slug", "description", "created_at"], source))
+    with pytest.raises(ProjectKeyMissing) as refused, conns.write("insert", expect=(ProjectKeyMissing,)) as conn:
+        if params is None:
+            conn.execute(conns.insert(s.scopes).values(_scope("orphan")))
+        else:
+            conn.execute(conns.insert(s.scopes), params)
 
-    assert _scope_projects(projected) == dict.fromkeys(("one", "many-a", "many-b", "rows", "selected"), "proj_one")
-
-
-@pytest.mark.parametrize("tenant", [TEN_SEVERAL, TEN_NONE], ids=["several-projects", "no-project"])
-def test_with_several_projects_or_none_the_fallback_is_null_and_the_insert_refused(
-    projected: HubStoreConnections, tenant: TenantId
-) -> None:
-    conns = projected.scoped(StoreScope(tenant))
-    with pytest.raises(HubStoreError), conns.write("insert") as conn:
-        conn.execute(conns.insert(s.scopes).values(_scope("orphan")))
-
+    assert refused.value.table == "scopes"
     assert _scope_projects(projected) == {}
 
 
-def test_a_project_the_caller_names_always_wins(projected: HubStoreConnections) -> None:
+def test_insert_rows_with_a_row_naming_no_project_is_refused_as_it_builds(projected: HubStoreConnections) -> None:
+    conns = projected.scoped(StoreScope(TEN_ONE))
+    rows = [_scope("named", project_id="proj_one"), _scope("orphan")]
+    with pytest.raises(ProjectKeyMissing) as refused:
+        conns.insert_rows(s.scopes, rows)
+
+    assert refused.value.table == "scopes"
+
+
+def test_insert_from_select_naming_no_project_is_refused_as_it_builds(projected: HubStoreConnections) -> None:
+    conns = projected.scoped(StoreScope(TEN_ONE))
+    with pytest.raises(ProjectKeyMissing) as refused:
+        conns.insert_from_select(s.scopes, _SCOPE_NAMES, _selected_scope())
+
+    assert refused.value.table == "scopes"
+
+
+def test_each_builder_writes_the_project_its_caller_names(projected: HubStoreConnections) -> None:
     conns = projected.scoped(StoreScope(TEN_SEVERAL))
     with conns.write("insert") as conn:
         conn.execute(conns.insert(s.scopes).values(_scope("values", project_id="proj_second")))
+        conn.execute(conns.insert(s.scopes), [_scope("params", project_id="proj_first")])
         conn.execute(conns.insert_rows(s.scopes, [_scope("rows", project_id="proj_first")]))
-        source = sa.select(
-            sa.literal("scp_selected"),
-            sa.literal("selected"),
-            sa.literal(""),
-            sa.literal(CREATED_AT, s.scopes.c.created_at.type),
-            sa.literal("proj_second"),
-        )
-        names = ["scope_id", "slug", "description", "created_at", "project_id"]
-        conn.execute(conns.insert_from_select(s.scopes, names, source))
+        names = [*_SCOPE_NAMES, "project_id"]
+        conn.execute(conns.insert_from_select(s.scopes, names, _selected_scope("proj_second")))
 
-    assert _scope_projects(projected) == {"values": "proj_second", "rows": "proj_first", "selected": "proj_second"}
+    assert _scope_projects(projected) == {
+        "values": "proj_second",
+        "params": "proj_first",
+        "rows": "proj_first",
+        "selected": "proj_second",
+    }
 
 
-def test_a_project_named_only_at_execute_is_refused(projected: HubStoreConnections) -> None:
-    conns = projected.scoped(StoreScope(TEN_SEVERAL))
-    with pytest.raises(ProjectKeyAtExecute), conns.write("insert", expect=(ProjectKeyAtExecute,)) as conn:
-        conn.execute(conns.insert(s.scopes), [_scope("params", project_id="proj_second")])
-
-    assert _scope_projects(projected) == {}
-
-
-def test_the_change_log_never_falls_back_to_a_project(projected: HubStoreConnections) -> None:
+def test_the_change_log_takes_no_project_key(projected: HubStoreConnections) -> None:
     conns = projected.scoped(StoreScope(TEN_ONE))
     row = {
         "recorded_at": CREATED_AT,

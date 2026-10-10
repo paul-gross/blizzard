@@ -107,7 +107,7 @@ from blizzard.hub.runtime import Migrations
 from blizzard.hub.secrets import hub_key_provider, secret_cipher
 from blizzard.hub.store import schema
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
-from blizzard.hub.store.internal.chunk_exclusive_store import LockedChunkTransaction
+from blizzard.hub.store.internal.chunk_rows import work_ref_conn_of
 from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
 from blizzard.hub.store.internal.config_apply_store import ConfigApplyStore
 from blizzard.hub.store.internal.config_import_store import ConfigImportStore
@@ -118,10 +118,11 @@ from blizzard.hub.store.internal.repository_record_store import RepositoryRecord
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from blizzard.hub.store.internal.scope_store import ScopeStore
 from blizzard.hub.store.internal.secret_store import SecretStore
+from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
 from blizzard.hub.store.scoped import (
-    SOLE_PROJECT_FALLBACK_TABLES,
     ScopedConnections,
+    is_project_keyed,
     is_tenant_owned,
     statements_of,
 )
@@ -214,9 +215,9 @@ def default_tenant(engine: Engine) -> TenantId:
 
 def stamp(table: sa.Table, /, **values: Any) -> dict[str, Any]:
     """``values`` for a raw test insert into ``table``, carrying the store's tenant when the table is
-    tenant-owned and the caller named none, and the row's tenant's project when the table is one the
-    scoped insert falls back to it for and the caller named none — what the scoped insert stamps in
-    production.
+    tenant-owned and the caller named none, and the row's tenant's project when the table is
+    project-keyed and the caller named none — the keys a production write supplies: the scoped insert
+    stamps the tenant, and the writer names the project.
 
     The tenant is a scalar subquery over ``tenants``, so a raw write needs no engine in hand; it names
     the store's only tenant, the same one ``default_tenant`` reads, and ``NULL`` when the store holds
@@ -224,7 +225,7 @@ def stamp(table: sa.Table, /, **values: Any) -> dict[str, Any]:
     The project is :func:`only_project_subquery` of the row's tenant, ``NULL`` unless it holds exactly one."""
     if is_tenant_owned(table) and "tenant_id" not in values:
         values["tenant_id"] = only_tenant_subquery()
-    if table.name in SOLE_PROJECT_FALLBACK_TABLES and "project_id" not in values:
+    if is_project_keyed(table) and "project_id" not in values:
         tenant = values.get("tenant_id")
         values["project_id"] = only_project_subquery(tenant if isinstance(tenant, str) else None)
     return _with_scope_id(table, values)
@@ -1751,8 +1752,8 @@ def seed_chunk_record(stores: ChunkStores, chunk: Chunk) -> None:
     that needs a chunk without going through an ingest's guard. A chunk built naming no project
     lands in the tenant's only one."""
     with stores.exclusive.locked_work_refs(chunk.work_refs) as handle:
-        if chunk.project_id is None and isinstance(handle, LockedChunkTransaction):
-            chunk = replace(chunk, project_id=_only_project_on(handle.conn))
+        if chunk.project_id is None:
+            chunk = replace(chunk, project_id=_only_project_on(work_ref_conn_of(handle)))
         stores.record.mint_locked(handle, chunk)
 
 
@@ -1976,17 +1977,27 @@ def seed_work_item(
     author: WorkItemAuthor,
     stated_priority: str | None = None,
     at: datetime,
+    project_id: ProjectId | None = None,
 ) -> HubWorkItem:
-    """Seed one hub-owned work item plus its resting chunk, mirroring production's own
-    two-step mint (``WorkItemEditService.create``) — there is no chunkless
-    filing path to seed around. Callers still seed ``graph_id``'s own row first
+    """Seed one hub-owned work item plus its resting chunk in ``project_id`` — the store's tenant's only
+    project when ``None`` — mirroring production's own two-step mint (``WorkItemEditService.create``):
+    there is no chunkless filing path to seed around. Callers still seed ``graph_id``'s own row first
     (``seed_graph``); this only seeds the item and its chunk."""
     ref = store.allocate_ref(source)
     pointer = WorkRef(source=source, ref=ref)
-    chunk = Chunk(chunk_id=f"ch_{ref}", graph_id=graph_id, work_refs=[pointer], minted_at=at)
+    project = project_id if project_id is not None else _only_project_of_items(store)
+    chunk = Chunk(chunk_id=f"ch_{ref}", graph_id=graph_id, work_refs=[pointer], minted_at=at, project_id=project)
     return store.create_with_chunk(
         pointer=pointer, title=title, body=body, author=author, stated_priority=stated_priority, at=at, chunk=chunk
     )
+
+
+def _only_project_of_items(store: IWriteWorkItemRepository) -> ProjectId:
+    """The only project of the tenant ``store`` writes, read through the adapter's own connections; raises when
+    the tenant holds none or several, or when ``store`` is not the store's adapter."""
+    if not isinstance(store, WorkItemStore):
+        raise TypeError(f"a work item seeded naming no project needs a WorkItemStore; got {type(store).__name__}")
+    return ProjectId(_only_project_of(store._store))
 
 
 @contextmanager

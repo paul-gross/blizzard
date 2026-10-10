@@ -18,11 +18,12 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.work_items import WorkItemClosure
 from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.chunk.model import Chunk, IReadWorkItemRepository, WorkItemAuthor, WorkRef
+from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
-from tests.support import hub_store_connections, seed_graph, seed_work_item
+from tests.support import default_project, hub_store_connections, seed_graph, seed_work_item
 
 pytestmark = pytest.mark.component
 
@@ -185,7 +186,13 @@ def test_edit_of_a_closed_item_is_a_no_op_and_returns_none(tmp_path: Path) -> No
 def test_create_with_chunk_inserts_the_item_and_the_chunk_rows_together(tmp_path: Path) -> None:
     store, engine = _store_and_engine(tmp_path)
     pointer = WorkRef(source="hub", ref="1")
-    chunk = Chunk(chunk_id="ch_1", graph_id="gr_1", work_refs=[pointer], minted_at=_NOW)
+    chunk = Chunk(
+        chunk_id="ch_1",
+        graph_id="gr_1",
+        work_refs=[pointer],
+        minted_at=_NOW,
+        project_id=ProjectId(default_project(engine)),
+    )
 
     created = store.create_with_chunk(
         pointer=pointer,
@@ -220,7 +227,13 @@ def test_create_with_chunk_rolls_back_the_item_and_the_chunk_rows_on_a_failing_c
     # landed, so the rollback under test covers all three tables, not the item row alone.
     pointer = WorkRef(source="hub", ref="1")
     bad = WorkRef(source="hub", ref=cast(str, None))
-    chunk = Chunk(chunk_id="ch_1", graph_id="gr_1", work_refs=[pointer, bad], minted_at=_NOW)
+    chunk = Chunk(
+        chunk_id="ch_1",
+        graph_id="gr_1",
+        work_refs=[pointer, bad],
+        minted_at=_NOW,
+        project_id=ProjectId(default_project(engine)),
+    )
 
     with pytest.raises(HubStoreError):
         store.create_with_chunk(

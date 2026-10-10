@@ -185,7 +185,13 @@ def test_a_slug_stays_unique_within_its_project(store: _Store) -> None:
     assert again == ScopeStore(store.first.conns).get(store.first.project, _SLUG)
     assert again.scope_id == store.first.scope.scope_id
 
-    duplicate = {"scope_id": "scp_duplicate", "slug": _SLUG, "description": "", "created_at": _AT}
+    duplicate = {
+        "scope_id": "scp_duplicate",
+        "project_id": store.first.project,
+        "slug": _SLUG,
+        "description": "",
+        "created_at": _AT,
+    }
     with pytest.raises(IntegrityError), store.first.conns.write("duplicate", expect=(IntegrityError,)) as conn:
         conn.execute(store.first.conns.insert(s.scopes).values(duplicate))
 

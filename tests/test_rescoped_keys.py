@@ -42,8 +42,9 @@ from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStor
 from blizzard.hub.store.internal.secret_store import SecretStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
+from blizzard.hub.store.scoped import is_project_keyed
 from blizzard.hub.tenancy import TenantId
-from tests.support import default_tenant, hub_scoped, scoped_connections
+from tests.support import default_project, default_tenant, hub_scoped, scoped_connections
 
 pytestmark = pytest.mark.component
 
@@ -106,7 +107,7 @@ def _filler(column: sa.Column[Any], n: int) -> object:
 
 def _row(table: sa.Table, key: Mapping[str, object], n: int) -> dict[str, object]:
     """A row of ``table`` holding ``key`` and a filler in every other column a row must carry; the scoped
-    insert stamps ``tenant_id``, and ``project_id`` from the tenant's only project."""
+    insert stamps ``tenant_id``, and :func:`_insert` names the tenant's only project."""
     required = (
         c
         for c in table.c
@@ -143,6 +144,8 @@ _KEYS: list[tuple[str, dict[str, object]]] = [
 
 def _insert(tenants: _Tenants, tenant: TenantId, table: sa.Table, row: Mapping[str, object]) -> None:
     store = scoped_connections(tenants.engine, tenant)
+    if is_project_keyed(table) and "project_id" not in row:
+        row = {**row, "project_id": default_project(tenants.engine, tenant)}
     with store.write("insert", expect=(IntegrityError,)) as conn:
         conn.execute(store.insert(table).values(**row))
 
