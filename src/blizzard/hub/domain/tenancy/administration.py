@@ -2,7 +2,8 @@
 (``blizzard-product:/plans/multi-tenancy/hub/spec/administration.md`` §Verbs, §Creating a tenant).
 
 A tenant is created in one write transaction: its ``tenants`` row, the packaged graphs minted into it, its built-in
-``hub`` work source's sequence, and — when one is named — its first admin's membership. Nothing of a tenant whose
+``hub`` work source's sequence, its ``default`` project (``blizzard-product:/plans/projects/hub/spec/model.md`` §Every
+tenant starts with a project), and — when one is named — its first admin's membership. Nothing of a tenant whose
 creation failed survives, and a tenant is usable the moment its creation commits. A tenant's name is a label of 1 to 64
 characters with no leading or trailing whitespace: it is never refused for being taken, and never stands in for the
 tenant's id. The concrete store lives at ``src/blizzard/hub/store/internal/tenant_admin_store.py``
@@ -20,8 +21,9 @@ from typing import Protocol
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.roles import domain_model
-from blizzard.hub.domain.config.changes import Door
+from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.graph.model import IWriteGraphRepository
+from blizzard.hub.domain.projects.model import IWriteProjectRepository, Project
 from blizzard.hub.tenancy import TenantId, UnknownTenant
 
 
@@ -99,15 +101,14 @@ class ITenantCreation(Protocol):
         """Seed the new tenant's built-in ``hub`` work source: its sequence row, numbering from 1."""
         ...
 
+    @property
+    def projects(self) -> IWriteProjectRepository:
+        """The new tenant's projects, which its default project is written into."""
+        ...
+
     def grant_admin(self, user_id: str, *, by: str, at: datetime) -> None:
         """Make ``user_id`` an ``admin`` member of the new tenant; :class:`TenantAdminUnknown` when no such user
         exists."""
-        ...
-
-    def seed_default_project(self, project_id: str, *, by: str, door: Door, at: datetime) -> None:
-        """Give the new tenant its first project, ``project_id`` — slug :data:`DEFAULT_PROJECT_SLUG`, name
-        :data:`DEFAULT_PROJECT_NAME`, no description, revision 1 — with its ``create`` change row, attributed to
-        ``by`` through ``door``."""
         ...
 
 
@@ -124,7 +125,8 @@ class IWriteTenantDirectory(IReadTenantDirectory, Protocol):
         ...
 
 
-#: The slug and display name of the project every tenant starts with.
+#: The slug and display name of the project every tenant starts with. Nothing else sets it apart: it is renamed, and
+#: its slug moved, like any other project.
 DEFAULT_PROJECT_SLUG = "default"
 DEFAULT_PROJECT_NAME = "Default"
 
@@ -151,8 +153,8 @@ class TenantAdministration:
 
     def create(self, name: str, *, admin_user_id: str | None, by: str, door: Door = Door.API) -> Tenant:
         """Create a tenant named ``name`` in one transaction, holding its default project, ``admin_user_id`` its first
-        admin when named. The creator is granted nothing they did not name themselves for; the project's change row
-        names the creator and ``door``. :class:`TenantNameRefused` when ``name`` is not a tenant name's shape —
+        admin when named. The creator is granted nothing they did not name themselves for; the project's ``create``
+        change names the creator and ``door``. :class:`TenantNameRefused` when ``name`` is not a tenant name's shape —
         nothing is created."""
         name = tenant_name(name)
         at = self._clock.now()
@@ -160,7 +162,10 @@ class TenantAdministration:
         with self._tenants.create(tenant, name=name, at=at, by=by) as creation:
             self._mint_packaged(creation.graphs)
             creation.seed_hub_sequence()
-            creation.seed_default_project(Id.mint(IdPrefix.PROJECT, self._clock).value, by=by, door=door, at=at)
+            project, change = Project.new(
+                DEFAULT_PROJECT_SLUG, DEFAULT_PROJECT_NAME, ChangeContext(actor=by, door=door), at=at
+            )
+            creation.projects.create(project, change=change)
             if admin_user_id is not None:
                 creation.grant_admin(admin_user_id, by=by, at=at)
         self._changed()

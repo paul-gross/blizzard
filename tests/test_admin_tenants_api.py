@@ -1,12 +1,15 @@
 """The tenant administration routes over the hub app with sign-in on: only a hub administrator creates, lists, renames
-and deletes tenants and syncs the packaged graphs into every open tenant; a name without a tenant name's shape answers
-``422``; a tenant's own admin is refused all of it; a rename reaches a runner's next registration; the tenant-scoped graph sync stays, deprecated, under ``GRAPH_EDIT``."""
+and deletes tenants and syncs the packaged graphs into every open tenant; a created tenant holds its ``default``
+project, created by the administrator; a name without a tenant name's shape answers ``422``; a tenant's own admin is
+refused all of it; a rename reaches a runner's next registration; the tenant-scoped graph sync stays, deprecated, under
+``GRAPH_EDIT``."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
 import pytest
+import sqlalchemy as sa
 from fastapi.testclient import TestClient
 
 from blizzard.auth_core import Role
@@ -15,6 +18,7 @@ from blizzard.hub.composition import TenantCache, TenantServices
 from blizzard.hub.config import AUTH_MODE_OAUTH
 from blizzard.hub.domain.tenancy import teardown
 from blizzard.hub.graphs import PACKAGED, GraphFile
+from blizzard.hub.store import schema
 from blizzard.hub.tenancy import StoreScope, TenantId
 from tests.support import HubHarness, build_hub, default_tenant, seed_hub_admin, seed_runner, seed_session, seed_user
 
@@ -67,6 +71,24 @@ def test_a_hub_administrator_creates_lists_and_renames_tenants(hub: HubHarness) 
         (created["tenant_id"], "acme-two", "open"),
     }
     assert hub.hub_services.memberships.role_in(TenantId(str(created["tenant_id"])), admin.user_id) is Role.ADMIN
+
+
+def test_a_tenant_created_through_the_route_holds_its_default_project_created_by_the_administrator(
+    hub: HubHarness,
+) -> None:
+    administrator = seed_user(hub, username="hal", role=Role.PENDING)
+    seed_hub_admin(hub.engine, administrator.user_id)
+
+    tenant = TenantId(str(_create(hub, seed_session(hub, administrator), "acme")["tenant_id"]))
+
+    [project] = hub.open_services(tenant).projects.list_all()
+    assert (project.slug, project.name) == ("default", "Default")
+    c = schema.config_changes.c
+    with hub.engine.connect() as conn:
+        changes = conn.execute(
+            sa.select(c.record_key, c.actor, c.door, c.op).where(c.tenant_id == tenant, c.record_kind == "project")
+        ).all()
+    assert [tuple(row) for row in changes] == [(project.project_id, administrator.user_id, "api", "create")]
 
 
 def test_creating_with_an_unknown_admin_answers_404_and_creates_nothing(hub: HubHarness) -> None:

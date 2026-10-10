@@ -1,7 +1,9 @@
 """Tenant administration driven through the hub's wired service: a tenant is created whole in one transaction — its
-row, the packaged graphs, its ``hub`` sequence, its ``default`` project and its first admin — or not at all; it is usable, and the hub's
-in-memory set of open tenants knows it, the moment its creation commits; names are labels of 1 to 64 characters with no
-leading or trailing whitespace; a rename reaches the in-memory set; the list shows every tenant with its state."""
+row, the packaged graphs, its ``hub`` sequence, its ``default`` project and its first admin — or not at all; it is
+usable, and the hub's in-memory set of open tenants knows it, the moment its creation commits; its default project is
+an ordinary project, drawing from the ``hub`` source and renamed like any other; names are labels of 1 to 64
+characters with no leading or trailing whitespace; a rename reaches the in-memory set; the list shows every tenant
+with its state."""
 
 from __future__ import annotations
 
@@ -15,8 +17,10 @@ from blizzard.auth_core import Permission, Role
 from blizzard.foundation.store.utc import as_utc
 from blizzard.hub.auth.errors import RepoErrorFactory
 from blizzard.hub.auth.internal.identity_transaction import IdentityTransactions
-from blizzard.hub.domain.config.changes import Door
+from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.graph.model import IWriteGraphRepository
+from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
+from blizzard.hub.domain.projects.model import Project, ProjectEdit, ProjectSlug
 from blizzard.hub.domain.tenancy.administration import (
     TenantAdministration,
     TenantAdminUnknown,
@@ -49,6 +53,7 @@ def _row_counts(hub: HubHarness) -> dict[str, int]:
                 schema.graphs,
                 schema.work_item_sequence,
                 schema.projects,
+                schema.project_former_slugs,
                 schema.config_changes,
                 schema.membership_facts,
             )
@@ -107,6 +112,64 @@ def test_a_created_tenant_holds_its_default_project_created_by_its_creator_throu
     assert project_id.startswith("proj_")
     assert project[1:] == ("default", "Default", "", 1)
     assert changes == [("project", project_id, project_id, "usr_creator", door.value, "create", 1)]
+
+
+def _default_project(hub: HubHarness, tenant: TenantId) -> Project:
+    project = hub.open_services(tenant).projects.get_by_slug(ProjectSlug.parse("default"))
+    assert project is not None
+    return project
+
+
+def test_a_created_tenant_reads_its_default_project_the_moment_its_creation_commits(hub: HubHarness) -> None:
+    created = hub.hub_services.tenant_admin.create("acme", admin_user_id=None, by="usr_creator")
+
+    projects = hub.open_services(created.tenant_id).projects.list_all()
+
+    assert [(p.slug, p.name, p.description, p.revision, p.created_at) for p in projects] == [
+        ("default", "Default", "", 1, created.created_at)
+    ]
+
+
+def test_two_tenants_each_hold_a_default_project_of_their_own(hub: HubHarness) -> None:
+    acme = hub.hub_services.tenant_admin.create("acme", admin_user_id=None, by="usr_creator")
+    bravo = hub.hub_services.tenant_admin.create("bravo", admin_user_id=None, by="usr_creator")
+
+    held = {tenant: _default_project(hub, tenant).project_id for tenant in (acme.tenant_id, bravo.tenant_id)}
+
+    assert len(set(held.values())) == 2
+    for tenant, project_id in held.items():
+        assert [p.project_id for p in hub.open_services(tenant).projects.list_all()] == [project_id]
+
+
+def test_the_default_project_draws_from_the_hub_source_with_no_stored_link(hub: HubHarness) -> None:
+    created = hub.hub_services.tenant_admin.create("acme", admin_user_id=None, by="usr_creator")
+    project = _default_project(hub, created.tenant_id)
+    links = hub.open_services(created.tenant_id).project_links
+
+    assert links.linked_at(project.project_id, RESERVED_HUB_SOURCE_NAME, hub.clock.now())
+    assert links.sources_of(project.project_id) == []
+    with hub.engine.connect() as conn:
+        stored = conn.execute(
+            sa.select(sa.func.count())
+            .select_from(schema.project_source_links)
+            .where(schema.project_source_links.c.tenant_id == created.tenant_id)
+        ).scalar_one()
+    assert stored == 0
+
+
+def test_the_default_project_is_renamed_and_its_slug_moved_like_any_other(hub: HubHarness) -> None:
+    created = hub.hub_services.tenant_admin.create("acme", admin_user_id=None, by="usr_creator")
+    services = hub.open_services(created.tenant_id)
+    project = _default_project(hub, created.tenant_id)
+
+    edited = services.project_authoring.edit(
+        project, ProjectEdit(slug="main", name="Main"), ChangeContext(actor="usr_ada", door=Door.API), if_match=1
+    )
+
+    assert (edited.project_id, edited.slug, edited.name, edited.revision) == (project.project_id, "main", "Main", 2)
+    assert services.projects.get_by_slug(ProjectSlug.parse("default")) is None
+    assert services.projects.get_by_former_slug(ProjectSlug.parse("default")) == edited
+    assert services.projects.list_all() == [edited]
 
 
 def test_the_named_admin_is_granted_admin_and_the_creator_nothing(hub: HubHarness) -> None:
