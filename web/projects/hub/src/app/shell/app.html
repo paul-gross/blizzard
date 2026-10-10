@@ -66,10 +66,16 @@
           </fleet-board-header>
         }
         @if (!mobile()) {
-          <app-nav shell-nav [showAdmin]="canManageUsers()" />
+          <app-nav shell-nav [showAdmin]="canManageUsers()" [lensEnabled]="ready()" />
         }
         @if (logoutError(); as error) {
           <p class="logout-error" role="alert" data-testid="logout-error">{{ error }}</p>
+        }
+        @if (lensNotice(); as notice) {
+          <div class="lens-notice" role="status" data-testid="lens-notice">
+            <span>{{ notice }}</span>
+            <fleet-kit-button testid="lens-notice-dismiss" (click)="dismissLensNotice()">Dismiss</fleet-kit-button>
+          </div>
         }
         <router-outlet />
         @if (mobile()) {

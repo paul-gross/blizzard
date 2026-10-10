@@ -3,7 +3,7 @@ import { computed } from '@angular/core';
 import { type RunnerRegistryView, type KitAsyncStateValue, injectNowSignal, asyncState } from 'fleet';
 import { injectHubBoardChunksQuery } from '../core/chunks.query';
 import { foldRunnerRows, type RunnerRow } from './runner-rows.model';
-import { injectHubRunnersQuery } from './runners.query';
+import { injectHubRunnersQuery } from '../core/runners.query';
 
 export * from './runner-rows.model';
 

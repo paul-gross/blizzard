@@ -11,7 +11,8 @@ import {
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import { filter, map } from 'rxjs';
-import { AppShell, BoardHeader, FleetLiveUpdates, ViewportService, injectNowSignal } from 'fleet/shell';
+import { AppShell, BoardHeader, FleetLiveUpdates, KitButton, ViewportService, injectNowSignal } from 'fleet/shell';
+import { ProjectLens } from '../core/project-lens';
 import { NoAccess } from '../core/auth/no-access';
 import { TenantContext } from '../core/auth/tenant-context';
 import { TenantPicker } from '../core/auth/tenant-picker';
@@ -100,6 +101,7 @@ import {
     BoardHeader,
     AppNav,
     AppNavMenu,
+    KitButton,
     MobileTitlebar,
     MobileTabBar,
     RouterOutlet,
@@ -119,6 +121,7 @@ export class App {
   private readonly providersQuery = injectAuthProvidersQuery();
   private readonly injector = inject(Injector);
   private readonly tenant = inject(TenantContext);
+  private readonly lens = inject(ProjectLens);
 
   /**
    * Demo mode's config, latched **here** and now — at app construction, off the
@@ -146,7 +149,7 @@ export class App {
 
   /** Whether the board has entered the tenant it settled on — every call names it from here. The header's
    * tenant-scoped reads below wait on it: before it, a read would name no tenant or a stale one. */
-  private readonly ready = computed(() => {
+  protected readonly ready = computed(() => {
     const tenancy = this.tenancy();
     return tenancy?.kind === 'selected' && this.tenant.current() === tenancy.tenant.tenant_id;
   });
@@ -223,6 +226,12 @@ export class App {
       else if (tenancy !== null) untracked(() => this.tenant.forgetSelection());
     });
 
+    // A project lens is resolved only in the tenant the board has entered: the lens guard waits for this.
+    effect(() => {
+      const ready = this.ready();
+      untracked(() => this.lens.settle(ready));
+    });
+
     // Open the SSE stream and wire it to the query cache once authenticated with at
     // least one permission — `start()` is idempotent, so a flip back to `ready`
     // (e.g. after a role change, #94) resumes it. `afterRenderEffect` (not a plain
@@ -277,6 +286,13 @@ export class App {
 
   protected onLogout(): void {
     this.logoutMutation.mutate();
+  }
+
+  /** The project lens's notice — a link that named no project of the tenant, opened on All. */
+  protected readonly lensNotice = this.lens.notice;
+
+  protected dismissLensNotice(): void {
+    this.lens.dismissNotice();
   }
 
   /** Header status: the live stream's connection state, falling back to the health read. */

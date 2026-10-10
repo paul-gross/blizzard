@@ -46,8 +46,11 @@ const FLEET_LIB = 'projects/fleet/src/lib';
  *   and spec reach does not count.
  * - `core/format/` is a declaration-free re-export barrel over top-level modules; reach lands on
  *   those modules, which are units of their own, never on the barrel.
+ * - `core/project-filter.ts` and `core/lens-link.ts` are neutral seams whose defaults are the runner app's answer — no
+ *   project filter, every link as it is — and which the hub app overrides from its project lens; a seam is placed with
+ *   the shared code that reads it, whichever app supplies the value.
  */
-const PLACEMENT_EXEMPT_UNITS = ['testing', 'core/format'];
+const PLACEMENT_EXEMPT_UNITS = ['testing', 'core/format', 'core/project-filter.ts', 'core/lens-link.ts'];
 
 /** Folders that only group units: a file under one belongs to the unit named by its first two segments. */
 const GROUPING_FOLDERS = ['core', 'chunk', 'shell'];

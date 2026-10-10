@@ -257,6 +257,11 @@
  *   - projects/hub/src/app/core/auth/tenant-picker.shell-sweep.spec.ts — the tenant
  *     picker's options share one width, the widest's, whatever their names' lengths,
  *     and stay inside the viewport at 390px and 320px.
+ *   - projects/hub/src/app/shell/nav/project-lens-control.shell-sweep.spec.ts — the
+ *     project lens control in the view-tab row: a tenant with many long-named projects
+ *     never pushes the row past the viewport (the chips scroll inside the control),
+ *     and every route tab and the lens's own choice stay on screen and hit-testable
+ *     at every desktop width.
  */
 
 const { spawnSync } = require('node:child_process');
@@ -318,6 +323,7 @@ const SWEEPS = [
   { project: 'fleet', spec: 'projects/fleet/src/lib/chunk/chunk-detail/chunk-timeline-forensics.shell-sweep.spec.ts' },
   { project: 'runner', spec: 'projects/runner/src/app/board/chunk-dock/chunk-detail-view-provenance.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/core/auth/tenant-picker.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/shell/nav/project-lens-control.shell-sweep.spec.ts' },
 ];
 
 /** Every `*.shell-sweep.spec.ts` under `projects/`, repo-relative and POSIX-separated.

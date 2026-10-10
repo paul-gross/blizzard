@@ -85,6 +85,11 @@ export {
   hubMembersKey,
   hubWorkItemKey,
   hubWorkItemsKey,
+  hubProjectKey,
+  hubProjectLinksKey,
+  hubProjectsKey,
+  lensedKey,
+  type ProjectKeyPart,
 } from './lib/core/query-keys';
 
 export * as hubApi from './lib/api/hub';
@@ -152,13 +157,28 @@ export type {
   RunDeltaView,
   RunRowView,
   RunnerCapability,
+  ProjectView,
+  ProjectsListView,
   RunnerRegistryView,
+  ServedProjectView,
   RunnerView,
   ScopeView,
   TrendView,
   MemberView,
   WorkItemView,
   WorkRefView,
+} from './lib/api/hub';
+export {
+  createProjectApiProjectsPost,
+  getProjectApiProjectsProjectGet,
+  linkRepositoryApiProjectsProjectRepositoryLinksRepositoryPut,
+  linkSourceApiProjectsProjectSourceLinksSourcePut,
+  listProjectsApiProjectsGet,
+  listRepositoryLinksApiProjectsProjectRepositoryLinksGet,
+  listSourceLinksApiProjectsProjectSourceLinksGet,
+  patchProjectApiProjectsProjectPatch,
+  unlinkRepositoryApiProjectsProjectRepositoryLinksRepositoryRetirePost,
+  unlinkSourceApiProjectsProjectSourceLinksSourceRetirePost,
 } from './lib/api/hub';
 export {
   RecordKind,

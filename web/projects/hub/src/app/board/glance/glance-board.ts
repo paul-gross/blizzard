@@ -7,7 +7,7 @@ import { injectHubHealthQuery } from '../health/health.query';
 import { injectHubQueueQuery } from '../queue/queue.query';
 import { injectHubQuestionsQuery } from '../questions/questions.query';
 import { injectHubDecisionsQuery } from '../gates/gates.query';
-import { injectHubRunnersQuery } from '../../runners/runners.query';
+import { injectHubRunnersQuery } from '../../core/runners.query';
 
 import { startOfLocalDayIso } from '../../core/local-day';
 import { doneTodayRows, doneTodayTotal, glanceVitals, inMotionRows, liveRunners, needsYouRows, terminalTotal, upNextRows } from './glance-board.model';

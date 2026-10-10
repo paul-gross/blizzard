@@ -65,6 +65,33 @@ export function hubConfigHistoryKey(recordKind: string, recordKey: string | null
 }
 /** The unfiltered change log — `GET /api/config/changes`, paged newest first. */
 export const hubConfigChangesKey = [...hubConfigKey, 'changes'] as const;
+/** Every project of the tenant — `GET /api/projects`. Under {@link hubConfigKey}: a project is a configured record,
+ * so every config write refreshes the list, and a project write invalidates the change log with it. */
+export const hubProjectsKey = [...hubConfigKey, 'projects'] as const;
+/** One project's record by id — `GET /api/projects/{project}`; under {@link hubProjectsKey}, so a projects write
+ * refreshes it. `projectId` is nullable, `hubChunkKey`'s own null-tolerant shape, for the disabled-query rest state. */
+export function hubProjectKey(projectId: string | null): readonly unknown[] {
+  return [...hubProjectsKey, projectId];
+}
+/** One project's source or repository links — `GET /api/projects/{project}/source-links` or `…/repository-links`. */
+export function hubProjectLinksKey(projectId: string | null, kind: 'source' | 'repository'): readonly unknown[] {
+  return [...hubProjectsKey, projectId, 'links', kind];
+}
+
+/** The trailing element a read the project lens narrows adds to its key: the lens's project, `null` for the whole
+ * tenant. */
+export interface ProjectKeyPart {
+  readonly project: string | null;
+}
+
+/** `key` narrowed to `project` — the key with a trailing {@link ProjectKeyPart}. Every lensed variant stays under
+ * `key`, so a prefix invalidation of `key` (an SSE event, a mutation) reaches the reads of every lens at once, and two
+ * lenses never share a cache entry. */
+export function lensedKey(key: readonly unknown[], project: string | null): readonly unknown[] {
+  const part: ProjectKeyPart = { project };
+  return [...key, part];
+}
+
 /** The gardening tab's docket read — `GET /api/garden-proposals`. Not
  * in the SSE event vocabulary, so nothing invalidates this key on a live event. */
 export const hubGardenProposalsKey = ['hub', 'garden-proposals'] as const;

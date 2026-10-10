@@ -5,10 +5,10 @@ import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-exper
 import { hubClient } from 'fleet';
 import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
 
-import { routes } from './app.routes';
+import { GARDENING_ROUTES } from './gardening.routes';
 
 /**
- * The `/gardening` subtree in the real route table (`app.routes.ts`) —
+ * The `/gardening` subtree (`gardening.routes.ts`, mounted at `gardening` as the app's route table mounts it) —
  * proves the five top-level children resolve, the bare parent path redirects to
  * `runs` (the leftmost tab), and each of the five bare/param pairs (`scopes`,
  * `routines`, `runs`, `findings`, `proposals`) actually mounts its page and selects
@@ -45,7 +45,7 @@ describe('the /gardening route subtree', () => {
       providers: [
         provideZonelessChangeDetection(),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
-        provideRouter(routes),
+        provideRouter([{ path: 'gardening', children: GARDENING_ROUTES }]),
       ],
     }).compileComponents();
   });

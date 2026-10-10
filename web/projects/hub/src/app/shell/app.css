@@ -22,3 +22,19 @@ router-outlet {
   padding: 6px 12px;
   color: var(--red);
 }
+/* The project lens's notice: a link that named no project of the tenant opened on All. */
+.lens-notice {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--line);
+  color: var(--amber-hi);
+  font-size: var(--fs-sm);
+}
+.lens-notice span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}

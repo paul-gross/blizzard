@@ -1,6 +1,7 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
+import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
 import { AppNav } from './app-nav';
 
@@ -9,7 +10,7 @@ describe('AppNav', () => {
     localStorage.clear();
     await TestBed.configureTestingModule({
       imports: [AppNav],
-      providers: [provideZonelessChangeDetection(), provideRouter([])],
+      providers: [provideZonelessChangeDetection(), provideRouter([]), provideTanStackQuery(new QueryClient())],
     }).compileComponents();
   });
 

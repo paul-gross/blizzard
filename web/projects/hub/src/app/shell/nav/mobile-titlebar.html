@@ -6,6 +6,9 @@
         Switch tenant
       </fleet-kit-menu-item>
     }
+    <fleet-kit-menu-item testid="mobile-titlebar-project" submenu [cdkMenuTriggerFor]="projectMenu">
+      Project lens
+    </fleet-kit-menu-item>
     <fleet-kit-menu-item testid="mobile-titlebar-appearance" submenu [cdkMenuTriggerFor]="appearanceMenu">
       Appearance
     </fleet-kit-menu-item>
@@ -18,6 +21,9 @@
     [current]="tenants.current()?.tenant_id ?? null"
     (choose)="tenants.switchTo($event)"
   />
+</ng-template>
+<ng-template #projectMenu>
+  <app-project-menu />
 </ng-template>
 <ng-template #appearanceMenu>
   <fleet-viewport-menu testid="mobile-titlebar-appearance-panel" />

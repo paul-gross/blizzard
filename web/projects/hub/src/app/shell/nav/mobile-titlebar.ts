@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { CdkMenuTrigger } from '@angular/cdk/menu';
 import { KitMenuItem, KitMenuPanel, MobileTitlebar as FleetMobileTitlebar, ViewportMenu } from 'fleet';
 
+import { ProjectMenu } from './project-menu';
 import { TenantMenu } from './tenant-menu';
 import { injectTenantSwitch } from './tenant-switch';
 
@@ -26,12 +27,13 @@ import { injectTenantSwitch } from './tenant-switch';
  *
  * The titlebar names the tenant the board is in beside the wordmark. Mobile has
  * no profile menu, so a caller with several memberships finds the tenant
- * switcher in this menu instead, the same {@link TenantMenu} submenu.
+ * switcher in this menu instead, the same {@link TenantMenu} submenu. The project lens is a submenu here too
+ * ({@link ProjectMenu}), the mobile counterpart of the desktop tab row's lens control.
  */
 @Component({
   selector: 'app-mobile-titlebar',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CdkMenuTrigger, FleetMobileTitlebar, KitMenuItem, KitMenuPanel, TenantMenu, ViewportMenu],
+  imports: [CdkMenuTrigger, FleetMobileTitlebar, KitMenuItem, KitMenuPanel, ProjectMenu, TenantMenu, ViewportMenu],
   templateUrl: './mobile-titlebar.html',
 })
 export class MobileTitlebar {

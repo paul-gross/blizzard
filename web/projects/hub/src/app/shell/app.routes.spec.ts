@@ -13,7 +13,7 @@ import {
 import { type MeResponse } from 'fleet/shell';
 import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
 
-import { LAST_TENANT_KEY, TAB_TENANT_KEY } from '../core/auth/tenant-context';
+import { LAST_TENANT_KEY, PAGE_RELOAD, TAB_TENANT_KEY } from '../core/auth/tenant-context';
 import { App } from './app';
 import { routes } from './app.routes';
 
@@ -348,5 +348,103 @@ describe('the admin members route', () => {
 
     expect(router.url).toBe('/admin/members');
     expect(el.querySelector('[data-testid="members-table"]')).toBeTruthy();
+  });
+});
+
+/**
+ * The project lens in the route table: every view is mounted at the root (All) and again under `p/:projectSlug`, so
+ * each one — and each of its redirects — is reachable under both, and a lensed URL renders its view only once the shell
+ * has entered its tenant and the guard has settled the project.
+ */
+describe('the views under the project lens', () => {
+  const BLIZZARD = {
+    project_id: 'proj_b',
+    slug: 'blizzard',
+    name: 'Blizzard',
+    description: '',
+    revision: 1,
+    created_at: '2026-10-01T00:00:00Z',
+  };
+  let authStub: RequestClientStub;
+  let reloads: number;
+
+  beforeEach(async () => {
+    localStorage.clear();
+    sessionStorage.clear();
+    reloads = 0;
+    authStub = stubRequestClient(hubClient, (method, path) => {
+      if (path === '/api/me') return OPERATOR_ME_RESPONSE;
+      if (path === '/api/auth/providers') return [];
+      if (path === '/api/projects') return { projects: [BLIZZARD] };
+      if (path.startsWith('/api/projects/')) return stubError(404, { detail: 'no such project' });
+      if (path === '/api/members') return [];
+      if (path === '/api/chunks') return { chunks: [], next_cursor: null };
+      if (path === '/api/questions' || path === '/api/graphs' || path === '/api/routines') return [];
+      if (path === '/api/runs' || path === '/api/scopes') return [];
+      if (path === '/api/runners') return { runners: [] };
+      if (path === '/api/spend') return { cost_usd: 0, cost_partial: false };
+      return {};
+    });
+    await TestBed.configureTestingModule({
+      imports: [App],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+        provideRouter(routes, withRouterConfig({ onSameUrlNavigation: 'reload' })),
+        provideViewportRenavigation(),
+        { provide: EVENT_SOURCE_FACTORY, useValue: (() => new FakeEventSource() as unknown as FleetEventSource) as EventSourceFactory },
+        { provide: PAGE_RELOAD, useValue: () => reloads++ },
+      ],
+    }).compileComponents();
+  });
+
+  afterEach(() => authStub.restore());
+
+  async function open(url: string, mode: 'desktop' | 'mobile' = 'desktop') {
+    TestBed.inject(ViewportService).setOverride(mode);
+    const fixture = TestBed.createComponent(App);
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl(url);
+    await settle(fixture);
+    return { router, el: fixture.nativeElement as HTMLElement };
+  }
+
+  for (const [url, landed] of [
+    ['/p/blizzard', '/p/blizzard/board'],
+    ['/p/blizzard/board', '/p/blizzard/board'],
+    ['/p/blizzard/graphs', '/p/blizzard/graphs'],
+    ['/p/blizzard/gardening', '/p/blizzard/gardening/runs'],
+    ['/p/blizzard/admin', '/p/blizzard/admin/members'],
+    ['/p/blizzard/admin/users', '/p/blizzard/admin/members'],
+    ['/p/blizzard/fleet', '/p/blizzard/board'],
+  ] as const) {
+    it(`lands ${url} on ${landed}, under the lens`, async () => {
+      const { router } = await open(url);
+
+      expect(router.url).toBe(landed);
+    });
+  }
+
+  it('renders the desktop board under the lens, and the mobile glance there on a phone', async () => {
+    const desktop = await open('/p/blizzard/board');
+    expect(desktop.el.querySelector('[data-testid="board-shell"]')).toBeTruthy();
+    expect(desktop.el.querySelector('[data-testid="project-lens-blizzard"]')?.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('renders the mobile glance under the lens on a phone', async () => {
+    const { el, router } = await open('/p/blizzard/board', 'mobile');
+
+    expect(router.url).toBe('/p/blizzard/board');
+    expect(el.querySelector('[data-testid="glance-board"]')).toBeTruthy();
+  });
+
+  it('opens an unknown project on All with a notice, in the same tenant and without a reload', async () => {
+    const { el, router } = await open('/p/gone/graphs');
+
+    expect(router.url).toBe('/graphs');
+    expect(el.querySelector('[data-testid="lens-notice"]')?.textContent).toContain('No project “gone” in this tenant.');
+    expect(reloads).toBe(0);
+    expect(sessionStorage.getItem(TAB_TENANT_KEY)).toBe('ten_operator');
+    expect(el.querySelector('[data-testid="board-header"]')).toBeTruthy();
   });
 });

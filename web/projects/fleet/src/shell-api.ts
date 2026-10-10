@@ -9,12 +9,15 @@ export { BoardHeader } from './lib/shell/board-header/board-header';
 export { FleetLiveUpdates } from './lib/sse/fleet-live';
 export { EVENT_SOURCE_FACTORY, FetchEventSource, type EventSourceFactory } from './lib/sse/sse.service';
 export { FLEET_CLOCK, injectNowSignal } from './lib/core/now-signal';
+export { HUB_PROJECT_FILTER, injectProjectFilter } from './lib/core/project-filter';
+export { IN_APP_LINK, LensLink, type InAppLink } from './lib/core/lens-link';
 
 export { ViewportService } from './lib/core/viewport/viewport-service';
 export { matchesMobileViewport } from './lib/core/viewport/matches-mobile-viewport';
 export { provideViewportRenavigation } from './lib/core/viewport/viewport-renavigation';
 
 export { KitTab, KitTabStrip } from './lib/kit/kit-tab';
+export { KitChip } from './lib/kit/kit-chips';
 export { MobileTabBar, type MobileTabItem } from './lib/shell/mobile-chrome/mobile-tab-bar';
 
 export { KitButton } from './lib/kit/kit-button';
@@ -28,16 +31,23 @@ export {
   hubFleetSpendKey,
   hubHealthKey,
   hubMeKey,
+  hubProjectKey,
+  hubProjectLinksKey,
+  hubProjectsKey,
   hubQuestionsKey,
+  lensedKey,
+  type ProjectKeyPart,
 } from './lib/core/query-keys';
 export { client as hubClient } from './lib/api/hub/client.gen';
 export {
   chunkCountsApiChunkCountsGet,
   fleetSpendApiSpendGet,
+  getProjectApiProjectsProjectGet,
   healthApiHealthGet,
   listChunksApiChunksGet,
   listDecisionsApiDecisionsGet,
   listOpenQuestionsApiQuestionsGet,
+  listProjectsApiProjectsGet,
   listProvidersApiAuthProvidersGet,
   logoutApiAuthLogoutPost,
   meApiMeGet,
@@ -49,6 +59,7 @@ export type {
   FleetSpendView,
   MeResponse,
   MeTenant,
+  ProjectView,
   ProviderSummary,
   QuestionView,
 } from './lib/api/hub/types.gen';

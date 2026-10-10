@@ -6,4 +6,5 @@
   @if (showAdmin()) {
     <a fleetKitTab routerLink="/admin" routerLinkActive="active" data-testid="nav-admin">Admin</a>
   }
+  <app-project-lens-control [enabled]="lensEnabled()" />
 </nav>
