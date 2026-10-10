@@ -39,3 +39,6 @@ export const repositoryLifecycleMutationKey = ['hub', 'mutation', 'repository-li
 export const createSecretMutationKey = ['hub', 'mutation', 'create-secret'] as const;
 export const replaceSecretMutationKey = ['hub', 'mutation', 'replace-secret'] as const;
 export const secretLifecycleMutationKey = ['hub', 'mutation', 'secret-lifecycle'] as const;
+export const createProjectMutationKey = ['hub', 'mutation', 'create-project'] as const;
+export const editProjectMutationKey = ['hub', 'mutation', 'edit-project'] as const;
+export const projectLinkMutationKey = ['hub', 'mutation', 'project-link'] as const;

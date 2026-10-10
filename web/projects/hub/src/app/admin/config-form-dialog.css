@@ -63,3 +63,9 @@ h2 {
   color: var(--red);
   overflow-wrap: anywhere;
 }
+
+.form-note {
+  margin: 8px 0 0;
+  font-size: var(--fs-sm);
+  color: var(--label);
+}

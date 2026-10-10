@@ -19,6 +19,7 @@ import { SECRET_CREATE_FIELDS, secretRows } from './secrets.model';
 import { injectCreateSecretMutation, type SecretCreateVars } from './secrets.mutations';
 import { injectSecretsQuery } from './secrets.query';
 import { ProjectLens } from '../../core/project-lens';
+import { LensNote } from '../../core/lens-note';
 
 /**
  * `/admin/secrets` — the secret list beside a `<router-outlet>` holding the
@@ -29,7 +30,7 @@ import { ProjectLens } from '../../core/project-lens';
 @Component({
   selector: 'app-secrets-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ConfigFormDialog, ConfigMaster, RouterOutlet],
+  imports: [ConfigFormDialog, ConfigMaster, LensNote, RouterOutlet],
   templateUrl: './secrets-page.html',
   styleUrl: '../config-page-host.css',
 })

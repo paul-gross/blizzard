@@ -265,3 +265,4 @@ export {
   wontFixFindingsApiFindingsWontFixPost,
 } from './lib/api/hub';
 export type { ChunkDetail } from './lib/api/hub';
+export type { ProjectCreateRequest, ProjectPatchRequest, RepositoryLinkView, SourceLinkView } from './lib/api/hub';

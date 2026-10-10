@@ -16,6 +16,14 @@ export const ADMIN_ROUTES: Routes = [
       { path: 'members', loadComponent: () => import('./members/members-page').then((m) => m.MembersPage) },
       { path: 'users', redirectTo: 'members', pathMatch: 'full' },
       {
+        path: 'projects',
+        loadComponent: () => import('./projects/projects-page').then((m) => m.ProjectsPage),
+        children: [
+          { path: '', loadComponent: () => import('./projects/project-detail').then((m) => m.ProjectDetail) },
+          { path: ':key', loadComponent: () => import('./projects/project-detail').then((m) => m.ProjectDetail) },
+        ],
+      },
+      {
         path: 'work-sources',
         loadComponent: () => import('./work-sources/work-sources-page').then((m) => m.WorkSourcesPage),
         children: [

@@ -1,0 +1,73 @@
+:host {
+  display: block;
+  min-width: 0;
+}
+.record {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.hdr {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.name {
+  margin: 0;
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.grow {
+  flex: 1;
+}
+.callout {
+  margin: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--amber-dim);
+  color: var(--amber);
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}
+.cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.card {
+  flex: 1 1 200px;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+}
+.section {
+  margin: 8px 0 0;
+  font-size: var(--fs-label);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--label);
+  font-weight: normal;
+}
+.card .section {
+  margin-top: 0;
+}
+.names {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+}
+.names li {
+  overflow-wrap: anywhere;
+}
+.dim,
+.note {
+  color: var(--label);
+}
+.note {
+  margin: 0;
+  font-size: var(--fs-sm);
+}

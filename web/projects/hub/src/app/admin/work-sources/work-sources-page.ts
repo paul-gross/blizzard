@@ -15,6 +15,8 @@ import {
   parseLifecycleFilter,
 } from '../config-filter.model';
 import { ConfigMaster } from '../config-master';
+import { injectLensLinks, withinLens } from '../projects/lens-links';
+import { lensedListState } from '../projects/projects.model';
 import type { ConfigRowVm } from '../config-record-list';
 import { WORK_SOURCE_FIELDS, workSourceRows } from './work-sources.model';
 import { injectWorkSourcesQuery } from './work-sources.query';
@@ -42,16 +44,25 @@ export class WorkSourcesPage {
 
   protected readonly mobile = computed(() => this.viewport.mode() === 'mobile');
   protected readonly lifecycle = computed(() => parseLifecycleFilter(this.filters.read(LIFECYCLE_FILTER_PARAM)));
+  /** Under a project lens the list narrows to the records that project links. */
+  private readonly lensLinks = injectLensLinks('source');
   private readonly sourcesQuery = injectWorkSourcesQuery(() => includeRetired(this.lifecycle()));
 
   protected readonly selectedKey = injectChildRouteParam('key');
   protected readonly rows = computed<readonly ConfigRowVm[]>(() =>
-    workSourceRows(this.sourcesQuery.data() ?? [], this.lifecycle()),
+    workSourceRows(withinLens(this.sourcesQuery.data() ?? [], this.lensLinks.names()), this.lifecycle()),
   );
   protected readonly state = computed<KitAsyncStateValue>(() =>
-    asyncState(this.sourcesQuery, this.rows().length === 0),
+    lensedListState(
+      this.lensLinks.failed(),
+      this.lensLinks.pending(),
+      asyncState(this.sourcesQuery, this.rows().length === 0),
+    ),
   );
-  protected readonly emptyText = computed(() => lifecycleEmptyText('work sources', this.lifecycle()));
+  protected readonly caption = computed(() => this.lensLinks.caption('Work sources'));
+  protected readonly emptyText = computed(() =>
+    this.lensLinks.emptyText(lifecycleEmptyText('work sources', this.lifecycle()), 'work sources'),
+  );
 
   protected onFilter(value: string): void {
     this.filters.patch({

@@ -1,0 +1,37 @@
+<fleet-kit-dialog [open]="true" [ariaLabel]="heading()" [testid]="testidPrefix() + '-dialog'" (closed)="onClosed()">
+  <h2 fleetKitDialogHeader [attr.data-testid]="testidPrefix() + '-dialog-title'">{{ heading() }}</h2>
+
+  @if (choices().length > 0) {
+    <div class="field">
+      <fleet-kit-select
+        [options]="choices()"
+        [selectedValue]="selected()"
+        [label]="fieldLabel()"
+        [ariaLabel]="fieldLabel()"
+        [testid]="testidPrefix() + '-choice'"
+        (choose)="onChoose($event)"
+      />
+    </div>
+    <p class="note">{{ note() }}</p>
+  } @else {
+    <p class="note" [attr.data-testid]="testidPrefix() + '-none'">{{ noneText() }}</p>
+  }
+
+  <div fleetKitDialogFooter class="footer">
+    @if (submitError(); as error) {
+      <p class="submit-error" [attr.data-testid]="testidPrefix() + '-submit-error'">{{ error }}</p>
+    }
+    <fleet-kit-button size="cta" [disabled]="submitting()" [testid]="testidPrefix() + '-cancel'" (click)="onClosed()">
+      Cancel
+    </fleet-kit-button>
+    <fleet-kit-button
+      size="cta"
+      variant="primary"
+      [disabled]="!canSubmit()"
+      [testid]="testidPrefix() + '-submit'"
+      (click)="onSubmit()"
+    >
+      Link
+    </fleet-kit-button>
+  </div>
+</fleet-kit-dialog>

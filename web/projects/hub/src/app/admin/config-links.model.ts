@@ -8,6 +8,7 @@ const SURFACE_SEGMENT: Partial<Record<RecordKind, readonly string[]>> = {
   [RecordKind.WORK_SOURCE]: ['/admin', 'work-sources'],
   [RecordKind.REPOSITORY]: ['/admin', 'repositories'],
   [RecordKind.SECRET]: ['/admin', 'secrets'],
+  [RecordKind.PROJECT]: ['/admin', 'projects'],
   [RecordKind.SCOPE]: ['/gardening', 'scopes'],
   [RecordKind.ROUTINE]: ['/gardening', 'routines'],
 };

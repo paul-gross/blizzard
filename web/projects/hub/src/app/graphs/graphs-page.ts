@@ -5,6 +5,7 @@ import { GraphDetail } from './graph-detail';
 import { GraphExplorer } from './graph-explorer';
 import { map } from 'rxjs';
 import { ProjectLens } from '../core/project-lens';
+import { LensNote } from '../core/lens-note';
 
 /**
  * The `/graphs` route — the graph explorer: a
@@ -17,7 +18,7 @@ import { ProjectLens } from '../core/project-lens';
 @Component({
   selector: 'app-graphs-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [GraphExplorer, GraphDetail],
+  imports: [GraphExplorer, GraphDetail, LensNote],
   templateUrl: './graphs-page.html',
   styleUrl: './graphs-page.css',
 })

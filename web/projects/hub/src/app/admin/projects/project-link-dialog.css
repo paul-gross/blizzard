@@ -1,0 +1,32 @@
+:host {
+  --kit-dialog-width: 560px;
+}
+h2 {
+  margin: 0;
+  font-size: var(--fs-md);
+  color: var(--text);
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 0;
+}
+.note {
+  margin: 8px 0 0;
+  color: var(--label);
+  font-size: var(--fs-sm);
+}
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.submit-error {
+  flex: 1 1 100%;
+  margin: 0;
+  color: var(--red);
+  font-size: var(--fs-sm);
+}

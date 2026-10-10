@@ -13,6 +13,7 @@ import {
   injectRevokeMemberMutation,
 } from './members.mutations';
 import { memberChangeErrorText, membersLabel, pendingMemberIds, revokePrompt, tenantNameOf } from './members-page.model';
+import { LensNote } from '../../core/lens-note';
 
 /**
  * The `/admin/members` route — the members of the tenant the board acts in. A container composing the presentational
@@ -30,7 +31,7 @@ import { memberChangeErrorText, membersLabel, pendingMemberIds, revokePrompt, te
 @Component({
   selector: 'app-members-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MembersTable, KitAsyncState, KitConfirmDialog],
+  imports: [MembersTable, KitAsyncState, KitConfirmDialog, LensNote],
   templateUrl: './members-page.html',
   styleUrl: './members-page.css',
 })

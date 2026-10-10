@@ -1,0 +1,12 @@
+:host {
+  display: block;
+  min-width: 0;
+}
+.lens-note {
+  margin: 0 0 8px;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  color: var(--label);
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}

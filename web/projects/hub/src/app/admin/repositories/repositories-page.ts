@@ -15,6 +15,8 @@ import {
   parseLifecycleFilter,
 } from '../config-filter.model';
 import { ConfigMaster } from '../config-master';
+import { injectLensLinks, withinLens } from '../projects/lens-links';
+import { lensedListState } from '../projects/projects.model';
 import type { ConfigRowVm } from '../config-record-list';
 import { REPOSITORY_FIELDS, repositoryRows } from './repositories.model';
 import { injectRepositoriesQuery } from './repositories.query';
@@ -42,16 +44,25 @@ export class RepositoriesPage {
 
   protected readonly mobile = computed(() => this.viewport.mode() === 'mobile');
   protected readonly lifecycle = computed(() => parseLifecycleFilter(this.filters.read(LIFECYCLE_FILTER_PARAM)));
+  /** Under a project lens the list narrows to the records that project links. */
+  private readonly lensLinks = injectLensLinks('repository');
   private readonly repositoriesQuery = injectRepositoriesQuery(() => includeRetired(this.lifecycle()));
 
   protected readonly selectedKey = injectChildRouteParam('key');
   protected readonly rows = computed<readonly ConfigRowVm[]>(() =>
-    repositoryRows(this.repositoriesQuery.data() ?? [], this.lifecycle()),
+    repositoryRows(withinLens(this.repositoriesQuery.data() ?? [], this.lensLinks.names()), this.lifecycle()),
   );
   protected readonly state = computed<KitAsyncStateValue>(() =>
-    asyncState(this.repositoriesQuery, this.rows().length === 0),
+    lensedListState(
+      this.lensLinks.failed(),
+      this.lensLinks.pending(),
+      asyncState(this.repositoriesQuery, this.rows().length === 0),
+    ),
   );
-  protected readonly emptyText = computed(() => lifecycleEmptyText('repositories', this.lifecycle()));
+  protected readonly caption = computed(() => this.lensLinks.caption('Repositories'));
+  protected readonly emptyText = computed(() =>
+    this.lensLinks.emptyText(lifecycleEmptyText('repositories', this.lifecycle()), 'repositories'),
+  );
 
   protected onFilter(value: string): void {
     this.filters.patch({

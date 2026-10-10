@@ -28,6 +28,9 @@
       </div>
     }
   </div>
+  @if (hint(); as note) {
+    <p class="form-note" [attr.data-testid]="testidPrefix() + '-hint'">{{ note }}</p>
+  }
 
   @if (mode() === 'edit') {
     <h3 class="section">Will change</h3>

@@ -106,6 +106,10 @@
  *     members table: with a tenant name and member details of any length, the
  *     page never scrolls sideways at 360/768/1280px; a table wider than a
  *     phone scrolls inside its panel, where the revoke button stays reachable.
+ *   - projects/hub/src/app/admin/projects/projects-table.shell-sweep.spec.ts — the
+ *     projects table: with a project name, slug and description of any length
+ *     and the "no runner" badge showing, the page never scrolls sideways at
+ *     360/768/1280px and the badge stays on screen.
  *   - projects/hub/src/app/garden/garden-runs.shell-sweep.spec.ts — the
  *     gardening runs-and-findings tab's two presentational components
  *     (blizzard#401 Phase 3): `FleetRunList`'s escalated row carries a
@@ -289,6 +293,7 @@ const SWEEPS = [
   { project: 'hub', spec: 'projects/hub/src/app/garden/scopes/scope-panel.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/admin/admin-config.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/admin/members/members-table.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/admin/projects/projects-table.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/garden-runs.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/findings/finding-fact-timeline.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/routines/gardening-routines-page.shell-sweep.spec.ts' },
