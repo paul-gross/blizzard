@@ -1,7 +1,8 @@
 """SQLAlchemy adapter for the legacy-config carry-over (package-private).
 
 One ``store.write`` runs the whole import through the per-record create bodies — so each keeps its
-in-transaction checks — and appends the ``config_import`` fact last. The fact is re-checked first inside
+in-transaction checks —, links what it created through the link bodies, and appends the ``config_import``
+fact last. The fact is re-checked first inside
 the same transaction, so two racing imports write once."""
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ from blizzard.hub.domain.config.carry_over import (
     LegacyImport,
     LegacyImportRefused,
 )
+from blizzard.hub.domain.config.changes import ConfigChange
 from blizzard.hub.domain.config.repositories import (
     RepositoryCoordinateTaken,
     RepositoryNameTaken,
@@ -31,6 +33,8 @@ from blizzard.hub.domain.config.work_sources import (
     WorkSourceNameTaken,
     WorkSourceSecretUnavailable,
 )
+from blizzard.hub.domain.projects.links import RepositoryLink, SourceLink
+from blizzard.hub.store.internal import project_link_store as link_writes
 from blizzard.hub.store.internal import repository_record_store as repository_writes
 from blizzard.hub.store.internal import work_source_record_store as work_source_writes
 from blizzard.hub.store.internal.secret_store import insert_secret
@@ -110,10 +114,20 @@ class ConfigImportStore:
                         repository_writes.insert_record(conn, repository, change)
                 except _REFUSALS as exc:
                     raise LegacyImportRefused(str(exc)) from exc
+                for link, change in imported.links:
+                    _insert_link(conn, link, change)
                 _append_fact(conn, imported.fact)
         except _AlreadyImported:
             return False
         return True
+
+
+def _insert_link(conn: Connection, link: object, change: ConfigChange) -> None:
+    if isinstance(link, SourceLink):
+        link_writes.insert_link(conn, link_writes._SOURCES, link.project_id, link.source_name, change)
+    else:
+        assert isinstance(link, RepositoryLink)
+        link_writes.insert_link(conn, link_writes._REPOSITORIES, link.project_id, link.repository_name, change)
 
 
 def _conforms_config_import_reader(x: ConfigImportStore) -> IReadConfigImports:

@@ -103,6 +103,7 @@ from blizzard.hub.domain.observability.tracing.attributes import (
     resource_attributes,
 )
 from blizzard.hub.domain.observability.transcripts import TranscriptCaps
+from blizzard.hub.domain.projects.declarations import ImportLinks
 from blizzard.hub.domain.projects.model import ProjectRequired
 from blizzard.hub.domain.runners.registration import RunnerRetired
 from blizzard.hub.runtime import migration_runner
@@ -287,7 +288,7 @@ def import_legacy_config(
 ) -> ImportResult:
     """The offline ``import-legacy`` wiring: the hub key's existence checked before a provider is
     built, then the store and key source opened directly, no app. The import writes into ``tenant``,
-    or into the hub's only open tenant when none is named."""
+    or into the hub's only open tenant when none is named, linking what it creates to that tenant's only project."""
     require_hub_key(environ, data_dir=config.data_dir)
     legacy = read_legacy_keys(config.config_path, environ)
     engine = open_hub_engine(config.db_url)
@@ -307,6 +308,7 @@ def import_legacy_config(
             stores.config_import.commit_coordinates(),
             existing,
             recorded=stores.config_import.recorded(),
+            links=ImportLinks(stores.projects),
         )
     finally:
         engine.dispose()

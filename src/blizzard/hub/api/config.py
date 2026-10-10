@@ -20,11 +20,13 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
-from blizzard.hub.api.project_params import project_of_call
+from blizzard.hub.api.project_params import PROJECT_REQUIRED
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.documents.codec import ConfigDecodeError, codec_for_media_type
 from blizzard.hub.domain.config.apply import (
+    ROUTINES_SECTION,
+    SCOPES_SECTION,
     ApplyEntryRefused,
     ConfigDeclaration,
     DeclarableRecord,
@@ -38,8 +40,17 @@ from blizzard.hub.domain.config.changes import ChangeContext, ConfigChange, Door
 from blizzard.hub.domain.config.repositories import RepositoryEdit, RepositoryFields
 from blizzard.hub.domain.config.work_sources import ConfigFieldError, WorkSourceEdit, WorkSourceFields
 from blizzard.hub.domain.garden.declarations import RoutineDeclaration, ScopeDeclaration
-from blizzard.hub.domain.garden.routines import RoutineEdit
+from blizzard.hub.domain.garden.routines import Routine, RoutineEdit
 from blizzard.hub.domain.garden.scopes import ScopeEdit
+from blizzard.hub.domain.projects.declarations import (
+    EntryProjectRequired,
+    ProjectDeclaration,
+    ProjectsPlan,
+    StoredProjects,
+    plan_projects,
+)
+from blizzard.hub.domain.projects.links import RepositoryLink, SourceLink
+from blizzard.hub.domain.projects.model import Project, ProjectEdit, ProjectSlug
 from blizzard.wire.config import (
     ConfigApplyOutcome,
     ConfigApplyResponse,
@@ -47,6 +58,9 @@ from blizzard.wire.config import (
     ConfigChangeView,
     ConfigDocument,
     FieldChangeView,
+    ProjectDocument,
+    RoutineEntry,
+    ScopeEntry,
 )
 from blizzard.wire.repository import RepositoryDocument
 from blizzard.wire.routine import RoutineDocument
@@ -117,9 +131,10 @@ def list_changes(
     return ConfigChangesPage(changes=[_view(c) for c in page], next_before=page[-1].id if len(rows) > limit else None)
 
 
-def _declaration(document: ConfigDocument, clock: IClock, project_id: str | None) -> ConfigDeclaration:
+def _declaration(document: ConfigDocument, clock: IClock, projects: ProjectsPlan) -> ConfigDeclaration:
     """The domain's declarations from a validated document: each entry's create fields, and a sparse edit
-    of only the fields the entry states (``model_fields_set``); its scopes and routines within ``project_id``."""
+    of only the fields the entry states (``model_fields_set``); the planned ``projects`` section, and each
+    scope and routine within the project it names, as the apply leaves the projects."""
     sources = []
     for entry in document.work_sources:
         stated = {name: getattr(entry, name) for name in entry.model_fields_set if name != "name"}
@@ -153,32 +168,39 @@ def _declaration(document: ConfigDocument, clock: IClock, project_id: str | None
                 edit=RepositoryEdit(**stated),
             )
         )
-    scopes, routines = _garden_declarations(document, clock, project_id) if project_id is not None else ((), ())
+    scopes, routines = _garden_declarations(document, clock, projects)
     return ConfigDeclaration(
         secrets=tuple(document.secrets),
         work_sources=tuple(sources),
         repositories=tuple(repositories),
+        projects=projects.section,
         scopes=scopes,
         routines=routines,
     )
 
 
 def _garden_declarations(
-    document: ConfigDocument, clock: IClock, project_id: str
+    document: ConfigDocument, clock: IClock, projects: ProjectsPlan
 ) -> tuple[tuple[ScopeDeclaration, ...], tuple[RoutineDeclaration, ...]]:
-    """The document's scope and routine declarations, each within ``project_id`` — the call's project."""
+    """The document's scope and routine declarations, each within the project its entry names — the tenant's
+    only one, as the apply leaves it, for an entry naming none."""
     scopes = [
         ScopeDeclaration(
             name=scope.slug,
             description=scope.description,
-            edit=ScopeEdit(**{name: getattr(scope, name) for name in scope.model_fields_set if name != "slug"}),
-            project_id=project_id,
+            edit=ScopeEdit(
+                **{name: getattr(scope, name) for name in scope.model_fields_set if name not in ("slug", "project")}
+            ),
+            project_id=projects.project_of(SCOPES_SECTION, index, scope.project).project_id,
         )
-        for scope in document.scopes
+        for index, scope in enumerate(document.scopes)
     ]
     routines = []
-    for routine in document.routines:
-        stated = {name: getattr(routine, name) for name in routine.model_fields_set if name != "scopes"}
+    for index, routine in enumerate(document.routines):
+        project_id = projects.project_of(ROUTINES_SECTION, index, routine.project).project_id
+        stated = {
+            name: getattr(routine, name) for name in routine.model_fields_set if name not in ("scopes", "project")
+        }
         routines.append(
             RoutineDeclaration(
                 name=routine.name,
@@ -196,33 +218,101 @@ def _garden_declarations(
     return tuple(scopes), tuple(routines)
 
 
-def _stored(declaration: ConfigDeclaration, services: TenantServices, project_id: str | None) -> StoredConfig:
+def _stored(declaration: ConfigDeclaration, services: TenantServices) -> StoredConfig:
     secrets = services.secret_catalog.get_many(list(declaration.secrets))
     retired = services.secret_catalog.retired_names()
-    scopes: dict[str, DeclarableRecord] = {
-        scope.slug: scope for scope in services.scopes.list_all() if scope.project_id == project_id
+    scopes: dict[tuple[str, str], DeclarableRecord] = {
+        (scope.project_id, scope.slug): scope for scope in services.scopes.list_all()
     }
     graph_names: set[str] = set()
-    names: list[str] = []
+    names: dict[str, list[str]] = {}
     for entry in declaration.routines:
         assert isinstance(entry, RoutineDeclaration)
         graph_names.add(entry.graph_name)
-        names.append(entry.name)
-    stored = services.routines.get_many_by_name(project_id, names) if project_id is not None else {}
-    routines: dict[str, DeclarableRecord] = dict(stored)
-    scope_links = services.routine_scopes.list_scopes_for([r.routine_id for r in stored.values()])
-    linked = {name: tuple(scope_links[r.routine_id]) for name, r in stored.items()}
+        names.setdefault(entry.project_id, []).append(entry.name)
+    routines: dict[tuple[str, str], DeclarableRecord] = {
+        (project_id, name): routine
+        for project_id, project_names in names.items()
+        for name, routine in services.routines.get_many_by_name(project_id, project_names).items()
+    }
+    ids = {key: r.routine_id for key, r in routines.items() if isinstance(r, Routine)}
+    scope_links = services.routine_scopes.list_scopes_for(list(ids.values()))
+    linked = {key: tuple(scope_links[routine_id]) for key, routine_id in ids.items()}
+    declared_scopes = [d for d in declaration.scopes if isinstance(d, ScopeDeclaration)]
     return StoredConfig(
         work_sources=services.work_source_records.get_many([d.name for d in declaration.work_sources]),
         repositories=services.repository_records.get_many([d.name for d in declaration.repositories]),
         secrets={name: RecordState.of(name in retired) for name in secrets},
-        scopes={d.name: scopes[d.name] for d in declaration.scopes if d.name in scopes},
+        scopes={d.key: scopes[d.key] for d in declared_scopes if d.key in scopes},
         routines=routines,
         references=DeclaredReferences(
-            scopes=frozenset(scopes) | {d.name for d in declaration.scopes},
+            scopes=frozenset(scopes) | {d.key for d in declared_scopes},
             enabled_graphs=frozenset(n for n in graph_names if services.graphs.get_enabled_by_name(n) is not None),
             linked_scopes=linked,
         ),
+    )
+
+
+def _projects(document: ConfigDocument, services: TenantServices, ctx: ChangeContext) -> ProjectsPlan:
+    """The planned ``projects`` section, from what the store holds for the projects and links the document names."""
+    projects = services.projects.list_all()
+    current = {project.slug: project for project in projects}
+    named = {entry.slug for entry in document.projects} | {
+        entry.project for entry in (*document.scopes, *document.routines) if entry.project is not None
+    }
+    former: dict[str, Project] = {}
+    for value in sorted(named - current.keys()):
+        slug = ProjectSlug.of(value)
+        left = services.projects.get_by_former_slug(slug) if slug is not None else None
+        if left is not None:
+            former[value] = left
+    links = services.project_links
+    source_links: dict[tuple[str, str], SourceLink] = {}
+    repository_links: dict[tuple[str, str], RepositoryLink] = {}
+    for entry in document.projects:
+        project = current.get(entry.slug)
+        if project is None:
+            continue
+        held = project.project_id
+        # Every standing link may be unlinked, and a listed one in any state relinked.
+        if "sources" in entry.model_fields_set:
+            listed = [link for name in entry.sources if (link := links.source_link(held, name)) is not None]
+            source_links.update({(held, link.source_name): link for link in [*links.sources_of(held), *listed]})
+        if "repositories" in entry.model_fields_set:
+            named_repos = [
+                link for name in entry.repositories if (link := links.repository_link(held, name)) is not None
+            ]
+            repository_links.update(
+                {(held, link.repository_name): link for link in [*links.repositories_of(held), *named_repos]}
+            )
+    sources = {entry.name for entry in document.work_sources}
+    if any("sources" in entry.model_fields_set for entry in document.projects):
+        sources |= {record.name for record in services.work_source_records.list_all(include_retired=True)}
+    repositories = {entry.name for entry in document.repositories}
+    if any("repositories" in entry.model_fields_set for entry in document.projects):
+        repositories |= {record.name for record in services.repository_records.list_all(include_retired=True)}
+    stored = StoredProjects(
+        projects=tuple(projects),
+        former=former,
+        source_links=source_links,
+        repository_links=repository_links,
+        sources=frozenset(sources),
+        repositories=frozenset(repositories),
+    )
+    declared = [_project_declaration(entry) for entry in document.projects]
+    return plan_projects(declared, stored, ctx, at=services.clock.now())
+
+
+def _project_declaration(entry: ProjectDocument) -> ProjectDeclaration:
+    stated = entry.model_fields_set
+    return ProjectDeclaration(
+        slug=entry.slug,
+        edit=ProjectEdit(
+            **({"name": entry.name} if "name" in stated and entry.name is not None else {}),
+            **({"description": entry.description} if "description" in stated else {}),
+        ),
+        sources=tuple(entry.sources) if "sources" in stated else None,
+        repositories=tuple(entry.repositories) if "repositories" in stated else None,
     )
 
 
@@ -238,6 +328,21 @@ def _outcome(outcome: EntryOutcome) -> ConfigApplyOutcome:
 def _refusal(exc: ApplyEntryRefused) -> HTTPException:
     """422 naming the entry (and field) for an invalid entry or unavailable secret; 409 for a conflict."""
     cause = exc.cause
+    if isinstance(cause, EntryProjectRequired):
+        return HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=[
+                {
+                    "loc": ["body", exc.section, exc.index, cause.field],
+                    "msg": cause.message,
+                    "type": PROJECT_REQUIRED,
+                    "projects": [
+                        {"project_id": project.project_id, "slug": project.slug, "name": project.name}
+                        for project in cause.projects
+                    ],
+                }
+            ],
+        )
     if isinstance(cause, ConfigFieldError):
         loc: list[str | int] = ["body", exc.section, exc.index]
         if cause.field:
@@ -274,23 +379,14 @@ def _document(body: bytes, content_type: str | None) -> ConfigDocument:
         ) from exc
 
 
-def _document_project(document: ConfigDocument, services: TenantServices) -> str | None:
-    """The project a document's scope and routine entries act in — the call's project; ``None`` for a document
-    naming neither, which needs no project."""
-    return project_of_call(services).project_id if document.scopes or document.routines else None
-
-
 def _apply(
     document: ConfigDocument, identity: ResolvedIdentity, services: TenantServices, *, dry_run: bool
 ) -> ConfigApplyResponse:
-    project_id = _document_project(document, services)
-    declaration = _declaration(document, services.clock, project_id)
     apply_id = None if dry_run else Id.mint(IdPrefix.CONFIG_APPLY, services.clock).value
     ctx = ChangeContext(actor=identity.user_id, door=Door.APPLY, apply_id=apply_id)
     try:
-        outcomes = services.config_authoring.apply(
-            declaration, _stored(declaration, services, project_id), ctx, dry_run=dry_run
-        )
+        declaration = _declaration(document, services.clock, _projects(document, services, ctx))
+        outcomes = services.config_authoring.apply(declaration, _stored(declaration, services), ctx, dry_run=dry_run)
     except ApplyEntryRefused as exc:
         raise _refusal(exc) from exc
     return ConfigApplyResponse(dry_run=dry_run, apply_id=apply_id, outcomes=[_outcome(o) for o in outcomes])
@@ -322,26 +418,43 @@ async def apply_config(
 
 @router.get("/export", response_model=ConfigDocument, dependencies=[_VIEW])
 def export_config(services: Services) -> ConfigDocument:
-    """Every active, non-built-in work source and repository, and every active scope and routine (its linked
-    scope set included), with every field, and every active secret name, as a document that applies back as a
-    no-op. Retired records are left out, since applying one would enable it."""
+    """Every project with its standing links, every active, non-built-in work source and repository, and every
+    active scope and routine (its linked scope set included) named in its project by slug, with every field, and
+    every active secret name, as a document that applies back as a no-op. Retired records are left out, since
+    applying one would enable it."""
     retired = services.secret_catalog.retired_names()
-    live_routines = [r for r in sorted(services.routines.list_all(), key=lambda r: r.name) if not r.retired]
+    projects = services.projects.list_all()
+    slug_of: dict[str, str] = {project.project_id: project.slug for project in projects}
+    live_routines = [
+        r for r in sorted(services.routines.list_all(), key=lambda r: (slug_of[r.project_id], r.name)) if not r.retired
+    ]
     scope_links = services.routine_scopes.list_scopes_for([r.routine_id for r in live_routines])
     sources = services.work_source_records.list_all(include_retired=False)
     repositories = services.repository_records.list_all(include_retired=False)
     return ConfigDocument(
         version=1,
+        projects=[
+            ProjectDocument(
+                slug=project.slug,
+                name=project.name,
+                description=project.description,
+                sources=sorted(link.source_name for link in services.project_links.sources_of(project.project_id)),
+                repositories=sorted(
+                    link.repository_name for link in services.project_links.repositories_of(project.project_id)
+                ),
+            )
+            for project in projects
+        ],
         secrets=[s.name for s in services.secret_catalog.list_all() if s.name not in retired],
         work_sources=[WorkSourceDocument(name=r.name, **vars(r.fields)) for r in sources],
         repositories=[RepositoryDocument(name=r.name, **vars(r.fields)) for r in repositories],
         scopes=[
-            ScopeDocument(slug=s.slug, description=s.description)
-            for s in sorted(services.scopes.list_all(), key=lambda s: s.slug)
+            ScopeEntry(slug=s.slug, description=s.description, project=slug_of[s.project_id])
+            for s in sorted(services.scopes.list_all(), key=lambda s: (slug_of[s.project_id], s.slug))
             if not s.retired
         ],
         routines=[
-            RoutineDocument(
+            RoutineEntry(
                 name=r.name,
                 graph_name=r.graph_name,
                 default_scope_slug=r.default_scope_slug,
@@ -349,6 +462,7 @@ def export_config(services: Services) -> ConfigDocument:
                 default_effort=r.default_effort,
                 default_harnesses=r.default_harnesses,
                 scopes=scope_links[r.routine_id],
+                project=slug_of[r.project_id],
             )
             for r in live_routines
         ],

@@ -22,12 +22,22 @@ from blizzard.hub.store.schema import (
     artifacts,
     config_changes,
     config_import_facts,
+    project_repository_links,
+    project_source_links,
     repositories,
     secret_lifecycle_facts,
     secrets,
     work_sources,
 )
-from tests.support import hub_scoped, hub_store_connections, seed_chunk, seed_graph, stamp
+from tests.support import (
+    default_project,
+    hub_scoped,
+    hub_store_connections,
+    seed_chunk,
+    seed_graph,
+    seed_project,
+    stamp,
+)
 
 pytestmark = pytest.mark.component
 
@@ -59,7 +69,15 @@ _COMMITS = (
     (None, "gadget"),
     ("git@github.com:acme/widget.git", "widget"),
 )
-_TABLES = (secrets, work_sources, repositories, config_changes, config_import_facts)
+_TABLES = (
+    secrets,
+    work_sources,
+    repositories,
+    config_changes,
+    config_import_facts,
+    project_source_links,
+    project_repository_links,
+)
 
 
 @pytest.fixture
@@ -136,8 +154,23 @@ def test_the_import_writes_the_expected_records_change_rows_and_one_fact(hub: Hu
         ("gadget", "https://api.github.com", "paul-gross", "gadget", "master", "bz-forge-token"),
     }
     changes = rows["config_changes"]
-    assert len(changes) == 6
+    assert len(changes) == 10
     assert {(r["actor"], r["door"], r["op"]) for r in changes} == {("migration", "migration", "create")}
+    links = sorted((str(r["record_kind"]), str(r["record_key"])) for r in changes if r["project_id"] is not None)
+    assert links == [
+        ("project_repository_link", "gadget"),
+        ("project_repository_link", "widget"),
+        ("project_source_link", "blizzard"),
+        ("project_source_link", "infra"),
+    ]
+    engine = create_engine_from_url(hub.db_url)
+    try:
+        project = default_project(engine)
+    finally:
+        engine.dispose()
+    assert {r["project_id"] for r in changes if r["project_id"] is not None} == {project}
+    assert sorted(str(r["source_name"]) for r in rows["project_source_links"]) == ["blizzard", "infra"]
+    assert sorted(str(r["repository_name"]) for r in rows["project_repository_links"]) == ["gadget", "widget"]
     (fact,) = rows["config_import_facts"]
     assert fact["actor"] == "migration"
     read = json.loads(str(fact["read"]))
@@ -206,6 +239,21 @@ def test_a_refusal_names_the_variable_and_leaves_the_store_untouched(
 
     with pytest.raises(LegacyImportRefused, match=named):
         import_legacy_config(hub, environ)
+
+    assert _rows(hub) == before
+
+
+def test_a_tenant_holding_several_projects_is_refused_naming_them(hub: HubConfig) -> None:
+    """The import names no project: it links what it creates to the tenant's only one, or writes nothing."""
+    engine = create_engine_from_url(hub.db_url)
+    try:
+        seed_project(engine, "web")
+    finally:
+        engine.dispose()
+    before = _rows(hub)
+
+    with pytest.raises(LegacyImportRefused, match="default, web"):
+        import_legacy_config(hub, _ENVIRON)
 
     assert _rows(hub) == before
 

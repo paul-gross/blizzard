@@ -32,6 +32,10 @@ from blizzard.hub.domain.config.work_sources import (
 )
 from blizzard.hub.domain.garden.routines import SCOPES_FIELD, Routine, RoutineNameTakenError
 from blizzard.hub.domain.garden.scopes import Scope, ScopeSlugTakenError
+from blizzard.hub.domain.projects.links import RepositoryLink, SourceLink
+from blizzard.hub.domain.projects.model import Project, ProjectSlugTaken
+from blizzard.hub.store.internal import project_link_store as link_writes
+from blizzard.hub.store.internal import project_store as project_writes
 from blizzard.hub.store.internal import repository_record_store as repository_writes
 from blizzard.hub.store.internal import routine_store as routine_writes
 from blizzard.hub.store.internal import scope_store as scope_writes
@@ -48,18 +52,24 @@ _REFUSALS = (
     RepositoryCoordinateTaken,
     RoutineNameTakenError,
     ScopeSlugTakenError,
+    ProjectSlugTaken,
 )
 
 
-def _taken(record: object, name: str) -> Exception:
+def _taken(record: object) -> Exception:
     """The refusal a create that lost its name to a concurrent one reads as."""
     if isinstance(record, ConfiguredWorkSource):
-        return WorkSourceNameTaken(name)
+        return WorkSourceNameTaken(record.name)
     if isinstance(record, Routine):
-        return RoutineNameTakenError(name)
+        return RoutineNameTakenError(record.name)
     if isinstance(record, Scope):
-        return ScopeSlugTakenError(name)
-    return RepositoryNameTaken(name)
+        return ScopeSlugTakenError(record.name)
+    if isinstance(record, Project):
+        return ProjectSlugTaken(record.slug)
+    if isinstance(record, SourceLink | RepositoryLink):
+        return ConfigRevisionConflict(record.LABEL, f"{record.project_id}/{record.target()}", current=record.revision)
+    assert isinstance(record, ConfiguredRepository)
+    return RepositoryNameTaken(record.name)
 
 
 class _DryRunRollback(Exception):
@@ -77,7 +87,7 @@ class ConfigApplyStore:
                     try:
                         self._run(conn, write)
                     except IntegrityError as exc:  # a concurrent create won the race
-                        cause = _taken(write.record, write.record.name)
+                        cause = _taken(write.record)
                         raise ApplyEntryRefused(write.section, write.index, cause) from exc
                     except _REFUSALS as exc:
                         raise ApplyEntryRefused(write.section, write.index, exc) from exc
@@ -95,6 +105,8 @@ class ConfigApplyStore:
             _run_scope(conn, record, from_revision, change, lifecycle=lifecycle, retired=retired)
         elif isinstance(record, Routine):
             _run_routine(conn, record, from_revision, change, lifecycle=lifecycle, retired=retired)
+        elif isinstance(record, Project | SourceLink | RepositoryLink):
+            _run_project(conn, record, from_revision, change)
         elif isinstance(record, ConfiguredWorkSource):
             if from_revision is None:
                 work_source_writes.insert_record(conn, record, change)
@@ -188,6 +200,32 @@ def _run_routine(
         else:
             assert isinstance(linked, list)
             routine_writes.set_linked_scopes(conn, record, linked, from_revision=from_revision, change=change)
+
+
+def _run_project(
+    conn: Connection, record: Project | SourceLink | RepositoryLink, from_revision: int | None, change: ConfigChange
+) -> None:
+    """A project is created or edited — an apply never moves its slug —, and a link created, unlinked or relinked."""
+    if isinstance(record, Project):
+        if from_revision is None:
+            project_writes.insert_project(conn, record, change)
+        else:
+            project_writes.update_project(conn, record, from_revision, None, change)
+        return
+    kind = link_writes._SOURCES if isinstance(record, SourceLink) else link_writes._REPOSITORIES
+    if from_revision is None:
+        link_writes.insert_link(conn, kind, record.project_id, record.target(), change)
+    else:
+        link_writes.record_link(
+            conn,
+            kind,
+            record.project_id,
+            record.target(),
+            linked=record.linked,
+            revision=record.revision,
+            from_revision=from_revision,
+            change=change,
+        )
 
 
 def _conforms_config_apply_store(x: ConfigApplyStore) -> IConfigApplyWriter:

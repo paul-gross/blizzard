@@ -2,7 +2,8 @@
 
 Each entry carries the garden rules a document write is held to, with one departure from the verbs: an
 apply never mints a scope implicitly, so a routine entry may only name a scope that is stored or declared
-in the same document."""
+in the same document — of the routine's own project. An entry is told apart by its project and its slug or name,
+so two projects may each declare a scope of one slug."""
 
 from __future__ import annotations
 
@@ -36,6 +37,10 @@ class ScopeDeclaration:
     edit: ScopeEdit
     project_id: str
 
+    @property
+    def key(self) -> tuple[str, str]:
+        return (self.project_id, self.name)
+
     def check(self, refs: DeclaredReferences, stored: DeclarableRecord | None) -> None:
         try:
             ScopeSlug.parse(self.name)
@@ -66,9 +71,14 @@ class RoutineDeclaration:
     project_id: str
     scopes: Sequence[str] | None = None
 
+    @property
+    def key(self) -> tuple[str, str]:
+        return (self.project_id, self.name)
+
     def check(self, refs: DeclaredReferences, stored: DeclarableRecord | None) -> None:
         """The graph resolves to an enabled one when the entry creates the routine or moves it to another
-        graph, and every scope it names is stored or declared; the harness preference is well-formed."""
+        graph, and every scope it names is stored or declared in its project; the harness preference is
+        well-formed."""
         try:
             validated_harnesses(list(self.default_harnesses))
         except InvalidHarnesses as exc:
@@ -81,10 +91,10 @@ class RoutineDeclaration:
             )
         except RoutineGraphUnresolvedError as exc:
             raise ConfigFieldError("graph_name", str(exc)) from exc
-        if self.default_scope_slug not in refs.scopes:
+        if (self.project_id, self.default_scope_slug) not in refs.scopes:
             raise ConfigFieldError("default_scope_slug", _unknown_scope(self.default_scope_slug))
         for slug in self.scopes or ():
-            if slug not in refs.scopes:
+            if (self.project_id, slug) not in refs.scopes:
                 raise ConfigFieldError(SCOPES_FIELD, _unknown_scope(slug))
 
     def create(self, ctx: ChangeContext, *, at: datetime) -> tuple[Routine, ConfigChange]:
@@ -108,10 +118,10 @@ class RoutineDeclaration:
         assert isinstance(record, Routine)
         if self.scopes is None:
             return None
-        linked = {*refs.linked_scopes.get(self.name, ()), record.default_scope_slug}
+        linked = {*refs.linked_scopes.get(self.key, ()), record.default_scope_slug}
         stated = {*self.scopes, record.default_scope_slug}
         return record.with_scopes(sorted(linked), sorted(stated), ctx, if_match=None, at=at)
 
 
 def _unknown_scope(slug: str) -> str:
-    return f"scope {slug!r} is neither stored nor declared in this document"
+    return f"scope {slug!r} is neither stored nor declared in this document, in the routine's project"

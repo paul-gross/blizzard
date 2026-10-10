@@ -22,6 +22,7 @@ from blizzard.hub.domain.config.carry_over import (
     CommitCoordinate,
     ExistingConfig,
     IConfigImportWriter,
+    IImportLinks,
     ImportResult,
     ImportStatus,
     LegacyImport,
@@ -167,15 +168,19 @@ class ConfigAuthoring:
         existing: ExistingConfig,
         *,
         recorded: bool,
+        links: IImportLinks,
     ) -> ImportResult:
-        """Carry ``legacy`` into records once, sealing each secret's value before the one write.
-        ``values`` holds the legacy variables' values; nothing is written when an import was
-        already recorded or no legacy key is present."""
+        """Carry ``legacy`` into records once, sealing each secret's value before the one write, and link each
+        work source and repository it creates through ``links``. ``values`` holds the legacy variables' values;
+        nothing is written when an import was already recorded or no legacy key is present."""
         if recorded:
             return ImportResult(ImportStatus.ALREADY_IMPORTED)
         if not legacy.present():
             return ImportResult(ImportStatus.NOTHING_TO_IMPORT)
-        plan = plan_import(legacy, values, commits, existing, ctx=MIGRATION_CONTEXT, at=self._clock.now())
+        at = self._clock.now()
+        plan = plan_import(legacy, values, commits, existing, ctx=MIGRATION_CONTEXT, at=at)
+        created = ([source.name for source, _ in plan.work_sources], [repo.name for repo, _ in plan.repositories])
+        linked = links.links(*created, MIGRATION_CONTEXT, at=at) if any(created) else ()
         sealed = tuple(
             SealedSecretWrite(
                 name=secret.name.value,
@@ -187,7 +192,11 @@ class ConfigAuthoring:
             for secret in plan.secrets
         )
         imported = LegacyImport(
-            secrets=sealed, work_sources=plan.work_sources, repositories=plan.repositories, fact=plan.fact
+            secrets=sealed,
+            work_sources=plan.work_sources,
+            repositories=plan.repositories,
+            fact=plan.fact,
+            links=linked,
         )
         if not self._import_writer.write(imported):
             return ImportResult(ImportStatus.ALREADY_IMPORTED)

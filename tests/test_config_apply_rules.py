@@ -10,8 +10,11 @@ import pytest
 
 from blizzard.hub.domain.config.apply import (
     ApplyEntryRefused,
+    ApplyPlan,
     ConfigDeclaration,
     DeclaredReferences,
+    EntryOutcome,
+    PlannedWrite,
     RepositoryDeclaration,
     SecretNotActive,
     StoredConfig,
@@ -234,9 +237,13 @@ def _garden(
         work_sources={},
         repositories={},
         secrets={},
-        scopes={s.slug: s for s in scopes},
-        routines={r.name: r for r in routines},
-        references=DeclaredReferences(scopes=known, enabled_graphs=frozenset({"alpha"}), linked_scopes=linked or {}),
+        scopes={(s.project_id, s.slug): s for s in scopes},
+        routines={(r.project_id, r.name): r for r in routines},
+        references=DeclaredReferences(
+            scopes=frozenset((_PROJECT, slug) for slug in known),
+            enabled_graphs=frozenset({"alpha"}),
+            linked_scopes={(_PROJECT, name): slugs for name, slugs in (linked or {}).items()},
+        ),
     )
 
 
@@ -310,3 +317,32 @@ def test_a_stored_routine_moving_to_an_unenabled_graph_is_refused_on_graph_name(
             ConfigDeclaration(routines=(_routine_entry(graph_name="missing"),)), _garden(routines=(_stored_routine(),))
         )
     assert isinstance(refused.value.cause, ConfigFieldError) and refused.value.cause.field == "graph_name"
+
+
+def test_two_projects_may_each_declare_a_scope_of_one_slug() -> None:
+    other = replace(_scope_entry(), project_id="proj_other")
+    plan = _plan(ConfigDeclaration(scopes=(_scope_entry(), other)), _garden())
+    assert [(w.change.project_id, o.key) for w, o in zip(plan.writes, plan.outcomes, strict=True)] == [
+        (_PROJECT, "core"),
+        ("proj_other", "core"),
+    ]
+
+
+def test_a_routine_may_name_only_a_scope_of_its_own_project() -> None:
+    entry = replace(_routine_entry(), project_id="proj_other")
+    with pytest.raises(ApplyEntryRefused) as refused:
+        _plan(ConfigDeclaration(routines=(entry,)), _garden(known=frozenset({"core"})))
+    assert isinstance(refused.value.cause, ConfigFieldError) and refused.value.cause.field == "default_scope_slug"
+
+
+def test_a_planned_section_commits_after_the_repositories_and_before_the_scopes() -> None:
+    repository = RepositoryDeclaration(name="r", fields=_REPO, edit=RepositoryEdit())
+    change = _plan(ConfigDeclaration(repositories=(repository,)), _stored()).writes[0].change
+    planned = ApplyPlan(
+        (PlannedWrite("projects", 0, object(), None, change),),
+        (EntryOutcome(RecordKind.PROJECT, "web", ChangeOp.CREATE),),
+    )
+    declaration = ConfigDeclaration(repositories=(repository,), projects=planned, scopes=(_scope_entry(),))
+    plan = _plan(declaration, _garden())
+    assert [w.section for w in plan.writes] == ["repositories", "projects", "scopes"]
+    assert [o.kind for o in plan.outcomes] == [RecordKind.REPOSITORY, RecordKind.PROJECT, RecordKind.SCOPE]

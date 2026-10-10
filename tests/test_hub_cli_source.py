@@ -209,7 +209,9 @@ def test_an_exported_document_applies_back_as_all_unchanged(client: TestClient, 
         out.write_text(exported.output)
         replay = _config(["apply", str(out)])
         assert replay.exit_code == 0, replay.output
-        assert len(_lines(replay.output, "unchanged")) == 2 and not _lines(replay.output, "create")
+        unchanged = _lines(replay.output, "unchanged")
+        assert len(unchanged) == 3 and not _lines(replay.output, "create")
+        assert any(line.split()[1:] == ["project", "default"] for line in unchanged)
     assert json.loads(_config(["export", "--format", "json"]).stdout)["version"] == 1
     assert _changes_count() == before
 

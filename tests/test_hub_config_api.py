@@ -563,6 +563,10 @@ def test_applying_an_export_writes_nothing(hub: HubHarness) -> None:
     assert exported.status_code == 200
     document = exported.json()
     assert document["version"] == 1
+    assert list(document)[:2] == ["version", "projects"]
+    assert document["projects"] == [
+        {"slug": "default", "name": "Default", "description": "", "sources": [], "repositories": []}
+    ]
     assert document["secrets"] == ["gh"]
     assert [w["name"] for w in document["work_sources"]] == ["demo"]
     assert [r["name"] for r in document["repositories"]] == ["blizzard"]
@@ -577,7 +581,7 @@ def test_applying_an_export_writes_nothing(hub: HubHarness) -> None:
     }
     before = _changes(hub)
     replay = _apply_json(hub, document)
-    assert [o["op"] for o in replay.json()["outcomes"]] == ["unchanged", "unchanged"]
+    assert [o["op"] for o in replay.json()["outcomes"]] == ["unchanged", "unchanged", "unchanged"]
     assert _changes(hub) == before
 
 
@@ -741,7 +745,10 @@ def test_an_export_with_scopes_and_routines_applies_back_as_a_no_op(hub: HubHarn
     ).json()
     hub.client.post(f"/api/routines/{retired['routine_id']}/retire", json={})
     document = hub.client.get("/api/config/export").json()
-    assert document["scopes"] == [{"slug": "core", "description": "the core"}, {"slug": "edge", "description": ""}]
+    assert document["scopes"] == [
+        {"slug": "core", "description": "the core", "project": "default"},
+        {"slug": "edge", "description": "", "project": "default"},
+    ]
     assert document["routines"] == [
         {
             "name": "nightly",
@@ -751,6 +758,7 @@ def test_an_export_with_scopes_and_routines_applies_back_as_a_no_op(hub: HubHarn
             "default_effort": None,
             "default_harnesses": [],
             "scopes": ["core", "edge"],
+            "project": "default",
         }
     ]
     before = _changes(hub)
