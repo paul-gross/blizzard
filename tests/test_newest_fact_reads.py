@@ -33,6 +33,7 @@ from tests.hub_event_rows import hub_events_of
 from tests.support import (
     build_hub,
     count_rows_read,
+    default_project,
     hub_level_connections,
     hub_store_connections,
     stamp,
@@ -145,7 +146,7 @@ def _retirement_reads(engine: Engine) -> dict[str, object]:
     return {
         "secret": lambda: SecretStore(store).retired_names(),
         "routine": lambda: RoutineStore(store).retired_ids(),
-        "scope": lambda: ScopeStore(store).retired_slugs(),
+        "scope": lambda: ScopeStore(store).retired_slugs(default_project(engine)),
         "graph": lambda: GraphStore(store).retired_graph_ids(),
         "repository": lambda: _read(store, lambda conn: _retirements(conn)),
         "repository_bounded": lambda: _read(store, lambda conn: _retirements(conn, ["k1", "k2"])),

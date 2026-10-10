@@ -8,9 +8,13 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+import sqlalchemy as sa
 
 from blizzard.auth_core import Role
-from tests.support import HubHarness, build_hub, seed_session, seed_user
+from blizzard.hub.domain.config.changes import ChangeContext, Door
+from blizzard.hub.domain.garden.scopes import ScopeSlug
+from blizzard.hub.store.schema import config_changes
+from tests.support import HubHarness, build_hub, default_project, hub_scoped, seed_project, seed_session, seed_user
 
 pytestmark = pytest.mark.component
 
@@ -207,3 +211,25 @@ def test_the_change_row_carries_the_door_and_the_authenticated_actor_not_by(tmp_
     with hub.engine.connect() as conn:
         (set_by,) = conn.exec_driver_sql("SELECT set_by FROM routine_lifecycle_facts").one()
     assert set_by == "someone-else"
+
+
+def test_a_slug_another_project_holds_resolves_within_the_routines_project(hub: HubHarness) -> None:
+    routine_id = _create(hub)["routine_id"]
+    own = default_project(hub.engine)
+    other = seed_project(hub.engine, "other")
+    theirs = hub.services.scope_registry.ensure(other, ScopeSlug.parse("web"), ChangeContext(actor="op", door=Door.API))
+
+    linked = hub.client.put(f"/api/routines/{routine_id}/scopes/web")
+    edited = hub.client.patch(f"/api/routines/{routine_id}", json={"default_scope_slug": "web"})
+
+    assert (linked.status_code, edited.status_code) == (404, 200), (linked.text, edited.text)
+    mine = hub.services.scopes.get(own, "web")
+    assert mine is not None and mine.scope_id != theirs.scope_id
+    assert hub.services.routine_scopes.list_routines(mine.scope_id) == [routine_id]
+    assert hub.services.routine_scopes.list_routines(theirs.scope_id) == []
+    with hub.engine.connect() as conn:
+        kinds = config_changes.c.record_kind.in_(("routine", "scope"))
+        rows = conn.execute(
+            hub_scoped(sa.select(config_changes.c.record_key, config_changes.c.project_id).where(kinds))
+        )
+        assert {project for key, project in rows if key != "web" or project != other} == {own}

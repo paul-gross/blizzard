@@ -20,7 +20,7 @@ from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.garden_sweeps_store import GardenSweepsStore
 from blizzard.hub.store.internal.routine_scope_store import RoutineScopeStore
 from blizzard.hub.store.internal.scope_store import ScopeStore
-from tests.support import hub_store_connections, migrate_to, seed_chunk, seed_graph, stamp
+from tests.support import default_project, hub_store_connections, migrate_to, seed_chunk, seed_graph, stamp
 
 pytestmark = pytest.mark.component
 
@@ -29,13 +29,14 @@ _SINCE = datetime(2026, 1, 1, tzinfo=UTC)
 _UNTIL = datetime(2026, 1, 15, tzinfo=UTC)
 
 
-def _routine(*, routine_id: str = "rtn_1", default_scope_slug: str = "blizzard") -> Routine:
+def _routine(engine: sa.Engine, *, routine_id: str = "rtn_1", default_scope_slug: str = "blizzard") -> Routine:
     return Routine(
         routine_id=routine_id,
         name="nightly",
         graph_name="alpha",
         default_scope_slug=default_scope_slug,
         created_at=_NOW,
+        project_id=default_project(engine),
     )
 
 
@@ -126,7 +127,7 @@ def _seed_common(conn: sa.Connection, routine: Routine) -> None:
 
 def test_a_scope_with_no_finding_set_reads_never(tmp_path: Path) -> None:
     _, engine = migrate_to(tmp_path, "head")
-    routine = _routine()
+    routine = _routine(engine)
     with engine.begin() as conn:
         _seed_common(conn, routine)
     service = _service(engine)
@@ -140,7 +141,7 @@ def test_a_scope_with_no_finding_set_reads_never(tmp_path: Path) -> None:
 
 def test_the_newest_set_by_produced_at_is_reported(tmp_path: Path) -> None:
     _, engine = migrate_to(tmp_path, "head")
-    routine = _routine()
+    routine = _routine(engine)
     with engine.begin() as conn:
         _seed_common(conn, routine)
         _seed_artifact(conn, "art_1", chunk_id="ch_1", produced_at=datetime(2026, 1, 2, tzinfo=UTC))
@@ -180,7 +181,7 @@ def test_last_swept_covers_the_declared_set_scoped_by_link_and_retirement(tmp_pa
     is omitted regardless of retirement or of its own sweep history; a linked, retired
     scope keeps its row if this routine swept it, but is omitted if it never was."""
     _, engine = migrate_to(tmp_path, "head")
-    routine = _routine(default_scope_slug="linked-never-swept")
+    routine = _routine(engine, default_scope_slug="linked-never-swept")
     linked_slugs = ("linked-never-swept", "linked-retired-swept", "linked-retired-never-swept")
     retired_slugs = ("linked-retired-swept", "linked-retired-never-swept", "not-linked-retired")
     all_slugs = (*linked_slugs, "not-linked", "not-linked-swept", "not-linked-retired")
@@ -224,7 +225,7 @@ def test_last_swept_covers_the_declared_set_scoped_by_link_and_retirement(tmp_pa
 
 def test_the_measurement_series_is_windowed_while_last_swept_is_not(tmp_path: Path) -> None:
     _, engine = migrate_to(tmp_path, "head")
-    routine = _routine()
+    routine = _routine(engine)
     with engine.begin() as conn:
         _seed_common(conn, routine)
         _seed_artifact(conn, "art_old", chunk_id="ch_1", produced_at=datetime(2025, 1, 1, tzinfo=UTC))

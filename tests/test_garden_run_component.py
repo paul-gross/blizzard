@@ -25,7 +25,7 @@ from blizzard.hub.domain.garden.routines import Routine
 from blizzard.hub.domain.garden.scopes import ScopeSlug
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.store import schema as s
-from tests.support import HubHarness, build_hub, count_queries, hub_scoped, stamp
+from tests.support import HubHarness, build_hub, count_queries, default_project, hub_scoped, stamp
 
 pytestmark = pytest.mark.component
 
@@ -52,13 +52,14 @@ def _routine(hub: HubHarness, *, name: str = "gardening", scope: str = "blizzard
         default_scope_slug=ScopeSlug.parse(scope),
         default_model=None,
         default_effort=None,
+        project_id=default_project(hub.engine),
     )
 
 
 def _run(hub: HubHarness, routine: Routine) -> str:
     """Mint a real run through `routine_run.run` — a genuine `work_item_runs` row
     joined through a genuine `chunk_work_refs`/`work_items` pointer, not hand-rolled."""
-    scope = hub.services.scopes.get(routine.default_scope_slug)
+    scope = hub.services.scopes.get(routine.project_id, routine.default_scope_slug)
     assert scope is not None
     result = hub.services.routine_run.run(
         routine,

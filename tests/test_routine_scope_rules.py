@@ -26,11 +26,14 @@ from blizzard.hub.domain.graph.model import Graph
 
 pytestmark = pytest.mark.unit
 
+_PROJECT = "proj_test"
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 _CTX = ChangeContext(actor="operator", door=Door.API)
 _GRAPH = Graph(graph_id="gr_1", name="default", entry_node_id="nd_1", nodes=[], edges=[], created_at=_T0)
-_SCOPE = Scope(scope_id="scp_blizzard", slug="blizzard", description="the hub itself", created_at=_T0)
-_OTHER_SCOPE = Scope(scope_id="scp_runner", slug="runner", description="", created_at=_T0)
+_SCOPE = Scope(
+    scope_id="scp_blizzard", slug="blizzard", description="the hub itself", created_at=_T0, project_id=_PROJECT
+)
+_OTHER_SCOPE = Scope(scope_id="scp_runner", slug="runner", description="", created_at=_T0, project_id=_PROJECT)
 _ROUTINE = Routine(
     routine_id="rtn_1",
     name="gardening",
@@ -40,6 +43,7 @@ _ROUTINE = Routine(
     default_model=["opus"],
     default_effort="high",
     default_harnesses=["claude"],
+    project_id=_PROJECT,
 )
 
 
@@ -158,6 +162,7 @@ def test_new_points_at_the_default_scope_and_stamps_the_instant() -> None:
         default_harnesses=("claude",),
         ctx=_CTX,
         at=_T0,
+        project_id=_PROJECT,
     )
     assert minted == Routine(
         routine_id="rtn_9",
@@ -168,6 +173,7 @@ def test_new_points_at_the_default_scope_and_stamps_the_instant() -> None:
         default_model=["opus"],
         default_effort=None,
         default_harnesses=["claude"],
+        project_id=_PROJECT,
     )
     assert minted.default_model is not model
     assert (change.record_key, change.revision) == ("nightly", 1)

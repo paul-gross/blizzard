@@ -23,7 +23,7 @@ from blizzard.hub.domain.garden.review.materialize import (
 )
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.internal.review_findings_store import ReviewFindingsStore
-from blizzard.hub.store.schema import artifacts, finding_facts, findings, scopes
+from blizzard.hub.store.schema import artifacts, chunks, config_changes, finding_facts, findings, scopes
 from blizzard.hub.store.scoped import ScopedStatements
 from tests.support import hub_scoped, hub_store_connections, seed_chunk, seed_graph, stamp
 
@@ -131,6 +131,15 @@ def test_deliver_mints_an_unseen_scope_in_the_same_transaction(tmp_path: Path) -
     with engine.connect() as conn:
         scope_row = conn.execute(hub_scoped(sa.select(scopes).where(scopes.c.slug == "brand-new"))).one()
         assert "ch_1" in scope_row.description
+        chunk_project = conn.execute(
+            hub_scoped(sa.select(chunks.c.project_id).where(chunks.c.chunk_id == "ch_1"))
+        ).scalar_one()
+        minted = sa.select(config_changes.c.op, config_changes.c.project_id).where(
+            config_changes.c.record_kind == "scope", config_changes.c.record_key == "brand-new"
+        )
+        change = conn.execute(hub_scoped(minted)).one()
+    assert scope_row.project_id == chunk_project
+    assert (change.op, change.project_id) == ("create", chunk_project)
 
 
 def test_deliver_does_not_re_mint_an_existing_scope(tmp_path: Path) -> None:

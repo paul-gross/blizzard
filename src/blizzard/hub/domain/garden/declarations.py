@@ -28,11 +28,13 @@ from blizzard.hub.domain.graph.harnesses import InvalidHarnesses, validated_harn
 @domain_model
 @dataclass(frozen=True)
 class ScopeDeclaration:
-    """A scope the document names by slug: its create description, and the sparse edit of what it states."""
+    """A scope the document names by slug within ``project_id``: its create description, and the sparse edit of
+    what it states."""
 
     name: str
     description: str
     edit: ScopeEdit
+    project_id: str
 
     def check(self, refs: DeclaredReferences, stored: DeclarableRecord | None) -> None:
         try:
@@ -41,7 +43,7 @@ class ScopeDeclaration:
             raise ConfigFieldError("slug", str(exc)) from exc
 
     def create(self, ctx: ChangeContext, *, at: datetime) -> tuple[Scope, ConfigChange]:
-        return Scope.new(ScopeSlug.parse(self.name), self.description, ctx, at=at)
+        return Scope.new(ScopeSlug.parse(self.name), self.description, ctx, project_id=self.project_id, at=at)
 
     def settle(self, record: DeclarableRecord, refs: DeclaredReferences, ctx: ChangeContext, *, at: datetime) -> None:
         return None
@@ -50,8 +52,8 @@ class ScopeDeclaration:
 @domain_model
 @dataclass(frozen=True)
 class RoutineDeclaration:
-    """A routine the document names: its create fields, the sparse edit of what it states, and the
-    linked scope set it states (``None`` leaves the stored set). ``routine_id`` is used only by a create."""
+    """A routine the document names within ``project_id``: its create fields, the sparse edit of what it states,
+    and the linked scope set it states (``None`` leaves the stored set). ``routine_id`` is used only by a create."""
 
     name: str
     routine_id: str
@@ -61,6 +63,7 @@ class RoutineDeclaration:
     default_effort: str | None
     default_harnesses: Sequence[str]
     edit: RoutineEdit
+    project_id: str
     scopes: Sequence[str] | None = None
 
     def check(self, refs: DeclaredReferences, stored: DeclarableRecord | None) -> None:
@@ -87,6 +90,7 @@ class RoutineDeclaration:
     def create(self, ctx: ChangeContext, *, at: datetime) -> tuple[Routine, ConfigChange]:
         return Routine.new(
             routine_id=self.routine_id,
+            project_id=self.project_id,
             name=self.name,
             graph_name=self.graph_name,
             default_scope_slug=self.default_scope_slug,

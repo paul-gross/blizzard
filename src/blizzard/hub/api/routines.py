@@ -21,6 +21,7 @@ from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.door import RequestDoor, change_context
+from blizzard.hub.api.project_params import CallProject, project_of_call
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.chunk.ingest import IngestConflict
@@ -35,6 +36,7 @@ from blizzard.hub.domain.garden.routines import (
     RoutineGraphUnresolvedError,
     RoutineNameImmutableError,
     RoutineNameTakenError,
+    RoutineScopeOtherProject,
 )
 from blizzard.hub.domain.garden.runs.baselines import RoutineBaseline
 from blizzard.hub.domain.garden.runs.run import RoutineRetiredError, RunResult, ScopeNotRelatedError, ScopeRetiredError
@@ -101,12 +103,14 @@ def create_routine(
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.GRAPH_EDIT))],
     door: RequestDoor,
     services: Services,
+    project: CallProject,
 ) -> RoutineView:
-    """Mint a routine; 422 on a duplicate name, a malformed default scope slug, or a
-    graph name with no enabled mint."""
+    """Mint a routine in the call's project, its default scope resolved or minted there; 422 on a duplicate name
+    in the project, a malformed default scope slug, or a graph name with no enabled mint."""
     try:
         slug = ScopeSlug.parse(request.default_scope_slug)
         routine = services.routine_authoring.create(
+            project_id=project.project_id,
             name=request.name,
             graph_name=request.graph_name,
             default_scope_slug=slug,
@@ -115,7 +119,13 @@ def create_routine(
             default_effort=request.default_effort,
             default_harnesses=request.default_harnesses,
         )
-    except (ScopeSlugError, RoutineNameTakenError, RoutineGraphUnresolvedError, InvalidHarnesses) as exc:
+    except (
+        ScopeSlugError,
+        RoutineNameTakenError,
+        RoutineGraphUnresolvedError,
+        RoutineScopeOtherProject,
+        InvalidHarnesses,
+    ) as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     return _routine_view(routine)
 
@@ -170,6 +180,7 @@ def _trend_view(trend: Trend) -> TrendView:
 @router.get("/routines/trend", response_model=TrendView, dependencies=[Depends(require(Permission.FLEET_VIEW))])
 def routine_trend(
     services: Services,
+    project: CallProject,
     routine: Annotated[str, Query()],
     since: Annotated[str, Query()],
     until: Annotated[str, Query()],
@@ -179,9 +190,9 @@ def routine_trend(
     """`routine`'s finding inflow-against-outflow over `[since, until)`: per
     `period_days`-wide period, findings created and per-kind exit counts, the outflow/
     withdrawn roll-ups, and the age cut against `introduced_boundary`. 404 on an
-    unknown routine name; 422 on a malformed instant, a non-positive `period_days`, a
+    unknown routine name in the call's project; 422 on a malformed instant, a non-positive `period_days`, a
     non-positive span, or a span/`period_days` pair bucketing past the period cap."""
-    if services.routines.get_by_name(routine) is None:
+    if services.routines.get_by_name(project.project_id, routine) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine!r}")
     parsed_since = _parse_instant(since, field="since")
     parsed_until = _parse_instant(until, field="until")
@@ -227,7 +238,7 @@ def routine_proposal_counts(
     """Garden-proposal counts per origin, routine, and class over
     `[since, until)`, split into open/passed/accepted-with-item/accepted-without-item —
     `created` is their sum. `routine` narrows to one routine's rows of
-    both origins when given; 404 on an unknown one. `origin` narrows to one origin. 422
+    both origins when given, looked up in the call's project; 404 on an unknown one. `origin` narrows to one origin. 422
     on a malformed instant or `until <= since`."""
     parsed_since = _parse_instant(since, field="since")
     parsed_until = _parse_instant(until, field="until")
@@ -235,7 +246,7 @@ def routine_proposal_counts(
         require_until_after_since(parsed_since, parsed_until)
     except InvalidWindowError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
-    if routine is not None and services.routines.get_by_name(routine) is None:
+    if routine is not None and services.routines.get_by_name(project_of_call(services).project_id, routine) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine!r}")
     rows = services.garden_proposals.counts_by_class(
         since=parsed_since, until=parsed_until, routine_name=routine, origin=origin
@@ -297,15 +308,15 @@ def list_routine_scopes(routine_id: str, services: Services) -> list[str]:
     return services.routine_scopes.list_scopes(routine.routine_id)
 
 
-def _resolve_scope_for_membership(scope_slug: str, services: TenantServices) -> Scope:
-    """Parse and resolve `scope_slug` for a link/unlink write: 422 on a malformed slug,
-    404 on a well-formed but unknown one — a management verb never silently mints
+def _resolve_scope_for_membership(routine: Routine, scope_slug: str, services: TenantServices) -> Scope:
+    """Parse and resolve `scope_slug` within `routine`'s project for a link/unlink write: 422 on a malformed
+    slug, 404 on a well-formed one the project does not hold — a management verb never silently mints
     (`hub scope create` is the one deliberate mint path)."""
     try:
         slug = ScopeSlug.parse(scope_slug)
     except ScopeSlugError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
-    scope = services.scopes.get(slug.value)
+    scope = services.scopes.get(routine.project_id, slug.value)
     if scope is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown scope {scope_slug}")
     return scope
@@ -324,9 +335,11 @@ def link_routine_scope(
     linking a linked scope writes nothing. 404 on an unknown routine id or a well-formed but
     unknown scope slug; 422 on a malformed scope slug; 409 on a stale `If-Match`."""
     routine = _routine_or_404(routine_id, services)
-    scope = _resolve_scope_for_membership(scope_slug, services)
+    scope = _resolve_scope_for_membership(routine, scope_slug, services)
     try:
         services.routine_scope_membership.link(routine, scope, change_context(identity, door), if_match=if_match)
+    except RoutineScopeOtherProject as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     except ConfigRevisionConflict as exc:
         raise _revision_conflict(exc) from exc
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -346,10 +359,10 @@ def unlink_routine_scope(
     but unknown scope slug; 422 on a malformed scope slug, or on naming the routine's own
     default scope — always a member of its own set; 409 on a stale `If-Match`."""
     routine = _routine_or_404(routine_id, services)
-    scope = _resolve_scope_for_membership(scope_slug, services)
+    scope = _resolve_scope_for_membership(routine, scope_slug, services)
     try:
         services.routine_scope_membership.unlink(routine, scope, change_context(identity, door), if_match=if_match)
-    except RoutineDefaultScopeUnlinkError as exc:
+    except (RoutineDefaultScopeUnlinkError, RoutineScopeOtherProject) as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     except ConfigRevisionConflict as exc:
         raise _revision_conflict(exc) from exc
@@ -388,7 +401,13 @@ def edit_routine(
         raise _unprocessable(exc) from exc
     except ConfigRevisionConflict as exc:
         raise _revision_conflict(exc) from exc
-    except (ScopeSlugError, RoutineNameImmutableError, RoutineGraphUnresolvedError, InvalidHarnesses) as exc:
+    except (
+        ScopeSlugError,
+        RoutineNameImmutableError,
+        RoutineGraphUnresolvedError,
+        RoutineScopeOtherProject,
+        InvalidHarnesses,
+    ) as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     return _routine_view(edited)
 
@@ -538,7 +557,7 @@ def run_routine(
         )
     except ScopeSlugError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
-    scope = services.scopes.get(slug.value)
+    scope = services.scopes.get(routine.project_id, slug.value)
     if scope is None:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"unknown scope {slug.value!r}")
     try:

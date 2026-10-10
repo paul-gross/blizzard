@@ -20,6 +20,7 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
+from blizzard.hub.api.project_params import project_of_call
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.documents.codec import ConfigDecodeError, codec_for_media_type
@@ -116,9 +117,9 @@ def list_changes(
     return ConfigChangesPage(changes=[_view(c) for c in page], next_before=page[-1].id if len(rows) > limit else None)
 
 
-def _declaration(document: ConfigDocument, clock: IClock) -> ConfigDeclaration:
+def _declaration(document: ConfigDocument, clock: IClock, project_id: str | None) -> ConfigDeclaration:
     """The domain's declarations from a validated document: each entry's create fields, and a sparse edit
-    of only the fields the entry states (``model_fields_set``)."""
+    of only the fields the entry states (``model_fields_set``); its scopes and routines within ``project_id``."""
     sources = []
     for entry in document.work_sources:
         stated = {name: getattr(entry, name) for name in entry.model_fields_set if name != "name"}
@@ -152,11 +153,26 @@ def _declaration(document: ConfigDocument, clock: IClock) -> ConfigDeclaration:
                 edit=RepositoryEdit(**stated),
             )
         )
+    scopes, routines = _garden_declarations(document, clock, project_id) if project_id is not None else ((), ())
+    return ConfigDeclaration(
+        secrets=tuple(document.secrets),
+        work_sources=tuple(sources),
+        repositories=tuple(repositories),
+        scopes=scopes,
+        routines=routines,
+    )
+
+
+def _garden_declarations(
+    document: ConfigDocument, clock: IClock, project_id: str
+) -> tuple[tuple[ScopeDeclaration, ...], tuple[RoutineDeclaration, ...]]:
+    """The document's scope and routine declarations, each within ``project_id`` — the call's project."""
     scopes = [
         ScopeDeclaration(
             name=scope.slug,
             description=scope.description,
             edit=ScopeEdit(**{name: getattr(scope, name) for name in scope.model_fields_set if name != "slug"}),
+            project_id=project_id,
         )
         for scope in document.scopes
     ]
@@ -173,29 +189,26 @@ def _declaration(document: ConfigDocument, clock: IClock) -> ConfigDeclaration:
                 default_effort=routine.default_effort,
                 default_harnesses=routine.default_harnesses,
                 edit=RoutineEdit(**stated),
+                project_id=project_id,
                 scopes=routine.scopes if "scopes" in routine.model_fields_set else None,
             )
         )
-    return ConfigDeclaration(
-        secrets=tuple(document.secrets),
-        work_sources=tuple(sources),
-        repositories=tuple(repositories),
-        scopes=tuple(scopes),
-        routines=tuple(routines),
-    )
+    return tuple(scopes), tuple(routines)
 
 
-def _stored(declaration: ConfigDeclaration, services: TenantServices) -> StoredConfig:
+def _stored(declaration: ConfigDeclaration, services: TenantServices, project_id: str | None) -> StoredConfig:
     secrets = services.secret_catalog.get_many(list(declaration.secrets))
     retired = services.secret_catalog.retired_names()
-    scopes: dict[str, DeclarableRecord] = {scope.slug: scope for scope in services.scopes.list_all()}
+    scopes: dict[str, DeclarableRecord] = {
+        scope.slug: scope for scope in services.scopes.list_all() if scope.project_id == project_id
+    }
     graph_names: set[str] = set()
     names: list[str] = []
     for entry in declaration.routines:
         assert isinstance(entry, RoutineDeclaration)
         graph_names.add(entry.graph_name)
         names.append(entry.name)
-    stored = services.routines.get_many_by_name(names)
+    stored = services.routines.get_many_by_name(project_id, names) if project_id is not None else {}
     routines: dict[str, DeclarableRecord] = dict(stored)
     scope_links = services.routine_scopes.list_scopes_for([r.routine_id for r in stored.values()])
     linked = {name: tuple(scope_links[r.routine_id]) for name, r in stored.items()}
@@ -261,14 +274,23 @@ def _document(body: bytes, content_type: str | None) -> ConfigDocument:
         ) from exc
 
 
+def _document_project(document: ConfigDocument, services: TenantServices) -> str | None:
+    """The project a document's scope and routine entries act in — the call's project; ``None`` for a document
+    naming neither, which needs no project."""
+    return project_of_call(services).project_id if document.scopes or document.routines else None
+
+
 def _apply(
     document: ConfigDocument, identity: ResolvedIdentity, services: TenantServices, *, dry_run: bool
 ) -> ConfigApplyResponse:
-    declaration = _declaration(document, services.clock)
+    project_id = _document_project(document, services)
+    declaration = _declaration(document, services.clock, project_id)
     apply_id = None if dry_run else Id.mint(IdPrefix.CONFIG_APPLY, services.clock).value
     ctx = ChangeContext(actor=identity.user_id, door=Door.APPLY, apply_id=apply_id)
     try:
-        outcomes = services.config_authoring.apply(declaration, _stored(declaration, services), ctx, dry_run=dry_run)
+        outcomes = services.config_authoring.apply(
+            declaration, _stored(declaration, services, project_id), ctx, dry_run=dry_run
+        )
     except ApplyEntryRefused as exc:
         raise _refusal(exc) from exc
     return ConfigApplyResponse(dry_run=dry_run, apply_id=apply_id, outcomes=[_outcome(o) for o in outcomes])

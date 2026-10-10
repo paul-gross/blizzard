@@ -17,6 +17,7 @@ from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
+from blizzard.hub.api.project_params import project_of_call
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.chunk.ingest import IngestConflict
@@ -244,7 +245,7 @@ def create_garden_proposal(
     is linked."""
     routine = None
     if request.routine is not None:
-        routine = services.routines.get_by_name(request.routine)
+        routine = services.routines.get_by_name(project_of_call(services).project_id, request.routine)
         if routine is None:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"unknown routine {request.routine!r}"

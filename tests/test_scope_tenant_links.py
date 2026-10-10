@@ -35,7 +35,7 @@ from blizzard.hub.store.internal.run_context_store import RunContextStore
 from blizzard.hub.store.internal.scope_store import ScopeStore
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.tenancy import TenantId
-from tests.support import default_tenant, hub_scoped, scoped_connections
+from tests.support import default_project, default_tenant, hub_scoped, scoped_connections
 
 pytestmark = pytest.mark.component
 
@@ -49,6 +49,7 @@ _SLUG = "blizzard"
 class _Tenant:
     tenant: TenantId
     conns: ScopedConnections
+    project: str
     scope: Scope
 
 
@@ -84,16 +85,22 @@ def _seed(conns: ScopedConnections, table: sa.Table, label: str, **key: object) 
         conn.execute(conns.insert(table).values(row))
 
 
-def _mint_scope(conns: ScopedConnections, slug: str, description: str) -> Scope:
-    record, change = Scope.new(ScopeSlug.parse(slug), description, _CTX, at=_AT)
+def _mint_scope(conns: ScopedConnections, project: str, slug: str, description: str) -> Scope:
+    record, change = Scope.new(ScopeSlug.parse(slug), description, _CTX, at=_AT, project_id=project)
     return ScopeStore(conns).ensure(record, change=change)
 
 
 def _tenant(engine: Engine, tenant: TenantId, label: str) -> _Tenant:
     conns = scoped_connections(engine, tenant)
-    scope = _mint_scope(conns, _SLUG, f"the {label} hub")
+    project = default_project(engine, tenant)
+    scope = _mint_scope(conns, project, _SLUG, f"the {label} hub")
     routine = Routine(
-        routine_id=f"rtn_{label}", name="nightly", graph_name="alpha", default_scope_slug=_SLUG, created_at=_AT
+        routine_id=f"rtn_{label}",
+        name="nightly",
+        graph_name="alpha",
+        default_scope_slug=_SLUG,
+        created_at=_AT,
+        project_id=project,
     )
     change = ConfigChange.of(_CTX, RecordKind.ROUTINE, routine.name, routine.revision, ChangeOp.CREATE, (), _AT)
     RoutineStore(conns).create(routine, change=change, scope_mint=None)
@@ -121,7 +128,7 @@ def _tenant(engine: Engine, tenant: TenantId, label: str) -> _Tenant:
         revisions={},
         measurement=None,
     )
-    return _Tenant(tenant=tenant, conns=conns, scope=scope)
+    return _Tenant(tenant=tenant, conns=conns, project=project, scope=scope)
 
 
 @pytest.fixture
@@ -160,15 +167,15 @@ def test_each_tenant_holds_its_own_scope_of_one_slug(store: _Store) -> None:
     assert store.first.scope.scope_id != store.second.scope.scope_id
     for tenant in store.both():
         assert tenant.scope.scope_id.startswith("scp_")
-        stored = ScopeStore(tenant.conns).get(_SLUG)
+        stored = ScopeStore(tenant.conns).get(tenant.project, _SLUG)
         assert stored is not None
         assert stored.scope_id == tenant.scope.scope_id
         assert [scope.scope_id for scope in ScopeStore(tenant.conns).list_all()] == [tenant.scope.scope_id]
 
 
 def test_a_slug_stays_unique_within_its_project(store: _Store) -> None:
-    again = _mint_scope(store.first.conns, _SLUG, "a later description")
-    assert again == ScopeStore(store.first.conns).get(_SLUG)
+    again = _mint_scope(store.first.conns, store.first.project, _SLUG, "a later description")
+    assert again == ScopeStore(store.first.conns).get(store.first.project, _SLUG)
     assert again.scope_id == store.first.scope.scope_id
 
     duplicate = {"scope_id": "scp_duplicate", "slug": _SLUG, "description": "", "created_at": _AT}
@@ -194,9 +201,9 @@ def test_every_child_row_links_its_own_tenants_scope(store: _Store, table: sa.Ta
 
 def test_each_tenants_reads_see_only_its_own_attachments(store: _Store) -> None:
     for tenant, label in ((store.first, "first"), (store.second, "second")):
-        assert RoutineScopeStore(tenant.conns).list_routines(_SLUG) == [f"rtn_{label}"]
+        assert RoutineScopeStore(tenant.conns).list_routines(tenant.scope.scope_id) == [f"rtn_{label}"]
         assert RoutineScopeStore(tenant.conns).list_scopes(f"rtn_{label}") == [_SLUG]
-        routine = RoutineStore(tenant.conns).get_by_name("nightly")
+        routine = RoutineStore(tenant.conns).get_by_name(tenant.project, "nightly")
         assert routine is not None
         assert (routine.routine_id, routine.default_scope_slug) == (f"rtn_{label}", _SLUG)
         assert [f.finding_id for f in FindingStore(tenant.conns).list_for("nightly", _SLUG)] == [f"fin_{label}"]
@@ -206,7 +213,7 @@ def test_each_tenants_reads_see_only_its_own_attachments(store: _Store) -> None:
 
 
 def test_unlinking_in_one_tenant_leaves_the_other_tenants_link(store: _Store) -> None:
-    second = _mint_scope(store.first.conns, "web", "")
+    second = _mint_scope(store.first.conns, store.first.project, "web", "")
     links = RoutineScopeStore(store.first.conns)
     routine = RoutineStore(store.first.conns).get("rtn_first")
     assert routine is not None
@@ -240,6 +247,6 @@ def test_links_follow_the_scope_id_when_its_slug_changes(store: _Store) -> None:
     assert routine is not None
     assert routine.default_scope_slug == "renamed"
     assert RoutineScopeStore(store.first.conns).list_scopes("rtn_first") == ["renamed"]
-    assert RoutineScopeStore(store.first.conns).list_routines("renamed") == ["rtn_first"]
+    assert RoutineScopeStore(store.first.conns).list_routines(store.first.scope.scope_id) == ["rtn_first"]
     assert _scope_ids(store.engine, s.work_item_runs, "scope_id", store.first.tenant) == {store.first.scope.scope_id}
-    assert RoutineScopeStore(store.second.conns).list_routines(_SLUG) == ["rtn_second"]
+    assert RoutineScopeStore(store.second.conns).list_routines(store.second.scope.scope_id) == ["rtn_second"]

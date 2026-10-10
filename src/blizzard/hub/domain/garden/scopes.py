@@ -1,7 +1,8 @@
 """Scope domain model — an operator-authored slug the hub stores and hands back, never
 resolves.
 
-Minted when its slug is first named, by ``scope create`` or a routine naming an unseen
+Each scope belongs to one project, and its slug names it within that project. Minted when
+its slug is first named in the project, by ``scope create`` or a routine naming an unseen
 default (:class:`ScopeRegistry.resolve`). A configured record (``bzh:configured-record``)
 whose retire/enable is a newest-fact-wins brake (``bzh:facts-not-status``)."""
 
@@ -88,13 +89,14 @@ class ScopeEdit:
 @dataclass(frozen=True)
 class Scope:
     """A stored scope — a configured record keyed by its ``scp_`` id and named by its slug
-    within its tenant; ``retired`` derives from the newest lifecycle fact. Each verb returns
+    within its project; ``retired`` derives from the newest lifecycle fact. Each verb returns
     the record with its :class:`ConfigChange`, or ``None`` when it changes nothing."""
 
     scope_id: str
     slug: str
     description: str
     created_at: datetime
+    project_id: str
     revision: int = 1
     retired: bool = False
 
@@ -125,13 +127,25 @@ class Scope:
         return BrakeState.of(retired=retired) in Scope.LEGAL_FROM[verb]
 
     @classmethod
-    def new(cls, slug: ScopeSlug, description: str, ctx: ChangeContext, *, at: datetime) -> tuple[Scope, ConfigChange]:
-        """A fresh scope at revision 1, its id minted at ``at``, with its ``create`` change."""
+    def new(
+        cls, slug: ScopeSlug, description: str, ctx: ChangeContext, *, project_id: str, at: datetime
+    ) -> tuple[Scope, ConfigChange]:
+        """A fresh scope of ``project_id`` at revision 1, its id minted at ``at``, with its ``create`` change."""
         record = cls(
-            scope_id=Id.mint_at(IdPrefix.SCOPE, at).value, slug=slug.value, description=description, created_at=at
+            scope_id=Id.mint_at(IdPrefix.SCOPE, at).value,
+            slug=slug.value,
+            description=description,
+            created_at=at,
+            project_id=project_id,
         )
         created = (FieldChange(_DESCRIPTION, None, description),)
-        return record, ConfigChange.of(ctx, RecordKind.SCOPE, record.slug, 1, ChangeOp.CREATE, created, at)
+        return record, record._change(ctx, 1, ChangeOp.CREATE, created, at)
+
+    def _change(
+        self, ctx: ChangeContext, revision: int, op: ChangeOp, changes: tuple[FieldChange, ...], at: datetime
+    ) -> ConfigChange:
+        """The change row a verb on this scope writes, in the scope's project."""
+        return ConfigChange.of(ctx, RecordKind.SCOPE, self.slug, revision, op, changes, at, project_id=self.project_id)
 
     def require_revision(self, if_match: int | None) -> None:
         """:class:`ConfigRevisionConflict` when ``if_match`` names a revision other than the stored one."""
@@ -152,7 +166,7 @@ class Scope:
             return None
         edited = replace(self, description=edit.description, revision=self.revision + 1)
         changes = (FieldChange(_DESCRIPTION, self.description, edit.description),)
-        return edited, ConfigChange.of(ctx, RecordKind.SCOPE, self.slug, edited.revision, ChangeOp.EDIT, changes, at)
+        return edited, self._change(ctx, edited.revision, ChangeOp.EDIT, changes, at)
 
     def set_retired(
         self, retired: bool, ctx: ChangeContext, *, if_match: int | None, at: datetime
@@ -164,7 +178,7 @@ class Scope:
             return None
         moved = replace(self, revision=self.revision + 1, retired=retired)
         flip = (FieldChange(RETIRED_FIELD, self.retired, retired),)
-        return moved, ConfigChange.of(ctx, RecordKind.SCOPE, self.slug, moved.revision, op, flip, at)
+        return moved, self._change(ctx, moved.revision, op, flip, at)
 
 
 #: A scope mint the caller commits in its own transaction: the record and its ``create`` change.
@@ -175,21 +189,22 @@ ScopeMint = tuple[Scope, ConfigChange]
 
 
 class IReadScopeRepository(Protocol):
-    """Read-only scope access."""
+    """Read-only scope access. A slug names a scope within a project; :meth:`list_all` reads every
+    project of the tenant."""
 
-    def get(self, slug: str) -> Scope | None: ...
+    def get(self, project_id: str, slug: str) -> Scope | None: ...
 
     def list_all(self) -> list[Scope]: ...
 
-    def is_retired(self, slug: str) -> bool:
-        """Whether ``slug``'s newest lifecycle fact reads retired.
+    def is_retired(self, project_id: str, slug: str) -> bool:
+        """Whether the newest lifecycle fact reads retired.
 
         ``False`` for a slug with no lifecycle fact at all — every freshly minted scope
         starts enabled."""
         ...
 
-    def retired_slugs(self) -> set[str]:
-        """Every slug whose newest lifecycle fact reads retired — the bulk
+    def retired_slugs(self, project_id: str) -> set[str]:
+        """Every slug of ``project_id`` whose newest lifecycle fact reads retired — the bulk
         counterpart to :meth:`is_retired`, mirroring
         ``IReadGraphRepository.retired_graph_ids``."""
         ...
@@ -200,7 +215,7 @@ class IWriteScopeRepository(IReadScopeRepository, Protocol):
     record write."""
 
     def ensure(self, record: Scope, *, change: ConfigChange) -> Scope:
-        """Insert ``record`` with its ``create`` change if its slug is unseen in the tenant;
+        """Insert ``record`` with its ``create`` change if its slug is unseen in its project;
         otherwise read back the stored scope (and its id) unchanged and write nothing — first-write-wins, never
         overwriting a stored description."""
         ...
@@ -225,22 +240,25 @@ class ScopeRegistry:
         self._scopes = scopes
         self._clock = clock
 
-    def ensure(self, slug: ScopeSlug, ctx: ChangeContext, *, description: str = "") -> Scope:
-        """Mint ``slug`` if unseen, else return the existing scope unchanged — the one
+    def ensure(self, project_id: str, slug: ScopeSlug, ctx: ChangeContext, *, description: str = "") -> Scope:
+        """Mint ``slug`` in ``project_id`` if unseen there, else return the existing scope unchanged — the one
         mint path ``scope create`` takes."""
-        existing, mint = self.resolve(slug, ctx, description=description)
+        existing, mint = self.resolve(project_id, slug, ctx, description=description)
         if mint is None:
             return existing
         record, change = mint
         return self._scopes.ensure(record, change=change)
 
-    def resolve(self, slug: ScopeSlug, ctx: ChangeContext, *, description: str = "") -> tuple[Scope, ScopeMint | None]:
-        """The scope ``slug`` names and, when it is unseen, the mint the caller commits in its
-        own transaction — how a routine naming an unseen default scope mints it."""
-        existing = self._scopes.get(slug.value)
+    def resolve(
+        self, project_id: str, slug: ScopeSlug, ctx: ChangeContext, *, description: str = ""
+    ) -> tuple[Scope, ScopeMint | None]:
+        """The scope ``slug`` names in ``project_id`` and, when the project holds none so, the mint the caller
+        commits in its own transaction — how a routine naming an unseen default scope mints it. The same slug in
+        another project is another scope."""
+        existing = self._scopes.get(project_id, slug.value)
         if existing is not None:
             return existing, None
-        mint = Scope.new(slug, description, ctx, at=self._clock.now())
+        mint = Scope.new(slug, description, ctx, project_id=project_id, at=self._clock.now())
         return mint[0], mint
 
     def edit(self, scope: Scope, edit: ScopeEdit, ctx: ChangeContext, *, if_match: int | None = None) -> Scope:

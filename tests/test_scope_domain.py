@@ -5,7 +5,7 @@ validation, the ``Scope`` record's sparse edit, revision, and change decisions,
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from typing import Any, cast
 
@@ -45,6 +45,7 @@ def test_parse_accepts_lowercase_alnum_and_hyphen() -> None:
     assert ScopeSlug.parse("blizzard-ops-2").value == "blizzard-ops-2"
 
 
+_PROJECT = "proj_test"
 _CTX = ChangeContext(actor="usr_1", door=Door.CLI)
 
 
@@ -58,8 +59,9 @@ class _FakeScopeRepo:
     updated: list[tuple[Scope, int, ConfigChange]] = field(default_factory=list)
     recorded: list[tuple[Scope, bool, int, str, ConfigChange]] = field(default_factory=list)
 
-    def get(self, slug: str) -> Scope | None:
-        return self.stored.get(slug)
+    def get(self, project_id: str, slug: str) -> Scope | None:
+        stored = self.stored.get(slug)
+        return stored if stored is not None and stored.project_id == project_id else None
 
     def ensure(self, record: Scope, *, change: ConfigChange) -> Scope:
         self.ensured.append((record, change))
@@ -86,6 +88,7 @@ def _as_write_repo(repo: _FakeScopeRepo) -> IWriteScopeRepository:
 def _scope(*, description: str = "old", revision: int = 1, retired: bool = False) -> Scope:
     return Scope(
         scope_id="scp_blizzard",
+        project_id=_PROJECT,
         slug="blizzard",
         description=description,
         created_at=_T0,
@@ -98,7 +101,7 @@ def _scope(*, description: str = "old", revision: int = 1, retired: bool = False
 
 
 def test_new_is_revision_one_with_a_create_change_keyed_on_the_slug() -> None:
-    record, change = Scope.new(ScopeSlug.parse("blizzard"), "the repo", _CTX, at=_T0)
+    record, change = Scope.new(ScopeSlug.parse("blizzard"), "the repo", _CTX, project_id=_PROJECT, at=_T0)
 
     assert (record.slug, record.description, record.revision, record.retired) == ("blizzard", "the repo", 1, False)
     assert (change.record_kind, change.record_key, change.revision, change.op) == (
@@ -158,7 +161,7 @@ def test_registry_ensure_mints_an_unseen_slug_with_its_create_change() -> None:
     repo = _FakeScopeRepo()
     registry = ScopeRegistry(scopes=_as_write_repo(repo), clock=FixedClock(instant=_T0))
 
-    registry.ensure(ScopeSlug.parse("blizzard"), _CTX, description="the repo")
+    registry.ensure(_PROJECT, ScopeSlug.parse("blizzard"), _CTX, description="the repo")
 
     [(record, change)] = repo.ensured
     assert (record.slug, record.description, record.created_at) == ("blizzard", "the repo", _T0)
@@ -169,7 +172,7 @@ def test_registry_ensure_defaults_description_to_empty() -> None:
     repo = _FakeScopeRepo()
     registry = ScopeRegistry(scopes=_as_write_repo(repo), clock=FixedClock(instant=_T0))
 
-    registry.ensure(ScopeSlug.parse("blizzard"), _CTX)
+    registry.ensure(_PROJECT, ScopeSlug.parse("blizzard"), _CTX)
 
     assert repo.ensured[0][0].description == ""
 
@@ -179,7 +182,7 @@ def test_registry_ensure_returns_a_stored_scope_and_writes_nothing() -> None:
     repo = _FakeScopeRepo(stored={"blizzard": stored})
     registry = ScopeRegistry(scopes=_as_write_repo(repo), clock=FixedClock(instant=_T0))
 
-    assert registry.ensure(ScopeSlug.parse("blizzard"), _CTX, description="other") is stored
+    assert registry.ensure(_PROJECT, ScopeSlug.parse("blizzard"), _CTX, description="other") is stored
     assert repo.ensured == []
 
 
@@ -187,7 +190,7 @@ def test_registry_resolve_hands_back_an_unseen_slugs_mint_without_writing() -> N
     repo = _FakeScopeRepo()
     registry = ScopeRegistry(scopes=_as_write_repo(repo), clock=FixedClock(instant=_T0))
 
-    scope, mint = registry.resolve(ScopeSlug.parse("blizzard"), _CTX)
+    scope, mint = registry.resolve(_PROJECT, ScopeSlug.parse("blizzard"), _CTX)
 
     assert mint is not None and mint[0] == scope
     assert repo.ensured == []
@@ -239,3 +242,21 @@ def test_lifecycle_retire_of_a_retired_scope_writes_nothing() -> None:
     lifecycle.retire(_scope(retired=True), _CTX, by="operator")
 
     assert repo.recorded == []
+
+
+def test_every_scope_change_row_carries_the_scope_project() -> None:
+    record, created = Scope.new(ScopeSlug.parse("blizzard"), "", _CTX, project_id=_PROJECT, at=_T0)
+    edited = record.edit(ScopeEdit(description="new"), _CTX, if_match=None, at=_T0)
+    retired = record.set_retired(True, _CTX, if_match=None, at=_T0)
+
+    assert edited is not None and retired is not None
+    assert {created.project_id, edited[1].project_id, retired[1].project_id} == {_PROJECT}
+
+
+def test_resolve_mints_a_slug_another_project_holds_within_its_own_project() -> None:
+    repo = _FakeScopeRepo(stored={"blizzard": replace(_scope(), project_id="proj_other")})
+    registry = ScopeRegistry(scopes=_as_write_repo(repo), clock=FixedClock(instant=_T0))
+
+    scope, mint = registry.resolve(_PROJECT, ScopeSlug.parse("blizzard"), _CTX)
+
+    assert mint is not None and scope.project_id == _PROJECT and scope.scope_id != "scp_blizzard"

@@ -17,10 +17,12 @@ from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.door import RequestDoor, change_context
+from blizzard.hub.api.project_params import CallProject
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.config.work_sources import ConfigFieldError, ConfigRevisionConflict
 from blizzard.hub.domain.garden.scopes import Scope, ScopeEdit, ScopeSlug, ScopeSlugError
+from blizzard.hub.domain.projects.model import Project
 from blizzard.wire.scope import ScopeCreateRequest, ScopeEditRequest, ScopeLifecycleRequest, ScopeView
 
 router = APIRouter(
@@ -52,8 +54,8 @@ def _revision_conflict(exc: ConfigRevisionConflict) -> HTTPException:
     return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
 
 
-def _scope_or_404(slug: str, services: TenantServices) -> Scope:
-    scope = services.scopes.get(slug)
+def _scope_or_404(project: Project, slug: str, services: TenantServices) -> Scope:
+    scope = services.scopes.get(project.project_id, slug)
     if scope is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown scope {slug}")
     return scope
@@ -65,14 +67,17 @@ def create_scope(
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.GRAPH_EDIT))],
     door: RequestDoor,
     services: Services,
+    project: CallProject,
 ) -> ScopeView:
-    """Mint a scope, or no-op onto the existing one of the same slug; 422 on a
+    """Mint a scope in the call's project, or no-op onto the project's existing one of the same slug; 422 on a
     malformed slug, naming the rejected value."""
     try:
         slug = ScopeSlug.parse(request.slug)
     except ScopeSlugError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
-    scope = services.scope_registry.ensure(slug, change_context(identity, door), description=request.description)
+    scope = services.scope_registry.ensure(
+        project.project_id, slug, change_context(identity, door), description=request.description
+    )
     return scope_view(scope)
 
 
@@ -83,9 +88,9 @@ def list_scopes(services: Services) -> list[ScopeView]:
 
 
 @router.get("/scopes/{slug}", response_model=ScopeView, dependencies=[Depends(require(Permission.FLEET_VIEW))])
-def get_scope(slug: str, services: Services) -> ScopeView:
-    """One scope; 404 on an unknown slug."""
-    return scope_view(_scope_or_404(slug, services))
+def get_scope(slug: str, services: Services, project: CallProject) -> ScopeView:
+    """One scope of the call's project; 404 on an unknown slug."""
+    return scope_view(_scope_or_404(project, slug, services))
 
 
 @router.get(
@@ -93,11 +98,11 @@ def get_scope(slug: str, services: Services) -> ScopeView:
     response_model=list[str],
     dependencies=[Depends(require(Permission.FLEET_VIEW))],
 )
-def list_scope_routines(slug: str, services: Services) -> list[str]:
+def list_scope_routines(slug: str, services: Services, project: CallProject) -> list[str]:
     """Every routine id linked to `slug` — the reverse direction of
     `GET /api/routines/{routine_id}/scopes`. 404 on an unknown slug."""
-    scope = _scope_or_404(slug, services)
-    return services.routine_scopes.list_routines(scope.slug)
+    scope = _scope_or_404(project, slug, services)
+    return services.routine_scopes.list_routines(scope.scope_id)
 
 
 @router.patch("/scopes/{slug}", response_model=ScopeView)
@@ -107,6 +112,7 @@ def edit_scope(
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.GRAPH_EDIT))],
     door: RequestDoor,
     services: Services,
+    project: CallProject,
     if_match: Annotated[int | None, Header()] = None,
 ) -> ScopeView:
     """Apply only the fields present; an edit that changes nothing writes nothing. 422 on a
@@ -116,7 +122,7 @@ def edit_scope(
         parsed = ScopeSlug.parse(slug)
     except ScopeSlugError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
-    scope = _scope_or_404(parsed.value, services)
+    scope = _scope_or_404(project, parsed.value, services)
     edit = ScopeEdit(**{name: getattr(request, name) for name in request.model_fields_set})
     try:
         edited = services.scope_registry.edit(scope, edit, change_context(identity, door), if_match=if_match)
@@ -134,11 +140,12 @@ def retire_scope(
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.GRAPH_EDIT))],
     door: RequestDoor,
     services: Services,
+    project: CallProject,
     if_match: Annotated[int | None, Header()] = None,
 ) -> ScopeView:
     """Retire a scope — a reversible brake; retiring a retired scope writes nothing. 404 on
     an unknown slug, 409 on a stale `If-Match`."""
-    scope = _scope_or_404(slug, services)
+    scope = _scope_or_404(project, slug, services)
     try:
         retired = services.scope_lifecycle.retire(
             scope, change_context(identity, door), by=request.by, if_match=if_match
@@ -155,11 +162,12 @@ def enable_scope(
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.GRAPH_EDIT))],
     door: RequestDoor,
     services: Services,
+    project: CallProject,
     if_match: Annotated[int | None, Header()] = None,
 ) -> ScopeView:
     """Re-enable a retired scope; enabling an enabled one writes nothing. 404 on an unknown
     slug, 409 on a stale `If-Match`."""
-    scope = _scope_or_404(slug, services)
+    scope = _scope_or_404(project, slug, services)
     try:
         enabled = services.scope_lifecycle.enable(
             scope, change_context(identity, door), by=request.by, if_match=if_match

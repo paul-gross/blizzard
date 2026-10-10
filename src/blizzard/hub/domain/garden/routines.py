@@ -76,6 +76,16 @@ class RoutineDefaultScopeUnlinkError(ValueError):
         self.scope_slug = scope_slug
 
 
+class RoutineScopeOtherProject(ValueError):
+    """A routine named a scope of another project as its default or in its linked set: a routine's scopes are
+    always its own project's."""
+
+    def __init__(self, routine_name: str, scope_slug: str) -> None:
+        super().__init__(f"scope {scope_slug!r} belongs to another project than routine {routine_name!r}")
+        self.routine_name = routine_name
+        self.scope_slug = scope_slug
+
+
 class RoutineVerb(StrEnum):
     """Every act addressed at a routine by name or id."""
 
@@ -138,6 +148,7 @@ class Routine:
     graph_name: str
     default_scope_slug: str
     created_at: datetime
+    project_id: str
     default_model: list[str] = field(default_factory=list)
     default_effort: str | None = None
     # The routine's default harness preference, `default_model`'s shape: empty is no preference.
@@ -170,6 +181,7 @@ class Routine:
         cls,
         *,
         routine_id: str,
+        project_id: str,
         name: str,
         graph_name: str,
         default_scope_slug: str,
@@ -179,18 +191,28 @@ class Routine:
         ctx: ChangeContext,
         at: datetime,
     ) -> tuple[Routine, ConfigChange]:
-        """A new routine at revision 1 pointing at ``default_scope_slug``, with its ``create`` change."""
+        """A new routine of ``project_id`` at revision 1 pointing at ``default_scope_slug``, a scope of the same
+        project, with its ``create`` change."""
         record = cls(
             routine_id=routine_id,
             name=name,
             graph_name=graph_name,
             default_scope_slug=default_scope_slug,
             created_at=at,
+            project_id=project_id,
             default_model=list(default_model),
             default_effort=default_effort,
             default_harnesses=validated_harnesses(list(default_harnesses)),
         )
-        return record, ConfigChange.of(ctx, RecordKind.ROUTINE, name, 1, ChangeOp.CREATE, record._diff(None), at)
+        return record, record._change(ctx, 1, ChangeOp.CREATE, record._diff(None), at)
+
+    def _change(
+        self, ctx: ChangeContext, revision: int, op: ChangeOp, changes: tuple[FieldChange, ...], at: datetime
+    ) -> ConfigChange:
+        """The change row a verb on this routine writes, in the routine's project."""
+        return ConfigChange.of(
+            ctx, RecordKind.ROUTINE, self.name, revision, op, changes, at, project_id=self.project_id
+        )
 
     def require_revision(self, if_match: int | None) -> None:
         """:class:`ConfigRevisionConflict` when ``if_match`` names a revision other than the stored one."""
@@ -211,7 +233,7 @@ class Routine:
         if not changes:
             return None
         edited = replace(merged, revision=self.revision + 1)
-        return edited, ConfigChange.of(ctx, RecordKind.ROUTINE, self.name, edited.revision, ChangeOp.EDIT, changes, at)
+        return edited, self._change(ctx, edited.revision, ChangeOp.EDIT, changes, at)
 
     def set_retired(
         self, retired: bool, ctx: ChangeContext, *, if_match: int | None, at: datetime
@@ -223,7 +245,7 @@ class Routine:
             return None
         moved = replace(self, revision=self.revision + 1, retired=retired)
         flip = (FieldChange(RETIRED_FIELD, self.retired, retired),)
-        return moved, ConfigChange.of(ctx, RecordKind.ROUTINE, self.name, moved.revision, op, flip, at)
+        return moved, self._change(ctx, moved.revision, op, flip, at)
 
     def with_scopes(
         self, linked: Sequence[str], scopes: Sequence[str], ctx: ChangeContext, *, if_match: int | None, at: datetime
@@ -236,7 +258,12 @@ class Routine:
             return None
         moved = replace(self, revision=self.revision + 1)
         changes = (FieldChange(SCOPES_FIELD, old, new),)
-        return moved, ConfigChange.of(ctx, RecordKind.ROUTINE, self.name, moved.revision, ChangeOp.EDIT, changes, at)
+        return moved, self._change(ctx, moved.revision, ChangeOp.EDIT, changes, at)
+
+    def require_own_scope(self, scope: Scope) -> None:
+        """:class:`RoutineScopeOtherProject` unless ``scope`` belongs to this routine's project."""
+        if scope.project_id != self.project_id:
+            raise RoutineScopeOtherProject(self.name, scope.slug)
 
     def require_unlinkable(self, scope: Scope) -> None:
         """The routine's own default scope never leaves its set."""
@@ -284,14 +311,15 @@ class Routine:
 
 
 class IReadRoutineRepository(Protocol):
-    """Read-only routine access."""
+    """Read-only routine access. A name names a routine within a project; :meth:`list_all` reads every project
+    of the tenant."""
 
     def get(self, routine_id: str) -> Routine | None: ...
 
-    def get_by_name(self, name: str) -> Routine | None: ...
+    def get_by_name(self, project_id: str, name: str) -> Routine | None: ...
 
-    def get_many_by_name(self, names: Sequence[str]) -> dict[str, Routine]:
-        """The routines holding ``names``, keyed by name — ``get_by_name``'s batched plural
+    def get_many_by_name(self, project_id: str, names: Sequence[str]) -> dict[str, Routine]:
+        """The routines of ``project_id`` holding ``names``, keyed by name — ``get_by_name``'s batched plural
         (``bzh:bulk-reconstitution``); a name no routine holds is absent."""
         ...
 
@@ -352,8 +380,8 @@ class IReadRoutineScopeRepository(Protocol):
         its list empty when nothing links to it."""
         ...
 
-    def list_routines(self, scope_slug: str) -> list[str]:
-        """Every routine id linked to ``scope_slug``, sorted — the reverse direction
+    def list_routines(self, scope_id: str) -> list[str]:
+        """Every routine id linked to the scope ``scope_id``, sorted — the reverse direction
         of :meth:`list_scopes`."""
         ...
 
@@ -363,7 +391,8 @@ class IWriteRoutineScopeRepository(IReadRoutineScopeRepository, Protocol):
     commits ``change`` with it."""
 
     def link(self, routine: Routine, scope_slug: str, *, from_revision: int, change: ConfigChange) -> Routine:
-        """Link ``scope_slug`` into ``routine``'s set as one compare-and-set on ``from_revision``."""
+        """Link the scope ``scope_slug`` names in ``routine``'s project into its set as one compare-and-set on
+        ``from_revision``."""
         ...
 
     def unlink(self, routine: Routine, scope_slug: str, *, from_revision: int, change: ConfigChange) -> Routine:
@@ -394,6 +423,7 @@ class RoutineAuthoring:
     def create(
         self,
         *,
+        project_id: str,
         name: str,
         graph_name: str,
         default_scope_slug: ScopeSlug,
@@ -402,12 +432,15 @@ class RoutineAuthoring:
         default_effort: str | None = None,
         default_harnesses: list[str] | None = None,
     ) -> Routine:
+        """Create a routine in ``project_id``; its name is free and its default scope resolves (or mints) within
+        that project."""
         harnesses = validated_harnesses(default_harnesses or [])
-        require_name_free(self._routines.get_by_name(name), name)
+        require_name_free(self._routines.get_by_name(project_id, name), name)
         require_graph_change_resolves(None, graph_name, self._resolves)
-        scope, scope_mint = self._scope_registry.resolve(default_scope_slug, ctx)
+        scope, scope_mint = self._scope_registry.resolve(project_id, default_scope_slug, ctx)
         routine, change = Routine.new(
             routine_id=Id.mint(IdPrefix.ROUTINE, self._clock).value,
+            project_id=project_id,
             name=name,
             graph_name=graph_name,
             default_scope_slug=scope.slug,
@@ -417,6 +450,7 @@ class RoutineAuthoring:
             ctx=ctx,
             at=self._clock.now(),
         )
+        routine.require_own_scope(scope)
         return self._routines.create(routine, change=change, scope_mint=scope_mint)
 
     def edit(self, routine: Routine, edit: RoutineEdit, ctx: ChangeContext, *, if_match: int | None = None) -> Routine:
@@ -432,7 +466,8 @@ class RoutineAuthoring:
         edited, change = decided
         scope_mint = None
         if isinstance(edit.default_scope_slug, ScopeSlug):
-            _, scope_mint = self._scope_registry.resolve(edit.default_scope_slug, ctx)
+            scope, scope_mint = self._scope_registry.resolve(routine.project_id, edit.default_scope_slug, ctx)
+            routine.require_own_scope(scope)
         return self._routines.update(edited, from_revision=routine.revision, change=change, scope_mint=scope_mint)
 
 
@@ -446,7 +481,9 @@ class RoutineScopeMembership:
         self._clock = clock
 
     def link(self, routine: Routine, scope: Scope, ctx: ChangeContext, *, if_match: int | None = None) -> Routine:
-        """Link `scope` into `routine`'s set; a no-op if it is already linked."""
+        """Link `scope` into `routine`'s set; a no-op if it is already linked. Refused when `scope` belongs to
+        another project than `routine`."""
+        routine.require_own_scope(scope)
         linked = self._routine_scopes.list_scopes(routine.routine_id)
         decided = routine.with_scopes(linked, [*linked, scope.slug], ctx, if_match=if_match, at=self._clock.now())
         if decided is None:
@@ -457,7 +494,8 @@ class RoutineScopeMembership:
     def unlink(self, routine: Routine, scope: Scope, ctx: ChangeContext, *, if_match: int | None = None) -> Routine:
         """Unlink `scope` from `routine`'s set; a no-op if it is not linked. Refused when
         `scope` is `routine`'s own default: a routine's default scope is always a
-        member of its own set."""
+        member of its own set, and when `scope` belongs to another project than `routine`."""
+        routine.require_own_scope(scope)
         routine.require_unlinkable(scope)
         linked = self._routine_scopes.list_scopes(routine.routine_id)
         kept = [slug for slug in linked if slug != scope.slug]

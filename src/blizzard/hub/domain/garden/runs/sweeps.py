@@ -157,7 +157,7 @@ class GardenSweepsService:
     def sweeps(self, routine: Routine, *, since: datetime, until: datetime) -> GardenSweeps:
         live_declared, facts = sweep_coverage(
             set(self._routine_scopes.list_scopes(routine.routine_id)),
-            self._scopes.retired_slugs(),
+            self._scopes.retired_slugs(routine.project_id),
             self._repo.sweeps_for_routine(routine.name),
         )
         return compute_sweeps(facts, routine_name=routine.name, scope_slugs=live_declared, since=since, until=until)

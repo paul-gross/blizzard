@@ -23,7 +23,7 @@ from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.garden.routines import Routine
 from blizzard.hub.domain.garden.scopes import ScopeSlug
 from blizzard.hub.domain.graph.model import Graph
-from tests.support import HubHarness, build_hub
+from tests.support import HubHarness, build_hub, default_project
 
 _CTX = ChangeContext(actor="operator", door=Door.API)
 
@@ -275,6 +275,7 @@ def _routine(hub: HubHarness) -> Routine:
         default_scope_slug=ScopeSlug.parse("blizzard"),
         default_model=None,
         default_effort=None,
+        project_id=default_project(hub.engine),
     )
 
 
@@ -292,7 +293,7 @@ def _relay(hub: HubHarness, monkeypatch: pytest.MonkeyPatch) -> None:
 def test_run_list_and_show_work_end_to_end_against_a_real_app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     hub = build_hub(tmp_path)
     routine = _routine(hub)
-    scope = hub.services.scopes.get(routine.default_scope_slug)
+    scope = hub.services.scopes.get(routine.project_id, routine.default_scope_slug)
     assert scope is not None
     result = hub.services.routine_run.run(
         routine,

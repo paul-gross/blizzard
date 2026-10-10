@@ -344,11 +344,23 @@ def link_project(
         authoring.link_repository(record, stored, _SEEDER)
 
 
-def seed_scope(conns: ScopedConnections, slug: str, *, at: datetime) -> str:
-    """Store a scope named ``slug`` in ``conns``' tenant through its adapter unless one is stored — the
-    parent a run, link or finding naming ``slug`` needs — and return its ``scope_id``."""
-    record, change = Scope.new(ScopeSlug.parse(slug), "", OP, at=at)
+def seed_scope(conns: ScopedConnections, slug: str, *, at: datetime, project_id: str | None = None) -> str:
+    """Store a scope named ``slug`` in ``project_id`` — ``conns``' tenant's only project when ``None`` — through
+    its adapter unless the project stores one — the parent a run, link or finding naming ``slug`` needs — and
+    return its ``scope_id``."""
+    project = project_id if project_id is not None else _only_project_of(conns)
+    record, change = Scope.new(ScopeSlug.parse(slug), "", OP, project_id=project, at=at)
     return ScopeStore(conns).ensure(record, change=change).scope_id
+
+
+def _only_project_of(conns: ScopedConnections) -> str:
+    """The id of ``conns``' tenant's only project; raises when it holds none or several."""
+    projects = schema.projects
+    with conns.read("only_project_of") as conn:
+        ids: list[str] = list(conn.execute(conns.select(projects, projects.c.project_id)).scalars())
+    if len(ids) != 1:
+        raise AssertionError(f"the tenant must hold exactly one project; it holds {len(ids)}")
+    return ids[0]
 
 
 def only_tenant_subquery() -> sa.ScalarSelect[Any]:

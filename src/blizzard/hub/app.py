@@ -66,6 +66,7 @@ from blizzard.hub.api.invitations import router as invitations_router
 from blizzard.hub.api.me import router as me_router
 from blizzard.hub.api.members import grants_router as member_grants_router
 from blizzard.hub.api.members import router as members_router
+from blizzard.hub.api.project_params import refuse_project_required
 from blizzard.hub.api.questions import router as questions_router
 from blizzard.hub.api.queue import router as queue_router
 from blizzard.hub.api.readiness import router as readiness_router
@@ -102,6 +103,7 @@ from blizzard.hub.domain.observability.tracing.attributes import (
     resource_attributes,
 )
 from blizzard.hub.domain.observability.transcripts import TranscriptCaps
+from blizzard.hub.domain.projects.model import ProjectRequired
 from blizzard.hub.domain.runners.registration import RunnerRetired
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.secrets import KeyCoverage, hub_key_provider, require_hub_key
@@ -384,6 +386,7 @@ def create_app(
     app.add_exception_handler(RequestValidationError, _validation_error)
     app.add_exception_handler(TenantClosed, refuse_closed_tenant)
     app.add_exception_handler(UnknownTenant, refuse_closed_tenant)
+    app.add_exception_handler(ProjectRequired, refuse_project_required)
 
     # API routers first, so /api/* always wins over the web mount at /.
     app.include_router(health_router)

@@ -81,7 +81,7 @@ class _AdapterCase:
 
 
 _ADAPTER_CASES = [
-    _AdapterCase("ScopeStore", lambda store: ScopeStore(store), lambda a: a.get("x"), "get"),
+    _AdapterCase("ScopeStore", lambda store: ScopeStore(store), lambda a: a.get("proj_x", "x"), "get"),
     _AdapterCase(
         "AnalyticsEventQueryStore",
         lambda store: AnalyticsEventQueryStore(store),

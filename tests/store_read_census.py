@@ -184,6 +184,7 @@ from tests.support import (
     added_runner,
     build_hub,
     chunk_stores,
+    default_project,
     default_tenant,
     hub_level_connections,
     hub_store_connections,
@@ -1034,6 +1035,7 @@ class HubWorld:
     invitation_token_hash: str
     routine_id: str
     scope_a: str
+    scope_a_id: str
     scope_c: str
     finding_1: str
     finding_2: str
@@ -1190,9 +1192,16 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
 
     # --- scopes and routines ---------------------------------------------------------------
     operator = ChangeContext(actor="operator", door=Door.API)
-    scope_a = hub.services.scope_registry.ensure(ScopeSlug.parse("blizzard"), operator, description="core")
-    scope_b = hub.services.scope_registry.ensure(ScopeSlug.parse("runner-scope"), operator, description="runner side")
-    scope_c = hub.services.scope_registry.ensure(ScopeSlug.parse("legacy"), operator, description="retired")
+    garden_project = default_project(hub.engine)
+    scope_a = hub.services.scope_registry.ensure(
+        garden_project, ScopeSlug.parse("blizzard"), operator, description="core"
+    )
+    scope_b = hub.services.scope_registry.ensure(
+        garden_project, ScopeSlug.parse("runner-scope"), operator, description="runner side"
+    )
+    scope_c = hub.services.scope_registry.ensure(
+        garden_project, ScopeSlug.parse("legacy"), operator, description="retired"
+    )
     hub.services.scope_lifecycle.retire(scope_c, operator, by="operator")
 
     # --- secrets ----------------------------------------------------------------------------
@@ -1229,6 +1238,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     )
 
     routine = hub.services.routine_authoring.create(
+        project_id=garden_project,
         ctx=operator,
         name="gardening",
         graph_name=default_graph.name,
@@ -1238,7 +1248,11 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     )
     hub.services.routine_scope_membership.link(routine, scope_b, operator)
     routine_2 = hub.services.routine_authoring.create(
-        ctx=operator, name="nightly", graph_name=default_graph.name, default_scope_slug=ScopeSlug.parse("runner-scope")
+        project_id=garden_project,
+        ctx=operator,
+        name="nightly",
+        graph_name=default_graph.name,
+        default_scope_slug=ScopeSlug.parse("runner-scope"),
     )
 
     # --- routine runs: garden_run/run_context's own source ---------------------------------
@@ -1875,6 +1889,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         invitation_token_hash=invitation_token_hash,
         routine_id=routine.routine_id,
         scope_a="blizzard",
+        scope_a_id=scope_a.scope_id,
         scope_c="legacy",
         finding_1=finding_1,
         finding_2=finding_2,
@@ -2195,8 +2210,10 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadRunnerRegistry, "names_for"): lambda w: w.hub.services.registry.names_for([HUB_RUNNER_ID]),
     (IReadRunnerNames, "names_for"): lambda w: w.hub.services.registry.names_for([HUB_RUNNER_ID]),
     (IReadRoutineRepository, "get"): lambda w: w.hub.services.routines.get(w.routine_id),
-    (IReadRoutineRepository, "get_by_name"): lambda w: w.hub.services.routines.get_by_name("gardening"),
-    (IReadRoutineRepository, "get_many_by_name"): lambda w: w.hub.services.routines.get_many_by_name(["gardening"]),
+    (IReadRoutineRepository, "get_by_name"): lambda w: w.hub.services.routines.get_by_name(w.project_id, "gardening"),
+    (IReadRoutineRepository, "get_many_by_name"): lambda w: w.hub.services.routines.get_many_by_name(
+        w.project_id, ["gardening"]
+    ),
     (IReadRoutineRepository, "list_all"): lambda w: w.hub.services.routines.list_all(),
     (IReadRoutineRepository, "is_retired"): lambda w: w.hub.services.routines.is_retired(w.routine_id),
     (IReadRoutineRepository, "retired_ids"): lambda w: w.hub.services.routines.retired_ids(),
@@ -2204,7 +2221,7 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadRoutineScopeRepository, "list_scopes_for"): lambda w: w.hub.services.routine_scopes.list_scopes_for(
         [w.routine_id]
     ),
-    (IReadRoutineScopeRepository, "list_routines"): lambda w: w.hub.services.routine_scopes.list_routines("blizzard"),
+    (IReadRoutineScopeRepository, "list_routines"): lambda w: w.hub.services.routine_scopes.list_routines(w.scope_a_id),
     (IReadRunContextRepository, "for_chunk"): lambda w: w.hub.services.run_context.for_chunk(w.run_chunk_1_chunk),
     (ISecretCatalog, "get"): lambda w: w.secrets.get("gh-token"),
     (ISecretCatalog, "get_many"): lambda w: w.secrets.get_many(["gh-token", "old-token"]),
@@ -2252,10 +2269,10 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadConfigChanges, "page"): lambda w: w.hub.services.config_changes.page(
         before=None, limit=10, record_kind=None, record_key=None
     ),
-    (IReadScopeRepository, "get"): lambda w: w.hub.services.scopes.get(w.scope_a),
+    (IReadScopeRepository, "get"): lambda w: w.hub.services.scopes.get(w.project_id, w.scope_a),
     (IReadScopeRepository, "list_all"): lambda w: w.hub.services.scopes.list_all(),
-    (IReadScopeRepository, "is_retired"): lambda w: w.hub.services.scopes.is_retired(w.scope_c),
-    (IReadScopeRepository, "retired_slugs"): lambda w: w.hub.services.scopes.retired_slugs(),
+    (IReadScopeRepository, "is_retired"): lambda w: w.hub.services.scopes.is_retired(w.project_id, w.scope_c),
+    (IReadScopeRepository, "retired_slugs"): lambda w: w.hub.services.scopes.retired_slugs(w.project_id),
     (IReadTranscriptSegments, "segments_for_chunk"): lambda w: w.hub.services.transcripts.segments_for_chunk(
         w.transcript_chunk
     ),

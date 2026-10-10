@@ -13,7 +13,7 @@ from sqlalchemy import Engine
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.garden.scopes import Scope, ScopeSlug
 from blizzard.hub.store.internal.scope_store import ScopeStore
-from tests.support import hub_store_connections, migrate_to
+from tests.support import default_project, hub_store_connections, migrate_to
 
 pytestmark = pytest.mark.component
 
@@ -24,8 +24,8 @@ _CTX = ChangeContext(actor="op", door=Door.API)
 _SLUGS = ("live", "retired", "re-enabled")
 
 
-def _mint(store: ScopeStore, slug: str) -> Scope:
-    record, change = Scope.new(ScopeSlug.parse(slug), "", _CTX, at=_T0)
+def _mint(store: ScopeStore, project: str, slug: str) -> Scope:
+    record, change = Scope.new(ScopeSlug.parse(slug), "", _CTX, at=_T0, project_id=project)
     return store.ensure(record, change=change)
 
 
@@ -45,17 +45,19 @@ def _store(tmp_path: Path) -> tuple[ScopeStore, Engine]:
 def test_retired_slugs_agrees_with_is_retired_across_a_live_a_retired_and_a_re_enabled_scope(
     tmp_path: Path,
 ) -> None:
-    store, _ = _store(tmp_path)
-    scopes = {slug: _mint(store, slug) for slug in _SLUGS}
+    store, engine = _store(tmp_path)
+    project = default_project(engine)
+    scopes = {slug: _mint(store, project, slug) for slug in _SLUGS}
 
     _flip(store, _flip(store, scopes["retired"], True), True)  # a repeat decides nothing
     _flip(store, _flip(store, scopes["re-enabled"], True), False)  # newest-fact-wins
 
-    assert store.retired_slugs() == {"retired"}
+    assert store.retired_slugs(project) == {"retired"}
     for slug in _SLUGS:
-        assert (slug in store.retired_slugs()) == store.is_retired(slug)
+        assert (slug in store.retired_slugs(project)) == store.is_retired(project, slug)
 
 
 def test_retired_slugs_of_no_scopes_is_empty(tmp_path: Path) -> None:
-    store, _ = _store(tmp_path)
-    assert store.retired_slugs() == set()
+    store, engine = _store(tmp_path)
+    project = default_project(engine)
+    assert store.retired_slugs(project) == set()

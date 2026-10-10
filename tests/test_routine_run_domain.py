@@ -43,6 +43,7 @@ from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository
 
 pytestmark = pytest.mark.unit
 
+_PROJECT = "proj_test"
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 _GRAPH = Graph(graph_id="gr_1", name="default", entry_node_id="nd_1", nodes=[], edges=[], created_at=_T0)
 _ROUTINE = Routine(
@@ -53,8 +54,11 @@ _ROUTINE = Routine(
     created_at=_T0,
     default_model=["opus"],
     default_effort="high",
+    project_id=_PROJECT,
 )
-_DEFAULT_SCOPE = Scope(scope_id="scp_blizzard", slug="blizzard", description="the hub itself", created_at=_T0)
+_DEFAULT_SCOPE = Scope(
+    scope_id="scp_blizzard", slug="blizzard", description="the hub itself", created_at=_T0, project_id=_PROJECT
+)
 
 
 @dataclass
@@ -84,13 +88,14 @@ class _FakeScopes:
     scopes: dict[str, Scope] = field(default_factory=lambda: {"blizzard": _DEFAULT_SCOPE})
     retired: set[str] = field(default_factory=set)
 
-    def get(self, slug: str) -> Scope | None:
-        return self.scopes.get(slug)
+    def get(self, project_id: str, slug: str) -> Scope | None:
+        scope = self.scopes.get(slug)
+        return scope if scope is not None and scope.project_id == project_id else None
 
     def list_all(self) -> list[Scope]:
         return list(self.scopes.values())
 
-    def is_retired(self, slug: str) -> bool:
+    def is_retired(self, project_id: str, slug: str) -> bool:
         return slug in self.retired
 
     def __getattr__(self, name: str) -> Any:
@@ -269,7 +274,7 @@ def test_run_retired_default_scope_is_refused() -> None:
 
 
 def test_run_retired_override_scope_is_refused() -> None:
-    cold = Scope(scope_id="scp_cold", slug="cold", description="", created_at=_T0)
+    cold = Scope(scope_id="scp_cold", slug="cold", description="", created_at=_T0, project_id=_PROJECT)
     scopes = _FakeScopes(scopes={"blizzard": _DEFAULT_SCOPE, "cold": cold}, retired={"cold"})
     service, *_ = _service(scopes=scopes, routine_scopes=_FakeRoutineScopes(related=["blizzard", "cold"]))
 
@@ -278,7 +283,7 @@ def test_run_retired_override_scope_is_refused() -> None:
 
 
 def test_run_refuses_an_override_outside_the_routines_related_set() -> None:
-    unrelated = Scope(scope_id="scp_unrelated", slug="unrelated", description="", created_at=_T0)
+    unrelated = Scope(scope_id="scp_unrelated", slug="unrelated", description="", created_at=_T0, project_id=_PROJECT)
     scopes = _FakeScopes(scopes={"blizzard": _DEFAULT_SCOPE, "unrelated": unrelated})
     service, *_ = _service(scopes=scopes)  # routine_scopes defaults to just ["blizzard"]
 
@@ -290,7 +295,7 @@ def test_run_refuses_a_related_check_before_the_retire_check() -> None:
     """An unrelated, also-retired scope is refused for being unrelated
     — the retire brake never runs against a scope the routine has no set
     membership for at all."""
-    unrelated = Scope(scope_id="scp_unrelated", slug="unrelated", description="", created_at=_T0)
+    unrelated = Scope(scope_id="scp_unrelated", slug="unrelated", description="", created_at=_T0, project_id=_PROJECT)
     scopes = _FakeScopes(scopes={"blizzard": _DEFAULT_SCOPE, "unrelated": unrelated}, retired={"unrelated"})
     service, *_ = _service(scopes=scopes)
 

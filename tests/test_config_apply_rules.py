@@ -34,6 +34,7 @@ from blizzard.hub.domain.kernel.unset import UNSET
 
 pytestmark = pytest.mark.unit
 
+_PROJECT = "proj_test"
 _AT = datetime(2026, 10, 4, 12, 0, 0, tzinfo=UTC)
 _CTX = ChangeContext(actor="alice", door=Door.APPLY, apply_id="apl_X")
 _SOURCE = WorkSourceFields(
@@ -190,7 +191,8 @@ def test_an_edit_that_leaves_every_field_unset_compares_nothing() -> None:
 
 
 def _scope_entry(slug: str = "core", description: str = "", **stated: object) -> ScopeDeclaration:
-    return ScopeDeclaration(name=slug, description=description, edit=ScopeEdit(**stated))  # type: ignore[arg-type]
+    edit = ScopeEdit(**stated)  # type: ignore[arg-type]
+    return ScopeDeclaration(name=slug, description=description, edit=edit, project_id=_PROJECT)
 
 
 def _routine_entry(scopes: tuple[str, ...] | None = None, **fields: object) -> RoutineDeclaration:
@@ -203,6 +205,7 @@ def _routine_entry(scopes: tuple[str, ...] | None = None, **fields: object) -> R
         default_harnesses=(),
         edit=RoutineEdit(name="nightly", **declared),  # type: ignore[arg-type]
         scopes=scopes,
+        project_id=_PROJECT,
         **declared,  # type: ignore[arg-type]
     )
 
@@ -216,6 +219,7 @@ def _stored_routine(*, retired: bool = False) -> Routine:
         created_at=_AT,
         revision=4,
         retired=retired,
+        project_id=_PROJECT,
     )
 
 
@@ -267,12 +271,12 @@ def test_a_stored_routine_as_declared_is_unchanged_and_a_retired_one_is_enabled(
 
 
 def test_a_stored_scope_edits_only_a_stated_description() -> None:
-    stored = Scope(scope_id="scp_core", slug="core", description="old", created_at=_AT, revision=2)
+    stored = Scope(scope_id="scp_core", slug="core", description="old", created_at=_AT, revision=2, project_id=_PROJECT)
     unstated = _plan(ConfigDeclaration(scopes=(_scope_entry(),)), _garden(scopes=(stored,)))
     assert unstated.writes == ()
     created = _plan(ConfigDeclaration(scopes=(_scope_entry(description="new"),)), _garden())
     assert created.outcomes[0].op is ChangeOp.CREATE
-    stated = ScopeDeclaration(name="core", description="new", edit=ScopeEdit(description="new"))
+    stated = ScopeDeclaration(name="core", description="new", edit=ScopeEdit(description="new"), project_id=_PROJECT)
     edited = _plan(ConfigDeclaration(scopes=(stated,)), _garden(scopes=(stored,)))
     assert [(w.change.op, w.from_revision) for w in edited.writes] == [(ChangeOp.EDIT, 2)]
 

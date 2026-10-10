@@ -15,7 +15,9 @@ from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.garden.review.validation import ValidatedReviewFindings
+from blizzard.hub.domain.garden.scopes import Scope, ScopeMint, ScopeSlug
 from blizzard.hub.domain.graph.model import Node
 
 
@@ -56,6 +58,10 @@ class NewReviewFindingFact:
     ref: str
 
 
+#: Who mints the scope a review delivery names: the hub itself, through the delivering runner's API call.
+REVIEW_MINT_CONTEXT = ChangeContext(actor="system", door=Door.API)
+
+
 @domain_model
 @dataclass(frozen=True)
 class ReviewFindingsPlan:
@@ -72,6 +78,13 @@ class ReviewFindingsPlan:
     new_scope_description: str = ""
     new_findings: list[NewReviewFinding] = field(default_factory=list)
     facts: list[NewReviewFindingFact] = field(default_factory=list)
+
+    def scope_mint(self, slug: str, project_id: str) -> ScopeMint:
+        """The mint of the scope ``slug`` in ``project_id`` — the reviewed chunk's project, which the store reads in
+        the delivery's own transaction — with its ``create`` change, stamped at this plan's instant."""
+        return Scope.new(
+            ScopeSlug.parse(slug), self.new_scope_description, REVIEW_MINT_CONTEXT, project_id=project_id, at=self.at
+        )
 
     @property
     def scope_slugs(self) -> list[str]:

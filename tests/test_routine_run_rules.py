@@ -28,12 +28,20 @@ from blizzard.hub.domain.graph.model import Graph
 
 pytestmark = pytest.mark.unit
 
+_PROJECT = "proj_test"
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 _GRAPH = Graph(graph_id="gr_1", name="default", entry_node_id="nd_1", nodes=[], edges=[], created_at=_T0)
 _ROUTINE = Routine(
-    routine_id="rtn_1", name="gardening", graph_name="default", default_scope_slug="blizzard", created_at=_T0
+    routine_id="rtn_1",
+    name="gardening",
+    graph_name="default",
+    default_scope_slug="blizzard",
+    created_at=_T0,
+    project_id=_PROJECT,
 )
-_SCOPE = Scope(scope_id="scp_blizzard", slug="blizzard", description="the hub itself", created_at=_T0)
+_SCOPE = Scope(
+    scope_id="scp_blizzard", slug="blizzard", description="the hub itself", created_at=_T0, project_id=_PROJECT
+)
 _BASELINE = FindingSet(
     finding_set_id="fins_1",
     artifact_id="art_1",

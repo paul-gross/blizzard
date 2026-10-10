@@ -36,6 +36,7 @@ from blizzard.hub.domain.kernel.unset import UnsetType
 
 pytestmark = pytest.mark.unit
 
+_PROJECT = "proj_test"
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 
@@ -156,7 +157,14 @@ def _as_write_repo(repo: _FakeGardenProposalRepo) -> IWriteGardenProposalReposit
 
 
 def _routine(name: str = "nightly") -> Routine:
-    return Routine(routine_id="routine_1", name=name, graph_name="g", default_scope_slug="runner", created_at=_T0)
+    return Routine(
+        routine_id="routine_1",
+        name=name,
+        graph_name="g",
+        default_scope_slug="runner",
+        created_at=_T0,
+        project_id=_PROJECT,
+    )
 
 
 def test_create_operator_mints_with_operator_origin_no_routine_and_the_callers_id() -> None:

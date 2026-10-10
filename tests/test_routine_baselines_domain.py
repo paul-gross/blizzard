@@ -17,9 +17,15 @@ from blizzard.hub.domain.garden.runs.baselines import MalformedFindingSetIdError
 
 pytestmark = pytest.mark.unit
 
+_PROJECT = "proj_test"
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 _ROUTINE = Routine(
-    routine_id="rtn_1", name="gardening", graph_name="default", default_scope_slug="blizzard", created_at=_T0
+    routine_id="rtn_1",
+    name="gardening",
+    graph_name="default",
+    default_scope_slug="blizzard",
+    created_at=_T0,
+    project_id=_PROJECT,
 )
 
 

@@ -26,7 +26,7 @@ from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.garden_proposal_closure_store import insert_garden_proposal_closure_row
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
 from blizzard.hub.store.internal.routine_store import RoutineStore
-from tests.support import build_hub, hub_store_connections, stamp
+from tests.support import build_hub, default_project, hub_store_connections, stamp
 
 pytestmark = pytest.mark.component
 
@@ -48,6 +48,7 @@ def _seed_routine(hub, name: str = "nightly", *, default_scope_slug: str = "bliz
         graph_name="g",
         default_scope_slug=default_scope_slug,
         created_at=_SINCE,
+        project_id=default_project(hub.engine),
     )
     change = ConfigChange.of(_CTX, RecordKind.ROUTINE, name, 1, ChangeOp.CREATE, (), routine.created_at)
     RoutineStore(hub_store_connections(hub.engine)).create(routine, change=change, scope_mint=None)

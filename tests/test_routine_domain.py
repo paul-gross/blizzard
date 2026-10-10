@@ -36,6 +36,7 @@ from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository
 
 pytestmark = pytest.mark.unit
 
+_PROJECT = "proj_test"
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 _GRAPH = Graph(graph_id="gr_1", name="alpha", entry_node_id="nd_1", nodes=[], edges=[], created_at=_T0)
 
@@ -66,8 +67,9 @@ class _FakeScopeRepo:
 
     stored: dict[str, Scope] = field(default_factory=dict)
 
-    def get(self, slug: str) -> Scope | None:
-        return self.stored.get(slug)
+    def get(self, project_id: str, slug: str) -> Scope | None:
+        stored = self.stored.get(slug)
+        return stored if stored is not None and stored.project_id == project_id else None
 
     def __getattr__(self, name: str) -> Any:
         raise NotImplementedError(f"should not touch {name!r}")
@@ -86,9 +88,6 @@ class _FakeRoutineScopeRepo:
 
     def list_scopes(self, routine_id: str) -> list[str]:
         return sorted(slug for rid, slug in self.linked if rid == routine_id)
-
-    def list_routines(self, scope_slug: str) -> list[str]:
-        return sorted(rid for rid, slug in self.linked if slug == scope_slug)
 
     def link(self, routine: Routine, scope_slug: str, *, from_revision: int, change: ConfigChange) -> Routine:
         self.linked.add((routine.routine_id, scope_slug))
@@ -121,8 +120,9 @@ class _FakeRoutineRepo:
     def get(self, routine_id: str) -> Routine | None:
         return self.by_id.get(routine_id)
 
-    def get_by_name(self, name: str) -> Routine | None:
-        return self.by_name.get(name)
+    def get_by_name(self, project_id: str, name: str) -> Routine | None:
+        routine = self.by_name.get(name)
+        return routine if routine is not None and routine.project_id == project_id else None
 
     def _write(self, routine: Routine, change: ConfigChange, scope_mint: ScopeMint | None) -> Routine:
         self.by_id[routine.routine_id] = routine
@@ -177,6 +177,7 @@ def _create(authoring: RoutineAuthoring, **overrides: Any) -> Routine:
         "graph_name": "alpha",
         "default_scope_slug": ScopeSlug.parse("blizzard"),
         "ctx": _CTX,
+        "project_id": _PROJECT,
     }
     fields.update(overrides)
     return authoring.create(**fields)
@@ -234,7 +235,7 @@ def test_create_naming_an_unseen_default_scope_mints_it_in_the_same_write() -> N
 
 
 def test_create_naming_a_stored_default_scope_mints_nothing() -> None:
-    stored = Scope(scope_id="scp_blizzard", slug="blizzard", description="", created_at=_T0)
+    stored = Scope(scope_id="scp_blizzard", slug="blizzard", description="", created_at=_T0, project_id=_PROJECT)
     authoring, routines, _, _ = _authoring(scopes=_FakeScopeRepo(stored={"blizzard": stored}))
 
     _create(authoring)
@@ -439,6 +440,7 @@ def _routine(**overrides: object) -> Routine:
         "graph_name": "alpha",
         "default_scope_slug": "blizzard",
         "created_at": _T0,
+        "project_id": _PROJECT,
     }
     fields.update(overrides)
     return Routine(**fields)  # type: ignore[arg-type]
@@ -449,7 +451,7 @@ class TestRoutineScopeMembership:
     a no-op writes nothing, and unlink refuses a routine's own default scope."""
 
     def _scope(self, slug: str) -> Scope:
-        return Scope(scope_id=f"scp_{slug}", slug=slug, description="", created_at=_T0)
+        return Scope(scope_id=f"scp_{slug}", slug=slug, description="", created_at=_T0, project_id=_PROJECT)
 
     def _membership(self, repo: _FakeRoutineScopeRepo) -> RoutineScopeMembership:
         return RoutineScopeMembership(routine_scopes=_as_write_routine_scopes(repo), clock=FixedClock(instant=_T0))

@@ -20,9 +20,15 @@ from tests.support import chunk_stores, hub_store_connections, migrate_to, seed_
 
 pytestmark = pytest.mark.component
 
+_PROJECT = "proj_test"
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 _ROUTINE = Routine(
-    routine_id="rtn_1", name="gardening", graph_name="default", default_scope_slug="blizzard", created_at=_NOW
+    routine_id="rtn_1",
+    name="gardening",
+    graph_name="default",
+    default_scope_slug="blizzard",
+    created_at=_NOW,
+    project_id=_PROJECT,
 )
 
 

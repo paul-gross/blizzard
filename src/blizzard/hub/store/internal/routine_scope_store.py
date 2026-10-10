@@ -56,11 +56,11 @@ class RoutineScopeStore:
                     linked[row.routine_id].append(row.slug)
         return linked
 
-    def list_routines(self, scope_slug: str) -> list[str]:
+    def list_routines(self, scope_id: str) -> list[str]:
         with self._store.read("list_routines") as conn:
             rows = conn.execute(
-                self._store.select(_links(self._store), routine_scopes.c.routine_id)
-                .where(scopes.c.slug == scope_slug)
+                self._store.select(routine_scopes, routine_scopes.c.routine_id)
+                .where(routine_scopes.c.scope_id == scope_id)
                 .order_by(routine_scopes.c.routine_id)
             ).all()
         return [row.routine_id for row in rows]
@@ -68,7 +68,7 @@ class RoutineScopeStore:
     def link(self, routine: Routine, scope_slug: str, *, from_revision: int, change: ConfigChange) -> Routine:
         with self._store.write("link", expect=(ConfigRevisionConflict,)) as conn:
             move_revision(conn, routine, from_revision)
-            link_scope(conn, routine.routine_id, scope_slug)
+            link_scope(conn, routine, scope_slug)
             append_change(conn, change)
         return routine
 
@@ -78,7 +78,7 @@ class RoutineScopeStore:
             conn.execute(
                 self._store.delete(routine_scopes).where(
                     routine_scopes.c.routine_id == routine.routine_id,
-                    routine_scopes.c.scope_id == scope_id_of(self._store, scope_slug),
+                    routine_scopes.c.scope_id == scope_id_of(self._store, scope_slug, routine.project_id),
                 )
             )
             append_change(conn, change)

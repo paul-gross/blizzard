@@ -1411,7 +1411,7 @@ _DOMAIN_PACKAGE_LAYERS: dict[str, frozenset[str]] = {
     "execution": frozenset({"chunk", "graph", "runners", "artifact"}),
     "operations": frozenset({"execution", "chunk", "graph", "runners"}),
     "work_items": frozenset({"operations", "chunk", "graph"}),
-    "garden": frozenset({"work_items", "chunk", "graph", "config"}),
+    "garden": frozenset({"work_items", "chunk", "graph", "config", "projects"}),
     "observability": frozenset({"chunk", "graph", "runners"}),
     "tenancy": frozenset({"graph", "config", "projects"}),
 }
