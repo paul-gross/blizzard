@@ -39,6 +39,10 @@ _PAGINATION_PARAMS = {"cursor", "limit"}
 #: The roll-up toggle the node and graph routes declare; the operator summary does not offer it.
 _ROLLUP_PARAMS = {"by_name"}
 
+#: The project lens every analytics route declares: the summary verb sends it for every dataset through its own
+#: ``--project``, outside the per-dataset filter table.
+_LENS_PARAMS = {"project"}
+
 
 def _relay(hub: HubHarness, token: str, monkeypatch: pytest.MonkeyPatch) -> None:
     headers = _cookie(token)
@@ -67,8 +71,9 @@ def _invoke(*args: str) -> Result:
 def test_the_applicability_table_matches_the_openapi_declared_params() -> None:
     for dataset, spec in _DATASETS.items():
         declared = {p["name"] for p in _OPENAPI["paths"][spec.path]["get"]["parameters"]} - _ROLLUP_PARAMS
+        assert declared >= _LENS_PARAMS, dataset
         table_filters = spec.filters
-        assert table_filters == declared - _PAGINATION_PARAMS, dataset
+        assert table_filters == declared - _PAGINATION_PARAMS - _LENS_PARAMS, dataset
         assert (declared & _PAGINATION_PARAMS) == (_PAGINATION_PARAMS if spec.paginated else set()), dataset
 
 

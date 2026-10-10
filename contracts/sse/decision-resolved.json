@@ -7,5 +7,11 @@
     "chunk_id": "ch_1",
     "decision_id": "dec_1",
     "key": "decisions:dec_1"
+  },
+  "full": {
+    "chunk_id": "ch_1",
+    "decision_id": "dec_1",
+    "key": "decisions:dec_1",
+    "project_id": "proj_1"
   }
 }

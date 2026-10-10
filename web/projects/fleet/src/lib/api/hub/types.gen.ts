@@ -935,6 +935,10 @@ export type ChunkChangedPayload = {
      */
     prev_status?: string | null;
     /**
+     * Project Id
+     */
+    project_id?: string | null;
+    /**
      * Runner Id
      */
     runner_id?: string | null;
@@ -2094,6 +2098,10 @@ export type DecisionOpenedPayload = {
      * Key
      */
     key?: string | null;
+    /**
+     * Project Id
+     */
+    project_id?: string | null;
 };
 
 /**
@@ -2152,6 +2160,10 @@ export type DecisionResolvedPayload = {
      * Key
      */
     key?: string | null;
+    /**
+     * Project Id
+     */
+    project_id?: string | null;
 };
 
 /**
@@ -2639,6 +2651,10 @@ export type EventLoggedPayload = {
      * Kind
      */
     kind: string;
+    /**
+     * Project Id
+     */
+    project_id?: string | null;
     /**
      * Runner Id
      */
@@ -5175,6 +5191,10 @@ export type QuestionAnsweredPayload = {
      */
     key?: string | null;
     /**
+     * Project Id
+     */
+    project_id?: string | null;
+    /**
      * Question Id
      */
     question_id: string;
@@ -5247,6 +5267,10 @@ export type QuestionAskedPayload = {
      * Key
      */
     key?: string | null;
+    /**
+     * Project Id
+     */
+    project_id?: string | null;
     /**
      * Question Id
      */
@@ -8832,6 +8856,10 @@ export type ListActivityApiActivityGetData = {
          * Limit
          */
         limit?: number;
+        /**
+         * Project
+         */
+        project?: string | null;
     };
     url: '/api/activity';
 };
@@ -9161,6 +9189,10 @@ export type CountsByAgentTypeApiAnalyticsCountsAgentTypesGetData = {
          * Effort
          */
         effort?: string | null;
+        /**
+         * Project
+         */
+        project?: string | null;
     };
     url: '/api/analytics/counts/agent-types';
 };
@@ -9235,6 +9267,10 @@ export type CountsByFileApiAnalyticsCountsFilesGetData = {
          * Effort
          */
         effort?: string | null;
+        /**
+         * Project
+         */
+        project?: string | null;
     };
     url: '/api/analytics/counts/files';
 };
@@ -9313,6 +9349,10 @@ export type CountsByNodeApiAnalyticsCountsNodesGetData = {
          * Effort
          */
         effort?: string | null;
+        /**
+         * Project
+         */
+        project?: string | null;
     };
     url: '/api/analytics/counts/nodes';
 };
@@ -9379,6 +9419,10 @@ export type CountsBySkillApiAnalyticsCountsSkillsGetData = {
          * Effort
          */
         effort?: string | null;
+        /**
+         * Project
+         */
+        project?: string | null;
     };
     url: '/api/analytics/counts/skills';
 };
@@ -9421,6 +9465,10 @@ export type DurationsByGraphApiAnalyticsDurationsGraphsGetData = {
          * Until
          */
         until?: string | null;
+        /**
+         * Project
+         */
+        project?: string | null;
     };
     url: '/api/analytics/durations/graphs';
 };
@@ -9463,6 +9511,10 @@ export type DurationsByNodeApiAnalyticsDurationsNodesGetData = {
          * Until
          */
         until?: string | null;
+        /**
+         * Project
+         */
+        project?: string | null;
     };
     url: '/api/analytics/durations/nodes';
 };
@@ -9549,6 +9601,10 @@ export type ListEventsApiAnalyticsEventsGetData = {
          * Effort
          */
         effort?: string | null;
+        /**
+         * Project
+         */
+        project?: string | null;
     };
     url: '/api/analytics/events';
 };
@@ -9627,6 +9683,10 @@ export type StreamEventsApiAnalyticsEventsNdjsonGetData = {
          * Effort
          */
         effort?: string | null;
+        /**
+         * Project
+         */
+        project?: string | null;
     };
     url: '/api/analytics/events/ndjson';
 };
@@ -9669,6 +9729,10 @@ export type OutcomesByNodeApiAnalyticsOutcomesNodesGetData = {
          * Until
          */
         until?: string | null;
+        /**
+         * Project
+         */
+        project?: string | null;
     };
     url: '/api/analytics/outcomes/nodes';
 };
@@ -9744,6 +9808,10 @@ export type SpendByChunkApiAnalyticsSpendChunksGetData = {
          * Until
          */
         until?: string | null;
+        /**
+         * Project
+         */
+        project?: string | null;
     };
     url: '/api/analytics/spend/chunks';
 };
@@ -9786,6 +9854,10 @@ export type StreamChunkSpendApiAnalyticsSpendChunksNdjsonGetData = {
          * Until
          */
         until?: string | null;
+        /**
+         * Project
+         */
+        project?: string | null;
     };
     url: '/api/analytics/spend/chunks/ndjson';
 };
@@ -9832,6 +9904,10 @@ export type SpendByGraphApiAnalyticsSpendGraphsGetData = {
          * Until
          */
         until?: string | null;
+        /**
+         * Project
+         */
+        project?: string | null;
     };
     url: '/api/analytics/spend/graphs';
 };
@@ -9878,6 +9954,10 @@ export type SpendByNodeApiAnalyticsSpendNodesGetData = {
          * Until
          */
         until?: string | null;
+        /**
+         * Project
+         */
+        project?: string | null;
     };
     url: '/api/analytics/spend/nodes';
 };
@@ -10129,6 +10209,10 @@ export type GetBacklogApiBacklogGetData = {
          * Limit
          */
         limit?: number;
+        /**
+         * Project
+         */
+        project?: string | null;
     };
     url: '/api/backlog';
 };
@@ -10204,9 +10288,23 @@ export type RepositionBacklogApiBacklogPositionPostResponse = RepositionBacklogA
 export type ChunkCountsApiChunkCountsGetData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * Project
+         */
+        project?: string | null;
+    };
     url: '/api/chunk-counts';
 };
+
+export type ChunkCountsApiChunkCountsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ChunkCountsApiChunkCountsGetError = ChunkCountsApiChunkCountsGetErrors[keyof ChunkCountsApiChunkCountsGetErrors];
 
 export type ChunkCountsApiChunkCountsGetResponses = {
     /**
@@ -10233,6 +10331,10 @@ export type ListChunksApiChunksGetData = {
          * Board Window
          */
         board_window?: boolean;
+        /**
+         * Project
+         */
+        project?: string | null;
     };
     url: '/api/chunks';
 };
@@ -11207,6 +11309,10 @@ export type ListEventsApiEventsGetData = {
          * Limit
          */
         limit?: number;
+        /**
+         * Project
+         */
+        project?: string | null;
     };
     url: '/api/events';
 };
@@ -11257,6 +11363,10 @@ export type ListFindingsApiFindingsGetData = {
          * Limit
          */
         limit?: number;
+        /**
+         * Project
+         */
+        project?: string | null;
     };
     url: '/api/findings';
 };
@@ -12303,9 +12413,23 @@ export type GetQuestionApiFleetQuestionsQuestionIdGetResponse = GetQuestionApiFl
 export type PeekQueueApiFleetQueuePeekGetData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * Project
+         */
+        project?: string | null;
+    };
     url: '/api/fleet/queue/peek';
 };
+
+export type PeekQueueApiFleetQueuePeekGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PeekQueueApiFleetQueuePeekGetError = PeekQueueApiFleetQueuePeekGetErrors[keyof PeekQueueApiFleetQueuePeekGetErrors];
 
 export type PeekQueueApiFleetQueuePeekGetResponses = {
     /**
@@ -12454,9 +12578,23 @@ export type HeartbeatRunnerApiFleetRunnersRunnerIdHeartbeatsPostResponse = Heart
 export type GetScopesApiFleetScopesGetData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * Chunk Id
+         */
+        chunk_id?: string | null;
+    };
     url: '/api/fleet/scopes';
 };
+
+export type GetScopesApiFleetScopesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetScopesApiFleetScopesGetError = GetScopesApiFleetScopesGetErrors[keyof GetScopesApiFleetScopesGetErrors];
 
 export type GetScopesApiFleetScopesGetResponses = {
     /**
@@ -12574,6 +12712,10 @@ export type ListGardenProposalsApiGardenProposalsGetData = {
          * Origin
          */
         origin?: GardenProposalOrigin | null;
+        /**
+         * Project
+         */
+        project?: string | null;
     };
     url: '/api/garden-proposals';
 };
@@ -13312,6 +13454,134 @@ export type PatchProjectApiProjectsProjectPatchResponses = {
 
 export type PatchProjectApiProjectsProjectPatchResponse = PatchProjectApiProjectsProjectPatchResponses[keyof PatchProjectApiProjectsProjectPatchResponses];
 
+export type ListProjectFindingsApiProjectsProjectFindingsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Project
+         */
+        project: string;
+    };
+    query?: {
+        /**
+         * Routine
+         */
+        routine?: string | null;
+        /**
+         * Scope
+         */
+        scope?: string | null;
+        /**
+         * Source
+         */
+        source?: string | null;
+        /**
+         * Include Gone
+         */
+        include_gone?: boolean;
+        /**
+         * Cursor
+         */
+        cursor?: string | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/projects/{project}/findings';
+};
+
+export type ListProjectFindingsApiProjectsProjectFindingsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListProjectFindingsApiProjectsProjectFindingsGetError = ListProjectFindingsApiProjectsProjectFindingsGetErrors[keyof ListProjectFindingsApiProjectsProjectFindingsGetErrors];
+
+export type ListProjectFindingsApiProjectsProjectFindingsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: FindingsPageView;
+};
+
+export type ListProjectFindingsApiProjectsProjectFindingsGetResponse = ListProjectFindingsApiProjectsProjectFindingsGetResponses[keyof ListProjectFindingsApiProjectsProjectFindingsGetResponses];
+
+export type ListProjectGardenProposalsApiProjectsProjectGardenProposalsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Project
+         */
+        project: string;
+    };
+    query?: {
+        /**
+         * Cursor
+         */
+        cursor?: string | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Origin
+         */
+        origin?: GardenProposalOrigin | null;
+    };
+    url: '/api/projects/{project}/garden-proposals';
+};
+
+export type ListProjectGardenProposalsApiProjectsProjectGardenProposalsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListProjectGardenProposalsApiProjectsProjectGardenProposalsGetError = ListProjectGardenProposalsApiProjectsProjectGardenProposalsGetErrors[keyof ListProjectGardenProposalsApiProjectsProjectGardenProposalsGetErrors];
+
+export type ListProjectGardenProposalsApiProjectsProjectGardenProposalsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: GardenProposalsPageView;
+};
+
+export type ListProjectGardenProposalsApiProjectsProjectGardenProposalsGetResponse = ListProjectGardenProposalsApiProjectsProjectGardenProposalsGetResponses[keyof ListProjectGardenProposalsApiProjectsProjectGardenProposalsGetResponses];
+
+export type CreateProjectGardenProposalApiProjectsProjectGardenProposalsPostData = {
+    body: GardenProposalCreateRequest;
+    path: {
+        /**
+         * Project
+         */
+        project: string;
+    };
+    query?: never;
+    url: '/api/projects/{project}/garden-proposals';
+};
+
+export type CreateProjectGardenProposalApiProjectsProjectGardenProposalsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateProjectGardenProposalApiProjectsProjectGardenProposalsPostError = CreateProjectGardenProposalApiProjectsProjectGardenProposalsPostErrors[keyof CreateProjectGardenProposalApiProjectsProjectGardenProposalsPostErrors];
+
+export type CreateProjectGardenProposalApiProjectsProjectGardenProposalsPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: GardenProposalView;
+};
+
+export type CreateProjectGardenProposalApiProjectsProjectGardenProposalsPostResponse = CreateProjectGardenProposalApiProjectsProjectGardenProposalsPostResponses[keyof CreateProjectGardenProposalApiProjectsProjectGardenProposalsPostResponses];
+
 export type ListRepositoryLinksApiProjectsProjectRepositoryLinksGetData = {
     body?: never;
     path: {
@@ -13429,6 +13699,424 @@ export type UnlinkRepositoryApiProjectsProjectRepositoryLinksRepositoryRetirePos
 };
 
 export type UnlinkRepositoryApiProjectsProjectRepositoryLinksRepositoryRetirePostResponse = UnlinkRepositoryApiProjectsProjectRepositoryLinksRepositoryRetirePostResponses[keyof UnlinkRepositoryApiProjectsProjectRepositoryLinksRepositoryRetirePostResponses];
+
+export type ListProjectRoutinesApiProjectsProjectRoutinesGetData = {
+    body?: never;
+    path: {
+        /**
+         * Project
+         */
+        project: string;
+    };
+    query?: {
+        /**
+         * Include Retired
+         */
+        include_retired?: boolean;
+    };
+    url: '/api/projects/{project}/routines';
+};
+
+export type ListProjectRoutinesApiProjectsProjectRoutinesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListProjectRoutinesApiProjectsProjectRoutinesGetError = ListProjectRoutinesApiProjectsProjectRoutinesGetErrors[keyof ListProjectRoutinesApiProjectsProjectRoutinesGetErrors];
+
+export type ListProjectRoutinesApiProjectsProjectRoutinesGetResponses = {
+    /**
+     * Response List Project Routines Api Projects  Project  Routines Get
+     *
+     * Successful Response
+     */
+    200: Array<RoutineView>;
+};
+
+export type ListProjectRoutinesApiProjectsProjectRoutinesGetResponse = ListProjectRoutinesApiProjectsProjectRoutinesGetResponses[keyof ListProjectRoutinesApiProjectsProjectRoutinesGetResponses];
+
+export type CreateProjectRoutineApiProjectsProjectRoutinesPostData = {
+    body: RoutineCreateRequest;
+    headers?: {
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
+    path: {
+        /**
+         * Project
+         */
+        project: string;
+    };
+    query?: never;
+    url: '/api/projects/{project}/routines';
+};
+
+export type CreateProjectRoutineApiProjectsProjectRoutinesPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateProjectRoutineApiProjectsProjectRoutinesPostError = CreateProjectRoutineApiProjectsProjectRoutinesPostErrors[keyof CreateProjectRoutineApiProjectsProjectRoutinesPostErrors];
+
+export type CreateProjectRoutineApiProjectsProjectRoutinesPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: RoutineView;
+};
+
+export type CreateProjectRoutineApiProjectsProjectRoutinesPostResponse = CreateProjectRoutineApiProjectsProjectRoutinesPostResponses[keyof CreateProjectRoutineApiProjectsProjectRoutinesPostResponses];
+
+export type ListProjectRunsApiProjectsProjectRunsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Project
+         */
+        project: string;
+    };
+    query?: {
+        /**
+         * Since
+         */
+        since?: string | null;
+        /**
+         * Until
+         */
+        until?: string | null;
+    };
+    url: '/api/projects/{project}/runs';
+};
+
+export type ListProjectRunsApiProjectsProjectRunsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListProjectRunsApiProjectsProjectRunsGetError = ListProjectRunsApiProjectsProjectRunsGetErrors[keyof ListProjectRunsApiProjectsProjectRunsGetErrors];
+
+export type ListProjectRunsApiProjectsProjectRunsGetResponses = {
+    /**
+     * Response List Project Runs Api Projects  Project  Runs Get
+     *
+     * Successful Response
+     */
+    200: Array<RunRowView>;
+};
+
+export type ListProjectRunsApiProjectsProjectRunsGetResponse = ListProjectRunsApiProjectsProjectRunsGetResponses[keyof ListProjectRunsApiProjectsProjectRunsGetResponses];
+
+export type ProjectRunDeltaApiProjectsProjectRunsChunkIdGetData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+        /**
+         * Project
+         */
+        project: string;
+    };
+    query?: never;
+    url: '/api/projects/{project}/runs/{chunk_id}';
+};
+
+export type ProjectRunDeltaApiProjectsProjectRunsChunkIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ProjectRunDeltaApiProjectsProjectRunsChunkIdGetError = ProjectRunDeltaApiProjectsProjectRunsChunkIdGetErrors[keyof ProjectRunDeltaApiProjectsProjectRunsChunkIdGetErrors];
+
+export type ProjectRunDeltaApiProjectsProjectRunsChunkIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: RunDeltaView;
+};
+
+export type ProjectRunDeltaApiProjectsProjectRunsChunkIdGetResponse = ProjectRunDeltaApiProjectsProjectRunsChunkIdGetResponses[keyof ProjectRunDeltaApiProjectsProjectRunsChunkIdGetResponses];
+
+export type ListProjectScopesApiProjectsProjectScopesGetData = {
+    body?: never;
+    path: {
+        /**
+         * Project
+         */
+        project: string;
+    };
+    query?: never;
+    url: '/api/projects/{project}/scopes';
+};
+
+export type ListProjectScopesApiProjectsProjectScopesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListProjectScopesApiProjectsProjectScopesGetError = ListProjectScopesApiProjectsProjectScopesGetErrors[keyof ListProjectScopesApiProjectsProjectScopesGetErrors];
+
+export type ListProjectScopesApiProjectsProjectScopesGetResponses = {
+    /**
+     * Response List Project Scopes Api Projects  Project  Scopes Get
+     *
+     * Successful Response
+     */
+    200: Array<ScopeView>;
+};
+
+export type ListProjectScopesApiProjectsProjectScopesGetResponse = ListProjectScopesApiProjectsProjectScopesGetResponses[keyof ListProjectScopesApiProjectsProjectScopesGetResponses];
+
+export type CreateProjectScopeApiProjectsProjectScopesPostData = {
+    body: ScopeCreateRequest;
+    headers?: {
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
+    path: {
+        /**
+         * Project
+         */
+        project: string;
+    };
+    query?: never;
+    url: '/api/projects/{project}/scopes';
+};
+
+export type CreateProjectScopeApiProjectsProjectScopesPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateProjectScopeApiProjectsProjectScopesPostError = CreateProjectScopeApiProjectsProjectScopesPostErrors[keyof CreateProjectScopeApiProjectsProjectScopesPostErrors];
+
+export type CreateProjectScopeApiProjectsProjectScopesPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: ScopeView;
+};
+
+export type CreateProjectScopeApiProjectsProjectScopesPostResponse = CreateProjectScopeApiProjectsProjectScopesPostResponses[keyof CreateProjectScopeApiProjectsProjectScopesPostResponses];
+
+export type GetProjectScopeApiProjectsProjectScopesSlugGetData = {
+    body?: never;
+    path: {
+        /**
+         * Slug
+         */
+        slug: string;
+        /**
+         * Project
+         */
+        project: string;
+    };
+    query?: never;
+    url: '/api/projects/{project}/scopes/{slug}';
+};
+
+export type GetProjectScopeApiProjectsProjectScopesSlugGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetProjectScopeApiProjectsProjectScopesSlugGetError = GetProjectScopeApiProjectsProjectScopesSlugGetErrors[keyof GetProjectScopeApiProjectsProjectScopesSlugGetErrors];
+
+export type GetProjectScopeApiProjectsProjectScopesSlugGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: ScopeView;
+};
+
+export type GetProjectScopeApiProjectsProjectScopesSlugGetResponse = GetProjectScopeApiProjectsProjectScopesSlugGetResponses[keyof GetProjectScopeApiProjectsProjectScopesSlugGetResponses];
+
+export type EditProjectScopeApiProjectsProjectScopesSlugPatchData = {
+    body: ScopeEditRequest;
+    headers?: {
+        /**
+         * If-Match
+         */
+        'if-match'?: number | null;
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
+    path: {
+        /**
+         * Slug
+         */
+        slug: string;
+        /**
+         * Project
+         */
+        project: string;
+    };
+    query?: never;
+    url: '/api/projects/{project}/scopes/{slug}';
+};
+
+export type EditProjectScopeApiProjectsProjectScopesSlugPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type EditProjectScopeApiProjectsProjectScopesSlugPatchError = EditProjectScopeApiProjectsProjectScopesSlugPatchErrors[keyof EditProjectScopeApiProjectsProjectScopesSlugPatchErrors];
+
+export type EditProjectScopeApiProjectsProjectScopesSlugPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: ScopeView;
+};
+
+export type EditProjectScopeApiProjectsProjectScopesSlugPatchResponse = EditProjectScopeApiProjectsProjectScopesSlugPatchResponses[keyof EditProjectScopeApiProjectsProjectScopesSlugPatchResponses];
+
+export type EnableProjectScopeApiProjectsProjectScopesSlugEnablePostData = {
+    body: ScopeLifecycleRequest;
+    headers?: {
+        /**
+         * If-Match
+         */
+        'if-match'?: number | null;
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
+    path: {
+        /**
+         * Slug
+         */
+        slug: string;
+        /**
+         * Project
+         */
+        project: string;
+    };
+    query?: never;
+    url: '/api/projects/{project}/scopes/{slug}/enable';
+};
+
+export type EnableProjectScopeApiProjectsProjectScopesSlugEnablePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type EnableProjectScopeApiProjectsProjectScopesSlugEnablePostError = EnableProjectScopeApiProjectsProjectScopesSlugEnablePostErrors[keyof EnableProjectScopeApiProjectsProjectScopesSlugEnablePostErrors];
+
+export type EnableProjectScopeApiProjectsProjectScopesSlugEnablePostResponses = {
+    /**
+     * Successful Response
+     */
+    202: ScopeView;
+};
+
+export type EnableProjectScopeApiProjectsProjectScopesSlugEnablePostResponse = EnableProjectScopeApiProjectsProjectScopesSlugEnablePostResponses[keyof EnableProjectScopeApiProjectsProjectScopesSlugEnablePostResponses];
+
+export type RetireProjectScopeApiProjectsProjectScopesSlugRetirePostData = {
+    body: ScopeLifecycleRequest;
+    headers?: {
+        /**
+         * If-Match
+         */
+        'if-match'?: number | null;
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
+    path: {
+        /**
+         * Slug
+         */
+        slug: string;
+        /**
+         * Project
+         */
+        project: string;
+    };
+    query?: never;
+    url: '/api/projects/{project}/scopes/{slug}/retire';
+};
+
+export type RetireProjectScopeApiProjectsProjectScopesSlugRetirePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RetireProjectScopeApiProjectsProjectScopesSlugRetirePostError = RetireProjectScopeApiProjectsProjectScopesSlugRetirePostErrors[keyof RetireProjectScopeApiProjectsProjectScopesSlugRetirePostErrors];
+
+export type RetireProjectScopeApiProjectsProjectScopesSlugRetirePostResponses = {
+    /**
+     * Successful Response
+     */
+    202: ScopeView;
+};
+
+export type RetireProjectScopeApiProjectsProjectScopesSlugRetirePostResponse = RetireProjectScopeApiProjectsProjectScopesSlugRetirePostResponses[keyof RetireProjectScopeApiProjectsProjectScopesSlugRetirePostResponses];
+
+export type ListProjectScopeRoutinesApiProjectsProjectScopesSlugRoutinesGetData = {
+    body?: never;
+    path: {
+        /**
+         * Slug
+         */
+        slug: string;
+        /**
+         * Project
+         */
+        project: string;
+    };
+    query?: never;
+    url: '/api/projects/{project}/scopes/{slug}/routines';
+};
+
+export type ListProjectScopeRoutinesApiProjectsProjectScopesSlugRoutinesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListProjectScopeRoutinesApiProjectsProjectScopesSlugRoutinesGetError = ListProjectScopeRoutinesApiProjectsProjectScopesSlugRoutinesGetErrors[keyof ListProjectScopeRoutinesApiProjectsProjectScopesSlugRoutinesGetErrors];
+
+export type ListProjectScopeRoutinesApiProjectsProjectScopesSlugRoutinesGetResponses = {
+    /**
+     * Response List Project Scope Routines Api Projects  Project  Scopes  Slug  Routines Get
+     *
+     * Successful Response
+     */
+    200: Array<string>;
+};
+
+export type ListProjectScopeRoutinesApiProjectsProjectScopesSlugRoutinesGetResponse = ListProjectScopeRoutinesApiProjectsProjectScopesSlugRoutinesGetResponses[keyof ListProjectScopeRoutinesApiProjectsProjectScopesSlugRoutinesGetResponses];
 
 export type ListSourceLinksApiProjectsProjectSourceLinksGetData = {
     body?: never;
@@ -13637,6 +14325,10 @@ export type GetQueueApiQueueGetData = {
          * Limit
          */
         limit?: number;
+        /**
+         * Project
+         */
+        project?: string | null;
     };
     url: '/api/queue';
 };
@@ -13944,6 +14636,10 @@ export type ListRoutinesApiRoutinesGetData = {
          * Include Retired
          */
         include_retired?: boolean;
+        /**
+         * Project
+         */
+        project?: string | null;
     };
     url: '/api/routines';
 };
@@ -14019,6 +14715,10 @@ export type RoutineProposalCountsApiRoutinesProposalCountsGetData = {
          * Origin
          */
         origin?: GardenProposalOrigin | null;
+        /**
+         * Project
+         */
+        project?: string | null;
     };
     url: '/api/routines/proposal-counts';
 };
@@ -14065,6 +14765,10 @@ export type RoutineTrendApiRoutinesTrendGetData = {
          * Period Days
          */
         period_days?: number;
+        /**
+         * Project
+         */
+        project?: string | null;
     };
     url: '/api/routines/trend';
 };
@@ -14735,6 +15439,10 @@ export type ListRunsApiRunsGetData = {
          * Until
          */
         until?: string | null;
+        /**
+         * Project
+         */
+        project?: string | null;
     };
     url: '/api/runs';
 };
@@ -14792,9 +15500,23 @@ export type RunDeltaApiRunsChunkIdGetResponse = RunDeltaApiRunsChunkIdGetRespons
 export type ListScopesApiScopesGetData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * Project
+         */
+        project?: string | null;
+    };
     url: '/api/scopes';
 };
+
+export type ListScopesApiScopesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListScopesApiScopesGetError = ListScopesApiScopesGetErrors[keyof ListScopesApiScopesGetErrors];
 
 export type ListScopesApiScopesGetResponses = {
     /**
@@ -15237,6 +15959,10 @@ export type FleetSpendApiSpendGetData = {
          * Until
          */
         until?: string | null;
+        /**
+         * Project
+         */
+        project?: string | null;
     };
     url: '/api/spend';
 };
@@ -15566,7 +16292,12 @@ export type CreateWorkItemApiWorkSourcesSourceItemsPostData = {
          */
         source: string;
     };
-    query?: never;
+    query?: {
+        /**
+         * Project
+         */
+        project?: string | null;
+    };
     url: '/api/work-sources/{source}/items';
 };
 

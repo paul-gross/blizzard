@@ -188,23 +188,24 @@ const HUB_FRAME_FIELD_SPECS: HubFrameFieldSpecs = {
       graph_id: true,
       by: true,
       key: true,
+      project_id: true,
     }),
   },
   'question-asked': {
     required: exactRequired<QuestionFrame>()({ chunk_id: true, question_id: true }),
-    optional: exactOptional<QuestionFrame>()({ key: true }),
+    optional: exactOptional<QuestionFrame>()({ key: true, project_id: true }),
   },
   'question-answered': {
     required: exactRequired<QuestionFrame>()({ chunk_id: true, question_id: true }),
-    optional: exactOptional<QuestionFrame>()({ key: true }),
+    optional: exactOptional<QuestionFrame>()({ key: true, project_id: true }),
   },
   'decision-opened': {
     required: exactRequired<DecisionFrame>()({ chunk_id: true, decision_id: true }),
-    optional: exactOptional<DecisionFrame>()({ key: true }),
+    optional: exactOptional<DecisionFrame>()({ key: true, project_id: true }),
   },
   'decision-resolved': {
     required: exactRequired<DecisionFrame>()({ chunk_id: true, decision_id: true }),
-    optional: exactOptional<DecisionFrame>()({ key: true }),
+    optional: exactOptional<DecisionFrame>()({ key: true, project_id: true }),
   },
   'queue-changed': {
     required: exactRequired<QueueChangedFrame>()({}),
@@ -221,7 +222,7 @@ const HUB_FRAME_FIELD_SPECS: HubFrameFieldSpecs = {
       chunk_id: true,
       runner_id: true,
     }),
-    optional: exactOptional<EventLoggedFrame>()({ runner_name: true, key: true }),
+    optional: exactOptional<EventLoggedFrame>()({ runner_name: true, key: true, project_id: true }),
   },
 };
 
