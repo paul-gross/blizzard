@@ -207,7 +207,7 @@ from blizzard.hub.store.internal.secret_referrers import SecretReferrersStore
 from blizzard.hub.store.internal.secret_store import SecretStore
 from blizzard.hub.store.internal.tenant_admin_store import TenantAdministrationStore
 from blizzard.hub.store.internal.tenant_teardown_store import TenantTeardownStore
-from blizzard.hub.store.internal.trace_store import TraceStore
+from blizzard.hub.store.internal.trace_store import ProjectLabels, TraceStore
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
@@ -1228,7 +1228,12 @@ def build_services(
 
     def hydration_of(tenant: TenantId) -> StepHydration:
         services = core.open_services(scope_of(tenant))
-        return StepHydration(graphs=services.graphs, names=services.registry, label=services.work_ref_label)
+        return StepHydration(
+            graphs=services.graphs,
+            names=services.registry,
+            projects=ProjectLabels(services.projects),
+            label=services.work_ref_label,
+        )
 
     trace_store = TraceStore(
         store_connections,

@@ -88,6 +88,11 @@ _RUNNER_NAMES = {"r-1": "runner-one", "r-9": "runner-nine"}
 _TENANT, _TENANT_NAME, _RENAMED = TenantId("ten_01GOLDENACME"), "acme", "acme-renamed"
 _EVENTS_TENANT, _EVENTS_TENANT_NAME = TenantId("ten_01GOLDENGLOBEX"), "globex"
 _OTHER_TENANT, _OTHER_TENANT_NAME = TenantId("ten_01GOLDENINITECH"), "initech"
+#: Each tenant's project as ``(project_id, slug, name)``; acme's slug changes between the passes.
+_PROJECT = ("proj_01GOLDENACMEWEB", "web", "Web")
+_RENAMED_SLUG = "storefront"
+_EVENTS_PROJECT = ("proj_01GOLDENGLOBEXDEFAULT", "default", "Default")
+_OTHER_PROJECT = ("proj_01GOLDENINITECHDEFAULT", "default", "Default")
 _SECOND_PASS = datetime(2026, 1, 3, 0, 0, tzinfo=UTC)
 _SETTINGS = EgressWriterSettings(max_rows_per_file=1000, min_free_bytes=0)
 _CODE_SCHEMAS = {"steps": STEPS_SCHEMA, "invocations": INVOCATIONS_SCHEMA, "events": EVENTS_SCHEMA}
@@ -132,6 +137,11 @@ def _views() -> list[tuple[str, str]]:
 # -- the seeded scenario ---------------------------------------------------------------------------------------------
 
 
+def _project_facts(project: tuple[str, str, str]) -> dict[str, str]:
+    project_id, slug, name = project
+    return {"project": project_id, "project_slug": slug, "project_name": name}
+
+
 def _scenario_rows() -> tuple[list[tuple[ExportedStep, CursorKey]], list[ExportedInvocation]]:
     """Every closed step and every usage fact of the shared tracing scenarios, as the first pass exports them, with
     every runner they name registered under a name."""
@@ -140,7 +150,12 @@ def _scenario_rows() -> tuple[list[tuple[ExportedStep, CursorKey]], list[Exporte
     usage_id = 0
     for name, scenario in fx.scenarios().items():
         facts = replace(
-            scenario, chunk_id=f"ch_{name}", runner_names=_RUNNER_NAMES, tenant=_TENANT, tenant_name=_TENANT_NAME
+            scenario,
+            chunk_id=f"ch_{name}",
+            runner_names=_RUNNER_NAMES,
+            tenant=_TENANT,
+            tenant_name=_TENANT_NAME,
+            **_project_facts(_PROJECT),
         )
         found = identify_steps(facts)
         for step in found:
@@ -163,18 +178,24 @@ def _rewritten(
     steps: list[tuple[ExportedStep, CursorKey]], invocations: list[ExportedInvocation]
 ) -> tuple[list[tuple[ExportedStep, CursorKey]], list[ExportedInvocation]]:
     """The second pass: one step and one invocation exported again, newer and with changed values, as a late-usage
-    rewrite produces — after their tenant was renamed, so the newer copies carry the new name."""
+    rewrite produces — after their tenant was renamed and their project's slug changed, so the newer copies carry the
+    new name and slug."""
     step, key = next((s, k) for s, k in steps if s.invocations > 0)
     again = replace(
         step,
         input_tokens=step.input_tokens + 7,
         invocations=step.invocations + 1,
         tenant_name=_RENAMED,
+        project_slug=_RENAMED_SLUG,
         exported_at=_SECOND_PASS,
     )
     invocation = invocations[0]
     later = replace(
-        invocation, output_tokens=invocation.output_tokens + 3, tenant_name=_RENAMED, exported_at=_SECOND_PASS
+        invocation,
+        output_tokens=invocation.output_tokens + 3,
+        tenant_name=_RENAMED,
+        project_slug=_RENAMED_SLUG,
+        exported_at=_SECOND_PASS,
     )
     return [(again, key)], [later]
 
@@ -273,15 +294,21 @@ _EVENTS_SECOND = [_UPGRADED, _EMPTIED, _REVIVED, _TWICE, _REDERIVED_FROM, _REDER
 _EVENTS_SECOND_DROPS = [_DROPS["seg-dropped"], _DROPS["seg-revived"]]
 
 
-def _events_facts(tenant: TenantId, tenant_name: str) -> Any:
-    return replace(fx.scenarios()["runner-step"], chunk_id=_EVENTS_CHUNK, tenant=tenant, tenant_name=tenant_name)
+def _events_facts(tenant: TenantId, tenant_name: str, project: tuple[str, str, str]) -> Any:
+    return replace(
+        fx.scenarios()["runner-step"],
+        chunk_id=_EVENTS_CHUNK,
+        tenant=tenant,
+        tenant_name=tenant_name,
+        **_project_facts(project),
+    )
 
 
 def _events_pass_rows(
     derivations: list[EventDerivation],
     drops: list[DropFact],
     exported_at: datetime,
-    tenant: tuple[TenantId, str] = (_EVENTS_TENANT, _EVENTS_TENANT_NAME),
+    tenant: tuple[TenantId, str, tuple[str, str, str]] = (_EVENTS_TENANT, _EVENTS_TENANT_NAME, _EVENTS_PROJECT),
 ) -> list[tuple[ExportedEventsEntry, EventsPosition]]:
     facts = _events_facts(*tenant)
     rows: list[tuple[ExportedEventsEntry, EventsPosition]] = []
@@ -343,7 +370,7 @@ def _export(directory: Path, encoder: Any) -> None:
     _write_pass(writer, _FIRST_PASS, steps, invocations)
     more_steps, more_invocations = _rewritten(steps, invocations)
     _write_pass(writer, _SECOND_PASS, more_steps, more_invocations)
-    other = (_OTHER_TENANT, _OTHER_TENANT_NAME)
+    other = (_OTHER_TENANT, _OTHER_TENANT_NAME, _OTHER_PROJECT)
     first = _events_pass_rows(_EVENTS_FIRST, [], _FIRST_PASS)
     first += _events_pass_rows([_OTHER_SHARED, _OTHER_SHARED_DROPPED], [], _FIRST_PASS, other)
     _write_events_pass(writer, _FIRST_PASS, _OLD_VERSION, first)
@@ -593,6 +620,29 @@ def test_the_golden_holds_a_row_exported_twice() -> None:
                         key = tuple(row[c] for c in dataset["identity"])
                         seen[key] = seen.get(key, 0) + 1
         assert any(count > 1 for count in seen.values()), dataset["name"]
+
+
+def test_the_project_columns_widen_each_dataset_in_place_beside_the_tenant_columns() -> None:
+    for name, dataset in _datasets().items():
+        names = [c["name"] for c in dataset["columns"]]
+        after_tenant = names[names.index("tenant_name") + 1 : names.index("tenant_name") + 4]
+        assert after_tenant == ["project_id", "project_slug", "project_name"], name
+        assert dataset["major_version"] == 1, name
+        assert sorted(p.name for p in _SCHEMA_DIR.glob(f"{name}.v*.json")) == [f"{name}.v1.json"]
+
+
+def test_the_golden_follows_a_project_slug_change_only_in_the_later_copy() -> None:
+    for name in ("steps", "invocations"):
+        identity = _datasets()[name]["identity"]
+        copies: dict[tuple[object, ...], list[tuple[str, str]]] = {}
+        for path, text in _golden_tree().items():
+            if path.startswith(f"{name}/"):
+                for row in map(json.loads, text.splitlines()):
+                    key = tuple(row[c] for c in identity)
+                    copies.setdefault(key, []).append((row["exported_at"], row["project_slug"]))
+        twice = [sorted(c) for c in copies.values() if len(c) > 1]
+        first, second = rfc3339_utc(_FIRST_PASS), rfc3339_utc(_SECOND_PASS)
+        assert twice == [[(first, _PROJECT[1]), (second, _RENAMED_SLUG)]], name
 
 
 def test_events_rows_fill_exactly_the_columns_their_record_type_appears_on() -> None:

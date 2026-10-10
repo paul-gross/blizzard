@@ -103,6 +103,7 @@ from blizzard.hub.domain.observability.forge_status import IReadAnnotatedSources
 from blizzard.hub.domain.observability.hub_events import HubEventLogService, IReadHubEventLog
 from blizzard.hub.domain.observability.tracing.cursor import CursorKey
 from blizzard.hub.domain.observability.tracing.repository import (
+    IReadProjectLabels,
     IReadRunnerNames,
     IReadStepCorpus,
     IReadTraceStatus,
@@ -137,7 +138,7 @@ from blizzard.hub.store.internal.invitation_store import InvitationStore
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
 from blizzard.hub.store.internal.secret_store import SecretStore
 from blizzard.hub.store.internal.tenant_teardown_store import TenantTeardownStore
-from blizzard.hub.store.internal.trace_store import TraceStore
+from blizzard.hub.store.internal.trace_store import ProjectLabels, TraceStore
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
@@ -898,7 +899,12 @@ def _trace_store_of(connections: ScopedConnections, hub: HubHarness) -> TraceSto
         connections,
         hub_events=_hub_events_of(hub),
         corpus=hub.hub_services.hub_scoped_reads.corpus,
-        hydration=lambda _tenant: StepHydration(graphs=hub.services.graphs, names=hub.services.registry, label=_label),
+        hydration=lambda _tenant: StepHydration(
+            graphs=hub.services.graphs,
+            names=hub.services.registry,
+            projects=ProjectLabels(hub.services.projects),
+            label=_label,
+        ),
         tenant_name=hub.hub_services.tenants.open_tenants.name,
     )
 
@@ -2223,6 +2229,7 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     ),
     (IReadRunnerRegistry, "names_for"): lambda w: w.hub.services.registry.names_for([HUB_RUNNER_ID]),
     (IReadRunnerNames, "names_for"): lambda w: w.hub.services.registry.names_for([HUB_RUNNER_ID]),
+    (IReadProjectLabels, "labels_for"): lambda w: ProjectLabels(w.hub.services.projects).labels_for([w.project_id]),
     (IReadRoutineRepository, "get"): lambda w: w.hub.services.routines.get(w.routine_id),
     (IReadRoutineRepository, "get_by_name"): lambda w: w.hub.services.routines.get_by_name(w.project_id, "gardening"),
     (IReadRoutineRepository, "get_many_by_name"): lambda w: w.hub.services.routines.get_many_by_name(

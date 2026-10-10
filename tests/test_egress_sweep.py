@@ -26,6 +26,7 @@ from blizzard.hub.domain.observability.egress.repository import EventsPosition, 
 from blizzard.hub.domain.observability.egress.rows import ExportedInvocation, ExportedStep
 from blizzard.hub.domain.observability.egress.schema import INVOCATIONS_SCHEMA, STEPS_SCHEMA
 from blizzard.hub.domain.observability.egress.sweep import EgressSweep
+from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.egress.factory import EgressUnavailable
 from blizzard.hub.egress.internal.ndjson import NdjsonEgressWriter
 from blizzard.hub.egress.writer import (
@@ -49,11 +50,13 @@ from tests.support import (
     added_runner,
     count_queries,
     count_rows_read,
+    default_project,
     default_tenant,
     hub_level_connections,
     hub_scoped,
     hub_store_connections,
     ingest,
+    seed_project,
     seed_runner,
 )
 from tests.trace_hub import claim, pass_build, seed_open_tenant_chunk, trace_hub, trace_store
@@ -162,6 +165,17 @@ def _tenant_of(row: dict[str, object]) -> tuple[object, object]:
     return (row["tenant_id"], row["tenant_name"])
 
 
+def _project_of(row: dict[str, object]) -> tuple[object, object, object]:
+    return (row["project_id"], row["project_slug"], row["project_name"])
+
+
+def _home_project(hub: HubHarness) -> tuple[str, str, str]:
+    """The default tenant's only project as ``(project_id, slug, name)``."""
+    project = hub.services.projects.get(ProjectId(default_project(hub.engine)))
+    assert project is not None
+    return (project.project_id, project.slug, project.name)
+
+
 def _anchored(hub: HubHarness, writer: IEgressWriter, config: EgressConfig = _SETTLED) -> None:
     _sweep(hub, writer, config).sweep()
 
@@ -262,6 +276,10 @@ def test_each_open_tenants_rows_are_exported_hydrated_in_their_own_tenant(tmp_pa
     assert [_tenant_of(r) for r in _rows(writer, "steps")] == [home, ("ten_other", "ten_other")]
     assert [_tenant_of(r) for r in _rows(writer, "invocations")] == [home, ("ten_other", "ten_other")]
     assert [_tenant_of(r) for r in _rows(writer, "events")] == [("ten_other", "ten_other")]
+    other_project = ("proj_ten_other", "default", "Default")
+    assert [_project_of(r) for r in _rows(writer, "steps")] == [_home_project(hub), other_project]
+    assert [_project_of(r) for r in _rows(writer, "invocations")] == [_home_project(hub), other_project]
+    assert [(r["record_type"], _project_of(r)) for r in _rows(writer, "events")] == [("dropped", other_project)]
     steps, invocations, events = (_store(hub).newest_cursor(d) for d in ("steps", "invocations", "events"))
     assert steps is not None and steps.step is not None
     assert invocations is not None
@@ -386,6 +404,45 @@ def test_rows_name_their_tenant_as_named_when_written_and_a_later_copy_follows_a
     named = [(tenant, before), (tenant, "renamed")]
     assert [_tenant_of(r) for r in _rows(writer, "steps")] == named
     assert [_tenant_of(r) for r in _rows(writer, "invocations")] == named
+
+
+def test_rows_name_their_project_as_known_when_written_and_a_later_copy_follows_a_slug_change(tmp_path: Path) -> None:
+    hub, graph = _hub(tmp_path)
+    writer = InMemoryEgressWriter()
+    _anchored(hub, writer)
+    project_id, slug, name = _home_project(hub)
+    chunk_id = _closed_step(hub, graph, 1)
+    _sweep(hub, writer).sweep()
+
+    moved = hub.client.patch(f"/api/projects/{project_id}", json={"slug": "storefront"})
+    assert moved.status_code == 200, moved.text
+    hub.clock.advance(timedelta(hours=3))
+    _push_usage(hub, chunk_id, _node_id(graph))
+    _sweep(hub, writer).sweep()
+
+    named = [(project_id, slug, name), (project_id, "storefront", name)]
+    assert [_project_of(r) for r in _rows(writer, "steps")] == named
+    assert [_project_of(r) for r in _rows(writer, "invocations")] == named
+
+
+def test_one_sweep_names_each_chunks_own_project_across_two_projects_of_a_tenant(tmp_path: Path) -> None:
+    hub, graph = _hub(tmp_path)
+    writer = InMemoryEgressWriter()
+    _anchored(hub, writer)
+    home = _home_project(hub)
+    first = _closed_step(hub, graph, 1)
+    second = _closed_step(hub, graph, 2)
+    mobile = seed_project(hub.engine, "mobile")
+    with hub.engine.begin() as conn:
+        chunks = schema.chunks
+        conn.execute(hub_scoped(sa.update(chunks).where(chunks.c.chunk_id == second).values(project_id=mobile)))
+    hub.clock.advance(timedelta(seconds=3))
+
+    _sweep(hub, writer).sweep()
+
+    expected = {first: home, second: (mobile, "mobile", "mobile")}
+    for dataset in ("steps", "invocations"):
+        assert {r["chunk_id"]: _project_of(r) for r in _rows(writer, dataset)} == expected, dataset
 
 
 def test_the_exports_failure_and_recovery_reach_the_hub_log_and_no_tenants_log(tmp_path: Path) -> None:

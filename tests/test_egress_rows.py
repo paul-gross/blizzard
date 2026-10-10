@@ -36,7 +36,8 @@ SENTINEL = "SENTINEL-do-not-leak"
 EXPORTED = datetime(2026, 2, 1, tzinfo=UTC)
 
 STEP_COLUMNS = [
-    "step_key", "trace_id", "step_kind", "tenant_id", "tenant_name", "chunk_id", "work_refs", "sources", "graph_id",
+    "step_key", "trace_id", "step_kind", "tenant_id", "tenant_name", "project_id", "project_slug", "project_name",
+    "chunk_id", "work_refs", "sources", "graph_id",
     "graph_name", "node_id", "node_name", "epoch", "decision_id", "visit", "runner_id", "runner_name", "harness_id", "models", "started_at",
     "ended_at", "closed_at", "duration_ms", "outcome", "choice", "to_node_name", "preceded_by", "bounce_cause", "asks",
     "asks_unanswered", "wait_queue_ms", "wait_claim_ms", "wait_ask_ms", "wait_pause_ms", "wait_pickup_ms",
@@ -44,7 +45,8 @@ STEP_COLUMNS = [
     "cost_estimated_usd", "cost_partial", "billed_partial", "exported_at",
 ]  # fmt: skip
 INVOCATION_COLUMNS = [
-    "usage_id", "step_key", "trace_id", "tenant_id", "tenant_name", "chunk_id", "epoch", "graph_id", "graph_name",
+    "usage_id", "step_key", "trace_id", "tenant_id", "tenant_name", "project_id", "project_slug", "project_name",
+    "chunk_id", "epoch", "graph_id", "graph_name",
     "node_id", "node_name", "runner_id", "runner_name", "kind", "model", "harness_id", "harness_version", "input_tokens", "output_tokens",
     "cache_read_tokens", "cache_create_tokens", "cost_billed_usd", "cost_estimated_usd", "recorded_at", "exported_at",
 ]  # fmt: skip
@@ -248,6 +250,28 @@ def test_rows_of_facts_read_without_a_tenant_name_none() -> None:
     assert (step_row(summary, EXPORTED).tenant_id, step_row(summary, EXPORTED).tenant_name) == (None, None), name
 
 
+def test_step_and_invocation_rows_name_the_project_their_facts_were_read_with() -> None:
+    fact = fx.usage()
+    facts = replace(
+        fx.make_facts(usage=(fact,), transitions=(fx.to("g1", "review", 30, 1),), **fx.runner_epoch(1, 10)),
+        project="proj_web",
+        project_slug="web",
+        project_name="Web",
+    )
+    (summary,) = _summaries(facts)
+    step = step_row(summary, EXPORTED)
+    invocation = fx.invocation_of(facts, AttributedUsage(7, "ch_1", "r-1", fact), EXPORTED)
+    expected = ("proj_web", "web", "Web")
+    assert (step.project_id, step.project_slug, step.project_name) == expected
+    assert (invocation.project_id, invocation.project_slug, invocation.project_name) == expected
+
+
+def test_rows_of_facts_read_without_a_project_name_none() -> None:
+    (name, summary), *_ = _all()
+    row = step_row(summary, EXPORTED)
+    assert (row.project_id, row.project_slug, row.project_name) == (None, None, None), name
+
+
 def _release_facts() -> StepFacts:
     """A chunk whose every identifying value differs from the fixtures' defaults."""
     graph = replace(fx.graph("g5", "plan", "ship"), name="release-flow")
@@ -258,7 +282,14 @@ def _release_facts() -> StepFacts:
         runner_names={"r-x": "release-runner"},
         **fx.runner_epoch(2, 40, "r-x"),
     )
-    return replace(facts, tenant=TenantId("ten_release"), tenant_name="release")
+    return replace(
+        facts,
+        tenant=TenantId("ten_release"),
+        tenant_name="release",
+        project="proj_release",
+        project_slug="release",
+        project_name="Release",
+    )
 
 
 def test_an_invocation_row_in_full() -> None:
@@ -284,6 +315,9 @@ def test_an_invocation_row_in_full() -> None:
         trace_id="f3e010092ca8029cd2d02a1a497f5ece",
         tenant_id="ten_release",
         tenant_name="release",
+        project_id="proj_release",
+        project_slug="release",
+        project_name="Release",
         chunk_id="ch_7",
         epoch=2,
         graph_id="g5",

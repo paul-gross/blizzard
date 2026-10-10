@@ -3,12 +3,12 @@
 Reads the cursor and its latch, and appends the cursor's fact rows (``bzh:facts-not-status``). The
 closing-fact candidates and whole-chunk :class:`StepFacts` span every tenant, so they come from the
 sweep corpus (:class:`IReadStepCorpus`); this store completes each chunk's facts in the chunk's own
-tenant — its work refs rendered, the graphs and runner names they name read, and the tenant's name
-beside them."""
+tenant — its work refs rendered, the graphs, runner names and project they name read, and the tenant's
+name beside them."""
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import replace
 from datetime import datetime
 
@@ -22,13 +22,16 @@ from blizzard.hub.domain.observability.tracing.cursor import CursorKey
 from blizzard.hub.domain.observability.tracing.facts import StepFacts
 from blizzard.hub.domain.observability.tracing.repository import (
     ClosingCandidates,
+    IReadProjectLabels,
     IReadStepCorpus,
     IReadTraceStatus,
     IWriteTraceCursor,
+    ProjectLabel,
     StepHydration,
     TraceCheckpoint,
     TraceExportFailure,
 )
+from blizzard.hub.domain.projects.model import IReadProjectRepository, ProjectId
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.tenancy import TenantClosed, TenantId, UnknownTenant
@@ -64,8 +67,8 @@ class TraceStore:
 
     def step_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, StepFacts]:
         """The corpus's step facts, each completed in its chunk's own tenant: its work refs rendered by that
-        tenant's label, the graphs and runner names its facts reference read through that tenant's reads, and
-        the tenant's current name beside them. A chunk of a tenant closed since the corpus read is left out:
+        tenant's label, the graphs, runner names and project its facts reference read through that tenant's
+        reads, and the tenant's current name beside them. A chunk of a tenant closed since the corpus read is left out:
         a window or page holding it exports none of its rows, and the cursor still passes its closing facts."""
         opened = _Opened(self._hydration)
         corpus = self._corpus.step_facts_for(chunk_ids, opened.label)
@@ -80,9 +83,11 @@ class TraceStore:
                 continue
             graphs = reads.graphs.get_many(sorted({g for facts in tenant_facts.values() for g in _graph_ids(facts)}))
             names = reads.names.names_for(sorted({r for facts in tenant_facts.values() for r in _runner_ids(facts)}))
+            projects = reads.projects.labels_for(sorted({f.project for f in tenant_facts.values() if f.project}))
             name = self._tenant_name(tenant)
             built.update(
-                (chunk_id, _with_reads(facts, graphs, names, name)) for chunk_id, facts in tenant_facts.items()
+                (chunk_id, _with_reads(facts, graphs, names, projects, name))
+                for chunk_id, facts in tenant_facts.items()
             )
         return {chunk_id: built[chunk_id] for chunk_id in corpus if chunk_id in built}
 
@@ -149,14 +154,32 @@ def _runner_ids(facts: StepFacts) -> set[str]:
 
 
 def _with_reads(
-    facts: StepFacts, graphs: dict[str, Graph], names: dict[str, str], tenant_name: str | None
+    facts: StepFacts,
+    graphs: dict[str, Graph],
+    names: dict[str, str],
+    projects: dict[str, ProjectLabel],
+    tenant_name: str | None,
 ) -> StepFacts:
+    project = projects.get(facts.project) if facts.project is not None else None
     return replace(
         facts,
         graphs={g: graphs[g] for g in _graph_ids(facts) if g in graphs},
         runner_names={r: names[r] for r in _runner_ids(facts) if r in names},
         tenant_name=tenant_name,
+        project_slug=project.slug if project is not None else None,
+        project_name=project.name if project is not None else None,
     )
+
+
+class ProjectLabels:
+    """A tenant's projects as the labels its step facts are completed with."""
+
+    def __init__(self, projects: IReadProjectRepository) -> None:
+        self._projects = projects
+
+    def labels_for(self, project_ids: Iterable[str]) -> dict[str, ProjectLabel]:
+        found = self._projects.get_many([ProjectId(p) for p in project_ids])
+        return {p.project_id: ProjectLabel(p.slug, p.name) for p in found.values()}
 
 
 class _Opened:
@@ -186,3 +209,7 @@ def _unrendered(ref: WorkRef) -> str | None:
 
 def _conforms_trace_store(x: TraceStore) -> tuple[IWriteTraceCursor, IReadTraceStatus]:
     return x, x
+
+
+def _conforms_project_labels(x: ProjectLabels) -> IReadProjectLabels:
+    return x

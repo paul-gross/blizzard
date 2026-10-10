@@ -139,6 +139,9 @@ class ExportedEventsEntry:
     step_started_at: datetime
     tenant_id: str | None
     tenant_name: str | None
+    project_id: str | None
+    project_slug: str | None
+    project_name: str | None
     chunk_id: str
     epoch: int
     spawn_generation: int
@@ -165,8 +168,8 @@ def derivation_id(segment_id: str, extractor_version: str, derived_at: datetime)
 def _anchored(
     record_type: str, segment_id: str, facts: StepFacts, chunk_id: str, epoch: int, spawn_generation: int, at: datetime
 ) -> ExportedEventsEntry:
-    """A row of ``record_type`` carrying only the columns every record has: the segment's step, position, tenant and
-    ``exported_at``."""
+    """A row of ``record_type`` carrying only the columns every record has: the segment's step, position, tenant,
+    project and ``exported_at``."""
     if chunk_id != facts.chunk_id:
         raise ValueError(f"segment {segment_id} belongs to {chunk_id}, not {facts.chunk_id}")
     step = runner_step(identify_steps(facts), epoch)
@@ -194,6 +197,9 @@ def _anchored(
         step_started_at=step.start,
         tenant_id=facts.tenant,
         tenant_name=facts.tenant_name,
+        project_id=facts.project,
+        project_slug=facts.project_slug,
+        project_name=facts.project_name,
         chunk_id=chunk_id,
         epoch=epoch,
         spawn_generation=spawn_generation,

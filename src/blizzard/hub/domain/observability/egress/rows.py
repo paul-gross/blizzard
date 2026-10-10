@@ -32,6 +32,9 @@ class ExportedStep:
     step_kind: str
     tenant_id: str | None
     tenant_name: str | None
+    project_id: str | None
+    project_slug: str | None
+    project_name: str | None
     chunk_id: str
     work_refs: tuple[str, ...]
     sources: tuple[str, ...]
@@ -98,6 +101,9 @@ class ExportedInvocation:
     trace_id: str
     tenant_id: str | None
     tenant_name: str | None
+    project_id: str | None
+    project_slug: str | None
+    project_name: str | None
     chunk_id: str
     epoch: int
     graph_id: str
@@ -131,13 +137,17 @@ def trace_id_text(key: StepKey) -> str:
 
 def step_row(summary: StepSummary, exported_at: datetime) -> ExportedStep:
     """The ``steps`` row of a closed step. ``runner_id`` and ``runner_name`` name the holder of a runner step only;
-    ``tenant_id`` and ``tenant_name`` name the chunk's tenant as the summary's facts were read."""
+    ``tenant_id`` and ``tenant_name`` name the chunk's tenant, and the ``project_*`` columns its project, as the
+    summary's facts were read."""
     return ExportedStep(
         step_key=summary.step_key.text(),
         trace_id=trace_id_text(summary.step_key),
         step_kind=summary.kind.value,
         tenant_id=summary.tenant,
         tenant_name=summary.tenant_name,
+        project_id=summary.project,
+        project_slug=summary.project_slug,
+        project_name=summary.project_name,
         chunk_id=summary.chunk_id,
         work_refs=summary.work_refs,
         sources=summary.work_sources,
@@ -185,7 +195,8 @@ def invocation_row(
     facts: StepFacts, step: NodeStep, usage: AttributedUsage, exported_at: datetime
 ) -> ExportedInvocation:
     """The ``invocations`` row of one usage row, positioned by ``step`` — the runner step holding its epoch,
-    open or closed; its runner's name is ``facts``' owner of the usage's epoch, and its tenant ``facts``' tenant."""
+    open or closed; its runner's name is ``facts``' owner of the usage's epoch, and its tenant and project are
+    ``facts``'."""
     if usage.chunk_id != facts.chunk_id:
         raise ValueError(f"usage {usage.usage_id} belongs to {usage.chunk_id}, not {facts.chunk_id}")
     fact = usage.fact
@@ -195,6 +206,9 @@ def invocation_row(
         trace_id=trace_id_text(step.key),
         tenant_id=facts.tenant,
         tenant_name=facts.tenant_name,
+        project_id=facts.project,
+        project_slug=facts.project_slug,
+        project_name=facts.project_name,
         chunk_id=usage.chunk_id,
         epoch=fact.epoch,
         graph_id=step.position.graph_id,

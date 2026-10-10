@@ -15,7 +15,7 @@ from blizzard.hub.domain.observability.tracing.repository import StepHydration
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
-from blizzard.hub.store.internal.trace_store import TraceStore
+from blizzard.hub.store.internal.trace_store import ProjectLabels, TraceStore
 from blizzard.hub.tenancy import StoreScope, TenantId
 from tests.hub_event_rows import hub_events_of
 from tests.support import (
@@ -74,7 +74,9 @@ def trace_store(hub: HubHarness) -> TraceStore:
 
     def hydration(tenant: TenantId) -> StepHydration:
         services = hub.open_services(tenant)
-        return StepHydration(graphs=services.graphs, names=services.registry, label=label)
+        return StepHydration(
+            graphs=services.graphs, names=services.registry, projects=ProjectLabels(services.projects), label=label
+        )
 
     return TraceStore(
         hub_store_connections(hub.engine),

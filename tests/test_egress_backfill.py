@@ -21,7 +21,18 @@ from blizzard.hub.egress.writer import EgressFailure, EgressFailureCause
 from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
 from tests.support import HubHarness, InMemoryEgressWriter, default_tenant, hub_level_connections
 from tests.test_egress_events_sweep import _OLD_VERSION, _Events
-from tests.test_egress_sweep import _SETTLED, _closed_step, _cursor_rows, _hub, _kinds, _rows, _store, _sweep
+from tests.test_egress_sweep import (
+    _SETTLED,
+    _closed_step,
+    _cursor_rows,
+    _home_project,
+    _hub,
+    _kinds,
+    _project_of,
+    _rows,
+    _store,
+    _sweep,
+)
 from tests.trace_hub import seed_open_tenant_chunk, trace_store
 
 pytestmark = pytest.mark.component
@@ -105,6 +116,26 @@ def test_the_backfill_writes_each_open_tenants_rows(tmp_path: Path) -> None:
         d: [(r["tenant_id"], r["tenant_name"]) for r in _rows(written, d)] for d in ("steps", "invocations", "events")
     }
     assert tenants == {"steps": [home, other], "invocations": [home, other], "events": [other]}
+
+
+def test_a_backfill_rewrites_its_window_naming_each_rows_project_as_known_now(tmp_path: Path) -> None:
+    hub, graph = _hub(tmp_path, _SETTLED)
+    since = hub.clock.now()
+    project_id, _, name = _home_project(hub)
+    _closed_step(hub, graph, 1)
+    seed_open_tenant_chunk(hub, "ten_other", "ch_other", hub.clock.now())
+    until = hub.clock.now() + timedelta(seconds=5)
+    hub.clock.advance(timedelta(seconds=6))
+    moved = hub.client.patch(f"/api/projects/{project_id}", json={"slug": "storefront"})
+    assert moved.status_code == 200, moved.text
+    written = InMemoryEgressWriter()
+
+    _service(hub, _SETTLED, written).backfill(since, until, dataset=None, dry_run=False)
+
+    home, other = (project_id, "storefront", name), ("proj_ten_other", "default", "Default")
+    projects = {d: [_project_of(r) for r in _rows(written, d)] for d in ("steps", "invocations", "events")}
+    assert projects == {"steps": [home, other], "invocations": [home, other], "events": [other]}
+    assert [r["record_type"] for r in _rows(written, "events")] == ["dropped"]
 
 
 def test_the_window_is_half_open(tmp_path: Path) -> None:

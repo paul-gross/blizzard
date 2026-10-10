@@ -194,6 +194,7 @@ def _hydrate(conn: Connection, batch: Sequence[str]) -> dict[str, tuple[TenantId
             StepFacts(
                 chunk_id=chunk_id,
                 tenant=TenantId(chunk.tenant_id),
+                project=chunk.project_id,
                 pin_graph_id=chunk.graph_id,
                 minted_at=chunk.minted_at,
                 lease_facts=tuple(TracedLease(r.epoch, r.minted_at) for r in leases[chunk_id]),

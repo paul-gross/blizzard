@@ -40,7 +40,8 @@ PLANTED = "SENTINEL-do-not-leak"
 EVENT_COLUMNS = [
     "record_type", "segment_id", "extractor_version", "derivation_id", "derived_at", "complete", "event_count",
     "dropped_at", "kind", "subject", "tool", "turn_path", "occurrence", "occurred_at", "depth", "agent_type",
-    "step_key", "trace_id", "step_started_at", "tenant_id", "tenant_name", "chunk_id", "epoch", "spawn_generation",
+    "step_key", "trace_id", "step_started_at", "tenant_id", "tenant_name", "project_id", "project_slug",
+    "project_name", "chunk_id", "epoch", "spawn_generation",
     "graph_id", "graph_name", "node_id", "node_name", "harness_id", "harness_version", "model", "effort", "exported_at",
 ]  # fmt: skip
 
@@ -141,6 +142,7 @@ def test_every_row_carries_its_step_chunk_and_graph() -> None:
         assert (row.step_key, row.step_started_at) == (step.key.text(), step.start)
         assert len(row.trace_id) == 32
         assert (row.tenant_id, row.tenant_name) == (None, None)
+        assert (row.project_id, row.project_slug, row.project_name) == (None, None, None)
         assert (row.chunk_id, row.epoch, row.spawn_generation) == ("ch_1", 1, 3)
         assert (row.graph_id, row.graph_name, row.node_id, row.node_name) == ("g1", "flow", "g1-build", "build")
         assert row.exported_at == EXPORTED
@@ -182,7 +184,14 @@ def _release_facts() -> StepFacts:
     """A chunk whose every identifying value differs from the fixtures' defaults."""
     graph = replace(fx.graph("g5", "plan", "ship"), name="release-flow")
     facts = fx.make_facts(chunk_id="ch_7", graphs={"g5": graph}, pin_graph_id="g5", **fx.runner_epoch(2, 40, "r-x"))
-    return replace(facts, tenant=TenantId("ten_release"), tenant_name="release")
+    return replace(
+        facts,
+        tenant=TenantId("ten_release"),
+        tenant_name="release",
+        project="proj_release",
+        project_slug="release",
+        project_name="Release",
+    )
 
 
 _RELEASE_STEP = {
@@ -191,6 +200,9 @@ _RELEASE_STEP = {
     "step_started_at": datetime(2026, 1, 1, 0, 0, 40, tzinfo=UTC),
     "tenant_id": "ten_release",
     "tenant_name": "release",
+    "project_id": "proj_release",
+    "project_slug": "release",
+    "project_name": "Release",
     "chunk_id": "ch_7",
     "epoch": 2,
     "spawn_generation": 4,

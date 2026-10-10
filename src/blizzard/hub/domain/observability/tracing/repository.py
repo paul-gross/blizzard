@@ -48,13 +48,31 @@ class IReadRunnerNames(Protocol):
         ...
 
 
+@domain_model
+@dataclass(frozen=True)
+class ProjectLabel:
+    """A project's slug and name as read."""
+
+    slug: str
+    name: str
+
+
+class IReadProjectLabels(Protocol):
+    """The projects' current slugs and names."""
+
+    def labels_for(self, project_ids: Iterable[str]) -> dict[str, ProjectLabel]:
+        """Each project's label, keyed by its id, in one batched read; an id with no project is absent."""
+        ...
+
+
 @dataclass(frozen=True)
 class StepHydration:
-    """One tenant's reads a chunk's step facts are completed through: the graphs and runner names
-    the facts name, and how the tenant renders a work ref."""
+    """One tenant's reads a chunk's step facts are completed through: the graphs, runner names and
+    projects the facts name, and how the tenant renders a work ref."""
 
     graphs: IReadManyGraphs
     names: IReadRunnerNames
+    projects: IReadProjectLabels
     label: WorkRefLabel
 
 

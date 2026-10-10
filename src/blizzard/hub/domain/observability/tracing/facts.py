@@ -247,3 +247,10 @@ class StepFacts:
     #: The tenant's name when the row was read — carried beside it like ``tenant``, outside its identity.
     #: ``None`` where no tenant, or no name for it, was read.
     tenant_name: str | None = field(default=None, compare=False)
+    #: The project the chunk belongs to, read from the chunk row — carried beside it like ``tenant``, outside its
+    #: identity. ``None`` where no project was read.
+    project: str | None = field(default=None, compare=False)
+    #: That project's slug and name when the row was read — carried like ``tenant_name``. ``None`` where no project,
+    #: or no project record for it, was read.
+    project_slug: str | None = field(default=None, compare=False)
+    project_name: str | None = field(default=None, compare=False)
