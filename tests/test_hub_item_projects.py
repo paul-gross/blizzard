@@ -137,3 +137,24 @@ def test_an_accepted_proposals_item_mints_into_the_proposals_project(tmp_path: P
     body = resp.json()
     closure = body["closure"]
     assert _projects_of(hub, closure["source"], closure["ref"], body["chunk_id"]) == (second, second)
+
+
+def test_hub_items_created_in_two_projects_take_distinct_sequential_refs(tmp_path: Path) -> None:
+    """``hub:<n>`` numbering is the tenant's one counter for the hub source, shared by every project."""
+    hub = build_hub(tmp_path)
+    seed_project(hub.engine, "second")
+
+    created = [_create_item(hub, project=project) for project in ("default", "second", "default", "second")]
+
+    assert all(status == 201 for status, _ in created), created
+    assert {body["source"] for _, body in created} == {"hub"}
+    refs = [int(body["ref"]) for _, body in created]
+    assert refs == list(range(refs[0], refs[0] + len(refs)))
+    sequence = s.work_item_sequence
+    with hub.engine.connect() as conn:
+        counters = conn.execute(
+            sa.select(sequence.c.next_ref).where(
+                sequence.c.tenant_id == default_tenant(hub.engine), sequence.c.source == "hub"
+            )
+        ).scalars()
+        assert list(counters) == [refs[-1] + 1]

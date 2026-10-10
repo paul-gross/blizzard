@@ -10,6 +10,7 @@ import pytest
 from blizzard.hub.domain.chunk.ingest import IngestSourceNotLinked
 from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.projects.model import ProjectId
+from blizzard.wire.chunk import ChunkIngestConflict
 from tests.support import (
     FakeWorkSource,
     HubHarness,
@@ -112,6 +113,21 @@ def test_an_item_whose_holder_is_terminal_ingests_again_into_another_project(tmp
     assert status == 201, body
     assert body["chunk_id"] != held
     assert _project_of(hub, body["chunk_id"]) == second
+
+
+def test_an_item_a_live_chunk_of_another_project_holds_answers_409_naming_its_holder(tmp_path: Path) -> None:
+    """The live hold on an item spans the tenant: no project mints a second chunk over another's live one."""
+    hub, first, _ = _two_projects(tmp_path)
+    status, body = _ingest(hub, "shared:11", project="default")
+    assert status == 201, body
+    held = body["chunk_id"]
+    assert _project_of(hub, held) == first
+
+    status, body = _ingest(hub, "shared:11", project="second")
+
+    assert status == 409
+    assert body == ChunkIngestConflict(existing_chunk_id=held, source="shared", ref="11").model_dump()
+    assert [c["chunk_id"] for c in hub.client.get("/api/chunks").json()["chunks"]] == [held]
 
 
 def test_a_named_project_an_ingest_source_is_not_linked_to_answers_source_not_linked(tmp_path: Path) -> None:

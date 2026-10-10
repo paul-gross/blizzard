@@ -28,8 +28,10 @@ from tests.support import (
     default_tenant,
     emitted_events,
     fixture_repository,
+    link_project,
     pointer_token,
     report_lease,
+    seed_project,
 )
 
 pytestmark = pytest.mark.component
@@ -44,15 +46,18 @@ _ENV_NAMES = {
 }
 
 
-def _mint_and_claim(hub: HubHarness, ref: str = "1") -> tuple[str, dict[str, str]]:
+def _mint_and_claim(hub: HubHarness, ref: str = "1", *, project: str | None = None) -> tuple[str, dict[str, str]]:
     minted = hub.client.post(
         "/api/graphs", json={"definition_yaml": PACKAGED.named("advanced-development-workflow").inlined_yaml}
     )
     assert minted.status_code == 201, minted.text
     nodes = {n["name"]: n["node_id"] for n in minted.json()["nodes"]}
-    chunk_id = hub.client.post(
-        "/api/chunks", json={"tokens": [pointer_token({"source": "default", "ref": ref})]}
-    ).json()["chunk_id"]
+    body: dict[str, object] = {"tokens": [pointer_token({"source": "default", "ref": ref})]}
+    if project is not None:
+        body["project"] = project
+    ingested = hub.client.post("/api/chunks", json=body)
+    assert ingested.status_code == 201, ingested.text
+    chunk_id = ingested.json()["chunk_id"]
     repin = hub.client.patch(f"/api/chunks/{chunk_id}", json={"graph_id": minted.json()["graph_id"]})
     assert repin.status_code == 202, repin.text
     hub.client.post(
@@ -334,3 +339,50 @@ def test_the_env_names_the_chunks_project_by_its_id_and_its_slug_as_the_visit_st
         (project["project_id"], "default"),
         (project["project_id"], "widgets"),
     ]
+
+
+def test_two_projects_linking_one_repository_land_onto_its_one_base_branch_and_record(tmp_path: Path) -> None:
+    """Nothing per project separates landings: each project's chunk delivers onto the same record's base branch."""
+    hub, runner = _hub(tmp_path)
+    create_repositories(hub.client, [fixture_repository("widget", _FORGE, owner="acme", base_branch="trunk")])
+    second = seed_project(hub.engine, "second")
+    link_project(hub.engine, project=second, source="default")
+    linked = hub.client.put("/api/projects/second/repository-links/widget")
+    assert linked.status_code == 200, linked.text
+    chunks = [_mint_and_claim(hub, ref, project=project) for ref, project in (("1", "default"), ("2", "second"))]
+    for chunk_id, nodes in chunks:
+        _seed_at_deliver(hub, chunk_id, nodes, [("widget", None)])
+
+    for chunk_id, nodes in chunks:
+
+        def land(_command: str, chunk_id: str = chunk_id, nodes: dict[str, str] = nodes) -> None:
+            hub.services.hub_node.record_marker(
+                chunk_id,
+                node_id=nodes["deliver"],
+                node_name="deliver",
+                epoch=1,
+                name="merged/acme/widget",
+                content="c1",
+            )
+
+        runner.before_run = land
+        _visit(hub, chunk_id, nodes)
+
+    assert {
+        (env["BZ_HUB_PROJECT"], env["BZ_FORGE_OWNER"], env["BZ_HUB_BASE_BRANCH"]) for _, _, env in runner.calls
+    } == {
+        ("default", "acme", "trunk"),
+        ("second", "acme", "trunk"),
+    }
+    landed = schema.delivery_repo_landed
+    with hub.engine.connect() as conn:
+        rows = (
+            conn.execute(
+                sa.select(landed.c.chunk_id, landed.c.repo, landed.c.repository_name).where(
+                    landed.c.tenant_id == default_tenant(hub.engine)
+                )
+            )
+            .tuples()
+            .all()
+        )
+    assert sorted(rows) == sorted((chunk_id, "acme/widget", "widget") for chunk_id, _ in chunks)

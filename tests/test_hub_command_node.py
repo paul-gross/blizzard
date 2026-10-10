@@ -1615,6 +1615,33 @@ def test_hub_advance_respects_the_poll_interval_then_succeeds(tmp_path: Path) ->
 
 
 @pytest.mark.component
+def test_a_slug_renamed_between_two_steps_of_one_chunk_reaches_the_second_step_under_the_same_id(
+    tmp_path: Path,
+) -> None:
+    """Each hub step reads its chunk's project as it starts: a re-poll after a rename names the new slug."""
+    runner = FakeHubCommandRunner()
+    runner.arm(
+        "check-ci",
+        CommandResult(exit_code=0, stdout="pending", stderr=""),
+        CommandResult(exit_code=0, stdout="success", stderr=""),
+    )
+    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
+    project_id = hub.client.get("/api/projects/default").json()["project_id"]
+    chunk_id, build_node_id, _graph = _to_poll_merge_node(hub, {"source": "default", "ref": "poll-rename"})
+    assert _submit_build_pass(hub, chunk_id, build_node_id, 1).json()["outcome"] == "hub_node_taken"
+
+    renamed = hub.client.patch("/api/projects/default", json={"slug": "widgets"})
+    assert renamed.status_code == 200, renamed.text
+    hub.clock.advance(timedelta(seconds=31))
+    assert hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance").json()["ran"] is True
+
+    assert [(env["BZ_HUB_PROJECT_ID"], env["BZ_HUB_PROJECT"]) for _, _, env in runner.calls] == [
+        (project_id, "default"),
+        (project_id, "widgets"),
+    ]
+
+
+@pytest.mark.component
 def test_pending_chunk_does_not_block_another_chunks_hub_node(tmp_path: Path) -> None:
     """The key #66 property: chunk A parked pending (slot released) must not prevent
     chunk B's hub node from running to completion on its own hub-advance call."""
