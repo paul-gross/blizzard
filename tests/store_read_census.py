@@ -1280,6 +1280,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     finding_1 = "fin_hub_1"
     finding_store.add(
         finding_1,
+        project_id=garden_project,
         routine_name="gardening",
         scope_slug="blizzard",
         class_="stale-docstring",
@@ -1293,6 +1294,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     finding_2 = "fin_hub_2"
     finding_store.add(
         finding_2,
+        project_id=garden_project,
         routine_name="gardening",
         scope_slug="blizzard",
         class_="dead-code",
@@ -1306,6 +1308,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     garden_proposal_1 = "gprop_hub_1"
     garden_proposal_store.create(
         garden_proposal_1,
+        project_id=garden_project,
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="gardening",
         class_="remediate",
@@ -1317,6 +1320,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     garden_proposal_2 = "gprop_hub_2"
     garden_proposal_store.create(
         garden_proposal_2,
+        project_id=garden_project,
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="gardening",
         class_="remediate",
@@ -1362,6 +1366,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     assert artifact_1 is not None
     finding_set_store.create(
         "fins_hub_1",
+        project_id=garden_project,
         artifact_id=artifact_1.artifact_id,
         chunk_id=run_chunk_1,
         scope_slug="blizzard",
@@ -1383,6 +1388,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     assert artifact_2 is not None
     finding_set_store.create(
         "fins_hub_2",
+        project_id=garden_project,
         artifact_id=artifact_2.artifact_id,
         chunk_id=run_chunk_1,
         scope_slug="runner-scope",
@@ -2123,17 +2129,23 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadFindingRepository, "get"): lambda w: w.hub.services.findings.get(w.finding_1),
     (IReadFindingRepository, "get_many"): lambda w: w.hub.services.findings.get_many([w.finding_1, w.finding_2]),
     (IReadFindingRepository, "get_with_facts"): lambda w: w.hub.services.findings.get_with_facts(w.finding_1),
-    (IReadFindingRepository, "list_for"): lambda w: w.hub.services.findings.list_for("gardening", "blizzard"),
-    (IReadFindingRepository, "list_for_routine"): lambda w: w.hub.services.findings.list_for_routine("gardening"),
-    (IReadFindingRepository, "list_by_source"): lambda w: w.hub.services.findings.list_by_source(
-        scope_slug="blizzard", source="review"
+    (IReadFindingRepository, "list_for"): lambda w: w.hub.services.findings.list_for(
+        w.project_id, "gardening", "blizzard"
     ),
-    (IReadFindingRepository, "list_across_routines"): lambda w: w.hub.services.findings.list_across_routines(),
+    (IReadFindingRepository, "list_for_routine"): lambda w: w.hub.services.findings.list_for_routine(
+        w.project_id, "gardening"
+    ),
+    (IReadFindingRepository, "list_by_source"): lambda w: w.hub.services.findings.list_by_source(
+        w.project_id, scope_slug="blizzard", source="review"
+    ),
+    (IReadFindingRepository, "list_across_routines"): lambda w: w.hub.services.findings.list_across_routines(
+        w.project_id
+    ),
     (IReadFindingRepository, "list_page"): lambda w: w.hub.services.findings.list_page(
-        routine_name=None, scope_slug=None, limit=50
+        project_id=None, routine_name=None, scope_slug=None, limit=50
     ),
     (IReadFindingRepository, "count_by_class"): lambda w: w.hub.services.findings.count_by_class(
-        "gardening", "stale-docstring"
+        w.project_id, "gardening", "stale-docstring"
     ),
     (IReadFindingRepository, "has_delivery_for_proposal"): lambda w: w.hub.services.findings.has_delivery_for_proposal(
         w.garden_proposal_2
@@ -2141,10 +2153,10 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadFindingSetRepository, "get"): lambda w: w.hub.services.finding_sets.get("fins_hub_1"),
     (IReadFindingSetRepository, "list_for_chunk"): lambda w: w.hub.services.finding_sets.list_for_chunk(w.run_chunk_1),
     (IReadFindingSetRepository, "newest_for_routine_scope"): lambda w: (
-        w.hub.services.finding_sets.newest_for_routine_scope("gardening", "blizzard")
+        w.hub.services.finding_sets.newest_for_routine_scope(w.project_id, "gardening", "blizzard")
     ),
     (IReadFindingSetRepository, "newest_by_scope_for_routine"): lambda w: (
-        w.hub.services.finding_sets.newest_by_scope_for_routine("gardening")
+        w.hub.services.finding_sets.newest_by_scope_for_routine(w.project_id, "gardening")
     ),
     (IReadGardenProposalClosureRepository, "get"): lambda w: w.hub.services.garden_proposal_closures.get(
         w.garden_proposal_1
@@ -2159,7 +2171,7 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadGardenProposalRepository, "list_all"): lambda w: w.hub.services.garden_proposals.list_all(),
     (IReadGardenProposalRepository, "list_page"): lambda w: w.hub.services.garden_proposals.list_page(limit=50),
     (IReadGardenProposalRepository, "list_for_routine"): lambda w: w.hub.services.garden_proposals.list_for_routine(
-        "gardening"
+        w.project_id, "gardening"
     ),
     (IReadGardenProposalRepository, "counts_by_class"): lambda w: w.hub.services.garden_proposals.counts_by_class(
         since=_ht(11), until=_ht(14)
@@ -2169,9 +2181,11 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     ),
     (IReadGardenRunRepository, "run_identity"): lambda w: w.garden_run.run_identity(w.run_chunk_1),
     (IReadGardenRunRepository, "delivered_sets"): lambda w: w.garden_run.delivered_sets(w.run_chunk_1),
-    (IReadGardenSweepsRepository, "sweeps_for_routine"): lambda w: w.garden_sweeps.sweeps_for_routine("gardening"),
+    (IReadGardenSweepsRepository, "sweeps_for_routine"): lambda w: w.garden_sweeps.sweeps_for_routine(
+        w.project_id, "gardening"
+    ),
     (IReadGardenTrendRepository, "facts_for_trend"): lambda w: w.garden_trend.facts_for_trend(
-        "gardening", since=_HUB_BASE, until=_HUB_UNTIL
+        w.project_id, "gardening", since=_HUB_BASE, until=_HUB_UNTIL
     ),
     (IReadGraphRepository, "get"): lambda w: w.hub.services.graphs.get(w.graph.graph_id),
     (IReadGraphRepository, "get_enabled_by_name"): lambda w: w.hub.services.graphs.get_enabled_by_name(_HUB_GRAPH_NAME),

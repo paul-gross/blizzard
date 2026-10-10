@@ -6,6 +6,7 @@ supersede never names a non-live absorber."""
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
@@ -41,9 +42,11 @@ from blizzard.hub.store.internal.garden_delivery_store import GardenDeliveryStor
 from blizzard.hub.store.schema import artifacts, finding_facts
 from tests.support import default_project, default_tenant, hub_store_connections, seed_chunk, seed_graph
 
+_PROJECT = "proj_test"
+
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 _LATER = _NOW.replace(hour=13)
-_RUN = RunContext(routine_name="nightly", scope_slug="blizzard", mode="full")
+_RUN = RunContext(project_id=_PROJECT, routine_name="nightly", scope_slug="blizzard", mode="full")
 
 
 def _world(tmp_path: Path) -> tuple[FindingStore, GardenDeliveryStore, Engine]:
@@ -64,9 +67,10 @@ def _world(tmp_path: Path) -> tuple[FindingStore, GardenDeliveryStore, Engine]:
     return FindingStore(connections), GardenDeliveryStore(connections), engine
 
 
-def _add_finding(findings: FindingStore, finding_id: str) -> None:
+def _add_finding(findings: FindingStore, project_id: str, finding_id: str) -> None:
     findings.add(
         finding_id,
+        project_id=project_id,
         routine_name="nightly",
         scope_slug="blizzard",
         class_="stale-docstring",
@@ -77,14 +81,14 @@ def _add_finding(findings: FindingStore, finding_id: str) -> None:
     )
 
 
-def _plan(*facts: NewFindingFact, expect: dict[str, str]) -> DeliveryPlan:
+def _plan(project_id: str, *facts: NewFindingFact, expect: dict[str, str]) -> DeliveryPlan:
     return DeliveryPlan(
         chunk_id="ch_1",
         node_id="nd_1",
         node_name="garden-deliver",
         epoch=1,
         at=_LATER,
-        run=_RUN,
+        run=replace(_RUN, project_id=project_id),
         deltas=[
             DeltaMaterialization(
                 finding_set=NewFindingSet(
@@ -124,8 +128,11 @@ def _markers(engine: Engine) -> int:
 @pytest.mark.component
 def test_deliver_loses_the_guard_when_an_exit_landed_after_validation(tmp_path: Path) -> None:
     findings, deliveries, engine = _world(tmp_path)
-    _add_finding(findings, "fin_1")
-    plan = _plan(NewFindingFact(finding_id="fin_1", kind="observed", finding_set_id="fins_1"), expect={"fin_1": "live"})
+    project = default_project(engine)
+    _add_finding(findings, project, "fin_1")
+    plan = _plan(
+        project, NewFindingFact(finding_id="fin_1", kind="observed", finding_set_id="fins_1"), expect={"fin_1": "live"}
+    )
     findings.record_fact("fin_1", kind="wont-fix", at=_LATER, note="n", actor="u1")
 
     outcome = deliveries.deliver(plan, admission=EpochAdmission.AT_OR_ABOVE)
@@ -138,8 +145,11 @@ def test_deliver_loses_the_guard_when_an_exit_landed_after_validation(tmp_path: 
 @pytest.mark.component
 def test_deliver_records_when_the_guarded_finding_has_not_moved(tmp_path: Path) -> None:
     findings, deliveries, engine = _world(tmp_path)
-    _add_finding(findings, "fin_1")
-    plan = _plan(NewFindingFact(finding_id="fin_1", kind="observed", finding_set_id="fins_1"), expect={"fin_1": "live"})
+    project = default_project(engine)
+    _add_finding(findings, project, "fin_1")
+    plan = _plan(
+        project, NewFindingFact(finding_id="fin_1", kind="observed", finding_set_id="fins_1"), expect={"fin_1": "live"}
+    )
 
     outcome = deliveries.deliver(plan, admission=EpochAdmission.AT_OR_ABOVE)
 
@@ -153,9 +163,11 @@ def test_a_reopened_delivered_finding_lands_the_runs_gone_as_gone(tmp_path: Path
     """Validation judged `fin_1` `delivered` and planned `resolved`; a person reopens it before the
     write. The stale plan loses the guard, and a re-plan against the fresh state flags it `gone`."""
     findings, deliveries, engine = _world(tmp_path)
-    _add_finding(findings, "fin_1")
+    project = default_project(engine)
+    _add_finding(findings, project, "fin_1")
     findings.record_fact("fin_1", kind="delivered", at=_NOW, note="n", actor="u1")
     stale = _plan(
+        project,
         NewFindingFact(finding_id="fin_1", kind="resolved", finding_set_id="fins_1", note="gone", actor="u1"),
         expect={"fin_1": "delivered"},
     )
@@ -163,6 +175,7 @@ def test_a_reopened_delivered_finding_lands_the_runs_gone_as_gone(tmp_path: Path
 
     assert deliveries.deliver(stale, admission=EpochAdmission.AT_OR_ABOVE) is DeliveryOutcome.GUARD_LOST
     fresh = _plan(
+        project,
         NewFindingFact(finding_id="fin_1", kind="gone", finding_set_id="fins_1", note="gone"),
         expect={"fin_1": "live"},
     )
@@ -175,8 +188,11 @@ def test_deliver_ignores_a_moved_finding_whose_facts_are_not_inserted(tmp_path: 
     """A delta already materialized under an earlier visit is dropped, so its ops write nothing and
     a finding they name having moved is no reason to refuse."""
     findings, deliveries, engine = _world(tmp_path)
-    _add_finding(findings, "fin_1")
-    plan = _plan(NewFindingFact(finding_id="fin_1", kind="observed", finding_set_id="fins_1"), expect={"fin_1": "live"})
+    project = default_project(engine)
+    _add_finding(findings, project, "fin_1")
+    plan = _plan(
+        project, NewFindingFact(finding_id="fin_1", kind="observed", finding_set_id="fins_1"), expect={"fin_1": "live"}
+    )
     assert deliveries.deliver(plan, admission=EpochAdmission.AT_OR_ABOVE) is DeliveryOutcome.RECORDED
     findings.record_fact("fin_1", kind="wont-fix", at=_LATER, note="n", actor="u1")
     revisit = DeliveryPlan(**{**plan.__dict__, "node_id": "nd_2", "epoch": 2})
@@ -190,8 +206,9 @@ def test_deliver_ignores_a_moved_finding_whose_facts_are_not_inserted(tmp_path: 
 @pytest.mark.component
 def test_supersede_refuses_an_absorber_exited_after_it_was_read(tmp_path: Path) -> None:
     findings, _, engine = _world(tmp_path)
-    _add_finding(findings, "fin_a")
-    _add_finding(findings, "fin_b")
+    project = default_project(engine)
+    _add_finding(findings, project, "fin_a")
+    _add_finding(findings, project, "fin_b")
     absorber = findings.get("fin_b")
     assert absorber is not None
     findings.record_fact("fin_b", kind="wont-fix", at=_LATER, note="n", actor="u2")
@@ -208,8 +225,9 @@ def test_crossing_supersedes_land_exactly_one(tmp_path: Path) -> None:
     """A→B and B→A, each having read the other as live: whichever runs second finds its absorber
     moved and is refused, so no cycle forms."""
     findings, _, engine = _world(tmp_path)
-    _add_finding(findings, "fin_a")
-    _add_finding(findings, "fin_b")
+    project = default_project(engine)
+    _add_finding(findings, project, "fin_a")
+    _add_finding(findings, project, "fin_b")
     a, b = findings.get("fin_a"), findings.get("fin_b")
     assert a is not None and b is not None
     service = FindingExitService(repo=findings, clock=FixedClock(instant=_LATER))

@@ -1799,6 +1799,7 @@ class IWriteWorkItemRepository(IReadWorkItemRepository, Protocol):
         routine_name: str,
         scope_slug: str,
         run_mode: str,
+        project_id: str,
         at: datetime,
         chunk: Chunk,
     ) -> HubWorkItem:

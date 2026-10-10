@@ -33,6 +33,8 @@ from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.tenancy import StoreScope, TenantId
 from tests.support import hub_store_connections, stamp
 
+_PROJECT = "proj_test"
+
 pytestmark = pytest.mark.component
 
 _NOW = datetime(2026, 7, 16, tzinfo=UTC)
@@ -119,6 +121,7 @@ def test_a_closing_write_holding_the_row_blocks_a_concurrent_edit_until_it_commi
     store, engine = _store_and_engine(tmp_path)
     proposal = store.create(
         "gprop_1",
+        project_id=_PROJECT,
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="fix-the-source",
@@ -168,6 +171,7 @@ def test_an_attach_racing_a_link_holding_the_row_raises_already_linked_not_an_in
     store, engine = _store_and_engine(tmp_path)
     proposal = store.create(
         "gprop_1",
+        project_id=_PROJECT,
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="fix-the-source",

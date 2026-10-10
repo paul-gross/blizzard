@@ -85,7 +85,7 @@ class RoutineBaselineService:
     def baselines_for(self, routine: Routine) -> list[RoutineBaseline]:
         """Newest-swept-first. Takes the already-resolved routine
         (`bzh:domain-takes-objects`)."""
-        sets = self._finding_sets.newest_by_scope_for_routine(routine.name)
+        sets = self._finding_sets.newest_by_scope_for_routine(routine.project_id, routine.name)
         return newest_swept_first([self._baseline_of(finding_set) for finding_set in sets])
 
     def _baseline_of(self, finding_set: FindingSet) -> RoutineBaseline:

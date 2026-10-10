@@ -363,10 +363,12 @@ def test_unlinking_a_pair_leaves_its_findings_readable(tmp_path: Path) -> None:
     `FindingStore.list_for` after that pair is unlinked — no finding read joins through
     `routine_scopes`."""
     scope_store, routine, engine = _routine_scope_store(tmp_path)
+    project = default_project(engine)
     finding_store = FindingStore(hub_store_connections(engine))
     linked = _relink(scope_store, routine, "other", link=True)
     finding_store.add(
         "fnd_1",
+        project_id=project,
         routine_name="nightly",
         scope_slug="other",
         class_="style",
@@ -379,7 +381,7 @@ def test_unlinking_a_pair_leaves_its_findings_readable(tmp_path: Path) -> None:
     _relink(scope_store, linked, "other", link=False)
 
     assert scope_store.list_scopes("rtn_1") == ["blizzard"]
-    assert [f.finding_id for f in finding_store.list_for("nightly", "other")] == ["fnd_1"]
+    assert [f.finding_id for f in finding_store.list_for(project, "nightly", "other")] == ["fnd_1"]
 
 
 def test_a_create_losing_the_name_to_a_concurrent_one_raises_name_taken(tmp_path: Path) -> None:

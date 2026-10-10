@@ -825,9 +825,7 @@ findings = Table(
     CheckConstraint("source IN ('routine', 'review')", name="ck_findings_source"),
 )
 
-# Each tenant-led index serves the reads that name no project; the project-led one beside it, the reads that do.
-Index("ix_findings_tenant_routine_scope", findings.c.tenant_id, findings.c.routine_name, findings.c.scope_slug)
-Index("ix_findings_tenant_routine_class", findings.c.tenant_id, findings.c.routine_name, findings.c.class_)
+# A project's bucket by (routine_name, scope_slug), and its recurrence by (routine_name, class).
 Index(
     "ix_findings_tenant_project_routine_scope",
     findings.c.tenant_id,
@@ -842,8 +840,7 @@ Index(
     findings.c.routine_name,
     findings.c.class_,
 )
-# Findings by (scope_slug, source), across routines.
-Index("ix_findings_tenant_scope_source", findings.c.tenant_id, findings.c.scope_slug, findings.c.source)
+# A project's findings by (scope_slug, source), across routines.
 Index(
     "ix_findings_tenant_project_scope_source",
     findings.c.tenant_id,
@@ -924,12 +921,6 @@ finding_sets = Table(
 
 Index("ix_finding_sets_tenant_chunk_id", finding_sets.c.tenant_id, finding_sets.c.chunk_id)
 Index(
-    "ix_finding_sets_tenant_routine_scope",
-    finding_sets.c.tenant_id,
-    finding_sets.c.routine_name,
-    finding_sets.c.scope_slug,
-)
-Index(
     "ix_finding_sets_tenant_project_routine_scope",
     finding_sets.c.tenant_id,
     finding_sets.c.project_id,
@@ -969,12 +960,6 @@ garden_proposals = Table(
     ),
 )
 
-Index(
-    "ix_garden_proposals_tenant_routine_class",
-    garden_proposals.c.tenant_id,
-    garden_proposals.c.routine_name,
-    garden_proposals.c.class_,
-)
 Index(
     "ix_garden_proposals_tenant_project_routine_class",
     garden_proposals.c.tenant_id,

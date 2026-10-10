@@ -37,6 +37,8 @@ from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.tenancy import TenantId
 from tests.support import default_project, default_tenant, hub_scoped, scoped_connections
 
+_PROJECT = "proj_test"
+
 pytestmark = pytest.mark.component
 
 _AT = datetime(2026, 10, 8, 12, 0, 0, tzinfo=UTC)
@@ -105,9 +107,13 @@ def _tenant(engine: Engine, tenant: TenantId, label: str) -> _Tenant:
     change = ConfigChange.of(_CTX, RecordKind.ROUTINE, routine.name, routine.revision, ChangeOp.CREATE, (), _AT)
     RoutineStore(conns).create(routine, change=change, scope_mint=None)
     _seed(conns, s.work_items, label, work_item_id=f"wi_{label}")
-    RunContextStore(conns).record(f"wi_{label}", RunContext(routine_name="nightly", scope_slug=_SLUG, mode="full"))
+    RunContextStore(conns).record(
+        f"wi_{label}",
+        RunContext(project_id=project, routine_name="nightly", scope_slug=_SLUG, mode="full"),
+    )
     FindingStore(conns).add(
         f"fin_{label}",
+        project_id=project,
         routine_name="nightly",
         scope_slug=_SLUG,
         class_="stale-docstring",
@@ -121,6 +127,7 @@ def _tenant(engine: Engine, tenant: TenantId, label: str) -> _Tenant:
     _seed(conns, s.artifacts, label, artifact_id=f"art_{label}", chunk_id=f"ch_{label}")
     FindingSetStore(conns).create(
         f"fins_{label}",
+        project_id=project,
         artifact_id=f"art_{label}",
         chunk_id=f"ch_{label}",
         scope_slug=_SLUG,
@@ -206,8 +213,10 @@ def test_each_tenants_reads_see_only_its_own_attachments(store: _Store) -> None:
         routine = RoutineStore(tenant.conns).get_by_name(tenant.project, "nightly")
         assert routine is not None
         assert (routine.routine_id, routine.default_scope_slug) == (f"rtn_{label}", _SLUG)
-        assert [f.finding_id for f in FindingStore(tenant.conns).list_for("nightly", _SLUG)] == [f"fin_{label}"]
-        finding_set = FindingSetStore(tenant.conns).newest_for_routine_scope("nightly", _SLUG)
+        assert [f.finding_id for f in FindingStore(tenant.conns).list_for(tenant.project, "nightly", _SLUG)] == [
+            f"fin_{label}"
+        ]
+        finding_set = FindingSetStore(tenant.conns).newest_for_routine_scope(tenant.project, "nightly", _SLUG)
         assert finding_set is not None
         assert finding_set.finding_set_id == f"fins_{label}"
 

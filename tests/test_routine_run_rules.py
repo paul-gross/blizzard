@@ -43,6 +43,7 @@ _SCOPE = Scope(
     scope_id="scp_blizzard", slug="blizzard", description="the hub itself", created_at=_T0, project_id=_PROJECT
 )
 _BASELINE = FindingSet(
+    project_id=_PROJECT,
     finding_set_id="fins_1",
     artifact_id="art_1",
     chunk_id="ch_prior",

@@ -4,6 +4,7 @@ names each side independently holds — the one join rests on."""
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -16,7 +17,15 @@ from blizzard.hub.domain.garden.routines import Routine
 from blizzard.hub.domain.garden.runs.baselines import RepoLandings, RoutineBaselineService
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingSetStore
-from tests.support import chunk_stores, hub_store_connections, migrate_to, seed_chunk, seed_graph, stamp
+from tests.support import (
+    chunk_stores,
+    default_project,
+    hub_store_connections,
+    migrate_to,
+    seed_chunk,
+    seed_graph,
+    stamp,
+)
 
 pytestmark = pytest.mark.component
 
@@ -54,6 +63,7 @@ def _seed_artifact(conn, artifact_id: str, *, chunk_id: str) -> None:  # type: i
 
 def test_landed_since_joins_the_finding_sets_repo_names_against_delivery(tmp_path: Path) -> None:
     _, engine = migrate_to(tmp_path, "head")
+    project = default_project(engine)
     with engine.begin() as conn:
         seed_graph(conn, "gr_1", at=_NOW)
         seed_chunk(conn, "ch_1", graph_id="gr_1", at=_NOW)
@@ -65,6 +75,7 @@ def test_landed_since_joins_the_finding_sets_repo_names_against_delivery(tmp_pat
     finding_set_id = Id.mint_at("fins", baseline_at).value
     FindingSetStore(hub_store_connections(engine)).create(
         finding_set_id,
+        project_id=project,
         artifact_id="art_1",
         chunk_id="ch_1",
         scope_slug="blizzard",
@@ -81,7 +92,7 @@ def test_landed_since_joins_the_finding_sets_repo_names_against_delivery(tmp_pat
     )
 
     service = RoutineBaselineService(finding_sets=FindingSetStore(hub_store_connections(engine)), delivery=delivery)
-    baselines = service.baselines_for(_ROUTINE)
+    baselines = service.baselines_for(replace(_ROUTINE, project_id=project))
 
     assert len(baselines) == 1
     baseline = baselines[0]

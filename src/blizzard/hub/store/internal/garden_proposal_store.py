@@ -23,6 +23,7 @@ from blizzard.hub.domain.garden.proposals.model import (
     GardenProposalCounts,
     GardenProposalEdit,
     GardenProposalFindingAlreadyLinkedError,
+    GardenProposalFindingOtherProjectError,
     GardenProposalPage,
     GardenProposalState,
     IWriteGardenProposalRepository,
@@ -31,6 +32,7 @@ from blizzard.hub.domain.garden.proposals.model import (
 )
 from blizzard.hub.domain.kernel.pagination import MalformedCursor, decode_cursor, encode_cursor
 from blizzard.hub.domain.kernel.unset import UnsetType
+from blizzard.hub.store.internal.finding_store import findings_outside_project
 from blizzard.hub.store.schema import garden_proposal_closures, garden_proposal_findings, garden_proposals
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements, statements_of
 
@@ -68,6 +70,14 @@ def _proposal_page_stmt(
     return stmt.order_by(garden_proposals.c.created_at.desc(), garden_proposals.c.proposal_id.desc()).limit(limit)
 
 
+def _refuse_another_projects_findings(conn: Any, finding_ids: Sequence[str], project_id: str) -> None:
+    """Raise :class:`GardenProposalFindingOtherProjectError` naming the first of `finding_ids` stored in a project
+    other than `project_id` — the store's own backstop beneath the domain's check."""
+    outside = findings_outside_project(conn, finding_ids, project_id)
+    if outside:
+        raise GardenProposalFindingOtherProjectError(outside[0])
+
+
 class GardenProposalStore:
     """Read-write garden-proposal adapter over the hub store engine."""
 
@@ -79,6 +89,7 @@ class GardenProposalStore:
         proposal_id: str,
         *,
         origin: GardenProposalOrigin,
+        project_id: str,
         routine_name: str | None,
         created_by: str | None = None,
         class_: str,
@@ -92,6 +103,7 @@ class GardenProposalStore:
                 self._store.insert(garden_proposals).values(
                     proposal_id=proposal_id,
                     origin=origin.value,
+                    project_id=project_id,
                     routine_name=routine_name,
                     created_by=created_by,
                     class_=class_,
@@ -101,6 +113,7 @@ class GardenProposalStore:
                 )
             )
             if findings:
+                _refuse_another_projects_findings(conn, findings, project_id)
                 conn.execute(
                     self._store.insert(garden_proposal_findings),
                     [{"proposal_id": proposal_id, "finding_id": finding_id} for finding_id in findings],
@@ -115,6 +128,7 @@ class GardenProposalStore:
             body=body,
             created_at=at,
             findings=list(findings),
+            project_id=project_id,
         )
 
     def _is_closed(self, conn: Any, proposal_id: str) -> bool:
@@ -169,14 +183,15 @@ class GardenProposalStore:
             for finding_id in finding_ids:
                 if finding_id in linked:
                     raise GardenProposalFindingAlreadyLinkedError(proposal_id, finding_id)
+            row = conn.execute(
+                self._store.select(garden_proposals).where(garden_proposals.c.proposal_id == proposal_id)
+            ).one()
             if finding_ids:
+                _refuse_another_projects_findings(conn, finding_ids, row.project_id)
                 conn.execute(
                     self._store.insert(garden_proposal_findings),
                     [{"proposal_id": proposal_id, "finding_id": finding_id} for finding_id in finding_ids],
                 )
-            row = conn.execute(
-                self._store.select(garden_proposals).where(garden_proposals.c.proposal_id == proposal_id)
-            ).one()
             findings = self._findings(conn, proposal_id)
         return self._of(row, findings)
 
@@ -237,11 +252,13 @@ class GardenProposalStore:
         return GardenProposalPage(proposals=proposals, next_cursor=next_cursor)
 
     def list_for_routine(
-        self, routine_name: str, *, state: RoutineProposalState = RoutineProposalState.ALL
+        self, project_id: str, routine_name: str, *, state: RoutineProposalState = RoutineProposalState.ALL
     ) -> list[GardenProposal]:
         """`list_all`'s routine-narrowed sibling — newest first, the same
         `created_at`/`proposal_id` tie-break."""
-        stmt = self._store.select(garden_proposals).where(garden_proposals.c.routine_name == routine_name)
+        stmt = self._store.select(garden_proposals).where(
+            garden_proposals.c.project_id == project_id, garden_proposals.c.routine_name == routine_name
+        )
         closure_exists = self._store.exists(
             garden_proposal_closures, garden_proposal_closures.c.proposal_id == garden_proposals.c.proposal_id
         )
@@ -261,6 +278,7 @@ class GardenProposalStore:
         since: datetime,
         until: datetime,
         routine_name: str | None = None,
+        project_id: str | None = None,
         origin: GardenProposalOrigin | None = None,
     ) -> list[GardenProposalCounts]:
         """One `GROUP BY` query over a left join to `garden_proposal_closures` — a
@@ -282,6 +300,8 @@ class GardenProposalStore:
             closures_c.item_outcome,
             func.count().label("n"),
         ).where(c.created_at >= since, c.created_at < until)
+        if project_id is not None:
+            stmt = stmt.where(c.project_id == project_id)
         if routine_name is not None:
             stmt = stmt.where(c.routine_name == routine_name)
         if origin is not None:
@@ -354,6 +374,7 @@ class GardenProposalStore:
             body=row.body,
             created_at=row.created_at,
             findings=findings,
+            project_id=row.project_id,
         )
 
 

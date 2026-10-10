@@ -13,7 +13,7 @@ from blizzard.foundation.garden_proposals import GardenProposalOrigin
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
-from tests.support import HubHarness, build_hub, hub_store_connections, stamp
+from tests.support import HubHarness, build_hub, default_project, hub_store_connections, stamp
 
 pytestmark = pytest.mark.component
 
@@ -25,6 +25,7 @@ def _seed(hub: HubHarness) -> None:
         conn.execute(s.scopes.insert().values(stamp(s.scopes, slug="blizzard", description="", created_at=_NOW)))
     FindingStore(hub_store_connections(hub.engine)).add(
         "fin_1",
+        project_id=default_project(hub.engine),
         routine_name="nightly",
         scope_slug="blizzard",
         class_="stale-docstring",
@@ -35,6 +36,7 @@ def _seed(hub: HubHarness) -> None:
     )
     GardenProposalStore(hub_store_connections(hub.engine)).create(
         "gprop_1",
+        project_id=default_project(hub.engine),
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="fix-the-source",

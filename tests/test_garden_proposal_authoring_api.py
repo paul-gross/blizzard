@@ -56,6 +56,7 @@ def _seed_finding(
 ) -> None:
     FindingStore(hub_store_connections(hub.engine)).add(
         finding_id,
+        project_id=default_project(hub.engine),
         routine_name=routine_name,
         scope_slug=scope_slug,
         class_="stale-docstring",
@@ -73,6 +74,7 @@ def _seed_proposal(
 ) -> None:
     GardenProposalStore(hub_store_connections(hub.engine)).create(
         proposal_id,
+        project_id=default_project(hub.engine),
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="fix-the-source",

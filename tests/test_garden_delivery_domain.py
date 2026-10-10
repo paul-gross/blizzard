@@ -37,12 +37,14 @@ from blizzard.hub.domain.garden.formats import (
 from blizzard.hub.domain.garden.run_context import RunContext
 from tests.garden_artifacts import add_op, candidate, wire_json
 
+_PROJECT = "proj_test"
+
 _FORMATS = GardenFormats()
 
 pytestmark = pytest.mark.unit
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
-_RUN = RunContext(routine_name="nightly", scope_slug="runner", mode="full")
+_RUN = RunContext(project_id=_PROJECT, routine_name="nightly", scope_slug="runner", mode="full")
 
 
 def _fin() -> str:
@@ -79,6 +81,7 @@ def _finding(
 ) -> Finding:
     resolved_state = state if state is not None else ("live" if live else "gone")
     return Finding(
+        project_id=_PROJECT,
         finding_id=finding_id,
         routine_name=_RUN.routine_name,
         scope_slug=scope_slug,

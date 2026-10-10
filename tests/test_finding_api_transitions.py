@@ -13,7 +13,7 @@ from sqlalchemy import insert
 
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
-from tests.support import build_hub, hub_scoped, hub_store_connections, stamp
+from tests.support import build_hub, default_project, hub_scoped, hub_store_connections, stamp
 
 pytestmark = pytest.mark.component
 
@@ -26,6 +26,7 @@ def _seed_finding(hub, finding_id: str, *, scope: str = "blizzard") -> None:  # 
             )
     FindingStore(hub_store_connections(hub.engine)).add(
         finding_id,
+        project_id=default_project(hub.engine),
         routine_name="nightly",
         scope_slug=scope,
         class_="c",

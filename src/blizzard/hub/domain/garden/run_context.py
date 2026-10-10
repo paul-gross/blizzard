@@ -16,6 +16,7 @@ class RunContext:
     routine_name: str
     scope_slug: str
     mode: str
+    project_id: str  # the routine's project
 
 
 # --- Repository seams (I-prefix, read/write split — bzh:repository-split) ----

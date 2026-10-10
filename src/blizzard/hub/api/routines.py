@@ -203,7 +203,7 @@ def routine_trend(
         )
     except InvalidWindowError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
-    return _trend_view(services.garden_trend.trend(routine, window))
+    return _trend_view(services.garden_trend.trend(project.project_id, routine, window))
 
 
 def _proposal_counts_row_view(counts: GardenProposalCounts) -> GardenProposalCountsRowView:
@@ -246,10 +246,13 @@ def routine_proposal_counts(
         require_until_after_since(parsed_since, parsed_until)
     except InvalidWindowError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
-    if routine is not None and services.routines.get_by_name(project_of_call(services).project_id, routine) is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine!r}")
+    project_id = None
+    if routine is not None:
+        project_id = project_of_call(services).project_id
+        if services.routines.get_by_name(project_id, routine) is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine!r}")
     rows = services.garden_proposals.counts_by_class(
-        since=parsed_since, until=parsed_until, routine_name=routine, origin=origin
+        since=parsed_since, until=parsed_until, routine_name=routine, project_id=project_id, origin=origin
     )
     return GardenProposalCountsView(
         since=iso_utc(parsed_since),

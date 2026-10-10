@@ -139,6 +139,7 @@ class WorkItemStore:
         routine_name: str,
         scope_slug: str,
         run_mode: str,
+        project_id: str,
         at: datetime,
         chunk: Chunk,
     ) -> HubWorkItem:
@@ -162,7 +163,9 @@ class WorkItemStore:
             )
             insert_chunk_rows(conn, chunk)
             insert_run_context_row(
-                conn, work_item_id, RunContext(routine_name=routine_name, scope_slug=scope_slug, mode=run_mode)
+                conn,
+                work_item_id,
+                RunContext(routine_name=routine_name, scope_slug=scope_slug, mode=run_mode, project_id=project_id),
             )
         record = HubWorkItem(
             work_item_id=work_item_id,

@@ -45,6 +45,7 @@ from blizzard.hub.work_sources.internal.hub_work_source import HubWorkSource
 from blizzard.hub.work_sources.source import WorkSourceError
 from tests.support import (
     chunk_stores,
+    default_project,
     hub_store_connections,
     migrate_to,
     seed_chunk_record,
@@ -626,6 +627,7 @@ def _seed_accepted_proposal(engine: Engine, *, pointer: WorkRef, finding_id: str
         conn.execute(insert(s.scopes).values(stamp(s.scopes, slug="blizzard", description="", created_at=_T0)))
     FindingStore(store).add(
         finding_id,
+        project_id=default_project(engine),
         routine_name="nightly",
         scope_slug="blizzard",
         class_="stale-docstring",
@@ -637,6 +639,7 @@ def _seed_accepted_proposal(engine: Engine, *, pointer: WorkRef, finding_id: str
     proposal_id = "gprop_1"
     GardenProposalStore(store).create(
         proposal_id,
+        project_id=default_project(engine),
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="fix-the-source",
@@ -787,6 +790,7 @@ def test_close_never_redelivers_a_proposal_a_legacy_resolved_fact_already_closed
 
 def test_close_with_no_garden_proposal_behind_it_leaves_findings_untouched(tmp_path: Path) -> None:
     source, items, _, _, engine, _ = _source(tmp_path)
+    project = default_project(engine)
     graph = _graph(engine)
     created = seed_work_item(
         items,
@@ -800,6 +804,7 @@ def test_close_with_no_garden_proposal_behind_it_leaves_findings_untouched(tmp_p
         conn.execute(insert(s.scopes).values(stamp(s.scopes, slug="blizzard", description="", created_at=_T0)))
     FindingStore(hub_store_connections(engine)).add(
         "fin_1",
+        project_id=project,
         routine_name="nightly",
         scope_slug="blizzard",
         class_="stale-docstring",

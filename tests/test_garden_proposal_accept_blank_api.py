@@ -13,6 +13,8 @@ from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
 from tests.support import build_hub, hub_store_connections, stamp
 
+_PROJECT = "proj_test"
+
 pytestmark = pytest.mark.component
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
@@ -24,6 +26,7 @@ def test_accept_minting_a_blank_body_is_422_and_mints_nothing(tmp_path: Path) ->
         conn.execute(s.scopes.insert().values(stamp(s.scopes, slug="blizzard", description="", created_at=_NOW)))
     GardenProposalStore(hub_store_connections(hub.engine)).create(
         "gprop_1",
+        project_id=_PROJECT,
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="fix-the-source",

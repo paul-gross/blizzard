@@ -27,7 +27,7 @@ from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_closure_store import GardenProposalClosureStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
-from tests.support import build_hub, count_queries, hub_scoped, hub_store_connections, stamp
+from tests.support import build_hub, count_queries, default_project, hub_scoped, hub_store_connections, stamp
 
 pytestmark = pytest.mark.component
 
@@ -40,6 +40,7 @@ def _seed_proposal(hub, *, proposal_id: str = "gprop_1") -> None:  # type: ignor
     store = hub_store_connections(hub.engine)
     FindingStore(store).add(
         "fin_1",
+        project_id=default_project(hub.engine),
         routine_name="nightly",
         scope_slug="blizzard",
         class_="stale-docstring",
@@ -50,6 +51,7 @@ def _seed_proposal(hub, *, proposal_id: str = "gprop_1") -> None:  # type: ignor
     )
     GardenProposalStore(store).create(
         proposal_id,
+        project_id=default_project(hub.engine),
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="fix-the-source",
@@ -70,6 +72,7 @@ def _seed_proposals(hub, proposal_ids: list[str]) -> None:  # type: ignore[no-un
         finding_id = f"fin_{i}"
         findings.add(
             finding_id,
+            project_id=default_project(hub.engine),
             routine_name="nightly",
             scope_slug="blizzard",
             class_="stale-docstring",
@@ -80,6 +83,7 @@ def _seed_proposals(hub, proposal_ids: list[str]) -> None:  # type: ignore[no-un
         )
         proposals.create(
             proposal_id,
+            project_id=default_project(hub.engine),
             origin=GardenProposalOrigin.ROUTINE_RUN,
             routine_name="nightly",
             class_="fix-the-source",

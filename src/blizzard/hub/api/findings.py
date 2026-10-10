@@ -20,6 +20,7 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
+from blizzard.hub.api.project_params import project_of_call
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.garden.findings.model import (
@@ -142,9 +143,11 @@ def list_findings(
     - both absent — every finding across every routine and every scope
 
     `source` further narrows to `"routine"` or `"review"`; absent reads
-    both. All share `list_page`'s own total `finding_id` order."""
+    both. All share `list_page`'s own total `finding_id` order. A named `routine` or `scope` is read in the call's
+    project (the tenant's only one, else `422 project_required`); naming neither reads the whole tenant."""
     try:
         page = services.findings.list_page(
+            project_id=project_of_call(services).project_id if routine is not None or scope is not None else None,
             routine_name=routine,
             scope_slug=scope,
             source=source,

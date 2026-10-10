@@ -13,13 +13,16 @@ from blizzard.hub.domain.garden.findings.bucket import FindingBucketReader
 from blizzard.hub.domain.garden.findings.model import Finding
 from blizzard.hub.domain.garden.run_context import RunContext
 
+_PROJECT = "proj_test"
+
 pytestmark = pytest.mark.unit
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
-_RUN = RunContext(routine_name="nightly", scope_slug="runner", mode="full")
+_RUN = RunContext(project_id=_PROJECT, routine_name="nightly", scope_slug="runner", mode="full")
 
 
 def _finding(finding_id: str, *, scope: str, state: str = "live", routine: str = "nightly") -> Finding:
     return Finding(
+        project_id=_PROJECT,
         finding_id=finding_id,
         routine_name=routine,
         scope_slug=scope,
@@ -43,13 +46,15 @@ class _Repo:
         self._routine = routine
         self._review = review
 
-    def list_for_routine(self, routine_name: str, *, include_gone: bool = False) -> list[Finding]:
+    def list_for_routine(self, project_id: str, routine_name: str, *, include_gone: bool = False) -> list[Finding]:
         assert include_gone
-        return [f for f in self._routine if f.routine_name == routine_name]
+        return [f for f in self._routine if f.project_id == project_id and f.routine_name == routine_name]
 
-    def list_by_source(self, *, scope_slug: str, source: str, include_gone: bool = False) -> list[Finding]:
+    def list_by_source(
+        self, project_id: str, *, scope_slug: str, source: str, include_gone: bool = False
+    ) -> list[Finding]:
         assert include_gone and source == "review"
-        return [f for f in self._review if f.scope_slug == scope_slug]
+        return [f for f in self._review if f.project_id == project_id and f.scope_slug == scope_slug]
 
 
 def _reader(routine: list[Finding], review: list[Finding]) -> FindingBucketReader:

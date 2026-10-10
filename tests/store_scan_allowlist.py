@@ -608,7 +608,6 @@ HUB_ALLOWED_SCANS: list[Allowance] = [
     IndexWalkAllowance(
         IReadDerivationCorpus, "derived_segment_ids", ("transcript_event_derivations",), _DERIVATION_SWEEP_REASON
     ),
-    IndexWalkAllowance(IReadFindingRepository, "list_across_routines", ("findings",), _PAGED_LISTING_REASON),
     IndexWalkAllowance(IReadFindingRepository, "list_page", ("findings",), _PAGED_LISTING_REASON),
     IndexWalkAllowance(IReadGardenProposalRepository, "counts_by_class", ("garden_proposals",), _ANALYTICS_REASON),
     IndexWalkAllowance(

@@ -21,6 +21,8 @@ from blizzard.hub.domain.garden.findings.model import (
     IWriteFindingRepository,
 )
 
+_PROJECT = "proj_test"
+
 pytestmark = pytest.mark.unit
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
@@ -28,6 +30,7 @@ _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 def _finding(finding_id: str, *, state: str = "live") -> Finding:
     return Finding(
+        project_id=_PROJECT,
         finding_id=finding_id,
         routine_name="nightly",
         scope_slug="runner",

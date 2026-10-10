@@ -10,6 +10,8 @@ import pytest
 from blizzard.hub.domain.garden.findings.bucket import FindingBucket
 from blizzard.hub.domain.garden.findings.model import Finding
 
+_PROJECT = "proj_test"
+
 pytestmark = pytest.mark.unit
 
 _AT = datetime(2026, 1, 1, tzinfo=UTC)
@@ -17,6 +19,7 @@ _AT = datetime(2026, 1, 1, tzinfo=UTC)
 
 def _finding(finding_id: str, *, scope: str = "runner", state: str = "live") -> Finding:
     return Finding(
+        project_id=_PROJECT,
         finding_id=finding_id,
         routine_name="nightly",
         scope_slug=scope,

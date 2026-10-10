@@ -3,7 +3,7 @@ All ``sqlalchemy`` usage is confined here
 (``bzh:dependency-inversion``). Resolves a chunk's first work ref straight against
 ``work_items`` rather than composing another store instance (``bzh:repository-split``)
 — this store depends only on :class:`ScopedConnections`. A run names its scope by
-``scope_id``, written from and read back as the slug within the tenant."""
+``scope_id``, written from and read back as the slug within the run's project."""
 
 from __future__ import annotations
 
@@ -24,8 +24,9 @@ def insert_run_context_row(conn: Connection, work_item_id: str, context: RunCont
     conn.execute(
         stmts.insert(s.work_item_runs).values(
             work_item_id=work_item_id,
+            project_id=context.project_id,
             routine_name=context.routine_name,
-            scope_id=scope_id_of(stmts, context.scope_slug),
+            scope_id=scope_id_of(stmts, context.scope_slug, context.project_id),
             mode=context.mode,
         )
     )
@@ -54,12 +55,18 @@ class RunContextStore:
             )
             row = conn.execute(
                 self._store.select(
-                    runs, s.work_item_runs.c.routine_name, s.scopes.c.slug.label("scope_slug"), s.work_item_runs.c.mode
+                    runs,
+                    s.work_item_runs.c.routine_name,
+                    s.scopes.c.slug.label("scope_slug"),
+                    s.work_item_runs.c.mode,
+                    s.work_item_runs.c.project_id,
                 ).where(s.work_item_runs.c.work_item_id == item_row.work_item_id)
             ).one_or_none()
         if row is None:
             return None
-        return RunContext(routine_name=row.routine_name, scope_slug=row.scope_slug, mode=row.mode)
+        return RunContext(
+            routine_name=row.routine_name, scope_slug=row.scope_slug, mode=row.mode, project_id=row.project_id
+        )
 
     def record(self, work_item_id: str, context: RunContext) -> None:
         with self._store.write("record") as conn:

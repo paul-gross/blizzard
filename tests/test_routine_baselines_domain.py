@@ -37,8 +37,8 @@ def _finding_set_id(at: datetime) -> str:
 class _FakeFindingSets:
     by_routine: dict[str, list[FindingSet]] = field(default_factory=dict)
 
-    def newest_by_scope_for_routine(self, routine_name: str) -> list[FindingSet]:
-        return self.by_routine.get(routine_name, [])
+    def newest_by_scope_for_routine(self, project_id: str, routine_name: str) -> list[FindingSet]:
+        return [fs for fs in self.by_routine.get(routine_name, []) if fs.project_id == project_id]
 
     def __getattr__(self, name: str) -> Any:
         raise NotImplementedError(f"should not touch {name!r}")
@@ -72,6 +72,7 @@ def _service(
 def test_a_swept_pair_yields_its_baseline_with_the_instant_decoded_from_the_id() -> None:
     finding_set_id = _finding_set_id(_T0)
     finding_set = FindingSet(
+        project_id=_PROJECT,
         finding_set_id=finding_set_id,
         artifact_id="art_1",
         chunk_id="ch_1",
@@ -102,6 +103,7 @@ def test_an_unswept_pair_yields_no_entry_at_all() -> None:
 def test_landed_since_is_queried_per_repo_against_the_recorded_instant() -> None:
     finding_set_id = _finding_set_id(_T0)
     finding_set = FindingSet(
+        project_id=_PROJECT,
         finding_set_id=finding_set_id,
         artifact_id="art_1",
         chunk_id="ch_1",
@@ -119,6 +121,7 @@ def test_landed_since_is_queried_per_repo_against_the_recorded_instant() -> None
 
 def test_baselines_are_ordered_newest_swept_first() -> None:
     older = FindingSet(
+        project_id=_PROJECT,
         finding_set_id=_finding_set_id(datetime(2026, 1, 1, tzinfo=UTC)),
         artifact_id="art_1",
         chunk_id="ch_1",
@@ -128,6 +131,7 @@ def test_baselines_are_ordered_newest_swept_first() -> None:
         measurement=None,
     )
     newer = FindingSet(
+        project_id=_PROJECT,
         finding_set_id=_finding_set_id(datetime(2026, 2, 1, tzinfo=UTC)),
         artifact_id="art_2",
         chunk_id="ch_1",
@@ -145,6 +149,7 @@ def test_baselines_are_ordered_newest_swept_first() -> None:
 
 def test_a_malformed_finding_set_id_raises() -> None:
     finding_set = FindingSet(
+        project_id=_PROJECT,
         finding_set_id="fins_not-a-ulid",
         artifact_id="art_1",
         chunk_id="ch_1",

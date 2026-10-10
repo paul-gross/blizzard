@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -44,10 +45,12 @@ from tests.support import (
     stamp,
 )
 
+_PROJECT = "proj_test"
+
 pytestmark = pytest.mark.component
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
-_RUN = RunContext(routine_name="nightly", scope_slug="blizzard", mode="dry_run")
+_RUN = RunContext(project_id=_PROJECT, routine_name="nightly", scope_slug="blizzard", mode="dry_run")
 
 
 def _store_and_engine(tmp_path: Path, *, enforce_foreign_keys: bool = False) -> tuple[GardenDeliveryStore, Engine]:
@@ -77,14 +80,14 @@ def _store_and_engine(tmp_path: Path, *, enforce_foreign_keys: bool = False) -> 
     return GardenDeliveryStore(store_connections), engine
 
 
-def _full_plan(*, at: datetime = _NOW) -> DeliveryPlan:
+def _full_plan(project_id: str, *, at: datetime = _NOW) -> DeliveryPlan:
     return DeliveryPlan(
         chunk_id="ch_1",
         node_id="nd_1",
         node_name="garden-survey",
         epoch=1,
         at=at,
-        run=_RUN,
+        run=replace(_RUN, project_id=project_id),
         deltas=[
             DeltaMaterialization(
                 finding_set=NewFindingSet(
@@ -132,13 +135,14 @@ def test_deliver_writes_a_facts_own_actor_column(tmp_path: Path) -> None:
     """The `resolved` fact a `gone` op settles a `delivered` finding to
     carries the actor `GardenDelivery` threaded onto `NewFindingFact`."""
     store, engine = _store_and_engine(tmp_path)
+    project = default_project(engine)
     plan = DeliveryPlan(
         chunk_id="ch_1",
         node_id="nd_1",
         node_name="garden-deliver",
         epoch=1,
         at=_NOW,
-        run=_RUN,
+        run=replace(_RUN, project_id=project),
         deltas=[
             DeltaMaterialization(
                 finding_set=NewFindingSet(
@@ -171,7 +175,8 @@ def test_deliver_writes_a_facts_own_actor_column(tmp_path: Path) -> None:
 
 def test_deliver_writes_every_row(tmp_path: Path) -> None:
     store, engine = _store_and_engine(tmp_path)
-    plan = _full_plan()
+    project = default_project(engine)
+    plan = _full_plan(project)
 
     outcome = store.deliver(plan, admission=EpochAdmission.AT_OR_ABOVE)
 
@@ -220,6 +225,7 @@ def test_deliver_writes_finding_sets_before_finding_facts_under_fk_enforcement(t
     ones an earlier delivery already recorded — fine with FK enforcement off, but a
     second, unrelated FK gap under strict enforcement this test is not about."""
     store, engine = _store_and_engine(tmp_path, enforce_foreign_keys=True)
+    project = default_project(engine)
     # `finding_sets.artifact_id` FKs to `artifacts` too — in production the routine's own
     # `produces:` step already wrote this artifact before delivery ever runs; seeded here
     # by hand only because this plan is built directly rather than through that path.
@@ -247,7 +253,7 @@ def test_deliver_writes_finding_sets_before_finding_facts_under_fk_enforcement(t
         node_name="garden-survey",
         epoch=1,
         at=_NOW,
-        run=_RUN,
+        run=replace(_RUN, project_id=project),
         deltas=[
             DeltaMaterialization(
                 finding_set=NewFindingSet(
@@ -282,7 +288,8 @@ def test_deliver_writes_finding_sets_before_finding_facts_under_fk_enforcement(t
 
 def test_deliver_replay_mints_nothing_new(tmp_path: Path) -> None:
     store, engine = _store_and_engine(tmp_path)
-    plan = _full_plan()
+    project = default_project(engine)
+    plan = _full_plan(project)
     first = store.deliver(plan, admission=EpochAdmission.AT_OR_ABOVE)
     assert first is DeliveryOutcome.RECORDED
 
@@ -305,7 +312,8 @@ def test_deliver_at_a_new_epoch_resolving_the_same_artifact_is_already_recorded(
     materialized artifact must return ALREADY_RECORDED cleanly, not trip
     `finding_sets.artifact_id`'s unique constraint with a raw IntegrityError."""
     store, engine = _store_and_engine(tmp_path)
-    first = _full_plan()
+    project = default_project(engine)
+    first = _full_plan(project)
     assert store.deliver(first, admission=EpochAdmission.AT_OR_ABOVE) is DeliveryOutcome.RECORDED
 
     second = DeliveryPlan(
@@ -314,7 +322,7 @@ def test_deliver_at_a_new_epoch_resolving_the_same_artifact_is_already_recorded(
         node_name="garden-survey",
         epoch=2,
         at=_NOW,
-        run=_RUN,
+        run=replace(_RUN, project_id=project),
         deltas=[
             DeltaMaterialization(
                 finding_set=NewFindingSet(
@@ -345,13 +353,14 @@ def test_deliver_with_one_delta_already_materialized_still_lands_the_other(tmp_p
     genuinely new one (`B`) must still land `B`'s rows — the broader idempotence check
     skips only `A`'s group, never bails the whole plan."""
     store, engine = _store_and_engine(tmp_path)
+    project = default_project(engine)
     first = DeliveryPlan(
         chunk_id="ch_1",
         node_id="nd_1",
         node_name="garden-survey",
         epoch=1,
         at=_NOW,
-        run=_RUN,
+        run=replace(_RUN, project_id=project),
         deltas=[
             DeltaMaterialization(
                 finding_set=NewFindingSet(
@@ -386,7 +395,7 @@ def test_deliver_with_one_delta_already_materialized_still_lands_the_other(tmp_p
         node_name="garden-survey",
         epoch=2,
         at=_NOW,
-        run=_RUN,
+        run=replace(_RUN, project_id=project),
         deltas=[
             DeltaMaterialization(
                 finding_set=NewFindingSet(
@@ -461,13 +470,14 @@ def test_deliver_substitutes_a_dropped_deltas_minted_id_for_a_proposals_ref_cita
     its `ref`-carrying `add` op. A proposal in the same visit citing that ref must land on
     `fin_a`, the id the first visit actually recorded."""
     store, engine = _store_and_engine(tmp_path)
+    project = default_project(engine)
     first = DeliveryPlan(
         chunk_id="ch_1",
         node_id="nd_1",
         node_name="garden-survey",
         epoch=1,
         at=_NOW,
-        run=_RUN,
+        run=replace(_RUN, project_id=project),
         deltas=[
             DeltaMaterialization(
                 finding_set=NewFindingSet(
@@ -502,7 +512,7 @@ def test_deliver_substitutes_a_dropped_deltas_minted_id_for_a_proposals_ref_cita
         node_name="garden-survey",
         epoch=2,
         at=_NOW,
-        run=_RUN,
+        run=replace(_RUN, project_id=project),
         deltas=[
             DeltaMaterialization(
                 finding_set=NewFindingSet(
@@ -559,7 +569,8 @@ def test_deliver_at_a_new_epoch_resolving_the_same_proposal_artifact_mints_no_du
     re-carrying the same `--proposals` artifact must mint the proposal exactly once,
     keyed `(source_artifact_id, ref)`."""
     store, engine = _store_and_engine(tmp_path)
-    first = _full_plan()
+    project = default_project(engine)
+    first = _full_plan(project)
     assert store.deliver(first, admission=EpochAdmission.AT_OR_ABOVE) is DeliveryOutcome.RECORDED
 
     second = DeliveryPlan(
@@ -568,7 +579,7 @@ def test_deliver_at_a_new_epoch_resolving_the_same_proposal_artifact_mints_no_du
         node_name="garden-survey",
         epoch=2,
         at=_NOW,
-        run=_RUN,
+        run=replace(_RUN, project_id=project),
         deltas=[],
         proposals=[
             NewProposal(
@@ -600,7 +611,8 @@ def test_deliver_with_one_proposal_already_delivered_still_lands_the_other(tmp_p
     """The proposal twin of the mixed-survival delta test above: a visit re-carrying an
     already-delivered proposal (`p1`) alongside a new one (`p2`) must still land `p2`."""
     store, engine = _store_and_engine(tmp_path)
-    assert store.deliver(_full_plan(), admission=EpochAdmission.AT_OR_ABOVE) is DeliveryOutcome.RECORDED
+    project = default_project(engine)
+    assert store.deliver(_full_plan(project), admission=EpochAdmission.AT_OR_ABOVE) is DeliveryOutcome.RECORDED
 
     second = DeliveryPlan(
         chunk_id="ch_1",
@@ -608,7 +620,7 @@ def test_deliver_with_one_proposal_already_delivered_still_lands_the_other(tmp_p
         node_name="garden-survey",
         epoch=2,
         at=_NOW,
-        run=_RUN,
+        run=replace(_RUN, project_id=project),
         deltas=[],
         proposals=[
             NewProposal(
@@ -648,13 +660,14 @@ def test_deliver_clean_plan_records_only_the_finding_set(tmp_path: Path) -> None
     """No findings, no proposals — but an artifact's scope/revisions/measurement are
     still recorded, even for an empty delta (acceptance criterion)."""
     store, engine = _store_and_engine(tmp_path)
+    project = default_project(engine)
     plan = DeliveryPlan(
         chunk_id="ch_1",
         node_id="nd_2",
         node_name="garden-survey",
         epoch=1,
         at=_NOW,
-        run=_RUN,
+        run=replace(_RUN, project_id=project),
         deltas=[
             DeltaMaterialization(
                 finding_set=NewFindingSet(

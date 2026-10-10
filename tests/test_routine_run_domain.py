@@ -120,8 +120,9 @@ class _FakeRoutineScopes:
 class _FakeFindingSets:
     newest: dict[tuple[str, str], FindingSet] = field(default_factory=dict)
 
-    def newest_for_routine_scope(self, routine_name: str, scope_slug: str) -> FindingSet | None:
-        return self.newest.get((routine_name, scope_slug))
+    def newest_for_routine_scope(self, project_id: str, routine_name: str, scope_slug: str) -> FindingSet | None:
+        found = self.newest.get((routine_name, scope_slug))
+        return found if found is not None and found.project_id == project_id else None
 
     def __getattr__(self, name: str) -> Any:
         raise NotImplementedError(f"should not touch {name!r}")
@@ -315,6 +316,7 @@ def test_run_delta_with_no_baseline_downgrades_to_full() -> None:
 
 def test_run_delta_with_a_recorded_baseline_stays_delta() -> None:
     baseline = FindingSet(
+        project_id=_PROJECT,
         finding_set_id="fins_1",
         artifact_id="art_1",
         chunk_id="ch_prior",
@@ -402,6 +404,7 @@ def test_compose_charge_names_the_downgrade() -> None:
 
 def test_compose_charge_names_the_baseline_revisions() -> None:
     baseline = FindingSet(
+        project_id=_PROJECT,
         finding_set_id="fins_1",
         artifact_id="art_1",
         chunk_id="ch_prior",

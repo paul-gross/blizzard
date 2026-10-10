@@ -37,6 +37,7 @@ from blizzard.hub.domain.garden.proposals.model import (
     GardenProposalFindingAlreadyLinkedError,
     GardenProposalFindingExitedError,
     GardenProposalFindingNotLinkedError,
+    GardenProposalFindingOtherProjectError,
     GardenProposalNoFindingsError,
     GardenProposalVerb,
 )
@@ -241,11 +242,12 @@ def create_garden_proposal(
 ) -> GardenProposalView:
     """Mint an operator-authored proposal, naming `routine` when the
     caller names one, else none. 422 for a blank title/class/body, an unknown routine,
-    or an unknown, exited, or duplicate finding id — the whole call is refused, nothing
-    is linked."""
+    or an unknown, exited, or duplicate finding id, or one of another project — the whole
+    call is refused, nothing is linked."""
+    project = project_of_call(services)
     routine = None
     if request.routine is not None:
-        routine = services.routines.get_by_name(project_of_call(services).project_id, request.routine)
+        routine = services.routines.get_by_name(project.project_id, request.routine)
         if routine is None:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"unknown routine {request.routine!r}"
@@ -253,6 +255,7 @@ def create_garden_proposal(
     findings = _resolve_findings_or_422(request.findings, services)
     try:
         proposal = services.garden_proposal_authoring.create_operator(
+            project_id=project.project_id,
             created_by=identity.user_id,
             routine=routine,
             class_=request.class_,
@@ -260,7 +263,12 @@ def create_garden_proposal(
             body=request.body,
             findings=findings,
         )
-    except (DuplicateProposalFindingError, GardenProposalFindingExitedError, GardenProposalBlankFieldError) as exc:
+    except (
+        DuplicateProposalFindingError,
+        GardenProposalFindingExitedError,
+        GardenProposalFindingOtherProjectError,
+        GardenProposalBlankFieldError,
+    ) as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     return garden_proposal_view(proposal, None)
 
@@ -303,8 +311,8 @@ def attach_garden_proposal_findings(
 ) -> GardenProposalView:
     """Link the given finding ids to `{proposal_id}` — works on either origin
     while open. 404 unknown proposal, 409 already closed, 422 no finding id, an unknown,
-    exited, or duplicate finding id, or one already linked to this proposal — the whole
-    call is refused, nothing is linked."""
+    exited, or duplicate finding id, one of another project than the proposal's, or one
+    already linked to this proposal — the whole call is refused, nothing is linked."""
     proposal = _get_or_404(proposal_id, services)
     _require_open_for(GardenProposalVerb.ATTACH, proposal, services)
     findings = _resolve_findings_or_422(request.findings, services)
@@ -314,6 +322,7 @@ def attach_garden_proposal_findings(
         GardenProposalNoFindingsError,
         DuplicateProposalFindingError,
         GardenProposalFindingExitedError,
+        GardenProposalFindingOtherProjectError,
         GardenProposalFindingAlreadyLinkedError,
     ) as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc

@@ -29,6 +29,7 @@ from tests.support import (
     HubHarness,
     build_hub,
     capture_statements,
+    default_project,
     hub_scoped,
     hub_store_connections,
     seed_lease,
@@ -79,7 +80,10 @@ def _seed_chunk(hub: HubHarness, *, with_run_context: bool = True) -> str:
     item = seed_work_item(items, graph_id="gr_delivery", author=WorkItemAuthor.user("u_1"), at=_NOW)
     if with_run_context:
         RunContextStore(store_connections).record(
-            item.work_item_id, RunContext(routine_name=_ROUTINE, scope_slug=_SCOPE, mode="dry_run")
+            item.work_item_id,
+            RunContext(
+                project_id=default_project(hub.engine), routine_name=_ROUTINE, scope_slug=_SCOPE, mode="dry_run"
+            ),
         )
     return f"ch_{item.ref}"
 
@@ -94,6 +98,7 @@ def _seed_finding(
 ) -> None:
     FindingStore(hub_store_connections(hub.engine)).add(
         finding_id,
+        project_id=default_project(hub.engine),
         routine_name=routine_name,
         scope_slug=scope_slug,
         class_="stale-docstring",
@@ -419,6 +424,7 @@ def test_a_repeated_delta_artifact_name_still_records_cleanly(tmp_path: Path) ->
 
 def test_an_observed_op_revives_a_previously_gone_finding(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
+    project = default_project(hub.engine)
     _seed_scope(hub, _SCOPE)
     chunk_id = _seed_chunk(hub)
     finding_id = Id.mint(IdPrefix.FINDING, hub.clock).value
@@ -427,7 +433,7 @@ def test_an_observed_op_revives_a_previously_gone_finding(tmp_path: Path) -> Non
     before = hub.clock.now() - timedelta(days=1)
     _seed_finding(hub, finding_id, at=before)
     FindingStore(hub_store_connections(hub.engine)).record_fact(finding_id, kind="gone", at=before, note="fixed")
-    assert [f.finding_id for f in hub.services.findings.list_for_routine(_ROUTINE)] == []
+    assert [f.finding_id for f in hub.services.findings.list_for_routine(project, _ROUTINE)] == []
     _record_artifact(hub, chunk_id, name="delta", content=_delta(findings=[_observed_op(finding_id)]))
 
     resp = _post(hub, chunk_id, delta=["delta"])
@@ -436,7 +442,7 @@ def test_an_observed_op_revives_a_previously_gone_finding(tmp_path: Path) -> Non
     assert resp.json() == {"outcome": "recorded", "detail": ""}
     # "Gone is reversible" is a liveness claim, not just a route outcome: the delivered
     # `observed` fact must actually restore the finding to the live set.
-    assert [f.finding_id for f in hub.services.findings.list_for_routine(_ROUTINE)] == [finding_id]
+    assert [f.finding_id for f in hub.services.findings.list_for_routine(project, _ROUTINE)] == [finding_id]
 
 
 def test_an_unknown_finding_id_is_invalid(tmp_path: Path) -> None:

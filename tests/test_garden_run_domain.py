@@ -30,6 +30,8 @@ from blizzard.hub.domain.garden.runs.history import (
     RunIdentity,
 )
 
+_PROJECT = "proj_test"
+
 pytestmark = pytest.mark.unit
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
@@ -120,21 +122,28 @@ class _FakeFindings:
     def get_with_facts(self, finding_id: str) -> tuple[Finding, list[FindingFact]] | None:
         raise NotImplementedError
 
-    def list_for(self, routine_name: str, scope_slug: str, *, include_gone: bool = False) -> list[Finding]:
+    def list_for(
+        self, project_id: str, routine_name: str, scope_slug: str, *, include_gone: bool = False
+    ) -> list[Finding]:
         raise NotImplementedError
 
-    def list_for_routine(self, routine_name: str, *, include_gone: bool = False) -> list[Finding]:
+    def list_for_routine(self, project_id: str, routine_name: str, *, include_gone: bool = False) -> list[Finding]:
         raise NotImplementedError
 
-    def list_across_routines(self, scope_slug: str | None = None, *, include_gone: bool = False) -> list[Finding]:
+    def list_across_routines(
+        self, project_id: str, scope_slug: str | None = None, *, include_gone: bool = False
+    ) -> list[Finding]:
         raise NotImplementedError
 
-    def list_by_source(self, *, scope_slug: str, source: str, include_gone: bool = False) -> list[Finding]:
+    def list_by_source(
+        self, project_id: str, *, scope_slug: str, source: str, include_gone: bool = False
+    ) -> list[Finding]:
         raise NotImplementedError
 
     def list_page(
         self,
         *,
+        project_id: str | None,
         routine_name: str | None,
         scope_slug: str | None,
         source: str | None = None,
@@ -144,7 +153,7 @@ class _FakeFindings:
     ) -> FindingPage:
         raise NotImplementedError
 
-    def count_by_class(self, routine_name: str, class_: str) -> int:
+    def count_by_class(self, project_id: str, routine_name: str, class_: str) -> int:
         raise NotImplementedError
 
     def has_delivery_for_proposal(self, proposal_id: str) -> bool:
@@ -153,6 +162,7 @@ class _FakeFindings:
 
 def _finding(finding_id: str, *, class_: str = "stale-docstring", locus: str = "a.py:1", summary: str = "s") -> Finding:
     return Finding(
+        project_id=_PROJECT,
         finding_id=finding_id,
         routine_name="nightly",
         scope_slug="blizzard",

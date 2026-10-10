@@ -43,9 +43,11 @@ def _store_and_items(tmp_path: Path) -> tuple[RunContextStore, WorkItemStore, En
 
 
 def test_record_then_for_chunk_round_trips(tmp_path: Path) -> None:
-    runs, items, _ = _store_and_items(tmp_path)
+    runs, items, engine = _store_and_items(tmp_path)
     item = seed_work_item(items, graph_id="gr_1", author=WorkItemAuthor.user("u_1"), at=_NOW)
-    context = RunContext(routine_name="nightly", scope_slug="blizzard", mode="dry_run")
+    context = RunContext(
+        project_id=default_project(engine), routine_name="nightly", scope_slug="blizzard", mode="dry_run"
+    )
 
     runs.record(item.work_item_id, context)
 
@@ -57,10 +59,12 @@ def test_record_then_for_chunk_round_trips(tmp_path: Path) -> None:
 
 def test_for_chunk_resolves_through_the_chunks_first_work_ref(tmp_path: Path) -> None:
     """A chunk naming more than one work ref still resolves off ``work_refs[0]``."""
-    runs, items, _ = _store_and_items(tmp_path)
+    runs, items, engine = _store_and_items(tmp_path)
     first = seed_work_item(items, graph_id="gr_1", author=WorkItemAuthor.user("u_1"), at=_NOW)
     second = seed_work_item(items, graph_id="gr_1", author=WorkItemAuthor.user("u_1"), at=_NOW)
-    context = RunContext(routine_name="nightly", scope_slug="blizzard", mode="dry_run")
+    context = RunContext(
+        project_id=default_project(engine), routine_name="nightly", scope_slug="blizzard", mode="dry_run"
+    )
     runs.record(first.work_item_id, context)
 
     chunk = Chunk(

@@ -15,7 +15,7 @@ from blizzard.foundation.garden_proposals import GardenProposalOrigin
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
-from tests.support import build_hub, hub_store_connections, stamp
+from tests.support import build_hub, default_project, hub_store_connections, stamp
 
 pytestmark = pytest.mark.component
 
@@ -27,6 +27,7 @@ def _seed(hub) -> None:  # type: ignore[no-untyped-def]
         conn.execute(insert(s.scopes).values(stamp(s.scopes, slug="blizzard", description="", created_at=_NOW)))
     FindingStore(hub_store_connections(hub.engine)).add(
         "fin_1",
+        project_id=default_project(hub.engine),
         routine_name="nightly",
         scope_slug="blizzard",
         class_="stale-docstring",
@@ -39,10 +40,12 @@ def _seed(hub) -> None:  # type: ignore[no-untyped-def]
 
 def test_list_renders_every_proposal_newest_first(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
+    project = default_project(hub.engine)
     _seed(hub)
     proposals = GardenProposalStore(hub_store_connections(hub.engine))
     proposals.create(
         "gprop_old",
+        project_id=project,
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="c",
@@ -53,6 +56,7 @@ def test_list_renders_every_proposal_newest_first(tmp_path: Path) -> None:
     )
     proposals.create(
         "gprop_new",
+        project_id=project,
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="c",
@@ -70,9 +74,11 @@ def test_list_renders_every_proposal_newest_first(tmp_path: Path) -> None:
 
 def test_get_renders_one_proposal(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
+    project = default_project(hub.engine)
     _seed(hub)
     GardenProposalStore(hub_store_connections(hub.engine)).create(
         "gprop_1",
+        project_id=project,
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="fix-the-source",
@@ -106,10 +112,12 @@ def test_paged_concatenation_matches_the_full_order_through_a_created_at_tie(tmp
     (`desc`) makes the order total. Paging one row at a time must retrace the same
     order a single unpaginated read renders."""
     hub = build_hub(tmp_path)
+    project = default_project(hub.engine)
     _seed(hub)
     proposals = GardenProposalStore(hub_store_connections(hub.engine))
     proposals.create(
         "gprop_a",
+        project_id=project,
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="c",
@@ -120,6 +128,7 @@ def test_paged_concatenation_matches_the_full_order_through_a_created_at_tie(tmp
     )
     proposals.create(
         "gprop_b",
+        project_id=project,
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="c",
@@ -130,6 +139,7 @@ def test_paged_concatenation_matches_the_full_order_through_a_created_at_tie(tmp
     )
     proposals.create(
         "gprop_c",
+        project_id=project,
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="c",
@@ -140,6 +150,7 @@ def test_paged_concatenation_matches_the_full_order_through_a_created_at_tie(tmp
     )
     proposals.create(
         "gprop_d",
+        project_id=project,
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="c",
@@ -199,10 +210,12 @@ def test_list_422s_on_a_malformed_cursor(tmp_path: Path) -> None:
 
 def test_list_next_cursor_is_null_only_on_the_last_page(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
+    project = default_project(hub.engine)
     _seed(hub)
     proposals = GardenProposalStore(hub_store_connections(hub.engine))
     proposals.create(
         "gprop_1",
+        project_id=project,
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="c",
@@ -213,6 +226,7 @@ def test_list_next_cursor_is_null_only_on_the_last_page(tmp_path: Path) -> None:
     )
     proposals.create(
         "gprop_2",
+        project_id=project,
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="c",
@@ -223,6 +237,7 @@ def test_list_next_cursor_is_null_only_on_the_last_page(tmp_path: Path) -> None:
     )
     proposals.create(
         "gprop_3",
+        project_id=project,
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="c",

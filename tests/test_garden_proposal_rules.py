@@ -46,6 +46,8 @@ from blizzard.hub.domain.garden.proposals.model import (
 from blizzard.hub.domain.garden.proposals.resolution import DeliveryClosure, delivery_closure, ordered_findings
 from blizzard.hub.domain.kernel.unset import UNSET
 
+_PROJECT = "proj_test"
+
 pytestmark = pytest.mark.unit
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
@@ -54,6 +56,7 @@ _T1 = datetime(2026, 1, 2, tzinfo=UTC)
 
 def _proposal(*, findings: list[str] | None = None) -> GardenProposal:
     return GardenProposal(
+        project_id=_PROJECT,
         proposal_id="gprop_1",
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
@@ -67,6 +70,7 @@ def _proposal(*, findings: list[str] | None = None) -> GardenProposal:
 
 def _finding(finding_id: str, *, state: str = "live") -> Finding:
     return Finding(
+        project_id=_PROJECT,
         finding_id=finding_id,
         routine_name="nightly",
         scope_slug="blizzard",
@@ -207,6 +211,7 @@ def test_citable_ids_admit_gone_delivered_and_when_asked_exited_findings() -> No
 def test_operator_proposal_carries_its_stripped_fields_and_cited_ids() -> None:
     proposal = GardenProposal.operator(
         "gprop_9",
+        project_id=_PROJECT,
         created_by="u1",
         routine_name="nightly",
         class_=" c ",
@@ -217,6 +222,7 @@ def test_operator_proposal_carries_its_stripped_fields_and_cited_ids() -> None:
     )
 
     assert proposal == GardenProposal(
+        project_id=_PROJECT,
         proposal_id="gprop_9",
         origin=GardenProposalOrigin.OPERATOR,
         routine_name="nightly",
@@ -237,6 +243,7 @@ def test_operator_refuses_blank_title_then_class_then_body(title: str, class_: s
     with pytest.raises(GardenProposalBlankFieldError) as excinfo:
         GardenProposal.operator(
             "gprop_9",
+            project_id=_PROJECT,
             created_by="u1",
             routine_name=None,
             class_=class_,
@@ -252,6 +259,7 @@ def test_operator_refuses_an_exited_finding_once_the_text_is_valid() -> None:
     with pytest.raises(GardenProposalFindingExitedError):
         GardenProposal.operator(
             "gprop_9",
+            project_id=_PROJECT,
             created_by="u1",
             routine_name=None,
             class_="c",

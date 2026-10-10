@@ -83,7 +83,7 @@ class ReviewFindingsStore:
             if plan.new_findings:
                 scope_ids = scope_ids_of(conn, [f.scope_slug for f in plan.new_findings], project_id)
                 conn.execute(
-                    self._store.insert(findings),
+                    self._store.insert(findings).values(project_id=project_id),
                     [
                         {
                             "finding_id": f.finding_id,

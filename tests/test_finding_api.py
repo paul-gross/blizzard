@@ -15,7 +15,7 @@ from sqlalchemy import insert
 
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
-from tests.support import build_hub, hub_scoped, hub_store_connections, stamp
+from tests.support import build_hub, default_project, hub_scoped, hub_store_connections, stamp
 
 pytestmark = pytest.mark.component
 
@@ -29,11 +29,13 @@ def _seed_scope(hub, slug: str) -> None:  # type: ignore[no-untyped-def]
 
 def test_list_returns_a_routines_live_findings_under_one_scope_and_nothing_else(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
+    project = default_project(hub.engine)
     _seed_scope(hub, "blizzard")
     _seed_scope(hub, "other-scope")
     findings = FindingStore(hub_store_connections(hub.engine))
     findings.add(
         "fin_1",
+        project_id=project,
         routine_name="nightly",
         scope_slug="blizzard",
         class_="stale-docstring",
@@ -45,6 +47,7 @@ def test_list_returns_a_routines_live_findings_under_one_scope_and_nothing_else(
     # Same routine, different scope — must not appear.
     findings.add(
         "fin_2",
+        project_id=project,
         routine_name="nightly",
         scope_slug="other-scope",
         class_="stale-docstring",
@@ -56,6 +59,7 @@ def test_list_returns_a_routines_live_findings_under_one_scope_and_nothing_else(
     # Same scope, different routine — must not appear.
     findings.add(
         "fin_3",
+        project_id=project,
         routine_name="weekly",
         scope_slug="blizzard",
         class_="stale-docstring",
@@ -67,6 +71,7 @@ def test_list_returns_a_routines_live_findings_under_one_scope_and_nothing_else(
     # Same routine and scope, but gone — excluded unless include_gone.
     findings.add(
         "fin_4",
+        project_id=project,
         routine_name="nightly",
         scope_slug="blizzard",
         class_="dead-code",
@@ -91,10 +96,12 @@ def test_list_reads_a_delivered_finding_only_with_include_gone(tmp_path: Path) -
     behaves like every other exited state on `GET /api/findings`, unlike the fleet-scoped
     bucket route, which surfaces it unconditionally."""
     hub = build_hub(tmp_path)
+    project = default_project(hub.engine)
     _seed_scope(hub, "blizzard")
     findings = FindingStore(hub_store_connections(hub.engine))
     findings.add(
         "fin_1",
+        project_id=project,
         routine_name="nightly",
         scope_slug="blizzard",
         class_="stale-docstring",
@@ -117,11 +124,13 @@ def test_list_reads_a_delivered_finding_only_with_include_gone(tmp_path: Path) -
 
 def test_list_widens_across_the_four_routine_scope_combinations(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
+    project = default_project(hub.engine)
     _seed_scope(hub, "blizzard")
     _seed_scope(hub, "other-scope")
     store = FindingStore(hub_store_connections(hub.engine))
     store.add(
         "fin_1",
+        project_id=project,
         routine_name="nightly",
         scope_slug="blizzard",
         class_="stale-docstring",
@@ -132,6 +141,7 @@ def test_list_widens_across_the_four_routine_scope_combinations(tmp_path: Path) 
     )
     store.add(
         "fin_2",
+        project_id=project,
         routine_name="nightly",
         scope_slug="other-scope",
         class_="stale-docstring",
@@ -142,6 +152,7 @@ def test_list_widens_across_the_four_routine_scope_combinations(tmp_path: Path) 
     )
     store.add(
         "fin_3",
+        project_id=project,
         routine_name="weekly",
         scope_slug="blizzard",
         class_="stale-docstring",
@@ -176,10 +187,12 @@ def test_list_narrows_to_source(tmp_path: Path) -> None:
     """`source` further narrows a `GET /api/findings` read, independent
     of `routine`/`scope` — absent reads both sources."""
     hub = build_hub(tmp_path)
+    project = default_project(hub.engine)
     _seed_scope(hub, "blizzard")
     store = FindingStore(hub_store_connections(hub.engine))
     store.add(
         "fin_1",
+        project_id=project,
         routine_name="nightly",
         scope_slug="blizzard",
         class_="stale-docstring",
@@ -226,10 +239,12 @@ def test_list_narrows_to_source(tmp_path: Path) -> None:
 
 def test_list_include_gone_behaves_the_same_across_routine_absent_combinations(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
+    project = default_project(hub.engine)
     _seed_scope(hub, "blizzard")
     store = FindingStore(hub_store_connections(hub.engine))
     store.add(
         "fin_1",
+        project_id=project,
         routine_name="nightly",
         scope_slug="blizzard",
         class_="stale-docstring",
@@ -255,9 +270,11 @@ def test_list_include_gone_behaves_the_same_across_routine_absent_combinations(t
 
 def test_get_renders_one_finding(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
+    project = default_project(hub.engine)
     _seed_scope(hub, "blizzard")
     FindingStore(hub_store_connections(hub.engine)).add(
         "fin_1",
+        project_id=project,
         routine_name="nightly",
         scope_slug="blizzard",
         class_="stale-docstring",
@@ -280,9 +297,11 @@ def test_get_renders_one_finding(tmp_path: Path) -> None:
 
 def test_get_renders_the_whole_fact_chain_oldest_first_for_an_add_only_finding(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
+    project = default_project(hub.engine)
     _seed_scope(hub, "blizzard")
     FindingStore(hub_store_connections(hub.engine)).add(
         "fin_1",
+        project_id=project,
         routine_name="nightly",
         scope_slug="blizzard",
         class_="stale-docstring",
@@ -302,10 +321,12 @@ def test_get_renders_the_whole_fact_chain_oldest_first_for_an_add_only_finding(t
 
 def test_get_renders_an_exit_fact_followed_by_a_reopen_oldest_first(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
+    project = default_project(hub.engine)
     _seed_scope(hub, "blizzard")
     store = FindingStore(hub_store_connections(hub.engine))
     store.add(
         "fin_1",
+        project_id=project,
         routine_name="nightly",
         scope_slug="blizzard",
         class_="stale-docstring",
@@ -328,10 +349,12 @@ def test_get_renders_an_exit_fact_followed_by_a_reopen_oldest_first(tmp_path: Pa
 
 def test_get_renders_a_finding_whose_newest_fact_carries_no_note(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
+    project = default_project(hub.engine)
     _seed_scope(hub, "blizzard")
     store = FindingStore(hub_store_connections(hub.engine))
     store.add(
         "fin_1",
+        project_id=project,
         routine_name="nightly",
         scope_slug="blizzard",
         class_="stale-docstring",
@@ -353,9 +376,11 @@ def test_get_renders_a_finding_whose_newest_fact_carries_no_note(tmp_path: Path)
 
 def test_list_read_carries_no_facts_key(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
+    project = default_project(hub.engine)
     _seed_scope(hub, "blizzard")
     FindingStore(hub_store_connections(hub.engine)).add(
         "fin_1",
+        project_id=project,
         routine_name="nightly",
         scope_slug="blizzard",
         class_="stale-docstring",
@@ -381,6 +406,7 @@ def _seed_paging_fixture(hub) -> None:  # type: ignore[no-untyped-def]
         finding_id = f"fin_{i}"
         store.add(
             finding_id,
+            project_id=default_project(hub.engine),
             routine_name="nightly",
             scope_slug="blizzard",
             class_="stale-docstring",
@@ -512,6 +538,7 @@ def _seed_finding(hub, finding_id: str, *, scope: str = "blizzard") -> None:  # 
         _seed_scope(hub, scope)
     FindingStore(hub_store_connections(hub.engine)).add(
         finding_id,
+        project_id=default_project(hub.engine),
         routine_name="nightly",
         scope_slug=scope,
         class_="stale-docstring",

@@ -8,7 +8,7 @@ reversible); `class_`/`locus` are opaque to the hub, same doc."""
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Protocol
 
@@ -173,6 +173,8 @@ class Finding:
     raised_by_chunk_id: str | None = None
     #: The newest fact's own actor — a `delivered` finding's own closer.
     actor: str | None = None
+    #: The project the finding belongs to — its routine's, or a review's chunk's.
+    project_id: str = field(kw_only=True)
 
     @property
     def exited(self) -> bool:
@@ -356,32 +358,37 @@ class IReadFindingRepository(Protocol):
         disagreeing on the same instant. `None` for an unknown id, `get`'s own contract."""
         ...
 
-    def list_for(self, routine_name: str, scope_slug: str, *, include_gone: bool = False) -> list[Finding]:
+    def list_for(
+        self, project_id: str, routine_name: str, scope_slug: str, *, include_gone: bool = False
+    ) -> list[Finding]:
         """A routine's findings under one scope
         (blizzard-product:/delivered/garden/machinery.md §Managing findings and proposals) —
         live only, unless `include_gone`, which also surfaces every exited finding,
         not just a merely `gone` one."""
         ...
 
-    def list_for_routine(self, routine_name: str, *, include_gone: bool = False) -> list[Finding]:
+    def list_for_routine(self, project_id: str, routine_name: str, *, include_gone: bool = False) -> list[Finding]:
         """Every finding live on `routine_name`, across every scope it holds
         — `list_for`'s scope-narrowed sibling, minus the `scope_slug` filter.
         Live only, unless `include_gone`, which also surfaces every exited finding."""
         ...
 
-    def list_across_routines(self, scope_slug: str | None = None, *, include_gone: bool = False) -> list[Finding]:
-        """Every finding across every routine; `scope_slug=None` reads every
-        scope. Reads the tenant's whole bucket by construction — `ix_findings_tenant_routine_scope` and
-        `ix_findings_tenant_routine_class` both lead with `tenant_id, routine_name`, and this never filters
-        on `routine_name`, so neither narrows past the tenant; the scale question here stays open."""
+    def list_across_routines(
+        self, project_id: str, scope_slug: str | None = None, *, include_gone: bool = False
+    ) -> list[Finding]:
+        """Every finding of `project_id` across every routine; `scope_slug=None` reads every
+        scope. Reads the project's whole bucket by construction — the project-led indexes narrow
+        past `tenant_id, project_id` only on `routine_name`, which this never filters on."""
         ...
 
-    def list_by_source(self, *, scope_slug: str, source: str, include_gone: bool = False) -> list[Finding]:
+    def list_by_source(
+        self, project_id: str, *, scope_slug: str, source: str, include_gone: bool = False
+    ) -> list[Finding]:
         """Every finding under `scope_slug` carrying `source` — filtered
-        on `ix_findings_tenant_scope_source`, indexed unlike `list_across_routines`."""
+        on `ix_findings_tenant_project_scope_source`, indexed unlike `list_across_routines`."""
         ...
 
-    def count_by_class(self, routine_name: str, class_: str) -> int:
+    def count_by_class(self, project_id: str, routine_name: str, class_: str) -> int:
         """How often `class_` recurs for `routine_name`
         (blizzard-product:/delivered/garden/machinery.md §What the store buys) — a count,
         never the rows themselves."""
@@ -390,6 +397,7 @@ class IReadFindingRepository(Protocol):
     def list_page(
         self,
         *,
+        project_id: str | None,
         routine_name: str | None,
         scope_slug: str | None,
         source: str | None = None,
@@ -398,10 +406,11 @@ class IReadFindingRepository(Protocol):
         limit: int,
     ) -> FindingPage:
         """Bounded, keyset-paginated read unifying `list_for`/`list_for_routine`/
-        `list_across_routines`; `source` narrows to `"routine"` or
-        `"review"`, `None` reads both. Statements and rows read are set by the page, not by
-        how many findings have exited: `include_gone=False` drops non-live findings in the
-        query itself. `cursor` is a prior :attr:`FindingPage.next_cursor`."""
+        `list_across_routines`; `project_id` narrows to one project, `None` reads the whole
+        tenant; `source` narrows to `"routine"` or `"review"`, `None` reads both.
+        Statements and rows read are set by the page, not by how many findings have exited:
+        `include_gone=False` drops non-live findings in the query itself.
+        `cursor` is a prior :attr:`FindingPage.next_cursor`."""
         ...
 
     def has_delivery_for_proposal(self, proposal_id: str) -> bool:
@@ -418,6 +427,7 @@ class IWriteFindingRepository(IReadFindingRepository, Protocol):
         self,
         finding_id: str,
         *,
+        project_id: str,
         routine_name: str,
         scope_slug: str,
         class_: str,
@@ -614,6 +624,7 @@ class FindingSet:
     routine_name: str  # a routine's own name, not its surrogate id
     revisions: dict[str, str]
     measurement: str | None
+    project_id: str = field(kw_only=True)  # the run's routine's project
 
 
 class IReadFindingSetRepository(Protocol):
@@ -625,14 +636,14 @@ class IReadFindingSetRepository(Protocol):
         """A run's own delivered sets — filtered on `ix_finding_sets_tenant_chunk_id`."""
         ...
 
-    def newest_for_routine_scope(self, routine_name: str, scope_slug: str) -> FindingSet | None:
+    def newest_for_routine_scope(self, project_id: str, routine_name: str, scope_slug: str) -> FindingSet | None:
         """A routine run's own delta baseline — the newest set for the
         (routine name, scope slug) pair, or `None` when the pair has recorded none.
         `finding_sets` carries no timestamp, so newest is `finding_set_id` descending:
         `fins_<ULID>` is monotonic in mint instant."""
         ...
 
-    def newest_by_scope_for_routine(self, routine_name: str) -> list[FindingSet]:
+    def newest_by_scope_for_routine(self, project_id: str, routine_name: str) -> list[FindingSet]:
         """One entry per scope `routine_name` has swept — the newest set for each,
         `newest_for_routine_scope`'s own batched sibling. A scope this routine has never
         swept is simply absent, never a `None` placeholder."""
@@ -648,6 +659,7 @@ class IWriteFindingSetRepository(IReadFindingSetRepository, Protocol):
         *,
         artifact_id: str,
         chunk_id: str,
+        project_id: str,
         scope_slug: str,
         routine_name: str,
         revisions: dict[str, str],

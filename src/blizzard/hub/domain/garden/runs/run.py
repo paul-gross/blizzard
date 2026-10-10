@@ -234,7 +234,7 @@ class RunService:
             scope_retired=self._scopes.is_retired(scope.project_id, scope.slug),
             linked=self._routine_scopes.list_scopes(routine.routine_id),
             requested_mode=mode,
-            baseline=self._finding_sets.newest_for_routine_scope(routine.name, scope.slug),
+            baseline=self._finding_sets.newest_for_routine_scope(routine.project_id, routine.name, scope.slug),
             note=note,
         )
         pointer, chunk, pointer_at = prepare_mint(
@@ -252,6 +252,7 @@ class RunService:
             title=plan.title,
             body=plan.charge,
             author=author,
+            project_id=routine.project_id,
             routine_name=routine.name,
             scope_slug=scope.slug,
             run_mode=plan.effective_mode.value,

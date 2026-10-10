@@ -19,7 +19,7 @@ class GardenSweepsStore:
     def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
-    def sweeps_for_routine(self, routine_name: str) -> list[SweepFact]:
+    def sweeps_for_routine(self, project_id: str, routine_name: str) -> list[SweepFact]:
         with self._store.read("sweeps_for_routine") as conn:
             rows = conn.execute(
                 self._store.select(
@@ -31,7 +31,7 @@ class GardenSweepsStore:
                     finding_sets.c.revisions,
                     finding_sets.c.measurement,
                     artifacts.c.produced_at,
-                ).where(finding_sets.c.routine_name == routine_name)
+                ).where(finding_sets.c.project_id == project_id, finding_sets.c.routine_name == routine_name)
             ).all()
         return [
             SweepFact(

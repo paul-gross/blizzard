@@ -24,7 +24,7 @@ from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal.finding_store import FindingStore, lock_findings
-from tests.support import count_queries, default_tenant, hub_store_connections, stamp
+from tests.support import count_queries, default_project, default_tenant, hub_store_connections, stamp
 
 pytestmark = pytest.mark.component
 
@@ -47,7 +47,7 @@ def _store(tmp_path: Path) -> FindingStore:
     return store
 
 
-def _add(store: FindingStore, finding_id: str = "fin_1", **overrides: object) -> Finding:
+def _add(store: FindingStore, project_id: str, finding_id: str = "fin_1", **overrides: object) -> Finding:
     fields: dict[str, object] = {
         "routine_name": "nightly",
         "scope_slug": "blizzard",
@@ -58,13 +58,14 @@ def _add(store: FindingStore, finding_id: str = "fin_1", **overrides: object) ->
         "at": _NOW,
     }
     fields.update(overrides)
-    return store.add(finding_id, **fields)  # type: ignore[arg-type]
+    return store.add(finding_id, project_id=project_id, **fields)  # type: ignore[arg-type]
 
 
 def test_add_then_get_round_trips(tmp_path: Path) -> None:
-    store = _store(tmp_path)
+    store, engine = _store_and_engine(tmp_path)
+    project = default_project(engine)
 
-    added = _add(store)
+    added = _add(store, project)
 
     fetched = store.get("fin_1")
     assert fetched == added
@@ -78,9 +79,10 @@ def test_get_unknown_id_is_none(tmp_path: Path) -> None:
 
 
 def test_get_many_returns_only_the_known_ids_keyed_by_finding_id(tmp_path: Path) -> None:
-    store = _store(tmp_path)
-    _add(store, finding_id="fin_1")
-    _add(store, finding_id="fin_2")
+    store, engine = _store_and_engine(tmp_path)
+    project = default_project(engine)
+    _add(store, project, finding_id="fin_1")
+    _add(store, project, finding_id="fin_2")
 
     fetched = store.get_many(["fin_1", "fin_ghost", "fin_2"])
 
@@ -98,8 +100,9 @@ def test_get_many_of_no_ids_is_empty(tmp_path: Path) -> None:
 def test_get_with_facts_returns_the_row_and_its_whole_chain_together(tmp_path: Path) -> None:
     """One read transaction for both, so `get_finding` never disagrees with itself the
     way two independent reads could under a concurrent write."""
-    store = _store(tmp_path)
-    _add(store)
+    store, engine = _store_and_engine(tmp_path)
+    project = default_project(engine)
+    _add(store, project)
     store.record_fact("fin_1", kind="observed", at=_LATER)
 
     result = store.get_with_facts("fin_1")
@@ -118,8 +121,9 @@ def test_get_with_facts_of_an_unknown_id_is_none(tmp_path: Path) -> None:
 
 def test_record_facts_is_all_or_nothing(tmp_path: Path) -> None:
     """One bad entry in a batch rolls back every entry in it, not just its own."""
-    store = _store(tmp_path)
-    _add(store, finding_id="fin_1")
+    store, engine = _store_and_engine(tmp_path)
+    project = default_project(engine)
+    _add(store, project, finding_id="fin_1")
 
     with pytest.raises(HubStoreError):
         store.record_facts(
@@ -133,9 +137,10 @@ def test_record_facts_is_all_or_nothing(tmp_path: Path) -> None:
 
 
 def test_record_facts_writes_nothing_once_a_guarded_finding_moved_off_its_expected_state(tmp_path: Path) -> None:
-    store = _store(tmp_path)
-    _add(store, finding_id="fin_1")
-    _add(store, finding_id="fin_2")
+    store, engine = _store_and_engine(tmp_path)
+    project = default_project(engine)
+    _add(store, project, finding_id="fin_1")
+    _add(store, project, finding_id="fin_2")
     store.record_fact("fin_1", kind="resolved", at=_LATER, note="n", actor="a")
 
     moved = store.record_facts(
@@ -152,8 +157,9 @@ def test_record_facts_writes_nothing_once_a_guarded_finding_moved_off_its_expect
 
 
 def test_record_facts_writes_when_every_guarded_finding_holds_its_expected_state(tmp_path: Path) -> None:
-    store = _store(tmp_path)
-    _add(store, finding_id="fin_1")
+    store, engine = _store_and_engine(tmp_path)
+    project = default_project(engine)
+    _add(store, project, finding_id="fin_1")
 
     moved = store.record_facts(
         [FactEntry(finding_id="fin_1", kind="wont-fix", at=_LATER, note="n")], expect={"fin_1": "live"}
@@ -164,8 +170,9 @@ def test_record_facts_writes_when_every_guarded_finding_holds_its_expected_state
 
 
 def test_a_stale_second_exit_is_refused_and_records_one_exit(tmp_path: Path) -> None:
-    store = _store(tmp_path)
-    _add(store, finding_id="fin_1")
+    store, engine = _store_and_engine(tmp_path)
+    project = default_project(engine)
+    _add(store, project, finding_id="fin_1")
     stale = store.get("fin_1")
     assert stale is not None
     service = FindingExitService(repo=store, clock=FixedClock(instant=_LATER))
@@ -181,8 +188,9 @@ def test_a_stale_second_exit_is_refused_and_records_one_exit(tmp_path: Path) -> 
 def test_a_finding_is_named_by_id_across_two_runs(tmp_path: Path) -> None:
     """The second run's `observed` op names the finding fin_1 recorded first —
     matching is a reference, never a recomputed fingerprint."""
-    store = _store(tmp_path)
-    _add(store)
+    store, engine = _store_and_engine(tmp_path)
+    project = default_project(engine)
+    _add(store, project)
 
     store.record_fact("fin_1", kind="observed", at=_LATER)
 
@@ -195,7 +203,8 @@ def test_a_persons_exit_verb_records_no_finding_set(tmp_path: Path) -> None:
     """A human-driven fact belongs to no run — unlike a delivered
     add/observed/gone, it carries no `finding_set_id`."""
     store, engine = _store_and_engine(tmp_path)
-    _add(store)
+    project = default_project(engine)
+    _add(store, project)
 
     store.record_fact("fin_1", kind="wont-fix", at=_LATER, actor="pgross")
 
@@ -208,8 +217,9 @@ def test_a_delivered_facts_actor_reads_back_through_the_real_store(tmp_path: Pat
     """The `actor` column threaded through `Finding`/`FindingLiveness`
     round-trips through the real store, not just a hand-built domain object — the
     settle-with-original-actor behavior rests on this read, not a fixture."""
-    store = _store(tmp_path)
-    _add(store)
+    store, engine = _store_and_engine(tmp_path)
+    project = default_project(engine)
+    _add(store, project)
 
     store.record_fact("fin_1", kind="delivered", at=_LATER, actor="pgross")
 
@@ -218,62 +228,68 @@ def test_a_delivered_facts_actor_reads_back_through_the_real_store(tmp_path: Pat
 
 
 def test_a_gone_finding_is_excluded_from_list_for_unless_include_gone(tmp_path: Path) -> None:
-    store = _store(tmp_path)
-    _add(store, finding_id="fin_1")
-    _add(store, finding_id="fin_2")
+    store, engine = _store_and_engine(tmp_path)
+    project = default_project(engine)
+    _add(store, project, finding_id="fin_1")
+    _add(store, project, finding_id="fin_2")
     store.record_fact("fin_1", kind="gone", at=_LATER, note="no longer reproduces")
 
-    live = store.list_for("nightly", "blizzard")
+    live = store.list_for(project, "nightly", "blizzard")
     assert [f.finding_id for f in live] == ["fin_2"]
 
-    everything = store.list_for("nightly", "blizzard", include_gone=True)
+    everything = store.list_for(project, "nightly", "blizzard", include_gone=True)
     assert {f.finding_id for f in everything} == {"fin_1", "fin_2"}
 
 
 def test_list_for_is_scoped_to_the_named_routine_and_scope(tmp_path: Path) -> None:
-    store = _store(tmp_path)
-    _add(store, finding_id="fin_1", routine_name="nightly", scope_slug="blizzard")
-    _add(store, finding_id="fin_2", routine_name="weekly", scope_slug="blizzard")
+    store, engine = _store_and_engine(tmp_path)
+    project = default_project(engine)
+    _add(store, project, finding_id="fin_1", routine_name="nightly", scope_slug="blizzard")
+    _add(store, project, finding_id="fin_2", routine_name="weekly", scope_slug="blizzard")
 
-    assert [f.finding_id for f in store.list_for("nightly", "blizzard")] == ["fin_1"]
+    assert [f.finding_id for f in store.list_for(project, "nightly", "blizzard")] == ["fin_1"]
 
 
 def test_list_across_routines_of_no_scope_returns_every_live_finding_across_every_routine(tmp_path: Path) -> None:
-    store = _store(tmp_path)
-    _add(store, finding_id="fin_1", routine_name="nightly", scope_slug="blizzard")
-    _add(store, finding_id="fin_2", routine_name="weekly", scope_slug="other-scope")
+    store, engine = _store_and_engine(tmp_path)
+    project = default_project(engine)
+    _add(store, project, finding_id="fin_1", routine_name="nightly", scope_slug="blizzard")
+    _add(store, project, finding_id="fin_2", routine_name="weekly", scope_slug="other-scope")
 
-    assert {f.finding_id for f in store.list_across_routines()} == {"fin_1", "fin_2"}
+    assert {f.finding_id for f in store.list_across_routines(project)} == {"fin_1", "fin_2"}
 
 
 def test_list_across_routines_narrows_to_the_named_scope_across_every_routine(tmp_path: Path) -> None:
-    store = _store(tmp_path)
-    _add(store, finding_id="fin_1", routine_name="nightly", scope_slug="blizzard")
-    _add(store, finding_id="fin_2", routine_name="weekly", scope_slug="blizzard")
-    _add(store, finding_id="fin_3", routine_name="nightly", scope_slug="other-scope")
+    store, engine = _store_and_engine(tmp_path)
+    project = default_project(engine)
+    _add(store, project, finding_id="fin_1", routine_name="nightly", scope_slug="blizzard")
+    _add(store, project, finding_id="fin_2", routine_name="weekly", scope_slug="blizzard")
+    _add(store, project, finding_id="fin_3", routine_name="nightly", scope_slug="other-scope")
 
-    assert {f.finding_id for f in store.list_across_routines("blizzard")} == {"fin_1", "fin_2"}
+    assert {f.finding_id for f in store.list_across_routines(project, "blizzard")} == {"fin_1", "fin_2"}
 
 
 def test_a_gone_finding_is_excluded_from_list_across_routines_unless_include_gone(tmp_path: Path) -> None:
-    store = _store(tmp_path)
-    _add(store, finding_id="fin_1", routine_name="nightly", scope_slug="blizzard")
-    _add(store, finding_id="fin_2", routine_name="weekly", scope_slug="other-scope")
+    store, engine = _store_and_engine(tmp_path)
+    project = default_project(engine)
+    _add(store, project, finding_id="fin_1", routine_name="nightly", scope_slug="blizzard")
+    _add(store, project, finding_id="fin_2", routine_name="weekly", scope_slug="other-scope")
     store.record_fact("fin_1", kind="gone", at=_LATER, note="no longer reproduces")
 
-    live = store.list_across_routines()
+    live = store.list_across_routines(project)
     assert [f.finding_id for f in live] == ["fin_2"]
 
-    everything = store.list_across_routines(include_gone=True)
+    everything = store.list_across_routines(project, include_gone=True)
     assert {f.finding_id for f in everything} == {"fin_1", "fin_2"}
 
 
 def test_list_across_routines_orders_by_finding_id(tmp_path: Path) -> None:
-    store = _store(tmp_path)
-    _add(store, finding_id="fin_2", routine_name="weekly", scope_slug="other-scope")
-    _add(store, finding_id="fin_1", routine_name="nightly", scope_slug="blizzard")
+    store, engine = _store_and_engine(tmp_path)
+    project = default_project(engine)
+    _add(store, project, finding_id="fin_2", routine_name="weekly", scope_slug="other-scope")
+    _add(store, project, finding_id="fin_1", routine_name="nightly", scope_slug="blizzard")
 
-    assert [f.finding_id for f in store.list_across_routines()] == ["fin_1", "fin_2"]
+    assert [f.finding_id for f in store.list_across_routines(project)] == ["fin_1", "fin_2"]
 
 
 def test_facts_for_many_batches_across_a_batch_boundary(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -281,13 +297,14 @@ def test_facts_for_many_batches_across_a_batch_boundary(tmp_path: Path, monkeypa
     finding than two full batches to prove a chain landing in the second (or third)
     batch still comes back correctly via `list_across_routines`, the unbounded caller."""
     monkeypatch.setattr(batching_module, "BATCH_SIZE", 3)
-    store = _store(tmp_path)
+    store, engine = _store_and_engine(tmp_path)
+    project = default_project(engine)
     finding_ids = [f"fin_{i}" for i in range(batching_module.BATCH_SIZE + 5)]
     for finding_id in finding_ids:
-        _add(store, finding_id=finding_id)
+        _add(store, project, finding_id=finding_id)
         store.record_fact(finding_id, kind="observed", at=_LATER)
 
-    found = {f.finding_id: f for f in store.list_across_routines()}
+    found = {f.finding_id: f for f in store.list_across_routines(project)}
 
     assert set(found) == set(finding_ids)
     for finding_id in finding_ids:
@@ -300,10 +317,11 @@ def test_get_many_batches_across_a_batch_boundary(tmp_path: Path, monkeypatch: p
     `_facts_for_many` — a chain landing in the second (or third) batch of either query
     must still come back correctly."""
     monkeypatch.setattr(batching_module, "BATCH_SIZE", 3)
-    store = _store(tmp_path)
+    store, engine = _store_and_engine(tmp_path)
+    project = default_project(engine)
     finding_ids = [f"fin_{i}" for i in range(batching_module.BATCH_SIZE + 5)]
     for finding_id in finding_ids:
-        _add(store, finding_id=finding_id)
+        _add(store, project, finding_id=finding_id)
         store.record_fact(finding_id, kind="observed", at=_LATER)
 
     found = store.get_many(finding_ids)
@@ -319,9 +337,10 @@ def test_get_many_query_cost_scales_linearly_with_batch_count(tmp_path: Path, mo
     the per-batch cost is constant, so the total grows with batch count, not id count."""
     monkeypatch.setattr(batching_module, "BATCH_SIZE", 3)
     store, engine = _store_and_engine(tmp_path)
+    project = default_project(engine)
     finding_ids = [f"fin_{i}" for i in range(7)]
     for finding_id in finding_ids:
-        _add(store, finding_id=finding_id)
+        _add(store, project, finding_id=finding_id)
 
     one_batch_count = count_queries(engine, lambda: store.get_many(finding_ids[:3]))
     two_batch_count = count_queries(engine, lambda: store.get_many(finding_ids[:6]))
@@ -334,14 +353,15 @@ def test_get_many_query_cost_scales_linearly_with_batch_count(tmp_path: Path, mo
 
 
 def test_count_by_class_counts_across_the_named_routine(tmp_path: Path) -> None:
-    store = _store(tmp_path)
-    _add(store, finding_id="fin_1", class_="stale-docstring")
-    _add(store, finding_id="fin_2", class_="stale-docstring")
-    _add(store, finding_id="fin_3", class_="dead-code")
+    store, engine = _store_and_engine(tmp_path)
+    project = default_project(engine)
+    _add(store, project, finding_id="fin_1", class_="stale-docstring")
+    _add(store, project, finding_id="fin_2", class_="stale-docstring")
+    _add(store, project, finding_id="fin_3", class_="dead-code")
 
-    assert store.count_by_class("nightly", "stale-docstring") == 2
-    assert store.count_by_class("nightly", "dead-code") == 1
-    assert store.count_by_class("nightly", "unseen-class") == 0
+    assert store.count_by_class(project, "nightly", "stale-docstring") == 2
+    assert store.count_by_class(project, "nightly", "dead-code") == 1
+    assert store.count_by_class(project, "nightly", "unseen-class") == 0
 
 
 def _add_review_finding(engine: Engine, finding_id: str = "fin_review", *, scope_slug: str = "blizzard") -> None:
@@ -371,11 +391,12 @@ def _add_review_finding(engine: Engine, finding_id: str = "fin_review", *, scope
 
 def test_list_by_source_narrows_to_review_findings_under_one_scope(tmp_path: Path) -> None:
     store, engine = _store_and_engine(tmp_path)
-    _add(store, finding_id="fin_routine")
+    project = default_project(engine)
+    _add(store, project, finding_id="fin_routine")
     _add_review_finding(engine, "fin_review")
     _add_review_finding(engine, "fin_review_other_scope", scope_slug="other-scope")
 
-    result = store.list_by_source(scope_slug="blizzard", source="review")
+    result = store.list_by_source(project, scope_slug="blizzard", source="review")
 
     assert [f.finding_id for f in result] == ["fin_review"]
     assert result[0].source == "review"
@@ -386,11 +407,12 @@ def test_list_by_source_narrows_to_review_findings_under_one_scope(tmp_path: Pat
 
 def test_list_by_source_excludes_a_gone_finding_unless_include_gone(tmp_path: Path) -> None:
     store, engine = _store_and_engine(tmp_path)
+    project = default_project(engine)
     _add_review_finding(engine, "fin_review")
     store.record_fact("fin_review", kind="gone", at=_LATER, note="no longer reproduces")
 
-    assert store.list_by_source(scope_slug="blizzard", source="review") == []
-    everything = store.list_by_source(scope_slug="blizzard", source="review", include_gone=True)
+    assert store.list_by_source(project, scope_slug="blizzard", source="review") == []
+    everything = store.list_by_source(project, scope_slug="blizzard", source="review", include_gone=True)
     assert [f.finding_id for f in everything] == ["fin_review"]
 
 
@@ -402,46 +424,49 @@ def test_list_by_source_query_plans_as_an_index_search(tmp_path: Path) -> None:
         plan = conn.execute(
             sa.text(
                 "EXPLAIN QUERY PLAN SELECT * FROM findings "
-                "WHERE tenant_id = :tenant AND scope_slug = 'blizzard' AND source = 'review'"
+                "WHERE tenant_id = :tenant AND project_id = :project AND scope_slug = 'blizzard' AND source = 'review'"
             ),
-            {"tenant": default_tenant(engine)},
+            {"tenant": default_tenant(engine), "project": default_project(engine)},
         ).all()
-    assert any("ix_findings_tenant_scope_source" in str(row) for row in plan), plan
+    assert any("ix_findings_tenant_project_scope_source" in str(row) for row in plan), plan
 
 
 def test_list_for_query_plans_as_an_index_search(tmp_path: Path) -> None:
     store, engine = _store_and_engine(tmp_path)
-    _add(store)
+    project = default_project(engine)
+    _add(store, project)
 
     with engine.connect() as conn:
         plan = conn.execute(
             sa.text(
                 "EXPLAIN QUERY PLAN SELECT * FROM findings "
-                "WHERE tenant_id = :tenant AND routine_name = 'nightly' AND scope_slug = 'blizzard'"
+                "WHERE tenant_id = :tenant AND project_id = :project AND routine_name = 'nightly' AND scope_slug = 'blizzard'"
             ),
-            {"tenant": default_tenant(engine)},
+            {"tenant": default_tenant(engine), "project": default_project(engine)},
         ).all()
-    assert any("ix_findings_tenant_routine_scope" in str(row) for row in plan), plan
+    assert any("ix_findings_tenant_project_routine_scope" in str(row) for row in plan), plan
 
 
 def test_count_by_class_query_plans_as_an_index_search(tmp_path: Path) -> None:
     store, engine = _store_and_engine(tmp_path)
-    _add(store)
+    project = default_project(engine)
+    _add(store, project)
 
     with engine.connect() as conn:
         plan = conn.execute(
             sa.text(
                 "EXPLAIN QUERY PLAN SELECT COUNT(*) FROM findings "
-                "WHERE tenant_id = :tenant AND routine_name = 'nightly' AND class = 'stale-docstring'"
+                "WHERE tenant_id = :tenant AND project_id = :project AND routine_name = 'nightly' AND class = 'stale-docstring'"
             ),
-            {"tenant": default_tenant(engine)},
+            {"tenant": default_tenant(engine), "project": default_project(engine)},
         ).all()
-    assert any("ix_findings_tenant_routine_class" in str(row) for row in plan), plan
+    assert any("ix_findings_tenant_project_routine_class" in str(row) for row in plan), plan
 
 
 def test_a_guarded_finding_write_holds_the_writer_lock_until_its_transaction_ends(tmp_path: Path) -> None:
     store, engine = _store_and_engine(tmp_path)
-    _add(store)
+    project = default_project(engine)
+    _add(store, project)
 
     connections = hub_store_connections(engine)
     with connections.read("winner") as winner, connections.read("loser") as loser:

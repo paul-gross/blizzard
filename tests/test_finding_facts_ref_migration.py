@@ -29,11 +29,13 @@ from blizzard.hub.store.schema import findings as findings_table
 from blizzard.hub.store.schema import garden_proposal_findings
 from tests.support import hub_store_connections, migrate_to, seed_chunk, seed_graph
 
+_PROJECT = "proj_test"
+
 pytestmark = pytest.mark.component
 
 _BEFORE = "20260902_0900_chunk_dependencies"  # the head just before finding_facts.ref
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
-_RUN = RunContext(routine_name="nightly", scope_slug="blizzard", mode="dry_run")
+_RUN = RunContext(project_id=_PROJECT, routine_name="nightly", scope_slug="blizzard", mode="dry_run")
 
 _SCOPES = sa.Table(
     "scopes",

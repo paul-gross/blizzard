@@ -21,7 +21,9 @@ class GardenTrendStore:
     def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
-    def facts_for_trend(self, routine_name: str, *, since: datetime, until: datetime) -> list[TrendFact]:
+    def facts_for_trend(
+        self, project_id: str, routine_name: str, *, since: datetime, until: datetime
+    ) -> list[TrendFact]:
         earlier = aliased(finding_facts)
         prior_kind = (
             self._store.select(earlier, earlier.c.kind)
@@ -41,6 +43,7 @@ class GardenTrendStore:
                     findings.c.introduced_at,
                     prior_kind.label("prior_kind"),
                 ).where(
+                    findings.c.project_id == project_id,
                     findings.c.routine_name == routine_name,
                     finding_facts.c.kind.in_(TREND_FACT_KINDS),
                     finding_facts.c.recorded_at >= since,

@@ -107,7 +107,9 @@ class TrendWindow:
 
 
 class IReadGardenTrendRepository(Protocol):
-    def facts_for_trend(self, routine_name: str, *, since: datetime, until: datetime) -> list[TrendFact]:
+    def facts_for_trend(
+        self, project_id: str, routine_name: str, *, since: datetime, until: datetime
+    ) -> list[TrendFact]:
         """Every :data:`TREND_FACT_KINDS` fact for `routine_name` recorded in `[since, until)`,
         as :class:`TrendFact` rows."""
         ...
@@ -186,8 +188,8 @@ class GardenTrendService:
     def __init__(self, *, repo: IReadGardenTrendRepository) -> None:
         self._repo = repo
 
-    def trend(self, routine_name: str, window: TrendWindow) -> Trend:
-        facts = self._repo.facts_for_trend(routine_name, since=window.since, until=window.until)
+    def trend(self, project_id: str, routine_name: str, window: TrendWindow) -> Trend:
+        facts = self._repo.facts_for_trend(project_id, routine_name, since=window.since, until=window.until)
         return compute_trend(
             facts,
             routine_name=routine_name,

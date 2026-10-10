@@ -61,7 +61,7 @@ class GardenSweeps:
 
 
 class IReadGardenSweepsRepository(Protocol):
-    def sweeps_for_routine(self, routine_name: str) -> list[SweepFact]:
+    def sweeps_for_routine(self, project_id: str, routine_name: str) -> list[SweepFact]:
         """Every `finding_sets` row for `routine_name`, unwindowed, each joined to
         its own artifact's `produced_at` — `finding_sets` carries no timestamp of its
         own."""
@@ -158,6 +158,6 @@ class GardenSweepsService:
         live_declared, facts = sweep_coverage(
             set(self._routine_scopes.list_scopes(routine.routine_id)),
             self._scopes.retired_slugs(routine.project_id),
-            self._repo.sweeps_for_routine(routine.name),
+            self._repo.sweeps_for_routine(routine.project_id, routine.name),
         )
         return compute_sweeps(facts, routine_name=routine.name, scope_slugs=live_declared, since=since, until=until)

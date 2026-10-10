@@ -50,6 +50,7 @@ from tests.support import (
     build_hub,
     capture_statements,
     close_tenant,
+    default_project,
     drain_stream,
     hub_scoped,
     runner_token,
@@ -573,6 +574,7 @@ def _seed(hub: HubHarness, harness: TenantHarness, label: str) -> _Tenant:
     t.keep("source", _ok(c.post("/api/work-sources", json=source), 201)["name"])
     FindingStore(scoped_connections(hub.engine, harness.tenant)).add(
         t.keep("finding_id", f"fin_{label}"),
+        project_id=default_project(hub.engine, harness.tenant),
         routine_name=f"{label}-routine",
         scope_slug=f"{label}-scope",
         class_="stale-docstring",

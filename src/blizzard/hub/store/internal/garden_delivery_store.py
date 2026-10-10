@@ -17,8 +17,9 @@ from blizzard.hub.domain.garden.delivery.materialize import (
     DeliveryPlan,
     IWriteGardenDeliveryRepository,
 )
+from blizzard.hub.domain.garden.delivery.validation import GardenDeliveryRejected
 from blizzard.hub.store.internal.chunk_rows import fence, lock_chunk_row, next_artifact_seq
-from blizzard.hub.store.internal.finding_store import lock_findings, moved_findings
+from blizzard.hub.store.internal.finding_store import findings_outside_project, lock_findings, moved_findings
 from blizzard.hub.store.internal.scope_store import scope_ids_of
 from blizzard.hub.store.schema import (
     artifacts,
@@ -155,16 +156,20 @@ class GardenDeliveryStore:
                 return DeliveryOutcome.GUARD_LOST
             finding_set_rows = [d.finding_set for d in surviving_deltas]
             # Every delta names the run's own scope (validation), stored before the run was minted;
-            # a slug the tenant does not hold maps to no id, which the NOT NULL link refuses.
+            # a slug the run's project does not hold maps to no id, which the NOT NULL link refuses.
             scope_ids = (
-                scope_ids_of(conn, [f.scope_slug for f in new_findings] + [fs.scope_slug for fs in finding_set_rows])
+                scope_ids_of(
+                    conn,
+                    [f.scope_slug for f in new_findings] + [fs.scope_slug for fs in finding_set_rows],
+                    plan.run.project_id,
+                )
                 if new_findings or finding_set_rows
                 else {}
             )
 
             if new_findings:
                 conn.execute(
-                    self._store.insert(findings),
+                    self._store.insert(findings).values(project_id=plan.run.project_id),
                     [
                         {
                             "finding_id": f.finding_id,
@@ -183,7 +188,7 @@ class GardenDeliveryStore:
                 )
             if finding_set_rows:
                 conn.execute(
-                    self._store.insert(finding_sets),
+                    self._store.insert(finding_sets).values(project_id=plan.run.project_id),
                     [
                         {
                             "finding_set_id": fs.finding_set_id,
@@ -216,7 +221,7 @@ class GardenDeliveryStore:
                 )
             if surviving_proposals:
                 conn.execute(
-                    self._store.insert(garden_proposals),
+                    self._store.insert(garden_proposals).values(project_id=plan.run.project_id),
                     [
                         {
                             "proposal_id": p.proposal_id,
@@ -242,6 +247,13 @@ class GardenDeliveryStore:
                     if finding_id in ref_substitutions or finding_id not in uninserted_finding_ids
                 ]
                 if links:
+                    cited = [link["finding_id"] for link in links]
+                    outside = findings_outside_project(conn, cited, plan.run.project_id)
+                    if outside:
+                        raise GardenDeliveryRejected(
+                            f"finding {outside[0]!r} belongs to another project than routine "
+                            f"{plan.run.routine_name!r}'s — nothing was written"
+                        )
                     conn.execute(self._store.insert(garden_proposal_findings), links)
 
             # Always written, even when every delta was already materialized: this visit

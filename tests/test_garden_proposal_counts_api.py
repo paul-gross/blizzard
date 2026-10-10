@@ -84,6 +84,7 @@ def _seed_proposal(
 ) -> None:
     GardenProposalStore(hub_store_connections(hub.engine)).create(
         proposal_id,
+        project_id=default_project(hub.engine),
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name=routine_name,
         class_=class_,

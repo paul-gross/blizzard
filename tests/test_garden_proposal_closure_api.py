@@ -20,7 +20,9 @@ from blizzard.hub.domain.garden.proposals.closure import _compose_minted_body
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
-from tests.support import HubHarness, build_hub, emitted_events, hub_store_connections, stamp
+from tests.support import HubHarness, build_hub, default_project, emitted_events, hub_store_connections, stamp
+
+_PROJECT = "proj_test"
 
 pytestmark = pytest.mark.component
 
@@ -32,6 +34,7 @@ def _seed(hub: HubHarness, *, proposal_id: str = "gprop_1", body: str = "the cas
         conn.execute(s.scopes.insert().values(stamp(s.scopes, slug="blizzard", description="", created_at=_NOW)))
     FindingStore(hub_store_connections(hub.engine)).add(
         "fin_1",
+        project_id=default_project(hub.engine),
         routine_name="nightly",
         scope_slug="blizzard",
         class_="stale-docstring",
@@ -42,6 +45,7 @@ def _seed(hub: HubHarness, *, proposal_id: str = "gprop_1", body: str = "the cas
     )
     GardenProposalStore(hub_store_connections(hub.engine)).create(
         proposal_id,
+        project_id=default_project(hub.engine),
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="fix-the-source",
@@ -138,6 +142,7 @@ def test_accept_a_proposal_citing_no_findings_mints_a_bare_item(tmp_path: Path) 
         conn.execute(s.scopes.insert().values(stamp(s.scopes, slug="blizzard", description="", created_at=_NOW)))
     GardenProposalStore(hub_store_connections(hub.engine)).create(
         "gprop_1",
+        project_id=_PROJECT,
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="fix-the-source",

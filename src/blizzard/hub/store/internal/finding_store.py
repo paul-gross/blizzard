@@ -93,6 +93,19 @@ def moved_findings(conn: Connection, expect: Mapping[str, str]) -> list[str]:
     return [fid for fid in guarded if derive_liveness(current[fid]).state != expect[fid]]
 
 
+def findings_outside_project(conn: Connection, finding_ids: Sequence[str], project_id: str) -> list[str]:
+    """The ids among `finding_ids` whose stored finding belongs to a project other than `project_id`, sorted — the
+    backstop every writer citing findings shares, read by primary key one `id_batches` batch at a time."""
+    outside: list[str] = []
+    for batch in id_batches(sorted(set(finding_ids))):
+        outside += conn.execute(
+            statements_of(conn)
+            .select(findings, findings.c.finding_id)
+            .where(findings.c.finding_id.in_(batch), findings.c.project_id != project_id)
+        ).scalars()
+    return sorted(outside)
+
+
 def facts_by_finding(conn: Connection, finding_ids: list[str]) -> dict[str, list[FindingFact]]:
     """One query per `id_batches` batch over `finding_ids` (index-backed on
     `ix_finding_facts_tenant_finding_id_id`), each finding's facts oldest first — `list_across_routines`
@@ -121,6 +134,7 @@ class FindingStore:
         self,
         finding_id: str,
         *,
+        project_id: str,
         routine_name: str,
         scope_slug: str,
         class_: str,
@@ -133,8 +147,9 @@ class FindingStore:
             conn.execute(
                 self._store.insert(findings).values(
                     finding_id=finding_id,
+                    project_id=project_id,
                     routine_name=routine_name,
-                    scope_id=scope_id_of(self._store, scope_slug),
+                    scope_id=scope_id_of(self._store, scope_slug, project_id),
                     scope_slug=scope_slug,
                     class_=class_,
                     locus=locus,
@@ -162,6 +177,7 @@ class FindingStore:
             last_seen_at=at,
             observed_count=0,
             source="routine",
+            project_id=project_id,
         )
 
     def record_fact(
@@ -252,35 +268,45 @@ class FindingStore:
             finding = self._of(row, facts)
         return finding, facts
 
-    def list_for(self, routine_name: str, scope_slug: str, *, include_gone: bool = False) -> list[Finding]:
-        """The pass's own bucket read — filtered on `ix_findings_tenant_routine_scope`,
+    def list_for(
+        self, project_id: str, routine_name: str, scope_slug: str, *, include_gone: bool = False
+    ) -> list[Finding]:
+        """The pass's own bucket read — filtered on `ix_findings_tenant_project_routine_scope`,
         ordered by `finding_id` so every backend returns the same rows."""
         with self._store.read("list_for") as conn:
             rows = conn.execute(
                 self._store.select(findings)
-                .where(findings.c.routine_name == routine_name, findings.c.scope_slug == scope_slug)
+                .where(
+                    findings.c.project_id == project_id,
+                    findings.c.routine_name == routine_name,
+                    findings.c.scope_slug == scope_slug,
+                )
                 .order_by(findings.c.finding_id)
             ).all()
             facts_by_id = self._facts_for_many(conn, [row.finding_id for row in rows])
             result = [self._of(row, facts_by_id[row.finding_id]) for row in rows]
         return [f for f in result if include_gone or f.live]
 
-    def list_for_routine(self, routine_name: str, *, include_gone: bool = False) -> list[Finding]:
+    def list_for_routine(self, project_id: str, routine_name: str, *, include_gone: bool = False) -> list[Finding]:
         """Every finding live on `routine_name`, across every scope
         — `list_for`'s scope-narrowed sibling, minus the `scope_slug` filter."""
         with self._store.read("list_for_routine") as conn:
             rows = conn.execute(
                 self._store.select(findings)
-                .where(findings.c.routine_name == routine_name)
+                .where(findings.c.project_id == project_id, findings.c.routine_name == routine_name)
                 .order_by(findings.c.finding_id)
             ).all()
             facts_by_id = self._facts_for_many(conn, [row.finding_id for row in rows])
             result = [self._of(row, facts_by_id[row.finding_id]) for row in rows]
         return [f for f in result if include_gone or f.live]
 
-    def list_across_routines(self, scope_slug: str | None = None, *, include_gone: bool = False) -> list[Finding]:
+    def list_across_routines(
+        self, project_id: str, scope_slug: str | None = None, *, include_gone: bool = False
+    ) -> list[Finding]:
         with self._store.read("list_across_routines") as conn:
-            stmt = self._store.select(findings).order_by(findings.c.finding_id)
+            stmt = (
+                self._store.select(findings).where(findings.c.project_id == project_id).order_by(findings.c.finding_id)
+            )
             if scope_slug is not None:
                 stmt = stmt.where(findings.c.scope_slug == scope_slug)
             rows = conn.execute(stmt).all()
@@ -288,12 +314,18 @@ class FindingStore:
             result = [self._of(row, facts_by_id[row.finding_id]) for row in rows]
         return [f for f in result if include_gone or f.live]
 
-    def list_by_source(self, *, scope_slug: str, source: str, include_gone: bool = False) -> list[Finding]:
-        """Filtered on `ix_findings_tenant_scope_source`."""
+    def list_by_source(
+        self, project_id: str, *, scope_slug: str, source: str, include_gone: bool = False
+    ) -> list[Finding]:
+        """Filtered on `ix_findings_tenant_project_scope_source`."""
         with self._store.read("list_by_source") as conn:
             rows = conn.execute(
                 self._store.select(findings)
-                .where(findings.c.scope_slug == scope_slug, findings.c.source == source)
+                .where(
+                    findings.c.project_id == project_id,
+                    findings.c.scope_slug == scope_slug,
+                    findings.c.source == source,
+                )
                 .order_by(findings.c.finding_id)
             ).all()
             facts_by_id = self._facts_for_many(conn, [row.finding_id for row in rows])
@@ -303,6 +335,7 @@ class FindingStore:
     def list_page(
         self,
         *,
+        project_id: str | None,
         routine_name: str | None,
         scope_slug: str | None,
         source: str | None = None,
@@ -318,6 +351,8 @@ class FindingStore:
         if limit < 1:
             raise ValueError(f"limit must be at least 1, got {limit}")
         stmt = self._store.select(findings).order_by(findings.c.finding_id).limit(limit + 1)
+        if project_id is not None:
+            stmt = stmt.where(findings.c.project_id == project_id)
         if routine_name is not None:
             stmt = stmt.where(findings.c.routine_name == routine_name)
         if scope_slug is not None:
@@ -335,13 +370,15 @@ class FindingStore:
         next_cursor = _encode_finding_cursor(page[-1]) if len(rows) > limit else None
         return FindingPage(findings=page, next_cursor=next_cursor)
 
-    def count_by_class(self, routine_name: str, class_: str) -> int:
+    def count_by_class(self, project_id: str, routine_name: str, class_: str) -> int:
         """How often `class_` recurs for `routine_name` — filtered on
-        `ix_findings_tenant_routine_class`."""
+        `ix_findings_tenant_project_routine_class`."""
         with self._store.read("count_by_class") as conn:
             return conn.execute(
                 self._store.select(findings, func.count()).where(
-                    findings.c.routine_name == routine_name, findings.c.class_ == class_
+                    findings.c.project_id == project_id,
+                    findings.c.routine_name == routine_name,
+                    findings.c.class_ == class_,
                 )
             ).scalar_one()
 
@@ -399,6 +436,7 @@ class FindingStore:
             severity=row.severity,
             raised_by_chunk_id=row.raised_by_chunk_id,
             actor=state.actor,
+            project_id=row.project_id,
         )
 
 
@@ -418,6 +456,7 @@ class FindingSetStore:
         *,
         artifact_id: str,
         chunk_id: str,
+        project_id: str,
         scope_slug: str,
         routine_name: str,
         revisions: dict[str, str],
@@ -429,7 +468,8 @@ class FindingSetStore:
                     finding_set_id=finding_set_id,
                     artifact_id=artifact_id,
                     chunk_id=chunk_id,
-                    scope_id=scope_id_of(self._store, scope_slug),
+                    project_id=project_id,
+                    scope_id=scope_id_of(self._store, scope_slug, project_id),
                     scope_slug=scope_slug,
                     routine_name=routine_name,
                     revisions=json.dumps(revisions),
@@ -444,6 +484,7 @@ class FindingSetStore:
             routine_name=routine_name,
             revisions=dict(revisions),
             measurement=measurement,
+            project_id=project_id,
         )
 
     def get(self, finding_set_id: str) -> FindingSet | None:
@@ -459,26 +500,30 @@ class FindingSetStore:
             rows = conn.execute(self._store.select(finding_sets).where(finding_sets.c.chunk_id == chunk_id)).all()
         return [self._of(row) for row in rows]
 
-    def newest_for_routine_scope(self, routine_name: str, scope_slug: str) -> FindingSet | None:
+    def newest_for_routine_scope(self, project_id: str, routine_name: str, scope_slug: str) -> FindingSet | None:
         """The newest set for the pair, ordered by `finding_set_id` descending — a
         monotonic-in-mint-instant ULID, so every backend returns the same row."""
         with self._store.read("newest_for_routine_scope") as conn:
             row = conn.execute(
                 self._store.select(finding_sets)
-                .where(finding_sets.c.routine_name == routine_name, finding_sets.c.scope_slug == scope_slug)
+                .where(
+                    finding_sets.c.project_id == project_id,
+                    finding_sets.c.routine_name == routine_name,
+                    finding_sets.c.scope_slug == scope_slug,
+                )
                 .order_by(desc(finding_sets.c.finding_set_id))
                 .limit(1)
             ).one_or_none()
         return self._of(row) if row is not None else None
 
-    def newest_by_scope_for_routine(self, routine_name: str) -> list[FindingSet]:
+    def newest_by_scope_for_routine(self, project_id: str, routine_name: str) -> list[FindingSet]:
         """One row per scope, the newest by `finding_set_id` — a group-by-max join,
         portable across backends (`bzh:sql-portable`)."""
         newest_per_scope = (
             self._store.select(
                 finding_sets, finding_sets.c.scope_slug, func.max(finding_sets.c.finding_set_id).label("finding_set_id")
             )
-            .where(finding_sets.c.routine_name == routine_name)
+            .where(finding_sets.c.project_id == project_id, finding_sets.c.routine_name == routine_name)
             .group_by(finding_sets.c.scope_slug)
             .subquery()
         )
@@ -500,6 +545,7 @@ class FindingSetStore:
             routine_name=row.routine_name,
             revisions=json.loads(row.revisions),
             measurement=row.measurement,
+            project_id=row.project_id,
         )
 
 

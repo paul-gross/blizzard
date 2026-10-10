@@ -89,12 +89,17 @@ def _fixtures() -> dict[str, list[tuple[str, int]]]:
 
 def test_sql_live_set_equals_derive_liveness(tmp_path: Path) -> None:
     store, engine = _store_and_engine(tmp_path)
+    project = default_project(engine)
     fixtures = _fixtures()
     for finding_id, facts in fixtures.items():
         _finding(engine, finding_id, facts)
 
-    page = store.list_page(routine_name=None, scope_slug=None, include_gone=False, limit=len(fixtures) + 1)
-    everything = store.list_page(routine_name=None, scope_slug=None, include_gone=True, limit=len(fixtures) + 1)
+    page = store.list_page(
+        project_id=project, routine_name=None, scope_slug=None, include_gone=False, limit=len(fixtures) + 1
+    )
+    everything = store.list_page(
+        project_id=project, routine_name=None, scope_slug=None, include_gone=True, limit=len(fixtures) + 1
+    )
 
     assert page.next_cursor is None
     assert len(everything.findings) == len(fixtures)
@@ -126,10 +131,11 @@ def test_page_cost_is_flat_in_exited_finding_count(tmp_path: Path) -> None:
     for gaps in (1, 12):
         (tmp_path / f"g{gaps}").mkdir()
         store, engine = _store_and_engine(tmp_path / f"g{gaps}")
+        project = default_project(engine)
         _seed_interleaved(engine, exited_each_gap=gaps)
 
-        def read(store: FindingStore = store):  # type: ignore[no-untyped-def]
-            return store.list_page(routine_name="nightly", scope_slug="blizzard", limit=2)
+        def read(store: FindingStore = store, project: str = project):  # type: ignore[no-untyped-def]
+            return store.list_page(project_id=project, routine_name="nightly", scope_slug="blizzard", limit=2)
 
         first = read()
         measured.append(

@@ -341,6 +341,7 @@ def _seed_baseline(hub: HubHarness, *, graph_id: str, routine_name: str, scope_s
         )
     FindingSetStore(hub_store_connections(hub.engine)).create(
         "fins_prior",
+        project_id=default_project(hub.engine),
         artifact_id="art_prior",
         chunk_id="ch_prior",
         scope_slug=scope_slug,
