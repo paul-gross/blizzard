@@ -585,6 +585,18 @@ export type ChunkDetail = {
     pause?: PauseView | null;
     pending?: PendingView | null;
     /**
+     * Project Id
+     */
+    project_id?: string | null;
+    /**
+     * Project Name
+     */
+    project_name?: string | null;
+    /**
+     * Project Slug
+     */
+    project_slug?: string | null;
+    /**
      * Questions
      */
     questions?: Array<QuestionView>;
@@ -768,6 +780,18 @@ export type ChunkSummary = {
      * Open Prs
      */
     open_prs?: Array<PrView>;
+    /**
+     * Project Id
+     */
+    project_id?: string | null;
+    /**
+     * Project Name
+     */
+    project_name?: string | null;
+    /**
+     * Project Slug
+     */
+    project_slug?: string | null;
     /**
      * Runner Id
      */
@@ -1341,6 +1365,18 @@ export type FindingView = {
      */
     observed_count: number;
     /**
+     * Project Id
+     */
+    project_id?: string | null;
+    /**
+     * Project Name
+     */
+    project_name?: string | null;
+    /**
+     * Project Slug
+     */
+    project_slug?: string | null;
+    /**
      * Raised By Chunk Id
      */
     raised_by_chunk_id?: string | null;
@@ -1496,6 +1532,18 @@ export type GardenProposalView = {
      */
     findings: Array<string>;
     origin: GardenProposalOrigin;
+    /**
+     * Project Id
+     */
+    project_id?: string | null;
+    /**
+     * Project Name
+     */
+    project_name?: string | null;
+    /**
+     * Project Slug
+     */
+    project_slug?: string | null;
     /**
      * Proposal Id
      */
@@ -2714,6 +2762,18 @@ export type ScopeView = {
      * Description
      */
     description: string;
+    /**
+     * Project Id
+     */
+    project_id?: string | null;
+    /**
+     * Project Name
+     */
+    project_name?: string | null;
+    /**
+     * Project Slug
+     */
+    project_slug?: string | null;
     /**
      * Retired
      */
