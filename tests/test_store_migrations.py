@@ -1505,6 +1505,8 @@ _HISTORICAL_RESHAPES: list[tuple[str, str, str, tuple[str, ...]] | tuple[str, st
     ("hub", "20261008_1720_tenant_deletion_closed_at", "work_item_runs", ("project_id",)),
     ("hub", "20261008_1720_tenant_deletion_closed_at", "work_items", ("project_id",)),
     ("hub", "20261008_1720_tenant_deletion_closed_at", "config_changes", ("project_id",)),
+    ("hub", "20261008_1810_project_read_indexes", "runner_registrations", ("projects",)),
+    ("hub", "20261008_1810_project_read_indexes", "delivery_repo_landed", ("repository_name",)),
     # runner tree — instance 6
     (
         "runner",

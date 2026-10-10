@@ -1175,6 +1175,8 @@ delivery_repo_landed = Table(
     Column("repo", String, nullable=False),
     Column("commit_hash", String, nullable=False),
     Column("landed_at", UtcDateTime, nullable=False),
+    # The name of the repository record the landing resolved to — null on a row landed before it was recorded.
+    Column("repository_name", String, nullable=True),
     Column(
         "tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_delivery_repo_landed_tenant_id"), nullable=False
     ),
@@ -1759,6 +1761,9 @@ runner_registrations = Table(
     Column("subscriptions", Text, nullable=True),
     # The node names the runner declared it holds for a human decision, JSON `list[str]`; `NULL` reads as none.
     Column("gates", Text, nullable=True),
+    # The projects the runner serves, JSON `list[dict]` of `{entry, project_id}`: each entry as declared and the
+    # project it resolved to; `NULL` reads as serving nothing.
+    Column("projects", Text, nullable=True),
     Column(
         "tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_runner_registrations_tenant_id"), nullable=False
     ),
