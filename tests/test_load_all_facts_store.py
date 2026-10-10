@@ -275,7 +275,9 @@ def _seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None
     )
     store.escalations.record_bounce("ch_kitchen_sink", epoch=1, cause="conflict", envelope="{}", at=_T0)
     store.hub_exec.record_hub_node_poll("ch_kitchen_sink", node_id="nd_g1_hub", epoch=1, at=_T0)
-    store.delivery.record_delivery_repo_landed("ch_kitchen_sink", repo="r1", commit_hash="c1", at=_T0)
+    store.delivery.record_delivery_repo_landed(
+        "ch_kitchen_sink", repo="r1", commit_hash="c1", repository_name=None, at=_T0
+    )
     store.delivery.record_delivery_landed("ch_kitchen_sink", at=_T0)
     store.decisions.record_decision(
         imposed_by_runner_id=None,

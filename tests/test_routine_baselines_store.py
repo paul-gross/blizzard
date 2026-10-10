@@ -85,10 +85,10 @@ def test_landed_since_joins_the_finding_sets_repo_names_against_delivery(tmp_pat
     )
     delivery = chunk_stores(engine, FixedClock(instant=_NOW)).delivery
     delivery.record_delivery_repo_landed(
-        "ch_2", repo="blizzard", commit_hash="e4f5", at=baseline_at + timedelta(hours=1)
+        "ch_2", repo="blizzard", commit_hash="e4f5", repository_name=None, at=baseline_at + timedelta(hours=1)
     )
     delivery.record_delivery_repo_landed(
-        "ch_2", repo="other-repo", commit_hash="9988", at=baseline_at + timedelta(hours=1)
+        "ch_2", repo="other-repo", commit_hash="9988", repository_name=None, at=baseline_at + timedelta(hours=1)
     )
 
     service = RoutineBaselineService(finding_sets=FindingSetStore(hub_store_connections(engine)), delivery=delivery)

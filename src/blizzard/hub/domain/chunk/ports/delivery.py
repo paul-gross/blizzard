@@ -33,7 +33,13 @@ class IReadChunkDeliveryRepository(Protocol):
 class IWriteChunkDeliveryRepository(IReadChunkDeliveryRepository, Protocol):
     """Read-write chunk-delivery access."""
 
-    def record_delivery_repo_landed(self, chunk_id: str, *, repo: str, commit_hash: str, at: datetime) -> None: ...
+    def record_delivery_repo_landed(
+        self, chunk_id: str, *, repo: str, commit_hash: str, repository_name: str | None, at: datetime
+    ) -> None:
+        """Record ``repo`` landed at ``commit_hash``; ``repository_name`` is the repository
+        record the landing resolved to, ``None`` when no record is known for it."""
+        ...
+
     def record_delivery_landed(self, chunk_id: str, *, at: datetime) -> None: ...
 
     def finalize_delivery(

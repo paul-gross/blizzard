@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import hmac
 import secrets
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
 from blizzard.foundation.roles import domain_model
@@ -35,11 +35,15 @@ class MarkerAuthority:
     ``(chunk_id, node_id, epoch)`` triple a hub node visit identifies, each recorded with the
     tenant the visit runs in.
 
-    Instance-scoped, never a module global; backed by a plain in-memory dict."""
+    Instance-scoped, never a module global; backed by a plain in-memory dict. Beside each live
+    token it holds the visit's landing names — each ``owner/repo`` the visit's commits resolved to,
+    mapped to its repository record's name — so a landed marker names the record its step started
+    against, however the project's links change while the step runs."""
 
     def __init__(self, *, token_factory: Callable[[], str] = secrets.token_urlsafe) -> None:
         self._token_factory = token_factory
         self._tokens: dict[_Key, tuple[str, TenantId]] = {}
+        self._repositories: dict[_Key, dict[str, str]] = {}
 
     def issue(self, chunk_id: str, *, node_id: str, epoch: int, tenant: TenantId) -> str:
         """Mint and store a fresh token for this ``(chunk_id, node_id, epoch)`` in ``tenant``,
@@ -60,7 +64,18 @@ class MarkerAuthority:
             return None
         return MarkerPrincipal(chunk_id=chunk_id, node_id=node_id, epoch=epoch, tenant_id=tenant)
 
+    def hold_repositories(self, chunk_id: str, *, node_id: str, epoch: int, names: Mapping[str, str]) -> None:
+        """Hold ``names`` — ``owner/repo`` to repository record name — for this visit, until
+        :meth:`revoke`."""
+        self._repositories[(chunk_id, node_id, epoch)] = dict(names)
+
+    def repository_name(self, chunk_id: str, *, node_id: str, epoch: int, repo: str) -> str | None:
+        """The record name this visit holds for ``repo`` (``owner/repo``); ``None`` when the
+        visit holds none for it."""
+        return self._repositories.get((chunk_id, node_id, epoch), {}).get(repo)
+
     def revoke(self, chunk_id: str, *, node_id: str, epoch: int) -> None:
-        """Remove the stored token for this key, if any — safe to call whether or not
-        one is stored."""
+        """Remove the stored token and held landing names for this key, if any — safe to
+        call whether or not one is stored."""
         self._tokens.pop((chunk_id, node_id, epoch), None)
+        self._repositories.pop((chunk_id, node_id, epoch), None)

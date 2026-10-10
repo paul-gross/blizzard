@@ -1179,9 +1179,12 @@ DEFAULT_FIXTURE_REPOSITORIES = (
 )
 
 
-def seed_repositories(engine: Engine, repositories: Sequence[RepositoryFields], *, tmp_path: Path) -> None:
+def seed_repositories(
+    engine: Engine, repositories: Sequence[RepositoryFields], *, tmp_path: Path, link: bool = True
+) -> None:
     """Write ``repositories`` and the secret they name straight into the store, as an operator's
-    ``blizzard hub repo create`` would — a no-op for none, and for a store an earlier build already seeded."""
+    ``blizzard hub repo create`` would, and link each to the tenant's only project unless ``link`` is false —
+    a no-op for none, and for a store an earlier build already seeded."""
     if not repositories:
         return
     authoring = config_authoring(
@@ -1194,6 +1197,8 @@ def seed_repositories(engine: Engine, repositories: Sequence[RepositoryFields], 
         with contextlib.suppress(SecretAlreadyExists):
             authoring.create_secret(SecretName.parse(fields.secret_name), "fixture-token", OP)
         authoring.create_repository(name, fields, OP)
+        if link:
+            link_project(engine, repository=name)
 
 
 def seed_fake_work_sources(engine: Engine, names: Iterable[str], *, tmp_path: Path, link: bool = True) -> None:
@@ -1251,8 +1256,10 @@ def build_hub(
 
     ``hub.client`` is a :class:`RunnerFleetClient`.
     ``work_sources=None`` defaults to one fake source, while ``{}`` is a deliberately **empty** registry;
-    each fake source is stored as a configured record linked to the tenant's only project, while
-    ``link=False`` leaves them unstored, serving no project, as a file-configured source is; ``hub_command_runner``/``hub_workdir`` left ``None`` wire real adapters."""
+    each fake source is stored as a configured record linked to the tenant's only project, and each seeded
+    repository is linked to it too, while ``link=False`` leaves the sources unstored, serving no project, as a
+    file-configured source is, and the repositories stored but unlinked; ``hub_command_runner``/``hub_workdir``
+    left ``None`` wire real adapters."""
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     config = HubConfig(
         root=tmp_path,
@@ -1273,7 +1280,9 @@ def build_hub(
     else:
         shutil.copyfile(hub_migration_prototype(), db_path)
     engine = create_engine_from_url(db_url)
-    seed_repositories(engine, DEFAULT_FIXTURE_REPOSITORIES if repositories is None else repositories, tmp_path=tmp_path)
+    seed_repositories(
+        engine, DEFAULT_FIXTURE_REPOSITORIES if repositories is None else repositories, tmp_path=tmp_path, link=link
+    )
 
     built_sources: dict[str, IWorkSource] = dict(
         work_sources if work_sources is not None else {"default": FakeWorkSource()}
@@ -1389,13 +1398,19 @@ def fixture_repositories(sources: Sequence[WorkSourceDocument], forge_api_url: s
     ]
 
 
-def create_repositories(hub: httpx.Client, repositories: Sequence[dict[str, str]]) -> None:
+def create_repositories(
+    hub: httpx.Client, repositories: Sequence[dict[str, str]], *, project: str | None = "default"
+) -> None:
     """Create repository ``repositories`` — and the secret they name — through a running hub's own
-    API, so a deliver node resolves its chunk's commits against them."""
+    API and link each to ``project`` (a slug; ``None`` links none), so a deliver node of that project's
+    chunks resolves their commits against them."""
     ensure_fixture_secret(hub)
     for repository in repositories:
         created = hub.post("/api/repositories", json=repository)
         assert created.status_code == 201, created.text
+        if project is not None:
+            linked = hub.put(f"/api/projects/{project}/repository-links/{repository['name']}")
+            assert linked.status_code == 200, linked.text
 
 
 def create_work_sources(hub: httpx.Client, sources: Sequence[WorkSourceDocument]) -> None:

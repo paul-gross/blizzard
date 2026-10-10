@@ -1676,9 +1676,15 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     chunk_delivery_b = "ch_hub_delivery_b"
     _mint(chunk_delivery_a, "1015", at=_ht(69))
     _mint(chunk_delivery_b, "1016", at=_ht(70))
-    write.delivery.record_delivery_repo_landed(chunk_delivery_a, repo="acme/widget", commit_hash="c1", at=_ht(71))
-    write.delivery.record_delivery_repo_landed(chunk_delivery_a, repo="acme/other", commit_hash="c2", at=_ht(72))
-    write.delivery.record_delivery_repo_landed(chunk_delivery_b, repo="acme/widget", commit_hash="c3", at=_ht(73))
+    write.delivery.record_delivery_repo_landed(
+        chunk_delivery_a, repo="acme/widget", commit_hash="c1", repository_name=None, at=_ht(71)
+    )
+    write.delivery.record_delivery_repo_landed(
+        chunk_delivery_a, repo="acme/other", commit_hash="c2", repository_name=None, at=_ht(72)
+    )
+    write.delivery.record_delivery_repo_landed(
+        chunk_delivery_b, repo="acme/widget", commit_hash="c3", repository_name=None, at=_ht(73)
+    )
     write.delivery.record_delivery_landed(chunk_delivery_a, at=_ht(74))
     write.artifacts.record_hub_artifact(
         chunk_delivery_a,

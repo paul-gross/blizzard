@@ -6,7 +6,7 @@ replay, validate, and materialize (blizzard-product:/delivered/garden/machinery.
 from __future__ import annotations
 
 import functools
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 
 from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
@@ -23,6 +23,7 @@ from blizzard.hub.domain.garden.findings.model import GUARD_ATTEMPTS
 from blizzard.hub.domain.garden.formats import IGardenFormats
 from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.domain.graph.model import Node
+from blizzard.hub.domain.projects.model import ProjectId
 
 
 class GardenDeliveryRecorder:
@@ -39,13 +40,13 @@ class GardenDeliveryRecorder:
         buckets: FindingBucketReader,
         materialize: GardenDelivery,
         formats: IGardenFormats,
-        resolve_commit: CommitResolver | None,
+        resolve_commit_for: Callable[[ProjectId], CommitResolver] | None,
     ) -> None:
         self._artifacts = artifacts
         self._buckets = buckets
         self._materialize = materialize
         self._formats = formats
-        self._resolve_commit = resolve_commit
+        self._resolve_commit_for = resolve_commit_for
 
     def record(
         self,
@@ -70,8 +71,13 @@ class GardenDeliveryRecorder:
         if replay is not None:
             return replay
         # One memo across every attempt: a retry never re-resolves a commit, so the delivery spends the
-        # fleet-wide hub-exec slot at most once per commit.
-        resolve_commit = functools.lru_cache(maxsize=None)(self._resolve_commit) if self._resolve_commit else None
+        # fleet-wide hub-exec slot at most once per commit. A cited commit resolves only in a repository
+        # the run's project links.
+        resolve_commit = (
+            functools.lru_cache(maxsize=None)(self._resolve_commit_for(ProjectId(run.project_id)))
+            if self._resolve_commit_for
+            else None
+        )
         for _ in range(GUARD_ATTEMPTS):
             validated = validate_delivery(
                 run=run,

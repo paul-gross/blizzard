@@ -155,7 +155,7 @@ from blizzard.hub.domain.operations.stop import StopService
 from blizzard.hub.domain.projects.authoring import ProjectAuthoring
 from blizzard.hub.domain.projects.bulk_resolve import BulkProjectResolver
 from blizzard.hub.domain.projects.links import IReadProjectLinks
-from blizzard.hub.domain.projects.model import IReadProjectRepository
+from blizzard.hub.domain.projects.model import IReadProjectRepository, ProjectId
 from blizzard.hub.domain.runners.enrollment import RunnerEnrollmentService
 from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, RetiredRunnerGuard
 from blizzard.hub.domain.tenancy.administration import TenantAdministration
@@ -363,8 +363,8 @@ class TenantServices:
     invitations: InvitationService
     #: Record a delivery lane's deferred review findings, once per chunk.
     review_findings: ReviewFindingsRecorder
-    #: Resolves a cited commit against the configured forge.
-    commit_resolver: CommitResolver
+    #: A project's resolver of a cited commit, against the forge of a repository the project links.
+    commit_resolver_for: Callable[[ProjectId], CommitResolver]
     #: A routine's finding inflow-against-outflow over a window.
     garden_trend: GardenTrendService
     #: A routine's per-scope last-swept table and windowed measurement series.
@@ -897,6 +897,8 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         marker_authority=parts.marker_authority,
         tenant=lambda: stores.scope.tenant,
         repositories=stores.repository_records,
+        links=stores.project_links,
+        projects=stores.projects,
         secrets=live.secrets,
         marker_callback_base_url=parts.hub_marker_callback_base_url,
         tracer=parts.platform_tracer,
@@ -935,13 +937,14 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     garden_run_store = GardenRunStore(tenant_connections)
     finding_bucket = FindingBucketReader(finding_store)
     garden_formats = GardenFormats()
-    # Bound as `.resolve` (a plain `delivery.validation.CommitResolver` callable), not the bare
-    # instance, so `HubServices.commit_resolver` carries no dependency on the concrete class.
-    commit_resolver = RepositoryCommitResolver(
+    # Bound as `.for_project` (a project to a plain `delivery.validation.CommitResolver` callable),
+    # not the bare instance, so the garden delivery carries no dependency on the concrete class.
+    commit_resolver_for = RepositoryCommitResolver(
         repositories=stores.repository_records,
         secrets=live.secrets,
         forge=parts.commit_forge,
-    ).resolve
+        links=stores.project_links,
+    ).for_project
     work_ref_label = _work_ref_label(work_sources)
     services = TenantServices(
         work_ref_label=work_ref_label,
@@ -1122,14 +1125,14 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             buckets=finding_bucket,
             materialize=GardenDelivery(delivery=garden_delivery_store, clock=clock),
             formats=garden_formats,
-            resolve_commit=commit_resolver,
+            resolve_commit_for=commit_resolver_for,
         ),
         review_findings=ReviewFindingsRecorder(
             artifacts=chunk_artifacts,
             materialize=ReviewFindingsMaterialize(delivery=review_findings_store, clock=clock),
             formats=garden_formats,
         ),
-        commit_resolver=commit_resolver,
+        commit_resolver_for=commit_resolver_for,
         garden_trend=GardenTrendService(repo=garden_trend_store),
         garden_sweeps=GardenSweepsService(
             repo=garden_sweeps_store, scopes=scope_store, routine_scopes=routine_scope_store
@@ -1211,8 +1214,8 @@ def build_services(
         work_sources=work_sources,
         marker_authority=marker_authority,
         system_artifacts=system_artifacts,
-        # Bound as `.resolve` per tenant (a plain `delivery.validation.CommitResolver` callable), so
-        # `TenantServices.commit_resolver` carries no dependency on the concrete class.
+        # Bound as `.for_project` per tenant (a project to a plain `delivery.validation.CommitResolver`
+        # callable), so `TenantServices.commit_resolver_for` carries no dependency on the concrete class.
         commit_forge=GitHubCommitResolver(forge_http_client or httpx.Client(timeout=10.0)),
         hub_command_runner=hub_command_runner or SubprocessHubCommandRunner(),
         hub_workdir=hub_workdir

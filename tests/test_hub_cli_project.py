@@ -176,10 +176,11 @@ def test_link_and_unlink_a_work_source_and_a_repository_by_slug_and_by_id(hub: H
     assert (unlinked_repository["name"], unlinked_repository["linked"]) == ("acme-repo", False)
     assert [row["name"] for row in after["source_links"]] == ["hub"]
     assert after["repository_links"] == []
+    # The build links what it seeds to the default project; only this project's link changes are the CLI's.
     link_changes = _changes(hub, "project_source_link") + _changes(hub, "project_repository_link")
-    assert {(c["op"], c["door"], c["project_id"]) for c in link_changes} == {
-        ("create", "cli", project_id),
-        ("retire", "cli", project_id),
+    assert {(c["op"], c["door"]) for c in link_changes if c["project_id"] == project_id} == {
+        ("create", "cli"),
+        ("retire", "cli"),
     }
 
 

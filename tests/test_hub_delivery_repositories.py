@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import cast
 
 import pytest
+import sqlalchemy as sa
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.hub_event_types import HubEventType
@@ -16,6 +17,7 @@ from blizzard.hub.delivery.command_runner import CommandResult
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
 from blizzard.hub.graphs import PACKAGED
+from blizzard.hub.store import schema
 from tests.support import (
     FIXTURE_FORGE_SECRET,
     FakeHubCommandRunner,
@@ -23,6 +25,7 @@ from tests.support import (
     HubHarness,
     build_hub,
     create_repositories,
+    default_tenant,
     emitted_events,
     fixture_repository,
     pointer_token,
@@ -95,12 +98,12 @@ def _seed_at_deliver(
     report_lease(hub, chunk_id, epoch=1, seq=1)
 
 
-def _visit(hub: HubHarness, chunk_id: str, nodes: dict[str, str]):  # type: ignore[no-untyped-def]
+def _visit(hub: HubHarness, chunk_id: str, nodes: dict[str, str], node_name: str = "deliver"):  # type: ignore[no-untyped-def]
     chunk = hub.services.chunks.record.get(chunk_id)
     assert chunk is not None
     graph = hub.services.graphs.get(chunk.graph_id)
     assert graph is not None
-    node = graph.node_by_id(nodes["deliver"])
+    node = graph.node_by_id(nodes[node_name])
     assert node is not None
     result = hub.services.hub_node.run(chunk, graph, node, epoch=1)
     assert result is not None
@@ -225,3 +228,109 @@ def test_a_chunk_with_no_commits_runs_with_no_forge_variables(tmp_path: Path) ->
     env = runner.calls[0][2]
     assert json.loads(env["BZ_HUB_GIT_COMMITS"]) == []
     assert not {"BZ_HUB_BASE_BRANCH", "BZ_FORGE_URL", "BZ_FORGE_TOKEN", "BZ_FORGE_OWNER"} & env.keys()
+
+
+def test_a_name_ambiguous_across_the_tenant_lands_in_the_record_its_project_links(tmp_path: Path) -> None:
+    hub, runner = _hub(tmp_path)
+    create_repositories(hub.client, [fixture_repository("widget", _FORGE, owner="acme")], project=None)
+    fork = fixture_repository("widget", _FORGE, owner="other") | {"name": "widget-fork"}
+    create_repositories(hub.client, [fork])
+    chunk_id, nodes = _mint_and_claim(hub)
+    _seed_at_deliver(hub, chunk_id, nodes, [("widget", None)])
+
+    _visit(hub, chunk_id, nodes)
+
+    env = runner.calls[0][2]
+    assert env["BZ_FORGE_OWNER"] == "other"
+    assert [c["repo"] for c in json.loads(env["BZ_HUB_GIT_COMMITS"])] == ["other/widget"]
+
+
+def test_a_repository_its_project_does_not_link_runs_no_command_and_is_recorded_as_not_linked(tmp_path: Path) -> None:
+    hub, runner = _hub(tmp_path)
+    create_repositories(hub.client, [fixture_repository("widget", _FORGE, owner="acme")], project=None)
+    chunk_id, nodes = _mint_and_claim(hub)
+    _seed_at_deliver(hub, chunk_id, nodes, [("widget", None)])
+
+    result = _visit(hub, chunk_id, nodes)
+
+    assert runner.calls == []
+    assert result.outcome_choice == "failure"
+    event_log = schema.event_log
+    with hub.engine.connect() as conn:
+        recorded = conn.execute(
+            sa.select(event_log.c.severity, event_log.c.message).where(
+                event_log.c.tenant_id == default_tenant(hub.engine), event_log.c.kind == "repository-not-linked"
+            )
+        ).one()
+    assert recorded.severity == "critical"
+    assert "repository record widget" in recorded.message
+    assert "project default" in recorded.message
+    assert "repository-unresolved" not in _event_kinds(hub)
+    names = [a["name"] for a in hub.client.get(f"/api/chunks/{chunk_id}").json()["artifacts"]]
+    assert "hub-log.repository-not-linked" in names
+
+
+def test_a_hub_node_that_lands_nothing_still_refuses_a_repository_its_project_does_not_link(tmp_path: Path) -> None:
+    hub, runner = _hub(tmp_path)
+    create_repositories(hub.client, [fixture_repository("widget", _FORGE, owner="acme")], project=None)
+    chunk_id, nodes = _mint_and_claim(hub)
+    _seed_at_deliver(hub, chunk_id, nodes, [("widget", None)])
+
+    result = _visit(hub, chunk_id, nodes, "record-findings")
+
+    assert runner.calls == []
+    assert result.outcome_choice == "failure"
+    assert "repository-not-linked" in _event_kinds(hub)
+
+
+def test_a_landing_names_the_record_its_visit_started_against_though_unlinked_mid_step(tmp_path: Path) -> None:
+    hub, runner = _hub(tmp_path)
+    create_repositories(hub.client, [fixture_repository("widget", _FORGE, owner="acme")])
+    chunk_id, nodes = _mint_and_claim(hub)
+    _seed_at_deliver(hub, chunk_id, nodes, [("widget", None)])
+
+    def land_after_unlinking(_command: str) -> None:
+        unlinked = hub.client.post("/api/projects/default/repository-links/widget/retire")
+        assert unlinked.status_code == 200, unlinked.text
+        hub.services.hub_node.record_marker(
+            chunk_id, node_id=nodes["deliver"], node_name="deliver", epoch=1, name="merged/acme/widget", content="c1"
+        )
+        hub.services.hub_node.record_marker(
+            chunk_id, node_id=nodes["deliver"], node_name="deliver", epoch=1, name="merged/acme/gadget", content="c2"
+        )
+
+    runner.before_run = land_after_unlinking
+    _visit(hub, chunk_id, nodes)
+
+    landed = schema.delivery_repo_landed
+    with hub.engine.connect() as conn:
+        rows = dict(
+            conn.execute(
+                sa.select(landed.c.repo, landed.c.repository_name).where(
+                    landed.c.tenant_id == default_tenant(hub.engine), landed.c.chunk_id == chunk_id
+                )
+            )
+            .tuples()
+            .all()
+        )
+    assert rows == {"acme/widget": "widget", "acme/gadget": None}
+
+
+def test_the_env_names_the_chunks_project_by_its_id_and_its_slug_as_the_visit_starts(tmp_path: Path) -> None:
+    hub, runner = _hub(tmp_path)
+    create_repositories(hub.client, [fixture_repository("widget", _FORGE, owner="acme")])
+    project = hub.client.get("/api/projects/default").json()
+    chunk_id, nodes = _mint_and_claim(hub)
+    _seed_at_deliver(hub, chunk_id, nodes, [("widget", None)])
+    _visit(hub, chunk_id, nodes)
+
+    renamed = hub.client.patch("/api/projects/default", json={"slug": "widgets"})
+    assert renamed.status_code == 200, renamed.text
+    next_chunk_id, next_nodes = _mint_and_claim(hub, "2")
+    _seed_at_deliver(hub, next_chunk_id, next_nodes, [("widget", None)])
+    _visit(hub, next_chunk_id, next_nodes)
+
+    assert [(call[2]["BZ_HUB_PROJECT_ID"], call[2]["BZ_HUB_PROJECT"]) for call in runner.calls] == [
+        (project["project_id"], "default"),
+        (project["project_id"], "widgets"),
+    ]

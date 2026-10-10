@@ -53,6 +53,7 @@ EVENT_LOG_KIND_CENSUS: dict[str, Disposition] = {
     "no-acceptable-harness": Recorded("runner/lifecycle/attempt.py:Attempt.escalate_no_acceptable_harness", "critical"),
     "hub-node-unroutable-outcome": Recorded("hub/delivery/hub_node.py:HubNodeExecutor._route", "critical"),
     "repository-unresolved": Recorded("hub/delivery/hub_node.py:HubNodeExecutor._record_refusal_event", "critical"),
+    "repository-not-linked": Recorded("hub/delivery/hub_node.py:HubNodeExecutor._record_refusal_event", "critical"),
     "repositories-disagree": Recorded("hub/delivery/hub_node.py:HubNodeExecutor._record_refusal_event", "critical"),
     "attempt-failed": Recorded("runner/lifecycle/attempt.py:Attempt.fail", "warning"),
     "command-failed": Recorded("runner/hub/outbound.py:OutboundFacts.command_failed", "warning"),

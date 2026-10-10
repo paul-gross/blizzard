@@ -301,7 +301,7 @@ def _recorder(
         buckets=cast(Any, buckets),
         materialize=cast(GardenDelivery, materialize),
         formats=cast(Any, _Formats()),
-        resolve_commit=resolve,
+        resolve_commit_for=lambda _project: resolve,
     )
     return recorder, buckets, materialize
 
