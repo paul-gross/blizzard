@@ -127,6 +127,21 @@ class ChunkNotGroupable(ValueError):
         self.status = status
 
 
+class ChunksInDifferentProjects(ValueError):
+    """A group op named a chunk of another project than the survivor's: a fold never
+    carries work across projects, whose chunks are served and delivered apart."""
+
+    def __init__(self, survivor_id: str, chunk_id: str, survivor_project: str, chunk_project: str) -> None:
+        super().__init__(
+            f"chunk {chunk_id} belongs to project {chunk_project}, but {survivor_id} belongs to "
+            f"{survivor_project} — grouping folds chunks of one project only"
+        )
+        self.survivor_id = survivor_id
+        self.chunk_id = chunk_id
+        self.survivor_project = survivor_project
+        self.chunk_project = chunk_project
+
+
 class FoldWouldCloseCycle(Exception):
     """Folding ``merge_ids`` into ``survivor_id`` would close a cycle in the resulting
     standing dependency graph — refused before any write, a set-level
@@ -472,6 +487,16 @@ def require_groupable(chunk_id: str, facts: ChunkFacts) -> ChunkStatus:
     return status
 
 
+def require_same_project(survivor: Chunk, targets: Iterable[Chunk]) -> None:
+    """Refuse a fold naming a chunk of another project than ``survivor``'s with
+    :class:`ChunksInDifferentProjects` — the first such target in ``targets``' order."""
+    project = survivor.require_project()
+    for target in targets:
+        target_project = target.require_project()
+        if target_project != project:
+            raise ChunksInDifferentProjects(survivor.chunk_id, target.chunk_id, project, target_project)
+
+
 def merge_targets(survivor_id: str, merge_ids: Sequence[str]) -> list[str]:
     """The chunks a group folds, in first-named order: naming the survivor or one id twice is
     a no-op, not an error."""
@@ -524,7 +549,8 @@ class GroupService:
     def group(self, survivor_id: str, merge_ids: list[str]) -> GroupResult:
         """Fold ``merge_ids`` into ``survivor_id``; the survivor absorbs their pointers
         and each folded chunk's standing dependency edges. Refused before any
-        write when the result would close a cycle (:class:`FoldWouldCloseCycle`)."""
+        write when a merge id belongs to another project (:class:`ChunksInDifferentProjects`)
+        or the result would close a cycle (:class:`FoldWouldCloseCycle`)."""
         with self._cycle_lock, self._exclusive.locked([survivor_id, *merge_ids]) as handle:
             return self._group_locked(handle, survivor_id, merge_ids)
 
@@ -536,6 +562,7 @@ class GroupService:
         facts = handle.facts_for(ids)
         survivor, survivor_status = self._admitted(records, facts, survivor_id)
         targets = [self._admitted(records, facts, merge_id)[0] for merge_id in merge_targets(survivor_id, merge_ids)]
+        require_same_project(survivor, targets)
         folded_ids = [t.chunk_id for t in targets]
         plan = plan_group(handle.standing_edges(), survivor_id, folded_ids)
         now = self._clock.now()

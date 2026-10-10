@@ -29,6 +29,7 @@ from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.kernel.pagination import DEFAULT_LIMIT, MAX_LIMIT, MalformedCursor
 from blizzard.hub.domain.operations.queue import (
     ChunkNotGroupable,
+    ChunksInDifferentProjects,
     DuplicateReorderIds,
     FoldWouldCloseCycle,
     MatchedEntry,
@@ -374,14 +375,15 @@ def group_chunks(
 ) -> object:
     """Merge unacquired chunks into ``chunk_id``. Accepts ``not_ready`` and ``ready``
     participants alike; 409 names the first chunk a runner holds, or one
-    already finished. The survivor also absorbs each folded chunk's standing dependency
-    edges; 409 refuses a fold that would close a cycle."""
+    already finished, or one of another project than the survivor's. The survivor also
+    absorbs each folded chunk's standing dependency edges; 409 refuses a fold that would
+    close a cycle."""
     before = chunk_events.ChunkChanged.before(services, chunk_id)
     try:
         result = services.group.group(chunk_id, request.merge_chunk_ids)
     except ChunkNotFound as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    except ChunkNotGroupable as exc:
+    except (ChunkNotGroupable, ChunksInDifferentProjects) as exc:
         return JSONResponse(status_code=status.HTTP_409_CONFLICT, content={"detail": str(exc)})
     except FoldWouldCloseCycle as exc:
         return JSONResponse(status_code=status.HTTP_409_CONFLICT, content={"detail": str(exc)})
