@@ -7,6 +7,7 @@ import { injectHubRoutinesQuery } from '../core/routines.query';
 
 import { injectChildRouteParam } from '../../core/route-state';
 import { presentRoutineName, routineListRows } from './gardening-routines-page.model';
+import { ProjectLens } from '../../core/project-lens';
 
 /**
  * The `/gardening/routines` sub-tab (`plans/garden/user-interface.md` §Declaring
@@ -31,6 +32,8 @@ import { presentRoutineName, routineListRows } from './gardening-routines-page.m
   styleUrl: './gardening-routines-page.css',
 })
 export class GardeningRoutinesPage {
+  private readonly lens = inject(ProjectLens);
+
   private readonly router = inject(Router);
   private readonly viewport = inject(ViewportService);
 
@@ -53,11 +56,11 @@ export class GardeningRoutinesPage {
   );
 
   protected selectRoutine(name: string): void {
-    void this.router.navigate(['/gardening', 'routines', name], { queryParamsHandling: 'preserve' });
+    void this.router.navigate(this.lens.link(['/gardening', 'routines', name]), { queryParamsHandling: 'preserve' });
   }
 
   protected onBack(): void {
-    void this.router.navigate(['/gardening', 'routines'], { queryParamsHandling: 'preserve' });
+    void this.router.navigate(this.lens.link(['/gardening', 'routines']), { queryParamsHandling: 'preserve' });
   }
 
   protected readonly listRows = computed<readonly RoutineListRowVm[]>(() =>

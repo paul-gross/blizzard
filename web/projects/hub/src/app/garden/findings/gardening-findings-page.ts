@@ -6,6 +6,7 @@ import { FleetFindingList, type FindingListRowVm } from '../core/finding-list';
 import { injectChildRouteParam } from '../../core/route-state';
 import { injectFindingsBucketFilters } from './gardening-findings-bucket-filters';
 import { findingListRows } from './gardening-findings-page.model';
+import { ProjectLens } from '../../core/project-lens';
 
 /**
  * The `/gardening/findings` sub-tab — the findings triage list and its filter row,
@@ -40,6 +41,8 @@ import { findingListRows } from './gardening-findings-page.model';
   },
 })
 export class GardeningFindingsPage {
+  private readonly lens = inject(ProjectLens);
+
   private readonly router = inject(Router);
   private readonly viewport = inject(ViewportService);
 
@@ -61,11 +64,11 @@ export class GardeningFindingsPage {
   );
 
   protected selectFinding(findingId: string): void {
-    void this.router.navigate(['/gardening', 'findings', findingId], { queryParamsHandling: 'preserve' });
+    void this.router.navigate(this.lens.link(['/gardening', 'findings', findingId]), { queryParamsHandling: 'preserve' });
   }
 
   protected onBack(): void {
-    void this.router.navigate(['/gardening', 'findings'], { queryParamsHandling: 'preserve' });
+    void this.router.navigate(this.lens.link(['/gardening', 'findings']), { queryParamsHandling: 'preserve' });
   }
 
   /**
@@ -103,7 +106,7 @@ export class GardeningFindingsPage {
       if (id === null) return;
       if (this.filters.bucketQuery.isPending() || this.filters.bucketQuery.isError()) return;
       if (this.findingListRows().some((row) => row.findingId === id)) return;
-      void this.router.navigate(['/gardening', 'findings'], {
+      void this.router.navigate(this.lens.link(['/gardening', 'findings']), {
         replaceUrl: true,
         queryParamsHandling: 'preserve',
       });

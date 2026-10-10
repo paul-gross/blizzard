@@ -5,6 +5,7 @@ import { KitMasterDetail, KitPanel, ViewportService } from 'fleet';
 
 import { injectChildRouteParam } from '../../core/route-state';
 import { GardeningRunsState } from './gardening-runs-state';
+import { ProjectLens } from '../../core/project-lens';
 
 /**
  * The `/gardening/runs` sub-tab — the run list, beside a `<router-outlet>` holding
@@ -30,6 +31,8 @@ import { GardeningRunsState } from './gardening-runs-state';
   providers: [GardeningRunsState],
 })
 export class GardeningRunsPage {
+  private readonly lens = inject(ProjectLens);
+
   private readonly router = inject(Router);
   private readonly viewport = inject(ViewportService);
 
@@ -41,10 +44,10 @@ export class GardeningRunsPage {
   protected readonly chunkId = injectChildRouteParam('chunkId');
 
   protected selectRun(chunkId: string): void {
-    void this.router.navigate(['/gardening', 'runs', chunkId], { queryParamsHandling: 'preserve' });
+    void this.router.navigate(this.lens.link(['/gardening', 'runs', chunkId]), { queryParamsHandling: 'preserve' });
   }
 
   protected onBack(): void {
-    void this.router.navigate(['/gardening', 'runs'], { queryParamsHandling: 'preserve' });
+    void this.router.navigate(this.lens.link(['/gardening', 'runs']), { queryParamsHandling: 'preserve' });
   }
 }

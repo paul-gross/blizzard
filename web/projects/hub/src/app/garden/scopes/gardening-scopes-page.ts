@@ -6,6 +6,7 @@ import { injectHubScopesQuery } from '../core/scopes.query';
 
 import { injectChildRouteParam } from '../../core/route-state';
 import { presentScopeSlug, scopeRows } from './gardening-scopes-page.model';
+import { ProjectLens } from '../../core/project-lens';
 
 /**
  * The `/gardening/scopes` sub-tab (`plans/garden/user-interface.md` §Declaring and
@@ -29,6 +30,8 @@ import { presentScopeSlug, scopeRows } from './gardening-scopes-page.model';
   styleUrl: './gardening-scopes-page.css',
 })
 export class GardeningScopesPage {
+  private readonly lens = inject(ProjectLens);
+
   private readonly router = inject(Router);
   private readonly viewport = inject(ViewportService);
 
@@ -50,11 +53,11 @@ export class GardeningScopesPage {
   );
 
   protected selectScope(slug: string): void {
-    void this.router.navigate(['/gardening', 'scopes', slug], { queryParamsHandling: 'preserve' });
+    void this.router.navigate(this.lens.link(['/gardening', 'scopes', slug]), { queryParamsHandling: 'preserve' });
   }
 
   protected onBack(): void {
-    void this.router.navigate(['/gardening', 'scopes'], { queryParamsHandling: 'preserve' });
+    void this.router.navigate(this.lens.link(['/gardening', 'scopes']), { queryParamsHandling: 'preserve' });
   }
 
   protected readonly scopeRows = computed<readonly ScopeRowVm[]>(() => scopeRows(this.scopes()));

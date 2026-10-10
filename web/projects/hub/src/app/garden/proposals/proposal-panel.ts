@@ -4,6 +4,7 @@ import { RouterLink } from '@angular/router';
 import { compactRef, type hubApi, KitAsyncState, type KitAsyncStateValue, KitBadge, KitButton, KitFactList, type KitFact, KitPanel, KitProseBlock, type Tone, FleetWhen } from 'fleet';
 import type { FindingTriageVerb } from '../core/finding-list';
 import { findingStateTone, isFindingExited } from '../core/finding-state';
+import { LensLink } from 'fleet/shell';
 
 /** A linked hub work item, legible for display — `label`/`webUrl` come straight off
  * `WorkItemView` rather than being guessed; `webUrl` is `null` once the chunk is
@@ -115,7 +116,7 @@ export interface ProposalPanelVm {
 @Component({
   selector: 'app-proposal-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, FleetWhen, KitBadge, KitButton, KitFactList, KitPanel, KitProseBlock, RouterLink],
+  imports: [KitAsyncState, FleetWhen, KitBadge, KitButton, KitFactList, KitPanel, KitProseBlock, RouterLink, LensLink],
   templateUrl: './proposal-panel.html',
   styleUrl: './proposal-panel.css',
 })

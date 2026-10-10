@@ -11,7 +11,7 @@
         <p class="rd-meta" data-testid="gardening-run-delta-meta">
           <a
             class="rd-ref"
-            [routerLink]="['/board', 'chunk', delta.chunkId]"
+            [routerLink]="['/board', 'chunk', delta.chunkId] | lensLink"
             [title]="delta.chunkId"
             data-testid="gardening-run-delta-chunk-link"
           >{{ compactRef(delta.chunkId) }}</a>
@@ -47,7 +47,7 @@
                       <li class="rd-entry">
                         <p class="rd-entry-head">
                           @if (a.findingId; as findingId) {
-                            <a class="rd-ref" [routerLink]="findingRoute(findingId)" [title]="findingId">{{
+                            <a class="rd-ref" [routerLink]="findingRoute(findingId) | lensLink" [title]="findingId">{{
                               compactRef(findingId)
                             }}</a>
                           } @else {
@@ -70,7 +70,7 @@
                     @for (o of set.observed; track o.findingId) {
                       <li class="rd-entry">
                         <p class="rd-entry-head">
-                          <a class="rd-ref" [routerLink]="findingRoute(o.findingId)" [title]="o.findingId">{{
+                          <a class="rd-ref" [routerLink]="findingRoute(o.findingId) | lensLink" [title]="o.findingId">{{
                             compactRef(o.findingId)
                           }}</a>
                           <!-- Each descriptive field is read back from the finding row, so any of
@@ -98,7 +98,7 @@
                   <ul>
                     @for (g of set.gone; track g.findingId) {
                       <li>
-                        <a class="rd-ref" [routerLink]="findingRoute(g.findingId)" [title]="g.findingId">{{
+                        <a class="rd-ref" [routerLink]="findingRoute(g.findingId) | lensLink" [title]="g.findingId">{{
                           compactRef(g.findingId)
                         }}</a>: {{ g.note }}
                       </li>

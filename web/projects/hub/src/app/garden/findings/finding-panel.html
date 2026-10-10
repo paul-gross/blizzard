@@ -61,7 +61,7 @@
           @if (panel.raisedByChunkId; as raisedByChunkId) {
             <a
               class="fp-raised-by"
-              [routerLink]="['/board', 'chunk', raisedByChunkId]"
+              [routerLink]="['/board', 'chunk', raisedByChunkId] | lensLink"
               [title]="raisedByChunkId"
               data-testid="fp-raised-by-link"
               >{{ compactRef(raisedByChunkId) }}</a
