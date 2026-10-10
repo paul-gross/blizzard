@@ -41,6 +41,7 @@ from blizzard.hub.api.deps import Services
 from blizzard.hub.api.findings import finding_view
 from blizzard.hub.api.garden_proposals import garden_proposal_view
 from blizzard.hub.api.ingest_broadcast import IngestBroadcast, pushed_facts
+from blizzard.hub.api.project_params import QueryProject
 from blizzard.hub.api.scopes import scope_view
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.config import HubConfig
@@ -222,12 +223,13 @@ def _migration_targets(
 
 
 @router.get("/queue/peek", response_model=QueuePeekResponse)
-def peek_queue(services: Services) -> QueuePeekResponse:
+def peek_queue(services: Services, project: QueryProject) -> QueuePeekResponse:
     """The runner's FILL read — the whole ready-queue order: a filling runner needs every
     ready chunk in one read. Kept as-is for a previous-minor caller;
-    ``POST /queue/peek`` below is the matched counterpart."""
+    ``POST /queue/peek`` below is the matched counterpart. ``?project=`` narrows it to that
+    project's chunks at their whole-queue positions, never reranked."""
     statuses = services.chunks.facts.load_live_statuses()
-    return queue_api.ReadyQueue.of(services, statuses).view
+    return queue_api.ReadyQueue.of(services, statuses, project=project).view
 
 
 @router.post("/queue/peek", response_model=QueuePeekResponse)
@@ -236,11 +238,16 @@ def peek_matched_queue(
     services: Services,
     principal: Annotated[RunnerPrincipal, Depends(require_runner_principal)],
 ) -> QueuePeekResponse:
-    """The matched fleet peek — at most one ready entry the calling principal can both
-    work (its declared capabilities admit the entry) and claim (not dependency-blocked),
-    with the request's match policy applied to both."""
+    """The matched fleet peek — at most one ready entry of a project the calling principal
+    serves that it can both work (its declared capabilities admit the entry) and claim (not
+    dependency-blocked), with the request's match policy applied to both. The served set is
+    the principal's stored declaration; a runner serving nothing is offered nothing."""
+    registration = services.registry.get_runner(principal.runner_id)
+    served = frozenset(
+        entry.project_id for entry in (registration.served if registration is not None else ()) if entry.project_id
+    )
     statuses = services.chunks.facts.load_live_statuses()
-    return queue_api.MatchedPeek.of(services, statuses, request).view
+    return queue_api.MatchedPeek.of(services, statuses, request, served=served).view
 
 
 @router.get("/system-artifacts", response_model=list[SystemArtifactView])

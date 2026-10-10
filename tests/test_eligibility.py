@@ -388,6 +388,7 @@ def test_the_predicate_the_matched_peek_and_claim_admission_agree(row) -> None: 
     eligible = EligibilityCheck(chunk, graph, node, capabilities).eligible
     peeked = select_matched_entry(
         [chunk],
+        served={_PROJECT},
         graphs={graph.graph_id: graph},
         facts={chunk.chunk_id: facts},
         capabilities=capabilities,
