@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any
+from typing import Any, ClassVar
 
 from sqlalchemy import Connection, CursorResult, Engine, Select, Table, and_, func, select
 
@@ -1134,6 +1134,206 @@ class NoStandingDependencyOntoEphemeralChunk(HubQueryCheck):
         return violations
 
 
+def _project_label(project_id: str | None) -> str:
+    return f"project {project_id}" if project_id is not None else "no project"
+
+
+def _same_project(one: str | None, other: str | None) -> bool:
+    """Whether both sides name a project and it is the same one; a side that resolves to none never matches."""
+    return one is not None and one == other
+
+
+class ProjectOfItsTenant(HubQueryCheck):
+    """Every row of :attr:`table` names, by its ``project_id``, a project of the row's own tenant. The foreign key
+    says only that the project exists, not whose it is, so only a read can show a row filed under another tenant's
+    project."""
+
+    invariant: ClassVar[str]
+    table: ClassVar[Table]
+    key: ClassVar[str]
+    noun: ClassVar[str]
+
+    def run(self) -> list[Violation]:
+        projects = hub.projects
+        tenant_of = {
+            row.project_id: row.tenant_id for row in self.rows(select(projects.c.project_id, projects.c.tenant_id))
+        }
+        key = self.table.c[self.key]
+        return [
+            Violation(
+                self.invariant,
+                f"{self.noun} {row[0]} of tenant {row.tenant_id} names project {row.project_id}, "
+                "not a project of its tenant",
+            )
+            for row in self.rows(select(key, self.table.c.tenant_id, self.table.c.project_id).order_by(key))
+            if tenant_of.get(row.project_id) != row.tenant_id
+        ]
+
+
+class ChunkProjectInTenant(ProjectOfItsTenant):
+    """``hub:chunk-project-in-tenant`` — every chunk's project is one of the chunk's tenant's."""
+
+    invariant = "hub:chunk-project-in-tenant"
+    table = hub.chunks
+    key = "chunk_id"
+    noun = "chunk"
+
+
+class WorkItemProjectInTenant(ProjectOfItsTenant):
+    """``hub:work-item-project-in-tenant`` — every work item's project is one of the item's tenant's."""
+
+    invariant = "hub:work-item-project-in-tenant"
+    table = hub.work_items
+    key = "work_item_id"
+    noun = "work item"
+
+
+def _scope_projects(check: HubQueryCheck) -> dict[str, str]:
+    scopes = hub.scopes
+    return {row.scope_id: row.project_id for row in check.rows(select(scopes.c.scope_id, scopes.c.project_id))}
+
+
+class RoutineScopeSameProject(HubQueryCheck):
+    """``hub:routine-scope-same-project`` — a routine's default scope, and every scope a ``routine_scopes`` row gives
+    it, belong to the routine's own project: a routine runs only over its project's scopes."""
+
+    def run(self) -> list[Violation]:
+        scope_project = _scope_projects(self)
+        routines, members = hub.routines, hub.routine_scopes
+        routine_project: dict[str, str] = {}
+        violations: list[Violation] = []
+        for row in self.rows(
+            select(routines.c.routine_id, routines.c.project_id, routines.c.default_scope_id).order_by(
+                routines.c.routine_id
+            )
+        ):
+            routine_project[row.routine_id] = row.project_id
+            if not _same_project(scope_project.get(row.default_scope_id), row.project_id):
+                violations.append(
+                    Violation(
+                        "hub:routine-scope-same-project",
+                        f"routine {row.routine_id} of project {row.project_id} defaults to scope "
+                        f"{row.default_scope_id} of {_project_label(scope_project.get(row.default_scope_id))}",
+                    )
+                )
+        for row in self.rows(
+            select(members.c.routine_id, members.c.scope_id).order_by(members.c.routine_id, members.c.scope_id)
+        ):
+            routine_of, scope_of = routine_project.get(row.routine_id), scope_project.get(row.scope_id)
+            if not _same_project(routine_of, scope_of):
+                violations.append(
+                    Violation(
+                        "hub:routine-scope-same-project",
+                        f"routine {row.routine_id} of {_project_label(routine_of)} is scoped to scope "
+                        f"{row.scope_id} of {_project_label(scope_of)}",
+                    )
+                )
+        return violations
+
+
+class FindingScopeInProject(HubQueryCheck):
+    """``hub:finding-scope-in-project`` — every finding and every finding set names a scope of its own project."""
+
+    def run(self) -> list[Violation]:
+        scope_project = _scope_projects(self)
+        violations: list[Violation] = []
+        for noun, table, key in (
+            ("finding", hub.findings, hub.findings.c.finding_id),
+            ("finding set", hub.finding_sets, hub.finding_sets.c.finding_set_id),
+        ):
+            for row in self.rows(select(key, table.c.scope_id, table.c.project_id).order_by(key)):
+                if not _same_project(scope_project.get(row.scope_id), row.project_id):
+                    violations.append(
+                        Violation(
+                            "hub:finding-scope-in-project",
+                            f"{noun} {row[0]} of project {row.project_id} names scope {row.scope_id} of "
+                            f"{_project_label(scope_project.get(row.scope_id))}",
+                        )
+                    )
+        return violations
+
+
+class ReviewFindingProjectIsChunks(HubQueryCheck):
+    """``hub:review-finding-project-is-chunks`` — a review-sourced finding belongs to the project of the chunk whose
+    review raised it. A finding whose raising chunk has no row is not judged here: there is no project to compare."""
+
+    def run(self) -> list[Violation]:
+        chunks, findings = hub.chunks, hub.findings
+        chunk_project = {
+            row.chunk_id: row.project_id for row in self.rows(select(chunks.c.chunk_id, chunks.c.project_id))
+        }
+        violations: list[Violation] = []
+        for row in self.rows(
+            select(findings.c.finding_id, findings.c.raised_by_chunk_id, findings.c.project_id)
+            .where(findings.c.source == "review", findings.c.raised_by_chunk_id.is_not(None))
+            .order_by(findings.c.finding_id)
+        ):
+            raised_in = chunk_project.get(row.raised_by_chunk_id)
+            if raised_in is not None and raised_in != row.project_id:
+                violations.append(
+                    Violation(
+                        "hub:review-finding-project-is-chunks",
+                        f"review finding {row.finding_id} of project {row.project_id} was raised by chunk "
+                        f"{row.raised_by_chunk_id} of project {raised_in}",
+                    )
+                )
+        return violations
+
+
+class ProposalCitesOwnProject(HubQueryCheck):
+    """``hub:proposal-cites-own-project`` — every finding a garden proposal cites belongs to the proposal's own
+    project."""
+
+    def run(self) -> list[Violation]:
+        proposals, findings, cites = hub.garden_proposals, hub.findings, hub.garden_proposal_findings
+        proposal_project = {
+            row.proposal_id: row.project_id
+            for row in self.rows(select(proposals.c.proposal_id, proposals.c.project_id))
+        }
+        finding_project = {
+            row.finding_id: row.project_id for row in self.rows(select(findings.c.finding_id, findings.c.project_id))
+        }
+        violations: list[Violation] = []
+        for row in self.rows(
+            select(cites.c.proposal_id, cites.c.finding_id).order_by(cites.c.proposal_id, cites.c.finding_id)
+        ):
+            cited_by, cited = proposal_project.get(row.proposal_id), finding_project.get(row.finding_id)
+            if not _same_project(cited_by, cited):
+                violations.append(
+                    Violation(
+                        "hub:proposal-cites-own-project",
+                        f"proposal {row.proposal_id} of {_project_label(cited_by)} cites finding {row.finding_id} "
+                        f"of {_project_label(cited)}",
+                    )
+                )
+        return violations
+
+
+class SlugNotCurrentAndFormer(HubQueryCheck):
+    """``hub:slug-not-current-and-former`` — taking a slug removes its former-slug row in the same write, so within a
+    tenant no slug is both some project's current slug and a former one."""
+
+    def run(self) -> list[Violation]:
+        projects, former = hub.projects, hub.project_former_slugs
+        holder = {
+            (row.tenant_id, row.slug): row.project_id
+            for row in self.rows(select(projects.c.tenant_id, projects.c.slug, projects.c.project_id))
+        }
+        return [
+            Violation(
+                "hub:slug-not-current-and-former",
+                f"tenant {row.tenant_id}: slug {row.slug} is project {holder[(row.tenant_id, row.slug)]}'s and "
+                f"project {row.project_id}'s former slug",
+            )
+            for row in self.rows(
+                select(former.c.tenant_id, former.c.slug, former.c.project_id).order_by(
+                    former.c.tenant_id, former.c.slug
+                )
+            )
+            if (row.tenant_id, row.slug) in holder
+        ]
+
+
 @dataclass(frozen=True)
 class HubInvariants:
     """The hub store's durable invariants (transitions, epochs, delivery)."""
@@ -1163,6 +1363,13 @@ class HubInvariants:
                 NoStandingDependencyCycle(conn),
                 NoDuplicateStandingDependency(conn),
                 NoStandingDependencyOntoEphemeralChunk(conn),
+                ChunkProjectInTenant(conn),
+                RoutineScopeSameProject(conn),
+                FindingScopeInProject(conn),
+                ReviewFindingProjectIsChunks(conn),
+                ProposalCitesOwnProject(conn),
+                WorkItemProjectInTenant(conn),
+                SlugNotCurrentAndFormer(conn),
             )
             for check in checks:
                 violations.extend(check.run())

@@ -29,8 +29,11 @@ from tests.runner_fakes import FakeProbe
 from tests.support import (
     add_tenant,
     close_tenant,
+    default_project,
+    default_tenant,
     hub_level_connections,
     hub_scoped,
+    hub_scoped_engine,
     migrate_to,
     seed_chunk,
     seed_drainable_history,
@@ -2051,3 +2054,383 @@ def test_a_row_naming_a_tenant_absent_from_tenants_is_a_violation(tmp_path: Path
         f"graphs holds 1 row(s) of tenant {second}, which is not in tenants",
         f"projects holds 1 row(s) of tenant {second}, which is not in tenants",
     ]
+
+
+_PROJECT_INVARIANTS = frozenset(
+    {
+        "hub:chunk-project-in-tenant",
+        "hub:routine-scope-same-project",
+        "hub:finding-scope-in-project",
+        "hub:review-finding-project-is-chunks",
+        "hub:proposal-cites-own-project",
+        "hub:work-item-project-in-tenant",
+        "hub:slug-not-current-and-former",
+    }
+)
+
+
+def _project_breaches(engine: sa.Engine, invariant: str) -> list[str]:
+    return [v.detail for v in HubInvariants(engine).run() if v.invariant == invariant]
+
+
+def _add_project(conn: sa.Connection, project_id: str, *, slug: str) -> None:
+    """A second project in the store's only tenant, beside its ``default``."""
+    conn.execute(
+        insert(hub.projects).values(
+            stamp(
+                hub.projects,
+                project_id=project_id,
+                slug=slug,
+                name=slug.title(),
+                description="",
+                revision=1,
+                created_at=_NOW,
+            )
+        )
+    )
+
+
+def _scope_values(scope_id: str, project_id: str) -> dict[str, object]:
+    return stamp(hub.scopes, scope_id=scope_id, slug=scope_id, description="", created_at=_NOW, project_id=project_id)
+
+
+def _routine_values(routine_id: str, project_id: str, *, default_scope_id: str) -> dict[str, object]:
+    return stamp(
+        hub.routines,
+        routine_id=routine_id,
+        name=routine_id,
+        graph_name="gr",
+        default_scope_id=default_scope_id,
+        created_at=_NOW,
+        project_id=project_id,
+    )
+
+
+def _finding_values(finding_id: str, project_id: str, *, scope_id: str, **overrides: object) -> dict[str, object]:
+    values: dict[str, object] = {
+        "finding_id": finding_id,
+        "routine_name": "rtn_1",
+        "scope_id": scope_id,
+        "scope_slug": scope_id,
+        "class_": "dead-code",
+        "locus": "src/a.py",
+        "summary": "s",
+        "project_id": project_id,
+    }
+    values.update(overrides)
+    return stamp(hub.findings, **values)
+
+
+def _work_item_values(work_item_id: str, *, tenant: str, project_id: str) -> dict[str, object]:
+    return stamp(
+        hub.work_items,
+        tenant_id=tenant,
+        work_item_id=work_item_id,
+        source="hub",
+        ref=work_item_id,
+        title="t",
+        body="",
+        author_kind="fleet",
+        author_payload="{}",
+        created_at=_NOW,
+        edited_at=_NOW,
+        project_id=project_id,
+    )
+
+
+def test_a_chunk_filed_under_another_tenants_project_is_a_violation(tmp_path: Path) -> None:
+    engine = _hub_engine(tmp_path)
+    first = default_tenant(engine)
+    second = add_tenant(engine, "second")
+    foreign = default_project(engine, second)
+    with engine.begin() as conn:
+        conn.execute(
+            insert(hub.chunks).values(
+                stamp(
+                    hub.chunks,
+                    tenant_id=first,
+                    chunk_id="ch_1",
+                    graph_id="gr_1",
+                    minted_at=_NOW,
+                    model="m",
+                    project_id=foreign,
+                )
+            )
+        )
+
+    assert _project_breaches(engine, "hub:chunk-project-in-tenant") == [
+        f"chunk ch_1 of tenant {first} names project {foreign}, not a project of its tenant"
+    ]
+
+
+def test_a_chunk_of_its_tenants_project_is_not_a_violation(tmp_path: Path) -> None:
+    engine = _hub_engine(tmp_path)
+    second = add_tenant(engine, "second")
+    with engine.begin() as conn:
+        conn.execute(
+            insert(hub.chunks).values(
+                stamp(
+                    hub.chunks,
+                    tenant_id=second,
+                    chunk_id="ch_1",
+                    graph_id="gr_1",
+                    minted_at=_NOW,
+                    model="m",
+                    project_id=default_project(engine, second),
+                )
+            )
+        )
+
+    assert {v.invariant for v in HubInvariants(engine).run()} & _PROJECT_INVARIANTS == set()
+
+
+def test_a_closed_tenants_misfiled_chunk_is_not_judged(tmp_path: Path) -> None:
+    """A closed tenant is checked only for what its deletion leaves behind, project rules included."""
+    engine = _hub_engine(tmp_path)
+    second = add_tenant(engine, "second")
+    with engine.begin() as conn:
+        conn.execute(
+            insert(hub.chunks).values(
+                stamp(
+                    hub.chunks,
+                    tenant_id=second,
+                    chunk_id="ch_1",
+                    graph_id="gr_1",
+                    minted_at=_NOW,
+                    model="m",
+                    project_id="proj_never_minted",
+                )
+            )
+        )
+    assert _project_breaches(engine, "hub:chunk-project-in-tenant") != []
+    close_tenant(engine, second)
+
+    assert _project_breaches(engine, "hub:chunk-project-in-tenant") == []
+
+
+def test_a_work_item_filed_under_another_tenants_project_is_a_violation(tmp_path: Path) -> None:
+    engine = _hub_engine(tmp_path)
+    first = default_tenant(engine)
+    second = add_tenant(engine, "second")
+    foreign = default_project(engine, second)
+    with engine.begin() as conn:
+        conn.execute(
+            insert(hub.work_items).values(_work_item_values("wi_1", tenant=first, project_id=default_project(engine)))
+        )
+        conn.execute(insert(hub.work_items).values(_work_item_values("wi_2", tenant=first, project_id=foreign)))
+
+    assert _project_breaches(engine, "hub:work-item-project-in-tenant") == [
+        f"work item wi_2 of tenant {first} names project {foreign}, not a project of its tenant"
+    ]
+
+
+def test_a_routine_over_another_projects_scope_is_a_violation(tmp_path: Path) -> None:
+    """Both the default scope and a ``routine_scopes`` membership must be the routine's own project's."""
+    engine = _hub_engine(tmp_path)
+    home = default_project(engine)
+    with engine.begin() as conn:
+        _add_project(conn, "proj_other", slug="other")
+        conn.execute(insert(hub.scopes).values(_scope_values("scp_home", home)))
+        conn.execute(insert(hub.scopes).values(_scope_values("scp_other", "proj_other")))
+        conn.execute(insert(hub.routines).values(_routine_values("rtn_ok", home, default_scope_id="scp_home")))
+        conn.execute(insert(hub.routines).values(_routine_values("rtn_bad", home, default_scope_id="scp_other")))
+        for routine_id, scope_id in (("rtn_ok", "scp_home"), ("rtn_ok", "scp_other")):
+            conn.execute(
+                insert(hub.routine_scopes).values(stamp(hub.routine_scopes, routine_id=routine_id, scope_id=scope_id))
+            )
+
+    assert _project_breaches(engine, "hub:routine-scope-same-project") == [
+        f"routine rtn_bad of project {home} defaults to scope scp_other of project proj_other",
+        f"routine rtn_ok of project {home} is scoped to scope scp_other of project proj_other",
+    ]
+
+
+def test_a_finding_or_finding_set_over_another_projects_scope_is_a_violation(tmp_path: Path) -> None:
+    engine = _hub_engine(tmp_path)
+    home = default_project(engine)
+    with engine.begin() as conn:
+        _add_project(conn, "proj_other", slug="other")
+        conn.execute(insert(hub.scopes).values(_scope_values("scp_home", home)))
+        conn.execute(insert(hub.scopes).values(_scope_values("scp_other", "proj_other")))
+        conn.execute(insert(hub.findings).values(_finding_values("fin_ok", home, scope_id="scp_home")))
+        conn.execute(insert(hub.findings).values(_finding_values("fin_bad", home, scope_id="scp_other")))
+        conn.execute(
+            insert(hub.finding_sets).values(
+                stamp(
+                    hub.finding_sets,
+                    finding_set_id="fins_bad",
+                    artifact_id="art_1",
+                    chunk_id="ch_1",
+                    scope_id="scp_home",
+                    scope_slug="scp_home",
+                    revisions="{}",
+                    project_id="proj_other",
+                )
+            )
+        )
+
+    assert _project_breaches(engine, "hub:finding-scope-in-project") == [
+        f"finding fin_bad of project {home} names scope scp_other of project proj_other",
+        f"finding set fins_bad of project proj_other names scope scp_home of project {home}",
+    ]
+
+
+def test_a_review_finding_outside_its_chunks_project_is_a_violation(tmp_path: Path) -> None:
+    engine = _hub_engine(tmp_path)
+    home = default_project(engine)
+    with engine.begin() as conn:
+        _add_project(conn, "proj_other", slug="other")
+        conn.execute(insert(hub.scopes).values(_scope_values("scp_home", home)))
+        conn.execute(
+            insert(hub.chunks).values(
+                stamp(hub.chunks, chunk_id="ch_1", graph_id="gr_1", minted_at=_NOW, model="m", project_id="proj_other")
+            )
+        )
+        for finding_id, raised_by in (("fin_review", "ch_1"), ("fin_unminted", "ch_never_minted")):
+            conn.execute(
+                insert(hub.findings).values(
+                    _finding_values(
+                        finding_id,
+                        home,
+                        scope_id="scp_home",
+                        routine_name=None,
+                        source="review",
+                        severity="major",
+                        raised_by_chunk_id=raised_by,
+                    )
+                )
+            )
+
+    assert _project_breaches(engine, "hub:review-finding-project-is-chunks") == [
+        f"review finding fin_review of project {home} was raised by chunk ch_1 of project proj_other"
+    ]
+
+
+def test_a_proposal_citing_another_projects_finding_is_a_violation(tmp_path: Path) -> None:
+    engine = _hub_engine(tmp_path)
+    home = default_project(engine)
+    with engine.begin() as conn:
+        _add_project(conn, "proj_other", slug="other")
+        conn.execute(insert(hub.scopes).values(_scope_values("scp_home", home)))
+        conn.execute(insert(hub.scopes).values(_scope_values("scp_other", "proj_other")))
+        conn.execute(insert(hub.findings).values(_finding_values("fin_home", home, scope_id="scp_home")))
+        conn.execute(insert(hub.findings).values(_finding_values("fin_other", "proj_other", scope_id="scp_other")))
+        conn.execute(
+            insert(hub.garden_proposals).values(
+                stamp(
+                    hub.garden_proposals,
+                    proposal_id="gprop_1",
+                    routine_name="rtn_1",
+                    class_="dead-code",
+                    title="t",
+                    body="",
+                    created_at=_NOW,
+                    project_id=home,
+                )
+            )
+        )
+        for finding_id in ("fin_home", "fin_other"):
+            conn.execute(
+                insert(hub.garden_proposal_findings).values(
+                    stamp(hub.garden_proposal_findings, proposal_id="gprop_1", finding_id=finding_id)
+                )
+            )
+
+    assert _project_breaches(engine, "hub:proposal-cites-own-project") == [
+        f"proposal gprop_1 of project {home} cites finding fin_other of project proj_other"
+    ]
+
+
+def test_a_slug_both_current_and_former_is_a_violation(tmp_path: Path) -> None:
+    engine = _hub_engine(tmp_path)
+    tenant, home = default_tenant(engine), default_project(engine)
+    with engine.begin() as conn:
+        _add_project(conn, "proj_other", slug="other")
+        for slug in ("other", "retired"):
+            conn.execute(
+                insert(hub.project_former_slugs).values(
+                    stamp(hub.project_former_slugs, slug=slug, project_id=home, left_at=_NOW)
+                )
+            )
+
+    assert _project_breaches(engine, "hub:slug-not-current-and-former") == [
+        f"tenant {tenant}: slug other is project proj_other's and project {home}'s former slug"
+    ]
+
+
+def test_a_carried_over_store_keeps_every_project_invariant(tmp_path: Path) -> None:
+    """Rows written before projects existed, in two tenants, each land in their own tenant's ``default`` project."""
+    runner, engine = migrate_to(tmp_path, "20261008_1720_tenant_deletion_closed_at")
+    seeding = hub_scoped_engine(engine)
+    with seeding.begin() as conn:
+        first = conn.execute(sa.select(hub.tenants.c.tenant_id)).scalar_one()
+        conn.execute(
+            insert(hub.tenants).values(tenant_id="tnt_second", name="second", created_at=_NOW, created_by="test")
+        )
+        for n, tenant in enumerate((first, "tnt_second")):
+            scope, routine, chunk, finding = f"scp_{n}", f"rtn_{n}", f"ch_{n}", f"fin_{n}"
+            conn.execute(
+                insert(hub.scopes).values(tenant_id=tenant, scope_id=scope, slug="s", description="", created_at=_NOW)
+            )
+            conn.execute(
+                insert(hub.routines).values(
+                    tenant_id=tenant,
+                    routine_id=routine,
+                    name="r",
+                    graph_name="g",
+                    default_scope_id=scope,
+                    created_at=_NOW,
+                )
+            )
+            conn.execute(insert(hub.routine_scopes).values(tenant_id=tenant, routine_id=routine, scope_id=scope))
+            conn.execute(
+                insert(hub.chunks).values(tenant_id=tenant, chunk_id=chunk, graph_id="gr_1", minted_at=_NOW, model="m")
+            )
+            conn.execute(
+                insert(hub.findings).values(
+                    tenant_id=tenant,
+                    finding_id=finding,
+                    scope_id=scope,
+                    scope_slug="s",
+                    class_="c",
+                    locus="a.py",
+                    summary="s",
+                    source="review",
+                    raised_by_chunk_id=chunk,
+                )
+            )
+            conn.execute(
+                insert(hub.garden_proposals).values(
+                    tenant_id=tenant,
+                    proposal_id=f"gprop_{n}",
+                    routine_name="r",
+                    class_="c",
+                    title="t",
+                    body="",
+                    created_at=_NOW,
+                )
+            )
+            conn.execute(
+                insert(hub.garden_proposal_findings).values(
+                    tenant_id=tenant, proposal_id=f"gprop_{n}", finding_id=finding
+                )
+            )
+            conn.execute(
+                insert(hub.work_items).values(
+                    tenant_id=tenant,
+                    work_item_id=f"wi_{n}",
+                    source="hub",
+                    ref="1",
+                    title="t",
+                    body="",
+                    author_kind="fleet",
+                    author_payload="{}",
+                    created_at=_NOW,
+                    edited_at=_NOW,
+                )
+            )
+    runner.upgrade("head")
+    try:
+        assert {v.invariant for v in HubInvariants(engine).run()} & _PROJECT_INVARIANTS == set()
+    finally:
+        engine.dispose()
