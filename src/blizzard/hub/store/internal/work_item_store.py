@@ -115,10 +115,12 @@ class WorkItemStore:
                 author=author,
                 stated_priority=stated_priority,
                 at=at,
+                project_id=chunk.project_id,
             )
             insert_chunk_rows(conn, chunk)
         return HubWorkItem(
             work_item_id=work_item_id,
+            project_id=chunk.project_id,
             source=pointer.source,
             ref=pointer.ref,
             title=title,
@@ -157,6 +159,7 @@ class WorkItemStore:
                 author=author,
                 stated_priority=None,
                 at=at,
+                project_id=chunk.project_id,
                 routine_name=routine_name,
                 scope_slug=scope_slug,
                 run_mode=run_mode,
@@ -169,6 +172,7 @@ class WorkItemStore:
             )
         record = HubWorkItem(
             work_item_id=work_item_id,
+            project_id=chunk.project_id,
             source=pointer.source,
             ref=pointer.ref,
             title=title,
@@ -194,11 +198,13 @@ class WorkItemStore:
         author: WorkItemAuthor,
         stated_priority: str | None,
         at: datetime,
+        project_id: str | None,
         routine_name: str | None = None,
         scope_slug: str | None = None,
         run_mode: str | None = None,
     ) -> str:
-        """Insert one ``work_items`` row on ``conn``, open, and return its minted id.
+        """Insert one ``work_items`` row on ``conn``, open, in ``project_id`` — the project its chunk is
+        minted into — and return its minted id.
         ``routine_name``/``scope_slug``/``run_mode`` are a routine run's own indexed
         values — ``None`` for every other item."""
         work_item_id = Id.mint_at(IdPrefix.WORK_ITEM, at).value
@@ -226,6 +232,8 @@ class WorkItemStore:
                 routine_name=routine_name,
                 scope_slug=scope_slug,
                 run_mode=run_mode,
+                # A chunk built by hand carrying no project names none; the scoped insert decides.
+                **({"project_id": project_id} if project_id is not None else {}),
             )
         )
         return work_item_id
@@ -310,10 +318,12 @@ class WorkItemStore:
                 author=author,
                 stated_priority=None,
                 at=at,
+                project_id=chunk.project_id,
             )
             insert_chunk_rows(conn, chunk)
         return HubWorkItem(
             work_item_id=work_item_id,
+            project_id=chunk.project_id,
             source=pointer.source,
             ref=pointer.ref,
             title=title,
@@ -390,6 +400,7 @@ class WorkItemStore:
             routine_name=row.routine_name,
             scope_slug=row.scope_slug,
             run_mode=row.run_mode,
+            project_id=row.project_id,
         )
 
 

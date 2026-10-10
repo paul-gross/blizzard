@@ -16,6 +16,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.chunk.model import Chunk, WorkItemAuthor, WorkRef, mint_chunk
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
+from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal.run_context_store import RunContextStore
@@ -41,7 +42,14 @@ def _stores(tmp_path: Path) -> tuple[WorkItemStore, ChunkStores, RunContextStore
 def test_item_lands_open_and_carries_the_runs_indexed_values(tmp_path: Path) -> None:
     items, _chunks, run_context, engine = _stores(tmp_path)
     pointer = WorkRef(source="hub", ref=items.allocate_ref("hub"))
-    chunk = mint_chunk([pointer], graph_id="gr_1", at=_NOW, default_model=["opus"], default_effort="high")
+    chunk = mint_chunk(
+        [pointer],
+        graph_id="gr_1",
+        at=_NOW,
+        project_id=ProjectId(default_project(engine)),
+        default_model=["opus"],
+        default_effort="high",
+    )
 
     items.create_run_with_chunk(
         project_id=default_project(engine),
@@ -73,7 +81,14 @@ def test_item_lands_open_and_carries_the_runs_indexed_values(tmp_path: Path) -> 
 def test_chunk_lands_not_ready_carrying_the_routines_defaults(tmp_path: Path) -> None:
     items, chunks, _run_context, engine = _stores(tmp_path)
     pointer = WorkRef(source="hub", ref=items.allocate_ref("hub"))
-    chunk = mint_chunk([pointer], graph_id="gr_1", at=_NOW, default_model=["opus"], default_effort="high")
+    chunk = mint_chunk(
+        [pointer],
+        graph_id="gr_1",
+        at=_NOW,
+        project_id=ProjectId(default_project(engine)),
+        default_model=["opus"],
+        default_effort="high",
+    )
 
     items.create_run_with_chunk(
         project_id=default_project(engine),

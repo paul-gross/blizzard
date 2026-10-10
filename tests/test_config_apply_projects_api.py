@@ -42,7 +42,7 @@ _WEB = {"slug": "web", "name": "Web", "sources": ["demo"], "repositories": ["bli
 
 @pytest.fixture
 def hub(tmp_path: Path) -> HubHarness:
-    hub = build_hub(tmp_path, repositories=())
+    hub = build_hub(tmp_path, repositories=(), link=False)
     assert hub.client.post("/api/secrets", json={"name": "gh", "value": "v"}).status_code == 201
     return hub
 

@@ -14,6 +14,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 from blizzard.auth_core import Permission
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
@@ -27,6 +28,7 @@ from blizzard.hub.api.chunk_views import ChunkView, blocked_view
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.graph_names import GraphNames, graph_by_ref
 from blizzard.hub.api.marker_auth import require_marker_authority
+from blizzard.hub.api.project_params import body_project, project_of_call, project_ref
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.chunk.delivery_read import DeliveryRead, DeliverySources
 from blizzard.hub.domain.chunk.dependencies import (
@@ -35,7 +37,14 @@ from blizzard.hub.domain.chunk.dependencies import (
     derive_chunk_neighborhood,
 )
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
-from blizzard.hub.domain.chunk.ingest import EmptyIngest, IngestConflict, ingest_work_refs
+from blizzard.hub.domain.chunk.ingest import (
+    EmptyIngest,
+    IngestConflict,
+    IngestProjectAmbiguous,
+    IngestProjectUnknown,
+    IngestSourceNotLinked,
+    ingest_work_refs,
+)
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, FleetSummary, WorkRef
 from blizzard.hub.domain.chunk.ports.work_refs import resolve_live_holders
 from blizzard.hub.domain.execution.decisions import NotEscalated
@@ -64,6 +73,7 @@ from blizzard.hub.domain.operations.restart import (
     RestartNodeUnknown,
 )
 from blizzard.hub.domain.operations.stop import ChunkNotStoppable
+from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.work_sources.source import AuthorView, WorkSourceError
 from blizzard.wire.chunk import (
     BlockedView,
@@ -93,6 +103,7 @@ from blizzard.wire.chunk import (
     WorkItemsView,
 )
 from blizzard.wire.fleet import FleetSummaryView
+from blizzard.wire.project import ProjectRequiredBody, SourceNotLinkedBody
 from blizzard.wire.work_source import WorkItemAuthorView
 
 #: How long a finished ``done`` chunk stays on ``GET /api/chunks?board_window=true``.
@@ -122,6 +133,34 @@ class OpenDecision:
             )
 
 
+def _ingest_project(services: TenantServices, pointers: list[WorkRef], named: ProjectId | None) -> ProjectId:
+    """The project an ingest of ``pointers`` mints into: ``named``, or the one its configured sources agree on,
+    or the one its hub items record. When nothing it holds names one, the call acts in the tenant's only
+    project, :class:`ProjectRequired` otherwise."""
+    try:
+        return services.ingest.choose_project(pointers, named)
+    except IngestProjectUnknown:
+        return project_of_call(services).project_id
+
+
+def ingest_project_refusal(
+    services: TenantServices, exc: IngestProjectAmbiguous | IngestSourceNotLinked
+) -> JSONResponse:
+    """An ingest's project refusal as its ``422`` body: ``source_not_linked`` naming the source and
+    the project it is not linked to (``null`` when it is linked to none); otherwise
+    ``project_required`` listing the candidates the tokens left open."""
+    if isinstance(exc, IngestSourceNotLinked):
+        project = services.projects.get(exc.project) if exc.project is not None else None
+        body: BaseModel = SourceNotLinkedBody(
+            message=str(exc), source=exc.source, project=project_ref(project) if project is not None else None
+        )
+    else:
+        found = services.projects.get_many(list(exc.candidates))
+        projects = [found[project_id] for project_id in exc.candidates if project_id in found]
+        body = ProjectRequiredBody(message=str(exc), projects=[project_ref(project) for project in projects])
+    return JSONResponse(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, content={"detail": body.model_dump()})
+
+
 @router.post(
     "/chunks",
     response_model=ChunkIngestResponse,
@@ -129,12 +168,15 @@ class OpenDecision:
     dependencies=[Depends(require(Permission.CHUNK_INGEST))],
 )
 def ingest_chunk(request: ChunkIngestRequest, services: Services) -> object:
-    """Ingest by source-native token; 422 on a token no configured source
-    claims; 409 on a pointer held by a live chunk; 503 if every graph named after the
-    packaged default has been retired (the operator's brake, not a code
-    bug: re-enable one or mint a new one)."""
+    """Ingest by source-native token into the project named, or the one the tokens' sources
+    agree on; 422 on a project the tenant does not hold, a token no configured source
+    claims, a project the tokens leave open (``project_required``) and a source the
+    project is not linked to (``source_not_linked``); 409 on a pointer held by a live chunk;
+    503 if every graph named after the packaged default has been retired (the operator's
+    brake, not a code bug: re-enable one or mint a new one)."""
     # Resolution before minting, and before the live-holder check: an unresolvable
     # token should not consult the store, and the request rejects as a whole.
+    named = body_project(request.project, services).project_id if request.project is not None else None
     pointers: list[WorkRef] = []
     for token in request.tokens:
         pointer = services.work_sources.resolve(token)
@@ -148,8 +190,11 @@ def ingest_chunk(request: ChunkIngestRequest, services: Services) -> object:
     try:
         # The batch is refused before the default graph resolves, which may mint one.
         pointers = ingest_work_refs(pointers)
+        project = _ingest_project(services, pointers, named)
     except EmptyIngest as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    except (IngestProjectAmbiguous, IngestSourceNotLinked) as exc:
+        return ingest_project_refusal(services, exc)
     try:
         graph = services.graph_mint.ensure_default(
             services.default_graph_doc, definition_yaml=services.default_graph_yaml
@@ -157,7 +202,9 @@ def ingest_chunk(request: ChunkIngestRequest, services: Services) -> object:
     except DefaultGraphRetired as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
     try:
-        chunk_id = services.ingest.ingest(pointers, graph=graph)
+        chunk_id = services.ingest.ingest(pointers, graph=graph, project=project)
+    except IngestSourceNotLinked as exc:  # unlinked after the project was chosen
+        return ingest_project_refusal(services, exc)
     except IngestConflict as exc:
         conflict = ChunkIngestConflict(
             existing_chunk_id=exc.existing_chunk_id, source=exc.pointer.source, ref=exc.pointer.ref

@@ -25,6 +25,7 @@ from blizzard.foundation.roles import domain_model
 from blizzard.foundation.work_items import WorkItemClosure
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, Graph, Node
+from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.runners.registration import RecordedPause
 
 if TYPE_CHECKING:
@@ -101,6 +102,9 @@ class HubWorkItem:
     routine_name: str | None = None
     scope_slug: str | None = None
     run_mode: str | None = None
+    # The project the item was minted into — every stored item records one; ``None`` only on a
+    # record built by hand.
+    project_id: ProjectId | None = None
 
     @property
     def pointer(self) -> WorkRef:
@@ -160,6 +164,14 @@ class IntendedMigration:
         return cls(mode=mode, graph_id=graph_id, node_name=node_name)
 
 
+class ChunkProjectMissing(Exception):
+    """A chunk record carries no project — one built by hand rather than minted or read back."""
+
+    def __init__(self, chunk_id: str) -> None:
+        super().__init__(f"chunk {chunk_id} carries no project")
+        self.chunk_id = chunk_id
+
+
 @domain_model
 @dataclass(frozen=True)
 class Chunk:
@@ -178,6 +190,15 @@ class Chunk:
     # The chunk's standing intent to migrate onto another graph at its next transition
     # — ``None`` while no intent is set.
     intended_migration: IntendedMigration | None = None
+    # The project the chunk was minted into, never changed after. Every mint names it and every
+    # read of a stored chunk fills it; ``None`` only on a record built by hand.
+    project_id: ProjectId | None = None
+
+    def require_project(self) -> ProjectId:
+        """The chunk's project — :class:`ChunkProjectMissing` on a record that carries none."""
+        if self.project_id is None:
+            raise ChunkProjectMissing(self.chunk_id)
+        return self.project_id
 
     def originating_ref(self) -> WorkRef | None:
         """The work ref the chunk was minted for — its first; a later fold appends refs after
@@ -190,15 +211,16 @@ def mint_chunk(
     *,
     graph_id: str,
     at: datetime,
+    project_id: ProjectId,
     default_model: list[str] | None = None,
     default_effort: str | None = None,
     default_harnesses: list[str] | None = None,
 ) -> Chunk:
-    """Mint a resting chunk pinned to ``graph_id`` holding ``work_refs``, timestamped at
-    the caller's own already-stamped ``at`` (``bzh:injected-clock``). Every call site but
-    a routine run's own passes neither preference — the empty-preference policy given
-    one home here; a routine run is the first to source one, from its own
-    routine's defaults."""
+    """Mint a resting chunk of ``project_id`` pinned to ``graph_id`` holding ``work_refs``,
+    timestamped at the caller's own already-stamped ``at`` (``bzh:injected-clock``). Every
+    mint names its project; none is inferred here. Every call site but a routine run's own
+    passes neither preference — the empty-preference policy given one home here; a routine
+    run is the first to source one, from its own routine's defaults."""
     return Chunk(
         chunk_id=Id.mint_at(IdPrefix.CHUNK, at).value,
         graph_id=graph_id,
@@ -207,6 +229,7 @@ def mint_chunk(
         default_model=list(default_model or []),
         default_effort=default_effort,
         default_harnesses=list(default_harnesses or []),
+        project_id=project_id,
     )
 
 

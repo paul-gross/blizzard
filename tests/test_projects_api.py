@@ -18,7 +18,7 @@ pytestmark = pytest.mark.component
 
 @pytest.fixture
 def hub(tmp_path: Path) -> HubHarness:
-    return build_hub(tmp_path)
+    return build_hub(tmp_path, link=False)
 
 
 def _ok(response, status: int = 200) -> dict:  # type: ignore[no-untyped-def]

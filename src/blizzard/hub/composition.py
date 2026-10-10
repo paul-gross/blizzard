@@ -960,7 +960,13 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             dependencies=chunk_dependencies,
         ),
         graphs=graph_store,
-        ingest=IngestService(record=chunk_record, exclusive=chunk_exclusive, clock=clock),
+        ingest=IngestService(
+            record=chunk_record,
+            exclusive=chunk_exclusive,
+            links=stores.project_links,
+            items=work_item_store,
+            clock=clock,
+        ),
         promote=PromoteService(
             record=chunk_record, queue=chunk_queue, facts=chunk_facts, exclusive=chunk_exclusive, clock=clock
         ),

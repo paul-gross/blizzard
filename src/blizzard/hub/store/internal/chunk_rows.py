@@ -164,7 +164,7 @@ def is_landing_marker(name: str, data: str) -> bool:
 def insert_chunk_rows(conn: Connection, chunk: Chunk) -> None:
     """Insert one chunk's ``chunks`` row and its ``chunk_work_refs`` rows on a
     caller-supplied ``conn`` — the caller owns the transaction boundary, so a composite
-    write can fold this into its own transaction."""
+    write can fold this into its own transaction. The row names the chunk's project."""
     stmts = statements_of(conn)
     conn.execute(
         stmts.insert(s.chunks).values(
@@ -176,6 +176,9 @@ def insert_chunk_rows(conn: Connection, chunk: Chunk) -> None:
             default_model=DEFAULT_MODEL.encode(chunk.default_model),
             default_effort=chunk.default_effort,
             default_harnesses=DEFAULT_HARNESSES.encode(chunk.default_harnesses),
+            # The project the chunk was minted into. A record built by hand carrying none names
+            # none, and the scoped insert decides what an unnamed project means.
+            **({"project_id": chunk.project_id} if chunk.project_id is not None else {}),
         )
     )
     for pointer in chunk.work_refs:
@@ -592,4 +595,5 @@ def chunk_row(conn, row) -> Chunk:  # type: ignore[no-untyped-def]
         default_effort=row.default_effort,
         default_harnesses=DEFAULT_HARNESSES.decode(row.default_harnesses),
         intended_migration=INTENDED_MIGRATION.decode(row.intended_migration),
+        project_id=row.project_id,
     )

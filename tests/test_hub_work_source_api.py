@@ -92,7 +92,7 @@ def test_a_hub_owned_pointer_ingests_and_renders_its_title_and_body(tmp_path: Pa
 def test_sources_listing_renders_capability_booleans(tmp_path: Path) -> None:
     """The listing is the built-in ``hub`` plus stored records; a file-configured source is
     not listed (its rows arrive by import), though its items stay served."""
-    hub = build_hub(tmp_path, work_sources={"forge": FakeWorkSource(name="forge")})
+    hub = build_hub(tmp_path, work_sources={"forge": FakeWorkSource(name="forge")}, link=False)
     hub.client.post("/api/secrets", json={"name": "gh", "value": "v"})
     hub.client.post(
         "/api/work-sources",

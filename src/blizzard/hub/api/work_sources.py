@@ -23,6 +23,7 @@ from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.door import RequestDoor, change_context
+from blizzard.hub.api.project_params import QueryProject, project_of_call
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
@@ -342,10 +343,13 @@ def create_work_item(
     request: WorkItemCreateRequest,
     services: Services,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
+    project: QueryProject = None,
 ) -> object:
     """Allocate a fresh item at SOURCE, open, authored by the caller, and mint its
-    resting ``not_ready`` chunk in the same transaction. 404/409 from the source's editor gate,
-    422 for a blank title or body, 409 if an out-of-band ingest already holds the
+    resting ``not_ready`` chunk in the same transaction, both in the project ``?project=`` names
+    — the tenant's only one when it names none. 404/409 from the source's editor gate,
+    422 for a blank title or body, an unknown project, or no project named in a tenant
+    holding several (``project_required``), 409 if an out-of-band ingest already holds the
     allocated ref's pointer, 503 if every graph named after the packaged default has
     been retired (the operator's brake, mirroring ``POST /chunks``)."""
     source_obj, editor = _require_editor(source, services)
@@ -355,6 +359,7 @@ def create_work_item(
         text = WorkItemText.of(title=request.title, body=request.body)
     except WorkItemFieldBlank as exc:
         raise _blank(exc) from exc
+    project_id = project if project is not None else project_of_call(services).project_id
     try:
         graph = services.graph_mint.ensure_default(
             services.default_graph_doc, definition_yaml=services.default_graph_yaml
@@ -368,6 +373,7 @@ def create_work_item(
             author=WorkItemAuthor.user(identity.user_id),
             stated_priority=request.stated_priority,
             graph=graph,
+            project_id=project_id,
         )
     except IngestConflict as exc:
         conflict = ChunkIngestConflict(

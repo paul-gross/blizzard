@@ -15,6 +15,7 @@ from blizzard.hub.domain.chunk.ingest import (
     require_unheld,
 )
 from blizzard.hub.domain.chunk.model import WorkRef
+from blizzard.hub.domain.projects.model import ProjectId
 from tests.support import make_graph
 
 pytestmark = pytest.mark.unit
@@ -24,6 +25,7 @@ _A = WorkRef(source="forge", ref="1")
 _B = WorkRef(source="forge", ref="2")
 _A_ELSEWHERE = WorkRef(source="tracker", ref="1")
 _GRAPH = make_graph("gr_1", "default")
+_PROJECT = ProjectId("proj_one")
 
 
 def test_an_empty_batch_is_refused() -> None:
@@ -50,19 +52,20 @@ def test_the_first_held_pointer_in_submitted_order_is_the_conflict() -> None:
 
 
 def test_decide_ingest_mints_one_chunk_over_the_collapsed_refs_at_the_given_instant() -> None:
-    chunk = decide_ingest([_A, _B, _A], live_holders={}, graph=_GRAPH, at=_T0)
+    chunk = decide_ingest([_A, _B, _A], live_holders={}, graph=_GRAPH, project_id=_PROJECT, at=_T0)
 
     assert chunk.work_refs == [_A, _B]
     assert chunk.graph_id == "gr_1"
     assert chunk.minted_at == _T0
+    assert chunk.project_id == _PROJECT
 
 
 def test_decide_ingest_refuses_an_empty_batch_before_any_holder() -> None:
     with pytest.raises(EmptyIngest):
-        decide_ingest([], live_holders={_A: "chk_holder"}, graph=_GRAPH, at=_T0)
+        decide_ingest([], live_holders={_A: "chk_holder"}, graph=_GRAPH, project_id=_PROJECT, at=_T0)
 
 
 def test_decide_ingest_refuses_a_batch_naming_a_held_pointer() -> None:
     with pytest.raises(IngestConflict) as exc_info:
-        decide_ingest([_A, _B], live_holders={_B: "chk_holder"}, graph=_GRAPH, at=_T0)
+        decide_ingest([_A, _B], live_holders={_B: "chk_holder"}, graph=_GRAPH, project_id=_PROJECT, at=_T0)
     assert exc_info.value.pointer == _B

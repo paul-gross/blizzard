@@ -19,6 +19,7 @@ from sqlalchemy import Connection
 
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, DependencyEdge, WorkRef
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead, ILockedWorkRefRead
+from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.runners.registration import RunnerRegistration
 from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.store.internal.chunk_dependencies_store import ChunkDependenciesStore
@@ -26,6 +27,10 @@ from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
 from blizzard.hub.store.internal.chunk_rows import is_ephemeral_id, lock_chunk_row, lock_keys, route_of_conn
 from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
+from blizzard.hub.store.internal.project_link_store import (
+    PROJECT_SOURCE_LINKS_LOCK_NAMESPACE,
+    projects_linking_source_conn,
+)
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from blizzard.hub.store.scoped import ScopedConnections
 
@@ -79,6 +84,9 @@ class LockedWorkRefTransaction:
     def live_holders(self, pointers: Sequence[WorkRef]) -> dict[WorkRef, str]:
         return self._work_refs.live_holders_conn(self.conn, pointers)
 
+    def source_links(self, sources: Sequence[str]) -> dict[str, list[ProjectId]]:
+        return {source: projects_linking_source_conn(self.conn, source) for source in dict.fromkeys(sources)}
+
 
 _POINTER_LOCK_NAMESPACE = "work_ref"
 
@@ -118,8 +126,12 @@ class ChunkExclusiveWrites:
             yield LockedChunkTransaction(conn, self._facts, self._record, self._dependencies, self._registry)
 
     @contextmanager
-    def locked_work_refs(self, pointers: Sequence[WorkRef]) -> Iterator[ILockedWorkRefRead]:
+    def locked_work_refs(
+        self, pointers: Sequence[WorkRef], *, project: ProjectId | None = None
+    ) -> Iterator[ILockedWorkRefRead]:
         with self._store.write("locked_work_ref_transaction") as conn:
+            if project is not None:
+                lock_keys(conn, PROJECT_SOURCE_LINKS_LOCK_NAMESPACE, [project])
             lock_keys(conn, _POINTER_LOCK_NAMESPACE, [pointer_lock_key(p) for p in pointers])
             yield LockedWorkRefTransaction(conn, self._work_refs)
 

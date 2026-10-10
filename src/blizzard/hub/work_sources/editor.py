@@ -12,6 +12,7 @@ from typing import Protocol
 from blizzard.foundation.work_items import WorkItemPriority
 from blizzard.hub.domain.chunk.model import HubWorkItem, WorkItemAuthor, WorkRef
 from blizzard.hub.domain.graph.model import Graph
+from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.work_items.editing import CreatedWorkItem, WithdrawnWorkItem
 from blizzard.hub.domain.work_items.model import WorkItemEdit
 
@@ -38,10 +39,17 @@ class IWorkEditor(Protocol):
         ...
 
     def create(
-        self, *, title: str, body: str, author: WorkItemAuthor, stated_priority: WorkItemPriority | None, graph: Graph
+        self,
+        *,
+        title: str,
+        body: str,
+        author: WorkItemAuthor,
+        stated_priority: WorkItemPriority | None,
+        graph: Graph,
+        project_id: ProjectId,
     ) -> CreatedWorkItem:
-        """Allocate a fresh item at this source, open, and mint its resting chunk pinned
-        to ``graph`` in the same transaction. Raises
+        """Allocate a fresh item at this source, open, and mint its resting chunk into
+        ``project_id``, pinned to ``graph``, in the same transaction. Raises
         :class:`~blizzard.hub.domain.chunk.ingest.IngestConflict` on an out-of-band pre-empt."""
         ...
 

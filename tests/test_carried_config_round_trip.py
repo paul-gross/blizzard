@@ -64,7 +64,7 @@ def test_a_carried_store_applies_its_own_export_without_a_change(tmp_path: Path)
     finally:
         engine.dispose()
 
-    hub = build_hub(tmp_path, repositories=())
+    hub = build_hub(tmp_path, repositories=(), link=False)
     assert hub.client.post("/api/graphs/sync").status_code == 200
     exported = hub.client.get("/api/config/export")
     assert exported.status_code == 200

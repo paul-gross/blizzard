@@ -3,19 +3,27 @@ and never the contents.
 
 **Batch = one chunk.** :func:`decide_ingest` owns what an ingest decides: a chunk wraps one or more
 work refs, a ref named twice is wrapped once, and a pointer already held by a live chunk rejects the
-whole ingest ``409`` — re-ingest is legal once its holder is finished."""
+whole ingest ``409`` — re-ingest is legal once its holder is finished.
+
+**One project.** :func:`choose_ingest_project` owns which project the chunk is minted into: the named
+one, else the one every configured source's links agree on — the built-in hub source sits out that
+inference, and an ingest of hub items alone follows the items' own project. Every configured source
+must be linked to the project chosen; ingest never links."""
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from datetime import datetime
 
 from blizzard.foundation.clock import IClock
-from blizzard.hub.domain.chunk.model import Chunk, WorkRef, mint_chunk
+from blizzard.hub.domain.chunk.model import Chunk, IReadWorkItemRepository, WorkRef, mint_chunk
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunk.ports.record import IWriteChunkRecordRepository
 from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository
 from blizzard.hub.domain.graph.model import Graph
+from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
+from blizzard.hub.domain.projects.links import IReadProjectLinks
+from blizzard.hub.domain.projects.model import ProjectId
 
 
 class IngestConflict(Exception):
@@ -32,6 +40,91 @@ class EmptyIngest(Exception):
 
     def __init__(self) -> None:
         super().__init__("at least one token required")
+
+
+class IngestProjectAmbiguous(Exception):
+    """No project was named and the ingest's pointers do not agree on one — a configured source is linked
+    to several projects, the sources' single projects differ, or hub items recorded in different
+    projects. Carries the candidates, ordered by id."""
+
+    def __init__(self, candidates: tuple[ProjectId, ...]) -> None:
+        super().__init__(f"name a project (candidates: {', '.join(candidates)})")
+        self.candidates = candidates
+
+
+class IngestSourceNotLinked(Exception):
+    """A pointer's configured source is not linked to the ingest's project — or, with ``project``
+    ``None``, to any project, so no project could take the ingest."""
+
+    def __init__(self, source: str, project: ProjectId | None) -> None:
+        target = f"project {project}" if project is not None else "any project"
+        super().__init__(f"source {source} is not linked to {target}")
+        self.source = source
+        self.project = project
+
+
+class IngestProjectUnknown(Exception):
+    """No project was named and nothing the ingest holds names one: a hub item it wraps records no
+    project."""
+
+    def __init__(self, pointer: WorkRef) -> None:
+        super().__init__(f"name a project ({pointer.source}:{pointer.ref} records none)")
+        self.pointer = pointer
+
+
+def choose_ingest_project(
+    named: ProjectId | None,
+    pointers: Sequence[WorkRef],
+    links: Mapping[str, Collection[ProjectId]],
+    items_projects: Mapping[WorkRef, ProjectId],
+) -> ProjectId:
+    """The project an ingest of ``pointers`` mints into.
+
+    ``named`` is the project the request named, already resolved. ``links`` maps each configured source
+    to the projects a standing link draws from it (a source absent from it links none);
+    ``items_projects`` maps each hub pointer to its item's recorded project. Unnamed, the project is
+    the one every configured source is linked to alone; with no configured source, the one every hub
+    item records. The hub source is linked to every project and sits out the inference.
+
+    Refuses the whole ingest: :class:`IngestSourceNotLinked` for a configured source linked to no
+    project, or to the project named; :class:`IngestProjectAmbiguous` when the pointers disagree;
+    :class:`IngestProjectUnknown` for a hub item recording no project."""
+    configured = configured_sources(pointers)
+    project = named if named is not None else _infer_project(configured, pointers, links, items_projects)
+    for source in configured:
+        if project not in links.get(source, ()):
+            raise IngestSourceNotLinked(source, project)
+    return project
+
+
+def configured_sources(pointers: Sequence[WorkRef]) -> list[str]:
+    """The configured sources ``pointers`` draw from, in first-seen order — every source but the
+    built-in hub source, which is linked to every project."""
+    return list(dict.fromkeys(p.source for p in pointers if p.source != RESERVED_HUB_SOURCE_NAME))
+
+
+def _infer_project(
+    configured: Sequence[str],
+    pointers: Sequence[WorkRef],
+    links: Mapping[str, Collection[ProjectId]],
+    items_projects: Mapping[WorkRef, ProjectId],
+) -> ProjectId:
+    """The one project the configured sources' links — or, with none, the hub items — agree on."""
+    if configured:
+        for source in configured:
+            if not links.get(source):
+                raise IngestSourceNotLinked(source, None)
+        candidates = {project for source in configured for project in links[source]}
+    else:
+        candidates = set[ProjectId]()
+        for pointer in pointers:
+            recorded = items_projects.get(pointer)
+            if recorded is None:
+                raise IngestProjectUnknown(pointer)
+            candidates.add(recorded)
+    if len(candidates) != 1:
+        raise IngestProjectAmbiguous(tuple(sorted(candidates)))
+    return next(iter(candidates))
 
 
 def ingest_work_refs(pointers: Iterable[WorkRef]) -> list[WorkRef]:
@@ -56,13 +149,18 @@ def require_unheld(pointers: Iterable[WorkRef], live_holders: Mapping[WorkRef, s
 
 
 def decide_ingest(
-    pointers: Sequence[WorkRef], *, live_holders: Mapping[WorkRef, str], graph: Graph, at: datetime
+    pointers: Sequence[WorkRef],
+    *,
+    live_holders: Mapping[WorkRef, str],
+    graph: Graph,
+    project_id: ProjectId,
+    at: datetime,
 ) -> Chunk:
-    """The resting chunk an ingest of ``pointers`` mints on ``graph`` at ``at``, or the refusal:
-    :class:`EmptyIngest` for no work ref, :class:`IngestConflict` for one a live chunk holds."""
+    """The resting chunk of ``project_id`` an ingest of ``pointers`` mints on ``graph`` at ``at``, or the
+    refusal: :class:`EmptyIngest` for no work ref, :class:`IngestConflict` for one a live chunk holds."""
     work_refs = ingest_work_refs(pointers)
     require_unheld(work_refs, live_holders)
-    return mint_chunk(work_refs, graph_id=graph.graph_id, at=at)
+    return mint_chunk(work_refs, graph_id=graph.graph_id, at=at, project_id=project_id)
 
 
 def require_no_live_holder(work_refs: IReadChunkWorkRefsRepository, pointer: WorkRef) -> None:
@@ -73,23 +171,67 @@ def require_no_live_holder(work_refs: IReadChunkWorkRefsRepository, pointer: Wor
 
 
 class IngestService:
-    """Mint a chunk from work refs, pinned to the default graph."""
+    """Mint a chunk from work refs into one project, pinned to the default graph."""
 
-    def __init__(self, *, record: IWriteChunkRecordRepository, exclusive: IChunkExclusiveWrites, clock: IClock) -> None:
+    def __init__(
+        self,
+        *,
+        record: IWriteChunkRecordRepository,
+        exclusive: IChunkExclusiveWrites,
+        links: IReadProjectLinks,
+        items: IReadWorkItemRepository,
+        clock: IClock,
+    ) -> None:
         self._record = record
         # The locked-transaction seam (``bzh:store-exclusive-write``): whether a pointer is held
         # is read under the pointer's lock, on the connection the mint then writes on.
         self._exclusive = exclusive
+        self._links = links
+        self._items = items
         self._clock = clock
 
-    def ingest(self, pointers: Sequence[WorkRef], *, graph: Graph) -> str:
-        """Mint a chunk wrapping ``pointers``; raises :class:`EmptyIngest` for none and
-        :class:`IngestConflict` for one a live chunk holds. Of two overlapping ingests of one
-        pointer, exactly one mints."""
+    def choose_project(self, pointers: Sequence[WorkRef], project: ProjectId | None) -> ProjectId:
+        """The project an ingest of ``pointers`` naming ``project`` mints into, read before anything
+        is written — :func:`choose_ingest_project` over the configured sources' standing links and,
+        when they decide, the hub items' recorded projects. Raises its refusals and
+        :class:`EmptyIngest`."""
         work_refs = ingest_work_refs(pointers)
-        with self._exclusive.locked_work_refs(work_refs) as handle:
+        configured = configured_sources(work_refs)
+        links = {source: self._links.projects_linking_source(source) for source in configured}
+        return choose_ingest_project(project, work_refs, links, self._recorded_projects(project, configured, work_refs))
+
+    def ingest(self, pointers: Sequence[WorkRef], *, graph: Graph, project: ProjectId | None) -> str:
+        """Mint a chunk wrapping ``pointers`` into ``project`` — or, with ``None``, the project
+        :func:`choose_ingest_project` infers. Raises :class:`EmptyIngest` for no pointer, the
+        project refusals of :func:`choose_ingest_project`, and :class:`IngestConflict` for a pointer
+        a live chunk holds. Of two overlapping ingests of one pointer, exactly one mints.
+
+        The links are read once to choose the project, then again under that project's source-link
+        lock — taken before the pointers' — so a source unlinked in between refuses the ingest
+        rather than minting a chunk its project no longer draws from."""
+        work_refs = ingest_work_refs(pointers)
+        chosen = self.choose_project(work_refs, project)
+        with self._exclusive.locked_work_refs(work_refs, project=chosen) as handle:
+            choose_ingest_project(chosen, work_refs, handle.source_links(configured_sources(work_refs)), {})
             chunk = decide_ingest(
-                work_refs, live_holders=handle.live_holders(work_refs), graph=graph, at=self._clock.now()
+                work_refs,
+                live_holders=handle.live_holders(work_refs),
+                graph=graph,
+                project_id=chosen,
+                at=self._clock.now(),
             )
             self._record.mint_locked(handle, chunk)
         return chunk.chunk_id
+
+    def _recorded_projects(
+        self, named: ProjectId | None, configured: Sequence[str], work_refs: Sequence[WorkRef]
+    ) -> dict[WorkRef, ProjectId]:
+        """The hub items' recorded projects, read only when they decide: no project named and no
+        configured source among the pointers."""
+        if named is not None or configured:
+            return {}
+        return {
+            pointer: item.project_id
+            for pointer, item in self._items.get_many(work_refs).items()
+            if item.project_id is not None
+        }

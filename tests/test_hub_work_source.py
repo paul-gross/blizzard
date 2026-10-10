@@ -26,6 +26,7 @@ from blizzard.hub.domain.garden.findings.model import FindingExitService
 from blizzard.hub.domain.garden.proposals.resolution import GardenProposalDeliveryResolution
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.operations.delete import DeleteService
+from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.domain.work_items.editing import (
     WithdrawalLostToClosure,
@@ -312,6 +313,7 @@ def test_create_allocates_an_open_item(tmp_path: Path) -> None:
         author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         stated_priority=WorkItemPriority.HIGH,
         graph=_graph(engine),
+        project_id=ProjectId(default_project(engine)),
     )
 
     assert created.item.title == "t"
@@ -331,6 +333,7 @@ def test_create_mints_a_not_ready_chunk_pinned_to_the_graph_and_holding_the_ref(
         author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         stated_priority=None,
         graph=graph,
+        project_id=ProjectId(default_project(engine)),
     )
 
     chunk = chunks.record.get(created.chunk_id)
@@ -350,6 +353,7 @@ def test_edit_replaces_fields_and_stamps_edited_at_leaving_created_at_and_ref(tm
         author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         stated_priority=None,
         graph=_graph(engine),
+        project_id=ProjectId(default_project(engine)),
     )
     pointer = WorkRef(source="hub", ref=created.item.ref)
     clock.advance(timedelta(days=1))
@@ -372,6 +376,7 @@ def test_an_empty_edit_stamps_edited_at_leaving_the_fields_unchanged(tmp_path: P
         author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         stated_priority=WorkItemPriority.HIGH,
         graph=_graph(engine),
+        project_id=ProjectId(default_project(engine)),
     )
     pointer = WorkRef(source="hub", ref=created.item.ref)
     clock.advance(timedelta(days=1))
@@ -393,6 +398,7 @@ def test_withdraw_sets_the_withdrawn_closure(tmp_path: Path) -> None:
         author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         stated_priority=None,
         graph=_graph(engine),
+        project_id=ProjectId(default_project(engine)),
     )
     with chunks.exclusive.locked([created.chunk_id]) as handle:
         chunks.lifecycle.record_stop_locked(handle, created.chunk_id, by="operator", at=_T0)
@@ -412,6 +418,7 @@ def test_edit_and_withdraw_of_a_closed_item_are_refused(tmp_path: Path) -> None:
         author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         stated_priority=None,
         graph=_graph(engine),
+        project_id=ProjectId(default_project(engine)),
     )
     pointer = WorkRef(source="hub", ref=created.item.ref)
     with chunks.exclusive.locked([created.chunk_id]) as handle:
@@ -435,6 +442,7 @@ def test_withdraw_deletes_an_unacquired_holder_and_withdraws_the_item(tmp_path: 
         author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         stated_priority=None,
         graph=_graph(engine),
+        project_id=ProjectId(default_project(engine)),
     )
     pointer = WorkRef(source="hub", ref=created.item.ref)
 
@@ -458,6 +466,7 @@ def test_withdraw_of_an_item_the_cascade_already_closed_is_refused(tmp_path: Pat
         author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         stated_priority=None,
         graph=_graph(engine),
+        project_id=ProjectId(default_project(engine)),
     )
     pointer = WorkRef(source="hub", ref=created.item.ref)
     source.withdraw(pointer, by="operator")  # cascades: deletes the unacquired holder too
@@ -476,6 +485,7 @@ def test_withdraw_is_refused_while_an_acquired_chunk_holds_the_ref(tmp_path: Pat
         author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         stated_priority=None,
         graph=_graph(engine),
+        project_id=ProjectId(default_project(engine)),
     )
     pointer = WorkRef(source="hub", ref=created.item.ref)
     with chunks.exclusive.locked([created.chunk_id]) as handle:
@@ -509,6 +519,7 @@ def test_withdraw_is_refused_while_the_unacquired_holder_is_a_standing_prerequis
         author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         stated_priority=None,
         graph=graph,
+        project_id=ProjectId(default_project(engine)),
     )
     pointer = WorkRef(source="hub", ref=created.item.ref)
     # The holder is left unacquired (no route recorded) — the cascade reaches
@@ -534,6 +545,7 @@ def test_withdraw_succeeds_once_the_holding_chunk_is_no_longer_live(tmp_path: Pa
         author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         stated_priority=None,
         graph=_graph(engine),
+        project_id=ProjectId(default_project(engine)),
     )
     pointer = WorkRef(source="hub", ref=created.item.ref)
     with chunks.exclusive.locked([created.chunk_id]) as handle:
@@ -914,10 +926,25 @@ def test_every_minting_door_refuses_a_blank_title_or_body(
     author = WorkItemAuthor.user("u_1")
 
     with pytest.raises(WorkItemFieldBlank) as created:
-        edits.create(source="hub", title=title, body=body, author=author, stated_priority=None, graph=graph)
+        edits.create(
+            source="hub",
+            title=title,
+            body=body,
+            author=author,
+            stated_priority=None,
+            graph=graph,
+            project_id=ProjectId(default_project(engine)),
+        )
     with pytest.raises(WorkItemFieldBlank) as accepted:
         edits.accept_create(
-            "gp_1", title=title, body=body, author=author, graph=graph, reason=None, closed_by="operator"
+            "gp_1",
+            title=title,
+            body=body,
+            author=author,
+            graph=graph,
+            project_id=ProjectId(default_project(engine)),
+            reason=None,
+            closed_by="operator",
         )
 
     assert {created.value.field_name, accepted.value.field_name} == {field_name}

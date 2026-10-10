@@ -21,6 +21,7 @@ from blizzard.foundation.garden_proposals import (
 )
 from blizzard.foundation.store import batching as batching_module
 from blizzard.hub.domain.chunk.model import IWriteWorkItemRepository, WorkItemAuthor, WorkRef, mint_chunk
+from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
@@ -215,7 +216,7 @@ def test_accept_create_mints_the_closure_item_and_chunk_atomically_and_is_idempo
     items = cast(IWriteWorkItemRepository, WorkItemStore(store))
     author = WorkItemAuthor.user("u1")
     pointer = WorkRef(source="hub", ref=items.allocate_ref("hub"))
-    chunk = mint_chunk([pointer], graph_id=graph.graph_id, at=_NOW)
+    chunk = mint_chunk([pointer], graph_id=graph.graph_id, at=_NOW, project_id=ProjectId(default_project(hub.engine)))
 
     first = items.accept_create(
         proposal_id="gprop_1",
@@ -265,7 +266,7 @@ def test_accept_create_writes_nothing_when_the_proposal_is_already_closed(tmp_pa
     closures.record_pass("gprop_1", reason="already passed", closed_by="u0", at=_NOW)
     items = cast(IWriteWorkItemRepository, WorkItemStore(store))
     pointer = WorkRef(source="hub", ref=items.allocate_ref("hub"))
-    chunk = mint_chunk([pointer], graph_id=graph.graph_id, at=_NOW)
+    chunk = mint_chunk([pointer], graph_id=graph.graph_id, at=_NOW, project_id=ProjectId(default_project(hub.engine)))
 
     result = items.accept_create(
         proposal_id="gprop_1",

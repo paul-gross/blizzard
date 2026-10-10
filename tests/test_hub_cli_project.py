@@ -54,7 +54,7 @@ def _seed_records(client: TestClient) -> None:
 
 @pytest.fixture
 def hub(tmp_path: Path) -> HubHarness:
-    hub = build_hub(tmp_path)
+    hub = build_hub(tmp_path, link=False)
     _seed_records(hub.client)
     return hub
 

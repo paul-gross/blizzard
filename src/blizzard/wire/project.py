@@ -102,9 +102,10 @@ class ProjectRequiredBody(BaseModel):
 
 
 class SourceNotLinkedBody(BaseModel):
-    """The ``detail`` of a ``422``: an ingest drew from a configured ``source`` its ``project`` is not linked to."""
+    """The ``detail`` of a ``422``: an ingest drew from a configured ``source`` its ``project`` is not linked to —
+    ``project`` is ``null`` when the source is linked to no project, so none could take the ingest."""
 
     code: Literal["source_not_linked"] = "source_not_linked"
     message: str
     source: str
-    project: ProjectRef
+    project: ProjectRef | None

@@ -354,6 +354,14 @@ def test_run_threads_the_routines_model_and_effort_defaults_onto_the_chunk() -> 
     assert chunk.default_effort == "high"
 
 
+def test_run_mints_the_chunk_into_the_routines_own_project() -> None:
+    service, items, *_ = _service()
+
+    service.run(_ROUTINE, scope=_DEFAULT_SCOPE, mode=RunMode.DELTA, note="first", author=_AUTHOR)
+
+    assert items.calls[0]["chunk"].project_id == _PROJECT == items.calls[0]["project_id"]
+
+
 def test_run_raises_ingest_conflict_when_the_freshly_allocated_ref_races_a_live_holder() -> None:
     service, *_ = _service(chunks=_FakeChunks(live_holder="ch_other"))
 

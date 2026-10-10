@@ -78,6 +78,7 @@ from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.config.repositories import RepositoryFields
 from blizzard.hub.domain.config.secrets import IHubKeyProvider, SecretAlreadyExists, SecretName
+from blizzard.hub.domain.config.work_sources import WorkSourceFields
 from blizzard.hub.domain.execution.auth.produces import PRODUCES_WARN
 from blizzard.hub.domain.execution.auth.route import ROUTE_TOKEN_WARN
 from blizzard.hub.domain.garden.scopes import Scope, ScopeSlug
@@ -103,6 +104,7 @@ from blizzard.hub.runtime import Migrations
 from blizzard.hub.secrets import hub_key_provider, secret_cipher
 from blizzard.hub.store import schema
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
+from blizzard.hub.store.internal.chunk_exclusive_store import LockedChunkTransaction
 from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
 from blizzard.hub.store.internal.config_apply_store import ConfigApplyStore
 from blizzard.hub.store.internal.config_import_store import ConfigImportStore
@@ -114,7 +116,12 @@ from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStor
 from blizzard.hub.store.internal.scope_store import ScopeStore
 from blizzard.hub.store.internal.secret_store import SecretStore
 from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
-from blizzard.hub.store.scoped import SOLE_PROJECT_FALLBACK_TABLES, ScopedConnections, is_tenant_owned
+from blizzard.hub.store.scoped import (
+    SOLE_PROJECT_FALLBACK_TABLES,
+    ScopedConnections,
+    is_tenant_owned,
+    statements_of,
+)
 from blizzard.hub.system_artifacts import PackagedSystemArtifacts
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION, StoreScope, TenantId
 from blizzard.hub.work_sources.annotator import IWorkAnnotator, WorkAnnotateError, WorkStatusMarker
@@ -1179,10 +1186,37 @@ def seed_repositories(engine: Engine, repositories: Sequence[RepositoryFields], 
         authoring.create_repository(name, fields, OP)
 
 
+def seed_fake_work_sources(engine: Engine, names: Iterable[str], *, tmp_path: Path, link: bool = True) -> None:
+    """Store a configured work source for each of ``names`` — the record an operator's ``blizzard hub source
+    create`` writes, on a locator of its own — and, with ``link``, link it to the tenant's only project, so an
+    ingest from the fake registry's source of that name resolves a project. A no-op for a name already stored."""
+    stores = WorkSourceRecordStore(hub_store_connections(engine))
+    authoring = config_authoring(
+        engine, keys=hub_key_provider({}, data_dir=tmp_path), clock=FixedClock(datetime(2026, 7, 12, tzinfo=UTC))
+    )
+    for name in names:
+        if stores.get(name) is not None:
+            continue
+        with contextlib.suppress(SecretAlreadyExists):
+            authoring.create_secret(SecretName.parse(FIXTURE_FORGE_SECRET), "fixture-token", OP)
+        fields = WorkSourceFields(
+            provider="github",
+            locator=f"fixture/{name}",
+            api_base="http://forge.fixture",
+            web_base=None,
+            annotate=False,
+            secret=FIXTURE_FORGE_SECRET,
+        )
+        authoring.create_work_source(name, fields, OP)
+        if link:
+            link_project(engine, source=name)
+
+
 def build_hub(
     tmp_path: Path,
     *,
     work_sources: dict[str, FakeWorkSource] | None = None,
+    link: bool = True,
     hub_command_runner: IHubCommandRunner | None = None,
     hub_workdir: IHubWorkdir | None = None,
     repositories: Sequence[RepositoryFields] | None = None,
@@ -1207,7 +1241,8 @@ def build_hub(
 
     ``hub.client`` is a :class:`RunnerFleetClient`.
     ``work_sources=None`` defaults to one fake source, while ``{}`` is a deliberately **empty** registry;
-    ``hub_command_runner``/``hub_workdir`` left ``None`` wire real adapters."""
+    each fake source is stored as a configured record linked to the tenant's only project, while
+    ``link=False`` leaves them unstored, serving no project, as a file-configured source is; ``hub_command_runner``/``hub_workdir`` left ``None`` wire real adapters."""
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     config = HubConfig(
         root=tmp_path,
@@ -1233,6 +1268,8 @@ def build_hub(
     built_sources: dict[str, IWorkSource] = dict(
         work_sources if work_sources is not None else {"default": FakeWorkSource()}
     )
+    if link:
+        seed_fake_work_sources(engine, built_sources, tmp_path=tmp_path)
     clock = FixedClock(datetime(2026, 7, 13, tzinfo=UTC))
     editors: dict[str, IWorkEditor] = {}
     # The built-in `hub` source is seated as a source, an editor and a closer unconditionally,
@@ -1352,16 +1389,22 @@ def create_repositories(hub: httpx.Client, repositories: Sequence[dict[str, str]
 
 
 def create_work_sources(hub: httpx.Client, sources: Sequence[WorkSourceDocument]) -> None:
-    """Create ``sources``, and the secret they name, through a running hub's own API.
+    """Create ``sources``, and the secret they name, through a running hub's own API, each linked to the
+    hub's only project.
 
     Every upper-tier fixture that stands a real hub up and then ingests seeds its sources
     through this once the hub answers, or its own ingests fail."""
     if not sources:
         return
     ensure_fixture_secret(hub)
+    projects = hub.get("/api/projects")
+    assert projects.status_code == 200, projects.text
+    (project,) = projects.json()["projects"]
     for source in sources:
         created = hub.post("/api/work-sources", json=source.model_dump())
         assert created.status_code == 201, created.text
+        linked = hub.put(f"/api/projects/{project['project_id']}/source-links/{source.name}")
+        assert linked.status_code == 200, linked.text
 
 
 def write_mock_harness_credentials(runner_dir: Path) -> tuple[str, str]:
@@ -1510,12 +1553,16 @@ def pointer_token(pointer: dict) -> str:
     return f"{pointer['source']}:{pointer['ref']}"
 
 
-def ingest(hub: HubHarness, pointers: list[dict], *, promote: bool = True) -> str:
+def ingest(hub: HubHarness, pointers: list[dict], *, promote: bool = True, project: str | None = None) -> str:
     """Ingest ``pointers`` (as ``{source, ref}`` dicts) into one chunk and, by default,
     promote it to ready — each dict converts to its ``{source}:{ref}`` ingest token.
+    ``project`` names the project by id or slug; ``None`` leaves the hub to infer it.
 
     Pass ``promote=False`` to assert the not-ready resting state a bare ingest leaves."""
-    resp = hub.client.post("/api/chunks", json={"tokens": [pointer_token(p) for p in pointers]})
+    body: dict[str, Any] = {"tokens": [pointer_token(p) for p in pointers]}
+    if project is not None:
+        body["project"] = project
+    resp = hub.client.post("/api/chunks", json=body)
     assert resp.status_code == 201, resp.text
     chunk_id = resp.json()["chunk_id"]
     if promote:
@@ -1692,9 +1739,21 @@ def assert_all_timestamps_utc(payload: object) -> None:
 
 def seed_chunk_record(stores: ChunkStores, chunk: Chunk) -> None:
     """Insert ``chunk``'s rows the way ingest does — under its pointers' locks — for a fixture
-    that needs a chunk without going through an ingest's guard."""
+    that needs a chunk without going through an ingest's guard. A chunk built naming no project
+    lands in the tenant's only one."""
     with stores.exclusive.locked_work_refs(chunk.work_refs) as handle:
+        if chunk.project_id is None and isinstance(handle, LockedChunkTransaction):
+            chunk = replace(chunk, project_id=_only_project_on(handle.conn))
         stores.record.mint_locked(handle, chunk)
+
+
+def _only_project_on(conn: sa.Connection) -> ProjectId:
+    """The id of the only project of the tenant ``conn`` is scoped to; raises when it holds none or several."""
+    projects = schema.projects
+    ids = list(conn.execute(statements_of(conn).select(projects, projects.c.project_id)).scalars())
+    if len(ids) != 1:
+        raise AssertionError(f"a chunk naming no project needs a tenant holding exactly one; it holds {len(ids)}")
+    return ProjectId(ids[0])
 
 
 def make_ready(hub: HubHarness, chunk_id: str) -> None:
@@ -1864,9 +1923,14 @@ def mint_graph(engine: Engine, graph_id: str, *, name: str, nodes: dict[str, str
     GraphStore(hub_store_connections(engine)).mint(graph, definition_yaml="", at=at)
 
 
-def seed_chunk(conn: sa.Connection, chunk_id: str, *, graph_id: str, at: datetime) -> None:
-    """Seed one ``chunks`` parent row — the FK a seeded route/pointer/etc. needs."""
-    values = {"chunk_id": chunk_id, "graph_id": graph_id, "minted_at": at}
+def seed_chunk(
+    conn: sa.Connection, chunk_id: str, *, graph_id: str, at: datetime, project_id: str | None = None
+) -> None:
+    """Seed one ``chunks`` parent row — the FK a seeded route/pointer/etc. needs — in ``project_id``, the
+    tenant's only project when ``None``."""
+    values: dict[str, Any] = {"chunk_id": chunk_id, "graph_id": graph_id, "minted_at": at}
+    if project_id is not None:
+        values["project_id"] = project_id
     conn.execute(sa.insert(_CHUNKS).values(_stamp_as_stored(conn, _CHUNKS, values)))
 
 

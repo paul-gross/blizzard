@@ -21,6 +21,7 @@ from blizzard.hub.domain.config.changes import ConfigChange
 from blizzard.hub.domain.config.work_sources import ConfigRevisionConflict, is_built_in
 from blizzard.hub.domain.projects.links import IWriteProjectLinks, RepositoryLink, SourceLink
 from blizzard.hub.domain.projects.model import ProjectId
+from blizzard.hub.store.internal.chunk_rows import lock_keys
 from blizzard.hub.store.internal.config_change_store import append_change
 from blizzard.hub.store.schema import (
     project_repository_link_facts,
@@ -47,6 +48,16 @@ class _Kind:
 _SOURCES = _Kind(project_source_links, project_source_link_facts, "source_name", "source link")
 _REPOSITORIES = _Kind(project_repository_links, project_repository_link_facts, "repository_name", "repository link")
 
+#: The ``keyed_locks`` namespace of one project's source links, keyed by the project's id. Every source link or
+#: unlink takes its project's key, and an ingest takes the key of the project it mints into before its pointers'
+#: keys, so the links an ingest read stand until it commits.
+PROJECT_SOURCE_LINKS_LOCK_NAMESPACE = "project-source-links"
+
+
+def _lock_source_links(conn: Connection, kind: _Kind, project_id: str) -> None:
+    if kind is _SOURCES:
+        lock_keys(conn, PROJECT_SOURCE_LINKS_LOCK_NAMESPACE, [project_id])
+
 
 def _append_fact(conn: Connection, kind: _Kind, project_id: str, name: str, linked: bool, change: ConfigChange) -> None:
     conn.execute(
@@ -65,7 +76,9 @@ def _append_fact(conn: Connection, kind: _Kind, project_id: str, name: str, link
 
 
 def insert_link(conn: Connection, kind: _Kind, project_id: str, name: str, change: ConfigChange) -> None:
-    """The first-link body, inside the caller's transaction: the link at revision 1, its linked fact, the change."""
+    """The first-link body, inside the caller's transaction: the link at revision 1, its linked fact, the change —
+    a source link under its project's lock."""
+    _lock_source_links(conn, kind, project_id)
     conn.execute(
         statements_of(conn).insert(kind.links).values({"project_id": project_id, kind.column: name, "revision": 1})
     )
@@ -85,7 +98,8 @@ def record_link(
     change: ConfigChange,
 ) -> None:
     """The unlink/relink body, inside the caller's transaction: compare-and-set the revision, append the fact and
-    the change."""
+    the change — a source link under its project's lock."""
+    _lock_source_links(conn, kind, project_id)
     links = kind.links
     moved = conn.execute(
         statements_of(conn)
@@ -141,6 +155,16 @@ def _standing(
         ).all()
         standing.update((row[0], row[1]) for row in rows)
     return standing
+
+
+def projects_linking_source_conn(conn: Connection, source_name: str) -> list[ProjectId]:
+    """The projects whose standing link draws from ``source_name``, ordered by id, read on the caller's ``conn`` —
+    the locked ingest's read, and :meth:`ProjectLinkStore.projects_linking_source`'s body."""
+    stmts = statements_of(conn)
+    links = _SOURCES.links
+    linking = conn.execute(stmts.select(links, links.c.project_id).where(links.c.source_name == source_name)).scalars()
+    standing = _standing(stmts, conn, _SOURCES, list(linking), source_name)
+    return sorted(ProjectId(project_id) for project_id, _ in standing)
 
 
 class ProjectLinkStore:
@@ -246,13 +270,8 @@ class ProjectLinkStore:
         ]
 
     def projects_linking_source(self, source_name: str) -> list[ProjectId]:
-        links = _SOURCES.links
         with self._store.read("projects_linking_source") as conn:
-            linking = conn.execute(
-                self._store.select(links, links.c.project_id).where(links.c.source_name == source_name)
-            ).scalars()
-            standing = _standing(self._store, conn, _SOURCES, list(linking), source_name)
-        return sorted(ProjectId(project_id) for project_id, _ in standing)
+            return projects_linking_source_conn(conn, source_name)
 
     def linked_at(self, project_id: ProjectId, source_name: str, at: datetime) -> bool:
         if is_built_in(source_name):

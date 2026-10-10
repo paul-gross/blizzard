@@ -76,6 +76,8 @@ def _create(client: TestClient, forge_url: str, *, annotate: bool = False) -> No
         },
     )
     assert created.status_code == 201, created.text
+    linked = client.put("/api/projects/default/source-links/widget")
+    assert linked.status_code == 200, linked.text
 
 
 def _ingest(client: TestClient, token: str) -> httpx.Response:

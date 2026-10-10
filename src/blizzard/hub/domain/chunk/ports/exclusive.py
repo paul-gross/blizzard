@@ -15,6 +15,7 @@ from contextlib import AbstractContextManager
 from typing import Protocol
 
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, DependencyEdge, WorkRef
+from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.runners.registration import RunnerRegistration
 from blizzard.hub.domain.runners.route import Route
 
@@ -53,6 +54,12 @@ class ILockedWorkRefRead(Protocol):
         read under the lock."""
         ...
 
+    def source_links(self, sources: Sequence[str]) -> dict[str, list[ProjectId]]:
+        """Each of ``sources`` mapped to the projects whose standing link draws from it, ordered by id —
+        :meth:`~blizzard.hub.domain.projects.links.IReadProjectLinks.projects_linking_source`, read under
+        the lock."""
+        ...
+
 
 class IChunkExclusiveWrites(Protocol):
     """Opens the locked write transaction an exactly-one-wins decision and its excluded
@@ -65,10 +72,14 @@ class IChunkExclusiveWrites(Protocol):
         write repository's own ``*_locked`` method, taking this same handle."""
         ...
 
-    def locked_work_refs(self, pointers: Sequence[WorkRef]) -> AbstractContextManager[ILockedWorkRefRead]:
+    def locked_work_refs(
+        self, pointers: Sequence[WorkRef], *, project: ProjectId | None = None
+    ) -> AbstractContextManager[ILockedWorkRefRead]:
         """Lock every named pointer, first, in sorted order, then yield the read handle bound
         to that one connection — for a decision whose race has no chunk row yet to lock. Each
-        pointer locks only its own key, so ingests of different pointers never contend. A write
-        under the lock goes through a write repository's own ``*_locked`` method, taking this
-        same handle."""
+        pointer locks only its own key, so ingests of different pointers never contend. With
+        ``project``, its source links' key is taken before any pointer's, the one order every
+        locker of both keeps; a source link or unlink of that project waits for the commit. A
+        write under the lock goes through a write repository's own ``*_locked`` method, taking
+        this same handle."""
         ...

@@ -137,6 +137,7 @@ class ChunkRecordStore:
                     default_effort=r.default_effort,
                     default_harnesses=DEFAULT_HARNESSES.decode(r.default_harnesses),
                     intended_migration=INTENDED_MIGRATION.decode(r.intended_migration),
+                    project_id=r.project_id,
                 )
         return result
 
@@ -176,6 +177,7 @@ class ChunkRecordStore:
                     default_effort=r.default_effort,
                     default_harnesses=DEFAULT_HARNESSES.decode(r.default_harnesses),
                     intended_migration=INTENDED_MIGRATION.decode(r.intended_migration),
+                    project_id=r.project_id,
                 )
                 for r in rows
             ]
@@ -219,6 +221,7 @@ class ChunkRecordStore:
                 default_effort=r.default_effort,
                 default_harnesses=DEFAULT_HARNESSES.decode(r.default_harnesses),
                 intended_migration=INTENDED_MIGRATION.decode(r.intended_migration),
+                project_id=r.project_id,
             )
             for r in page_rows
         ]

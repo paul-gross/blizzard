@@ -13,6 +13,7 @@ from blizzard.hub.domain.chunk.model import HubWorkItem, IReadWorkItemRepository
 from blizzard.hub.domain.garden.proposals.resolution import GardenProposalDeliveryResolution
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
+from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.work_items.editing import CreatedWorkItem, WithdrawnWorkItem, WorkItemEditService
 from blizzard.hub.domain.work_items.model import WorkItemEdit, is_readable
 from blizzard.hub.work_sources.closer import IWorkCloser, WorkItemGoneError
@@ -98,7 +99,14 @@ class HubWorkSource:
         return self._resolve(pointer)
 
     def create(
-        self, *, title: str, body: str, author: WorkItemAuthor, stated_priority: WorkItemPriority | None, graph: Graph
+        self,
+        *,
+        title: str,
+        body: str,
+        author: WorkItemAuthor,
+        stated_priority: WorkItemPriority | None,
+        graph: Graph,
+        project_id: ProjectId,
     ) -> CreatedWorkItem:
         return self._edits.create(
             source=RESERVED_HUB_SOURCE_NAME,
@@ -107,6 +115,7 @@ class HubWorkSource:
             author=author,
             stated_priority=stated_priority,
             graph=graph,
+            project_id=project_id,
         )
 
     def edit(self, pointer: WorkRef, edit: WorkItemEdit) -> HubWorkItem:
