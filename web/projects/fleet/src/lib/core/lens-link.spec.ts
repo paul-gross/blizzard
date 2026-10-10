@@ -1,6 +1,7 @@
 import { Component, provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, RouterLink } from '@angular/router';
+import { vi } from 'vitest';
 
 import { IN_APP_LINK, type InAppLink, LensLink } from './lens-link';
 
@@ -56,5 +57,17 @@ describe('LensLink', () => {
     const first = pipe.transform(['/board', 'chunk', 'chk_1']);
     expect(pipe.transform(['/board', 'chunk', 'chk_1'])).toBe(first);
     expect(pipe.transform(['/board', 'chunk', 'chk_2'])).not.toBe(first);
+  });
+
+  it('hands a missing link back as it is, without asking the lens', () => {
+    const rewrite = vi.fn((link: InAppLink) => link);
+    TestBed.configureTestingModule({
+      providers: [provideZonelessChangeDetection(), { provide: IN_APP_LINK, useValue: rewrite }],
+    });
+    const pipe = TestBed.runInInjectionContext(() => new LensLink());
+
+    expect(pipe.transform(null)).toBeNull();
+    expect(pipe.transform(undefined)).toBeUndefined();
+    expect(rewrite).not.toHaveBeenCalled();
   });
 });
