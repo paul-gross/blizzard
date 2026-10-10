@@ -6,6 +6,7 @@ implemented; anything else raises loudly if called (``bzh:domain-core``)."""
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, cast
@@ -36,6 +37,16 @@ class _FakeRegistry:
         raise NotImplementedError(f"RunnerEnrollmentService should not touch {name!r}")
 
 
+class _NoProjects:
+    """A tenant holding no project — enrolling a token never resolves a served declaration."""
+
+    def resolve_ids(self, references: Sequence[str]) -> Mapping[str, str | None]:
+        return dict.fromkeys(references)
+
+    def only_id(self) -> str | None:
+        return None
+
+
 def _as_write_registry(registry: _FakeRegistry) -> IWriteRunnerRegistry:
     return cast(IWriteRunnerRegistry, registry)
 
@@ -59,7 +70,7 @@ def test_token_hash_is_the_sha256_hex_digest() -> None:
 def test_enroll_mints_a_urlsafe_token_and_stores_only_its_hash() -> None:
     clock = FixedClock(instant=_T0)
     registry = _FakeRegistry()
-    service = RunnerEnrollmentService(registry=_as_write_registry(registry), clock=clock)
+    service = RunnerEnrollmentService(registry=_as_write_registry(registry), served_projects=_NoProjects(), clock=clock)
 
     token = service.enroll(_registration())
 
@@ -72,7 +83,7 @@ def test_enroll_mints_a_urlsafe_token_and_stores_only_its_hash() -> None:
 def test_enroll_mints_a_different_token_each_call() -> None:
     clock = FixedClock(instant=_T0)
     registry = _FakeRegistry()
-    service = RunnerEnrollmentService(registry=_as_write_registry(registry), clock=clock)
+    service = RunnerEnrollmentService(registry=_as_write_registry(registry), served_projects=_NoProjects(), clock=clock)
 
     first = service.enroll(_registration())
     second = service.enroll(_registration())
@@ -85,7 +96,7 @@ def test_re_enroll_rotates_the_stored_hash() -> None:
     ends up holding (an overwrite, not an append-only fact — see `src/blizzard/hub/domain/runners/registration.py`)."""
     clock = FixedClock(instant=_T0)
     registry = _FakeRegistry()
-    service = RunnerEnrollmentService(registry=_as_write_registry(registry), clock=clock)
+    service = RunnerEnrollmentService(registry=_as_write_registry(registry), served_projects=_NoProjects(), clock=clock)
 
     first_token = service.enroll(_registration())
     second_token = service.enroll(_registration())
@@ -100,7 +111,7 @@ def test_enroll_uses_the_injected_clock_not_the_wall_clock() -> None:
     later = datetime(2026, 6, 1, tzinfo=UTC)
     clock = FixedClock(instant=later)
     registry = _FakeRegistry()
-    service = RunnerEnrollmentService(registry=_as_write_registry(registry), clock=clock)
+    service = RunnerEnrollmentService(registry=_as_write_registry(registry), served_projects=_NoProjects(), clock=clock)
 
     service.enroll(_registration())
 

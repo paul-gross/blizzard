@@ -290,3 +290,123 @@ def test_adding_a_runner_and_rotating_its_token_are_refused_to_a_contributor(tmp
     assert [r["runner_id"] for r in listed] == ["runner-a"]
     added = _add(hub, headers=_cookie(admin))
     assert hub.client.get(f"/api/runners/{added['runner_id']}", headers=_cookie(admin)).json()["added_by"] == "ada"
+
+
+def _create_project(hub: HubHarness, slug: str) -> str:
+    resp = hub.client.post("/api/projects", json={"slug": slug, "name": slug.title()})
+    assert resp.status_code == 201, resp.text
+    return resp.json()["project_id"]
+
+
+def _add_serving(hub: HubHarness, projects: list[str]) -> dict[str, Any]:
+    resp = hub.client.post("/api/runners", json={"name": "r-claude", "projects": projects})
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
+def _served(hub: HubHarness, runner_id: str) -> list[dict[str, Any]]:
+    resp = hub.client.get(f"/api/runners/{runner_id}")
+    assert resp.status_code == 200, resp.text
+    listed = next(r for r in hub.client.get("/api/runners").json()["runners"] if r["runner_id"] == runner_id)
+    assert listed["projects"] == resp.json()["projects"]
+    return resp.json()["projects"]
+
+
+def _register_serving(hub: HubHarness, projects: list[str] | None, runner_id: str = "r1") -> list[dict[str, Any]]:
+    body: dict[str, Any] = {"runner_id": runner_id, "workspace_id": "w1"}
+    if projects is not None:
+        body["projects"] = projects
+    resp = hub.client.post("/api/fleet/runners", json=body)
+    assert resp.status_code == 201, resp.text
+    return resp.json()["projects"]
+
+
+def _slugs(served: list[dict[str, Any]]) -> list[tuple[str, str | None]]:
+    return [(entry["entry"], entry["slug"]) for entry in served]
+
+
+def test_a_runner_added_naming_no_project_serves_the_tenants_only_project_by_its_id(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    added = _add(hub)
+
+    [served] = _served(hub, added["runner_id"])
+
+    assert served["entry"] == served["project_id"]
+    assert (served["slug"], served["name"]) == ("default", "Default")
+
+
+def test_a_runner_added_naming_no_project_serves_none_while_the_tenant_holds_several(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _create_project(hub, "beta")
+
+    added = _add(hub)
+
+    assert _served(hub, added["runner_id"]) == []
+
+
+def test_a_runner_added_with_an_empty_list_serves_none(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+
+    added = _add_serving(hub, [])
+
+    assert _served(hub, added["runner_id"]) == []
+
+
+def test_a_runner_added_naming_projects_serves_each_as_declared(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    beta = _create_project(hub, "beta")
+
+    added = _add_serving(hub, ["default", beta])
+
+    assert _slugs(_served(hub, added["runner_id"])) == [("default", "default"), (beta, "beta")]
+
+
+def test_adding_a_runner_naming_a_project_the_tenant_lacks_is_refused_and_adds_nothing(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+
+    resp = hub.client.post("/api/runners", json={"name": "r-claude", "projects": ["default", "nope"]})
+
+    assert resp.status_code == 422, resp.text
+    assert "nope" in resp.json()["detail"]
+    assert hub.client.get("/api/runners").json()["runners"] == []
+
+
+def test_a_registration_replaces_clears_or_keeps_the_declaration_and_never_refuses_over_it(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _create_project(hub, "beta")
+    seed_runner(hub, "r1")
+    assert _slugs(_served(hub, "r1")) == [("default", "default")]
+
+    # A registration from a runner that predates the declaration sends none and keeps the stored one.
+    assert _slugs(_register_serving(hub, None)) == [("default", "default")]
+    assert _slugs(_register_serving(hub, ["beta", "nope"])) == [("beta", "beta"), ("nope", None)]
+    assert _slugs(_served(hub, "r1")) == [("beta", "beta"), ("nope", None)]
+    assert _register_serving(hub, []) == []
+    assert _served(hub, "r1") == []
+    assert _register_serving(hub, None) == []
+
+
+def test_an_unresolved_entry_starts_serving_once_a_project_answers_to_it(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    seed_runner(hub, "r1")
+    _register_serving(hub, ["later"])
+    assert _slugs(_served(hub, "r1")) == [("later", None)]
+
+    _create_project(hub, "later")
+
+    assert _slugs(_register_serving(hub, None)) == [("later", "later")]
+    assert _slugs(_served(hub, "r1")) == [("later", "later")]
+
+
+def test_a_served_project_keeps_serving_under_a_new_slug_and_its_former_slug_still_resolves(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    beta = _create_project(hub, "beta")
+    seed_runner(hub, "r1", projects=("beta",))
+
+    renamed = hub.client.patch("/api/projects/beta", json={"slug": "gamma"})
+    assert renamed.status_code == 200, renamed.text
+
+    [kept] = _served(hub, "r1")
+    assert (kept["entry"], kept["project_id"], kept["slug"]) == ("beta", beta, "gamma")
+    [redeclared] = _register_serving(hub, ["beta"])
+    assert (redeclared["project_id"], redeclared["slug"]) == (beta, "gamma")

@@ -153,6 +153,7 @@ from blizzard.hub.domain.operations.queue import GroupService, QueueService
 from blizzard.hub.domain.operations.restart import RestartService
 from blizzard.hub.domain.operations.stop import StopService
 from blizzard.hub.domain.projects.authoring import ProjectAuthoring
+from blizzard.hub.domain.projects.bulk_resolve import BulkProjectResolver
 from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import IReadProjectRepository
 from blizzard.hub.domain.runners.enrollment import RunnerEnrollmentService
@@ -907,6 +908,8 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     detach = DetachService(route=chunk_route, exclusive=chunk_exclusive, clock=clock)
     # One id-keyed retired-runner refusal, shared by every runner-contact operation.
     retired = RetiredRunnerGuard(registry=registry_store)
+    # A served declaration resolves against the tenant's projects in one read per add or registration.
+    served_projects = BulkProjectResolver(stores.projects)
     fleet = FleetService(
         registry=registry_store,
         routes=chunk_route,
@@ -914,9 +917,10 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         facts=chunk_facts,
         detach=detach,
         retired=retired,
+        served_projects=served_projects,
         clock=clock,
     )
-    enrollment = RunnerEnrollmentService(registry=registry_store, clock=clock)
+    enrollment = RunnerEnrollmentService(registry=registry_store, served_projects=served_projects, clock=clock)
     graph_mint = GraphMintService(graphs=graph_store, clock=clock)
     scope_store = ScopeStore(tenant_connections)
     scope_registry = ScopeRegistry(scopes=scope_store, clock=clock)

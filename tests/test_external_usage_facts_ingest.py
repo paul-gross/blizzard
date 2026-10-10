@@ -19,9 +19,11 @@ from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.execution.detach import DetachService
 from blizzard.hub.domain.execution.facts import FactIngestService, PushedFact
 from blizzard.hub.domain.execution.fleet import FleetService
+from blizzard.hub.domain.projects.bulk_resolve import BulkProjectResolver
 from blizzard.hub.domain.runners.registration import RetiredRunnerGuard
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.internal.project_store import ProjectStore
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from tests.support import build_hub, chunk_stores, emitted_events, hub_store_connections, migrate_to
 
@@ -59,6 +61,7 @@ def _service(engine: sa.Engine, clock: FixedClock) -> FactIngestService:
         facts=chunks.facts,
         detach=DetachService(route=chunks.route, exclusive=chunks.exclusive, clock=clock),
         retired=retired,
+        served_projects=BulkProjectResolver(ProjectStore(store)),
         clock=clock,
     )
     event_log = EventLogService(events=chunks.events, publisher=EventBroker())

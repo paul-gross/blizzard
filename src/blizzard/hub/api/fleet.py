@@ -14,6 +14,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import JSONResponse
 
+from blizzard.foundation.claim_denials import ClaimDenialReason
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import dto
 from blizzard.foundation.store.utc import iso_utc
@@ -65,6 +66,7 @@ from blizzard.hub.domain.garden.proposals.model import RoutineProposalState
 from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.domain.graph.model import FollowLatest, Graph
 from blizzard.hub.domain.observability.transcripts import LeaseSegmentsNotOwned, refuse_foreign_lease_read
+from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.runners.registration import (
     DeclaredSubscription,
     RunnerCapability,
@@ -585,6 +587,23 @@ def hub_advance(
     )
 
 
+def _incompatible_denial(
+    services: TenantServices, chunk_id: str, exc: ClaimDeniedIncompatible
+) -> RouteClaimIncompatibleDenial:
+    """The incompatible-claim body: a capability refusal keeps its standing ``detail``; a project refusal's
+    ``detail`` names the chunk's project by its slug as it stands."""
+    if exc.reason is not ClaimDenialReason.PROJECT or exc.project_id is None:
+        return RouteClaimIncompatibleDenial(chunk_id=chunk_id, incompatible_runner_id=exc.runner_id)
+    project = services.projects.get(ProjectId(exc.project_id))
+    named = exc.project_id if project is None else project.slug
+    return RouteClaimIncompatibleDenial(
+        chunk_id=chunk_id,
+        incompatible_runner_id=exc.runner_id,
+        reason=ClaimDenialReason.PROJECT,
+        detail=f"runner does not serve the chunk's project {named}",
+    )
+
+
 @claim_router.post("/routes", response_model=RouteClaimResponse, status_code=status.HTTP_201_CREATED)
 def claim_route(
     claim: RouteClaim,
@@ -592,8 +611,9 @@ def claim_route(
     fleet: Annotated[FleetRequest, Depends(FleetRequest.of_even_if_retired)],
 ) -> object:
     """Claim a chunk; 403 if the runner is unregistered, paused, or retired at the hub, 409 if already claimed,
-    already terminal ({done, stopped}), not ready, standing on an unmet prerequisite,
-    or incompatible with the runner's stored capabilities, else the first node envelope."""
+    already terminal ({done, stopped}), not ready, standing on an unmet prerequisite, of a project
+    the runner does not serve, or incompatible with the runner's stored capabilities, else the first
+    node envelope."""
     runner_id = fleet.caller_id()
     chunk = services.chunks.record.get(claim.chunk_id)
     if chunk is None:
@@ -632,9 +652,7 @@ def claim_route(
         )
         return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=dependency_denial.model_dump())
     except ClaimDeniedIncompatible as exc:
-        incompatible_denial = RouteClaimIncompatibleDenial(
-            chunk_id=claim.chunk_id, incompatible_runner_id=exc.runner_id
-        )
+        incompatible_denial = _incompatible_denial(services, claim.chunk_id, exc)
         return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=incompatible_denial.model_dump())
     except ClaimConflict as exc:
         conflict = RouteClaimConflict(chunk_id=claim.chunk_id, held_by_runner_id=exc.held_by_runner_id)
@@ -863,6 +881,7 @@ def register_runner(
         capabilities=capabilities,
         subscriptions=subscriptions,
         gates=tuple(request.gates),
+        projects=request.projects,
     )
     services.events.publish_runner_changed(runner_id, kind="registered", runner_name=registered.name)
     return RunnerRegistrationResponse(
@@ -871,6 +890,9 @@ def register_runner(
         first_registration=registered.first,
         tenant_id=fleet.scope.tenant,
         tenant_name=fleet.tenant_name,
+        projects=runners_api.served_views(
+            registered.projects, runners_api.served_projects(services, registered.projects)
+        ),
     )
 
 
@@ -906,4 +928,8 @@ def get_runner(
         registration.refuse_if_never_connected()
     except RunnerNeverConnected as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    return runners_api.runner_view(services.fleet.own_liveness(registration), now=services.clock.now())
+    return runners_api.runner_view(
+        services.fleet.own_liveness(registration),
+        now=services.clock.now(),
+        projects=runners_api.served_projects(services, registration.served),
+    )

@@ -11,11 +11,12 @@ import sqlalchemy as sa
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
-from blizzard.hub.domain.runners.registration import RunnerAddition, RunnerRegistration
+from blizzard.hub.domain.runners.registration import RunnerAddition, RunnerRegistration, ServedEntry
 from blizzard.hub.runtime import migration_runner
+from blizzard.hub.store import schema
 from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
-from tests.support import count_queries, hub_store_connections
+from tests.support import count_queries, default_tenant, hub_store_connections
 
 pytestmark = pytest.mark.component
 
@@ -131,3 +132,43 @@ def test_runners_list_oldest_added_first_with_the_id_breaking_a_tie(tmp_path: Pa
     store.record_registration("rn_c", workspace_id="w1", env_capacity=None, at=_LATER)
 
     assert [r.runner_id for r in store.list_runners()] == ["rn_c", "rn_a", "rn_b"]
+
+
+_SERVED = (ServedEntry("alpha", "proj_a"), ServedEntry("later", None))
+
+
+def test_a_runner_is_added_holding_its_served_declaration_entry_by_entry(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    store.add(RunnerAddition("rn_1", "r-claude", "hash-rn_1", at=_T0, by="admin", served=_SERVED))
+
+    assert _get(store, "rn_1").served == _SERVED
+    assert _get(store, "rn_1").serves("proj_a")
+
+
+def test_a_registration_naming_no_declaration_leaves_the_stored_one_and_a_named_one_replaces_it(
+    tmp_path: Path,
+) -> None:
+    store = _store(tmp_path)
+    store.add(RunnerAddition("rn_1", "r-claude", "hash-rn_1", at=_T0, by="admin", served=_SERVED))
+
+    store.record_registration("rn_1", workspace_id="w1", env_capacity=1, at=_T0)
+    assert _get(store, "rn_1").served == _SERVED
+    store.record_registration("rn_1", workspace_id="w1", env_capacity=1, projects=(), at=_LATER)
+    assert _get(store, "rn_1").served == ()
+    replaced = (ServedEntry("proj_b", "proj_b"),)
+    store.record_registration("rn_1", workspace_id="w1", env_capacity=1, projects=replaced, at=_LATER)
+    assert _get(store, "rn_1").served == replaced
+    assert [r.served for r in store.list_runners()] == [replaced]
+
+
+def test_a_runner_row_holding_no_declaration_serves_nothing(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    store = RunnerRegistryStore(hub_store_connections(engine))
+    store.add(RunnerAddition("rn_1", "r-claude", "hash-rn_1", at=_T0, by="admin", served=_SERVED))
+    with engine.begin() as conn:
+        registrations = schema.runner_registrations
+        conn.execute(
+            sa.update(registrations).where(registrations.c.tenant_id == default_tenant(engine)).values(projects=None)
+        )
+
+    assert _get(store, "rn_1").served == ()

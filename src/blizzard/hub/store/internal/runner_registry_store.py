@@ -23,6 +23,7 @@ from blizzard.hub.domain.runners.registration import (
     RunnerAddition,
     RunnerCapability,
     RunnerRegistration,
+    ServedEntry,
     SubscriptionUsageMiss,
     SubscriptionUsageSample,
     TokenRotation,
@@ -174,6 +175,7 @@ class RunnerRegistryStore:
                     token_hash=addition.token_hash,
                     added_at=addition.at,
                     added_by=addition.by,
+                    projects=_served_json(addition.served),
                 )
             )
 
@@ -189,6 +191,7 @@ class RunnerRegistryStore:
         capabilities: tuple[RunnerCapability, ...] = (),
         subscriptions: tuple[DeclaredSubscription, ...] | None = None,
         gates: tuple[str, ...] = (),
+        projects: tuple[ServedEntry, ...] | None = None,
         at: datetime,
     ) -> bool:
         # Written unconditionally on every registration, `None`/empty verbatim included: the
@@ -230,6 +233,9 @@ class RunnerRegistryStore:
         }
         if name is not None:
             refreshed["name"] = name
+        # `None` leaves the stored declaration as it is; `()` stores an empty one, which serves nothing.
+        if projects is not None:
+            refreshed["projects"] = _served_json(projects)
         registration = s.runner_registrations.c.runner_id == runner_id
         with self._store.write("record_registration") as conn:
             if not conn.execute(
@@ -636,6 +642,10 @@ class RunnerRegistryStore:
             retired_at=as_utc(retired_at) if retired_at is not None else None,
             retired_by=retired_by,
             gates=tuple(json.loads(row.gates)) if row.gates else (),
+            served=tuple(
+                ServedEntry(entry=e["entry"], project_id=e.get("project_id"))
+                for e in (json.loads(row.projects) if row.projects else [])
+            ),
         )
 
     @staticmethod
@@ -649,6 +659,11 @@ class RunnerRegistryStore:
             return ()
         admitted = (ExternalSubscriptionUsageWindow.admitted(entry) for entry in entries)
         return tuple(window for window in admitted if not isinstance(window, str))
+
+
+def _served_json(served: tuple[ServedEntry, ...]) -> str:
+    """The served declaration as stored: a JSON list of ``{entry, project_id}``, ``[]`` when it serves nothing."""
+    return json.dumps([{"entry": e.entry, "project_id": e.project_id} for e in served])
 
 
 def _conforms_registry(x: RunnerRegistryStore) -> IWriteRunnerRegistry:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -21,9 +22,11 @@ from blizzard.hub.domain.runners.registration import (
     RunnerLiveness,
     RunnerNotEnrolled,
     RunnerRegistration,
+    ServedEntry,
     declared_name,
 )
 from blizzard.hub.domain.runners.route import Route
+from blizzard.hub.domain.runners.served import IServedProjects, declaration_at_registration
 
 _log = get_logger("blizzard.hub.registry")
 
@@ -40,11 +43,13 @@ class ReleasedRoute:
 @domain_model
 @dataclass(frozen=True)
 class Registered:
-    """What one registration recorded: whether it was the runner's first since it was added, and
-    the name the runner now holds — the one it declared, else the one it already held."""
+    """What one registration recorded: whether it was the runner's first since it was added, the
+    name the runner now holds — the one it declared, else the one it already held — and the served
+    declaration it now holds, the one it sent or else the stored one."""
 
     first: bool
     name: str
+    projects: tuple[ServedEntry, ...]
 
 
 @domain_model
@@ -70,10 +75,13 @@ class FleetService:
         facts: IReadChunkFactsRepository,
         detach: DetachService,
         retired: RetiredRunnerGuard,
+        served_projects: IServedProjects,
         clock: IClock,
         stale_after: timedelta = STALE_AFTER,
     ) -> None:
         self._registry = registry
+        # The tenant's projects, which a served declaration resolves against.
+        self._served_projects = served_projects
         # Retirement's holdings read and release pass — the hub's existing detach path.
         self._routes = routes
         self._records = records
@@ -95,15 +103,19 @@ class FleetService:
         capabilities: tuple[RunnerCapability, ...] = (),
         subscriptions: tuple[DeclaredSubscription, ...] | None = None,
         gates: tuple[str, ...] = (),
+        projects: Sequence[str] | None = None,
     ) -> Registered:
         """Register (or refresh) ``held``, a runner the hub added — the one its bearer token names.
 
         The runner's reported facts are overwritten on every registration; absent values store as
-        null/empty. A declared ``name`` replaces the one held; none, or a blank one, keeps it. A
+        null/empty. A declared ``name`` replaces the one held; none, or a blank one, keeps it. A sent
+        ``projects`` replaces the served declaration (``[]`` clears it); ``None`` keeps it, re-resolving
+        only its unresolved entries. No entry is refused: a registration is also the runner's heartbeat. A
         retired runner raises :class:`~blizzard.hub.domain.runners.registration.RunnerRetired` before any write."""
         held.refuse_if_retired(action="registration")
         runner_id = held.runner_id
         recorded_name = declared_name(name)
+        served = declaration_at_registration(held.served, projects, self._served_projects)
         created = self._registry.record_registration(
             runner_id,
             name=recorded_name,
@@ -114,6 +126,7 @@ class FleetService:
             capabilities=capabilities,
             subscriptions=subscriptions,
             gates=gates,
+            projects=served,
             at=self._clock.now(),
         )
         _log.info(
@@ -125,9 +138,12 @@ class FleetService:
             public_url=public_url,
             capabilities=[c.harness_id for c in capabilities],
             subscriptions=None if subscriptions is None else [s.slug for s in subscriptions],
+            projects=None if served is None else [e.entry for e in served],
             first_time=created,
         )
-        return Registered(first=created, name=recorded_name or held.name)
+        return Registered(
+            first=created, name=recorded_name or held.name, projects=held.served if served is None else served
+        )
 
     def heartbeat(self, runner_id: str) -> bool:
         """Refresh a runner's liveness; returns False if it is unregistered. A retired runner

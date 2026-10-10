@@ -10,7 +10,10 @@ from pathlib import Path
 
 import pytest
 
-from tests.support import HubHarness, build_hub
+from blizzard.foundation.claim_denials import ClaimDenialReason
+from blizzard.hub.domain.runners.registration import RunnerCapability
+from blizzard.wire.route import RouteClaimIncompatibleDenial
+from tests.support import HubHarness, build_hub, seed_runner
 
 pytestmark = pytest.mark.component
 
@@ -56,6 +59,8 @@ def test_claim_denied_when_capabilities_no_longer_satisfy_the_chunk(tmp_path: Pa
     body = resp.json()
     assert body["chunk_id"] == chunk_id
     assert body["incompatible_runner_id"] == "r1"
+    assert body["reason"] == "capability"
+    assert body["detail"] == RouteClaimIncompatibleDenial.model_fields["detail"].default
     # Distinguishable from the other three 409 shapes.
     assert "held_by_runner_id" not in body
     assert "status" not in body
@@ -128,3 +133,34 @@ def test_claim_denied_once_capabilities_regress_between_registration_and_claim(t
 
     assert resp.status_code == 409, resp.text
     assert resp.json()["incompatible_runner_id"] == "r1"
+
+
+def test_claim_denied_when_the_runner_does_not_serve_the_chunks_project(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    seed_runner(hub, "r1", projects=("beta",))  # names no project the tenant holds, so serves none
+    chunk_id = _ingest(hub, "1")
+
+    resp = hub.client.post("/api/fleet/routes", json=_claim_body(chunk_id))
+
+    assert resp.status_code == 409, resp.text
+    body = resp.json()
+    assert (body["chunk_id"], body["incompatible_runner_id"], body["reason"]) == (chunk_id, "r1", "project")
+    assert "default" in body["detail"]
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["route"] is None
+
+
+def test_an_unserved_project_is_judged_before_a_capability_mismatch(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    seed_runner(hub, "r1", projects=(), capabilities=(RunnerCapability("other-harness", default=True),))
+    chunk_id = _ingest(hub, "1", default_harnesses=["special-harness"])
+
+    resp = hub.client.post("/api/fleet/routes", json=_claim_body(chunk_id))
+
+    assert resp.status_code == 409, resp.text
+    assert resp.json()["reason"] == "project"
+
+
+def test_a_denial_body_from_a_hub_that_names_no_reason_reads_as_a_capability_denial() -> None:
+    body = {"chunk_id": "ch_1", "incompatible_runner_id": "r1", "detail": "runner capabilities no longer satisfy"}
+
+    assert RouteClaimIncompatibleDenial.model_validate(body).reason is ClaimDenialReason.CAPABILITY

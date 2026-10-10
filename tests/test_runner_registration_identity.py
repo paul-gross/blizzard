@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient
 
 from blizzard.hub.store import schema
 from blizzard.hub.tenancy import TenantId
-from tests.support import HubHarness, add_tenant, build_hub, default_tenant, seed_runner
+from tests.support import HubHarness, add_tenant, build_hub, default_project, default_tenant, seed_runner
 
 pytestmark = pytest.mark.component
 
@@ -32,6 +32,15 @@ def _tenant(hub: HubHarness, tenant: TenantId | None = None) -> dict[str, str]:
     with hub.engine.connect() as conn:
         name = conn.execute(sa.select(schema.tenants.c.name).where(schema.tenants.c.tenant_id == named)).scalar_one()
     return {"tenant_id": named, "tenant_name": name}
+
+
+def _serving_default(hub: HubHarness, tenant: TenantId | None = None, *, entry: str | None = None) -> list[dict]:
+    """The ``projects`` a registration answers for a runner serving ``tenant``'s only project (default: the store's
+    only tenant's), declared as ``entry`` — the project's id, as adding a runner with no list stores it, when
+    ``None``."""
+    project_id = default_project(hub.engine, tenant)
+    declared = project_id if entry is None else entry
+    return [{"entry": declared, "project_id": project_id, "slug": "default", "name": "Default"}]
 
 
 def _rename(hub: HubHarness, tenant: TenantId, name: str) -> None:
@@ -63,7 +72,7 @@ def test_an_added_runner_first_registers_under_its_minted_id(tmp_path: Path) -> 
     assert first.status_code == 201, first.text
     assert first.json() == {
         "runner_id": added.runner_id,
-        "projects": None,
+        "projects": _serving_default(hub),
         "runner_name": "r-claude",
         "first_registration": True,
         **_tenant(hub),
@@ -99,7 +108,7 @@ def test_a_restart_under_a_new_name_renames_the_runner_and_changes_nothing_else(
 
     assert renamed.json() == {
         "runner_id": added.runner_id,
-        "projects": None,
+        "projects": _serving_default(hub),
         "runner_name": "r-new",
         "first_registration": False,
         **_tenant(hub),
@@ -155,7 +164,7 @@ def test_a_runner_added_in_another_tenant_registers_naming_that_tenant(tmp_path:
     assert first.status_code == 201, first.text
     assert first.json() == {
         "runner_id": "rn-bravo-1",
-        "projects": None,
+        "projects": _serving_default(hub, bravo, entry="default"),
         "runner_name": "r-bravo",
         "first_registration": True,
         "tenant_id": bravo,

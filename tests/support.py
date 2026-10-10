@@ -87,8 +87,11 @@ from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.transcripts import TranscriptCaps
 from blizzard.hub.domain.projects.authoring import ProjectAuthoring
+from blizzard.hub.domain.projects.bulk_resolve import BulkProjectResolver
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.runners.registration import RunnerAddition, RunnerCapability, RunnerRegistration
+from blizzard.hub.domain.runners.served import resolve_served
+from blizzard.hub.domain.tenancy.administration import DEFAULT_PROJECT_SLUG
 from blizzard.hub.egress.writer import (
     EgressBatch,
     EgressFailure,
@@ -943,12 +946,14 @@ def seed_runner(
     token: str | None = None,
     capabilities: tuple[RunnerCapability, ...] = SEEDED_CAPABILITIES,
     register: bool = True,
+    projects: tuple[str, ...] | None = None,
 ) -> str:
     """Add ``runner_id`` at the hub as ``hub runner add`` does, but under a chosen id and holding
     ``token`` (default :func:`runner_token`), and — with ``register`` — record its first registration
     so it is connected; returns the plaintext token. ``register=False`` leaves it added but never
     connected. A runner the hub already holds is left as is, except that ``register`` connects one
-    that never has."""
+    that never has. It serves ``projects``, each an id or slug, and the tenant's ``default`` project
+    when ``None``, whatever other projects the tenant holds."""
     services = target.services if isinstance(target, HubHarness) else target
     registry = services.registry
     assert isinstance(registry, RunnerRegistryStore), "seeding writes through the hub's own registry store"
@@ -956,7 +961,11 @@ def seed_runner(
     token_hash = TokenHash(plaintext).hex
     present = registry.get_runner(runner_id)
     if present is None:
-        registry.add(RunnerAddition(runner_id, name or runner_id, token_hash, at=services.clock.now(), by="test"))
+        declared = (DEFAULT_PROJECT_SLUG,) if projects is None else projects
+        served = resolve_served(declared, BulkProjectResolver(services.projects))
+        registry.add(
+            RunnerAddition(runner_id, name or runner_id, token_hash, at=services.clock.now(), by="test", served=served)
+        )
     if register and (present is None or present.never_connected()):
         services.fleet.register(added_runner(services, runner_id), workspace_id, capabilities=capabilities)
     return plaintext
