@@ -709,7 +709,16 @@ const HUB_LAYERS = {
   'garden/scopes': ['garden/core'],
   'garden/findings': ['garden/core', 'garden/proposals'],
   'garden/routines': ['garden/core', 'garden/runs', 'graphs'],
-  garden: ['garden/findings', 'garden/proposals', 'garden/routines', 'garden/runs', 'garden/scopes'],
+  'garden/doorway': ['garden/core', 'garden/proposals', 'garden/runs'],
+  garden: [
+    'garden/core',
+    'garden/doorway',
+    'garden/findings',
+    'garden/proposals',
+    'garden/routines',
+    'garden/runs',
+    'garden/scopes',
+  ],
   shell: [
     'admin',
     'board',

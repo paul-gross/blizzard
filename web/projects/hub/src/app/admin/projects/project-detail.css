@@ -71,3 +71,11 @@
   margin: 0;
   font-size: var(--fs-sm);
 }
+.note a {
+  color: var(--cyan);
+  text-decoration: none;
+}
+.note a:hover,
+.note a:focus-visible {
+  text-decoration: underline;
+}

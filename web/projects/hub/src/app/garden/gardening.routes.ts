@@ -1,5 +1,7 @@
 import type { Routes } from '@angular/router';
 
+import { gardenProjectGuard, gardeningDoorwayGuard } from './garden-lens.guard';
+
 /**
  * The gardening tab — a top-level peer of board/graphs/events, not a
  * panel inside any of them. Five deep-linkable children, one per noun the garden
@@ -15,13 +17,23 @@ import type { Routes } from '@angular/router';
  * right-hand child is swapped; the list, its filters, and its scroll position all
  * survive. Filter state itself rides the query string (`route-state.ts`), which
  * makes a filtered view shareable by URL as well as durable.
+ *
+ * Every noun belongs to one project, so the tabs are a project's garden and exist only under its lens
+ * (`/p/{project}/gardening/…`). On All the bare path is the doorway — one card per project and no tabs — and a tab's
+ * link on All is followed into a project by {@link gardenProjectGuard}.
  */
 export const GARDENING_ROUTES: Routes = [
   {
     path: '',
+    pathMatch: 'full',
+    canActivate: [gardeningDoorwayGuard],
+    loadComponent: () => import('./doorway/gardening-doorway').then((m) => m.GardeningDoorway),
+  },
+  {
+    path: '',
+    canActivate: [gardenProjectGuard],
     loadComponent: () => import('./gardening-page').then((m) => m.GardeningPage),
     children: [
-      { path: '', redirectTo: 'runs', pathMatch: 'full' },
       // A scope has no id of its own — its slug *is* the id.
       {
         path: 'scopes',

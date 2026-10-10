@@ -1,3 +1,36 @@
+<nav class="crumbs" aria-label="Breadcrumb" data-testid="gardening-crumbs">
+  <span class="crumb">Gardening</span>
+  <span class="sep" aria-hidden="true">›</span>
+  <fleet-kit-menu
+    class="project-crumb"
+    ariaLabel="Switch project"
+    testid="gardening-crumb-project"
+    [menu]="projectMenu"
+  >
+    <span trigger>{{ projectName() }} ▾</span>
+  </fleet-kit-menu>
+  @if (surface(); as label) {
+    <span class="sep" aria-hidden="true">›</span>
+    <span class="crumb current" data-testid="gardening-crumb-surface">{{ label }}</span>
+  }
+</nav>
+<ng-template #projectMenu>
+  <fleet-kit-menu-panel testid="gardening-crumb-project-panel">
+    @for (choice of projectChoices(); track choice.slug) {
+      <fleet-kit-menu-item-radio
+        [checked]="choice.slug === lensSlug()"
+        [testid]="'gardening-crumb-project-' + (choice.slug ?? 'all')"
+        (triggered)="chooseProject(choice.slug)"
+        >{{ choice.label }}</fleet-kit-menu-item-radio
+      >
+    }
+  </fleet-kit-menu-panel>
+</ng-template>
+@if (unserved()) {
+  <p class="unserved" role="status" data-testid="gardening-unserved">
+    No runner serves {{ projectName() }}: the work its garden raises waits until a runner declares it.
+  </p>
+}
 <nav fleetKitTabStrip class="subnav" data-testid="gardening-subnav">
   <a fleetKitTab routerLink="runs" routerLinkActive="active" data-testid="gardening-tab-runs">Runs</a>
   <a fleetKitTab routerLink="findings" routerLinkActive="active" data-testid="gardening-tab-findings">Findings</a>

@@ -210,10 +210,8 @@ export {
   confirmGoneFindingsApiFindingsConfirmGonePost,
   deleteChunkApiChunksChunkIdDelete,
   detachChunkApiChunksChunkIdDetachPost,
-  editScopeApiScopesSlugPatch,
   enableGraphApiGraphsGraphIdEnablePost,
   enableRoutineApiRoutinesRoutineIdEnablePost,
-  enableScopeApiScopesSlugEnablePost,
   fleetSpendApiSpendGet,
   getBacklogApiBacklogGet,
   getFindingApiFindingsFindingIdGet,
@@ -233,7 +231,6 @@ export {
   listRoutinesApiRoutinesGet,
   listRunnersApiRunnersGet,
   listRunsApiRunsGet,
-  listScopeRoutinesApiScopesSlugRoutinesGet,
   listScopesApiScopesGet,
   listMembersApiMembersGet,
   revokeMembershipApiMembersUserIdDelete,
@@ -254,7 +251,6 @@ export {
   resumeRunnerApiRunnersRunnerIdResumePost,
   retireGraphApiGraphsGraphIdRetirePost,
   retireRoutineApiRoutinesRoutineIdRetirePost,
-  retireScopeApiScopesSlugRetirePost,
   routineBaselinesApiRoutinesRoutineIdBaselinesGet,
   routineProposalCountsApiRoutinesProposalCountsGet,
   routineSweepsApiRoutinesRoutineIdSweepsGet,
@@ -266,3 +262,17 @@ export {
 } from './lib/api/hub';
 export type { ChunkDetail } from './lib/api/hub';
 export type { ProjectCreateRequest, ProjectPatchRequest, RepositoryLinkView, SourceLinkView } from './lib/api/hub';
+// A project's garden: its nested reads and its scopes' by-slug verbs, each addressed inside the project.
+export {
+  editProjectScopeApiProjectsProjectScopesSlugPatch,
+  enableProjectScopeApiProjectsProjectScopesSlugEnablePost,
+  getGardenProposalApiGardenProposalsProposalIdGet,
+  listProjectFindingsApiProjectsProjectFindingsGet,
+  listProjectGardenProposalsApiProjectsProjectGardenProposalsGet,
+  listProjectRoutinesApiProjectsProjectRoutinesGet,
+  listProjectRunsApiProjectsProjectRunsGet,
+  listProjectScopeRoutinesApiProjectsProjectScopesSlugRoutinesGet,
+  listProjectScopesApiProjectsProjectScopesGet,
+  projectRunDeltaApiProjectsProjectRunsChunkIdGet,
+  retireProjectScopeApiProjectsProjectScopesSlugRetirePost,
+} from './lib/api/hub';

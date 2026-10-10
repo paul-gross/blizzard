@@ -266,6 +266,10 @@
  *     never pushes the row past the viewport (the chips scroll inside the control),
  *     and every route tab and the lens's own choice stay on screen and hit-testable
  *     at every desktop width.
+ *   - projects/hub/src/app/garden/doorway/gardening-doorway.shell-sweep.spec.ts — the
+ *     gardening doorway on All: one card per project reflows to a single column at
+ *     phone widths with no horizontal overflow, a long project name or routine list
+ *     wraps inside its card, and every card's way in stays on screen.
  */
 
 const { spawnSync } = require('node:child_process');
@@ -329,6 +333,7 @@ const SWEEPS = [
   { project: 'runner', spec: 'projects/runner/src/app/board/chunk-dock/chunk-detail-view-provenance.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/core/auth/tenant-picker.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/shell/nav/project-lens-control.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/garden/doorway/gardening-doorway.shell-sweep.spec.ts' },
 ];
 
 /** Every `*.shell-sweep.spec.ts` under `projects/`, repo-relative and POSIX-separated.

@@ -5,10 +5,20 @@ import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-exper
 import { hubClient } from 'fleet';
 import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
 
+import { provideProjectLens } from '../core/project-lens';
 import { GARDENING_ROUTES } from './gardening.routes';
 
+/** The lens every case opens the garden under. */
+const PROJECT = 'blizzard';
+
+/** A nested project read's path as the un-nested read it narrows, so one stub table answers both. */
+function unnested(path: string): string {
+  return path.replace(`/api/projects/${PROJECT}/`, '/api/');
+}
+
 /**
- * The `/gardening` subtree (`gardening.routes.ts`, mounted at `gardening` as the app's route table mounts it) —
+ * The `/gardening` subtree (`gardening.routes.ts`, mounted at `gardening` under a project's lens, as the app's route
+ * table mounts it; the doorway and the guards on All are `garden-lens.guard.spec.ts`'s) —
  * proves the five top-level children resolve, the bare parent path redirects to
  * `runs` (the leftmost tab), and each of the five bare/param pairs (`scopes`,
  * `routines`, `runs`, `findings`, `proposals`) actually mounts its page and selects
@@ -30,7 +40,8 @@ describe('the /gardening route subtree', () => {
   let stub: RequestClientStub;
 
   beforeEach(async () => {
-    stub = stubRequestClient(hubClient, (method, path) => {
+    stub = stubRequestClient(hubClient, (method, nested) => {
+      const path = unnested(nested);
       if (method === 'GET' && path === '/api/garden-proposals') return { proposals: [], next_cursor: null };
       if (method === 'GET' && path === '/api/routines') return [];
       if (method === 'GET' && path === '/api/graphs') return [];
@@ -45,7 +56,8 @@ describe('the /gardening route subtree', () => {
       providers: [
         provideZonelessChangeDetection(),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
-        provideRouter([{ path: 'gardening', children: GARDENING_ROUTES }]),
+        provideRouter([{ path: 'p/:projectSlug', children: [{ path: 'gardening', children: GARDENING_ROUTES }] }]),
+        provideProjectLens(),
       ],
     }).compileComponents();
   });
@@ -66,10 +78,10 @@ describe('the /gardening route subtree', () => {
     // navigation with no visible effect — the tab stops responding, with nothing
     // in the URL to show for it. Walking the strip is the only shape that catches it.
     for (const tab of ['scopes', 'routines', 'runs', 'findings', 'proposals', 'scopes', 'runs', 'findings']) {
-      await router.navigateByUrl(`/gardening/${tab}`);
+      await router.navigateByUrl(`/p/${PROJECT}/gardening/${tab}`);
       await settle(fixture, 8);
 
-      expect(router.url, `navigating to ${tab} from the previous tab did not land`).toBe(`/gardening/${tab}`);
+      expect(router.url, `navigating to ${tab} from the previous tab did not land`).toBe(`/p/${PROJECT}/gardening/${tab}`);
       expect(
         (fixture.nativeElement as HTMLElement).querySelector(`[data-testid="gardening-${tab}-list"]`) ??
           (fixture.nativeElement as HTMLElement).textContent,
@@ -78,21 +90,22 @@ describe('the /gardening route subtree', () => {
     }
   });
 
-  it('redirects the bare /gardening path to /gardening/runs, selecting nothing', async () => {
+  it('opens a project\'s bare gardening path on its runs tab, selecting nothing', async () => {
     const fixture = TestBed.createComponent(TestGardeningRouteHost);
     const router = TestBed.inject(Router);
 
-    await router.navigateByUrl('/gardening');
+    await router.navigateByUrl('/p/blizzard/gardening');
     await settle(fixture);
 
-    expect(router.url).toBe('/gardening/runs');
+    expect(router.url).toBe('/p/blizzard/gardening/runs');
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('[data-testid="gardening-runs-empty"]')).toBeTruthy();
   });
 
   it('resolves /gardening/scopes/:scopeSlug to the scope detail', async () => {
     stub.restore();
-    stub = stubRequestClient(hubClient, (method, path) => {
+    stub = stubRequestClient(hubClient, (method, nested) => {
+      const path = unnested(nested);
       if (method === 'GET' && path === '/api/garden-proposals') return { proposals: [], next_cursor: null };
       if (method === 'GET' && path === '/api/routines') return [];
       if (method === 'GET' && path === '/api/graphs') return [];
@@ -107,7 +120,7 @@ describe('the /gardening route subtree', () => {
     const fixture = TestBed.createComponent(TestGardeningRouteHost);
     const router = TestBed.inject(Router);
 
-    await router.navigateByUrl('/gardening/scopes/blizzard');
+    await router.navigateByUrl('/p/blizzard/gardening/scopes/blizzard');
     await settle(fixture, 12);
 
     const el = fixture.nativeElement as HTMLElement;
@@ -118,7 +131,7 @@ describe('the /gardening route subtree', () => {
     const fixture = TestBed.createComponent(TestGardeningRouteHost);
     const router = TestBed.inject(Router);
 
-    await router.navigateByUrl('/gardening/routines');
+    await router.navigateByUrl('/p/blizzard/gardening/routines');
     await settle(fixture);
 
     const el = fixture.nativeElement as HTMLElement;
@@ -128,7 +141,8 @@ describe('the /gardening route subtree', () => {
 
   it('resolves /gardening/routines/:routineName to the routine detail', async () => {
     stub.restore();
-    stub = stubRequestClient(hubClient, (method, path) => {
+    stub = stubRequestClient(hubClient, (method, nested) => {
+      const path = unnested(nested);
       if (method === 'GET' && path === '/api/garden-proposals') return { proposals: [], next_cursor: null };
       if (method === 'GET' && path === '/api/routines') {
         return [
@@ -162,7 +176,7 @@ describe('the /gardening route subtree', () => {
     const fixture = TestBed.createComponent(TestGardeningRouteHost);
     const router = TestBed.inject(Router);
 
-    await router.navigateByUrl('/gardening/routines/nightly');
+    await router.navigateByUrl('/p/blizzard/gardening/routines/nightly');
     await settle(fixture, 12);
 
     const el = fixture.nativeElement as HTMLElement;
@@ -173,7 +187,7 @@ describe('the /gardening route subtree', () => {
     const fixture = TestBed.createComponent(TestGardeningRouteHost);
     const router = TestBed.inject(Router);
 
-    await router.navigateByUrl('/gardening/runs');
+    await router.navigateByUrl('/p/blizzard/gardening/runs');
     await settle(fixture);
 
     const el = fixture.nativeElement as HTMLElement;
@@ -183,7 +197,8 @@ describe('the /gardening route subtree', () => {
 
   it('resolves /gardening/runs/:chunkId to the run detail', async () => {
     stub.restore();
-    stub = stubRequestClient(hubClient, (method, path) => {
+    stub = stubRequestClient(hubClient, (method, nested) => {
+      const path = unnested(nested);
       if (method === 'GET' && path === '/api/garden-proposals') return { proposals: [], next_cursor: null };
       if (method === 'GET' && path === '/api/routines') return [];
       if (method === 'GET' && path === '/api/graphs') return [];
@@ -206,7 +221,7 @@ describe('the /gardening route subtree', () => {
     const fixture = TestBed.createComponent(TestGardeningRouteHost);
     const router = TestBed.inject(Router);
 
-    await router.navigateByUrl('/gardening/runs/ch_1');
+    await router.navigateByUrl('/p/blizzard/gardening/runs/ch_1');
     await settle(fixture, 12);
 
     const el = fixture.nativeElement as HTMLElement;
@@ -217,7 +232,7 @@ describe('the /gardening route subtree', () => {
     const fixture = TestBed.createComponent(TestGardeningRouteHost);
     const router = TestBed.inject(Router);
 
-    await router.navigateByUrl('/gardening/findings');
+    await router.navigateByUrl('/p/blizzard/gardening/findings');
     await settle(fixture);
 
     const el = fixture.nativeElement as HTMLElement;
@@ -227,7 +242,8 @@ describe('the /gardening route subtree', () => {
 
   it('resolves /gardening/findings/:findingId to the finding detail', async () => {
     stub.restore();
-    stub = stubRequestClient(hubClient, (method, path) => {
+    stub = stubRequestClient(hubClient, (method, nested) => {
+      const path = unnested(nested);
       if (method === 'GET' && path === '/api/garden-proposals') return { proposals: [], next_cursor: null };
       if (method === 'GET' && path === '/api/routines') return [];
       if (method === 'GET' && path === '/api/graphs') return [];
@@ -279,7 +295,7 @@ describe('the /gardening route subtree', () => {
     const fixture = TestBed.createComponent(TestGardeningRouteHost);
     const router = TestBed.inject(Router);
 
-    await router.navigateByUrl('/gardening/findings/fnd_1');
+    await router.navigateByUrl('/p/blizzard/gardening/findings/fnd_1');
     await settle(fixture, 12);
 
     const el = fixture.nativeElement as HTMLElement;
@@ -290,7 +306,7 @@ describe('the /gardening route subtree', () => {
     const fixture = TestBed.createComponent(TestGardeningRouteHost);
     const router = TestBed.inject(Router);
 
-    await router.navigateByUrl('/gardening/proposals');
+    await router.navigateByUrl('/p/blizzard/gardening/proposals');
     await settle(fixture);
 
     const el = fixture.nativeElement as HTMLElement;
@@ -300,7 +316,8 @@ describe('the /gardening route subtree', () => {
 
   it('resolves /gardening/proposals/:proposalId to that proposal, not the first row of the docket', async () => {
     stub.restore();
-    stub = stubRequestClient(hubClient, (method, path) => {
+    stub = stubRequestClient(hubClient, (method, nested) => {
+      const path = unnested(nested);
       if (method === 'GET' && path === '/api/garden-proposals') {
         return {
           proposals: [
@@ -338,17 +355,36 @@ describe('the /gardening route subtree', () => {
     const fixture = TestBed.createComponent(TestGardeningRouteHost);
     const router = TestBed.inject(Router);
 
-    await router.navigateByUrl('/gardening/proposals/gprop_2');
+    await router.navigateByUrl('/p/blizzard/gardening/proposals/gprop_2');
     await settle(fixture, 12);
 
     // The param, not the docket's own first-row fallback, drives the pane — and the
     // list stays mounted beside it across the bare/param pair.
-    expect(router.url).toBe('/gardening/proposals/gprop_2');
+    expect(router.url).toBe('/p/blizzard/gardening/proposals/gprop_2');
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('[data-testid="gardening-proposal-row-gprop_1"]')).toBeTruthy();
     expect(el.querySelector('[data-testid="gardening-proposal-row-gprop_2"]')?.classList).toContain('selected');
     expect(el.querySelector('[data-testid="gardening-proposal-case"]')?.textContent).toContain(
       'Delete the dead helper',
     );
+  });
+
+  it('reads every tab through the project\'s nested routes, and a scope by its slug only inside the project', async () => {
+    const fixture = TestBed.createComponent(TestGardeningRouteHost);
+    const router = TestBed.inject(Router);
+
+    for (const tab of ['scopes', 'routines', 'runs', 'findings', 'proposals']) {
+      await router.navigateByUrl(`/p/${PROJECT}/gardening/${tab}`);
+      await settle(fixture, 8);
+    }
+
+    const paths = stub.requests.map((request) => request.path);
+    for (const nested of ['scopes', 'routines', 'runs', 'findings', 'garden-proposals']) {
+      expect(paths, `the ${nested} read`).toContain(`/api/projects/${PROJECT}/${nested}`);
+    }
+    const unnestedGardenReads = paths.filter((path) =>
+      /^\/api\/(scopes|routines|runs|findings|garden-proposals)(\/|$)/.test(path),
+    );
+    expect(unnestedGardenReads).toEqual([]);
   });
 });

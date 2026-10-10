@@ -1,9 +1,10 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
 import { hubClient } from 'fleet';
+import { HUB_PROJECT_FILTER } from 'fleet/shell';
 import { type RequestClientStub, stubRequestClient } from 'fleet/testing';
 import { injectScopeLifecycleMutation } from './scope-lifecycle.mutations';
 
@@ -15,7 +16,7 @@ describe('injectScopeLifecycleMutation', () => {
     stub = stubRequestClient(hubClient, () => ({}));
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     TestBed.configureTestingModule({
-      providers: [provideZonelessChangeDetection(), provideTanStackQuery(queryClient)],
+      providers: [provideZonelessChangeDetection(), provideTanStackQuery(queryClient), { provide: HUB_PROJECT_FILTER, useValue: signal('acme').asReadonly() }],
     });
   });
 
@@ -26,10 +27,10 @@ describe('injectScopeLifecycleMutation', () => {
 
     await mutation.mutateAsync({ slug: 'blizzard', retired: true });
 
-    const calls = stub.forRoute('/api/scopes/blizzard/retire', 'POST');
+    const calls = stub.forRoute('/api/projects/acme/scopes/blizzard/retire', 'POST');
     expect(calls).toHaveLength(1);
     expect(calls[0].body).toEqual({ by: 'operator' });
-    expect(stub.forRoute('/api/scopes/blizzard/enable', 'POST')).toHaveLength(0);
+    expect(stub.forRoute('/api/projects/acme/scopes/blizzard/enable', 'POST')).toHaveLength(0);
   });
 
   it('routes to the enable verb when retired=false', async () => {
@@ -37,10 +38,10 @@ describe('injectScopeLifecycleMutation', () => {
 
     await mutation.mutateAsync({ slug: 'blizzard', retired: false });
 
-    const calls = stub.forRoute('/api/scopes/blizzard/enable', 'POST');
+    const calls = stub.forRoute('/api/projects/acme/scopes/blizzard/enable', 'POST');
     expect(calls).toHaveLength(1);
     expect(calls[0].body).toEqual({ by: 'operator' });
-    expect(stub.forRoute('/api/scopes/blizzard/retire', 'POST')).toHaveLength(0);
+    expect(stub.forRoute('/api/projects/acme/scopes/blizzard/retire', 'POST')).toHaveLength(0);
   });
 
   it('invalidates the scope list on success', async () => {

@@ -1,0 +1,47 @@
+<fleet-kit-panel class="doorway" label="Gardens">
+  <p class="lead" data-testid="gardening-doorway-lead">
+    Gardening belongs to a project: each project tends its own. Choose one to go in.
+  </p>
+  <fleet-kit-async-state
+    [state]="state()"
+    emptyText="NO PROJECTS IN THIS TENANT"
+    loadingTestid="gardening-doorway-loading"
+    emptyTestid="gardening-doorway-empty"
+    errorTestid="gardening-doorway-error"
+  >
+    <ul class="cards" data-testid="gardening-doorway">
+      @for (card of cards(); track card.projectId) {
+        <li class="card" [attr.data-testid]="'gardening-doorway-card-' + card.slug">
+          <div class="card-head">
+            <span class="name">{{ card.name }}</span>
+            @if (card.waiting > 0) {
+              <span class="waiting" data-testid="gardening-doorway-waiting">{{ waitingLabel(card.waiting) }}</span>
+            }
+          </div>
+          @if (card.unplanted) {
+            <p class="unplanted">Nothing planted yet — no scopes or routines. Gardening starts with a scope.</p>
+          } @else {
+            <dl class="facts">
+              <dt>routines</dt>
+              <dd>{{ card.routines.length > 0 ? card.routines.join(', ') : 'none' }}</dd>
+              <dt>scopes</dt>
+              <dd>{{ card.scopes }}</dd>
+              <dt>runs</dt>
+              <dd>{{ card.runs }} in the {{ windowLabel }}</dd>
+            </dl>
+          }
+          @if (card.unserved === true) {
+            <p class="unserved" data-testid="gardening-doorway-unserved">
+              No runner serves this project: the work its garden raises waits until one does.
+            </p>
+          }
+          <div class="card-foot">
+            <a class="open" [routerLink]="card.link | lensLink" [attr.data-testid]="'gardening-doorway-open-' + card.slug"
+              >Open {{ card.name }}'s garden</a
+            >
+          </div>
+        </li>
+      }
+    </ul>
+  </fleet-kit-async-state>
+</fleet-kit-panel>

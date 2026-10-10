@@ -1,8 +1,9 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, type ParamMap } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { hubClient, type MeResponse } from 'fleet';
+import { HUB_PROJECT_FILTER } from 'fleet/shell';
 import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
 import { BehaviorSubject } from 'rxjs';
 import { vi } from 'vitest';
@@ -58,9 +59,9 @@ describe('GardeningScopeDetail', () => {
     stub = stubRequestClient(hubClient, (method, path) => {
       const overridden = opts.routeOverride?.(method, path);
       if (overridden !== undefined) return overridden;
-      if (method === 'GET' && path === '/api/scopes') return scopes;
-      if (method === 'GET' && path === '/api/routines') return routines;
-      if (method === 'GET' && path === '/api/scopes/blizzard/routines') return [ROUTINE.routine_id];
+      if (method === 'GET' && path === '/api/projects/acme/scopes') return scopes;
+      if (method === 'GET' && path === '/api/projects/acme/routines') return routines;
+      if (method === 'GET' && path === '/api/projects/acme/scopes/blizzard/routines') return [ROUTINE.routine_id];
       if (method === 'GET' && path === '/api/me') return me;
       return {};
     });
@@ -71,6 +72,7 @@ describe('GardeningScopeDetail', () => {
         provideZonelessChangeDetection(),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
         { provide: ActivatedRoute, useValue: { paramMap: paramMap$ } },
+        { provide: HUB_PROJECT_FILTER, useValue: signal('acme').asReadonly() },
       ],
     }).compileComponents();
     const fixture = TestBed.createComponent(GardeningScopeDetail);
@@ -117,7 +119,7 @@ describe('GardeningScopeDetail', () => {
   it('says so when no routine is related to the selected scope', async () => {
     const fixture = await render({
       params: { scopeSlug: 'blizzard' },
-      routeOverride: (method, path) => (method === 'GET' && path === '/api/scopes/blizzard/routines' ? [] : undefined),
+      routeOverride: (method, path) => (method === 'GET' && path === '/api/projects/acme/scopes/blizzard/routines' ? [] : undefined),
     });
     const el = fixture.nativeElement as HTMLElement;
 
@@ -134,7 +136,7 @@ describe('GardeningScopeDetail', () => {
     expect(el.querySelector('[data-testid="gardening-scope-panel-retire"]')).toBeTruthy();
   });
 
-  it('submits an edited description through PATCH /api/scopes/{slug}', async () => {
+  it('submits an edited description through PATCH /api/projects/{project}/scopes/{slug}', async () => {
     const fixture = await render({ me: OPERATOR_ME_RESPONSE, params: { scopeSlug: 'blizzard' } });
     const el = fixture.nativeElement as HTMLElement;
 
@@ -144,12 +146,12 @@ describe('GardeningScopeDetail', () => {
     el.querySelector<HTMLButtonElement>('[data-testid="gardening-scope-panel-description-submit"]')?.click();
     await settle(fixture);
 
-    const calls = stub.forRoute('/api/scopes/blizzard', 'PATCH');
+    const calls = stub.forRoute('/api/projects/acme/scopes/blizzard', 'PATCH');
     expect(calls).toHaveLength(1);
     expect(calls[0].body).toEqual({ description: 'updated description' });
   });
 
-  it('retires a scope through POST /api/scopes/{slug}/retire once confirmed', async () => {
+  it('retires a scope through POST /api/projects/{project}/scopes/{slug}/retire once confirmed', async () => {
     const fixture = await render({ me: OPERATOR_ME_RESPONSE, params: { scopeSlug: 'blizzard' } });
     const el = fixture.nativeElement as HTMLElement;
 
@@ -158,7 +160,7 @@ describe('GardeningScopeDetail', () => {
     el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-confirm"]')?.click();
     await settle(fixture);
 
-    expect(stub.forRoute('/api/scopes/blizzard/retire', 'POST')).toHaveLength(1);
+    expect(stub.forRoute('/api/projects/acme/scopes/blizzard/retire', 'POST')).toHaveLength(1);
   });
 
   describe('pending scoped to the selected scope', () => {
@@ -169,7 +171,7 @@ describe('GardeningScopeDetail', () => {
         me: OPERATOR_ME_RESPONSE,
         scopes: [SCOPE, OTHER_SCOPE],
         params: { scopeSlug: 'blizzard' },
-        routeOverride: (method, path) => (method === 'GET' && path === '/api/scopes/other/routines' ? [] : undefined),
+        routeOverride: (method, path) => (method === 'GET' && path === '/api/projects/acme/scopes/other/routines' ? [] : undefined),
       });
       vi.spyOn(TestBed.inject(QueryClient), 'invalidateQueries').mockReturnValue(new Promise<void>(() => undefined));
       return fixture;
@@ -229,7 +231,7 @@ describe('GardeningScopeDetail', () => {
       me: OPERATOR_ME_RESPONSE,
       params: { scopeSlug: 'blizzard' },
       routeOverride: (method, path) =>
-        method === 'POST' && path === '/api/scopes/blizzard/retire'
+        method === 'POST' && path === '/api/projects/acme/scopes/blizzard/retire'
           ? stubError(404, { detail: 'unknown scope blizzard' })
           : undefined,
     });
@@ -271,7 +273,7 @@ describe('GardeningScopeDetail', () => {
       me: OPERATOR_ME_RESPONSE,
       params: { scopeSlug: 'blizzard' },
       routeOverride: (method, path) =>
-        method === 'POST' && path === '/api/scopes/blizzard/enable'
+        method === 'POST' && path === '/api/projects/acme/scopes/blizzard/enable'
           ? stubError(404, { detail: 'unknown scope blizzard' })
           : undefined,
     });
@@ -309,7 +311,7 @@ describe('GardeningScopeDetail', () => {
       me: OPERATOR_ME_RESPONSE,
       params: { scopeSlug: 'blizzard' },
       routeOverride: (method, path) =>
-        method === 'PATCH' && path === '/api/scopes/blizzard'
+        method === 'PATCH' && path === '/api/projects/acme/scopes/blizzard'
           ? stubError(404, { detail: 'unknown scope blizzard' })
           : undefined,
     });

@@ -1,6 +1,7 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import { getFindingApiFindingsFindingIdGet, listFindingsApiFindingsGet, type FindingDetailView, type FindingView, hubFindingKey, hubFindingsBucketKey, hubFindingsKey } from 'fleet';
+import { getFindingApiFindingsFindingIdGet, listFindingsApiFindingsGet, listProjectFindingsApiProjectsProjectFindingsGet, type FindingDetailView, type FindingView, hubFindingKey, hubFindingsBucketKey, hubFindingsKey } from 'fleet';
+import { injectProjectFilter, lensedKey } from 'fleet/shell';
 import { DRAIN_LIMIT, drainPages } from '../../core/paginated-read';
 
 /**
@@ -79,8 +80,9 @@ export function injectHubFindingQuery(findingId: () => string | null) {
 }
 
 /**
- * The findings triage bucket read — every finding matching `routine`/`scope`, live
- * through `GET /api/findings` (the triage surface, as distinct from
+ * The findings triage bucket read — every finding matching `routine`/`scope`, live, through the lensed project's
+ * `GET /api/projects/{project}/findings` — a routine's name and a scope's slug are unique only inside a project — or
+ * `GET /api/findings` on All (the triage surface, as distinct from
  * {@link injectHubFindingsQuery}'s by-id fan-out the docket detail's evidence table
  * reads). `routine` and `scope` are each independently optional: a `null` means every
  * value on that dimension, unfiltered, so the read is always enabled. A `null` half is
@@ -93,24 +95,30 @@ export function injectHubFindingQuery(findingId: () => string | null) {
  * bucket still resolves whole.
  */
 export function injectHubFindingsBucketQuery(routine: () => string | null, scope: () => string | null) {
+  const project = injectProjectFilter();
   return injectQuery(() => {
     const r = routine();
     const s = scope();
+    const lens = project();
+    const query = (cursor: string | undefined) => ({
+      ...(r !== null ? { routine: r } : {}),
+      ...(s !== null ? { scope: s } : {}),
+      include_gone: true,
+      cursor,
+      limit: DRAIN_LIMIT,
+    });
     return {
-      queryKey: hubFindingsBucketKey(r, s),
+      queryKey: lensedKey(hubFindingsBucketKey(r, s), lens),
       queryFn: (): Promise<FindingView[]> =>
         drainPages(
           (cursor) =>
-            listFindingsApiFindingsGet({
-              query: {
-                ...(r !== null ? { routine: r } : {}),
-                ...(s !== null ? { scope: s } : {}),
-                include_gone: true,
-                cursor,
-                limit: DRAIN_LIMIT,
-              },
-              throwOnError: false,
-            }),
+            lens === null
+              ? listFindingsApiFindingsGet({ query: query(cursor), throwOnError: false })
+              : listProjectFindingsApiProjectsProjectFindingsGet({
+                  path: { project: lens },
+                  query: query(cursor),
+                  throwOnError: false,
+                }),
           (page) => page.findings,
         ),
     };

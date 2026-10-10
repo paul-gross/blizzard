@@ -22,3 +22,37 @@
   flex-direction: column;
   padding: 8px;
 }
+/* The breadcrumb — `Gardening › {project} › {surface}`, the lens shown in place. */
+.crumbs {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--bezel);
+  font-size: var(--fs-sm);
+  overflow-x: auto;
+}
+.crumb {
+  color: var(--label);
+  white-space: nowrap;
+}
+.crumb.current {
+  color: var(--snow);
+}
+.sep {
+  color: var(--label-dim);
+}
+.project-crumb [trigger] {
+  color: var(--amber-hi);
+  white-space: nowrap;
+}
+.unserved {
+  flex: none;
+  margin: 0;
+  padding: 6px 14px;
+  border-bottom: 1px solid var(--line);
+  color: var(--amber-hi);
+  font-size: var(--fs-sm);
+}
