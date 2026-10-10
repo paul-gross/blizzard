@@ -452,6 +452,23 @@ _PROBES: dict[tuple[str, str], _Probe] = {
         status=200,
         reason="a batch acks per record, stored under the sender's tenant whatever chunk it names",
     ),
+    # -- gardening under a project: the path names the project, so another tenant's answers as one never minted --
+    ("POST", "/api/projects/{project}/scopes"): _f({"slug": "beta-extra"}),
+    ("GET", "/api/projects/{project}/scopes"): _f(),
+    ("GET", "/api/projects/{project}/scopes/{slug}"): _f(),
+    ("PATCH", "/api/projects/{project}/scopes/{slug}"): _f({}),
+    ("POST", "/api/projects/{project}/scopes/{slug}/enable"): _f({}),
+    ("POST", "/api/projects/{project}/scopes/{slug}/retire"): _f({}),
+    ("GET", "/api/projects/{project}/scopes/{slug}/routines"): _f(),
+    ("POST", "/api/projects/{project}/routines"): _f(
+        {"name": "beta-extra", "graph_name": "{graph_name}", "default_scope_slug": "s"}
+    ),
+    ("GET", "/api/projects/{project}/routines"): _f(),
+    ("GET", "/api/projects/{project}/findings"): _f(),
+    ("GET", "/api/projects/{project}/garden-proposals"): _f(),
+    ("POST", "/api/projects/{project}/garden-proposals"): _f({"class": "c", "title": "t", "body": "b", "findings": []}),
+    ("GET", "/api/projects/{project}/runs"): _f(),
+    ("GET", "/api/projects/{project}/runs/{chunk_id}"): _f(ids=_RUN),
     # -- projects: last, as the created project leaves the tenant two, and a create naming none ambiguous ----------
     ("GET", "/api/projects"): _LIST,
     ("POST", "/api/projects"): _own({"slug": "beta-extra", "name": "Beta extra"}, status=201),

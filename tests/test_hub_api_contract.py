@@ -63,6 +63,15 @@ _SANCTIONED_DEPRECATED_OPERATIONS = {f"GET {alias}" for _, alias in _DEPRECATED_
     # The users routes, superseded by the members routes of the request's tenant.
     "GET /api/users",
     "POST /api/users/{user_id}/role",
+    # The un-nested gardening verbs, superseded by the same verbs under `/api/projects/{project}`.
+    "POST /api/scopes",
+    "GET /api/scopes/{slug}",
+    "PATCH /api/scopes/{slug}",
+    "GET /api/scopes/{slug}/routines",
+    "POST /api/scopes/{slug}/retire",
+    "POST /api/scopes/{slug}/enable",
+    "POST /api/routines",
+    "POST /api/garden-proposals",
 }
 
 

@@ -16,8 +16,10 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
+from blizzard.hub.api.chunk_views import ProjectLabelFields
 from blizzard.hub.api.deps import Services
-from blizzard.hub.api.project_params import project_of_call
+from blizzard.hub.api.project_labels import ProjectLabels
+from blizzard.hub.api.project_params import PathProject, QueryProject, project_of_call
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.chunk.ingest import IngestConflict
@@ -45,6 +47,7 @@ from blizzard.hub.domain.garden.proposals.resolution import resolve_proposal_fin
 from blizzard.hub.domain.graph.authoring import DefaultGraphRetired
 from blizzard.hub.domain.kernel.pagination import DEFAULT_LIMIT, MAX_LIMIT, MalformedCursor
 from blizzard.hub.domain.kernel.unset import UNSET
+from blizzard.hub.domain.projects.model import Project
 from blizzard.hub.domain.work_items.model import WorkItemFieldBlank
 from blizzard.wire.chunk import ChunkIngestConflict
 from blizzard.wire.garden_proposal import (
@@ -59,9 +62,9 @@ from blizzard.wire.garden_proposal import (
     GardenProposalView,
 )
 
-router = APIRouter(
-    prefix="/api", tags=["garden-proposals"], dependencies=[Depends(reject_runner_principal), Depends(tenant_bound)]
-)
+_GUARDS = [Depends(reject_runner_principal), Depends(tenant_bound)]
+router = APIRouter(prefix="/api", tags=["garden-proposals"], dependencies=_GUARDS)
+project_router = APIRouter(prefix="/api/projects/{project}", tags=["garden-proposals"], dependencies=_GUARDS)
 
 
 def closure_view(closure: GardenProposalClosure) -> GardenProposalClosureView:
@@ -76,9 +79,11 @@ def closure_view(closure: GardenProposalClosure) -> GardenProposalClosureView:
     )
 
 
-def garden_proposal_view(proposal: GardenProposal, closure: GardenProposalClosure | None) -> GardenProposalView:
-    """The one ``GardenProposal`` -> ``GardenProposalView`` projection — the
-    ``finding_view`` shape."""
+def garden_proposal_view(
+    proposal: GardenProposal, closure: GardenProposalClosure | None, labels: ProjectLabelFields | None = None
+) -> GardenProposalView:
+    """The one ``GardenProposal`` -> ``GardenProposalView`` projection, labelled with its project when ``labels``
+    is given — the ``finding_view`` shape."""
     # `class_`'s alias is the Python keyword `class` — constructed by alias via
     # `model_validate`, the `finding_view` shape.
     return GardenProposalView.model_validate(
@@ -93,8 +98,17 @@ def garden_proposal_view(proposal: GardenProposal, closure: GardenProposalClosur
             "findings": list(proposal.findings),
             "created_at": iso_utc(proposal.created_at),
             "closure": closure_view(closure) if closure is not None else None,
+            **(labels if labels is not None else {}),
         }
     )
+
+
+def _labelled(
+    proposal: GardenProposal, closure: GardenProposalClosure | None, services: TenantServices
+) -> GardenProposalView:
+    """``proposal``'s view, labelled from one read of its project."""
+    labels = ProjectLabels.read(services, [proposal.project_id]).fields(proposal.project_id)
+    return garden_proposal_view(proposal, closure, labels)
 
 
 def _get_or_404(proposal_id: str, services: TenantServices) -> GardenProposal:
@@ -127,26 +141,56 @@ def _resolve_findings_or_422(finding_ids: list[str], services: TenantServices) -
     return [found[fid] for fid in finding_ids]
 
 
+def _page(
+    services: TenantServices,
+    project_id: str | None,
+    *,
+    cursor: str | None,
+    limit: int,
+    origin: GardenProposalOrigin | None,
+) -> GardenProposalsPageView:
+    try:
+        page = services.garden_proposals.list_page(cursor=cursor, limit=limit, origin=origin, project_id=project_id)
+    except MalformedCursor as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="malformed cursor") from exc
+    closures = services.garden_proposal_closures.get_many([p.proposal_id for p in page.proposals])
+    labels = ProjectLabels.read(services, (p.project_id for p in page.proposals))
+    return GardenProposalsPageView(
+        proposals=[
+            garden_proposal_view(p, closures.get(p.proposal_id), labels.fields(p.project_id)) for p in page.proposals
+        ],
+        next_cursor=page.next_cursor,
+    )
+
+
 @router.get(
     "/garden-proposals", response_model=GardenProposalsPageView, dependencies=[Depends(require(Permission.FLEET_VIEW))]
 )
 def list_garden_proposals(
     services: Services,
+    project: QueryProject,
     cursor: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
     origin: Annotated[GardenProposalOrigin | None, Query()] = None,
 ) -> GardenProposalsPageView:
-    """Every garden proposal, newest first, bounded and keyset-paginated.
-    `origin` narrows to `routine-run` or `operator` proposals."""
-    try:
-        page = services.garden_proposals.list_page(cursor=cursor, limit=limit, origin=origin)
-    except MalformedCursor as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="malformed cursor") from exc
-    closures = services.garden_proposal_closures.get_many([p.proposal_id for p in page.proposals])
-    return GardenProposalsPageView(
-        proposals=[garden_proposal_view(p, closures.get(p.proposal_id)) for p in page.proposals],
-        next_cursor=page.next_cursor,
-    )
+    """Every garden proposal, newest first, bounded and keyset-paginated — of the project `?project=` names, else
+    of every project. `origin` narrows to `routine-run` or `operator` proposals."""
+    return _page(services, project, cursor=cursor, limit=limit, origin=origin)
+
+
+@project_router.get(
+    "/garden-proposals", response_model=GardenProposalsPageView, dependencies=[Depends(require(Permission.FLEET_VIEW))]
+)
+def list_project_garden_proposals(
+    services: Services,
+    project: PathProject,
+    cursor: Annotated[str | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
+    origin: Annotated[GardenProposalOrigin | None, Query()] = None,
+) -> GardenProposalsPageView:
+    """The project's garden proposals, newest first, bounded and keyset-paginated; `origin` narrows to one
+    origin. 404 on an unknown project."""
+    return _page(services, project.project_id, cursor=cursor, limit=limit, origin=origin)
 
 
 @router.get(
@@ -157,7 +201,7 @@ def list_garden_proposals(
 def get_garden_proposal(proposal_id: str, services: Services) -> GardenProposalView:
     """One garden proposal's whole record; 404 on an unknown id."""
     proposal = _get_or_404(proposal_id, services)
-    return garden_proposal_view(proposal, services.garden_proposal_closures.get(proposal_id))
+    return _labelled(proposal, services.garden_proposal_closures.get(proposal_id), services)
 
 
 @router.post("/garden-proposals/{proposal_id}/pass", response_model=GardenProposalView)
@@ -179,7 +223,7 @@ def pass_garden_proposal(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     except GardenProposalAlreadyClosed as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    return garden_proposal_view(proposal, closure)
+    return _labelled(proposal, closure, services)
 
 
 @router.post("/garden-proposals/{proposal_id}/accept", response_model=GardenProposalAcceptResponse)
@@ -226,25 +270,13 @@ def accept_garden_proposal(
         )
         services.events.publish_queue_changed()  # mint adds the chunk to the backlog list
     return GardenProposalAcceptResponse(
-        **garden_proposal_view(proposal, accepted.closure).model_dump(), chunk_id=accepted.chunk_id
+        **_labelled(proposal, accepted.closure, services).model_dump(), chunk_id=accepted.chunk_id
     )
 
 
-@router.post(
-    "/garden-proposals",
-    response_model=GardenProposalView,
-    status_code=status.HTTP_201_CREATED,
-)
-def create_garden_proposal(
-    request: GardenProposalCreateRequest,
-    services: Services,
-    identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
+def _create(
+    request: GardenProposalCreateRequest, services: TenantServices, identity: ResolvedIdentity, project: Project
 ) -> GardenProposalView:
-    """Mint an operator-authored proposal, naming `routine` when the
-    caller names one, else none. 422 for a blank title/class/body, an unknown routine,
-    or an unknown, exited, or duplicate finding id, or one of another project — the whole
-    call is refused, nothing is linked."""
-    project = project_of_call(services)
     routine = None
     if request.routine is not None:
         routine = services.routines.get_by_name(project.project_id, request.routine)
@@ -270,7 +302,43 @@ def create_garden_proposal(
         GardenProposalBlankFieldError,
     ) as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
-    return garden_proposal_view(proposal, None)
+    return garden_proposal_view(proposal, None, ProjectLabels.of_project(project).fields(proposal.project_id))
+
+
+@router.post(
+    "/garden-proposals",
+    response_model=GardenProposalView,
+    status_code=status.HTTP_201_CREATED,
+    deprecated=True,
+)
+def create_garden_proposal(
+    request: GardenProposalCreateRequest,
+    services: Services,
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
+) -> GardenProposalView:
+    """Mint an operator-authored proposal in the call's project (the tenant's only one, else `422
+    project_required`), naming `routine` when the caller names one, else none. 422 for a blank title/class/body,
+    an unknown routine, or an unknown, exited, or duplicate finding id, or one of another project — the whole
+    call is refused, nothing is linked. Deprecated: `POST /api/projects/{project}/garden-proposals`."""
+    return _create(request, services, identity, project_of_call(services))
+
+
+@project_router.post(
+    "/garden-proposals",
+    response_model=GardenProposalView,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_project_garden_proposal(
+    request: GardenProposalCreateRequest,
+    services: Services,
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
+    project: PathProject,
+) -> GardenProposalView:
+    """Mint an operator-authored proposal in the project, naming `routine` — one of the project's — when the
+    caller names one, else none. 422 for a blank title/class/body, an unknown routine, or an unknown, exited, or
+    duplicate finding id, or one of another project — the whole call is refused, nothing is linked. 404 on an
+    unknown project."""
+    return _create(request, services, identity, project)
 
 
 @router.patch(
@@ -296,7 +364,7 @@ def edit_garden_proposal(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     except GardenProposalAlreadyClosed as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    return garden_proposal_view(updated, services.garden_proposal_closures.get(proposal_id))
+    return _labelled(updated, services.garden_proposal_closures.get(proposal_id), services)
 
 
 @router.post(
@@ -328,7 +396,7 @@ def attach_garden_proposal_findings(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     except GardenProposalAlreadyClosed as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    return garden_proposal_view(updated, services.garden_proposal_closures.get(proposal_id))
+    return _labelled(updated, services.garden_proposal_closures.get(proposal_id), services)
 
 
 @router.post(
@@ -353,4 +421,4 @@ def detach_garden_proposal_findings(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     except GardenProposalAlreadyClosed as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    return garden_proposal_view(updated, services.garden_proposal_closures.get(proposal_id))
+    return _labelled(updated, services.garden_proposal_closures.get(proposal_id), services)

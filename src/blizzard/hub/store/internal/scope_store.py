@@ -196,9 +196,12 @@ class ScopeStore:
                 return None
             return self._of(row, retired=_is_retired(conn, row.scope_id))
 
-    def list_all(self) -> list[Scope]:
+    def list_all(self, project_id: str | None = None) -> list[Scope]:
+        stmt = self._store.select(scopes)
+        if project_id is not None:
+            stmt = stmt.where(scopes.c.project_id == project_id)
         with self._store.read("list_all") as conn:
-            rows = conn.execute(self._store.select(scopes).order_by(scopes.c.created_at.desc())).all()
+            rows = conn.execute(stmt.order_by(scopes.c.created_at.desc())).all()
             retired = _retired_scope_ids(conn)
         return [self._of(row, retired=row.scope_id in retired) for row in rows]
 

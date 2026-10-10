@@ -93,13 +93,14 @@ class GardenRunStore:
     def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
-    def runs_in_window(self, *, since: datetime, until: datetime) -> list[RunDeliveries]:
+    def runs_in_window(self, *, since: datetime, until: datetime, project_id: str | None = None) -> list[RunDeliveries]:
+        stmt = self._store.select(_run_identity_join(self._store), *_IDENTITY_COLUMNS).where(
+            chunks.c.minted_at >= since, chunks.c.minted_at < until, _canonical_work_ref(self._store)
+        )
+        if project_id is not None:
+            stmt = stmt.where(chunks.c.project_id == project_id)
         with self._store.read("runs_in_window") as conn:
-            rows = conn.execute(
-                self._store.select(_run_identity_join(self._store), *_IDENTITY_COLUMNS)
-                .where(chunks.c.minted_at >= since, chunks.c.minted_at < until, _canonical_work_ref(self._store))
-                .order_by(chunks.c.minted_at.desc(), chunks.c.chunk_id.desc())
-            ).all()
+            rows = conn.execute(stmt.order_by(chunks.c.minted_at.desc(), chunks.c.chunk_id.desc())).all()
             delivered_by_chunk = self._delivered_sets_by_chunk(conn, [row.chunk_id for row in rows])
         return [
             RunDeliveries(identity=_identity_of(row), delivered=delivered_by_chunk.get(row.chunk_id, []))

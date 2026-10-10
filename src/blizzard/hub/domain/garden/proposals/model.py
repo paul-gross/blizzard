@@ -331,11 +331,12 @@ def pair_with_closures(
 @domain_model
 @dataclass(frozen=True)
 class GardenProposalCounts:
-    """One origin/routine/class triple's garden-proposal counts over a window:
+    """One project's origin/routine/class triple's garden-proposal counts over a window:
     `open`, `passed`, `accepted_with_item`,
     `accepted_without_item` — each a closure-state bucket. `created` is always their
     sum, derived rather than stored, so it can never disagree with the four it sums."""
 
+    project_id: str
     origin: GardenProposalOrigin
     routine_name: str | None
     class_: str
@@ -367,13 +368,18 @@ class IReadGardenProposalRepository(Protocol):
     def list_all(self) -> list[GardenProposal]: ...
 
     def list_page(
-        self, *, cursor: str | None = None, limit: int, origin: GardenProposalOrigin | None = None
+        self,
+        *,
+        cursor: str | None = None,
+        limit: int,
+        origin: GardenProposalOrigin | None = None,
+        project_id: str | None = None,
     ) -> GardenProposalPage:
         """`list_all`'s bounded sibling, ordered ``(created_at desc, proposal_id desc)``.
         ``cursor`` is a prior :attr:`GardenProposalPage.next_cursor`;
         any other raises :class:`~blizzard.hub.domain.kernel.pagination.MalformedCursor`.
-        ``origin`` narrows to one origin when given, applied in SQL inside the keyset
-        window."""
+        ``origin`` narrows to one origin and ``project_id`` to one project when given, each applied in SQL inside
+        the keyset window."""
         ...
 
     def list_for_routine(
@@ -396,11 +402,11 @@ class IReadGardenProposalRepository(Protocol):
         project_id: str | None = None,
         origin: GardenProposalOrigin | None = None,
     ) -> list[GardenProposalCounts]:
-        """Garden-proposal counts grouped by `(origin, routine_name,
+        """Garden-proposal counts grouped by `(project_id, origin, routine_name,
         class_)`, over `[since, until)` on `created_at` — current closure state, not
         closure time. `project_id` narrows to one project's rows. `routine_name` narrows to one routine's rows of
         both origins when given, else every routine; `origin` narrows to one origin,
-        applied in SQL. Rows ordered `(origin, routine_name, class_)`."""
+        applied in SQL. Rows ordered `(origin, routine_name, class_, project_id)`."""
         ...
 
 

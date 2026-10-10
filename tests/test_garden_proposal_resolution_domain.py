@@ -129,7 +129,12 @@ class _FakeProposals:
         raise NotImplementedError
 
     def list_page(
-        self, *, cursor: str | None = None, limit: int, origin: GardenProposalOrigin | None = None
+        self,
+        *,
+        cursor: str | None = None,
+        limit: int,
+        origin: GardenProposalOrigin | None = None,
+        project_id: str | None = None,
     ) -> GardenProposalPage:
         raise NotImplementedError
 

@@ -52,11 +52,14 @@ from blizzard.hub.api.config import router as config_router
 from blizzard.hub.api.decisions import router as decisions_router
 from blizzard.hub.api.egress import router as egress_router
 from blizzard.hub.api.events import router as events_router
+from blizzard.hub.api.findings import project_router as project_findings_router
 from blizzard.hub.api.findings import router as findings_router
 from blizzard.hub.api.fleet import claim_router as fleet_claim_router
 from blizzard.hub.api.fleet import router as fleet_router
 from blizzard.hub.api.fleet_identity import router as fleet_identity_router
+from blizzard.hub.api.garden_proposals import project_router as project_garden_proposals_router
 from blizzard.hub.api.garden_proposals import router as garden_proposals_router
+from blizzard.hub.api.garden_runs import project_router as project_garden_runs_router
 from blizzard.hub.api.garden_runs import router as garden_runs_router
 from blizzard.hub.api.graphs import router as graphs_router
 from blizzard.hub.api.health import router as health_router
@@ -72,8 +75,10 @@ from blizzard.hub.api.questions import router as questions_router
 from blizzard.hub.api.queue import router as queue_router
 from blizzard.hub.api.readiness import router as readiness_router
 from blizzard.hub.api.repositories import router as repositories_router
+from blizzard.hub.api.routines import project_router as project_routines_router
 from blizzard.hub.api.routines import router as routines_router
 from blizzard.hub.api.runners import router as runners_router
+from blizzard.hub.api.scopes import project_router as project_scopes_router
 from blizzard.hub.api.scopes import router as scopes_router
 from blizzard.hub.api.secrets import router as secrets_router
 from blizzard.hub.api.secrets import sanitized_validation_response
@@ -427,6 +432,12 @@ def create_app(
     app.include_router(work_sources_router)
     app.include_router(repositories_router)
     app.include_router(projects_router)
+    # A project's gardening, nested under `/api/projects/{project}` after the project routes themselves.
+    app.include_router(project_scopes_router)
+    app.include_router(project_routines_router)
+    app.include_router(project_findings_router)
+    app.include_router(project_garden_proposals_router)
+    app.include_router(project_garden_runs_router)
     # Outside the fleet gate — pinned by `tests/test_fleet_identity.py`'s tokenless-401 case.
     app.include_router(fleet_identity_router)
     # The runner-authenticated fleet router — a fleet verb is authenticated

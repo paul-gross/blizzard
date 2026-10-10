@@ -46,7 +46,7 @@ class _FakeRepo:
     identities: dict[str, RunIdentity] = field(default_factory=dict)
     delivered: dict[str, list[DeliveredSetRaw]] = field(default_factory=dict)
 
-    def runs_in_window(self, *, since: datetime, until: datetime) -> list[RunDeliveries]:
+    def runs_in_window(self, *, since: datetime, until: datetime, project_id: str | None = None) -> list[RunDeliveries]:
         return [r for r in self.records if since <= r.identity.minted_at < until]
 
     def run_identity(self, chunk_id: str) -> RunIdentity | None:

@@ -233,9 +233,12 @@ class RoutineStore:
                 return None
             return self._of(row, retired=_is_retired(conn, row.routine_id))
 
-    def list_all(self) -> list[Routine]:
+    def list_all(self, project_id: str | None = None) -> list[Routine]:
+        stmt = _routine_select(self._store)
+        if project_id is not None:
+            stmt = stmt.where(routines.c.project_id == project_id)
         with self._store.read("list_all") as conn:
-            rows = conn.execute(_routine_select(self._store).order_by(routines.c.created_at.desc())).all()
+            rows = conn.execute(stmt.order_by(routines.c.created_at.desc())).all()
             retired = _retired_ids(conn)
         return [self._of(row, retired=row.routine_id in retired) for row in rows]
 

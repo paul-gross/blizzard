@@ -146,12 +146,13 @@ def test_proposal_counts_reports_bucketed_counts_per_routine_and_class(tmp_path:
     assert body["since"] == iso_utc(_SINCE)
     assert body["until"] == iso_utc(_UNTIL)
     assert body["routine"] is None
+    [project] = hub.services.projects.list_all()
     assert body["rows"] == [
         {
             "origin": "routine-run",
-            "project_id": None,
-            "project_slug": None,
-            "project_name": None,
+            "project_id": project.project_id,
+            "project_slug": project.slug,
+            "project_name": project.name,
             "routine_name": "nightly",
             "class": "fix-the-source",
             "open": 1,

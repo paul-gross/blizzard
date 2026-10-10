@@ -92,8 +92,8 @@ class _FakeScopes:
         scope = self.scopes.get(slug)
         return scope if scope is not None and scope.project_id == project_id else None
 
-    def list_all(self) -> list[Scope]:
-        return list(self.scopes.values())
+    def list_all(self, project_id: str | None = None) -> list[Scope]:
+        return [s for s in self.scopes.values() if project_id is None or s.project_id == project_id]
 
     def is_retired(self, project_id: str, slug: str) -> bool:
         return slug in self.retired

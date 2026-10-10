@@ -190,11 +190,13 @@ ScopeMint = tuple[Scope, ConfigChange]
 
 class IReadScopeRepository(Protocol):
     """Read-only scope access. A slug names a scope within a project; :meth:`list_all` reads every
-    project of the tenant."""
+    project of the tenant unless it is given one."""
 
     def get(self, project_id: str, slug: str) -> Scope | None: ...
 
-    def list_all(self) -> list[Scope]: ...
+    def list_all(self, project_id: str | None = None) -> list[Scope]:
+        """Every scope, newest first — of ``project_id`` only when it is given."""
+        ...
 
     def is_retired(self, project_id: str, slug: str) -> bool:
         """Whether the newest lifecycle fact reads retired.

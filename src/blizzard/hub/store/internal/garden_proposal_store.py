@@ -56,12 +56,19 @@ def _decode_proposal_cursor(cursor: str) -> tuple[datetime, str]:
 
 
 def _proposal_page_stmt(
-    stmts: ScopedStatements, after: tuple[datetime, str] | None, limit: int, *, origin: GardenProposalOrigin | None
+    stmts: ScopedStatements,
+    after: tuple[datetime, str] | None,
+    limit: int,
+    *,
+    origin: GardenProposalOrigin | None,
+    project_id: str | None,
 ) -> Select[Any]:
     stmt = stmts.select(garden_proposals)
     c = garden_proposals.c
     if origin is not None:
         stmt = stmt.where(c.origin == origin.value)
+    if project_id is not None:
+        stmt = stmt.where(c.project_id == project_id)
     if after is not None:
         created_at, proposal_id = after
         # The portable spelling of `(created_at, proposal_id) < (created_at, proposal_id)`
@@ -234,7 +241,12 @@ class GardenProposalStore:
             return [self._of(row, findings[row.proposal_id]) for row in rows]
 
     def list_page(
-        self, *, cursor: str | None = None, limit: int, origin: GardenProposalOrigin | None = None
+        self,
+        *,
+        cursor: str | None = None,
+        limit: int,
+        origin: GardenProposalOrigin | None = None,
+        project_id: str | None = None,
     ) -> GardenProposalPage:
         """`list_all`'s bounded sibling — same total order, a SQL
         keyset window. `origin` narrows in SQL, inside the window. No
@@ -244,7 +256,9 @@ class GardenProposalStore:
             raise ValueError(f"limit must be at least 1, got {limit}")
         after = _decode_proposal_cursor(cursor) if cursor is not None else None
         with self._store.read("list_page") as conn:
-            rows = conn.execute(_proposal_page_stmt(self._store, after, limit + 1, origin=origin)).all()
+            rows = conn.execute(
+                _proposal_page_stmt(self._store, after, limit + 1, origin=origin, project_id=project_id)
+            ).all()
             page_rows = rows[:limit]
             findings = self._findings_for(conn, [row.proposal_id for row in page_rows])
         proposals = [self._of(row, findings[row.proposal_id]) for row in page_rows]
@@ -285,14 +299,16 @@ class GardenProposalStore:
         proposal with no closure row still groups in (as `NULL`/`NULL`, `OPEN`'s own
         shape), folded through :func:`garden_proposal_state` in Python rather
         than a Python-side fold over ungrouped rows (`GardenRunStore._fact_counts_by_set`'s
-        own shape). Grouped by `(origin, routine_name, class_)`: a
-        routine named by both origins returns one row per origin."""
+        own shape). Grouped by `(project_id, origin, routine_name, class_)`: a
+        routine named by both origins returns one row per origin, and a routine name two projects hold returns one
+        row per project."""
         c = garden_proposals.c
         closures_c = garden_proposal_closures.c
         stmt = self._store.select(
             self._store.scope_join(
                 garden_proposals, garden_proposal_closures, closures_c.proposal_id == c.proposal_id, isouter=True
             ),
+            c.project_id,
             c.origin,
             c.routine_name,
             c.class_,
@@ -306,12 +322,14 @@ class GardenProposalStore:
             stmt = stmt.where(c.routine_name == routine_name)
         if origin is not None:
             stmt = stmt.where(c.origin == origin.value)
-        stmt = stmt.group_by(c.origin, c.routine_name, c.class_, closures_c.closure, closures_c.item_outcome)
+        stmt = stmt.group_by(
+            c.project_id, c.origin, c.routine_name, c.class_, closures_c.closure, closures_c.item_outcome
+        )
         with self._store.read("counts_by_class") as conn:
             rows = conn.execute(stmt).all()
-        accumulator: dict[tuple[GardenProposalOrigin, str | None, str], dict[GardenProposalState, int]] = {}
+        accumulator: dict[tuple[str, GardenProposalOrigin, str | None, str], dict[GardenProposalState, int]] = {}
         for row in rows:
-            key = (GardenProposalOrigin(row.origin), row.routine_name, row.class_)
+            key = (row.project_id, GardenProposalOrigin(row.origin), row.routine_name, row.class_)
             buckets = accumulator.setdefault(key, dict.fromkeys(GardenProposalState, 0))
             bucket = garden_proposal_state(
                 GardenProposalClosureKind(row.closure) if row.closure is not None else None,
@@ -320,6 +338,7 @@ class GardenProposalStore:
             buckets[bucket] += row.n
         return [
             GardenProposalCounts(
+                project_id=project_id_,
                 origin=origin_,
                 routine_name=routine_name_,
                 class_=class_,
@@ -328,8 +347,8 @@ class GardenProposalStore:
                 accepted_with_item=buckets[GardenProposalState.ACCEPTED_MINTED],
                 accepted_without_item=buckets[GardenProposalState.ACCEPTED_DECLINED],
             )
-            for (origin_, routine_name_, class_), buckets in sorted(
-                accumulator.items(), key=lambda kv: (kv[0][0].value, kv[0][1] or "", kv[0][2])
+            for (project_id_, origin_, routine_name_, class_), buckets in sorted(
+                accumulator.items(), key=lambda kv: (kv[0][1].value, kv[0][2] or "", kv[0][3], kv[0][0])
             )
         ]
 

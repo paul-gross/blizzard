@@ -2190,15 +2190,19 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     ),
     (IReadGardenProposalRepository, "get"): lambda w: w.hub.services.garden_proposals.get(w.garden_proposal_1),
     (IReadGardenProposalRepository, "list_all"): lambda w: w.hub.services.garden_proposals.list_all(),
-    (IReadGardenProposalRepository, "list_page"): lambda w: w.hub.services.garden_proposals.list_page(limit=50),
+    (IReadGardenProposalRepository, "list_page"): lambda w: (
+        w.hub.services.garden_proposals.list_page(limit=50),
+        w.hub.services.garden_proposals.list_page(limit=50, project_id=w.project_id),
+    ),
     (IReadGardenProposalRepository, "list_for_routine"): lambda w: w.hub.services.garden_proposals.list_for_routine(
         w.project_id, "gardening"
     ),
     (IReadGardenProposalRepository, "counts_by_class"): lambda w: w.hub.services.garden_proposals.counts_by_class(
         since=_ht(11), until=_ht(14)
     ),
-    (IReadGardenRunRepository, "runs_in_window"): lambda w: w.garden_run.runs_in_window(
-        since=_HUB_BASE, until=_HUB_UNTIL
+    (IReadGardenRunRepository, "runs_in_window"): lambda w: (
+        w.garden_run.runs_in_window(since=_HUB_BASE, until=_HUB_UNTIL),
+        w.garden_run.runs_in_window(since=_HUB_BASE, until=_HUB_UNTIL, project_id=w.project_id),
     ),
     (IReadGardenRunRepository, "run_identity"): lambda w: w.garden_run.run_identity(w.run_chunk_1),
     (IReadGardenRunRepository, "delivered_sets"): lambda w: w.garden_run.delivered_sets(w.run_chunk_1),
@@ -2250,7 +2254,10 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadRoutineRepository, "get_many_by_name"): lambda w: w.hub.services.routines.get_many_by_name(
         w.project_id, ["gardening"]
     ),
-    (IReadRoutineRepository, "list_all"): lambda w: w.hub.services.routines.list_all(),
+    (IReadRoutineRepository, "list_all"): lambda w: (
+        w.hub.services.routines.list_all(),
+        w.hub.services.routines.list_all(w.project_id),
+    ),
     (IReadRoutineRepository, "is_retired"): lambda w: w.hub.services.routines.is_retired(w.routine_id),
     (IReadRoutineRepository, "retired_ids"): lambda w: w.hub.services.routines.retired_ids(),
     (IReadRoutineScopeRepository, "list_scopes"): lambda w: w.hub.services.routine_scopes.list_scopes(w.routine_id),
@@ -2306,7 +2313,10 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
         before=None, limit=10, record_kind=None, record_key=None
     ),
     (IReadScopeRepository, "get"): lambda w: w.hub.services.scopes.get(w.project_id, w.scope_a),
-    (IReadScopeRepository, "list_all"): lambda w: w.hub.services.scopes.list_all(),
+    (IReadScopeRepository, "list_all"): lambda w: (
+        w.hub.services.scopes.list_all(),
+        w.hub.services.scopes.list_all(w.project_id),
+    ),
     (IReadScopeRepository, "is_retired"): lambda w: w.hub.services.scopes.is_retired(w.project_id, w.scope_c),
     (IReadScopeRepository, "retired_slugs"): lambda w: w.hub.services.scopes.retired_slugs(w.project_id),
     (IReadTranscriptSegments, "segments_for_chunk"): lambda w: w.hub.services.transcripts.segments_for_chunk(

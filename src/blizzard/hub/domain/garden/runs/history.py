@@ -82,6 +82,8 @@ class RunSummary:
     outcome: ChunkStatus
     escalation: RunEscalation | None
     delivered: list[DeliveredSet]
+    #: The run chunk's project.
+    project_id: str | None
 
 
 @domain_model
@@ -149,6 +151,8 @@ class RunDelta:
     outcome: ChunkStatus
     escalation: RunEscalation | None
     sets: list[DeliveredSetDelta]
+    #: The run chunk's project.
+    project_id: str | None
 
 
 @domain_model
@@ -189,10 +193,10 @@ class DeliveredSetRaw:
 
 
 class IReadGardenRunRepository(Protocol):
-    def runs_in_window(self, *, since: datetime, until: datetime) -> list[RunDeliveries]:
+    def runs_in_window(self, *, since: datetime, until: datetime, project_id: str | None = None) -> list[RunDeliveries]:
         """Every `work_item_runs`-backed chunk minted in `[since, until)`, newest first
         (an explicit SQL `order_by`, never incidental row order) — each with the
-        `finding_sets` rows it delivered, if any."""
+        `finding_sets` rows it delivered, if any. `project_id` narrows to that project's chunks when given."""
         ...
 
     def run_identity(self, chunk_id: str) -> RunIdentity | None:
@@ -334,6 +338,7 @@ def run_rows(
                 outcome=outcome,
                 escalation=escalation,
                 delivered=record.delivered,
+                project_id=chunk.project_id,
             )
         )
     return rows
@@ -360,14 +365,17 @@ class GardenRunService:
         self._formats = formats
         self._clock = clock
 
-    def list_runs(self, *, since: datetime | None = None, until: datetime | None = None) -> list[RunSummary]:
-        """Every run in the window :meth:`RunWindow.of` settles against now. One bulk
+    def list_runs(
+        self, *, since: datetime | None = None, until: datetime | None = None, project_id: str | None = None
+    ) -> list[RunSummary]:
+        """Every run in the window :meth:`RunWindow.of` settles against now, of `project_id` only when it is given.
+        One bulk
         `get_many` and one bulk `load_facts_for` resolve every window run's chunk and
         chunk facts (`bzh:bulk-reconstitution`) — `records` is already the window's own
         bounded set (`runs_in_window`'s own SQL `WHERE`), so the batch cost tracks runs
         in the window."""
         window = RunWindow.of(since, until, now=self._clock.now())
-        records = self._repo.runs_in_window(since=window.since, until=window.until)
+        records = self._repo.runs_in_window(since=window.since, until=window.until, project_id=project_id)
         chunk_ids = [record.identity.chunk_id for record in records]
         return run_rows(records, self._chunk_records.get_many(chunk_ids), self._chunk_facts.load_facts_for(chunk_ids))
 
@@ -394,4 +402,5 @@ class GardenRunService:
             outcome=outcome,
             escalation=escalation,
             sets=sets,
+            project_id=chunk.project_id,
         )

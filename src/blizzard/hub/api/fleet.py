@@ -41,6 +41,7 @@ from blizzard.hub.api.deps import Services
 from blizzard.hub.api.findings import finding_view
 from blizzard.hub.api.garden_proposals import garden_proposal_view
 from blizzard.hub.api.ingest_broadcast import IngestBroadcast, pushed_facts
+from blizzard.hub.api.project_labels import ProjectLabels
 from blizzard.hub.api.project_params import QueryProject
 from blizzard.hub.api.scopes import scope_view
 from blizzard.hub.composition import TenantServices
@@ -373,7 +374,9 @@ def get_garden_findings(chunk_id: str, services: Services) -> list[FindingView]:
     chunk's own run context derives the routine and scope, no caller flag can name another.
     404 for an unknown chunk or one with no run context (not a routine run)."""
     run = _routine_run_or_404(chunk_id, services)
-    return [finding_view(f) for f in services.finding_bucket.for_run(run).citable]
+    citable = services.finding_bucket.for_run(run).citable
+    labels = ProjectLabels.read(services, (f.project_id for f in citable))
+    return [finding_view(f, labels.fields(f.project_id)) for f in citable]
 
 
 @router.get("/chunks/{chunk_id}/garden/proposals", response_model=list[GardenProposalView])
@@ -389,8 +392,9 @@ def get_garden_proposals(
     for an unknown chunk and for one carrying no run context (not a routine run): a
     chunk with nothing to read is refused rather than answered with an empty bucket."""
     run = _routine_run_or_404(chunk_id, services)
+    labels = ProjectLabels.read(services, [run.project_id]).fields(run.project_id)
     return [
-        garden_proposal_view(p, closure)
+        garden_proposal_view(p, closure, labels)
         for p, closure in services.routine_garden_proposals.list_for_routine(run.project_id, run.routine_name, state)
     ]
 
@@ -501,10 +505,19 @@ def get_chunk_analytics_spend_graphs(
 
 
 @router.get("/scopes", response_model=list[ScopeView])
-def get_scopes(services: Services) -> list[ScopeView]:
+def get_scopes(services: Services, chunk_id: Annotated[str | None, Query()] = None) -> list[ScopeView]:
     """Every scope, newest first, each marked retired or not — the
-    deployment's scope vocabulary."""
-    return [scope_view(s) for s in services.scopes.list_all()]
+    deployment's scope vocabulary; with `chunk_id`, only the scopes of that chunk's project, the vocabulary a
+    worker on that chunk may name. 404 on an unknown chunk."""
+    project_id = None
+    if chunk_id is not None:
+        chunk = services.chunks.record.get(chunk_id)
+        if chunk is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+        project_id = chunk.require_project()
+    scopes = services.scopes.list_all(project_id)
+    labels = ProjectLabels.read(services, (s.project_id for s in scopes))
+    return [scope_view(s, labels.fields(s.project_id)) for s in scopes]
 
 
 def _answered_findings_or_404(chunk_id: str, services: TenantServices) -> list[FindingView]:
@@ -517,7 +530,8 @@ def _answered_findings_or_404(chunk_id: str, services: TenantServices) -> list[F
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"chunk {chunk_id} answers no accepted, minted garden proposal",
         )
-    return [finding_view(f) for f in findings]
+    labels = ProjectLabels.read(services, (f.project_id for f in findings))
+    return [finding_view(f, labels.fields(f.project_id)) for f in findings]
 
 
 @router.get("/chunks/{chunk_id}/findings", response_model=list[FindingView])

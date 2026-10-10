@@ -323,7 +323,9 @@ class IReadRoutineRepository(Protocol):
         (``bzh:bulk-reconstitution``); a name no routine holds is absent."""
         ...
 
-    def list_all(self) -> list[Routine]: ...
+    def list_all(self, project_id: str | None = None) -> list[Routine]:
+        """Every routine, newest first — of ``project_id`` only when it is given."""
+        ...
 
     def is_retired(self, routine_id: str) -> bool:
         """Whether ``routine_id``'s newest lifecycle fact reads retired.
