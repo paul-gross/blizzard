@@ -2644,6 +2644,10 @@ export type RunnerStatusView = {
      */
     runner_name?: string | null;
     /**
+     * Served Projects
+     */
+    served_projects?: Array<ServedProjectStatusView> | null;
+    /**
      * Tenant Id
      */
     tenant_id?: string | null;
@@ -2887,6 +2891,41 @@ export type SelfTestView = {
      * Status
      */
     status: string;
+};
+
+/**
+ * ServedProjectStatusView
+ *
+ * One project the runner serves, as its hub last answered: the ``entry`` as configured — a project id
+ * or slug — and the project it resolved to. ``resolved`` is false for an entry no project answers to, and
+ * ``answered`` false for a configured entry the hub has not answered yet; either way ``project_id``,
+ * ``slug`` and ``name`` are ``None``.
+ */
+export type ServedProjectStatusView = {
+    /**
+     * Answered
+     */
+    answered?: boolean;
+    /**
+     * Entry
+     */
+    entry: string;
+    /**
+     * Name
+     */
+    name?: string | null;
+    /**
+     * Project Id
+     */
+    project_id?: string | null;
+    /**
+     * Resolved
+     */
+    resolved: boolean;
+    /**
+     * Slug
+     */
+    slug?: string | null;
 };
 
 /**
