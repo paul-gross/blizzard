@@ -8,6 +8,7 @@ import click
 
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
+from blizzard.hub.cli.project_option import project_option, project_query
 from blizzard.hub.cli.views import Listing
 
 
@@ -26,10 +27,11 @@ def queue_group() -> None:
 
 
 @queue_group.command("show", cls=FleetCommand)
-def queue_show(cli: CliContext) -> None:
+@project_option(required_by_hub=False)
+def queue_show(cli: CliContext, project: str | None) -> None:
     """The hub-ordered ready queue, read-only — a client of ``GET /api/queue``, drained
     to its whole order."""
-    entries = cli.get_all("/api/queue", "GET /queue", key="entries")
+    entries = cli.get_all("/api/queue", "GET /queue", key="entries", params=project_query(project))
     cli.show({"entries": entries}, QueueListing(entries))
 
 

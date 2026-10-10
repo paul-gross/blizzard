@@ -12,6 +12,7 @@ import httpx
 
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext, RawBody
+from blizzard.hub.cli.project_option import project_option, project_query
 from blizzard.hub.cli.views import Listing
 from blizzard.hub.documents.codec import accepted_extensions, codec_for_path
 
@@ -71,11 +72,12 @@ def config_group() -> None:
 @click.option(
     "--all", "everything", is_flag=True, default=False, help="Print every change rather than the newest page."
 )
-def config_changes(cli: CliContext, kind: str | None, key: str | None, everything: bool) -> None:
+@project_option(required_by_hub=False)
+def config_changes(cli: CliContext, kind: str | None, key: str | None, everything: bool, project: str | None) -> None:
     """List configuration changes newest first — who changed which record, through which door, and what.
 
     Shows the newest page unless --all. A secret's value never appears."""
-    params = {k: v for k, v in (("record_kind", kind), ("record_key", key)) if v is not None}
+    params = {k: v for k, v in (("record_kind", kind), ("record_key", key)) if v is not None} | project_query(project)
     rows: list[Any] = []
     while True:
         body = cli.get("/api/config/changes", "GET /config/changes", params=params).json()

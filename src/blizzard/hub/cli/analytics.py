@@ -12,6 +12,7 @@ from blizzard.cli.window import since_option, until_option, utc_query_value
 from blizzard.foundation.roles import dto
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
+from blizzard.hub.cli.project_option import project_option, project_query
 from blizzard.hub.cli.views import Cost, Listing
 
 
@@ -232,6 +233,7 @@ def _scope_params(
 @_harness_version_option
 @_model_option
 @_effort_option
+@project_option(required_by_hub=False)
 @click.option("--cursor", default=None, help="Resume from a prior page's next_cursor.")
 @click.option(
     "--limit", default=None, type=int, help="Max rows in one page (1-1000, default 200). Illegal with --ndjson."
@@ -257,6 +259,7 @@ def analytics_events(
     harness_version: str | None,
     model: str | None,
     effort: str | None,
+    project: str | None,
     cursor: str | None,
     limit: int | None,
     ndjson: bool,
@@ -285,7 +288,7 @@ def analytics_events(
         harness_version=harness_version,
         model=model,
         effort=effort,
-    )
+    ) | project_query(project)
     if ndjson:
         for line in cli.stream("/api/analytics/events/ndjson", "GET /analytics/events/ndjson", params=params):
             click.echo(line)
@@ -402,6 +405,7 @@ _SPEND_CHUNKS_NDJSON_PATH = "/api/analytics/spend/chunks/ndjson"
 @_harness_version_option
 @_model_option
 @_effort_option
+@project_option(required_by_hub=False)
 @click.option("--cursor", default=None, help="Resume from a prior page's next_cursor (spend-chunks only).")
 @click.option(
     "--limit", default=None, type=int, help="Max rows in one page (spend-chunks only). Illegal with --ndjson."
@@ -429,6 +433,7 @@ def analytics_summary(
     harness_version: str | None,
     model: str | None,
     effort: str | None,
+    project: str | None,
     cursor: str | None,
     limit: int | None,
     ndjson: bool,
@@ -482,7 +487,7 @@ def analytics_summary(
         harness_version=harness_version,
         model=model,
         effort=effort,
-    )
+    ) | project_query(project)
     if ndjson:
         for line in cli.stream(_SPEND_CHUNKS_NDJSON_PATH, "GET /analytics/spend/chunks/ndjson", params=params):
             click.echo(line)

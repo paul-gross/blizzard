@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from typing import TypeVar
+from urllib.parse import quote
 
 import click
 
@@ -36,3 +37,11 @@ def project_option(*, required_by_hub: bool) -> Callable[[F], F]:
 def project_query(project: str | None) -> dict[str, str]:
     """The query parameters naming ``project``: none when it is ``None``."""
     return {PROJECT_PARAM: project} if project is not None else {}
+
+
+def project_path(project: str | None, path: str) -> str:
+    """The hub route for ``path`` (``/scopes``, ``/routines`` …) inside ``project``: the project's own nested route
+    when one is named, else the un-nested route, where the hub takes the tenant's only project."""
+    if project is None:
+        return f"/api{path}"
+    return f"/api/projects/{quote(project, safe='')}{path}"

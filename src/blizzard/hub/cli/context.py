@@ -280,6 +280,9 @@ class CliContext:
             detail = body.get("detail")
             if isinstance(detail, str):
                 return detail
+            if isinstance(detail, dict) and isinstance(detail.get("message"), str):
+                # A structured refusal: its code beside a sentence naming what was refused.
+                return detail["message"]
             if isinstance(detail, list):
                 # A validation refusal: one "field: message" per entry.
                 parts = [
@@ -370,12 +373,7 @@ class CliContext:
         ``--project``."""
         if resp.status_code != httpx.codes.UNPROCESSABLE_ENTITY or _error_code(resp) != _PROJECT_REQUIRED:
             return
-        lines = ["this tenant holds several projects — name the one to act in with --project <id|slug>"]
-        projects = _projects_of(resp)
-        if projects:
-            lines.append("its projects:")
-            lines.extend(f"  {p['project_id']}  {p['slug']}  {p['name']}" for p in projects)
-        raise click.ClickException("\n".join(lines))
+        raise project_required(_projects_of(resp))
 
     def _tenant_refusal(self, headline: str) -> click.ClickException:
         """``headline``, then the tenants the caller can name with ``--tenant``. ``/api/me`` is asked without the
@@ -398,6 +396,16 @@ class CliContext:
         door_header = {"X-Blizzard-Door": "cli"} if door else {}
         tenant_header = {TENANT_HEADER: self.tenant} if self.tenant else {}
         return {**door_header, **headers, **tenant_header, **self.trace.headers()}
+
+
+def project_required(projects: list[dict[str, str]]) -> click.ClickException:
+    """The refusal of a call that needs a project and named none while the tenant holds several: ``projects``
+    (each with ``project_id``, ``slug`` and ``name``) listed, ids beside slugs and names, asking for ``--project``."""
+    lines = ["this tenant holds several projects — name the one to act in with --project <id|slug>"]
+    if projects:
+        lines.append("its projects:")
+        lines.extend(f"  {p['project_id']}  {p['slug']}  {p['name']}" for p in projects)
+    return click.ClickException("\n".join(lines))
 
 
 def _error_code(resp: httpx.Response) -> str | None:

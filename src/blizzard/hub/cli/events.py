@@ -11,6 +11,7 @@ from blizzard.cli.window import since_option, utc_query_value
 from blizzard.foundation.event_log import EventLogSeverity
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
+from blizzard.hub.cli.project_option import project_option, project_query
 from blizzard.hub.cli.views import Listing
 
 
@@ -35,6 +36,7 @@ class FeedListing(Listing):
 @click.option("--chunk", "chunk_id", default=None, help="Only events about this chunk.")
 @since_option()
 @click.option("--limit", type=click.IntRange(1, 200), default=None, help="Max rows (1-200, default 200).")
+@project_option(required_by_hub=False)
 def events(
     cli: CliContext,
     severity: str | None,
@@ -42,6 +44,7 @@ def events(
     chunk_id: str | None,
     since: datetime | None,
     limit: int | None,
+    project: str | None,
 ) -> None:
     """Read the operational event feed — the event log unified with open escalations,
     newest first. ``--json`` prints the raw response, ``detail`` included."""
@@ -52,6 +55,6 @@ def events(
         "since": utc_query_value(since),
         "limit": str(limit) if limit is not None else None,
     }
-    params = {k: v for k, v in named.items() if v is not None}
+    params = {k: v for k, v in named.items() if v is not None} | project_query(project)
     body = cli.get("/api/events", "GET /events", params=params).json()
     cli.show(body, FeedListing(body["events"]))

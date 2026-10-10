@@ -8,6 +8,7 @@ import click
 
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
+from blizzard.hub.cli.project_option import project_option, project_path, project_query
 from blizzard.hub.cli.views import Listing
 
 
@@ -28,28 +29,38 @@ def scope_group() -> None:
 @scope_group.command("create", cls=FleetCommand)
 @click.argument("slug")
 @click.option("--description", default="", help="The scope's description.")
-def scope_create(cli: CliContext, slug: str, description: str) -> None:
+@project_option(required_by_hub=True)
+def scope_create(cli: CliContext, slug: str, description: str, project: str | None) -> None:
     """Mint SLUG, or no-op onto the existing scope of the same slug.
 
     A re-create never overwrites a stored description — ``scope edit`` is the verb that
     changes it."""
-    resp = cli.post("/api/scopes", "POST /scopes", json_body={"slug": slug, "description": description}, door=True)
+    resp = cli.post(
+        project_path(project, "/scopes"),
+        "POST /scopes",
+        json_body={"slug": slug, "description": description},
+        door=True,
+    )
     body = resp.json()
     cli.show_lines(body, f"scope {body['slug']} ready")
 
 
 @scope_group.command("list", cls=FleetCommand)
-def scope_list(cli: CliContext) -> None:
+@project_option(required_by_hub=False)
+def scope_list(cli: CliContext, project: str | None) -> None:
     """List every scope, newest first — slug, retired, description."""
-    rows = cli.get("/api/scopes", "GET /scopes").json()
+    rows = cli.get("/api/scopes", "GET /scopes", params=project_query(project) or None).json()
     cli.show(rows, ScopeListing(rows))
 
 
 @scope_group.command("show", cls=FleetCommand)
 @click.argument("slug")
-def scope_show(cli: CliContext, slug: str) -> None:
+@project_option(required_by_hub=True)
+def scope_show(cli: CliContext, slug: str, project: str | None) -> None:
     """Show SLUG's record — state, description, revision, and when it was created."""
-    body = cli.get(f"/api/scopes/{slug}", "GET /scopes/{slug}", on_status={404: f"unknown scope {slug}"}).json()
+    body = cli.get(
+        project_path(project, f"/scopes/{slug}"), "GET /scopes/{slug}", on_status={404: f"unknown scope {slug}"}
+    ).json()
     state = "retired" if body["retired"] else "enabled"
     cli.show_lines(
         body,
@@ -63,10 +74,11 @@ def scope_show(cli: CliContext, slug: str) -> None:
 @scope_group.command("edit", cls=FleetCommand)
 @click.argument("slug")
 @click.option("--description", required=True, help="The scope's new description.")
-def scope_edit(cli: CliContext, slug: str, description: str) -> None:
+@project_option(required_by_hub=True)
+def scope_edit(cli: CliContext, slug: str, description: str, project: str | None) -> None:
     """Change SLUG's stored description in place; never touches its slug."""
     resp = cli.patch(
-        f"/api/scopes/{slug}",
+        project_path(project, f"/scopes/{slug}"),
         "PATCH /scopes/{slug}",
         json_body={"description": description},
         on_status={404: f"unknown scope {slug}"},
@@ -79,22 +91,24 @@ def scope_edit(cli: CliContext, slug: str, description: str) -> None:
 @scope_group.command("retire", cls=FleetCommand)
 @click.argument("slug")
 @click.option("--by", "by", default="operator", help="Who is retiring (recorded on the fact).")
-def scope_retire(cli: CliContext, slug: str, by: str) -> None:
+@project_option(required_by_hub=True)
+def scope_retire(cli: CliContext, slug: str, by: str, project: str | None) -> None:
     """Retire SLUG — a reversible brake; in-flight users of it are untouched."""
-    _set_scope_lifecycle(cli, slug, verb="retire", by=by)
+    _set_scope_lifecycle(cli, slug, verb="retire", by=by, project=project)
 
 
 @scope_group.command("enable", cls=FleetCommand)
 @click.argument("slug")
 @click.option("--by", "by", default="operator", help="Who is re-enabling (recorded on the fact).")
-def scope_enable(cli: CliContext, slug: str, by: str) -> None:
+@project_option(required_by_hub=True)
+def scope_enable(cli: CliContext, slug: str, by: str, project: str | None) -> None:
     """Re-enable a retired SLUG."""
-    _set_scope_lifecycle(cli, slug, verb="enable", by=by)
+    _set_scope_lifecycle(cli, slug, verb="enable", by=by, project=project)
 
 
-def _set_scope_lifecycle(cli: CliContext, slug: str, *, verb: str, by: str) -> None:
+def _set_scope_lifecycle(cli: CliContext, slug: str, *, verb: str, by: str, project: str | None) -> None:
     resp = cli.post(
-        f"/api/scopes/{slug}/{verb}",
+        project_path(project, f"/scopes/{slug}/{verb}"),
         f"POST /scopes/{{slug}}/{verb}",
         json_body={"by": by},
         on_status={404: f"unknown scope {slug}"},

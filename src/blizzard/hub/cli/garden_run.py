@@ -15,6 +15,7 @@ from blizzard.cli.window import since_option, until_option, utc_query_value
 from blizzard.foundation.roles import dto
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
+from blizzard.hub.cli.project_option import project_option, project_query
 from blizzard.hub.cli.views import Listing
 
 
@@ -37,13 +38,14 @@ def run_group() -> None:
 @run_group.command("list", cls=FleetCommand)
 @since_option()
 @until_option()
-def run_list(cli: CliContext, since: datetime | None, until: datetime | None) -> None:
+@project_option(required_by_hub=False)
+def run_list(cli: CliContext, since: datetime | None, until: datetime | None, project: str | None) -> None:
     """List every run minted in --since/--until, newest first — both default to the
     last 24 hours ending now."""
     params = {
         k: v for k, v in {"since": utc_query_value(since), "until": utc_query_value(until)}.items() if v is not None
     }
-    resp = cli.send("get", "/api/runs", params=params)
+    resp = cli.send("get", "/api/runs", params=params | project_query(project))
     if resp.status_code == httpx.codes.UNPROCESSABLE_ENTITY:
         raise click.ClickException(f"run list rejected: {cli.detail(resp, 'validation failed')}")
     cli.check(resp, "GET /runs")

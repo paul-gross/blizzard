@@ -11,6 +11,7 @@ import click
 from blizzard.foundation.roles import dto
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
+from blizzard.hub.cli.project_option import project_query
 from blizzard.hub.cli.views import ChunkLine, Cost, QuestionLine, RunnerLine
 
 # The since-the-beginning-of-time cutoff `hub status` passes ``GET /api/spend``.
@@ -39,17 +40,29 @@ class FleetStatus:
 
 
 @click.command(cls=FleetCommand)
-def status(cli: CliContext) -> None:
+@click.option(
+    "--project",
+    "project",
+    default=None,
+    metavar="PROJECT",
+    help="Show only this project's chunks, their open questions and its spend, by id or slug; the runners are "
+    "the whole fleet. Without it, every project of the tenant is shown.",
+)
+def status(cli: CliContext, project: str | None) -> None:
     """The fleet view: every chunk with its derived status, the runners, and open questions."""
-    chunks = cli.get_all("/api/chunks", "GET /chunks", key="chunks")
+    lens = project_query(project)
+    chunks = cli.get_all("/api/chunks", "GET /chunks", key="chunks", params=lens)
     runners = cli.get("/api/runners", "GET /runners")
-    questions = cli.get("/api/questions", "GET /questions")
-    spend = cli.get("/api/spend", "GET /spend", params={"since": _FLEET_SPEND_SINCE})
+    questions = cli.get("/api/questions", "GET /questions").json()
+    if project is not None:
+        shown = {chunk["chunk_id"] for chunk in chunks}
+        questions = [question for question in questions if question.get("chunk_id") in shown]
+    spend = cli.get("/api/spend", "GET /spend", params={"since": _FLEET_SPEND_SINCE} | lens)
 
     view = FleetStatus(
         chunks=chunks,
         runners=runners.json().get("runners", []),
-        questions=questions.json(),
+        questions=questions,
         spend=spend.json(),
     )
     cli.show(

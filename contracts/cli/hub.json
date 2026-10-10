@@ -285,6 +285,18 @@
               "type": "text"
             },
             {
+              "help": "Show only this project's records, by id or slug. Without it, every project of the tenant is shown.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Resume from a prior page's next_cursor.",
               "hidden": false,
               "kind": "option",
@@ -604,6 +616,18 @@
               "name": "effort",
               "opts": [
                 "--effort"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Show only this project's records, by id or slug. Without it, every project of the tenant is shown.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
               ],
               "required": false,
               "secondary_opts": [],
@@ -1034,7 +1058,7 @@
           "short_help": "Merge MERGE_IDS into CHUNK_ID, the survivor \u2014 a pure client of ``POST /api/chunks/{id}/group``."
         },
         "ingest": {
-          "help": "Ingest work items by token, minting a chunk.\n\nEach POINTER is a source-native token \u2014 ``source:ref``, ``source#ref``, or a pasted\nwork item URL; a batch mints one chunk carrying every pointer. 422 when no\nconfigured work source claims a token; 409 when a pointer is already held.",
+          "help": "Ingest work items by token, minting a chunk.\n\nEach POINTER is a source-native token \u2014 ``source:ref``, ``source#ref``, or a pasted\nwork item URL; a batch mints one chunk carrying every pointer. 422 when no\nconfigured work source claims a token or a pointer's source is not linked to the\nproject; 409 when a pointer is already held.",
           "params": [
             {
               "hidden": false,
@@ -1046,6 +1070,18 @@
               "required": true,
               "secondary_opts": [],
               "type": "pointer"
+            },
+            {
+              "help": "The project to mint the chunk in, by id or slug. Without it, the project the pointers' work sources are linked to; needed when they name none or disagree.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Print the raw response body as JSON.",
@@ -1090,6 +1126,18 @@
         "list": {
           "help": "The fleet chunk list \u2014 derived status per chunk.",
           "params": [
+            {
+              "help": "Show only this project's records, by id or slug. Without it, every project of the tenant is shown.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
             {
               "help": "Print the raw response body as JSON.",
               "hidden": false,
@@ -2071,6 +2119,18 @@
               "type": "boolean"
             },
             {
+              "help": "Show only this project's records, by id or slug. Without it, every project of the tenant is shown.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
@@ -2567,6 +2627,18 @@
           "type": "integer range"
         },
         {
+          "help": "Show only this project's records, by id or slug. Without it, every project of the tenant is shown.",
+          "hidden": false,
+          "kind": "option",
+          "name": "project",
+          "opts": [
+            "--project"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": "text"
+        },
+        {
           "help": "Print the raw response body as JSON.",
           "hidden": false,
           "kind": "option",
@@ -2724,6 +2796,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The project the record belongs to, by id or slug. Needed only when the tenant holds several projects; with one, the record goes to it.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Print the raw response body as JSON.",
@@ -3388,6 +3472,18 @@
               "type": "text"
             },
             {
+              "help": "The project the record belongs to, by id or slug. Needed only when the tenant holds several projects; with one, the record goes to it.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
@@ -3596,6 +3692,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "choice"
+            },
+            {
+              "help": "Show only this project's records, by id or slug. Without it, every project of the tenant is shown.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Print the raw response body as JSON.",
@@ -4454,6 +4562,18 @@
               "name": "source",
               "opts": [
                 "--source"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The project the record belongs to, by id or slug. Needed only when the tenant holds several projects; with one, the record goes to it.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
               ],
               "required": false,
               "secondary_opts": [],
@@ -5654,6 +5774,18 @@
           "help": "The hub-ordered ready queue, read-only \u2014 a client of ``GET /api/queue``, drained\nto its whole order.",
           "params": [
             {
+              "help": "Show only this project's records, by id or slug. Without it, every project of the tenant is shown.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
@@ -6311,6 +6443,18 @@
               "type": "text"
             },
             {
+              "help": "The project the record belongs to, by id or slug. Needed only when the tenant holds several projects; with one, the record goes to it.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
@@ -6503,6 +6647,18 @@
               "type": "text"
             },
             {
+              "help": "The project the record belongs to, by id or slug. Needed only when the tenant holds several projects; with one, the record goes to it.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
@@ -6556,6 +6712,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "Show only this project's records, by id or slug. Without it, every project of the tenant is shown.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Print the raw response body as JSON.",
@@ -6648,6 +6816,18 @@
               "type": "choice"
             },
             {
+              "help": "Show only this project's records, by id or slug. Without it, every project of the tenant is shown.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
@@ -6708,6 +6888,18 @@
               "name": "by",
               "opts": [
                 "--by"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The project the record belongs to, by id or slug. Needed only when the tenant holds several projects; with one, the record goes to it.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
               ],
               "required": false,
               "secondary_opts": [],
@@ -6798,6 +6990,18 @@
               "name": "note",
               "opts": [
                 "--note"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The project the record belongs to, by id or slug. Needed only when the tenant holds several projects; with one, the record goes to it.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
               ],
               "required": false,
               "secondary_opts": [],
@@ -7074,6 +7278,18 @@
               "type": "datetime"
             },
             {
+              "help": "The project the record belongs to, by id or slug. Needed only when the tenant holds several projects; with one, the record goes to it.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
@@ -7176,6 +7392,18 @@
               "type": "integer"
             },
             {
+              "help": "The project the record belongs to, by id or slug. Needed only when the tenant holds several projects; with one, the record goes to it.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
@@ -7249,6 +7477,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "datetime"
+            },
+            {
+              "help": "Show only this project's records, by id or slug. Without it, every project of the tenant is shown.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Print the raw response body as JSON.",
@@ -7363,6 +7603,18 @@
                 "name"
               ],
               "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "A project the runner serves, by id or slug (repeatable). Without it, the runner serves the tenant's project when the tenant holds one, and none when it holds several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "projects",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
               "secondary_opts": [],
               "type": "text"
             },
@@ -7946,6 +8198,18 @@
               "type": "text"
             },
             {
+              "help": "The project the record belongs to, by id or slug. Needed only when the tenant holds several projects; with one, the record goes to it.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
@@ -8008,6 +8272,18 @@
                 "--description"
               ],
               "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The project the record belongs to, by id or slug. Needed only when the tenant holds several projects; with one, the record goes to it.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
               "secondary_opts": [],
               "type": "text"
             },
@@ -8078,6 +8354,18 @@
               "type": "text"
             },
             {
+              "help": "The project the record belongs to, by id or slug. Needed only when the tenant holds several projects; with one, the record goes to it.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
@@ -8120,6 +8408,18 @@
         "list": {
           "help": "List every scope, newest first \u2014 slug, retired, description.",
           "params": [
+            {
+              "help": "Show only this project's records, by id or slug. Without it, every project of the tenant is shown.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
             {
               "help": "Print the raw response body as JSON.",
               "hidden": false,
@@ -8187,6 +8487,18 @@
               "type": "text"
             },
             {
+              "help": "The project the record belongs to, by id or slug. Needed only when the tenant holds several projects; with one, the record goes to it.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
@@ -8237,6 +8549,18 @@
                 "slug"
               ],
               "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The project the record belongs to, by id or slug. Needed only when the tenant holds several projects; with one, the record goes to it.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
               "secondary_opts": [],
               "type": "text"
             },
@@ -9170,6 +9494,18 @@
     "status": {
       "help": "The fleet view: every chunk with its derived status, the runners, and open questions.",
       "params": [
+        {
+          "help": "Show only this project's chunks, their open questions and its spend, by id or slug; the runners are the whole fleet. Without it, every project of the tenant is shown.",
+          "hidden": false,
+          "kind": "option",
+          "name": "project",
+          "opts": [
+            "--project"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": "text"
+        },
         {
           "help": "Print the raw response body as JSON.",
           "hidden": false,
