@@ -24,6 +24,7 @@ from blizzard.hub.domain.chunk.model import ChunkFacts, RouteHistory
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
+from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.store import schema as hub
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
@@ -1334,6 +1335,93 @@ class SlugNotCurrentAndFormer(HubQueryCheck):
         ]
 
 
+def _earliest_links(check: HubQueryCheck, facts: Table, name: str) -> dict[tuple[str, str], datetime]:
+    """Each (project, name) a link fact ever linked, to its earliest linking instant: a link linked by an instant
+    is one with a ``linked`` fact set at or before it, whatever later facts say."""
+    earliest: dict[tuple[str, str], datetime] = {}
+    for row in check.rows(select(facts.c.project_id, facts.c[name], facts.c.set_at).where(facts.c.linked.is_(True))):
+        key = (row.project_id, row[1])
+        if key not in earliest or row.set_at < earliest[key]:
+            earliest[key] = row.set_at
+    return earliest
+
+
+class ChunkSourcesLinked(HubQueryCheck):
+    """``hub:chunk-sources-linked`` — every source a chunk's work refs name is linked to the chunk's project, as the
+    link's facts answer. The originating ref (a chunk's first) was linked when the chunk was minted, since ingest
+    chose the project by that link; a ref folded in later carries no instant of its own, so it is judged only as
+    linked at some time. The built-in hub source is linked to every project without a stored link. A chunk minted
+    before its project was created was minted before any link existed and is not judged."""
+
+    def run(self) -> list[Violation]:
+        projects, chunks, refs = hub.projects, hub.chunks, hub.chunk_work_refs
+        created = {
+            row.project_id: row.created_at for row in self.rows(select(projects.c.project_id, projects.c.created_at))
+        }
+        minted = {
+            row.chunk_id: (row.project_id, row.minted_at)
+            for row in self.rows(select(chunks.c.chunk_id, chunks.c.project_id, chunks.c.minted_at))
+        }
+        linked = _earliest_links(self, hub.project_source_link_facts, "source_name")
+        violations: list[Violation] = []
+        judged: set[str] = set()
+        for row in self.rows(select(refs.c.chunk_id, refs.c.source, refs.c.ref).order_by(refs.c.chunk_id, refs.c.id)):
+            originating = row.chunk_id not in judged
+            judged.add(row.chunk_id)
+            if row.source == RESERVED_HUB_SOURCE_NAME or row.chunk_id not in minted:
+                continue
+            project_id, minted_at = minted[row.chunk_id]
+            if project_id not in created or minted_at < created[project_id]:
+                continue
+            since = linked.get((project_id, row.source))
+            if since is None:
+                violations.append(
+                    Violation(
+                        "hub:chunk-sources-linked",
+                        f"chunk {row.chunk_id} of project {project_id} names {row.source}:{row.ref}, "
+                        "a source its project never linked",
+                    )
+                )
+            elif originating and since > minted_at:
+                violations.append(
+                    Violation(
+                        "hub:chunk-sources-linked",
+                        f"chunk {row.chunk_id} of project {project_id} was minted from {row.source}:{row.ref}, "
+                        "a source its project had not linked by then",
+                    )
+                )
+        return violations
+
+
+class LandedRepositoryLinked(HubQueryCheck):
+    """``hub:landed-repository-linked`` — every per-repository landing that names its repository record names one
+    the chunk's project had linked when the landing was written, as the link's facts answer. A link unlinked while
+    the landing step ran still answers: the step resolved its repositories while linked. A landing naming no
+    repository was written before the name was recorded and is not judged."""
+
+    def run(self) -> list[Violation]:
+        chunks, landed = hub.chunks, hub.delivery_repo_landed
+        project_of = {row.chunk_id: row.project_id for row in self.rows(select(chunks.c.chunk_id, chunks.c.project_id))}
+        linked = _earliest_links(self, hub.project_repository_link_facts, "repository_name")
+        violations: list[Violation] = []
+        for row in self.rows(
+            select(landed.c.id, landed.c.chunk_id, landed.c.repo, landed.c.repository_name, landed.c.landed_at)
+            .where(landed.c.repository_name.is_not(None))
+            .order_by(landed.c.id)
+        ):
+            project_id = project_of.get(row.chunk_id)
+            since = linked.get((project_id, row.repository_name)) if project_id is not None else None
+            if since is None or since > row.landed_at:
+                violations.append(
+                    Violation(
+                        "hub:landed-repository-linked",
+                        f"chunk {row.chunk_id} of {_project_label(project_id)} landed {row.repo} in repository "
+                        f"{row.repository_name}, which its project had not linked by then",
+                    )
+                )
+        return violations
+
+
 @dataclass(frozen=True)
 class HubInvariants:
     """The hub store's durable invariants (transitions, epochs, delivery)."""
@@ -1370,6 +1458,8 @@ class HubInvariants:
                 ProposalCitesOwnProject(conn),
                 WorkItemProjectInTenant(conn),
                 SlugNotCurrentAndFormer(conn),
+                ChunkSourcesLinked(conn),
+                LandedRepositoryLinked(conn),
             )
             for check in checks:
                 violations.extend(check.run())

@@ -2172,7 +2172,8 @@ def seed_drainable_history(
     while it is whole. Chunk ``ch_ran`` was claimed by runner ``r1`` (its route, token and lease at an epoch the runner
     owns), migrated by that runner's landing — which released the route — restarted at a hub-owned epoch, and completed
     with one work ref whose close was enqueued and retired; chunk ``ch_open`` holds ``open_refs`` work refs and nothing
-    else. Both chunks pin ``graph_id``, the tenant's own, whose ``node_id`` a runner executes.
+    else. Both chunks pin ``graph_id``, the tenant's own, whose ``node_id`` a runner executes, and name the source
+    ``github``, which the tenant's only project linked at ``at``.
     Partway through a drain the epoch owners, route facts and close intents are gone while the restart, the migration,
     the completion and some work refs are not. Chunk ids are global: one store holds one such history."""
     later = at + timedelta(seconds=1)
@@ -2228,6 +2229,15 @@ def seed_drainable_history(
     ]
     for table, values in rows:
         conn.execute(hub_scoped(sa.insert(table)).values(stamp(table, tenant_id=tenant, **values)))
+    projects = schema.projects.c
+    project_id = conn.execute(
+        hub_scoped(sa.select(projects.project_id).where(projects.tenant_id == tenant))
+    ).scalar_one()
+    link = {"tenant_id": tenant, "project_id": project_id, "source_name": "github"}
+    conn.execute(hub_scoped(sa.insert(schema.project_source_links)).values(**link, revision=1))
+    conn.execute(
+        hub_scoped(sa.insert(schema.project_source_link_facts)).values(**link, linked=True, set_at=at, set_by="seed")
+    )
     if open_refs:
         conn.execute(
             hub_scoped(sa.insert(schema.chunk_work_refs)),

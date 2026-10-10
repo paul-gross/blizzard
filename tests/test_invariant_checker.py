@@ -8,7 +8,7 @@ contracted to read."""
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -27,6 +27,7 @@ from blizzard.runner.store import schema as runner
 from blizzard.tools.invariants import HubInvariants, RunnerInvariants
 from tests.runner_fakes import FakeProbe
 from tests.support import (
+    MIGRATION_CLOCK,
     add_tenant,
     close_tenant,
     default_project,
@@ -2065,6 +2066,8 @@ _PROJECT_INVARIANTS = frozenset(
         "hub:proposal-cites-own-project",
         "hub:work-item-project-in-tenant",
         "hub:slug-not-current-and-former",
+        "hub:chunk-sources-linked",
+        "hub:landed-repository-linked",
     }
 )
 
@@ -2358,9 +2361,127 @@ def test_a_slug_both_current_and_former_is_a_violation(tmp_path: Path) -> None:
     ]
 
 
+def _hours(n: float) -> datetime:
+    return _NOW + timedelta(hours=n)
+
+
+def _source_fact(conn: sa.Connection, source: str, *, linked: bool, at: datetime, project_id: str = "proj_app") -> None:
+    conn.execute(
+        insert(hub.project_source_link_facts).values(
+            stamp(
+                hub.project_source_link_facts,
+                project_id=project_id,
+                source_name=source,
+                linked=linked,
+                set_at=at,
+                set_by="op",
+            )
+        )
+    )
+
+
+def _repository_fact(
+    conn: sa.Connection, repository: str, *, linked: bool, at: datetime, project_id: str = "proj_app"
+) -> None:
+    conn.execute(
+        insert(hub.project_repository_link_facts).values(
+            stamp(
+                hub.project_repository_link_facts,
+                project_id=project_id,
+                repository_name=repository,
+                linked=linked,
+                set_at=at,
+                set_by="op",
+            )
+        )
+    )
+
+
+def _mint(
+    conn: sa.Connection, chunk_id: str, *, at: datetime, refs: tuple[str, ...], project_id: str = "proj_app"
+) -> None:
+    """A chunk of ``project_id`` minted ``at``, naming ``refs`` (``source:ref``) in order, the first originating."""
+    conn.execute(
+        insert(hub.chunks).values(
+            stamp(hub.chunks, chunk_id=chunk_id, graph_id="gr_1", minted_at=at, model="m", project_id=project_id)
+        )
+    )
+    for pointer in refs:
+        source, ref = pointer.split(":")
+        conn.execute(
+            insert(hub.chunk_work_refs).values(stamp(hub.chunk_work_refs, chunk_id=chunk_id, source=source, ref=ref))
+        )
+
+
+def test_a_chunk_naming_a_source_its_project_did_not_link_is_a_violation(tmp_path: Path) -> None:
+    """A chunk's first ref must have been linked by its mint; a ref folded in later, only linked at some time. The
+    hub source needs no link, a later unlink breaks nothing, and a chunk minted before its project existed predates
+    every link."""
+    engine = _hub_engine(tmp_path)
+    with engine.begin() as conn:
+        _add_project(conn, "proj_app", slug="app")
+        _source_fact(conn, "acme", linked=True, at=_hours(1))
+        _source_fact(conn, "acme", linked=False, at=_hours(5))
+        _source_fact(conn, "beta", linked=True, at=_hours(4))
+        _mint(conn, "ch_early", at=_hours(0.5), refs=("acme:1",))
+        _mint(conn, "ch_stray", at=_hours(2), refs=("hub:1", "gamma:7"))
+        _mint(conn, "ch_folded", at=_hours(2), refs=("acme:2", "beta:3", "hub:2"))
+        _mint(conn, "ch_late_origin", at=_hours(3), refs=("beta:4",))
+        _mint(conn, "ch_carried", at=_hours(-1), refs=("gamma:8",))
+
+    assert _project_breaches(engine, "hub:chunk-sources-linked") == [
+        "chunk ch_early of project proj_app was minted from acme:1, a source its project had not linked by then",
+        "chunk ch_late_origin of project proj_app was minted from beta:4, a source its project had not linked by then",
+        "chunk ch_stray of project proj_app names gamma:7, a source its project never linked",
+    ]
+
+
+def test_a_landing_in_a_repository_its_project_had_not_linked_is_a_violation(tmp_path: Path) -> None:
+    """A landing must name a repository its chunk's project linked by the time it landed; an unlink while the step
+    ran does not undo that, and a landing naming no repository predates the name and is not judged."""
+    engine = _hub_engine(tmp_path)
+    home = default_project(engine)
+    with engine.begin() as conn:
+        _add_project(conn, "proj_app", slug="app")
+        _repository_fact(conn, "app-repo", linked=True, at=_hours(1))
+        _repository_fact(conn, "app-repo", linked=False, at=_hours(2))
+        _mint(conn, "ch_app", at=_hours(1), refs=())
+        _mint(conn, "ch_home", at=_hours(1), refs=(), project_id=home)
+        for chunk_id, repo, name, at in (
+            ("ch_app", "acme/app", "app-repo", _hours(3)),
+            ("ch_app", "acme/early", "app-repo", _hours(0.5)),
+            ("ch_app", "acme/other", "other-repo", _hours(3)),
+            ("ch_app", "acme/carried", None, _hours(3)),
+            ("ch_home", "acme/app", "app-repo", _hours(1.5)),
+        ):
+            conn.execute(
+                insert(hub.delivery_repo_landed).values(
+                    stamp(
+                        hub.delivery_repo_landed,
+                        chunk_id=chunk_id,
+                        repo=repo,
+                        commit_hash="c0ffee",
+                        landed_at=at,
+                        repository_name=name,
+                    )
+                )
+            )
+
+    assert _project_breaches(engine, "hub:landed-repository-linked") == [
+        "chunk ch_app of project proj_app landed acme/early in repository app-repo, which its project had not "
+        "linked by then",
+        "chunk ch_app of project proj_app landed acme/other in repository other-repo, which its project had not "
+        "linked by then",
+        f"chunk ch_home of project {home} landed acme/app in repository app-repo, which its project had not "
+        "linked by then",
+    ]
+
+
 def test_a_carried_over_store_keeps_every_project_invariant(tmp_path: Path) -> None:
-    """Rows written before projects existed, in two tenants, each land in their own tenant's ``default`` project."""
+    """Rows written before projects existed, in two tenants, each land in their own tenant's ``default`` project. A
+    carried chunk was minted before the migration created that project, and a carried landing names no repository."""
     runner, engine = migrate_to(tmp_path, "20261008_1720_tenant_deletion_closed_at")
+    carried_mint = MIGRATION_CLOCK.now() - timedelta(days=1)
     seeding = hub_scoped_engine(engine)
     with seeding.begin() as conn:
         first = conn.execute(sa.select(hub.tenants.c.tenant_id)).scalar_one()
@@ -2384,7 +2505,31 @@ def test_a_carried_over_store_keeps_every_project_invariant(tmp_path: Path) -> N
             )
             conn.execute(insert(hub.routine_scopes).values(tenant_id=tenant, routine_id=routine, scope_id=scope))
             conn.execute(
-                insert(hub.chunks).values(tenant_id=tenant, chunk_id=chunk, graph_id="gr_1", minted_at=_NOW, model="m")
+                insert(hub.chunks).values(
+                    tenant_id=tenant, chunk_id=chunk, graph_id="gr_1", minted_at=carried_mint, model="m"
+                )
+            )
+            conn.execute(
+                insert(hub.work_sources).values(
+                    tenant_id=tenant,
+                    name="acme",
+                    provider="github",
+                    locator="acme/app",
+                    annotate=False,
+                    revision=1,
+                    created_at=_NOW,
+                    created_by="test",
+                )
+            )
+            # A stored source, a source never stored as a record, and the built-in hub source.
+            for source in ("acme", "default", "hub"):
+                conn.execute(
+                    insert(hub.chunk_work_refs).values(tenant_id=tenant, chunk_id=chunk, source=source, ref="1")
+                )
+            conn.execute(
+                insert(hub.delivery_repo_landed).values(
+                    tenant_id=tenant, chunk_id=chunk, repo="acme/app", commit_hash="c0ffee", landed_at=_NOW
+                )
             )
             conn.execute(
                 insert(hub.findings).values(
