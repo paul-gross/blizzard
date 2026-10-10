@@ -85,6 +85,8 @@ from blizzard.hub.domain.graph.model import Edge, Graph, Node
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.transcripts import TranscriptCaps
+from blizzard.hub.domain.projects.authoring import ProjectAuthoring
+from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.runners.registration import RunnerAddition, RunnerCapability, RunnerRegistration
 from blizzard.hub.egress.writer import (
     EgressBatch,
@@ -105,6 +107,8 @@ from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
 from blizzard.hub.store.internal.config_apply_store import ConfigApplyStore
 from blizzard.hub.store.internal.config_import_store import ConfigImportStore
 from blizzard.hub.store.internal.graph_store import GraphStore
+from blizzard.hub.store.internal.project_link_store import ProjectLinkStore
+from blizzard.hub.store.internal.project_store import ProjectStore
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from blizzard.hub.store.internal.scope_store import ScopeStore
@@ -295,6 +299,49 @@ def default_project(engine: Engine, tenant: TenantId | None = None) -> str:
     if len(ids) != 1:
         raise AssertionError(f"default_project needs a tenant holding exactly one project; {tenant} holds {len(ids)}")
     return ids[0]
+
+
+_SEEDER = ChangeContext(actor="test", door=Door.API)
+
+
+def _project_authoring(engine: Engine, tenant: TenantId) -> tuple[ProjectAuthoring, ProjectStore]:
+    conns = scoped_connections(engine, tenant)
+    projects = ProjectStore(conns)
+    return ProjectAuthoring(projects=projects, links=ProjectLinkStore(conns), clock=FixedClock(_GRAPH_T0)), projects
+
+
+def seed_project(engine: Engine, slug: str, *, tenant: TenantId | None = None) -> ProjectId:
+    """Create a project named ``slug`` in ``tenant`` — the store's only tenant when ``None`` — through project
+    authoring, its create change row included, and return its id. Once the tenant holds two projects, a write that
+    names none is refused: the test names the project on every write it makes from then on."""
+    authoring, _ = _project_authoring(engine, tenant if tenant is not None else default_tenant(engine))
+    return authoring.create(slug, slug, _SEEDER).project_id
+
+
+def link_project(
+    engine: Engine,
+    *,
+    project: str | None = None,
+    source: str | None = None,
+    repository: str | None = None,
+    tenant: TenantId | None = None,
+) -> None:
+    """Link ``project`` — ``tenant``'s only project when ``None`` — to the work source ``source`` and/or the
+    repository ``repository``, through project authoring: a first link, or a relink of one it unlinked. ``tenant``
+    is the store's only tenant when ``None``. The named records must be stored in that tenant."""
+    tenant = tenant if tenant is not None else default_tenant(engine)
+    authoring, projects = _project_authoring(engine, tenant)
+    record = projects.get(ProjectId(project if project is not None else default_project(engine, tenant)))
+    assert record is not None, f"link_project needs {project} among {tenant}'s projects"
+    conns = scoped_connections(engine, tenant)
+    if source is not None:
+        work_source = WorkSourceRecordStore(conns).get(source)
+        assert work_source is not None, f"link_project needs the work source {source} stored in {tenant}"
+        authoring.link_source(record, work_source, _SEEDER)
+    if repository is not None:
+        stored = RepositoryRecordStore(conns).get(repository)
+        assert stored is not None, f"link_project needs the repository {repository} stored in {tenant}"
+        authoring.link_repository(record, stored, _SEEDER)
 
 
 def seed_scope(conns: ScopedConnections, slug: str, *, at: datetime) -> str:

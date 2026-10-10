@@ -111,6 +111,8 @@ from blizzard.hub.domain.observability.tracing.repository import (
     TraceCheckpoint,
 )
 from blizzard.hub.domain.observability.transcripts import IReadTranscriptSegments
+from blizzard.hub.domain.projects.links import IReadProjectLinks
+from blizzard.hub.domain.projects.model import IReadProjectRepository, ProjectEdit, ProjectId, ProjectSlug
 from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
 from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.domain.tenancy.administration import IReadTenantDirectory
@@ -1060,6 +1062,9 @@ class HubWorld:
     chunk_route_b: str
     transcript_chunk: str
     transcript_segment_id: str
+    #: The tenant's one project, renamed ``default`` -> ``census``, linked to ``census-source`` (unlinked, then
+    #: relinked) and to ``census-repo``.
+    project_id: ProjectId
 
 
 def build_hub_world(tmp_path: Path) -> HubWorld:
@@ -1825,6 +1830,17 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         )
     invitation_store.record(InvitationOutcome("inv_census_2", InvitationOutcomeKind.REVOKED, user_1.user_id, _ht(110)))
 
+    # --- projects and their links: last, so every write above lands in the tenant's one project ----
+    [project] = hub.services.projects.list_all()
+    census_source = hub.services.work_source_records.get("census-source")
+    census_repo = hub.services.repository_records.get("census-repo")
+    assert census_source is not None and census_repo is not None
+    source_link = hub.services.project_authoring.link_source(project, census_source, operator)
+    hub.services.project_authoring.unlink_source(source_link, operator)
+    hub.services.project_authoring.link_source(project, census_source, operator)
+    hub.services.project_authoring.link_repository(project, census_repo, operator)
+    project = hub.services.project_authoring.edit(project, ProjectEdit(slug="census"), operator)
+
     return HubWorld(
         hub=hub,
         engine=engine,
@@ -1887,6 +1903,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         chunk_route_b=chunk_route_b,
         transcript_chunk=transcript_chunk,
         transcript_segment_id=transcript_segment_id,
+        project_id=project.project_id,
     )
 
 
@@ -2209,6 +2226,28 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     ),
     (IReadConfigRevisions, "revisions"): lambda w: w.config_revisions.revisions(RecordKind.REPOSITORY, "census-repo"),
     (IReadConfigImports, "recorded"): lambda w: w.config_imports.recorded(),
+    (IReadProjectRepository, "get"): lambda w: w.hub.services.projects.get(w.project_id),
+    (IReadProjectRepository, "get_many"): lambda w: w.hub.services.projects.get_many([w.project_id]),
+    (IReadProjectRepository, "list_all"): lambda w: w.hub.services.projects.list_all(),
+    (IReadProjectRepository, "get_by_slug"): lambda w: w.hub.services.projects.get_by_slug(ProjectSlug.parse("census")),
+    (IReadProjectRepository, "get_by_former_slug"): lambda w: w.hub.services.projects.get_by_former_slug(
+        ProjectSlug.parse("default")
+    ),
+    (IReadProjectRepository, "resolve"): lambda w: w.hub.services.projects.resolve("default"),
+    (IReadProjectLinks, "source_link"): lambda w: w.hub.services.project_links.source_link(
+        w.project_id, "census-source"
+    ),
+    (IReadProjectLinks, "repository_link"): lambda w: w.hub.services.project_links.repository_link(
+        w.project_id, "census-repo"
+    ),
+    (IReadProjectLinks, "sources_of"): lambda w: w.hub.services.project_links.sources_of(w.project_id),
+    (IReadProjectLinks, "repositories_of"): lambda w: w.hub.services.project_links.repositories_of(w.project_id),
+    (IReadProjectLinks, "projects_linking_source"): lambda w: w.hub.services.project_links.projects_linking_source(
+        "census-source"
+    ),
+    (IReadProjectLinks, "linked_at"): lambda w: w.hub.services.project_links.linked_at(
+        w.project_id, "census-source", w.clock.now()
+    ),
     (IReadConfigImports, "commit_coordinates"): lambda w: w.config_imports.commit_coordinates(),
     (IReadConfigChanges, "page"): lambda w: w.hub.services.config_changes.page(
         before=None, limit=10, record_kind=None, record_key=None

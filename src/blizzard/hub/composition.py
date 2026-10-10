@@ -152,6 +152,9 @@ from blizzard.hub.domain.operations.promote import PromoteService
 from blizzard.hub.domain.operations.queue import GroupService, QueueService
 from blizzard.hub.domain.operations.restart import RestartService
 from blizzard.hub.domain.operations.stop import StopService
+from blizzard.hub.domain.projects.authoring import ProjectAuthoring
+from blizzard.hub.domain.projects.links import IReadProjectLinks
+from blizzard.hub.domain.projects.model import IReadProjectRepository
 from blizzard.hub.domain.runners.enrollment import RunnerEnrollmentService
 from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, RetiredRunnerGuard
 from blizzard.hub.domain.tenancy.administration import TenantAdministration
@@ -191,6 +194,8 @@ from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.internal.hub_event_log_store import HubEventLogStore
 from blizzard.hub.store.internal.hub_scoped_reads import HubScopedReads, build_hub_scoped_reads
 from blizzard.hub.store.internal.invitation_store import InvitationStore
+from blizzard.hub.store.internal.project_link_store import ProjectLinkStore
+from blizzard.hub.store.internal.project_store import ProjectStore
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
 from blizzard.hub.store.internal.review_findings_store import ReviewFindingsStore
 from blizzard.hub.store.internal.routine_scope_store import RoutineScopeStore
@@ -303,6 +308,12 @@ class TenantServices:
     repository_records: IReadRepositoryRecordRepository
     #: The configuration change log.
     config_changes: IReadConfigChanges
+    #: Stored projects (the read half).
+    projects: IReadProjectRepository
+    #: Each project's links to the tenant's work sources and repositories (the read half).
+    project_links: IReadProjectLinks
+    #: The one writer of projects and their links, each write with its change row.
+    project_authoring: ProjectAuthoring
     #: The routine read Protocol — the same store instance as
     #: ``routine_authoring``'s writes.
     routines: IReadRoutineRepository
@@ -472,6 +483,10 @@ class TenantStores:
     #: Which active configured records name each secret, across every referring kind.
     secret_referrers: SecretReferrersStore
     config_changes: ConfigChangeStore
+    #: Projects — composition-only write half; ``HubServices`` carries the read half.
+    projects: ProjectStore
+    #: Project links — composition-only write half; ``HubServices`` carries the read half.
+    project_links: ProjectLinkStore
     config_apply: ConfigApplyStore
     config_import: ConfigImportStore
     invitations: InvitationStore
@@ -514,6 +529,8 @@ def build_tenant_stores(connections: ScopedConnections, *, clock: IClock) -> Ten
         repository_records=RepositoryRecordStore(connections),
         secret_referrers=SecretReferrersStore(connections),
         config_changes=ConfigChangeStore(connections),
+        projects=ProjectStore(connections),
+        project_links=ProjectLinkStore(connections),
         config_apply=ConfigApplyStore(connections),
         config_import=ConfigImportStore(connections),
         invitations=InvitationStore(connections),
@@ -1042,6 +1059,9 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         work_source_records=stores.work_source_records,
         repository_records=stores.repository_records,
         config_changes=stores.config_changes,
+        projects=stores.projects,
+        project_links=stores.project_links,
+        project_authoring=ProjectAuthoring(projects=stores.projects, links=stores.project_links, clock=clock),
         routines=routine_store,
         routine_scopes=routine_scope_store,
         routine_scope_membership=RoutineScopeMembership(routine_scopes=routine_scope_store, clock=clock),

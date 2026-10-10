@@ -321,6 +321,7 @@ HUB_ALLOWED_SCANS: list[Allowance] = [
     TableWideAllowance("graph_policy_facts", 200, _FLEET_CONFIG_REASON),
     TableWideAllowance("graphs", 200, _FLEET_CONFIG_REASON),
     TableWideAllowance("identities", 200, _FLEET_CONFIG_REASON),
+    TableWideAllowance("projects", 200, _FLEET_CONFIG_REASON),
     TableWideAllowance("repositories", 200, _FLEET_CONFIG_REASON),
     TableWideAllowance("repository_lifecycle_facts", 200, _FLEET_CONFIG_REASON),
     TableWideAllowance("routine_lifecycle_facts", 200, _FLEET_CONFIG_REASON),

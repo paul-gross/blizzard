@@ -22,7 +22,7 @@ from __future__ import annotations
 import asyncio
 import re
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Literal
 
@@ -32,12 +32,18 @@ import sqlalchemy as sa
 from fastapi import FastAPI
 
 from blizzard.auth_core import Role
+from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.hub.app import Sweep
+from blizzard.hub.composition import TenantStores, build_hub_core
 from blizzard.hub.domain.observability.egress.config import EgressConfig
+from blizzard.hub.domain.projects.authoring import ProjectAuthoring
+from blizzard.hub.domain.projects.model import ProjectEdit, ProjectId
 from blizzard.hub.store import schema
 from blizzard.hub.store.internal.finding_store import FindingStore
+from blizzard.hub.tenancy import StoreScope
 from tests.support import (
+    OP,
     HubHarness,
     InMemoryTraceExporter,
     TenantHarness,
@@ -827,6 +833,54 @@ def test_a_write_in_one_tenant_changes_nothing_the_other_reads(two: _Two) -> Non
             wrong[f"{method} {path}"] = f"{response.status_code} {response.text[:200]}"
     assert not wrong, "\n".join(f"{route}: {answer}" for route, answer in wrong.items())
     assert _reads(two.first) == before
+
+
+def _project_answers(stores: TenantStores, project_id: ProjectId, owner: _Tenant, at: datetime) -> tuple[object, ...]:
+    """What ``stores`` answers for ``project_id`` and the source and repository ``owner`` linked it to."""
+    links = stores.project_links
+    source, repository = owner.ids["source"], owner.ids["repository"]
+    return (
+        stores.projects.get(project_id),
+        stores.projects.get_many([project_id]),
+        links.source_link(project_id, source),
+        links.repository_link(project_id, repository),
+        links.sources_of(project_id),
+        links.repositories_of(project_id),
+        links.linked_at(project_id, source, at),
+    )
+
+
+def test_a_tenants_projects_and_links_answer_only_in_their_own_tenant(two: _Two) -> None:
+    """At the store, as no route names a project: the other tenant's project, slugs and links answer as a project never
+    minted does, while their own tenant reads them."""
+    core = build_hub_core(two.hub.engine, clock=two.hub.clock)
+    stores = {t.label: core.open(StoreScope(t.harness.tenant)) for t in two.both()}
+    projects = {}
+    for t in two.both():
+        own = stores[t.label]
+        authoring = ProjectAuthoring(projects=own.projects, links=own.project_links, clock=two.hub.clock)
+        [project] = own.projects.list_all()
+        source, repository = (
+            own.work_source_records.get(t.ids["source"]),
+            own.repository_records.get(t.ids["repository"]),
+        )
+        assert source is not None and repository is not None
+        authoring.link_source(project, source, OP)
+        authoring.link_repository(project, repository, OP)
+        projects[t.label] = authoring.edit(project, ProjectEdit(slug=f"{t.label}-renamed"), OP)
+    never = ProjectId(Id.mint_at(IdPrefix.PROJECT, two.hub.clock.now()).value)
+    at = two.hub.clock.now()
+    for owner, sender in ((two.first, two.second), (two.second, two.first)):
+        project = projects[owner.label]
+        own, foreign = stores[owner.label], stores[sender.label]
+        unknown = _project_answers(own, never, owner, at)
+        assert _project_answers(own, project.project_id, owner, at) != unknown
+        assert _project_answers(foreign, project.project_id, owner, at) == unknown
+        slug = f"{owner.label}-renamed"
+        assert own.projects.resolve(slug) == project
+        assert foreign.projects.resolve(slug) is None
+        assert project.project_id in own.project_links.projects_linking_source(owner.ids["source"])
+        assert project.project_id not in foreign.project_links.projects_linking_source(owner.ids["source"])
 
 
 def test_each_tenants_stream_replays_its_own_events_only(two: _Two) -> None:
