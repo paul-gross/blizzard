@@ -1,12 +1,14 @@
 // @ts-check
 const { defineConfig } = require("eslint/config");
 const rootConfig = require("../../eslint.config.js");
+const lensLinks = require("../../eslint.lens-links.js");
 
 module.exports = defineConfig([
   // The generated openapi-ts client is committed and drift-checked, not
   // hand-edited — never lint it (bzh:generated-client).
   { ignores: ["**/lib/api/**"] },
   ...rootConfig,
+  ...lensLinks,
   {
     files: ["**/*.ts"],
     rules: {

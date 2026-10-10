@@ -18,6 +18,7 @@ import type { ConfigRowVm } from '../config-record-list';
 import { SECRET_CREATE_FIELDS, secretRows } from './secrets.model';
 import { injectCreateSecretMutation, type SecretCreateVars } from './secrets.mutations';
 import { injectSecretsQuery } from './secrets.query';
+import { ProjectLens } from '../../core/project-lens';
 
 /**
  * `/admin/secrets` — the secret list beside a `<router-outlet>` holding the
@@ -33,6 +34,8 @@ import { injectSecretsQuery } from './secrets.query';
   styleUrl: '../config-page-host.css',
 })
 export class SecretsPage {
+  private readonly lens = inject(ProjectLens);
+
   private readonly router = inject(Router);
   private readonly viewport = inject(ViewportService);
   private readonly filters = injectQueryFilters();
@@ -57,13 +60,13 @@ export class SecretsPage {
   }
 
   protected onPick(key: string): void {
-    void this.router.navigate(['/admin', 'secrets', key], {
+    void this.router.navigate(this.lens.link(['/admin', 'secrets', key]), {
       queryParamsHandling: 'preserve',
     });
   }
 
   protected onBack(): void {
-    void this.router.navigate(['/admin', 'secrets'], {
+    void this.router.navigate(this.lens.link(['/admin', 'secrets']), {
       queryParamsHandling: 'preserve',
     });
   }
@@ -88,7 +91,7 @@ export class SecretsPage {
     this.createMutation.mutate(body, {
       onSuccess: () => {
         this.createOpen.set(false);
-        void this.router.navigate(['/admin', 'secrets', body.name], {
+        void this.router.navigate(this.lens.link(['/admin', 'secrets', body.name]), {
           queryParamsHandling: 'preserve',
         });
       },

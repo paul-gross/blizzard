@@ -8,6 +8,7 @@ import { ConfigMaster } from '../config-master';
 import type { ConfigRowVm } from '../config-record-list';
 import { changeEntries, changeEntryRows } from './changes.model';
 import { injectConfigChangesQuery } from './changes.query';
+import { ProjectLens } from '../../core/project-lens';
 
 /**
  * `/admin/changes` — the change log across every config record, newest first, paged
@@ -23,6 +24,8 @@ import { injectConfigChangesQuery } from './changes.query';
   styleUrl: '../config-page-host.css',
 })
 export class ChangesPage {
+  private readonly lens = inject(ProjectLens);
+
   private readonly router = inject(Router);
   private readonly viewport = inject(ViewportService);
   private readonly changesQuery = injectConfigChangesQuery();
@@ -41,10 +44,10 @@ export class ChangesPage {
   }
 
   protected onPick(key: string): void {
-    void this.router.navigate(['/admin', 'changes', key]);
+    void this.router.navigate(this.lens.link(['/admin', 'changes', key]));
   }
 
   protected onBack(): void {
-    void this.router.navigate(['/admin', 'changes']);
+    void this.router.navigate(this.lens.link(['/admin', 'changes']));
   }
 }

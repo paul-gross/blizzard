@@ -18,6 +18,7 @@ import { ConfigMaster } from '../config-master';
 import type { ConfigRowVm } from '../config-record-list';
 import { WORK_SOURCE_FIELDS, workSourceRows } from './work-sources.model';
 import { injectWorkSourcesQuery } from './work-sources.query';
+import { ProjectLens } from '../../core/project-lens';
 
 /**
  * `/admin/work-sources` — the work source list beside a `<router-outlet>` holding the
@@ -33,6 +34,8 @@ import { injectWorkSourcesQuery } from './work-sources.query';
   styleUrl: '../config-page-host.css',
 })
 export class WorkSourcesPage {
+  private readonly lens = inject(ProjectLens);
+
   private readonly router = inject(Router);
   private readonly viewport = inject(ViewportService);
   private readonly filters = injectQueryFilters();
@@ -57,13 +60,13 @@ export class WorkSourcesPage {
   }
 
   protected onPick(key: string): void {
-    void this.router.navigate(['/admin', 'work-sources', key], {
+    void this.router.navigate(this.lens.link(['/admin', 'work-sources', key]), {
       queryParamsHandling: 'preserve',
     });
   }
 
   protected onBack(): void {
-    void this.router.navigate(['/admin', 'work-sources'], {
+    void this.router.navigate(this.lens.link(['/admin', 'work-sources']), {
       queryParamsHandling: 'preserve',
     });
   }
@@ -88,7 +91,7 @@ export class WorkSourcesPage {
     this.createMutation.mutate(body, {
       onSuccess: () => {
         this.createOpen.set(false);
-        void this.router.navigate(['/admin', 'work-sources', body.name], {
+        void this.router.navigate(this.lens.link(['/admin', 'work-sources', body.name]), {
           queryParamsHandling: 'preserve',
         });
       },

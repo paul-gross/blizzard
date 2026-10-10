@@ -78,7 +78,7 @@
               <li>
                 <span class="dim">{{ link.kind }}</span>
                 @if (link.route; as route) {
-                  <a [routerLink]="route">{{ link.name }}</a>
+                  <a [routerLink]="route | lensLink">{{ link.name }}</a>
                 } @else {
                   <span>{{ link.name }}</span>
                 }

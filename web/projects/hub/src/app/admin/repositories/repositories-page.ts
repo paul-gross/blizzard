@@ -18,6 +18,7 @@ import { ConfigMaster } from '../config-master';
 import type { ConfigRowVm } from '../config-record-list';
 import { REPOSITORY_FIELDS, repositoryRows } from './repositories.model';
 import { injectRepositoriesQuery } from './repositories.query';
+import { ProjectLens } from '../../core/project-lens';
 
 /**
  * `/admin/repositories` — the repository list beside a `<router-outlet>` holding the
@@ -33,6 +34,8 @@ import { injectRepositoriesQuery } from './repositories.query';
   styleUrl: '../config-page-host.css',
 })
 export class RepositoriesPage {
+  private readonly lens = inject(ProjectLens);
+
   private readonly router = inject(Router);
   private readonly viewport = inject(ViewportService);
   private readonly filters = injectQueryFilters();
@@ -57,13 +60,13 @@ export class RepositoriesPage {
   }
 
   protected onPick(key: string): void {
-    void this.router.navigate(['/admin', 'repositories', key], {
+    void this.router.navigate(this.lens.link(['/admin', 'repositories', key]), {
       queryParamsHandling: 'preserve',
     });
   }
 
   protected onBack(): void {
-    void this.router.navigate(['/admin', 'repositories'], {
+    void this.router.navigate(this.lens.link(['/admin', 'repositories']), {
       queryParamsHandling: 'preserve',
     });
   }
@@ -88,7 +91,7 @@ export class RepositoriesPage {
     this.createMutation.mutate(body, {
       onSuccess: () => {
         this.createOpen.set(false);
-        void this.router.navigate(['/admin', 'repositories', body.name], {
+        void this.router.navigate(this.lens.link(['/admin', 'repositories', body.name]), {
           queryParamsHandling: 'preserve',
         });
       },

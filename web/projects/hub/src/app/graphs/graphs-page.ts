@@ -4,6 +4,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { GraphDetail } from './graph-detail';
 import { GraphExplorer } from './graph-explorer';
 import { map } from 'rxjs';
+import { ProjectLens } from '../core/project-lens';
 
 /**
  * The `/graphs` route — the graph explorer: a
@@ -21,6 +22,8 @@ import { map } from 'rxjs';
   styleUrl: './graphs-page.css',
 })
 export class GraphsPage {
+  private readonly lens = inject(ProjectLens);
+
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
 
@@ -32,6 +35,6 @@ export class GraphsPage {
   });
 
   protected select(graphId: string): void {
-    void this.router.navigate(['/graphs', graphId]);
+    void this.router.navigate(this.lens.link(['/graphs', graphId]));
   }
 }
