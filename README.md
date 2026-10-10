@@ -81,6 +81,9 @@ engineer's agents show up on the same board.
   [`human-auth.md`](./docs/deployment/human-auth.md), [`runner-auth.md`](./docs/deployment/runner-auth.md).
 - **Tenants.** One hub serves several fleets, each a tenant with its own members, runners and records; people join one
   by invitation, and hub administrators create and delete them: [`tenants.md`](./docs/deployment/tenants.md).
+- **Projects.** A tenant divides its work into projects, each drawing from the work sources and landing in the
+  repositories it links, served by the runners that declare it, and shown alone through the board's project lens:
+  [`projects.md`](./docs/deployment/projects.md).
 - **One box or a whole team.** Hub and runner colocated on your own machine, over the default sqlite store, is a
   complete deployment rather than a demo mode. The same two daemons become a shared hub on a server with a runner on
   each engineer's laptop when you want that instead; nothing about the work changes shape in between.

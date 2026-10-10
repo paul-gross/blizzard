@@ -37,6 +37,11 @@ one `add` was given ([remote-runner.md](../remote-runner.md#point-it-at-the-hub)
 ([tenants.md](./tenants.md#naming-the-tenant-a-call-acts-in)). The runner belongs to that tenant for as long as it
 exists: its token names the tenant on every fleet call, and a runner never moves between tenants.
 
+`add` takes a repeatable `--project <id|slug>`, the projects the runner serves; a project the tenant does not hold
+refuses the add. Without it, the runner serves the tenant's project when the tenant holds one, and nothing when it
+holds several. `blizzard-runner init` writes `projects = ["default"]` into a fresh config, or the projects its own
+repeated `--project` names, and adds the runner serving them ([projects.md](./projects.md#runners-serve-projects)).
+
 `blizzard-runner init <dir>` adds the runner and writes its token in one step, at the hub its config names, which `--hub
 <url>` or else `BZ_HUB_URL` sets on a fresh config. With no token, it adds the runner under the config's `name`. On a
 hub with `auth.mode = "none"` that needs no sign-in; on one that requires it, the add runs under your `blizzard hub

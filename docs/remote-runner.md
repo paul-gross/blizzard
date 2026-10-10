@@ -26,6 +26,10 @@ Only the config differs from the colocated case — in `blizzard-runner.toml`, t
 - `name = "anna-laptop"` — the label `hub runner list` and the board show beside the runner's id. It identifies nothing:
   two runners may share a name, and every operator verb takes the id. It defaults to `runner-local`.
 
+A third key, `projects`, names the projects the runner serves, by id or slug; `init` writes `projects = ["default"]`.
+Leaving the key out declares nothing and keeps what the hub holds for the runner, and `projects = []` serves none
+([deployment/projects.md](./deployment/projects.md#runners-serve-projects)).
+
 The toml's `hub_url` is authoritative: `BZ_HUB_URL` seeds it only at `blizzard-runner init` time, as `--hub <url>` does
 over it, and a running daemon reads the toml alone — re-pointing a runner means editing the file and restarting, not
 exporting a variable. The same `BZ_HUB_URL` variable does live-target the operator's `blizzard hub …` client CLI — two

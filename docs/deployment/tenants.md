@@ -1,8 +1,8 @@
 # Tenants
 
-A hub holds its fleets as tenants. A tenant is one fleet's whole world: its chunks and graphs, scopes and routines,
-work sources, repositories and secrets, its event log, and its runners. Every such record belongs to exactly one
-tenant, and nothing crosses between them — a person sees, and a runner works on, only the records of a tenant they
+A hub holds its fleets as tenants. A tenant is one fleet's whole world: its projects, chunks and graphs, scopes and
+routines, work sources, repositories and secrets, its event log, and its runners. Every such record belongs to exactly
+one tenant, and nothing crosses between them — a person sees, and a runner works on, only the records of a tenant they
 belong to. People's accounts and sign-in identities, the hub administrators, the egress and trace exports, the hub's own
 event log, and its signing keys are the hub's own and sit above every tenant.
 
@@ -10,8 +10,9 @@ A tenant is named by its id, `ten_` followed by a ULID, which never changes. Its
 with no leading or trailing whitespace, never refused for being taken, so two tenants may share one. Every verb and
 route names a tenant by its id.
 
-A fresh hub starts with one tenant named `default`, empty. An upgraded hub carries every existing row into that one
-tenant ([`upgrade.md`](../upgrade.md#tenants-boundary)).
+A fresh hub starts with one tenant named `default`, empty but for its `default` project. Every tenant starts with a
+project of that slug ([projects.md](./projects.md#the-default-project)). An upgraded hub carries every existing row into
+that one tenant ([`upgrade.md`](../upgrade.md#tenants-boundary)).
 
 ## Hub administrators
 
@@ -47,11 +48,11 @@ Each verb takes `tenant:admin` and no `--tenant`: it names the tenant it acts on
 | `blizzard hub tenant rename <tenant_id> <name>`     | `PATCH /api/admin/tenants/{tenant_id}`       |
 | `blizzard hub tenant delete <tenant_id> [--yes]`    | `DELETE /api/admin/tenants/{tenant_id}`      |
 
-**Create** makes the tenant in one transaction, its packaged graphs minted and, with `--admin <user_id>`
-(`admin_user_id` over HTTP), that user granted the `admin` role in it. It answers `201` with the new id, and the tenant
-is usable at once. A name that is not a tenant name's shape answers `422`, and an `--admin` that names no user `404`;
-neither creates anything. Without `--admin` the tenant has no members until someone who holds `membership:grant-any`
-grants one or invites one.
+**Create** makes the tenant in one transaction, its packaged graphs minted, its `default` project created, and, with
+`--admin <user_id>` (`admin_user_id` over HTTP), that user granted the `admin` role in it. It answers `201` with the new
+id, and the tenant is usable at once. A name that is not a tenant name's shape answers `422`, and an `--admin` that
+names no user `404`; neither creates anything. Without `--admin` the tenant has no members until someone who holds
+`membership:grant-any` grants one or invites one.
 
 **List** shows every tenant oldest first: the open ones, and those whose deletion is underway with when they closed.
 

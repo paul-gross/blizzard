@@ -48,6 +48,9 @@ version — an older one reads that version's rows alone, since mixing would dou
 converted to UTC before the wire — a bare 10:00 means the operator's 10am, whatever timezone the hub runs in. A time
 ending `Z` or `±hh:mm` is that instant instead.
 
+Every analytics read takes `?project=<id|slug>` to read one project's chunks; without it, it reads the whole tenant
+([projects.md](./projects.md#--project-on-the-cli)).
+
 None of the seven routes defaults or requires a since/until window (unlike `/api/spend`, requiring `since`, or
 `/api/activity`, defaulting to 24h): an unfiltered call costs a full scan — acceptable at today's volumes, a deliberate
 open deferral.

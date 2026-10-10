@@ -1,7 +1,7 @@
 # Configuration changes
 
-Every committed write to a stored work source, repository, secret, scope, or routine appends one row to the hub's change
-log, in the same transaction as the write. A write that changes nothing appends nothing.
+Every committed write to a stored work source, repository, secret, project, project link, scope, or routine appends one
+row to the hub's change log, in the same transaction as the write. A write that changes nothing appends nothing.
 
 ## Reading the log
 

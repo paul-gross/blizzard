@@ -5,6 +5,10 @@ behind it — it may name none at all. Both are hub-stored records, and both now
 [`domain/findings-and-proposals.md`](https://github.com/paul-gross/blizzard-context/blob/master/domain/findings-and-proposals.md)
 owns the concept; this covers the verbs only.
 
+Both belong to a project. The listing verbs take `--project <id|slug>` to show one project's records;
+`garden-proposal create`, and a findings read naming a routine or scope, take it when the tenant holds several
+projects ([projects.md](./projects.md#a-call-that-names-no-project)).
+
 ## Findings
 
 `blizzard hub finding list --routine <name> --scope <slug> [--source routine|review] [--include-gone]` and
