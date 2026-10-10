@@ -29,6 +29,9 @@ _CHUNK = "ch_1"
 _DOCKET = [
     {
         "proposal_id": "gprop_1",
+        "project_id": None,
+        "project_slug": None,
+        "project_name": None,
         "origin": "routine-run",
         "routine_name": "nightly",
         "created_by": None,

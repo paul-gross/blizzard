@@ -39,6 +39,17 @@ class RunnerSubscriptionDeclaration(BaseModel):
     provider: str
 
 
+class ServedProjectView(BaseModel):
+    """One entry of the projects a runner serves: the ``entry`` as declared — a project id or slug — and the project
+    it resolves to in the runner's tenant. ``project_id``, ``slug`` and ``name`` are ``None`` for an entry that
+    resolves to no project, which serves nothing until a project answers to it."""
+
+    entry: str
+    project_id: str | None = None
+    slug: str | None = None
+    name: str | None = None
+
+
 class RunnerRegistrationRequest(BaseModel):
     """Register the calling runner — the one its bearer token was issued to; a stray ``runner_id``
     in the body is ignored. ``env_capacity`` is the runner's configured environment-pool size,
@@ -60,6 +71,9 @@ class RunnerRegistrationRequest(BaseModel):
     subscriptions: list[RunnerSubscriptionDeclaration] | None = None
     #: The node names this runner holds for a human decision — its own configuration, reported not enforced by the hub.
     gates: list[str] = []
+    #: The projects the runner serves, each by id or slug — ``None`` keeps the declaration the hub holds, ``[]``
+    #: serves none.
+    projects: list[str] | None = None
 
 
 class RunnerRegistrationResponse(BaseModel):
@@ -76,6 +90,9 @@ class RunnerRegistrationResponse(BaseModel):
     tenant_id: str | None = None
     #: That tenant's current name.
     tenant_name: str | None = None
+    #: The projects the runner serves, as the hub resolved its declaration; ``None`` from a hub that predates
+    #: projects.
+    projects: list[ServedProjectView] | None = None
 
 
 class RunnerEnrollmentResponse(BaseModel):
@@ -94,6 +111,9 @@ class RunnerAddRequest(BaseModel):
 
     #: A blank name is refused (422).
     name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+    #: The projects the runner serves, each by id or slug — ``None`` serves the tenant's project when it holds exactly
+    #: one, and none otherwise; ``[]`` serves none. An entry naming no project is refused (422).
+    projects: list[str] | None = None
 
 
 class RunnerAddResponse(BaseModel):
@@ -189,6 +209,8 @@ class RunnerView(BaseModel):
     retired_by: str | None = None
     # The node names the runner declared it holds for a human decision; empty when it imposes none.
     gates: list[str] = []
+    # The projects the runner serves, as declared and resolved; empty when it serves none.
+    projects: list[ServedProjectView] = []
 
 
 class RunnerRegistryView(BaseModel):
@@ -225,6 +247,8 @@ class RunnerRegistryView(BaseModel):
     retired_by: str | None = None
     # The node names the runner declared it holds for a human decision; empty when it imposes none.
     gates: list[str] = []
+    # The projects the runner serves, as declared and resolved; empty when it serves none.
+    projects: list[ServedProjectView] = []
 
 
 class RunnerRegistryListResponse(BaseModel):

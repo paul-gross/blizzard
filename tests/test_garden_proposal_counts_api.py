@@ -149,6 +149,9 @@ def test_proposal_counts_reports_bucketed_counts_per_routine_and_class(tmp_path:
     assert body["rows"] == [
         {
             "origin": "routine-run",
+            "project_id": None,
+            "project_slug": None,
+            "project_name": None,
             "routine_name": "nightly",
             "class": "fix-the-source",
             "open": 1,

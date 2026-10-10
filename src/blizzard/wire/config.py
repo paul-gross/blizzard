@@ -34,6 +34,9 @@ class ConfigChangeView(BaseModel):
     op: str
     diff: list[FieldChangeView]
     apply_id: str | None = None
+    #: The project the change concerns — a project's own, its links', a scope's or a routine's; ``None`` for a
+    #: tenant record.
+    project_id: str | None = None
 
 
 class ConfigChangesPage(BaseModel):

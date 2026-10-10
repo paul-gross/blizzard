@@ -183,6 +183,10 @@ class FindingView(BaseModel):
     raised_by_chunk_id: str | None = None
     #: How an exited finding left; `None` while it has not exited.
     exit: FindingExit | None = None
+    #: The project this belongs to — its id, current slug and display name; ``None`` where the hub reports none.
+    project_id: str | None = None
+    project_slug: str | None = None
+    project_name: str | None = None
 
 
 class FindingsPageView(BaseModel):

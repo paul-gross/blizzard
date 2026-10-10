@@ -22,6 +22,10 @@ class QueuePeekEntry(BaseModel):
     work_refs: list[WorkRefModel] = []
     # The chunk's blocked marking — see BlockedView.
     blocked: BlockedView | None = None
+    #: The project this belongs to — its id, current slug and display name; ``None`` where the hub reports none.
+    project_id: str | None = None
+    project_slug: str | None = None
+    project_name: str | None = None
 
 
 class QueuePeekResponse(BaseModel):
@@ -76,6 +80,10 @@ class BacklogPeekEntry(BaseModel):
     work_refs: list[WorkRefModel] = []
     # The chunk's blocked marking — see BlockedView.
     blocked: BlockedView | None = None
+    #: The project this belongs to — its id, current slug and display name; ``None`` where the hub reports none.
+    project_id: str | None = None
+    project_slug: str | None = None
+    project_name: str | None = None
 
 
 class BacklogPeekResponse(BaseModel):

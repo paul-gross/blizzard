@@ -63,6 +63,7 @@ def test_an_added_runner_first_registers_under_its_minted_id(tmp_path: Path) -> 
     assert first.status_code == 201, first.text
     assert first.json() == {
         "runner_id": added.runner_id,
+        "projects": None,
         "runner_name": "r-claude",
         "first_registration": True,
         **_tenant(hub),
@@ -98,6 +99,7 @@ def test_a_restart_under_a_new_name_renames_the_runner_and_changes_nothing_else(
 
     assert renamed.json() == {
         "runner_id": added.runner_id,
+        "projects": None,
         "runner_name": "r-new",
         "first_registration": False,
         **_tenant(hub),
@@ -153,6 +155,7 @@ def test_a_runner_added_in_another_tenant_registers_naming_that_tenant(tmp_path:
     assert first.status_code == 201, first.text
     assert first.json() == {
         "runner_id": "rn-bravo-1",
+        "projects": None,
         "runner_name": "r-bravo",
         "first_registration": True,
         "tenant_id": bravo,

@@ -20,7 +20,7 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
-from blizzard.hub.api.project_params import PROJECT_REQUIRED
+from blizzard.hub.api.project_params import PROJECT_REQUIRED, QueryProject
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.documents.codec import ConfigDecodeError, codec_for_media_type
@@ -104,6 +104,7 @@ def _view(change: ConfigChange) -> ConfigChangeView:
         op=change.op.value,
         diff=[FieldChangeView(field=d.field, old=d.old, new=d.new) for d in change.diff],
         apply_id=change.apply_id,
+        project_id=change.project_id,
     )
 
 
@@ -123,10 +124,14 @@ def list_changes(
     limit: Annotated[int, Query(ge=1, le=MAX_CHANGES_LIMIT)] = 50,
     record_kind: RecordKind | None = None,
     record_key: str | None = None,
+    project: QueryProject = None,
 ) -> ConfigChangesPage:
     """The change log newest-first, keyset-paged on `id`: pass the page's `next_before` as
-    `before` for the next. Optionally narrowed to one `record_kind` and `record_key`."""
-    rows = services.config_changes.page(before=before, limit=limit + 1, record_kind=record_kind, record_key=record_key)
+    `before` for the next. Optionally narrowed to one `record_kind` and `record_key`, and to the
+    changes concerning one `project` (its id or slug; 422 when the tenant holds no such project)."""
+    rows = services.config_changes.page(
+        before=before, limit=limit + 1, record_kind=record_kind, record_key=record_key, project_id=project
+    )
     page = rows[:limit]
     return ConfigChangesPage(changes=[_view(c) for c in page], next_before=page[-1].id if len(rows) > limit else None)
 

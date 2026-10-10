@@ -452,6 +452,17 @@ _PROBES: dict[tuple[str, str], _Probe] = {
         status=200,
         reason="a batch acks per record, stored under the sender's tenant whatever chunk it names",
     ),
+    # -- projects: last, as the created project leaves the tenant two, and a create naming none ambiguous ----------
+    ("GET", "/api/projects"): _LIST,
+    ("POST", "/api/projects"): _own({"slug": "beta-extra", "name": "Beta extra"}, status=201),
+    ("GET", "/api/projects/{project}"): _f(),
+    ("PATCH", "/api/projects/{project}"): _f({}),
+    ("GET", "/api/projects/{project}/source-links"): _f(),
+    ("PUT", "/api/projects/{project}/source-links/{source}"): _f(),
+    ("POST", "/api/projects/{project}/source-links/{source}/retire"): _f(),
+    ("GET", "/api/projects/{project}/repository-links"): _f(),
+    ("PUT", "/api/projects/{project}/repository-links/{repository}"): _f(),
+    ("POST", "/api/projects/{project}/repository-links/{repository}/retire"): _f(),
 }
 
 
@@ -618,6 +629,13 @@ def _seed(hub: HubHarness, harness: TenantHarness, label: str) -> _Tenant:
     decisions = _ok(c.get("/api/decisions"), 200)["decisions"]
     assert len(decisions) == 1, parked
     t.keep("decision_id", decisions[0]["decision_id"])
+    # The tenant's one project, under a slug of its own, linked to its source and repository.
+    [project] = _ok(c.get("/api/projects"), 200)["projects"]
+    t.keep("project", project["project_id"])
+    slug = t.keep("project_slug", f"{label}-project")
+    _ok(c.patch(f"/api/projects/{project['project_id']}", json={"slug": slug}), 200)
+    _ok(c.put(f"/api/projects/{slug}/source-links/{t.ids['source']}"), 200)
+    _ok(c.put(f"/api/projects/{slug}/repository-links/{t.ids['repository']}"), 200)
     return t
 
 
@@ -769,6 +787,10 @@ def test_a_tenant_sees_its_own_records_in_its_listings(two: _Two) -> None:
             ("/api/runners", t.ids["runner_id"]),
             ("/api/members", t.ids["user_id"]),
             ("/api/questions", t.ids["question_id"]),
+            ("/api/projects", t.ids["project"]),
+            ("/api/projects", t.ids["project_slug"]),
+            (f"/api/projects/{t.ids['project']}/source-links", t.ids["source"]),
+            (f"/api/projects/{t.ids['project']}/repository-links", t.ids["repository"]),
         ):
             assert marker in t.client.get(path).text, f"{t.label} misses its own {marker} at {path}"
 
@@ -853,8 +875,8 @@ def _project_answers(stores: TenantStores, project_id: ProjectId, owner: _Tenant
 
 
 def test_a_tenants_projects_and_links_answer_only_in_their_own_tenant(two: _Two) -> None:
-    """At the store, as no route names a project: the other tenant's project, slugs and links answer as a project never
-    minted does, while their own tenant reads them."""
+    """At the store: the other tenant's project, slugs and links answer as a project never minted does, while their own
+    tenant reads them."""
     core = build_hub_core(two.hub.engine, clock=two.hub.clock)
     stores = {t.label: core.open(StoreScope(t.harness.tenant)) for t in two.both()}
     projects = {}
@@ -883,6 +905,20 @@ def test_a_tenants_projects_and_links_answer_only_in_their_own_tenant(two: _Two)
         assert foreign.projects.resolve(slug) is None
         assert project.project_id in own.project_links.projects_linking_source(owner.ids["source"])
         assert project.project_id not in foreign.project_links.projects_linking_source(owner.ids["source"])
+
+
+def test_a_project_named_by_the_other_tenants_id_or_slug_answers_404_as_a_never_minted_one(two: _Two) -> None:
+    for owner, sender in ((two.first, two.second), (two.second, two.first)):
+        ghost = _ghost_of(owner)
+        for key in ("project", "project_slug"):
+            for path in ("/api/projects/{}", "/api/projects/{}/source-links", "/api/projects/{}/repository-links"):
+                own = owner.client.get(path.format(owner.ids[key]))
+                foreign = sender.client.get(path.format(owner.ids[key]))
+                unknown = sender.client.get(path.format(ghost.ids[key]))
+                assert own.status_code == 200, own.text
+                assert owner.ids["project"] in own.text
+                assert foreign.status_code == 404, foreign.text
+                assert foreign.text == _unghosted(unknown.text, ghost, owner)
 
 
 def test_each_tenants_stream_replays_its_own_events_only(two: _Two) -> None:

@@ -115,6 +115,9 @@ def test_patch_applies_graph_id_and_both_defaults_together(tmp_path: Path) -> No
     assert resp.status_code == 202, resp.text
     assert resp.json() == {
         "chunk_id": chunk_id,
+        "project_id": None,
+        "project_slug": None,
+        "project_name": None,
         "graph_id": alt_graph_id,
         "default_model": ["blizzard:basic", "gpt-5.3-codex"],
         "default_effort": "medium",

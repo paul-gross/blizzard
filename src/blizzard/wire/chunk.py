@@ -46,12 +46,18 @@ class ChunkIngestRequest(BaseModel):
     Tokens only; no pre-resolved ``{source, ref}`` shape travels alongside them."""
 
     tokens: list[str]
+    #: The project to ingest into, by id or slug; ``None`` infers it from the tokens' configured sources.
+    project: str | None = None
 
 
 class ChunkIngestResponse(BaseModel):
     """The minted chunk id."""
 
     chunk_id: str
+    #: The project this belongs to — its id, current slug and display name; ``None`` where the hub reports none.
+    project_id: str | None = None
+    project_slug: str | None = None
+    project_name: str | None = None
 
 
 class ChunkDeleteRequest(BaseModel):
@@ -185,6 +191,10 @@ class ChunkSummary(BaseModel):
     awaiting_external_merge: bool = False
     landed_repos: list[LandedRepoView] = []
     landed: bool = False
+    #: The project this belongs to — its id, current slug and display name; ``None`` where the hub reports none.
+    project_id: str | None = None
+    project_slug: str | None = None
+    project_name: str | None = None
 
 
 class ChunksPageView(BaseModel):
@@ -461,6 +471,10 @@ class ChunkPatchResponse(BaseModel):
     default_effort: str | None = None
     default_harnesses: list[str] = []
     intended_migration: IntendedMigrationView | None = None
+    #: The project this belongs to — its id, current slug and display name; ``None`` where the hub reports none.
+    project_id: str | None = None
+    project_slug: str | None = None
+    project_name: str | None = None
 
 
 class PauseView(BaseModel):
@@ -587,6 +601,10 @@ class ChunkDetail(BaseModel):
     # a bounce is contention, not failure.
     bounces: list[BounceView] = []
     escalation: ChunkEscalationView | None = None
+    #: The project this belongs to — its id, current slug and display name; ``None`` where the hub reports none.
+    project_id: str | None = None
+    project_slug: str | None = None
+    project_name: str | None = None
 
 
 class ChunkDecisionStatusView(BaseModel):
@@ -613,6 +631,10 @@ class ChunkStatusView(BaseModel):
     restart_epochs: list[int] = []
     cost: ChunkUsageTotalView = Field(default_factory=ChunkUsageTotalView.zero)
     decision: ChunkDecisionStatusView | None = None
+    #: The project this belongs to — its id, current slug and display name; ``None`` where the hub reports none.
+    project_id: str | None = None
+    project_slug: str | None = None
+    project_name: str | None = None
 
 
 class WorkItemEntry(BaseModel):

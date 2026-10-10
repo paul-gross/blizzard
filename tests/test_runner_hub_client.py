@@ -333,6 +333,7 @@ def test_register_runner_posts_registration() -> None:
     assert reply == RegistrationReply(runner_id="rn_1", runner_name="r-claude", first_registration=True)
     assert seen == {
         "name": "r-claude",
+        "projects": None,
         "workspace_id": "ws1",
         "env_capacity": 4,
         "url": None,
@@ -359,6 +360,7 @@ def test_register_runner_sends_null_capacity_when_unset() -> None:
     assert reply.runner_name == "r-claude"
     assert seen == {
         "name": "r-claude",
+        "projects": None,
         "workspace_id": "ws1",
         "env_capacity": None,
         "url": None,
@@ -573,7 +575,7 @@ def test_add_runner_posts_the_name_under_the_operators_session_when_one_is_held(
 ) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         assert (request.method, request.url.path) == ("POST", "/api/runners")
-        assert json.loads(request.content) == {"name": "r-claude"}
+        assert json.loads(request.content) == {"name": "r-claude", "projects": None}
         assert request.headers.get("Authorization") == authorization
         return httpx.Response(201, json={"runner_id": "rn_1", "runner_name": "r-claude", "token": "tok"})
 

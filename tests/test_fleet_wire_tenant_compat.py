@@ -1,6 +1,7 @@
 """The fleet wire under tenancy only gains fields (component tier): against the committed hub spec,
 no ``/api/fleet`` path, request, parameter or enum changes, the only surface responses that grow
-are registration's and the identity route's, and a runner's own hub client — whose models know
+by a tenant are registration's and the identity route's, every other model a fleet path reaches
+grows by optional project fields alone, and a runner's own hub client — whose models know
 nothing of tenants — registers and is identified in a tenant other than the first."""
 
 from __future__ import annotations
@@ -26,6 +27,9 @@ _METHODS = ("get", "post", "put", "patch", "delete")
 #: The two responses that name the runner's tenant, and the fields each gains.
 _GROWN = {"RunnerRegistrationResponse", "RunnerIdentityView"}
 _TENANT_FIELDS = {"tenant_id", "tenant_name"}
+#: The optional project fields a fleet-reached model may gain: a chunk's or garden record's project, a runner's
+#: served projects, and why a claim was refused.
+_PROJECT_FIELDS = {"project_id", "project_slug", "project_name", "projects", "reason"}
 
 
 def _committed() -> dict[str, Any]:
@@ -69,7 +73,7 @@ def _reachable(spec: dict[str, Any]) -> set[str]:
     return seen
 
 
-def test_no_fleet_path_request_parameter_or_enum_changes_and_only_two_responses_grow() -> None:
+def test_no_fleet_path_request_parameter_or_enum_changes_and_responses_grow_only_by_optional_fields() -> None:
     committed, live = _committed(), _live()
     before, after = _fleet_operations(committed), _fleet_operations(live)
 
@@ -85,7 +89,7 @@ def test_no_fleet_path_request_parameter_or_enum_changes_and_only_two_responses_
         assert now.get("required") == was.get("required"), name
         gained = set(now.get("properties", {})) - set(was.get("properties", {}))
         assert set(was.get("properties", {})) <= set(now.get("properties", {})), name
-        assert gained <= (_TENANT_FIELDS if name in _GROWN else set()), name
+        assert gained <= (_TENANT_FIELDS if name in _GROWN else set()) | _PROJECT_FIELDS, name
     assert set(head["RunnerRegistrationResponse"]["properties"]) >= _TENANT_FIELDS
     assert set(head["RunnerIdentityView"]["properties"]) >= _TENANT_FIELDS
 

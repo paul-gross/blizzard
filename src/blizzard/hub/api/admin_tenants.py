@@ -12,6 +12,7 @@ from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require_hub
+from blizzard.hub.api.door import RequestDoor
 from blizzard.hub.api.hub_level import Hub
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.domain.tenancy.administration import Tenant, TenantAdminUnknown, TenantNameRefused
@@ -45,12 +46,12 @@ def _view(tenant: Tenant) -> TenantView:
 
 
 @router.post("/tenants", response_model=TenantView, status_code=status.HTTP_201_CREATED)
-def create_tenant(body: TenantCreateRequest, actor: TenantAdmin, services: Hub) -> TenantView:
-    """Create a tenant in one transaction, its packaged graphs minted and, when named, its first admin granted; it is
-    usable the moment this answers. ``404`` when ``admin_user_id`` names no user, ``422`` when the name is not a tenant
-    name's shape — nothing is created."""
+def create_tenant(body: TenantCreateRequest, actor: TenantAdmin, door: RequestDoor, services: Hub) -> TenantView:
+    """Create a tenant in one transaction, its packaged graphs minted, its default project created through the
+    request's door and, when named, its first admin granted; it is usable the moment this answers. ``404`` when
+    ``admin_user_id`` names no user, ``422`` when the name is not a tenant name's shape — nothing is created."""
     try:
-        tenant = services.tenant_admin.create(body.name, admin_user_id=body.admin_user_id, by=actor.user_id)
+        tenant = services.tenant_admin.create(body.name, admin_user_id=body.admin_user_id, by=actor.user_id, door=door)
     except TenantNameRefused as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     except TenantAdminUnknown as exc:

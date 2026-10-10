@@ -91,6 +91,25 @@ def test_a_tenant_created_through_the_route_holds_its_default_project_created_by
     assert [tuple(row) for row in changes] == [(project.project_id, administrator.user_id, "api", "create")]
 
 
+def test_the_default_projects_create_change_records_the_door_the_tenant_was_created_through(hub: HubHarness) -> None:
+    session = _hub_admin(hub)
+    resp = hub.client.post(
+        "/api/admin/tenants", json={"name": "acme"}, headers={**_bearer(session), "X-Blizzard-Door": "cli"}
+    )
+    assert resp.status_code == 201, resp.text
+    tenant = TenantId(str(resp.json()["tenant_id"]))
+
+    [project] = hub.open_services(tenant).projects.list_all()
+    c = schema.config_changes.c
+    with hub.engine.connect() as conn:
+        doors = conn.execute(
+            sa.select(c.door).where(
+                c.tenant_id == tenant, c.record_kind == "project", c.record_key == project.project_id
+            )
+        ).scalars()
+        assert list(doors) == ["cli"]
+
+
 def test_creating_with_an_unknown_admin_answers_404_and_creates_nothing(hub: HubHarness) -> None:
     session = _hub_admin(hub)
 

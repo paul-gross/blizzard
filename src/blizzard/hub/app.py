@@ -67,6 +67,7 @@ from blizzard.hub.api.me import router as me_router
 from blizzard.hub.api.members import grants_router as member_grants_router
 from blizzard.hub.api.members import router as members_router
 from blizzard.hub.api.project_params import refuse_project_required
+from blizzard.hub.api.projects import router as projects_router
 from blizzard.hub.api.questions import router as questions_router
 from blizzard.hub.api.queue import router as queue_router
 from blizzard.hub.api.readiness import router as readiness_router
@@ -425,6 +426,7 @@ def create_app(
     app.include_router(admin_events_router)
     app.include_router(work_sources_router)
     app.include_router(repositories_router)
+    app.include_router(projects_router)
     # Outside the fleet gate — pinned by `tests/test_fleet_identity.py`'s tokenless-401 case.
     app.include_router(fleet_identity_router)
     # The runner-authenticated fleet router — a fleet verb is authenticated
