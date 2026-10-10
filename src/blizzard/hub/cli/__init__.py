@@ -29,6 +29,7 @@ _COMMANDS = {
     "secret": f"{_CLI}.secret:secret_group",
     "source": f"{_CLI}.source:source_group",
     "repo": f"{_CLI}.repo:repo_group",
+    "project": f"{_CLI}.project:project_group",
     "config": f"{_CLI}.config:config_group",
     "routine": f"{_CLI}.routine:routine_group",
     "run": f"{_CLI}.garden_run:run_group",

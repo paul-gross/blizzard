@@ -37,6 +37,7 @@ def tenant_create(cli: CliContext, name: str, admin_user_id: str | None) -> None
         "POST /admin/tenants",
         json_body={"name": name, "admin_user_id": admin_user_id},
         on_status={404: f"no such user {admin_user_id}", 422: "name refused"},
+        door=True,
     )
     body = resp.json()
     admin = f" — {admin_user_id} is its admin" if admin_user_id else ""

@@ -37,6 +37,9 @@ TENANT_HEADER = "X-Blizzard-Tenant"
 #: The error code a call answers when the caller belongs to several tenants and named none.
 _TENANT_REQUIRED = "tenant_required"
 
+#: The error code a call answers when it needs a project, named none, and the tenant holds several.
+_PROJECT_REQUIRED = "project_required"
+
 #: The ``detail`` a call answers when the tenant it acts in does not exist, is closed, or is one the caller cannot
 #: enter — the hub tells those apart for no one.
 _NO_SUCH_TENANT = "no such tenant"
@@ -156,9 +159,18 @@ class CliContext:
         )
 
     def put(
-        self, path: str, operation: str, *, json_body: object | None = None, on_status: dict[int, str] | None = None
+        self,
+        path: str,
+        operation: str,
+        *,
+        json_body: object | None = None,
+        on_status: dict[int, str] | None = None,
+        if_match: int | None = None,
+        door: bool = False,
     ) -> httpx.Response:
-        return self._verb("put", path, operation, json_body=json_body, on_status=on_status)
+        return self._verb(
+            "put", path, operation, json_body=json_body, on_status=on_status, if_match=if_match, door=door
+        )
 
     def delete(
         self,
@@ -183,7 +195,7 @@ class CliContext:
         Dispatches through ``httpx``'s module-level ``stream``, mirroring :meth:`send` so
         ``monkeypatch.setattr`` still intercepts it; a refusal resolves before any line is
         yielded, so it surfaces like :meth:`check`'s buffered path, not mid-iteration — a
-        tenant refusal as :meth:`send` raises it."""
+        tenant or project refusal as :meth:`send` raises it."""
         full_url = f"{self.hub_url.rstrip('/')}{path}"
         try:
             with httpx.stream(
@@ -192,6 +204,7 @@ class CliContext:
                 if resp.status_code >= 400:
                     resp.read()
                 self._refuse_tenant(resp)
+                self._refuse_project(resp)
                 self.check(resp, operation, on_status=on_status)
                 yield from resp.iter_lines()
         except httpx.HTTPError as exc:
@@ -210,7 +223,8 @@ class CliContext:
         raw_body: RawBody | None = None,
     ) -> httpx.Response:
         """The call itself, unchecked — for a verb that reads a status code of its own first —
-        except a tenant refusal, which no verb answers itself (:meth:`_refuse_tenant`). Dispatches through
+        except a tenant or project refusal, which no verb answers itself (:meth:`_refuse_tenant`,
+        :meth:`_refuse_project`). Dispatches through
         ``httpx``'s module-level verb function, same as :meth:`stream` — except a DELETE carrying a JSON body, which
         ``httpx.delete`` refuses a ``json`` keyword for: that case goes through ``httpx.request`` instead."""
         full_url = f"{self.hub_url.rstrip('/')}{path}"
@@ -236,6 +250,7 @@ class CliContext:
         except httpx.HTTPError as exc:
             raise self.failed(f"{method.upper()} {path}", exc) from exc
         self._refuse_tenant(resp)
+        self._refuse_project(resp)
         return resp
 
     def check(self, resp: httpx.Response, operation: str, *, on_status: dict[int, str] | None = None) -> None:
@@ -349,6 +364,19 @@ class CliContext:
                 f"no tenant {self.tenant} you can enter — it does not exist, it is closed, or you are not its member"
             )
 
+    def _refuse_project(self, resp: httpx.Response) -> None:
+        """Raise on a ``422 project_required`` — the call needs a project, named none, and the tenant holds several —
+        listing the tenant's projects from the refusal itself, ids beside slugs and names, and asking for
+        ``--project``."""
+        if resp.status_code != httpx.codes.UNPROCESSABLE_ENTITY or _error_code(resp) != _PROJECT_REQUIRED:
+            return
+        lines = ["this tenant holds several projects — name the one to act in with --project <id|slug>"]
+        projects = _projects_of(resp)
+        if projects:
+            lines.append("its projects:")
+            lines.extend(f"  {p['project_id']}  {p['slug']}  {p['name']}" for p in projects)
+        raise click.ClickException("\n".join(lines))
+
     def _tenant_refusal(self, headline: str) -> click.ClickException:
         """``headline``, then the tenants the caller can name with ``--tenant``. ``/api/me`` is asked without the
         refused tenant's header, which would refuse it too."""
@@ -393,4 +421,14 @@ def _tenants_of(me: httpx.Response) -> list[dict[str, str]]:
     if not isinstance(rows, list):
         return []
     keys = ("tenant_id", "name", "role")
+    return [{k: str(row[k]) for k in keys} for row in rows if isinstance(row, dict) and all(row.get(k) for k in keys)]
+
+
+def _projects_of(refusal: httpx.Response) -> list[dict[str, str]]:
+    """The ``projects`` rows of a ``project_required`` refusal that carry an id, a slug and a name."""
+    detail = refusal.json().get("detail")
+    rows = detail.get("projects") if isinstance(detail, dict) else None
+    if not isinstance(rows, list):
+        return []
+    keys = ("project_id", "slug", "name")
     return [{k: str(row[k]) for k in keys} for row in rows if isinstance(row, dict) and all(row.get(k) for k in keys)]

@@ -1,6 +1,7 @@
 """``blizzard hub tenant create|list|rename|delete`` — a hub administrator's verbs, against a real hub with sign-in on:
-create names its admin, list shows a deletion underway, rename keeps the id, and delete asks first and answers each of
-the hub's outcomes — removed, underway, already deleted, and the only tenant refused."""
+create names its admin and records the CLI as the door of the tenant's default project, list shows a deletion
+underway, rename keeps the id, and delete asks first and answers each of the hub's outcomes — removed, underway,
+already deleted, and the only tenant refused."""
 
 from __future__ import annotations
 
@@ -11,11 +12,13 @@ from typing import Any
 
 import httpx
 import pytest
+import sqlalchemy as sa
 from click.testing import CliRunner, Result
 
 from blizzard.auth_core import Role
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.config import AUTH_MODE_OAUTH
+from blizzard.hub.store import schema
 from blizzard.hub.tenancy import TenantId
 from tests.support import HubHarness, build_hub, default_tenant, seed_hub_admin, seed_session, seed_user
 
@@ -82,6 +85,21 @@ def test_create_names_its_admin_and_rename_keeps_the_id(hub: HubHarness, cli: Cl
     assert f"{tenant}  acme two  open" in listed.output
     assert f"{default_tenant(hub.engine)}  default  open" in listed.output
     assert hub.hub_services.memberships.role_in(TenantId(tenant), ada.user_id) is Role.ADMIN
+
+
+@pytest.mark.component
+def test_a_created_tenants_default_project_records_the_cli_as_its_door(hub: HubHarness, cli: Cli) -> None:
+    tenant = TenantId(_created(cli("tenant", "create", "acme")))
+
+    [project] = hub.open_services(tenant).projects.list_all()
+    c = schema.config_changes.c
+    with hub.engine.connect() as conn:
+        doors = conn.execute(
+            sa.select(c.door).where(
+                c.tenant_id == tenant, c.record_kind == "project", c.record_key == project.project_id
+            )
+        ).scalars()
+        assert list(doors) == ["cli"]
 
 
 @pytest.mark.component

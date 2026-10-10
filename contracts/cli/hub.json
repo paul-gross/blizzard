@@ -4936,6 +4936,471 @@
       "path": "hub migrate",
       "short_help": "Apply pending store migrations, or reverse with --down <rev>."
     },
+    "project": {
+      "commands": {
+        "create": {
+          "help": "Create project SLUG at revision 1, named NAME (default: SLUG). It draws work only from the built-in hub\nsource until a work source or repository is linked to it. Refused when SLUG is another project's current slug.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "slug",
+              "opts": [
+                "slug"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The project's display name (default: SLUG).",
+              "hidden": false,
+              "kind": "option",
+              "name": "name",
+              "opts": [
+                "--name"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "What the project is for.",
+              "hidden": false,
+              "kind": "option",
+              "name": "description",
+              "opts": [
+                "--description"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub project create",
+          "short_help": "Create project SLUG at revision 1, named NAME (default: SLUG)."
+        },
+        "edit": {
+          "help": "Change only the fields given on PROJECT; every other field keeps its value. A slug the project leaves keeps\nnaming it until another project takes it. A change that leaves every field as it is writes nothing and keeps the\nrevision. Refused when the new slug is another project's, or --if-match names a stale revision.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "project",
+              "opts": [
+                "project"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The new slug; the one it leaves keeps naming the project.",
+              "hidden": false,
+              "kind": "option",
+              "name": "slug",
+              "opts": [
+                "--slug"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The new display name.",
+              "hidden": false,
+              "kind": "option",
+              "name": "name",
+              "opts": [
+                "--name"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The new description.",
+              "hidden": false,
+              "kind": "option",
+              "name": "description",
+              "opts": [
+                "--description"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Refuse the change unless it is still at this revision.",
+              "hidden": false,
+              "kind": "option",
+              "name": "if_match",
+              "opts": [
+                "--if-match"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "integer"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub project edit",
+          "short_help": "Change only the fields given on PROJECT; every other field keeps its value."
+        },
+        "link": {
+          "help": "Link PROJECT to one work source (--source) or one repository (--repository): work ingested from that source\ncan belong to PROJECT, and PROJECT's work can land in that repository. A retired record can be linked; a link\nalready standing, and the built-in hub source, change nothing; a link unlinked earlier is linked again.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "project",
+              "opts": [
+                "project"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "A work source, by name.",
+              "hidden": false,
+              "kind": "option",
+              "name": "source",
+              "opts": [
+                "--source"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "A repository, by name.",
+              "hidden": false,
+              "kind": "option",
+              "name": "repository",
+              "opts": [
+                "--repository"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Refuse the change unless it is still at this revision.",
+              "hidden": false,
+              "kind": "option",
+              "name": "if_match",
+              "opts": [
+                "--if-match"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "integer"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub project link",
+          "short_help": "Link PROJECT to one work source (--source) or one repository (--repository): work ingested from that source can belong to PROJECT, and PROJECT's work can land in that repository."
+        },
+        "list": {
+          "help": "List the tenant's projects \u2014 slug, name, id, revision.",
+          "params": [
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub project list",
+          "short_help": "List the tenant's projects \u2014 slug, name, id, revision."
+        },
+        "show": {
+          "help": "Show PROJECT \u2014 named by its id, its slug, or a slug it has left \u2014 with the work sources and repositories\nlinked to it.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "project",
+              "opts": [
+                "project"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub project show",
+          "short_help": "Show PROJECT \u2014 named by its id, its slug, or a slug it has left \u2014 with the work sources and repositories linked to it."
+        },
+        "unlink": {
+          "help": "Unlink PROJECT from one work source (--source) or one repository (--repository): new work from that source\nno longer goes to PROJECT, and PROJECT's work no longer lands in that repository. Unlinking an unlinked link\nchanges nothing; link it again to restore it. Refused for the built-in hub source, which every project draws\nfrom.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "project",
+              "opts": [
+                "project"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "A work source, by name.",
+              "hidden": false,
+              "kind": "option",
+              "name": "source",
+              "opts": [
+                "--source"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "A repository, by name.",
+              "hidden": false,
+              "kind": "option",
+              "name": "repository",
+              "opts": [
+                "--repository"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Refuse the change unless it is still at this revision.",
+              "hidden": false,
+              "kind": "option",
+              "name": "if_match",
+              "opts": [
+                "--if-match"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "integer"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub project unlink",
+          "short_help": "Unlink PROJECT from one work source (--source) or one repository (--repository): new work from that source no longer goes to PROJECT, and PROJECT's work no longer lands in that repository."
+        }
+      },
+      "help": "Operator verbs over the tenant's projects: create, list, show, edit, and link or unlink a work source or a\nrepository.",
+      "params": [],
+      "path": "hub project",
+      "short_help": "Operator verbs over the tenant's projects: create, list, show, edit, and link or unlink a work source or a repository."
+    },
     "question": {
       "commands": {
         "answer": {
