@@ -29,6 +29,7 @@ from blizzard.hub.domain.garden.runs.history import (
     RunDeliveries,
     RunIdentity,
 )
+from blizzard.hub.domain.projects.model import ProjectId
 
 _PROJECT = "proj_test"
 
@@ -77,7 +78,14 @@ class _FakeChunkRecords:
     def list_all(self) -> list[Chunk]:
         return list(self.chunks.values())
 
-    def list_page(self, *, cursor: str | None = None, limit: int, done_since: datetime | None = None) -> ChunkPage:
+    def list_page(
+        self,
+        *,
+        cursor: str | None = None,
+        limit: int,
+        done_since: datetime | None = None,
+        project: ProjectId | None = None,
+    ) -> ChunkPage:
         raise NotImplementedError
 
 
@@ -100,7 +108,7 @@ class _FakeChunkFacts:
     def load_live_statuses(self) -> dict[str, ChunkStatus]:
         return {chunk_id: f.status() for chunk_id, f in self.facts.items()}
 
-    def status_counts(self) -> dict[ChunkStatus, int]:
+    def status_counts(self, *, project: ProjectId | None = None) -> dict[ChunkStatus, int]:
         raise NotImplementedError
 
 

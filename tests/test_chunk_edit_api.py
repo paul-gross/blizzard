@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.support import build_hub, emitted_events, ingest
+from tests.support import build_hub, default_project, emitted_events, ingest
 
 pytestmark = pytest.mark.component
 
@@ -115,9 +115,9 @@ def test_patch_applies_graph_id_and_both_defaults_together(tmp_path: Path) -> No
     assert resp.status_code == 202, resp.text
     assert resp.json() == {
         "chunk_id": chunk_id,
-        "project_id": None,
-        "project_slug": None,
-        "project_name": None,
+        "project_id": default_project(hub.engine),
+        "project_slug": "default",
+        "project_name": "Default",
         "graph_id": alt_graph_id,
         "default_model": ["blizzard:basic", "gpt-5.3-codex"],
         "default_effort": "medium",

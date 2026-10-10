@@ -22,6 +22,7 @@ from blizzard.hub.domain.chunk.model import Chunk, IntendedMigration, WorkRef
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead, ILockedWorkRefRead
 from blizzard.hub.domain.chunk.ports.record import ChunkPage, IWriteChunkRecordRepository
 from blizzard.hub.domain.kernel.pagination import MalformedCursor, decode_cursor, encode_cursor
+from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import (
     DEFAULT_HARNESSES,
@@ -59,9 +60,15 @@ def _decode_chunk_cursor(cursor: str) -> tuple[datetime, str]:
 
 
 def _chunk_page_stmt(
-    stmts: ScopedStatements, after: tuple[datetime, str] | None, limit: int, done_since: datetime | None
+    stmts: ScopedStatements,
+    after: tuple[datetime, str] | None,
+    limit: int,
+    done_since: datetime | None,
+    project: ProjectId | None,
 ) -> Select[Any]:
     stmt = stmts.select(s.chunks)
+    if project is not None:
+        stmt = stmt.where(s.chunks.c.project_id == project)
     if done_since is not None:
         stmt = stmt.where(~settled_done(stmts, finished_before=done_since))
     if after is not None:
@@ -182,19 +189,27 @@ class ChunkRecordStore:
                 for r in rows
             ]
 
-    def list_page(self, *, cursor: str | None = None, limit: int, done_since: datetime | None = None) -> ChunkPage:
+    def list_page(
+        self,
+        *,
+        cursor: str | None = None,
+        limit: int,
+        done_since: datetime | None = None,
+        project: ProjectId | None = None,
+    ) -> ChunkPage:
         """`list_all`'s bounded sibling: a SQL keyset window with
         ephemeral chunks excluded in Python after the read, so a window landing wholly
         on ephemeral rows can come back short of `limit` live chunks. Each retry doubles
         the window rather than stopping there, so a `next_cursor` walk still sees every
-        visible chunk exactly once; ``done_since`` narrows it in SQL (:func:`settled_done`)."""
+        visible chunk exactly once; ``done_since`` narrows it in SQL (:func:`settled_done`), and
+        ``project`` to that project's chunks."""
         if limit < 1:
             raise ValueError(f"limit must be at least 1, got {limit}")
         after = _decode_chunk_cursor(cursor) if cursor is not None else None
         fetch = limit + 1
         with self._store.read("list_page") as conn:
             while True:
-                rows = conn.execute(_chunk_page_stmt(self._store, after, fetch, done_since)).all()
+                rows = conn.execute(_chunk_page_stmt(self._store, after, fetch, done_since, project)).all()
                 ephemeral: set[str] = set()
                 for batch in id_batches([r.chunk_id for r in rows]):
                     ephemeral |= ephemeral_ids_in(conn, batch)

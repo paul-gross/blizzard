@@ -2083,7 +2083,10 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
         [w.chunk_ready_1, w.chunk_ready_2]
     ),
     (IReadChunkFactsRepository, "load_live_statuses"): lambda w: w.read.facts.load_live_statuses(),
-    (IReadChunkFactsRepository, "status_counts"): lambda w: w.read.facts.status_counts(),
+    (IReadChunkFactsRepository, "status_counts"): lambda w: (
+        w.read.facts.status_counts(),
+        w.read.facts.status_counts(project=w.project_id),
+    ),
     (IReadChunkFactsRepository, "status_facts_for"): lambda w: w.read.facts.status_facts_for(
         [w.chunk_ready_1, w.chunk_ready_2]
     ),
@@ -2116,13 +2119,19 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
         statuses=w.read.facts.load_live_statuses()
     ),
     (IReadChunkRecordRepository, "list_all"): lambda w: w.read.record.list_all(),
-    (IReadChunkRecordRepository, "list_page"): lambda w: w.read.record.list_page(limit=50, done_since=_HUB_BASE),
+    (IReadChunkRecordRepository, "list_page"): lambda w: (
+        w.read.record.list_page(limit=50, done_since=_HUB_BASE),
+        w.read.record.list_page(limit=50, done_since=_HUB_BASE, project=w.project_id),
+    ),
     (IReadChunkRouteRepository, "route_of"): lambda w: w.read.route.route_of(w.chunk_route_a),
     (IReadChunkRouteRepository, "load_all_routes"): lambda w: w.read.route.load_all_routes(),
     (IReadChunkRouteRepository, "routes_for"): lambda w: w.read.route.routes_for([w.chunk_route_a, w.chunk_route_b]),
     (IReadChunkRouteRepository, "runner_high_water"): lambda w: w.read.route.runner_high_water(HUB_RUNNER_ID),
     (IReadChunkRouteRepository, "live_routes_of_runner"): lambda w: w.read.route.live_routes_of_runner(HUB_RUNNER_ID),
-    (IReadChunkUsageRepository, "usage_total_since"): lambda w: w.read.usage.usage_total_since(_HUB_BASE),
+    (IReadChunkUsageRepository, "usage_total_since"): lambda w: (
+        w.read.usage.usage_total_since(_HUB_BASE),
+        w.read.usage.usage_total_since(_HUB_BASE, project=w.project_id),
+    ),
     (IReadChunkWorkRefsRepository, "find_live_holder"): lambda w: w.read.work_refs.find_live_holder(
         WorkRef(source="default", ref="1001")
     ),

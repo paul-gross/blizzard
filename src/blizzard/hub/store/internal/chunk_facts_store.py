@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import Table, func
+from sqlalchemy import Table, and_, func
 
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
 from blizzard.foundation.clock import IClock
@@ -40,6 +40,7 @@ from blizzard.hub.domain.chunk.model import (
     UsageFact,
 )
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_decisions_store import decision_closure_ids
 from blizzard.hub.store.internal.chunk_rows import ephemeral_ids_select, graph_id_of_batch
@@ -208,34 +209,34 @@ class ChunkFactsStore:
             statuses = self._maybe_live_statuses(conn)
         return {chunk_id: status for chunk_id, status in statuses.items() if status not in TERMINAL_STATUSES}
 
-    def status_counts(self) -> dict[ChunkStatus, int]:
+    def status_counts(self, *, project: ProjectId | None = None) -> dict[ChunkStatus, int]:
         """See :meth:`~blizzard.hub.domain.chunk.ports.facts.IReadChunkFactsRepository.status_counts` —
         the settled-terminal chunks are counted in SQL (:func:`settled_stopped`,
         :func:`settled_done`) without loading a fact row; only the :func:`maybe_live`
         candidates :meth:`load_live_statuses` already hydrates are derived per chunk."""
-        not_ephemeral = s.chunks.c.chunk_id.not_in(ephemeral_ids_select(self._store))
+        counted = s.chunks.c.chunk_id.not_in(ephemeral_ids_select(self._store))
+        if project is not None:
+            counted = and_(s.chunks.c.project_id == project, counted)
         with self._store.read("status_counts") as conn:
             stopped, done = (
-                conn.execute(self._store.select(s.chunks, func.count()).where(not_ephemeral, settled)).scalar_one()
+                conn.execute(self._store.select(s.chunks, func.count()).where(counted, settled)).scalar_one()
                 for settled in (settled_stopped(self._store), settled_done(self._store))
             )
-            counts = Counter(self._maybe_live_statuses(conn).values())
+            counts = Counter(self._maybe_live_statuses(conn, project).values())
         counts[ChunkStatus.STOPPED] += stopped
         counts[ChunkStatus.DONE] += done
         return {status: counts[status] for status in ChunkStatus}
 
-    def _maybe_live_statuses(self, conn) -> dict[str, ChunkStatus]:  # type: ignore[no-untyped-def]
+    def _maybe_live_statuses(self, conn, project: ProjectId | None = None) -> dict[str, ChunkStatus]:  # type: ignore[no-untyped-def]
         """Every :func:`maybe_live` candidate's derived status, terminal ones included — the
         prefilter's tie residue derives here, not in SQL. Ephemeral chunks never write a
         terminal fact, so they are excluded in the same query."""
-        candidate_ids = [
-            r.chunk_id
-            for r in conn.execute(
-                self._store.select(s.chunks, s.chunks.c.chunk_id).where(
-                    maybe_live(self._store), s.chunks.c.chunk_id.not_in(ephemeral_ids_select(self._store))
-                )
-            )
-        ]
+        candidates = self._store.select(s.chunks, s.chunks.c.chunk_id).where(
+            maybe_live(self._store), s.chunks.c.chunk_id.not_in(ephemeral_ids_select(self._store))
+        )
+        if project is not None:
+            candidates = candidates.where(s.chunks.c.project_id == project)
+        candidate_ids = [r.chunk_id for r in conn.execute(candidates)]
         facts_by_id = self._load(conn, candidate_ids, families=_STATUS_FAMILIES)
         return {chunk_id: facts.status() for chunk_id, facts in facts_by_id.items()}
 

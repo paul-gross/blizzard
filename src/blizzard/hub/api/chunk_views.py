@@ -31,6 +31,7 @@ from blizzard.hub.domain.chunk.model import (
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.domain.operations.complete import is_completion_replay
 from blizzard.hub.domain.operations.edit import is_graph_editable
+from blizzard.hub.domain.projects.model import Project, ProjectId
 from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.work_sources.source import IWorkSource
 from blizzard.wire.chunk import (
@@ -110,6 +111,24 @@ def blocked_view(unmet_prerequisite_chunk_ids: Sequence[str] | None) -> BlockedV
     return BlockedView(prerequisite_chunk_id=marking.prerequisite_chunk_id, unmet_count=marking.unmet_count)
 
 
+class ProjectLabelFields(TypedDict):
+    """The project label fields every chunk-describing view carries."""
+
+    project_id: str | None
+    project_slug: str | None
+    project_name: str | None
+
+
+def project_label_fields(project_id: str | None, project: Project | None) -> ProjectLabelFields:
+    """A chunk's project labels: its ``project_id``, with the current slug and name of ``project``,
+    the record that id resolves to — ``None`` for each label the hub has no record for."""
+    return {
+        "project_id": project_id,
+        "project_slug": project.slug if project is not None else None,
+        "project_name": project.name if project is not None else None,
+    }
+
+
 class DeliveryWireFields(TypedDict):
     open_prs: list[PrView]
     closed_prs: list[PrView]
@@ -143,6 +162,8 @@ class ChunkView:
     delivery: DeliveryRead | None = None
     #: Runner names by id — the caller's own batched read; ``None`` makes each render read the names it shows.
     runner_names: Mapping[str, str] | None = None
+    #: Projects by id — the caller's own batched read; ``None`` makes each render read the chunk's own project.
+    projects: Mapping[ProjectId, Project] | None = None
 
     @classmethod
     def of(
@@ -180,10 +201,11 @@ class ChunkView:
         blocked: BlockedView | None = None,
         delivery: DeliveryRead | None = None,
         runner_names: Mapping[str, str] | None = None,
+        projects: Mapping[ProjectId, Project] | None = None,
     ) -> ChunkView:
         """The bulk-read counterpart to :meth:`of`: a fan-out list read injects
-        already-fetched facts, route, pointer live-holders and runner names, skipping a
-        per-chunk ``load_facts``/``route_of``/``live_holders``/``names_for`` call.
+        already-fetched facts, route, pointer live-holders, runner names and projects, skipping
+        a per-chunk ``load_facts``/``route_of``/``live_holders``/``names_for``/project read.
         ``route=None`` means "no live route"; :meth:`of` leaves both uninjected."""
         return cls(
             services=services,
@@ -195,7 +217,17 @@ class ChunkView:
             blocked=blocked,
             delivery=delivery,
             runner_names=runner_names,
+            projects=projects,
         )
+
+    def _project_fields(self) -> ProjectLabelFields:
+        """The chunk's project labels: from the injected projects, else one read of its own project."""
+        project_id = self.chunk.project_id
+        if project_id is None:
+            return project_label_fields(None, None)
+        if self.projects is not None:
+            return project_label_fields(project_id, self.projects.get(project_id))
+        return project_label_fields(project_id, self.services.projects.get(project_id))
 
     def _delivery(self) -> DeliveryRead:
         if self.delivery is not None:
@@ -267,6 +299,7 @@ class ChunkView:
             completed_at=iso_utc(completed_at) if completed_at is not None else None,
             blocked=self.blocked,
             **self._delivery_fields(self._delivery()),
+            **self._project_fields(),
         )
 
     def current_node(self) -> tuple[str | None, str | None]:
@@ -354,6 +387,7 @@ class ChunkView:
             usage=self._usage_history(),
             pending=self._pending(),
             bounces=self._bounces(),
+            **self._project_fields(),
         )
 
     @staticmethod

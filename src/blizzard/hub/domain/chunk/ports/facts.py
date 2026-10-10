@@ -11,6 +11,7 @@ from typing import Protocol
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.hub.domain.chunk.model import ChunkFacts
+from blizzard.hub.domain.projects.model import ProjectId
 
 
 class IReadChunkFactsRepository(Protocol):
@@ -39,11 +40,12 @@ class IReadChunkFactsRepository(Protocol):
         (a done prerequisite) resolves it by id through :meth:`status_facts_for`."""
         ...
 
-    def status_counts(self) -> dict[ChunkStatus, int]:
+    def status_counts(self, *, project: ProjectId | None = None) -> dict[ChunkStatus, int]:
         """How many non-ephemeral chunks derive each :class:`ChunkStatus` — every status keyed,
-        zero-filled; the same set ``list_all`` returns. Settled-terminal chunks are counted in
-        the store query without being loaded (``bzh:live-set-read``); only the candidates a
-        terminal fact doesn't already settle are derived per chunk."""
+        zero-filled; the same set ``list_all`` returns, or ``project``'s chunks of it.
+        Settled-terminal chunks are counted in the store query without being loaded
+        (``bzh:live-set-read``); only the candidates a terminal fact doesn't already settle are
+        derived per chunk."""
         ...
 
     def status_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:

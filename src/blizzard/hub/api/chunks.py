@@ -24,11 +24,11 @@ from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.chunk_edit import ChunkPatchBody
-from blizzard.hub.api.chunk_views import ChunkView, blocked_view
+from blizzard.hub.api.chunk_views import ChunkView, blocked_view, project_label_fields
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.graph_names import GraphNames, graph_by_ref
 from blizzard.hub.api.marker_auth import require_marker_authority
-from blizzard.hub.api.project_params import body_project, project_of_call, project_ref
+from blizzard.hub.api.project_params import QueryProject, body_project, project_of_call, project_ref
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.chunk.delivery_read import DeliveryRead, DeliverySources
 from blizzard.hub.domain.chunk.dependencies import (
@@ -212,17 +212,19 @@ def ingest_chunk(request: ChunkIngestRequest, services: Services) -> object:
         return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=conflict.model_dump())
     chunk_events.ChunkChanged.of(services, chunk_id, prev_status=None).publish(cause="minted", key=f"chunks:{chunk_id}")
     services.events.publish_queue_changed()  # mint adds the chunk to the backlog list
-    return ChunkIngestResponse(chunk_id=chunk_id)
+    return ChunkIngestResponse(chunk_id=chunk_id, **project_label_fields(project, services.projects.get(project)))
 
 
 @router.get("/chunks", response_model=ChunksPageView, dependencies=[Depends(require(Permission.FLEET_VIEW))])
 def list_chunks(
     services: Services,
+    project: QueryProject,
     cursor: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
     board_window: Annotated[bool, Query()] = False,
 ) -> ChunksPageView:
-    """The fleet chunk list — derived status per chunk, bounded and keyset-paginated.
+    """The fleet chunk list — derived status per chunk, bounded and keyset-paginated;
+    ``?project=`` narrows the rows to that project's chunks, in the same order.
 
     Only the page's own rows render, but live-holder and blocked-marking derivation still
     see the whole fleet — a pointer this page renders can be held live by a
@@ -237,7 +239,7 @@ def list_chunks(
     statuses = {chunk_id: chunk_facts.status() for chunk_id, chunk_facts in facts.items()}
     markings = derive_blocked_prerequisites(services.chunks.dependencies.list_standing_edges(), statuses)
     try:
-        page = services.chunks.record.list_page(cursor=cursor, limit=limit, done_since=done_since)
+        page = services.chunks.record.list_page(cursor=cursor, limit=limit, done_since=done_since, project=project)
     except MalformedCursor as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="malformed cursor") from exc
     if done_since is not None:
@@ -264,6 +266,8 @@ def list_chunks(
     runner_names = services.registry.names_for(
         route.runner_id for chunk in page_chunks if (route := routes.get(chunk.chunk_id)) is not None
     )
+    # The page's projects — one batched read, narrowed to the page.
+    projects = services.projects.get_many(sorted({c.project_id for c in page_chunks if c.project_id is not None}))
     return ChunksPageView(
         chunks=[
             ChunkView.injected(
@@ -279,6 +283,7 @@ def list_chunks(
                     delivery_sources.get(chunk.chunk_id, DeliverySources()),
                 ),
                 runner_names=runner_names,
+                projects=projects,
             ).summary()
             for chunk in page_chunks
         ],
@@ -287,10 +292,11 @@ def list_chunks(
 
 
 @router.get("/chunk-counts", response_model=ChunkCountsView, dependencies=[Depends(require(Permission.FLEET_VIEW))])
-def chunk_counts(services: Services) -> ChunkCountsView:
+def chunk_counts(services: Services, project: QueryProject) -> ChunkCountsView:
     """The all-time fleet count per derived status — over exactly the chunks
-    ``GET /api/chunks`` pages over, with no window applied."""
-    counts = services.chunks.facts.status_counts()
+    ``GET /api/chunks`` pages over, with no window applied; ``?project=`` counts that
+    project's chunks alone."""
+    counts = services.chunks.facts.status_counts(project=project)
     return ChunkCountsView(
         total=sum(counts.values()),
         terminal=sum(n for st, n in counts.items() if st in TERMINAL_STATUSES),
@@ -741,6 +747,9 @@ def patch_chunk(chunk_id: str, request: ChunkPatchRequest, services: Services) -
         default_effort=updated.default_effort,
         default_harnesses=list(updated.default_harnesses),
         intended_migration=ChunkView.of(services, updated, facts=facts).intended_migration(),
+        **project_label_fields(
+            updated.project_id, services.projects.get(updated.project_id) if updated.project_id is not None else None
+        ),
     )
 
 
