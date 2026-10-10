@@ -1,9 +1,12 @@
 """The identity check at the head of every tick: the runner drives its leases only while its token
-resolves to the runner its store belongs to. A store naming no runner adopts the token's; a token
+resolves to the runner its store belongs to. A store naming no runner matches any token, and takes its id
+from the first registration, never from the check; a token
 naming another runner refuses until the right one returns; a hub that does not answer never reads as
 a mismatch; a hub with no identity read leaves the registration reply to decide. While refusing, a
 token corrected in the runtime dir's ``.env`` is taken up at the next check, unless the process
-environment supplied the token."""
+environment supplied the token. The hub proxy's forward is a first contact too: it runs the same check
+before forwarding while nothing in its process has checked, and takes the outage path when the hub does
+not answer it."""
 
 from __future__ import annotations
 
@@ -23,10 +26,11 @@ from blizzard.runner.composition import held_hub_token
 from blizzard.runner.config import DEFAULT_TOKEN_ENV, RunnerConfig
 from blizzard.runner.hub.client import IdentityRouteMissing, TokenIdentity, TokenRefusal
 from blizzard.runner.hub.held_token import HubTokenHolder
-from blizzard.runner.hub.identity import IdentityState, IdentityVerdictHolder, RunnerIdentity
+from blizzard.runner.hub.identity import IdentityState, IdentityVerdictHolder
 from blizzard.runner.hub.internal.http_hub import HeldTokenAuth, HttpHubClient
 from blizzard.runner.hub.internal.token_file import HubTokenFile
-from blizzard.runner.lifecycle.identity_check import IdentityCheck
+from blizzard.runner.lifecycle.identity_check import IdentityCheck, ProxyIdentityCheck
+from blizzard.runner.lifecycle.registration import Registration
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.tick import tick
 from tests.runner_fakes import (
@@ -84,14 +88,14 @@ def _state(ctx: LoopContext) -> IdentityState:
 @pytest.mark.parametrize(
     ("registered", "token_runner", "expected", "store_runner"),
     [
-        (False, "r1", IdentityState.MATCHED, "r1"),
+        (False, "r1", IdentityState.MATCHED, None),
         (True, "r1", IdentityState.MATCHED, "r1"),
         (True, "rn_other", IdentityState.MISMATCHED, "r1"),
     ],
-    ids=["empty-row-adopts", "same-runner", "another-runner"],
+    ids=["empty-row-matches", "same-runner", "another-runner"],
 )
 def test_the_check_compares_the_token_runner_with_the_store_runner(
-    tmp_path: Path, registered: bool, token_runner: str, expected: IdentityState, store_runner: str
+    tmp_path: Path, registered: bool, token_runner: str, expected: IdentityState, store_runner: str | None
 ) -> None:
     hub = FakeHub(default_runner_id="r1")
     hub.issued[hub.token] = token_runner
@@ -103,17 +107,27 @@ def test_the_check_compares_the_token_runner_with_the_store_runner(
     assert (verdict.state, verdict.store_runner_id, verdict.token_runner_id) == (expected, store_runner, token_runner)
     assert verdict.checked_at == _NOW
     stored = ctx.stores.identity.runner_identity()
-    assert stored is not None and stored.runner_id == store_runner
+    assert (stored.runner_id if stored is not None else None) == store_runner
     assert ctx.identity.current() == stored
 
 
-def test_an_adopted_identity_survives_in_the_store_row(tmp_path: Path) -> None:
-    ctx = _ctx(tmp_path, FakeHub(default_runner_id="rn_minted"), registered=False)
+def test_an_empty_store_takes_its_id_from_the_first_registration_never_from_the_check(tmp_path: Path) -> None:
+    """The process's identity names only a runner that has registered — sign-in and the trace sweep read it as
+    such — so the check leaves an empty store empty, and the registration after it adopts the reply's id."""
+    hub = FakeHub(default_runner_id="rn_minted")
+    ctx = _ctx(tmp_path, hub, registered=False)
+
     IdentityCheck(ctx).run()
 
-    assert ctx.stores.identity.runner_identity() == RunnerIdentity(
-        runner_id="rn_minted", runner_name="runner-local", registered_at=_NOW
-    )
+    assert _state(ctx) is IdentityState.MATCHED
+    assert (ctx.stores.identity.runner_identity(), ctx.identity.current()) == (None, None)
+
+    Registration(ctx).run()
+
+    adopted = ctx.stores.identity.runner_identity()
+    assert adopted is not None and adopted.runner_id == "rn_minted"
+    assert ctx.identity.current() == adopted
+    assert len(hub.registered) == 1
 
 
 @pytest.mark.parametrize("start", [IdentityState.UNCHECKED, IdentityState.MATCHED, IdentityState.MISMATCHED])
@@ -238,27 +252,95 @@ def test_the_check_reads_the_token_runner_from_a_real_hub(
     assert (verdict.state, verdict.store_runner_id, verdict.token_runner_id) == (expected, "rn_store", token_runner)
 
 
-def _proxied(tmp_path: Path, verdict: IdentityVerdictHolder, forwarded: list[str]) -> httpx.Response:
+def _identity(runner_id: str) -> httpx.Response:
+    return httpx.Response(200, json={"runner_id": runner_id, "runner_name": "runner-local"})
+
+
+def _proxied(
+    tmp_path: Path,
+    forwarded: list[str],
+    *,
+    identity: httpx.Response | None = None,
+    verdict: IdentityVerdictHolder | None = None,
+) -> tuple[httpx.Response, IdentityVerdictHolder, list[str]]:
+    """A fleet-summary read through the hub proxy of a runner whose store names ``r1``; the hub answers the
+    identity read with ``identity`` (the token naming ``r1`` unless a test says otherwise), or is
+    unreachable when it is a ``503``. Returns the response, the loop's verdict, and the identity reads."""
+    asked: list[str] = []
+    answer = identity if identity is not None else _identity("r1")
+
     def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/fleet/identity":
+            asked.append(str(request.url))
+            return answer
         forwarded.append(str(request.url))
         return httpx.Response(200, json={"ready": 1, "running": 0, "waiting": 0, "needs": 0})
 
+    ctx = _ctx(tmp_path, FakeHub(default_runner_id="r1"))
+    held = verdict or ctx.identity_verdict
     config = RunnerConfig(root=tmp_path, db_url="sqlite://", hub_url="http://hub.local:8421")
     app = create_app(
         config,
         hub_proxy_client=httpx.Client(transport=httpx.MockTransport(handler)),
         hub_retry_clock=no_retry_clock(),
-        identity_verdict=verdict,
+        identity_verdict=held,
+        identity_check=ProxyIdentityCheck(ctx.stores.identity, held, ctx.clock),
     )
-    return TestClient(app).get("/api/fleet-summary")
+    client = TestClient(app)
+    resp = client.get("/api/fleet-summary")
+    if resp.status_code == 200:
+        assert client.get("/api/fleet-summary").status_code == 200
+    return resp, held, asked
 
 
-def test_the_hub_proxy_forwards_nothing_until_the_identity_is_verified(tmp_path: Path) -> None:
+def test_an_unchecked_hub_proxy_checks_the_token_first_and_forwards_once_it_names_the_store_runner(
+    tmp_path: Path,
+) -> None:
+    """The API may serve before any tick has checked: the forward is the process's first contact, so it asks
+    the hub itself rather than refusing a runner whose token is its own — once, remembering the match —
+    and leaves the loop's verdict, which the status reports, untouched."""
     forwarded: list[str] = []
-    resp = _proxied(tmp_path, IdentityVerdictHolder(_RESET), forwarded)
+    resp, verdict, asked = _proxied(tmp_path, forwarded)
+
+    assert resp.status_code == 200, resp.text
+    assert forwarded == ["http://hub.local:8421/api/fleet/summary"] * 2
+    assert asked == ["http://hub.local:8421/api/fleet/identity"]
+    assert verdict.verdict().state is IdentityState.UNCHECKED
+
+
+def test_an_unchecked_hub_proxy_fails_as_an_outage_does_while_the_hub_does_not_answer(tmp_path: Path) -> None:
+    """An unchecked runner behaves exactly as during an outage: the forward answers the hub's own failure,
+    which a route serving from the runner's pin falls back on — not an identity refusal."""
+    forwarded: list[str] = []
+    down = httpx.Response(503, json={"detail": "the hub is unreachable"})
+    resp, _, _ = _proxied(tmp_path, forwarded, identity=down)
+
+    assert resp.status_code == 503
+    assert resp.json()["detail"] == "the hub is unreachable"
+    assert forwarded == []
+
+
+@pytest.mark.parametrize("status_code", [401, 404], ids=["token-refused", "no-identity-read"])
+def test_the_hub_proxy_forwards_nothing_while_the_hub_names_no_runner_for_the_token(
+    tmp_path: Path, status_code: int
+) -> None:
+    forwarded: list[str] = []
+    refused = httpx.Response(status_code, json={"reason": "unknown", "runner_id": None})
+    resp, _, _ = _proxied(tmp_path, forwarded, identity=refused)
 
     assert resp.status_code == 503
     assert resp.json()["detail"].startswith("runner_identity_unverified")
+    assert forwarded == []
+
+
+def test_an_unchecked_hub_proxy_refuses_a_token_naming_another_runner(tmp_path: Path) -> None:
+    forwarded: list[str] = []
+    resp, _, _ = _proxied(tmp_path, forwarded, identity=_identity("rn_other"))
+
+    assert resp.status_code == 503
+    detail = resp.json()["detail"]
+    assert detail.startswith("runner_identity_mismatch")
+    assert "r1" in detail and "rn_other" in detail
     assert forwarded == []
 
 
@@ -266,21 +348,22 @@ def test_the_hub_proxy_names_both_runners_and_the_reset_command_while_refusing(t
     verdict = IdentityVerdictHolder(_RESET)
     verdict.record(IdentityState.MISMATCHED, store_runner_id="rn_store", token_runner_id="rn_other", checked_at=_NOW)
     forwarded: list[str] = []
-    resp = _proxied(tmp_path, verdict, forwarded)
+    resp, _, asked = _proxied(tmp_path, forwarded, verdict=verdict)
 
     assert resp.status_code == 503
     detail = resp.json()["detail"]
     assert detail.startswith("runner_identity_mismatch")
     assert "rn_store" in detail and "rn_other" in detail and _RESET in detail
-    assert forwarded == []
+    assert (forwarded, asked) == ([], [])
 
 
-def test_the_hub_proxy_forwards_once_matched(tmp_path: Path) -> None:
+def test_the_hub_proxy_forwards_once_the_loop_matched_without_asking(tmp_path: Path) -> None:
     forwarded: list[str] = []
-    resp = _proxied(tmp_path, IdentityVerdictHolder(_RESET, state=IdentityState.MATCHED), forwarded)
+    matched = IdentityVerdictHolder(_RESET, state=IdentityState.MATCHED)
+    resp, _, asked = _proxied(tmp_path, forwarded, verdict=matched)
 
     assert resp.status_code == 200, resp.text
-    assert forwarded == ["http://hub.local:8421/api/fleet/summary"]
+    assert asked == []
 
 
 _WRONG = "token-of-another-runner"

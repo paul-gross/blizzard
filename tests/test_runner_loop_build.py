@@ -506,6 +506,42 @@ def test_tick_once_over_a_supplied_graph_traces_through_it_and_leaves_it_open(
         graph.close()
 
 
+class _HubCallingBackfill:
+    """Stands in for the transcript backfill: each verb makes one lease-path hub call through the
+    context it was handed, so the test sees whether that context's hub forwards."""
+
+    def __init__(self, ctx: LoopContext) -> None:
+        self._ctx = ctx
+
+    def run(self, *, dry_run: bool, limit: int | None) -> object:
+        return self._ctx.hub.chunk_statuses(["chk_backfill"])
+
+    def reship(self, segment_id: str) -> object:
+        return self._ctx.hub.chunk_statuses([segment_id])
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("verb", ["backfill", "reship"])
+def test_a_transcript_operator_verb_checks_identity_before_its_first_hub_call(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, verb: str
+) -> None:
+    """An operator verb builds its own process graph, whose verdict starts unchecked: without the
+    tick's identity check at its head, every hub call it makes is answered as an outage."""
+    config = RunnerConfig(root=tmp_path, db_url=RunnerConfig.default_db_url(tmp_path), hub_url="http://hub.test:8421")
+    hub = FakeHub()
+    monkeypatch.setattr(loop_wiring, "HttpHubClient", lambda _client: hub)
+    monkeypatch.setattr(loop_wiring, "TranscriptBackfill", _HubCallingBackfill)
+    wiring = LoopWiring.of(config)
+
+    if verb == "backfill":
+        answer = wiring.backfill_transcripts(dry_run=False)
+    else:
+        answer = wiring.reship_transcript("chk_backfill")
+
+    assert isinstance(answer, dict)
+    assert hub.chunk_statuses_calls == [["chk_backfill"]]
+
+
 @pytest.mark.unit
 def test_hosted_graph_shares_process_scoped_dependencies_with_loop_and_recovery(tmp_path: Path) -> None:
     config = RunnerConfig(root=tmp_path, db_url=RunnerConfig.default_db_url(tmp_path))

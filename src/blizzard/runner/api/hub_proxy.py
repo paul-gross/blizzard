@@ -18,8 +18,11 @@ from blizzard.foundation.logging import get_logger
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.hub.held_token import ICurrentHubToken
-from blizzard.runner.hub.identity import IdentityState, IdentityVerdict
+from blizzard.runner.hub.identity import IdentityState, IdentityVerdict, IIdentityOnContact
+from blizzard.wire.runner import RunnerIdentityView
 
+# The hub's answer to which runner the presented token belongs to.
+_IDENTITY_PATH = "/api/fleet/identity"
 # The per-attempt bound: the timeout on any single outbound request this proxy makes.
 _HUB_TIMEOUT = 15.0
 # The whole-forward bound a caller-less ``GET`` retries within; pinned at
@@ -58,6 +61,9 @@ class HubProxy:
     clock: IMonotonicClock
     #: The token the forward presents — the runner's held one; ``config``'s own when none is wired.
     token: ICurrentHubToken | None = None
+    #: The identity check the forward waits on — it forwards only once the token is verified to name the
+    #: store's runner; ungated when none is wired.
+    identity: IIdentityOnContact | None = None
 
     @classmethod
     def of(cls, request: Request, what: str) -> HubProxy:
@@ -70,10 +76,14 @@ class HubProxy:
                 detail="runner not wired to a hub — start via `blizzard runner host`",
             )
         wiring = RunnerWiring.of(request)
-        verdict = wiring.maybe_identity_verdict()
-        if verdict is not None and not verdict.matched():
-            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_unverified(verdict.verdict()))
-        return cls(config, what, wiring.hub_proxy_client(), wiring.hub_retry_clock(), wiring.maybe_hub_token())
+        return cls(
+            config,
+            what,
+            wiring.hub_proxy_client(),
+            wiring.hub_retry_clock(),
+            wiring.maybe_hub_token(),
+            wiring.maybe_identity_check(),
+        )
 
     def get(
         self,
@@ -112,6 +122,11 @@ class HubProxy:
     ) -> httpx.Response:
         """Forward ``method path``, or raise ``502`` unreachable / the upstream status verbatim.
 
+        While the loop has not checked the runner's identity, the forward first asks the hub which runner
+        its token belongs to, through this same forward — so a hub that does not answer fails it exactly
+        as an outage fails any read. A token not verified to name the store's runner answers ``503`` with
+        the reason, forwarding nothing.
+
         A ``GET`` retries a transport error or a ``502``/``503``/``504`` with bounded backoff,
         within ``timeout`` when the caller supplies one or ``_HUB_RETRY_CEILING`` otherwise —
         that whole-forward budget, not ``_HUB_TIMEOUT``, is what ``timeout`` means for a
@@ -122,6 +137,20 @@ class HubProxy:
         structlog level the exhausted-forward line logs at — every route keeps ``error``
         unless it opts into a lower one for a tolerated failure. ``fields`` add a structured
         subject to that line."""
+        self._verify_identity(timeout)
+        return self._forward(method, path, expect=expect, timeout=timeout, severity=severity, params=params, **fields)
+
+    def _forward(
+        self,
+        method: str,
+        path: str,
+        *,
+        expect: int,
+        timeout: float | None,
+        severity: str,
+        params: dict[str, str] | None,
+        **fields: object,
+    ) -> httpx.Response:
         url = f"{self.config.hub_url.rstrip('/')}{path}"
         retryable = method == "GET"
         budget = timeout if timeout is not None else (_HUB_RETRY_CEILING if retryable else _HUB_TIMEOUT)
@@ -163,6 +192,33 @@ class HubProxy:
                 retries += 1
                 continue
             raise HTTPException(status_code=upstream.status_code, detail=self._detail(upstream))
+
+    def _verify_identity(self, timeout: float | None) -> None:
+        """Return once the token is verified to name the store's runner; raise ``503`` with the reason
+        when it is not, or the forward's own failure when the hub does not answer the identity read."""
+        if self.identity is None:
+            return
+        verdict = self.identity.verdict_on_contact(lambda: self._token_runner_id(timeout))
+        if verdict.state is not IdentityState.MATCHED:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_unverified(verdict))
+
+    def _token_runner_id(self, timeout: float | None) -> str | None:
+        """The runner the hub resolves the presented token to; ``None`` when it refuses the token (401) or
+        has no identity read (404). Any other failure is the forward's own."""
+        try:
+            resp = self._forward(
+                "GET", _IDENTITY_PATH, expect=status.HTTP_200_OK, timeout=timeout, severity="error", params=None
+            )
+        except HTTPException as exc:
+            if exc.status_code in (status.HTTP_401_UNAUTHORIZED, status.HTTP_404_NOT_FOUND):
+                return None
+            raise
+        try:
+            return RunnerIdentityView.model_validate(resp.json()).runner_id
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY, detail=f"hub answered a malformed identity: {exc}"
+            ) from exc
 
     def _may_retry(self, retries: int, budget: float, started: float) -> bool:
         """Whether one more attempt is worth scheduling: the *whole* next backoff — not

@@ -11,6 +11,7 @@ replaced at each successful one."""
 from __future__ import annotations
 
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
@@ -95,7 +96,8 @@ class IdentityState(StrEnum):
 
     #: Not yet verified since the process started: every hub call answers as during an outage.
     UNCHECKED = "unchecked"
-    #: The token resolves to the store's runner, or the store named none and adopted it.
+    #: The token resolves to the store's runner, or the store names none yet and its first registration
+    #: adopts the id.
     MATCHED = "matched"
     #: The token resolves to a different runner: the runner refuses to work until it matches again.
     MISMATCHED = "mismatched"
@@ -125,6 +127,16 @@ class ICurrentIdentityVerdict(Protocol):
 
     def registration_checks(self) -> bool:
         """Whether the hub has no identity read, so the registration reply is the check."""
+        ...
+
+
+class IIdentityOnContact(Protocol):
+    """The identity verdict a hub contact outside the loop waits on."""
+
+    def verdict_on_contact(self, ask: Callable[[], str | None]) -> IdentityVerdict:
+        """The verdict the contact waits on: the loop's once it has checked; before that, one judged from
+        ``ask`` — the runner the hub resolves the token to, or ``None`` when the hub refuses the token or
+        has no identity read. Whatever ``ask`` raises when the hub does not answer propagates."""
         ...
 
 

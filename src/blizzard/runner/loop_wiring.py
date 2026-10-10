@@ -30,6 +30,7 @@ from blizzard.runner.hub.internal.http_hub import HeldTokenAuth, HttpHubClient
 from blizzard.runner.hub.verified import VerifiedHubClient
 from blizzard.runner.leases.internal.worker_stdout_files import WorkerStdoutFiles
 from blizzard.runner.lifecycle.env_release import EnvironmentRelease
+from blizzard.runner.lifecycle.identity_check import IdentityCheck
 from blizzard.runner.lifecycle.judgement.internal.elicitation_files import ElicitationFiles
 from blizzard.runner.lifecycle.judgement.internal.subprocess_check_runner import SubprocessCheckRunner
 from blizzard.runner.lifecycle.session import HarnessSelector, SessionResolver
@@ -272,11 +273,20 @@ class LoopWiring:
         """Run one transcript-backfill pass — the operator verb's own entry,
         wired here rather than at the CLI so the composition root stays the one place a
         context is built."""
-        return self._with_context(lambda ctx: TranscriptBackfill(ctx).run(dry_run=dry_run, limit=limit))
+        return self._with_context(
+            lambda ctx: TranscriptBackfill(_identity_checked(ctx)).run(dry_run=dry_run, limit=limit)
+        )
 
     def reship_transcript(self, segment_id: str) -> TranscriptReshipReport:
         """Re-ship one already-imported segment — wired here for the reason above."""
-        return self._with_context(lambda ctx: TranscriptBackfill(ctx).reship(segment_id))
+        return self._with_context(lambda ctx: TranscriptBackfill(_identity_checked(ctx)).reship(segment_id))
+
+
+def _identity_checked(ctx: LoopContext) -> LoopContext:
+    """``ctx`` after the identity check an operator verb's own process owes before its first other hub call —
+    the tick's head, run once: until it matches, the context's hub answers every call as an outage."""
+    IdentityCheck(ctx).run()
+    return ctx
 
 
 class IVerifiableHubClient(IHubClient, ITokenIdentityReader, Protocol):

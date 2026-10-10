@@ -81,12 +81,13 @@ from blizzard.runner.harness.health_cache import HarnessHealthCache, IReadHarnes
 from blizzard.runner.harness.registry import HarnessRegistry, IHarnessRegistry
 from blizzard.runner.harness.workspace_prompts import WorkspacePromptService
 from blizzard.runner.hub.held_token import ICurrentHubToken
-from blizzard.runner.hub.identity import ICurrentIdentityVerdict, ICurrentRunnerIdentity
+from blizzard.runner.hub.identity import ICurrentIdentityVerdict, ICurrentRunnerIdentity, IIdentityOnContact
 from blizzard.runner.hub.internal.http_hub import HeldTokenAuth
 from blizzard.runner.leases.activity import LocalLeaseService
 from blizzard.runner.leases.asks import AskService
 from blizzard.runner.leases.liveness import LeaseLivenessService
 from blizzard.runner.leases.session import LeaseSessionService
+from blizzard.runner.lifecycle.identity_check import ProxyIdentityCheck
 from blizzard.runner.lifecycle.judgement.git_commit_declaration import GitCommitDeclarationService
 from blizzard.runner.lifecycle.judgement.internal.elicitation_files import ElicitationFiles
 from blizzard.runner.lifecycle.takeover import TakeoverService
@@ -221,6 +222,7 @@ def create_app(
     platform_tracing: IPlatformTracing | None = None,
     identity: ICurrentRunnerIdentity | None = None,
     identity_verdict: ICurrentIdentityVerdict | None = None,
+    identity_check: IIdentityOnContact | None = None,
     hub_token: ICurrentHubToken | None = None,
 ) -> FastAPI:
     """Build a fully wired runner app from resolved config.
@@ -230,8 +232,9 @@ def create_app(
     wired; ``events`` defaults absent, leaving the route silent. ``platform_tracing`` is off unless the
     composition root passes a handle. ``telemetry_receiver`` is the process's worker telemetry receiver;
     absent, the OTLP routes answer 503. ``identity`` is the process's holder; absent, the federation
-    routes answer 503. ``identity_verdict`` gates the hub proxy, which forwards only while it is matched;
-    absent, the proxy forwards ungated. ``hub_token`` is the token the proxy presents; absent, the proxy
+    routes answer 503. ``identity_verdict`` is the verdict the status reports. ``identity_check`` gates
+    the hub proxy, which forwards only once it verifies the token names the store's runner; absent, the
+    proxy forwards ungated. ``hub_token`` is the token the proxy presents; absent, the proxy
     presents ``config``'s."""
     log = get_logger("blizzard.runner")
     clock = clock or SystemClock()
@@ -247,6 +250,7 @@ def create_app(
     )
     app.state.config = config
     app.state.identity_verdict = identity_verdict
+    app.state.identity_check = identity_check
     app.state.hub_token = hub_token
     if identity is not None:
         app.state.federation = FederationSettings(
@@ -523,6 +527,8 @@ def _wire_hosted_app(
         platform_tracing=platform_tracing,
         identity=graph.identity,
         identity_verdict=graph.identity_verdict,
+        # The proxy's forward is a first contact with the hub: it asks which runner its token names.
+        identity_check=ProxyIdentityCheck(runner_stores.identity, graph.identity_verdict, clock),
         hub_token=graph.hub_token,
         readiness=readiness,
         workspace_provider=workspace_provider,

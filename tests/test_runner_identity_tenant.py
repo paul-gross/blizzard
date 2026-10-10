@@ -204,13 +204,18 @@ def test_a_runner_upgraded_from_before_tenants_adopts_its_tenant_at_its_first_co
         engine.dispose()
 
 
-def test_an_empty_row_adopts_the_token_runner_with_its_tenant(tmp_path: Path) -> None:
+def test_an_empty_row_takes_the_registered_runner_with_its_tenant(tmp_path: Path) -> None:
+    """The check adopts nothing into an empty row; the registration after it records the runner and its tenant."""
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     ctx = _ctx(store, _tenant_hub())
 
     IdentityCheck(ctx).run()
+    assert store.runner_identity() is None
 
-    assert store.runner_identity() == RunnerIdentity(_RUNNER, "runner-local", _NOW, "ten_default", "default")
+    Registration(ctx).run()
+    recorded = store.runner_identity()
+    assert recorded is not None
+    assert (recorded.runner_id, recorded.tenant_id, recorded.tenant_name) == (_RUNNER, "ten_default", "default")
 
 
 def test_a_mismatched_answer_records_nothing_of_the_other_runners_tenant(tmp_path: Path) -> None:
