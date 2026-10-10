@@ -139,7 +139,9 @@ class IngestBroadcast:
         key = self._dedupe_key(fact, row_id, state)
         question_id = fact.payload.get("question_id")
         if fact.kind == QUESTION_ASKED and isinstance(question_id, str):
-            self.services.events.publish_question_asked(chunk_id, question_id, key=key)
+            self.services.events.publish_question_asked(
+                chunk_id, question_id, key=key, project_id=state.chunk.project_id if state.chunk is not None else None
+            )
         change = self.changes[chunk_id]
         change.publish_from(state, cause=_CAUSE_BY_FACT_KIND.get(fact.kind), key=key)
 

@@ -35,7 +35,9 @@ from blizzard.hub.domain.observability.analytics.operational import (
     summarize_durations,
     summarize_outcomes,
 )
+from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.internal.project_reach import chunks_of_project
 from blizzard.hub.store.internal.usage_aggregate import usage_aggregate_columns
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements
 
@@ -77,6 +79,17 @@ def _source_chunks_stmt(stmts: ScopedStatements, source: str) -> Select[Any]:
     return stmts.select(s.chunk_work_refs, s.chunk_work_refs.c.chunk_id).where(s.chunk_work_refs.c.source == source)
 
 
+def _of_criteria_chunks(
+    stmts: ScopedStatements, stmt: Select[Any], chunk_id: Any, criteria: OperationalCriteria
+) -> Select[Any]:
+    """``stmt`` narrowed to the rows whose ``chunk_id`` names a chunk of ``criteria``'s source and project."""
+    if criteria.source is not None:
+        stmt = stmt.where(chunk_id.in_(_source_chunks_stmt(stmts, criteria.source)))
+    if criteria.project is not None:
+        stmt = stmt.where(chunk_id.in_(chunks_of_project(stmts, ProjectId(criteria.project))))
+    return stmt
+
+
 def _duration_window_groups_stmt(stmts: ScopedStatements, criteria: OperationalCriteria) -> Select[Any]:
     """Every distinct ``(chunk_id, epoch)`` with a matching runner-step transition in the
     window — which GROUPS the window admits, not which rows survive.
@@ -88,8 +101,7 @@ def _duration_window_groups_stmt(stmts: ScopedStatements, criteria: OperationalC
     stmt = stmt.where(_runner_executed_or_entry(t, gn))
     if criteria.graph_id is not None:
         stmt = stmt.where(t.c.graph_id == criteria.graph_id)
-    if criteria.source is not None:
-        stmt = stmt.where(t.c.chunk_id.in_(_source_chunks_stmt(stmts, criteria.source)))
+    stmt = _of_criteria_chunks(stmts, stmt, t.c.chunk_id, criteria)
     if criteria.since is not None:  # the half-open [since, until) bound `steps_in_window` owns, in SQL form
         stmt = stmt.where(t.c.recorded_at >= criteria.since)
     if criteria.until is not None:
@@ -150,8 +162,7 @@ def _spend_filtered_stmt(stmts: ScopedStatements, criteria: OperationalCriteria,
     stmt = stmts.select(stmts.scope_join(u, c, u.c.chunk_id == c.c.chunk_id), *cols)
     if criteria.graph_id is not None:
         stmt = stmt.where(c.c.graph_id == criteria.graph_id)
-    if criteria.source is not None:
-        stmt = stmt.where(u.c.chunk_id.in_(_source_chunks_stmt(stmts, criteria.source)))
+    stmt = _of_criteria_chunks(stmts, stmt, u.c.chunk_id, criteria)
     if criteria.since is not None:
         stmt = stmt.where(u.c.recorded_at >= criteria.since)
     if criteria.until is not None:
@@ -246,8 +257,7 @@ def _judged_distribution_stmt(stmts: ScopedStatements, criteria: OperationalCrit
     stmt = stmt.where(t.c.from_node_id.is_not(None), t.c.choice_name.is_not(None), b.c.chunk_id.is_(None))
     if criteria.graph_id is not None:
         stmt = stmt.where(t.c.graph_id == criteria.graph_id)
-    if criteria.source is not None:
-        stmt = stmt.where(t.c.chunk_id.in_(_source_chunks_stmt(stmts, criteria.source)))
+    stmt = _of_criteria_chunks(stmts, stmt, t.c.chunk_id, criteria)
     if criteria.since is not None:
         stmt = stmt.where(t.c.recorded_at >= criteria.since)
     if criteria.until is not None:
@@ -263,8 +273,7 @@ def _candidate_lease_epochs_stmt(stmts: ScopedStatements, criteria: OperationalC
     applies once ``resolve_attempt_failures`` has derived a failed attempt's own graph."""
     sub = _lease_min_stmt(stmts).subquery()
     stmt = select(sub.c.chunk_id, sub.c.epoch, sub.c.minted_at)
-    if criteria.source is not None:
-        stmt = stmt.where(sub.c.chunk_id.in_(_source_chunks_stmt(stmts, criteria.source)))
+    stmt = _of_criteria_chunks(stmts, stmt, sub.c.chunk_id, criteria)
     if criteria.since is not None:
         stmt = stmt.where(sub.c.minted_at >= criteria.since)
     if criteria.until is not None:

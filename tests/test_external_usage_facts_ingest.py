@@ -64,7 +64,7 @@ def _service(engine: sa.Engine, clock: FixedClock) -> FactIngestService:
         served_projects=BulkProjectResolver(ProjectStore(store)),
         clock=clock,
     )
-    event_log = EventLogService(events=chunks.events, publisher=EventBroker())
+    event_log = EventLogService(events=chunks.events, publisher=EventBroker(), chunks=chunks.record)
     return FactIngestService(
         facts=chunks.facts,
         route=chunks.route,

@@ -11,6 +11,7 @@ import pytest
 
 from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.chunk.ports.events import IEventLogPublisher, IWriteChunkEventsRepository
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 
 pytestmark = pytest.mark.unit
 
@@ -57,6 +58,7 @@ class _FakePublisher:
         runner_id: str | None,
         runner_name: str | None = None,
         key: str | None = None,
+        project_id: str | None = None,
     ) -> int:
         self.published.append((severity, kind))
         return len(self.published)
@@ -64,8 +66,17 @@ class _FakePublisher:
 
 def _service(events: _FakeEvents, publisher: _FakePublisher) -> EventLogService:
     return EventLogService(
-        events=cast(IWriteChunkEventsRepository, events), publisher=cast(IEventLogPublisher, publisher)
+        events=cast(IWriteChunkEventsRepository, events),
+        publisher=cast(IEventLogPublisher, publisher),
+        chunks=cast(IReadChunkRecordRepository, _NoChunks()),
     )
+
+
+class _NoChunks:
+    """A chunk record holding no chunk, so a frame names no project."""
+
+    def get(self, chunk_id: str) -> None:
+        return None
 
 
 def test_record_derives_severity_from_the_closed_vocabulary() -> None:

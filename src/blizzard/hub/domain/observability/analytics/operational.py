@@ -26,6 +26,8 @@ class OperationalCriteria:
 
     graph_id: str | None = None
     source: str | None = None
+    # A project id: the facts of that project's chunks alone. ``None`` reads the whole tenant.
+    project: str | None = None
     since: datetime | None = None
     until: datetime | None = None
 

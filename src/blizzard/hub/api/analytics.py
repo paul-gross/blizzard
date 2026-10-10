@@ -22,6 +22,7 @@ from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
+from blizzard.hub.api.project_params import QueryProject
 from blizzard.hub.domain.kernel.pagination import MalformedCursor
 from blizzard.hub.domain.observability.analytics.derivation import ReDeriveScope, ReDeriveScopeRefused
 from blizzard.hub.domain.observability.analytics.extraction import read_version
@@ -41,6 +42,7 @@ from blizzard.hub.domain.observability.analytics.queries import (
     QueriedEvent,
     fold_counts_by_name,
 )
+from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.wire.analytics import (
     AnalyticsChunkSpendResponse,
     AnalyticsChunkSpendView,
@@ -96,6 +98,7 @@ class NormalizedScope:
     source: str | None
     since: datetime | None
     until: datetime | None
+    project: ProjectId | None = None
 
 
 @dto
@@ -110,6 +113,8 @@ class ScopeFilters:
     source: str | None
     since: datetime | None
     until: datetime | None
+    # The project lens: a read names one project or, with ``None``, covers the whole tenant.
+    project: ProjectId | None = None
 
     @classmethod
     def of(
@@ -118,8 +123,9 @@ class ScopeFilters:
         source: Annotated[str | None, Query()] = None,
         since: Annotated[datetime | None, Query()] = None,
         until: Annotated[datetime | None, Query()] = None,
+        project: QueryProject = None,
     ) -> ScopeFilters:
-        return cls(graph_id, source, since, until)
+        return cls(graph_id, source, since, until, project)
 
     def normalized(self) -> NormalizedScope:
         return NormalizedScope(
@@ -127,6 +133,7 @@ class ScopeFilters:
             source=self.source,
             since=as_utc(self.since) if self.since is not None else None,
             until=as_utc(self.until) if self.until is not None else None,
+            project=self.project,
         )
 
 
@@ -137,7 +144,7 @@ def operational_criteria(scope: ScopeFilters) -> OperationalCriteria:
     Shared with the fleet router's own analytics reads, not this
     module's alone."""
     n = scope.normalized()
-    return OperationalCriteria(graph_id=n.graph_id, source=n.source, since=n.since, until=n.until)
+    return OperationalCriteria(graph_id=n.graph_id, source=n.source, project=n.project, since=n.since, until=n.until)
 
 
 @dto
@@ -165,9 +172,15 @@ class EventScopeFilters:
         harness_version: Annotated[str | None, Query()] = None,
         model: Annotated[str | None, Query()] = None,
         effort: Annotated[str | None, Query()] = None,
+        project: QueryProject = None,
     ) -> EventScopeFilters:
         return cls(
-            ScopeFilters(graph_id, source, since, until), extractor_version, harness_id, harness_version, model, effort
+            ScopeFilters(graph_id, source, since, until, project),
+            extractor_version,
+            harness_id,
+            harness_version,
+            model,
+            effort,
         )
 
     @property
@@ -182,6 +195,7 @@ class EventScopeFilters:
             extractor_version=read_version(self.extractor_version),
             graph_id=normalized.graph_id,
             source=normalized.source,
+            project=normalized.project,
             since=normalized.since,
             until=normalized.until,
             harness_id=self.harness_id,

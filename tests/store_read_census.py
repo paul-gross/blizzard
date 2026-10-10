@@ -54,7 +54,7 @@ from blizzard.hub.domain.chunk.ports.decisions import IReadChunkDecisionsReposit
 from blizzard.hub.domain.chunk.ports.delivery import IReadChunkDeliveryRepository
 from blizzard.hub.domain.chunk.ports.dependencies import IReadChunkDependenciesRepository
 from blizzard.hub.domain.chunk.ports.escalations import IReadChunkEscalationsRepository
-from blizzard.hub.domain.chunk.ports.events import IReadChunkEventsRepository
+from blizzard.hub.domain.chunk.ports.events import FeedLens, IReadChunkEventsRepository
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission
 from blizzard.hub.domain.chunk.ports.hub_exec import IReadChunkHubExecRepository
@@ -2003,38 +2003,59 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadCloseIntentCorpus, "pending_close_intents"): lambda w: (
         w.hub.hub_services.hub_scoped_reads.corpus.pending_close_intents()
     ),
-    (IReadOperationalAnalytics, "durations_by_node"): lambda w: w.hub.services.operational_analytics.durations_by_node(
-        OperationalCriteria()
+    (IReadOperationalAnalytics, "durations_by_node"): lambda w: (
+        w.hub.services.operational_analytics.durations_by_node(OperationalCriteria()),
+        w.hub.services.operational_analytics.durations_by_node(OperationalCriteria(project=w.project_id)),
     ),
     (IReadOperationalAnalytics, "durations_by_graph"): lambda w: (
-        w.hub.services.operational_analytics.durations_by_graph(OperationalCriteria())
+        w.hub.services.operational_analytics.durations_by_graph(OperationalCriteria()),
+        w.hub.services.operational_analytics.durations_by_graph(OperationalCriteria(project=w.project_id)),
     ),
-    (IReadOperationalAnalytics, "spend_by_node"): lambda w: w.hub.services.operational_analytics.spend_by_node(
-        OperationalCriteria()
+    (IReadOperationalAnalytics, "spend_by_node"): lambda w: (
+        w.hub.services.operational_analytics.spend_by_node(OperationalCriteria()),
+        w.hub.services.operational_analytics.spend_by_node(OperationalCriteria(project=w.project_id)),
     ),
-    (IReadOperationalAnalytics, "spend_by_graph"): lambda w: w.hub.services.operational_analytics.spend_by_graph(
-        OperationalCriteria()
+    (IReadOperationalAnalytics, "spend_by_graph"): lambda w: (
+        w.hub.services.operational_analytics.spend_by_graph(OperationalCriteria()),
+        w.hub.services.operational_analytics.spend_by_graph(OperationalCriteria(project=w.project_id)),
     ),
-    (IReadOperationalAnalytics, "spend_by_chunk"): lambda w: w.hub.services.operational_analytics.spend_by_chunk(
-        OperationalCriteria(), limit=50
+    (IReadOperationalAnalytics, "spend_by_chunk"): lambda w: (
+        w.hub.services.operational_analytics.spend_by_chunk(OperationalCriteria(), limit=50),
+        w.hub.services.operational_analytics.spend_by_chunk(OperationalCriteria(project=w.project_id), limit=50),
     ),
-    (IReadOperationalAnalytics, "outcomes_by_node"): lambda w: w.hub.services.operational_analytics.outcomes_by_node(
-        OperationalCriteria()
+    (IReadOperationalAnalytics, "outcomes_by_node"): lambda w: (
+        w.hub.services.operational_analytics.outcomes_by_node(OperationalCriteria()),
+        w.hub.services.operational_analytics.outcomes_by_node(OperationalCriteria(project=w.project_id)),
     ),
-    (IReadAnalyticsEventQueries, "events"): lambda w: w.hub.services.analytics_events.events(
-        EventQueryCriteria(extractor_version=EXTRACTOR_VERSION), limit=50
+    (IReadAnalyticsEventQueries, "events"): lambda w: (
+        w.hub.services.analytics_events.events(EventQueryCriteria(extractor_version=EXTRACTOR_VERSION), limit=50),
+        w.hub.services.analytics_events.events(
+            EventQueryCriteria(extractor_version=EXTRACTOR_VERSION, project=w.project_id), limit=50
+        ),
     ),
-    (IReadAnalyticsEventQueries, "counts_by_file"): lambda w: w.hub.services.analytics_events.counts_by_file(
-        EventQueryCriteria(extractor_version=EXTRACTOR_VERSION)
+    (IReadAnalyticsEventQueries, "counts_by_file"): lambda w: (
+        w.hub.services.analytics_events.counts_by_file(EventQueryCriteria(extractor_version=EXTRACTOR_VERSION)),
+        w.hub.services.analytics_events.counts_by_file(
+            EventQueryCriteria(extractor_version=EXTRACTOR_VERSION, project=w.project_id)
+        ),
     ),
-    (IReadAnalyticsEventQueries, "counts_by_skill"): lambda w: w.hub.services.analytics_events.counts_by_skill(
-        EventQueryCriteria(extractor_version=EXTRACTOR_VERSION)
+    (IReadAnalyticsEventQueries, "counts_by_skill"): lambda w: (
+        w.hub.services.analytics_events.counts_by_skill(EventQueryCriteria(extractor_version=EXTRACTOR_VERSION)),
+        w.hub.services.analytics_events.counts_by_skill(
+            EventQueryCriteria(extractor_version=EXTRACTOR_VERSION, project=w.project_id)
+        ),
     ),
     (IReadAnalyticsEventQueries, "counts_by_agent_type"): lambda w: (
-        w.hub.services.analytics_events.counts_by_agent_type(EventQueryCriteria(extractor_version=EXTRACTOR_VERSION))
+        w.hub.services.analytics_events.counts_by_agent_type(EventQueryCriteria(extractor_version=EXTRACTOR_VERSION)),
+        w.hub.services.analytics_events.counts_by_agent_type(
+            EventQueryCriteria(extractor_version=EXTRACTOR_VERSION, project=w.project_id)
+        ),
     ),
-    (IReadAnalyticsEventQueries, "counts_by_node"): lambda w: w.hub.services.analytics_events.counts_by_node(
-        EventQueryCriteria(extractor_version=EXTRACTOR_VERSION)
+    (IReadAnalyticsEventQueries, "counts_by_node"): lambda w: (
+        w.hub.services.analytics_events.counts_by_node(EventQueryCriteria(extractor_version=EXTRACTOR_VERSION)),
+        w.hub.services.analytics_events.counts_by_node(
+            EventQueryCriteria(extractor_version=EXTRACTOR_VERSION, project=w.project_id)
+        ),
     ),
     (IReadChunkArtifactsRepository, "load_artifacts"): lambda w: w.read.artifacts.load_artifacts(w.chunk_artifacts),
     (IReadChunkArtifactsRepository, "delivery_sources_for"): lambda w: w.read.artifacts.delivery_sources_for(
@@ -2075,13 +2096,23 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadChunkDependenciesRepository, "standing_edges_for_dependents"): lambda w: (
         w.read.dependencies.standing_edges_for_dependents([w.chunk_dependency_dependent])
     ),
-    (IReadChunkEscalationsRepository, "list_open_escalations"): lambda w: w.read.escalations.list_open_escalations(),
-    (IReadChunkEventsRepository, "list_events"): lambda w: w.read.events.list_events(),
-    (IReadChunkEventsRepository, "activity_facts_since"): lambda w: w.read.events.activity_facts_since(
-        _HUB_BASE, limit=50
+    (IReadChunkEscalationsRepository, "list_open_escalations"): lambda w: (
+        w.read.escalations.list_open_escalations(),
+        w.read.escalations.list_open_escalations(project=w.project_id),
     ),
-    (IReadChunkEventsRepository, "activity_events_since"): lambda w: w.read.events.activity_events_since(
-        _HUB_BASE, limit=50
+    (IReadChunkEventsRepository, "list_events"): lambda w: (
+        w.read.events.list_events(),
+        w.read.events.list_events(lens=FeedLens(w.project_id, frozenset({HUB_RUNNER_ID}))),
+    ),
+    (IReadChunkEventsRepository, "activity_facts_since"): lambda w: (
+        w.read.events.activity_facts_since(_HUB_BASE, limit=50),
+        w.read.events.activity_facts_since(_HUB_BASE, limit=50, project=w.project_id),
+    ),
+    (IReadChunkEventsRepository, "activity_events_since"): lambda w: (
+        w.read.events.activity_events_since(_HUB_BASE, limit=50),
+        w.read.events.activity_events_since(
+            _HUB_BASE, limit=50, lens=FeedLens(w.project_id, frozenset({HUB_RUNNER_ID}))
+        ),
     ),
     (IReadChunkFactsRepository, "load_facts"): lambda w: w.read.facts.load_facts(w.chunk_ready_1),
     (IReadChunkFactsRepository, "load_all_facts"): lambda w: w.read.facts.load_all_facts(),

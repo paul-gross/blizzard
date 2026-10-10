@@ -99,11 +99,17 @@ def resolve_decision(
         return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=conflict.model_dump())
     if decision is not None:
         key = f"decision_resolutions:{decision_id}"
-        services.events.publish_decision_resolved(decision.chunk_id, decision_id, key=key)
+        state = chunk_events.ChunkFrameState.load(services, decision.chunk_id)
+        services.events.publish_decision_resolved(
+            decision.chunk_id,
+            decision_id,
+            key=key,
+            project_id=state.chunk.project_id if state.chunk is not None else None,
+        )
         # Hardcoded literal, not a derivation — a resolution always lands the chunk
         # back at `running` (see `chunk_events.ChunkChanged.publish`'s docstring).
-        chunk_events.ChunkChanged.of(services, decision.chunk_id, prev_status=change.prev_status).publish(
-            cause="decision-resolved", status="running", key=key
+        chunk_events.ChunkChanged.of(services, decision.chunk_id, prev_status=change.prev_status).publish_from(
+            state, cause="decision-resolved", status="running", key=key
         )
     assert result.resolved and result.resolved_by
     return DecisionResolutionResponse(

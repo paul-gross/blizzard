@@ -13,7 +13,7 @@ import json
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Connection, Select, or_
+from sqlalchemy import Connection, Select, and_, or_, true
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.event_log import (
@@ -23,8 +23,10 @@ from blizzard.foundation.event_log import (
     narrow_event_log_severity,
 )
 from blizzard.hub.domain.chunk.model import DEFAULT_EVENT_LIST_LIMIT, ActivityEntry, OperationalEvent
-from blizzard.hub.domain.chunk.ports.events import IWriteChunkEventsRepository
+from blizzard.hub.domain.chunk.ports.events import FeedLens, IWriteChunkEventsRepository
+from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.internal.project_reach import chunks_of_project
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements
 
 # The hub coordinator's own reserved ``transitions.runner_id`` — the only fact-table
@@ -41,6 +43,16 @@ def _bounded_stmt(stmt: Select[Any], *, ts_col: Any, pk_col: Any, since: datetim
     """``activity_facts_since``'s shared bound over a source's base statement (never a full-table scan) — a pure
     builder that lets a test compile the exact statement a source executes."""
     return stmt.where(ts_col >= since).order_by(ts_col.desc(), pk_col.desc()).limit(limit)
+
+
+def _event_log_in_lens(stmts: ScopedStatements, lens: FeedLens) -> Any:
+    """An ``event_log`` row :class:`FeedLens` keeps: one naming a chunk of its project, or one naming no chunk whose
+    runner, if it names one, serves the project."""
+    t = s.event_log
+    return or_(
+        t.c.chunk_id.in_(chunks_of_project(stmts, lens.project)),
+        and_(t.c.chunk_id.is_(None), or_(t.c.runner_id.is_(None), t.c.runner_id.in_(sorted(lens.runners)))),
+    )
 
 
 def _narrow_persisted_severity(*, kind: str, severity: str) -> EventLogSeverity:
@@ -262,6 +274,7 @@ class ChunkEventsStore:
         chunk_id: str | None = None,
         since: datetime | None = None,
         limit: int = DEFAULT_EVENT_LIST_LIMIT,
+        lens: FeedLens | None = None,
     ) -> list[OperationalEvent]:
         with self._store.read("list_events") as conn:
             stmt = self._store.select(s.event_log)
@@ -273,6 +286,8 @@ class ChunkEventsStore:
                 stmt = stmt.where(s.event_log.c.chunk_id == chunk_id)
             if since is not None:
                 stmt = stmt.where(s.event_log.c.recorded_at >= since)
+            if lens is not None:
+                stmt = stmt.where(_event_log_in_lens(self._store, lens))
             stmt = stmt.order_by(s.event_log.c.recorded_at.desc(), s.event_log.c.id.desc()).limit(limit)
             return [
                 OperationalEvent(
@@ -290,7 +305,9 @@ class ChunkEventsStore:
                 for row in conn.execute(stmt).all()
             ]
 
-    def activity_events_since(self, since: datetime, *, limit: int) -> list[OperationalEvent]:
+    def activity_events_since(
+        self, since: datetime, *, limit: int, lens: FeedLens | None = None
+    ) -> list[OperationalEvent]:
         """See
         :meth:`~blizzard.hub.domain.chunk.ports.events.IReadChunkEventsRepository.activity_events_since` —
         the feed's own event source: recency-ordered and deleted-chunk-excluding, which
@@ -301,6 +318,7 @@ class ChunkEventsStore:
                 self._store.select(s.event_log)
                 .where(s.event_log.c.recorded_at >= since)
                 .where(or_(s.event_log.c.chunk_id.is_(None), s.event_log.c.chunk_id.not_in(deleted)))
+                .where(_event_log_in_lens(self._store, lens) if lens is not None else true())
                 .order_by(s.event_log.c.recorded_at.desc(), s.event_log.c.id.desc())
                 .limit(limit)
             )
@@ -320,7 +338,9 @@ class ChunkEventsStore:
                 for row in conn.execute(stmt).all()
             ]
 
-    def activity_facts_since(self, since: datetime, *, limit: int) -> list[ActivityEntry]:
+    def activity_facts_since(
+        self, since: datetime, *, limit: int, project: ProjectId | None = None
+    ) -> list[ActivityEntry]:
         """See
         :meth:`~blizzard.hub.domain.chunk.ports.events.IReadChunkEventsRepository.activity_facts_since` — one
         bounded read per mapped ``ChunkChangeCause`` fact table, concatenated, unsorted across
@@ -331,6 +351,7 @@ class ChunkEventsStore:
             # Resolved once: every fact-source block below excludes a
             # deleted chunk by referencing this same subquery, rather than repeating it.
             deleted = _deleted_chunk_ids_stmt(self._store)
+            chunks = chunks_of_project(self._store, project) if project is not None else None
             rows += self._bounded(
                 conn,
                 _chunk_minted_stmt(self._store, deleted),
@@ -338,6 +359,7 @@ class ChunkEventsStore:
                 pk_col=s.chunks.c.chunk_id,
                 since=since,
                 limit=limit,
+                chunks=chunks,
                 builder=lambda r: ActivityEntry(
                     type="chunk-changed",
                     key=f"chunks:{r.chunk_id}",
@@ -354,6 +376,7 @@ class ChunkEventsStore:
                 pk_col=s.chunk_promoted.c.id,
                 since=since,
                 limit=limit,
+                chunks=chunks,
                 builder=lambda r: ActivityEntry(
                     type="chunk-changed",
                     key=f"chunk_promoted:{r.id}",
@@ -370,6 +393,7 @@ class ChunkEventsStore:
                 pk_col=s.chunk_grouped.c.id,
                 since=since,
                 limit=limit,
+                chunks=chunks,
                 builder=lambda r: ActivityEntry(
                     type="chunk-changed",
                     key=f"chunk_grouped:{r.id}",
@@ -386,6 +410,7 @@ class ChunkEventsStore:
                 pk_col=s.route_created.c.route_id,
                 since=since,
                 limit=limit,
+                chunks=chunks,
                 builder=lambda r: ActivityEntry(
                     type="chunk-changed",
                     key=f"route_created:{r.route_id}",
@@ -403,6 +428,7 @@ class ChunkEventsStore:
                 pk_col=s.transitions.c.transition_id,
                 since=since,
                 limit=limit,
+                chunks=chunks,
                 builder=lambda r: ActivityEntry(
                     type="chunk-changed",
                     key=f"transitions:{r.transition_id}",
@@ -420,6 +446,7 @@ class ChunkEventsStore:
                 pk_col=s.chunk_migrations.c.migration_id,
                 since=since,
                 limit=limit,
+                chunks=chunks,
                 builder=lambda r: ActivityEntry(
                     type="chunk-changed",
                     key=f"chunk_migrations:{r.migration_id}",
@@ -436,6 +463,7 @@ class ChunkEventsStore:
                 pk_col=s.chunk_restarts.c.id,
                 since=since,
                 limit=limit,
+                chunks=chunks,
                 builder=lambda r: ActivityEntry(
                     type="chunk-changed",
                     key=f"chunk_restarts:{r.id}",
@@ -452,6 +480,7 @@ class ChunkEventsStore:
                 pk_col=s.decisions.c.decision_id,
                 since=since,
                 limit=limit,
+                chunks=chunks,
                 builder=lambda r: ActivityEntry(
                     type="chunk-changed",
                     key=f"decisions:{r.decision_id}",
@@ -468,6 +497,7 @@ class ChunkEventsStore:
                 pk_col=s.decision_resolutions.c.decision_id,
                 since=since,
                 limit=limit,
+                chunks=chunks,
                 builder=lambda r: ActivityEntry(
                     type="chunk-changed",
                     key=f"decision_resolutions:{r.decision_id}",
@@ -484,6 +514,7 @@ class ChunkEventsStore:
                 pk_col=s.questions.c.question_id,
                 since=since,
                 limit=limit,
+                chunks=chunks,
                 builder=lambda r: ActivityEntry(
                     type="chunk-changed",
                     key=f"questions:{r.question_id}",
@@ -501,6 +532,7 @@ class ChunkEventsStore:
                 pk_col=s.question_answers.c.question_id,
                 since=since,
                 limit=limit,
+                chunks=chunks,
                 builder=lambda r: ActivityEntry(
                     type="chunk-changed",
                     key=f"question_answers:{r.question_id}",
@@ -517,6 +549,7 @@ class ChunkEventsStore:
                 pk_col=s.escalations.c.id,
                 since=since,
                 limit=limit,
+                chunks=chunks,
                 builder=lambda r: ActivityEntry(
                     type="chunk-changed",
                     key=f"escalations:{r.id}",
@@ -533,6 +566,7 @@ class ChunkEventsStore:
                 pk_col=s.requeues.c.id,
                 since=since,
                 limit=limit,
+                chunks=chunks,
                 builder=lambda r: ActivityEntry(
                     type="chunk-changed",
                     key=f"requeues:{r.id}",
@@ -549,6 +583,7 @@ class ChunkEventsStore:
                 pk_col=s.route_released.c.id,
                 since=since,
                 limit=limit,
+                chunks=chunks,
                 builder=lambda r: ActivityEntry(
                     type="chunk-changed",
                     key=f"route_released:{r.id}",
@@ -565,6 +600,7 @@ class ChunkEventsStore:
                 pk_col=s.chunk_pause_facts.c.id,
                 since=since,
                 limit=limit,
+                chunks=chunks,
                 builder=lambda r: ActivityEntry(
                     type="chunk-changed",
                     key=f"chunk_pause_facts:{r.id}",
@@ -581,6 +617,7 @@ class ChunkEventsStore:
                 pk_col=s.chunk_stopped.c.id,
                 since=since,
                 limit=limit,
+                chunks=chunks,
                 builder=lambda r: ActivityEntry(
                     type="chunk-changed",
                     key=f"chunk_stopped:{r.id}",
@@ -597,6 +634,7 @@ class ChunkEventsStore:
                 pk_col=s.chunk_completed.c.id,
                 since=since,
                 limit=limit,
+                chunks=chunks,
                 builder=lambda r: ActivityEntry(
                     type="chunk-changed",
                     key=f"chunk_completed:{r.id}",
@@ -613,6 +651,7 @@ class ChunkEventsStore:
                 pk_col=s.chunk_deleted.c.id,
                 since=since,
                 limit=limit,
+                chunks=chunks,
                 builder=lambda r: ActivityEntry(
                     type="chunk-changed",
                     key=f"chunk_deleted:{r.id}",
@@ -626,10 +665,13 @@ class ChunkEventsStore:
             return rows
 
     @staticmethod
-    def _bounded(conn: Connection, stmt, *, ts_col, pk_col, since: datetime, limit: int, builder):  # type: ignore[no-untyped-def]
+    def _bounded(conn: Connection, stmt, *, ts_col, pk_col, since: datetime, limit: int, chunks, builder):  # type: ignore[no-untyped-def]
         """Run one source's own ``ORDER BY <ts> DESC, <pk> DESC LIMIT :limit`` bounded
         read and reshape each row via ``builder`` — the one piece every
-        :meth:`activity_facts_since` source shares (never a full-table scan)."""
+        :meth:`activity_facts_since` source shares (never a full-table scan). ``chunks``, when given, narrows
+        the source to the facts of those chunks: every source selects the chunk it names as ``chunk_id``."""
+        if chunks is not None:
+            stmt = stmt.where(stmt.selected_columns.chunk_id.in_(chunks))
         bounded_stmt = _bounded_stmt(stmt, ts_col=ts_col, pk_col=pk_col, since=since, limit=limit)
         return [builder(row) for row in conn.execute(bounded_stmt).all()]
 

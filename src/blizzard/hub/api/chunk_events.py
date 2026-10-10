@@ -155,9 +155,16 @@ class ChunkChanged:
         that loaded every touched chunk's state once through `load_frame_states`."""
         facts = state.facts
         resolved_status = status if status is not None else facts.status().value
+        project_id = state.chunk.project_id if state.chunk is not None else None
         if state.chunk is None or state.graph is None:
             self.services.events.publish_chunk_changed(
-                self.chunk_id, resolved_status, prev_status=self.prev_status, cause=cause, by=by, key=key
+                self.chunk_id,
+                resolved_status,
+                prev_status=self.prev_status,
+                cause=cause,
+                by=by,
+                key=key,
+                project_id=project_id,
             )
             return facts
 
@@ -184,5 +191,6 @@ class ChunkChanged:
             graph_id=change.graph_id,
             by=by,
             key=key,
+            project_id=project_id,
         )
         return facts

@@ -8,7 +8,7 @@ out the real interval. Names no daemon's own vocabulary."""
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 
 from fastapi import Request
@@ -41,7 +41,8 @@ class Cursor:
 class Stream:
     """One subscriber's live connection — its broker, its request, its resume cursor,
     its daemon's reserved open-of-stream comment, and (optionally) the shutdown signal
-    and keepalive interval it races its live wait against."""
+    and keepalive interval it races its live wait against, and the predicate selecting which
+    events it is sent. Without ``admits`` every event is sent."""
 
     broker: EventBroker | None
     request: Request
@@ -49,6 +50,9 @@ class Stream:
     reserved_comment: str
     shutdown: asyncio.Event | None = None
     keepalive_seconds: float = DEFAULT_KEEPALIVE_SECONDS
+    #: Whether an event is sent to this subscriber — awaited on the event loop, so it never reads a store
+    #: there. Applied alike to the replay tail and to live events; a refused event is skipped.
+    admits: Callable[[Event], Awaitable[bool]] | None = None
 
     async def frames(self) -> AsyncIterator[bytes]:
         """Yield the reserved comment, the buffered replay tail, then live events until the broker closes.
@@ -73,7 +77,8 @@ class Stream:
         try:
             yield self.reserved_comment.encode()
             for event in broker.replay_since(resume_from):
-                yield event.framed().encode()
+                if await self._admits(event):
+                    yield event.framed().encode()
                 last_sent = event.id
             while True:
                 if await self.request.is_disconnected():
@@ -102,12 +107,16 @@ class Stream:
                 for event in events:
                     if event.id <= last_sent:
                         continue  # already emitted in the replay tail (dedup at the seam)
-                    yield event.framed().encode()
+                    if await self._admits(event):
+                        yield event.framed().encode()
                     last_sent = event.id
                 if ended:
                     return
         finally:
             broker.unsubscribe(sub)
+
+    async def _admits(self, event: Event) -> bool:
+        return True if self.admits is None else await self.admits(event)
 
 
 def _queued(queue: asyncio.Queue[Event]) -> list[Event]:

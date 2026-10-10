@@ -30,6 +30,8 @@ class EventQueryCriteria:
     node_id: str | None = None
     graph_id: str | None = None
     source: str | None = None
+    # A project id: the events of that project's chunks alone. ``None`` reads the whole tenant.
+    project: str | None = None
     # An untimed event (no ``occurred_at``) falls outside every range, ``since``/``until`` alike.
     since: datetime | None = None
     until: datetime | None = None

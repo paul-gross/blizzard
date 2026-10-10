@@ -62,7 +62,11 @@ def _event_log(hub: HubHarness) -> EventLogService:
     """A real :class:`EventLogService` over the harness's own store and broker, for a
     test that wires its own :class:`CloseIntentDrainer` rather than taking
     ``hub.services.close_drain``."""
-    return EventLogService(events=cast(IWriteChunkEventsRepository, hub.services.chunks.events), publisher=hub.events)
+    return EventLogService(
+        events=cast(IWriteChunkEventsRepository, hub.services.chunks.events),
+        publisher=hub.events,
+        chunks=hub.services.chunks.record,
+    )
 
 
 def _event_logged_frames(hub: HubHarness, *, since: int = 0) -> list[dict]:

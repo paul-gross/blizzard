@@ -128,8 +128,12 @@ class OpenDecision:
         """Emit ``decision-opened`` if the chunk now carries a live, unresolved gate."""
         decision = self.services.chunks.decisions.decision_for_chunk(self.chunk_id)
         if decision is not None and decision.is_open:
+            chunk = self.services.chunks.record.get(self.chunk_id)
             self.services.events.publish_decision_opened(
-                self.chunk_id, decision.decision_id, key=f"decisions:{decision.decision_id}"
+                self.chunk_id,
+                decision.decision_id,
+                key=f"decisions:{decision.decision_id}",
+                project_id=chunk.project_id if chunk is not None else None,
             )
 
 

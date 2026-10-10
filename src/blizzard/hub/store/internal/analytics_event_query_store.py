@@ -20,7 +20,9 @@ from blizzard.hub.domain.observability.analytics.queries import (
     KeyedCount,
     QueriedEvent,
 )
+from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.internal.project_reach import chunks_of_project
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements
 
 #: ``events``' cursor is the shared codec over one part: the last row's id.
@@ -51,6 +53,8 @@ def _filtered_stmt(stmts: ScopedStatements, base: Select[Any], criteria: EventQu
             s.chunk_work_refs.c.source == criteria.source
         )
         stmt = stmt.where(t.c.chunk_id.in_(matching_chunks))
+    if criteria.project is not None:
+        stmt = stmt.where(t.c.chunk_id.in_(chunks_of_project(stmts, ProjectId(criteria.project))))
     if criteria.since is not None:
         stmt = stmt.where(t.c.occurred_at >= criteria.since)
     if criteria.until is not None:

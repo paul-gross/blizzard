@@ -53,30 +53,40 @@ class ChunkChangedPayload(SseFramePayload):
     #: :attr:`RunnerChangedPayload.by`; omitted on every other cause.
     by: str | None = None
     key: str | None = None
+    #: The chunk's project, stamped by the publisher; what a project-filtered stream selects on.
+    project_id: str | None = None
 
 
 class QuestionAskedPayload(SseFramePayload):
     chunk_id: str
     question_id: str
     key: str | None = None
+    #: The chunk's project, stamped by the publisher; what a project-filtered stream selects on.
+    project_id: str | None = None
 
 
 class QuestionAnsweredPayload(SseFramePayload):
     chunk_id: str
     question_id: str
     key: str | None = None
+    #: The chunk's project, stamped by the publisher; what a project-filtered stream selects on.
+    project_id: str | None = None
 
 
 class DecisionOpenedPayload(SseFramePayload):
     chunk_id: str
     decision_id: str
     key: str | None = None
+    #: The chunk's project, stamped by the publisher; what a project-filtered stream selects on.
+    project_id: str | None = None
 
 
 class DecisionResolvedPayload(SseFramePayload):
     chunk_id: str
     decision_id: str
     key: str | None = None
+    #: The chunk's project, stamped by the publisher; what a project-filtered stream selects on.
+    project_id: str | None = None
 
 
 class QueueChangedPayload(SseFramePayload):
@@ -101,6 +111,8 @@ class EventLoggedPayload(SseFramePayload):
     #: The runner's registered name at publish time; omitted whenever ``runner_id`` is ``null``.
     runner_name: str | None = None
     key: str | None = None
+    #: The named chunk's project, stamped by the recorder; omitted when no chunk is named.
+    project_id: str | None = None
 
     _null_when_absent: ClassVar[frozenset[str]] = frozenset({"chunk_id", "runner_id"})
 

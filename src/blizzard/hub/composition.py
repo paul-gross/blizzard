@@ -883,7 +883,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     # Recording an event is what publishes it (``bzh:operational-event-log``) — one
     # service, shared by every event-authoring call site below, over the same store and
     # broker instance every other collaborator holds.
-    event_log = EventLogService(events=chunk_events, publisher=events)
+    event_log = EventLogService(events=chunk_events, publisher=events, chunks=chunk_record)
     hub_node = HubNodeExecutor(
         facts=chunk_facts,
         artifacts=chunk_artifacts,

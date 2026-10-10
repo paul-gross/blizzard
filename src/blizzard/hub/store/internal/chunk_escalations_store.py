@@ -15,6 +15,7 @@ from blizzard.hub.domain.chunk.model import EscalationOpen
 from blizzard.hub.domain.chunk.ports.escalations import IWriteChunkEscalationsRepository
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
+from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import (
     ephemeral_ids_select,
@@ -34,10 +35,10 @@ class ChunkEscalationsStore:
         self._clock = clock
         self._facts = facts
 
-    def list_open_escalations(self) -> list[EscalationOpen]:
+    def list_open_escalations(self, *, project: ProjectId | None = None) -> list[EscalationOpen]:
         """Every open escalation fleet-wide, each decided by ``ChunkFacts.open_escalation``
         (#293) — the rule's one implementation, never a second derivation from raw rows."""
-        candidates = self._escalation_candidates(self._newest_escalation_per_chunk())
+        candidates = self._escalation_candidates(self._newest_escalation_per_chunk(project))
         facts_by_id = self._facts.load_facts_for(candidates)
         return [
             EscalationOpen(
@@ -148,7 +149,7 @@ class ChunkEscalationsStore:
             )
             return True
 
-    def _newest_escalation_per_chunk(self):  # type: ignore[no-untyped-def]
+    def _newest_escalation_per_chunk(self, project: ProjectId | None = None):  # type: ignore[no-untyped-def]
         """The newest ``escalations`` row per chunk, over the chunks that might still be
         live — a chunk a terminal fact settles, or one grouped away or deleted, can never
         hold an open escalation, so it is excluded in the query rather than loaded and
@@ -156,6 +157,8 @@ class ChunkEscalationsStore:
         live_chunk_ids = self._store.select(s.chunks, s.chunks.c.chunk_id).where(
             maybe_live(self._store), s.chunks.c.chunk_id.not_in(ephemeral_ids_select(self._store))
         )
+        if project is not None:
+            live_chunk_ids = live_chunk_ids.where(s.chunks.c.project_id == project)
         with self._store.read("_newest_escalation_per_chunk") as conn:
             newer = s.escalations.alias("newer")
             beaten = self._store.exists(
