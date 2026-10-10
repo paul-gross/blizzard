@@ -1,5 +1,6 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { Router, provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
@@ -7,6 +8,18 @@ import { type MeResponse, hubClient } from 'fleet';
 import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
 import { LAST_TENANT_KEY, PAGE_RELOAD, TAB_TENANT_KEY } from '../../core/auth/tenant-context';
 import { MobileTitlebar } from './mobile-titlebar';
+
+@Component({ selector: 'app-test-titlebar-view', template: '' })
+class TestView {}
+
+const GLACIER = {
+  project_id: 'proj_glacier',
+  slug: 'glacier',
+  name: 'Glacier',
+  description: '',
+  revision: 1,
+  created_at: '2026-10-01T00:00:00Z',
+};
 
 /** A caller holding two memberships — the only caller the switcher is offered to. */
 const TWO_TENANTS: MeResponse = {
@@ -30,7 +43,11 @@ describe('MobileTitlebar', () => {
     localStorage.clear();
     sessionStorage.clear();
     me = OPERATOR_ME_RESPONSE;
-    stub = stubRequestClient(hubClient, (_method, path) => (path === '/api/me' ? me : {}));
+    stub = stubRequestClient(hubClient, (_method, path) => {
+      if (path === '/api/me') return me;
+      if (path === '/api/projects') return { projects: [GLACIER] };
+      return {};
+    });
     reload = vi.fn();
     await TestBed.configureTestingModule({
       imports: [MobileTitlebar],
@@ -38,6 +55,10 @@ describe('MobileTitlebar', () => {
         provideZonelessChangeDetection(),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
         { provide: PAGE_RELOAD, useValue: reload },
+        provideRouter([
+          { path: 'p/:projectSlug', children: [{ path: '**', component: TestView }] },
+          { path: '**', component: TestView },
+        ]),
       ],
     }).compileComponents();
   });
@@ -105,6 +126,23 @@ describe('MobileTitlebar', () => {
 
     const caption = (fixture.nativeElement as HTMLElement).querySelector('[data-testid="mobile-titlebar-caption"]');
     expect(caption?.textContent?.trim()).toBe('Acme');
+  });
+
+  it('names the project the lens is on beside the tenant, with the menu closed', async () => {
+    await TestBed.inject(Router).navigateByUrl('/p/glacier/board');
+    const fixture = await mountIn(TWO_TENANTS);
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="mobile-titlebar-caption"]')?.textContent?.trim()).toBe('Acme');
+    expect(el.querySelector('[data-testid="mobile-titlebar-detail"]')?.textContent?.trim()).toBe('Glacier');
+  });
+
+  it('names no project on All, and reads none there', async () => {
+    await TestBed.inject(Router).navigateByUrl('/board');
+    const fixture = await mountIn(TWO_TENANTS);
+
+    expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="mobile-titlebar-detail"]')).toBeNull();
+    expect(stub.forRoute('/api/projects', 'GET')).toHaveLength(0);
   });
 
   it('offers no tenant switcher to a caller with one membership', async () => {

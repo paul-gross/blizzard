@@ -1,6 +1,7 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import { type BacklogPeekEntry, type QueuePeekEntry, getBacklogApiBacklogGet, getQueueApiQueueGet, LIVE_COVERED_POLL_BACKSTOP_MS, hubBacklogKey, hubQueueKey } from 'fleet';
+import { type BacklogPeekEntry, type QueuePeekEntry, getBacklogApiBacklogGet, getQueueApiQueueGet, LIVE_COVERED_POLL_BACKSTOP_MS, hubBacklogKey, hubQueueKey, lensedKey } from 'fleet';
+import { injectProjectFilter } from 'fleet/shell';
 import { DRAIN_LIMIT, drainPages } from '../../core/paginated-read';
 
 /**
@@ -9,19 +10,24 @@ import { DRAIN_LIMIT, drainPages } from '../../core/paginated-read';
  * (bzh:generated-client). Each entry carries its `position`, `graph_id`, and work
  * refs so the board can render and reshape the queue. The read is keyset-paginated
  * on the hub; {@link drainPages} follows `next_cursor` to exhaustion,
- * so each entry's `position` still reads as its absolute index in the whole order.
+ * so each entry's `position` still reads as its absolute index in the whole order. Under a project lens the read sends
+ * `?project=` and keys on it: the hub keeps the lensed project's entries, each still at its whole-order position.
  * Freshness: `EVENT_INVALIDATION_REGISTRY` (`web/projects/fleet/src/lib/sse/fleet-live.ts`).
  */
 export function injectHubQueueQuery() {
-  return injectQuery(() => ({
-    queryKey: hubQueueKey,
-    queryFn: (): Promise<QueuePeekEntry[]> =>
-      drainPages(
-        (cursor) => getQueueApiQueueGet({ query: { cursor, limit: DRAIN_LIMIT }, throwOnError: false }),
-        (page) => page.entries,
-      ),
-    refetchInterval: LIVE_COVERED_POLL_BACKSTOP_MS,
-  }));
+  const projectFilter = injectProjectFilter();
+  return injectQuery(() => {
+    const project = projectFilter() ?? undefined;
+    return {
+      queryKey: lensedKey(hubQueueKey, project ?? null),
+      queryFn: (): Promise<QueuePeekEntry[]> =>
+        drainPages(
+          (cursor) => getQueueApiQueueGet({ query: { cursor, limit: DRAIN_LIMIT, project }, throwOnError: false }),
+          (page) => page.entries,
+        ),
+      refetchInterval: LIVE_COVERED_POLL_BACKSTOP_MS,
+    };
+  });
 }
 
 /**
@@ -38,14 +44,18 @@ export function injectHubQueueQuery() {
  * as {@link injectHubQueueQuery}. Freshness: `EVENT_INVALIDATION_REGISTRY` (`web/projects/fleet/src/lib/sse/fleet-live.ts`).
  */
 export function injectHubBacklogQuery(canReorder: () => boolean) {
-  return injectQuery(() => ({
-    queryKey: hubBacklogKey,
-    enabled: canReorder(),
-    queryFn: (): Promise<BacklogPeekEntry[]> =>
-      drainPages(
-        (cursor) => getBacklogApiBacklogGet({ query: { cursor, limit: DRAIN_LIMIT }, throwOnError: false }),
-        (page) => page.entries,
-      ),
-    refetchInterval: LIVE_COVERED_POLL_BACKSTOP_MS,
-  }));
+  const projectFilter = injectProjectFilter();
+  return injectQuery(() => {
+    const project = projectFilter() ?? undefined;
+    return {
+      queryKey: lensedKey(hubBacklogKey, project ?? null),
+      enabled: canReorder(),
+      queryFn: (): Promise<BacklogPeekEntry[]> =>
+        drainPages(
+          (cursor) => getBacklogApiBacklogGet({ query: { cursor, limit: DRAIN_LIMIT, project }, throwOnError: false }),
+          (page) => page.entries,
+        ),
+      refetchInterval: LIVE_COVERED_POLL_BACKSTOP_MS,
+    };
+  });
 }

@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { CdkMenuTrigger } from '@angular/cdk/menu';
 import { KitMenuItem, KitMenuPanel, MobileTitlebar as FleetMobileTitlebar, ViewportMenu } from 'fleet';
 
+import { injectLensedProject } from '../../core/lensed-project';
 import { ProjectMenu } from './project-menu';
 import { TenantMenu } from './tenant-menu';
 import { injectTenantSwitch } from './tenant-switch';
@@ -28,7 +29,8 @@ import { injectTenantSwitch } from './tenant-switch';
  * The titlebar names the tenant the board is in beside the wordmark. Mobile has
  * no profile menu, so a caller with several memberships finds the tenant
  * switcher in this menu instead, the same {@link TenantMenu} submenu. The project lens is a submenu here too
- * ({@link ProjectMenu}), the mobile counterpart of the desktop tab row's lens control.
+ * ({@link ProjectMenu}), the mobile counterpart of the desktop tab row's lens control. With the menu closed the bar
+ * still shows the lens: beside the tenant it names the project the lens is on, and nothing more on All.
  */
 @Component({
   selector: 'app-mobile-titlebar',
@@ -44,4 +46,7 @@ export class MobileTitlebar {
 
   /** The memberships and the switch the tenant submenu offers, and the tenant the titlebar names. */
   protected readonly tenants = injectTenantSwitch();
+
+  /** The project the lens is on, which the bar names beside the tenant — `null` on All. */
+  protected readonly lensed = injectLensedProject();
 }

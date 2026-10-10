@@ -1,4 +1,4 @@
-<fleet-mobile-titlebar [live]="live()" [caption]="tenants.current()?.name ?? ''" [menu]="shellMenu" />
+<fleet-mobile-titlebar [live]="live()" [caption]="tenants.current()?.name ?? ''" [detail]="lensed()?.name ?? ''" [menu]="shellMenu" />
 <ng-template #shellMenu>
   <fleet-kit-menu-panel testid="mobile-titlebar-menu-panel">
     @if (tenants.switchable()) {

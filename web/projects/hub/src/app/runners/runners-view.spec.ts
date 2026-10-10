@@ -22,6 +22,9 @@ const row = (id: string, over: Partial<RunnerRow> = {}): RunnerRow => ({
   used: 0,
   subscriptionPaces: [],
   nowMs: Date.parse(NOW),
+  served: [],
+  unassigned: false,
+  unresolved: [],
   ...over,
 });
 

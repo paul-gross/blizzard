@@ -18,7 +18,7 @@ import { KitMenu } from '../../kit';
  *
  * `testid` roots the handles this component renders itself (`${testid}`,
  * `${testid}-livedot`, `${testid}-menu`), so two mounts (hub and runner) never
- * collide on the same `data-testid` (the caption is `${testid}-caption`) (`bzh:frontend-kit`'s globally-unique
+ * collide on the same `data-testid` (the caption is `${testid}-caption`, the detail `${testid}-detail`) (`bzh:frontend-kit`'s globally-unique
  * handle rule). The panel's own handle belongs to whoever declares the panel.
  * Defaults to `'mobile-titlebar'` — the hub's existing handle — so the hub side
  * needs no input to keep its specs passing.
@@ -47,7 +47,12 @@ export class MobileTitlebar {
    * leaves it, its full text on hover. Empty renders nothing. */
   readonly caption = input('');
 
+  /** A second short line after the caption — the hub names the project its lens is on — truncated like the caption,
+   * its full text on hover. Empty renders nothing. */
+  readonly detail = input('');
+
   protected readonly captionTestid = computed(() => `${this.testid()}-caption`);
+  protected readonly detailTestid = computed(() => `${this.testid()}-detail`);
 
   protected readonly livedotTestid = computed(() => `${this.testid()}-livedot`);
   protected readonly menuTestid = computed(() => `${this.testid()}-menu`);

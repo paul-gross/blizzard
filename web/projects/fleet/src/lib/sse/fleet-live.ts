@@ -1,4 +1,4 @@
-import { DestroyRef, EnvironmentInjector, Injectable, type Signal, inject, signal } from '@angular/core';
+import { DestroyRef, type EffectRef, EnvironmentInjector, Injectable, type Signal, effect, inject, signal, untracked } from '@angular/core';
 import { QueryClient } from '@tanstack/angular-query-experimental';
 
 import {
@@ -29,6 +29,7 @@ import {
   hubRunnersKey,
 } from '../core/query-keys';
 import { FLEET_CLOCK } from '../core/now-signal';
+import { HUB_PROJECT_FILTER } from '../core/project-filter';
 import { LiveInvalidationSpine } from './live-invalidation-spine';
 import { type SseStatus, SseService } from './sse.service';
 
@@ -36,6 +37,12 @@ export type { RunnerChangeKind };
 
 /** The hub's SSE stream endpoint (deliberately not in OpenAPI — native EventSource). */
 export const HUB_EVENT_STREAM_URL = '/api/events/stream';
+
+/** The stream's URL for the project `project` names: `?project=` narrows the frames to that project's, `null` reads the
+ * whole tenant. */
+export function hubEventStreamUrl(project: string | null): string {
+  return project === null ? HUB_EVENT_STREAM_URL : `${HUB_EVENT_STREAM_URL}?project=${encodeURIComponent(project)}`;
+}
 
 /**
  * How long {@link LiveInvalidationSpine.dispatch} accumulates invalidation keys before
@@ -271,6 +278,11 @@ export class FleetLiveUpdates {
   private readonly injector = inject(EnvironmentInjector);
   private readonly destroyRef = inject(DestroyRef);
   private readonly clock = inject(FLEET_CLOCK);
+  private readonly projectFilter = inject(HUB_PROJECT_FILTER);
+  /** The project the open stream is narrowed to — the filter's value when the stream last opened. */
+  private streamProject: string | null = null;
+  /** Watches the project filter once {@link start} has run; `null` before. */
+  private lensRef: EffectRef | null = null;
   private seq = 0;
   private readonly _log = signal<readonly LoggedEvent[]>([]);
   private readonly spine = new LiveInvalidationSpine<HubEventPayload, HubEventType>({
@@ -278,7 +290,7 @@ export class FleetLiveUpdates {
     queryClient: this.queryClient,
     injector: this.injector,
     destroyRef: this.destroyRef,
-    streamUrl: HUB_EVENT_STREAM_URL,
+    streamUrl: () => hubEventStreamUrl(this.streamProject),
     eventTypes: HUB_EVENT_TYPES,
     registry: EVENT_INVALIDATION_REGISTRY,
     coalesceWindowMs: INVALIDATION_COALESCE_WINDOW_MS,
@@ -309,9 +321,34 @@ export class FleetLiveUpdates {
   /**
    * Open the live stream and wire it to the query cache. Idempotent — a second call
    * is a no-op. Auto-closes on the caller's {@link DestroyRef} (the app teardown).
+   *
+   * The stream follows the project filter ({@link HUB_PROJECT_FILTER}): it opens with the filter's `?project=`, and when
+   * the filter changes it is closed and reopened on the new one — one stream at a time, the feed ring emptied for the
+   * new stream's replay to refill. An app that provides no filter never reopens.
    */
   start(): void {
+    if (this.lensRef !== null) return;
+    this.streamProject = untracked(this.projectFilter);
     this.spine.start();
+    // `untracked` around the `effect()` call: `start()` runs inside the app root's own effect (`app.ts`), and an effect
+    // created there must not be tracked by it (NG0602) — the same guard the spine puts on its own effects.
+    this.lensRef = untracked(() =>
+      effect(
+        () => {
+          const project = this.projectFilter();
+          if (project === this.streamProject) return;
+          untracked(() => this.reopen(project));
+        },
+        { injector: this.injector },
+      ),
+    );
+  }
+
+  /** Close the stream and open it again narrowed to `project`, with the feed ring emptied. */
+  private reopen(project: string | null): void {
+    this.streamProject = project;
+    this._log.set([]);
+    this.spine.restart();
   }
 
   /** Append one frame to the bounded Activity feed ring, dropping the oldest past the cap.

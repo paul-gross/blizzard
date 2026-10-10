@@ -1,6 +1,7 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import { type ActivityView, listActivityApiActivityGet, hubActivityKey } from 'fleet';
+import { type ActivityView, listActivityApiActivityGet, hubActivityKey, lensedKey } from 'fleet';
+import { injectProjectFilter } from 'fleet/shell';
 
 /**
  * The backfill row cap for `GET /api/activity` — reconciled with
@@ -12,9 +13,9 @@ export const ACTIVITY_LIMIT = 200;
 /**
  * Hub `GET /api/activity` read — the Activity feed panel's backfill-on-load,
  * through TanStack Query and the generated hub client
- * (bzh:generated-client). Unfiltered (the rail always shows the whole recent feed), so
- * unlike {@link injectHubEventsQuery} this takes no filter accessor and rides one
- * fixed query key.
+ * (bzh:generated-client). Takes no filter accessor, unlike {@link injectHubEventsQuery}: the rail shows the whole
+ * recent feed, narrowed only by the project lens — under a lens the read sends `?project=` (the hub keeps the rows of the
+ * project's chunks and of the runners that serve it) and keys on it.
  *
  * `limit` is hardcoded to {@link ACTIVITY_LIMIT} rather than left to the generated
  * client's own default, so the backfill cap and the panel's rendered-row cap
@@ -24,15 +25,19 @@ export const ACTIVITY_LIMIT = 200;
  * ({@link FleetLiveUpdates}) is what keeps the feed current after the initial read.
  */
 export function injectHubActivityQuery() {
-  return injectQuery(() => ({
-    queryKey: hubActivityKey,
-    queryFn: async (): Promise<ActivityView[]> => {
-      const { data, error } = await listActivityApiActivityGet({
-        query: { limit: ACTIVITY_LIMIT },
-        throwOnError: false,
-      });
-      if (error) throw error;
-      return data?.activity ?? [];
-    },
-  }));
+  const projectFilter = injectProjectFilter();
+  return injectQuery(() => {
+    const project = projectFilter();
+    return {
+      queryKey: lensedKey(hubActivityKey, project),
+      queryFn: async (): Promise<ActivityView[]> => {
+        const { data, error } = await listActivityApiActivityGet({
+          query: { limit: ACTIVITY_LIMIT, project: project ?? undefined },
+          throwOnError: false,
+        });
+        if (error) throw error;
+        return data?.activity ?? [];
+      },
+    };
+  });
 }

@@ -1,0 +1,17 @@
+:host {
+  display: block;
+  flex: none;
+  min-width: 0;
+}
+/* Amber, the board's "something else must happen before this continues" tone: the work is parked, not failing. */
+.unserved {
+  margin: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--amber-dim);
+  border-left-width: 2px;
+  background: var(--overlay-20);
+  color: var(--amber-hi);
+  font-family: var(--mono);
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}

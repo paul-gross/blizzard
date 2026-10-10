@@ -4,6 +4,9 @@
   @if (caption()) {
     <span class="caption" [attr.title]="caption()" [attr.data-testid]="captionTestid()">{{ caption() }}</span>
   }
+  @if (detail()) {
+    <span class="detail" [attr.title]="detail()" [attr.data-testid]="detailTestid()">{{ detail() }}</span>
+  }
   <span class="spacer"></span>
   <span
     class="livedot"

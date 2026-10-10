@@ -11,6 +11,7 @@ import { injectHubRunnersQuery } from '../../core/runners.query';
 
 import { startOfLocalDayIso } from '../../core/local-day';
 import { doneTodayRows, doneTodayTotal, glanceVitals, inMotionRows, liveRunners, needsYouRows, terminalTotal, upNextRows } from './glance-board.model';
+import { UnservedBanner } from '../unserved/unserved-banner';
 import { GlanceView, type AttentionRow, type DoneRow, type MotionRow, type UpNextRow, type Vitals } from './glance-view';
 
 /**
@@ -21,7 +22,7 @@ import { GlanceView, type AttentionRow, type DoneRow, type MotionRow, type UpNex
 @Component({
   selector: 'app-glance-board',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [GlanceView],
+  imports: [GlanceView, UnservedBanner],
   templateUrl: './glance-board.html',
   styleUrl: './glance-board.css',
 })

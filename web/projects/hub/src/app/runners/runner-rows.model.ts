@@ -1,6 +1,8 @@
 import { type ChunkStatus, type hubApi, type ExternalSubscriptionUsageWindowView, RunnerConnection, type RunnerRegistryView, compactRef, ageMs, formatRefreshedAgo, formatSeenAgo } from 'fleet';
 import type { ChunkSummary } from 'fleet/shell';
 
+import { isUnassigned, servedProjects, unresolvedEntries } from '../core/project-serving';
+
 /** One claim line under a registry row: the chunk a runner holds, where it sits, and
  * how it is doing there — the node alone reads the same for a chunk actively
  * running and one parked `needs_human`. */
@@ -82,6 +84,14 @@ export interface RunnerRow extends RunnerRegistryView {
   readonly claims: readonly ClaimLine[];
   readonly used: number;
   readonly subscriptionPaces: readonly SubscriptionPace[];
+  /** The display name of each project the runner serves, in its declaration's order; an entry naming no project of the
+   * tenant is in {@link unresolved} instead. */
+  readonly served: readonly string[];
+  /** Whether the runner declares no project at all — it is offered no work, so an idle row reads as unassigned rather
+   * than as starved. */
+  readonly unassigned: boolean;
+  /** The entries of the runner's declaration that name no project of the tenant, as the runner wrote them. */
+  readonly unresolved: readonly string[];
   /** The registry's one clock reading (`injectNowSignal`), so every time-relative label on
    * the row — pace bars, "seen Ns ago" — ticks together rather than each reading `Date.now()`. */
   readonly nowMs: number;
@@ -202,6 +212,29 @@ export function foldRunnerRows(
     claims: claims.get(runner.runner_id) ?? [],
     used: used.get(runner.runner_id) ?? 0,
     subscriptionPaces: toSubscriptionPaces(runner, nowMs),
+    served: servedNames(runner),
+    unassigned: isUnassigned(runner),
+    unresolved: unresolvedEntries(runner),
     nowMs,
   }));
+}
+
+/** The display name of each resolved project in `runner`'s declaration — its name, else its slug. */
+function servedNames(runner: RunnerRegistryView): readonly string[] {
+  return servedProjects(runner)
+    .filter((served) => served.project_id != null)
+    .map((served) => served.name ?? served.slug ?? served.entry);
+}
+
+/**
+ * The runners a registry under the project lens shows: on All (`null`) every runner; under a lens the runners whose
+ * declaration resolves to the lensed project (matched by its current slug, which the lens holds), and the unassigned
+ * ones, which serve no project and so wait on every project alike.
+ */
+export function lensRunners(runners: readonly RunnerRegistryView[], slug: string | null): readonly RunnerRegistryView[] {
+  if (slug === null) return runners;
+  return runners.filter(
+    (runner) =>
+      isUnassigned(runner) || servedProjects(runner).some((served) => served.project_id != null && served.slug === slug),
+  );
 }

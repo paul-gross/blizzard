@@ -11,6 +11,12 @@
   border-bottom: 1px solid var(--bezel);
   font-family: var(--mono);
 }
+/* Everything but the caption and the detail holds its size, so only those two give way. */
+fleet-brand-mark,
+.livedot,
+.menu {
+  flex: none;
+}
 .word {
   flex: none;
   color: var(--snow);
@@ -18,15 +24,25 @@
   font-weight: 700;
   letter-spacing: 0.06em;
 }
-/* The only part of the bar that gives way: a long caption truncates rather than
+/* The only parts of the bar that give way: a long caption or detail truncates rather than
    push the live dot and the menu off the edge. */
-.caption {
+.caption,
+.detail {
   min-width: 0;
   overflow: hidden;
   color: var(--label);
   font-size: var(--fs-sm);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* The detail reads as a step below the caption — the hub's project lens inside its tenant. */
+.detail {
+  flex-shrink: 0.5;
+  color: var(--amber-hi);
+}
+.detail::before {
+  content: '› ';
+  color: var(--label-dim);
 }
 .spacer {
   flex: 1;

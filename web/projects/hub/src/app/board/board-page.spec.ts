@@ -7,7 +7,7 @@ import { Router, provideRouter, withRouterConfig } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { BoardShell } from './board-shell/board-shell';
-import { compactRef, hubClient, hubQueueKey } from 'fleet';
+import { compactRef, hubClient, hubQueueKey, lensedKey } from 'fleet';
 import { injectDeleteChunkMutation } from './chunks/delete.mutations';
 import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
 import { vi } from 'vitest';
@@ -570,7 +570,7 @@ describe('BoardPage', () => {
 
       // A's response carries A's order and predates B's write. B's later override
       // must continue to win while B waits to start its own refresh.
-      queryClient.setQueryData(hubQueueKey, [
+      queryClient.setQueryData(lensedKey(hubQueueKey, null), [
         { chunk_id: READY_NEXT, graph_id: 'gr_1', position: 0, work_refs: [] },
         { chunk_id: READY, graph_id: 'gr_1', position: 1, work_refs: [] },
       ]);
@@ -582,7 +582,7 @@ describe('BoardPage', () => {
       expect(laneIds(el, 'ready')).toEqual([compactRef(READY), compactRef(READY_NEXT)]);
 
       // B's own response now confirms B's order and retires its override.
-      queryClient.setQueryData(hubQueueKey, [
+      queryClient.setQueryData(lensedKey(hubQueueKey, null), [
         { chunk_id: READY, graph_id: 'gr_1', position: 0, work_refs: [] },
         { chunk_id: READY_NEXT, graph_id: 'gr_1', position: 1, work_refs: [] },
       ]);

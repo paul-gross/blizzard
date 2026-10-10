@@ -45,6 +45,9 @@ const ROWS: readonly RunnerRow[] = [
     registered_at: NOW,
     last_seen_at: NOW,
     nowMs: Date.parse(NOW),
+    served: [],
+    unassigned: false,
+    unresolved: [],
     online: true,
     hub_paused: false,
     locally_paused: false,
@@ -78,6 +81,9 @@ const ROWS: readonly RunnerRow[] = [
     registered_at: NOW,
     last_seen_at: NOW,
     nowMs: Date.parse(NOW),
+    served: [],
+    unassigned: false,
+    unresolved: [],
     online: false,
     hub_paused: true,
     locally_paused: true,
@@ -106,6 +112,9 @@ const ROWS: readonly RunnerRow[] = [
     registered_at: NOW,
     last_seen_at: NOW,
     nowMs: Date.parse(NOW),
+    served: [],
+    unassigned: false,
+    unresolved: [],
     online: false,
     hub_paused: false,
     locally_paused: false,
@@ -125,6 +134,9 @@ const ROWS: readonly RunnerRow[] = [
     registered_at: NOW,
     last_seen_at: NOW,
     nowMs: Date.parse(NOW),
+    served: [],
+    unassigned: false,
+    unresolved: [],
     online: true,
     hub_paused: false,
     locally_paused: false,
@@ -175,6 +187,9 @@ const ROWS: readonly RunnerRow[] = [
     registered_at: null,
     last_seen_at: null,
     nowMs: Date.parse(NOW),
+    served: [],
+    unassigned: false,
+    unresolved: [],
     online: false,
     hub_paused: false,
     locally_paused: false,
@@ -192,6 +207,10 @@ const ROWS: readonly RunnerRow[] = [
     registered_at: NOW,
     last_seen_at: NOW,
     nowMs: Date.parse(NOW),
+    // Serving several long-named projects, with an entry naming no project of the tenant.
+    served: ['Celestial Navigation Platform', 'Northwind Interplanetary Logistics', 'Blizzard'],
+    unassigned: false,
+    unresolved: ['permafrost-archive-and-recovery-service'],
     online: true,
     hub_paused: false,
     locally_paused: false,
@@ -256,6 +275,19 @@ describe('mobile Fleet screen layout shell sweep (web:shell-sweep)', () => {
 
       // The claim line's long chunk id and the subscription group's long name are the
       // two spans most likely to force a card wider than its own box.
+      // The served projects and the unresolved entry wrap inside their card.
+      const servedMarks = root.querySelectorAll<HTMLElement>(
+        '[data-runner="rn_01KXKVVF1J3D6H6VYZ3XYN7Q2M"] [data-testid="runner-served-project"], [data-runner="rn_01KXKVVF1J3D6H6VYZ3XYN7Q2M"] [data-testid="runner-unresolved"]',
+      );
+      expect(servedMarks).toHaveLength(4);
+      for (const mark of servedMarks) {
+        const rect = mark.getBoundingClientRect();
+        expect(rect.width, `${mark.textContent} has no width`).toBeGreaterThan(0);
+        expect(rect.right, `${mark.textContent} is past the panel at ${width}px`).toBeLessThanOrEqual(
+          panel.getBoundingClientRect().right + 1,
+        );
+      }
+
       const claim = root.querySelector<HTMLElement>('[data-runner="rn_online"] [data-testid="mobile-fleet-runner-claim"]')!;
       expect(claim.getBoundingClientRect().right).toBeLessThanOrEqual(cards[0].getBoundingClientRect().right + 1);
 

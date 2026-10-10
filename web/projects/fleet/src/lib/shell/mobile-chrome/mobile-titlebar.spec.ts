@@ -10,7 +10,7 @@ import { MobileTitlebar } from './mobile-titlebar';
   selector: 'fleet-test-host',
   imports: [KitMenuItem, KitMenuPanel, MobileTitlebar],
   template: `
-    <fleet-mobile-titlebar [live]="live()" [testid]="testid()" [caption]="caption()" [menu]="shellMenu" />
+    <fleet-mobile-titlebar [live]="live()" [testid]="testid()" [caption]="caption()" [detail]="detail()" [menu]="shellMenu" />
     <ng-template #shellMenu>
       <fleet-kit-menu-panel [testid]="testid() + '-menu-panel'">
         <fleet-kit-menu-item testid="shell-item">Appearance</fleet-kit-menu-item>
@@ -22,6 +22,7 @@ class TestHost {
   readonly live = signal(true);
   readonly testid = signal('mobile-titlebar');
   readonly caption = signal('');
+  readonly detail = signal('');
 }
 
 describe('MobileTitlebar', () => {
@@ -84,5 +85,19 @@ describe('MobileTitlebar', () => {
     const caption = el.querySelector('[data-testid="mobile-titlebar-caption"]');
     expect(caption?.textContent?.trim()).toBe('Acme Robotics');
     expect(caption?.getAttribute('title')).toBe('Acme Robotics');
+  });
+
+  it('renders no detail until one is given, then names it after the caption with its full text on hover', async () => {
+    fixture.componentInstance.caption.set('Acme Robotics');
+    await fixture.whenStable();
+    expect(el.querySelector('[data-testid="mobile-titlebar-detail"]')).toBeNull();
+
+    fixture.componentInstance.detail.set('Glacier');
+    await fixture.whenStable();
+
+    const detail = el.querySelector('[data-testid="mobile-titlebar-detail"]');
+    expect(detail?.textContent?.trim()).toBe('Glacier');
+    expect(detail?.getAttribute('title')).toBe('Glacier');
+    expect(el.querySelector('[data-testid="mobile-titlebar-caption"]')?.nextElementSibling).toBe(detail);
   });
 });
