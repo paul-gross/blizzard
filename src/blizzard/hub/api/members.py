@@ -30,7 +30,7 @@ from blizzard.hub.auth.memberships import (
 )
 from blizzard.hub.auth.models import Identity, ResolvedIdentity
 from blizzard.hub.composition import HubServices
-from blizzard.hub.tenancy import TenantId
+from blizzard.hub.tenancy import StoreScope, TenantId
 from blizzard.wire.user import MemberRoleRequest, MemberView, UserIdentityView
 
 router = APIRouter(
@@ -62,12 +62,12 @@ def identity_views(identities: list[Identity]) -> list[UserIdentityView]:
 def change_membership(services: HubServices, actor: ResolvedIdentity, user_id: str, to_role: Role | None) -> Member:
     """Move ``user_id`` to ``to_role`` (``None`` revokes) in the actor's tenant, answering each refusal: ``404`` for a
     user that does not exist or is no member, alike; ``403`` for changing your own role; ``409`` for the tenant's last
-    admin."""
+    admin. A revocation ends the user's open event streams in the tenant."""
     subject = services.users.get(user_id)
     if subject is None:
         raise _unknown(NotAMember(user_id))
     try:
-        return services.members.change(
+        member = services.members.change(
             actor=actor, subject=services.members.member(subject, tenant=tenant_of(actor)), to_role=to_role
         )
     except NotAMember as exc:
@@ -76,6 +76,11 @@ def change_membership(services: HubServices, actor: ResolvedIdentity, user_id: s
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except LastAdminKept as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    if member.role is None:
+        # The revocation has committed: the user's open event streams in the tenant end. Every membership role
+        # holds the stream's permission, so a role change ends none.
+        services.tenants.open_services(StoreScope(member.tenant)).events.end_subscriber(user_id)
+    return member
 
 
 def _unknown(exc: NotAMember) -> HTTPException:

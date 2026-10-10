@@ -41,8 +41,9 @@ class Cursor:
 class Stream:
     """One subscriber's live connection — its broker, its request, its resume cursor,
     its daemon's reserved open-of-stream comment, and (optionally) the shutdown signal
-    and keepalive interval it races its live wait against, and the predicate selecting which
-    events it is sent. Without ``admits`` every event is sent."""
+    and keepalive interval it races its live wait against, the predicate selecting which
+    events it is sent, and the principal it is opened for. Without ``admits`` every event is
+    sent."""
 
     broker: EventBroker | None
     request: Request
@@ -53,6 +54,8 @@ class Stream:
     #: Whether an event is sent to this subscriber — awaited on the event loop, so it never reads a store
     #: there. Applied alike to the replay tail and to live events; a refused event is skipped.
     admits: Callable[[Event], Awaitable[bool]] | None = None
+    #: The principal the subscription is opened for, so its broker can end that principal's streams.
+    owner: str | None = None
 
     async def frames(self) -> AsyncIterator[bytes]:
         """Yield the reserved comment, the buffered replay tail, then live events until the broker closes.
@@ -68,7 +71,7 @@ class Stream:
             return
 
         shutdown = self.shutdown if self.shutdown is not None else asyncio.Event()
-        sub = broker.subscribe()
+        sub = broker.subscribe(self.owner)
         # A cursor above this broker's high-water mark is a prior instance's id — degrade it to 0
         # (``Cursor.of``'s own fallback) for one value shared by the replay and the dedup below.
         latest = broker.latest_id()

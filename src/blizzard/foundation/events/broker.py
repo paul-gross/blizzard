@@ -33,14 +33,16 @@ class Event:
 
 
 class Subscriber:
-    """One live SSE connection: its event queue, the loop that drains it, and the signal that its
-    broker has closed — set after every event published before the close is queued."""
+    """One live SSE connection: its event queue, the loop that drains it, the principal it was opened
+    for (``None`` when its daemon names none), and the signal that it has ended — its broker closed, or
+    its owner was ended — set after every event published before the end is queued."""
 
-    __slots__ = ("ended", "loop", "queue")
+    __slots__ = ("ended", "loop", "owner", "queue")
 
-    def __init__(self, queue: asyncio.Queue[Event], loop: asyncio.AbstractEventLoop) -> None:
+    def __init__(self, queue: asyncio.Queue[Event], loop: asyncio.AbstractEventLoop, owner: str | None = None) -> None:
         self.queue = queue
         self.loop = loop
+        self.owner = owner
         self.ended = asyncio.Event()
 
 
@@ -76,10 +78,10 @@ class EventBroker:
 
     # --- subscription (called from the async SSE handler) -------------------
 
-    def subscribe(self) -> Subscriber:
-        """Register a live connection, capturing the running loop for the handoff. A connection to a
-        closed broker is ended from the start."""
-        sub = Subscriber(asyncio.Queue(), asyncio.get_running_loop())
+    def subscribe(self, owner: str | None = None) -> Subscriber:
+        """Register a live connection opened for ``owner``, capturing the running loop for the handoff. A
+        connection to a closed broker is ended from the start."""
+        sub = Subscriber(asyncio.Queue(), asyncio.get_running_loop(), owner)
         with self._lock:
             if self._closed:
                 sub.ended.set()
@@ -96,6 +98,17 @@ class EventBroker:
             self._subscribers.clear()
         for sub in subscribers:
             # Queued behind every event handed over before the close, so none of them is lost.
+            with contextlib.suppress(RuntimeError):
+                sub.loop.call_soon_threadsafe(sub.ended.set)
+
+    def end_subscriber(self, owner: str) -> None:
+        """End every open connection of ``owner`` as :meth:`close` ends them all — each sends what it already
+        holds, then returns — leaving every other connection and the broker open. Called from a worker
+        thread, once the write that ends ``owner``'s access has committed."""
+        with self._lock:
+            ended = [sub for sub in self._subscribers if sub.owner == owner]
+            self._subscribers.difference_update(ended)
+        for sub in ended:
             with contextlib.suppress(RuntimeError):
                 sub.loop.call_soon_threadsafe(sub.ended.set)
 

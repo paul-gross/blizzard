@@ -1,8 +1,9 @@
 """The hub live-event stream — ``GET /api/events/stream`` (SSE), excluded from the OpenAPI schema.
 
 A subscriber registers with its tenant's :class:`~blizzard.hub.events.broker.EventBroker`, replays
-the buffered tail newer than its ``Last-Event-ID``, then streams live until it disconnects or its
-tenant's broker is dropped — ids are monotonic, so an event caught in both is emitted once.
+the buffered tail newer than its ``Last-Event-ID``, then streams live until it disconnects, its
+tenant's broker is dropped, or its viewer's membership in the tenant ends — ids are monotonic, so an
+event caught in both is emitted once.
 :class:`Cursor`/:class:`Stream` are the runner-shared machinery; only the reserved open-of-stream
 comment names this daemon."""
 
@@ -27,6 +28,7 @@ from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.project_params import QueryProject
+from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.chunk.model import ActivityEntry, ActivityFeed, EventFeed, OperationalEvent
 from blizzard.hub.domain.chunk.ports.events import FeedLens
@@ -43,18 +45,23 @@ _RESERVED_COMMENT = ": blizzard hub event stream\n\n"
 FEED_MAX_LIMIT = 200
 
 
-@router.get(
-    "/events/stream",
-    include_in_schema=False,
-    dependencies=[Depends(reject_runner_principal), Depends(require(Permission.FLEET_VIEW))],
-)
-async def events_stream(request: Request, services: Services, project: QueryProject = None) -> StreamingResponse:
+@router.get("/events/stream", include_in_schema=False, dependencies=[Depends(reject_runner_principal)])
+async def events_stream(
+    request: Request,
+    services: Services,
+    project: QueryProject = None,
+    viewer: Annotated[ResolvedIdentity | None, Depends(require(Permission.FLEET_VIEW))] = None,
+) -> StreamingResponse:
     """Subscribe to the live event stream of the request's tenant, resuming from ``Last-Event-ID`` if
-    present. The stream ends when the tenant's broker is dropped. ``?project=`` sends only the frames
-    :class:`ProjectLens` selects for that project, the replay tail's included."""
+    present. The stream ends when the tenant's broker is dropped, or when the viewer's membership in the
+    tenant ends. ``?project=`` sends only the frames :class:`ProjectLens` selects for that project, the
+    replay tail's included."""
     shutdown: asyncio.Event | None = getattr(request.app.state, "shutdown", None)
     admits = None if project is None else (await _stream_lens(services, project)).admits
-    stream = Stream(services.events, request, Cursor.of(request), _RESERVED_COMMENT, shutdown, admits=admits)
+    owner = viewer.user_id if viewer is not None else None
+    stream = Stream(
+        services.events, request, Cursor.of(request), _RESERVED_COMMENT, shutdown, admits=admits, owner=owner
+    )
     return StreamingResponse(stream.frames(), media_type="text/event-stream")
 
 
