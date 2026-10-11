@@ -9,6 +9,7 @@ from __future__ import annotations
 from sqlalchemy import Table
 from sqlalchemy.engine import Connection
 
+from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.config.changes import ISecretReferences, RecordKind, RecordRef
 from blizzard.hub.store.internal.newest_fact import newest_retired_select
 from blizzard.hub.store.schema import (
@@ -33,14 +34,19 @@ def active_referrers(conn: Connection, secret_names: list[str]) -> dict[str, lis
         return found
     stmts = statements_of(conn)
     for kind, table, facts in _REFERRING:
-        rows = conn.execute(
-            stmts.select(table, table.c.secret_name, table.c.name)
-            .where(
-                table.c.secret_name.in_(secret_names),
-                table.c.name.not_in(newest_retired_select(stmts, facts, facts.c.name)),
+        rows = []
+        for batch in id_batches(secret_names):
+            rows.extend(
+                conn.execute(
+                    stmts.select(table, table.c.secret_name, table.c.name)
+                    .where(
+                        table.c.secret_name.in_(batch),
+                        table.c.name.not_in(newest_retired_select(stmts, facts, facts.c.name)),
+                    )
+                    .order_by(table.c.name)
+                ).all()
             )
-            .order_by(table.c.name)
-        ).all()
+        rows.sort(key=lambda row: row.name)
         for row in rows:
             found[row.secret_name].append(RecordRef(kind, row.name))
     return found

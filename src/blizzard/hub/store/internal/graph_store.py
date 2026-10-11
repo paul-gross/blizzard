@@ -405,14 +405,26 @@ class GraphStore:
         node_rows = conn.execute(self._store.select(graph_nodes).where(graph_nodes.c.graph_id.in_(batch_ids))).all()
         node_ids = {nr.node_id for nr in node_rows}
         node_graph_of = {nr.node_id: nr.graph_id for nr in node_rows}
-        choice_rows = conn.execute(self._store.select(graph_choices).where(graph_choices.c.node_id.in_(node_ids))).all()
+        choice_rows = [
+            cr
+            for node_batch in id_batches(sorted(node_ids))
+            for cr in conn.execute(
+                self._store.select(graph_choices).where(graph_choices.c.node_id.in_(node_batch))
+            ).all()
+        ]
         choices_by_node: dict[str, list[Choice]] = defaultdict(list)
         for cr in choice_rows:
             choices_by_node[cr.node_id].append(CHOICES.of(cr))
         nodes_by_graph: dict[str, list[Node]] = defaultdict(list)
         for nr in node_rows:
             nodes_by_graph[nr.graph_id].append(NODES.of(nr, choices=choices_by_node[nr.node_id]))
-        edge_rows = conn.execute(self._store.select(graph_edges).where(graph_edges.c.from_node_id.in_(node_ids))).all()
+        edge_rows = [
+            er
+            for node_batch in id_batches(sorted(node_ids))
+            for er in conn.execute(
+                self._store.select(graph_edges).where(graph_edges.c.from_node_id.in_(node_batch))
+            ).all()
+        ]
         edges_by_graph: dict[str, list[Edge]] = defaultdict(list)
         for er in edge_rows:
             edges_by_graph[node_graph_of[er.from_node_id]].append(EDGES.of(er))

@@ -369,21 +369,21 @@ class ChunkDecisionsStore:
         )
 
 
-def decision_closure_ids(conn: Connection, decision_ids: Sequence[str]) -> set[str]:
-    """The ids among ``decision_ids`` closed by a fact in :data:`_DECISION_CLOSURE_TABLES`
+def decision_closure_ids(conn: Connection, decision_ids: Sequence[str] | None) -> set[str]:
+    """The ids among ``decision_ids`` — every decision when ``None`` — closed by a fact in :data:`_DECISION_CLOSURE_TABLES`
     — :meth:`ChunkDecisionsStore._not_closed_clause`'s own predicate, inverted, so every
     closure read (the live decision, the bulk status read, the chunk facts) shares one rule."""
-    if not decision_ids:
+    if decision_ids is not None and not decision_ids:
         return set()
     stmts = statements_of(conn)
     closed: set[str] = set()
-    for batch in id_batches(decision_ids):
-        rows = conn.execute(
-            stmts.select(s.decisions, s.decisions.c.decision_id).where(
-                s.decisions.c.decision_id.in_(batch), ~ChunkDecisionsStore._not_closed_clause(stmts)
-            )
-        ).all()
-        closed |= {r.decision_id for r in rows}
+    for batch in id_batches(decision_ids) if decision_ids is not None else [None]:
+        stmt = stmts.select(s.decisions, s.decisions.c.decision_id).where(
+            ~ChunkDecisionsStore._not_closed_clause(stmts)
+        )
+        if batch is not None:
+            stmt = stmt.where(s.decisions.c.decision_id.in_(batch))
+        closed |= {r.decision_id for r in conn.execute(stmt).all()}
     return closed
 
 
