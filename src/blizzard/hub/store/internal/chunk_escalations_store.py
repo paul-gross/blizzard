@@ -158,8 +158,8 @@ class ChunkEscalationsStore:
 
         A **drop-only** narrowing, sound because each superseding arm (a lease minted, or a requeue
         recorded, strictly after the escalation) is one ``ChunkFacts.open_escalation`` also has
-        (``model.py``), so a chunk dropped here is one the fold would drop too; arms it lacks
-        (completion) only leave extra work for the fold, never a wrong answer."""
+        (``src/blizzard/hub/domain/chunk/model.py``), so a chunk dropped here is one the fold would drop too; arms
+        it lacks (completion) only leave extra work for the fold, never a wrong answer."""
         live_chunk_ids = self._store.select(s.chunks, s.chunks.c.chunk_id).where(
             maybe_live(self._store), s.chunks.c.chunk_id.not_in(ephemeral_ids_select(self._store))
         )
