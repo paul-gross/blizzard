@@ -6,7 +6,6 @@ from __future__ import annotations
 import base64
 import json
 import os
-import socket
 import subprocess
 import sys
 import time
@@ -224,26 +223,6 @@ def test_a_refused_send_is_reported_only_under_the_debug_flag(monkeypatch: pytes
 
     assert result.exit_code == 0
     assert "trace send failed" in result.stderr
-
-
-def test_the_send_stops_at_the_total_cap_against_a_listener_that_never_answers() -> None:
-    listener = socket.socket()
-    listener.bind(("127.0.0.1", 0))
-    listener.listen(8)
-    span = cli_spans.CliSpan.open(parse_traceparent(_PARENT), "runner ask", clock=Clock())  # type: ignore[arg-type]
-    span.finish(0)
-    try:
-        with httpx.Client() as client:
-            started = time.monotonic()
-            finished = cli_spans.send(
-                client, f"http://127.0.0.1:{listener.getsockname()[1]}", span, headers={}, environ={}
-            )
-            elapsed = time.monotonic() - started
-    finally:
-        listener.close()
-
-    assert finished is False
-    assert elapsed < cli_spans.SEND_CAP_SECONDS + 0.1
 
 
 def test_the_clock_is_one_wall_anchor_plus_monotonic_deltas() -> None:

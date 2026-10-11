@@ -7710,12 +7710,6 @@
    "over_cap": 2,
    "total": 105
   },
-  "service/test_worker_cli_span_latency_service.py": {
-   "comments": 0,
-   "docstrings": 5,
-   "over_cap": 0,
-   "total": 67
-  },
   "store_read_census.py": {
    "comments": 46,
    "docstrings": 31,

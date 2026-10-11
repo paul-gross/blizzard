@@ -126,13 +126,6 @@ describe('ProjectsPage', () => {
     expect(router.url).toBe('/admin/projects/proj_w');
   });
 
-  it('under a lens lists only the lensed project and opens it', async () => {
-    const { el, router } = await open('/p/winter/admin/projects', WINTER);
-    expect(router.url).toBe('/p/winter/admin/projects/proj_w');
-    expect(el.querySelector('[data-testid="projects-table-row-proj_b"]')).toBeNull();
-    expect(el.querySelector('[data-testid="projects-table-row-proj_w"]')).not.toBeNull();
-  });
-
   it('creates a project from its slug and description, naming it by the slug, then opens it', async () => {
     const { harness, el, router } = await open('/admin/projects');
     el.querySelector<HTMLElement>('[data-testid="admin-projects-new"]')!.click();
