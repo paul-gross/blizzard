@@ -272,4 +272,4 @@ def test_ensure_default_disambiguates_a_retirement_with_a_cheap_existence_probe_
     # The pre-lock get_enabled_by_name, the cross-graph warning reads, the name lock's own
     # statements, the write's open-tenant check, and the locked get_enabled_by_name +
     # any_minted — flat, never a query per other graph the hub holds.
-    assert count_queries(hub.engine, _retry) == 11
+    assert count_queries(hub.engine, _retry) == 9

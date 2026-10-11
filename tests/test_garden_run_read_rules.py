@@ -124,7 +124,7 @@ def test_an_empty_or_inverted_sweep_window_refuses(until: datetime) -> None:
 
 
 def _fact(slug: str) -> SweepFact:
-    return SweepFact(finding_set_id=f"fins_{slug}", scope_slug=slug, produced_at=_T0, revisions={}, measurement=None)
+    return SweepFact(finding_set_id=f"fins_{slug}", scope_slug=slug, produced_at=_T0, revisions={})
 
 
 def test_coverage_drops_retired_scopes_and_facts_for_unlinked_ones() -> None:

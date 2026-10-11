@@ -1,7 +1,7 @@
 """A routine's per-scope last-swept table and its windowed measurement series — a read
 over `finding_sets`, each row joined to its own artifact's `produced_at`. Last-swept is
 unwindowed: a scope swept months ago must never read as never. The measurement
-series is cut to `[since, until)` in Python, not SQL (`bzh:sql-portable`)."""
+series is cut to `[since, until)` by the store, in SQL, like the garden trend window."""
 
 from __future__ import annotations
 
@@ -19,13 +19,12 @@ from blizzard.hub.domain.garden.scopes import IReadScopeRepository
 @dataclass(frozen=True)
 class SweepFact:
     """One `finding_sets` row for a routine, joined to its own artifact's `produced_at`
-    — the shape `sweeps_for_routine` returns, unwindowed."""
+    — the shape `last_swept_by_scope` returns, unwindowed."""
 
     finding_set_id: str
     scope_slug: str
     produced_at: datetime
     revisions: dict[str, str]
-    measurement: str | None
 
 
 @domain_model
@@ -61,38 +60,37 @@ class GardenSweeps:
 
 
 class IReadGardenSweepsRepository(Protocol):
-    def sweeps_for_routine(self, project_id: str, routine_name: str) -> list[SweepFact]:
-        """Every `finding_sets` row for `routine_name`, unwindowed, each joined to
-        its own artifact's `produced_at` — `finding_sets` carries no timestamp of its
+    def last_swept_by_scope(self, project_id: str, routine_name: str) -> list[SweepFact]:
+        """The newest `finding_sets` row of `routine_name` per scope, unwindowed — newest by
+        `(produced_at, finding_set_id)` (`IReadFindingSetRepository.newest_for_routine_scope`), each
+        joined to its own artifact's `produced_at`, since `finding_sets` carries no timestamp of its
         own."""
+        ...
+
+    def measurements_in_window(
+        self, project_id: str, routine_name: str, *, since: datetime, until: datetime
+    ) -> list[MeasurementReading]:
+        """Every recorded measurement of `routine_name` with `since <= produced_at < until`,
+        ordered by `(produced_at, finding_set_id)`."""
         ...
 
 
 def compute_sweeps(
-    facts: list[SweepFact],
+    newest: list[SweepFact],
+    measurements: list[MeasurementReading],
     *,
     routine_name: str,
     scope_slugs: list[str],
     since: datetime,
     until: datetime,
 ) -> GardenSweeps:
-    """Fold `facts` (already unwindowed) into the last-swept table over `scope_slugs` —
-    the routine's declared set, retired scopes already filtered out by the caller
-    — and the windowed measurement series. One pass over `facts`:
-    newest-per-scope by `produced_at`, ties broken by `finding_set_id`
-    (ULID-monotonic, `IReadFindingSetRepository.newest_for_routine_scope`)."""
-    newest: dict[str, SweepFact] = {}
-    for fact in facts:
-        current = newest.get(fact.scope_slug)
-        if current is None or (fact.produced_at, fact.finding_set_id) > (
-            current.produced_at,
-            current.finding_set_id,
-        ):
-            newest[fact.scope_slug] = fact
-    covered = set(scope_slugs) | set(newest)
+    """Assemble the last-swept table over `scope_slugs` — the routine's declared set, retired
+    scopes already filtered out by the caller — from `newest` (the newest set per scope, already
+    picked by the store), beside the windowed `measurements`."""
+    by_scope = {fact.scope_slug: fact for fact in newest}
     last_swept = []
-    for slug in sorted(covered):
-        fact = newest.get(slug)
+    for slug in sorted(set(scope_slugs) | set(by_scope)):
+        fact = by_scope.get(slug)
         last_swept.append(
             ScopeSweep(
                 scope_slug=slug,
@@ -101,14 +99,6 @@ def compute_sweeps(
                 revisions=dict(fact.revisions) if fact else {},
             )
         )
-    measurements = sorted(
-        (
-            MeasurementReading(scope_slug=fact.scope_slug, produced_at=fact.produced_at, measurement=fact.measurement)
-            for fact in facts
-            if fact.measurement is not None and since <= fact.produced_at < until
-        ),
-        key=lambda m: m.produced_at,
-    )
     return GardenSweeps(
         routine_name=routine_name, since=since, until=until, last_swept=last_swept, measurements=measurements
     )
@@ -130,7 +120,7 @@ class SweepWindow:
 
 
 def sweep_coverage(declared: set[str], retired: set[str], facts: list[SweepFact]) -> tuple[list[str], list[SweepFact]]:
-    """The scopes a routine's last-swept table covers and the facts it folds: every
+    """The scopes a routine's last-swept table covers and the facts it lists: every
     declared scope not retired, plus a retired declared one only where a fact already
     records it swept. A scope unlinked since being swept never resurfaces through its
     own fact."""
@@ -139,7 +129,7 @@ def sweep_coverage(declared: set[str], retired: set[str], facts: list[SweepFact]
 
 
 class GardenSweepsService:
-    """Reads a routine's last-swept table and measurement series, delegating the fold
+    """Reads a routine's last-swept table and measurement series, delegating the assembly
     to `compute_sweeps`. Takes the resolved `Routine` (`bzh:domain-takes-objects`) —
     existence is resolved at the edge, before this is ever invoked."""
 
@@ -155,9 +145,17 @@ class GardenSweepsService:
         self._routine_scopes = routine_scopes
 
     def sweeps(self, routine: Routine, *, since: datetime, until: datetime) -> GardenSweeps:
-        live_declared, facts = sweep_coverage(
-            set(self._routine_scopes.list_scopes(routine.routine_id)),
+        declared = set(self._routine_scopes.list_scopes(routine.routine_id))
+        live_declared, newest = sweep_coverage(
+            declared,
             self._scopes.retired_slugs(routine.project_id),
-            self._repo.sweeps_for_routine(routine.project_id, routine.name),
+            self._repo.last_swept_by_scope(routine.project_id, routine.name),
         )
-        return compute_sweeps(facts, routine_name=routine.name, scope_slugs=live_declared, since=since, until=until)
+        measurements = [
+            reading
+            for reading in self._repo.measurements_in_window(routine.project_id, routine.name, since=since, until=until)
+            if reading.scope_slug in declared
+        ]
+        return compute_sweeps(
+            newest, measurements, routine_name=routine.name, scope_slugs=live_declared, since=since, until=until
+        )

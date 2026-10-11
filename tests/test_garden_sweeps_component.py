@@ -247,3 +247,69 @@ def test_the_measurement_series_is_windowed_while_last_swept_is_not(tmp_path: Pa
     (row,) = sweeps.last_swept
     assert row.finding_set_id == "fins_old"
     assert row.produced_at == datetime(2025, 1, 1, tzinfo=UTC)
+
+
+def _seed_set(
+    conn: sa.Connection,
+    n: str,
+    *,
+    produced_at: datetime,
+    scope_slug: str = "blizzard",
+    measurement: str | None = None,
+    finding_set_id: str | None = None,
+) -> None:
+    _seed_artifact(conn, f"art_{n}", chunk_id="ch_1", produced_at=produced_at)
+    _seed_finding_set(
+        conn,
+        finding_set_id or f"fins_{n}",
+        artifact_id=f"art_{n}",
+        chunk_id="ch_1",
+        scope_slug=scope_slug,
+        routine_name="nightly",
+        revisions={},
+        measurement=measurement,
+    )
+
+
+def test_a_tie_on_produced_at_breaks_on_the_higher_finding_set_id(tmp_path: Path) -> None:
+    _, engine = migrate_to(tmp_path, "head")
+    routine = _routine(engine)
+    tied = datetime(2026, 1, 5, tzinfo=UTC)
+    with engine.begin() as conn:
+        _seed_common(conn, routine)
+        _seed_set(conn, "a", produced_at=tied, finding_set_id="fins_a")
+        _seed_set(conn, "b", produced_at=tied, finding_set_id="fins_b")
+
+    sweeps = _service(engine).sweeps(routine, since=_SINCE, until=_UNTIL)
+
+    assert sweeps.last_swept[0].finding_set_id == "fins_b"
+
+
+def test_the_newest_set_is_reported_per_scope_whatever_the_insert_order(tmp_path: Path) -> None:
+    _, engine = migrate_to(tmp_path, "head")
+    routine = _routine(engine)
+    with engine.begin() as conn:
+        _seed_common(conn, routine)
+        _seed_set(conn, "1", produced_at=datetime(2026, 1, 9, tzinfo=UTC))
+        _seed_set(conn, "2", produced_at=datetime(2026, 1, 2, tzinfo=UTC))
+        _seed_set(conn, "3", produced_at=datetime(2026, 1, 5, tzinfo=UTC))
+
+    sweeps = _service(engine).sweeps(routine, since=_SINCE, until=_UNTIL)
+
+    (row,) = sweeps.last_swept
+    assert row.finding_set_id == "fins_1"
+
+
+def test_measurements_are_cut_to_the_half_open_window_in_produced_at_order(tmp_path: Path) -> None:
+    _, engine = migrate_to(tmp_path, "head")
+    routine = _routine(engine)
+    with engine.begin() as conn:
+        _seed_common(conn, routine)
+        _seed_set(conn, "1", produced_at=datetime(2026, 1, 9, tzinfo=UTC), measurement="second")
+        _seed_set(conn, "2", produced_at=_SINCE, measurement="first")
+        _seed_set(conn, "3", produced_at=_UNTIL, measurement="excluded: the window is open at until")
+        _seed_set(conn, "4", produced_at=datetime(2026, 1, 10, tzinfo=UTC), measurement=None)
+
+    sweeps = _service(engine).sweeps(routine, since=_SINCE, until=_UNTIL)
+
+    assert [m.measurement for m in sweeps.measurements] == ["first", "second"]
