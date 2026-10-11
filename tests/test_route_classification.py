@@ -311,6 +311,7 @@ _FLEET: set[tuple[str, str]] = {
     ("GET", "/api/fleet/chunks/{chunk_id}/envelope"),
     ("GET", "/api/fleet/chunks/{chunk_id}/garden/findings"),
     ("GET", "/api/fleet/chunks/{chunk_id}/garden/proposals"),
+    ("GET", "/api/fleet/chunks/{chunk_id}/garden/proposals/page"),
     # A worker's own routine-run read of the counts/spend summaries — the
     # same operator-plane query criteria and response shaping, gated on the chunk's own
     # run context rather than operator credentials.

@@ -397,6 +397,7 @@ _PROBES: dict[tuple[str, str], _Probe] = {
     ("GET", "/api/fleet/chunks/{chunk_id}/findings/{finding_id}"): _f(ids=_GARDEN),
     ("GET", "/api/fleet/chunks/{chunk_id}/garden/findings"): _f(ids=_RUN),
     ("GET", "/api/fleet/chunks/{chunk_id}/garden/proposals"): _f(ids=_RUN),
+    ("GET", "/api/fleet/chunks/{chunk_id}/garden/proposals/page"): _f(ids=_RUN),
     ("POST", "/api/fleet/chunks/{chunk_id}/hub-advance"): _f(),
     ("POST", "/api/fleet/chunks/{chunk_id}/pause"): _f(),
     ("GET", "/api/fleet/chunks/{chunk_id}/pm-items"): _f(),

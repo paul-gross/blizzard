@@ -675,3 +675,66 @@ def test_two_edits_from_the_same_stale_view_each_keep_the_field_they_did_not_nam
     after = store.get("gprop_1")
     assert after is not None
     assert (after.title, after.class_, after.body) == ("new title", "c", "new body")
+
+
+def _seed_routine_docket(store: GardenProposalStore, engine: Engine, *, open_count: int, closed_count: int) -> None:
+    project = default_project(engine)
+    for n in range(open_count + closed_count):
+        store.create(
+            f"gprop_{n:03d}",
+            project_id=project,
+            origin=GardenProposalOrigin.ROUTINE_RUN,
+            routine_name="nightly",
+            class_="c",
+            title="t",
+            body="b",
+            findings=["fin_1"],
+            at=_NOW + timedelta(minutes=n),
+        )
+        if n >= open_count:
+            _pass(engine, f"gprop_{n:03d}")
+    store.create(
+        "gprop_other",
+        project_id=project,
+        origin=GardenProposalOrigin.ROUTINE_RUN,
+        routine_name="other",
+        class_="c",
+        title="t",
+        body="b",
+        findings=["fin_1"],
+        at=_NOW,
+    )
+
+
+@pytest.mark.parametrize("state", list(RoutineProposalState))
+def test_routine_page_followed_to_its_end_equals_list_for_routine(tmp_path: Path, state: RoutineProposalState) -> None:
+    store, engine = _store_and_engine(tmp_path)
+    project = default_project(engine)
+    _seed_routine_docket(store, engine, open_count=3, closed_count=4)
+
+    collected = []
+    cursor = None
+    while True:
+        page = store.list_page(limit=2, project_id=project, routine_name="nightly", state=state, cursor=cursor)
+        assert len(page.proposals) <= 2
+        collected += page.proposals
+        cursor = page.next_cursor
+        if cursor is None:
+            break
+
+    assert collected == store.list_for_routine(project, "nightly", state=state)
+
+
+def test_routine_page_cost_is_flat_in_closed_proposal_count(tmp_path: Path) -> None:
+    measured = []
+    for closed in (2, 15):
+        (tmp_path / f"c{closed}").mkdir()
+        store, engine = _store_and_engine(tmp_path / f"c{closed}")
+        project = default_project(engine)
+        _seed_routine_docket(store, engine, open_count=3, closed_count=closed)
+
+        def read(store: GardenProposalStore = store, project: str = project):  # type: ignore[no-untyped-def]
+            return store.list_page(limit=2, project_id=project, routine_name="nightly", state=RoutineProposalState.ALL)
+
+        measured.append((count_queries(engine, read), count_rows_read(engine, read)))
+    assert measured[0] == measured[1]

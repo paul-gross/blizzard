@@ -135,6 +135,8 @@ class _FakeProposals:
         limit: int,
         origin: GardenProposalOrigin | None = None,
         project_id: str | None = None,
+        routine_name: str | None = None,
+        state: RoutineProposalState | None = None,
     ) -> GardenProposalPage:
         raise NotImplementedError
 

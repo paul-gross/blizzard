@@ -7645,7 +7645,7 @@
     },
     "/api/leases/{lease_id}/garden/proposals": {
       "get": {
-        "description": "Forward this lease's chunk's garden-proposals read to the hub, ``state`` unvalidated;\nits refusals pass through verbatim.",
+        "description": "Forward this lease's chunk's garden-proposals read to the hub, ``state`` unvalidated;\nits refusals pass through verbatim. Answers the whole docket, not a page: the worker's reconcile\nstep compares what it found against every proposal in ``state``, so a window would change what it\ndedups against. Each hub request is bounded by its page; the whole read is that consumer's need.",
         "operationId": "list_garden_proposals_api_leases__lease_id__garden_proposals_get",
         "parameters": [
           {
