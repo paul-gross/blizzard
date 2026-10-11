@@ -13,7 +13,7 @@ from sqlalchemy.types import TypeDecorator
 
 
 class UtcDateTime(TypeDecorator[datetime]):
-    """A ``DateTime`` column that is UTC-aware on both sides of the driver.
+    """A ``DateTime`` column that holds UTC wall time and reads back UTC-aware.
 
     The DDL it emits is byte-identical to a plain ``DateTime`` (``bzh:sql-portable``),
     so retyping a column owes no migration."""
@@ -24,7 +24,9 @@ class UtcDateTime(TypeDecorator[datetime]):
     def process_bind_param(self, value: datetime | None, dialect: object) -> datetime | None:
         if value is None:
             return None
-        return value.astimezone(UTC) if value.tzinfo is not None else value.replace(tzinfo=UTC)
+        # Naive UTC, never an aware value: an aware bind reaches Postgres as ``timestamptz``
+        # and is rendered into the session's ``TimeZone`` on the cast to the column.
+        return value.astimezone(UTC).replace(tzinfo=None) if value.tzinfo is not None else value
 
     def process_result_value(self, value: datetime | None, dialect: object) -> datetime | None:
         if value is None:
