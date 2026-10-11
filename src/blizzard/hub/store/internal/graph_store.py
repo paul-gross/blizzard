@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, cast
 
-from sqlalchemy import Connection
+from sqlalchemy import Connection, Select
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
@@ -344,46 +344,32 @@ class GraphStore:
 
     def enabled_by_name_conn(self, conn: Connection, name: str) -> Graph | None:
         """`get_enabled_by_name`, resolved on the caller's connection."""
-        # Tie-break on graph_id descending — ULIDs sort lexically by creation —
-        # then walked newest-first, skipping every retired graph_id.
-        rows = conn.execute(
-            self._store.select(graphs)
-            .where(graphs.c.name == name)
-            .order_by(graphs.c.created_at.desc(), graphs.c.graph_id.desc())
-        ).all()
-        retired = self._retired_among(conn, [row.graph_id for row in rows])
-        for row in rows:
-            if row.graph_id not in retired:
-                return self._reify(conn, row)
-        return None
+        row = conn.execute(self._enabled_by_name_select(name)).first()
+        return self._reify(conn, row) if row is not None else None
 
     def graph_id_of_enabled_name(self, name: str) -> str | None:
-        """``get_enabled_by_name``'s narrow sibling — the same tie-break and
-        retired-skip, selecting only ``graph_id`` and never reifying a row."""
+        """``get_enabled_by_name``'s narrow sibling — the same select, naming only ``graph_id`` and
+        never reifying a row."""
         with self._store.read("graph_id_of_enabled_name") as conn:
-            rows = conn.execute(
-                self._store.select(graphs, graphs.c.graph_id)
-                .where(graphs.c.name == name)
-                .order_by(graphs.c.created_at.desc(), graphs.c.graph_id.desc())
-            ).all()
-            retired = self._retired_among(conn, [row.graph_id for row in rows])
-            for row in rows:
-                if row.graph_id not in retired:
-                    return row.graph_id
-            return None
+            return conn.execute(self._enabled_by_name_select(name, graphs.c.graph_id)).scalar_one_or_none()
 
-    def _retired_among(self, conn, graph_ids: Sequence[str]) -> set[str]:  # type: ignore[no-untyped-def]
-        """``get_enabled_by_name``/``graph_id_of_enabled_name``'s shared retirement
-        filter — the newest lifecycle fact for each of ``graph_ids`` only, batched
-        through :func:`id_batches`, rather than :meth:`retired_graph_ids`'s every-graph
-        read or one :meth:`_is_retired` query per candidate."""
-        if not graph_ids:
-            return set()
-        facts = graph_lifecycle_facts
-        retired: set[str] = set()
-        for batch in id_batches(graph_ids):
-            retired.update(conn.execute(newest_retired_select(self._store, facts, facts.c.graph_id, batch)).scalars())
-        return retired
+    def _enabled_by_name_select(self, name: str, *columns: Any) -> Select:  # type: ignore[type-arg]
+        """The one statement behind both enabled-by-name reads: ``name``'s newest mint that is not
+        retired — ``(created_at, graph_id)`` descending, ULIDs sorting lexically by creation — as
+        ``LIMIT 1``, so only the winning row is read. Retired is :func:`newest_retired_select`'s
+        rule over this name's graph ids."""
+        retired = newest_retired_select(
+            self._store,
+            graph_lifecycle_facts,
+            graph_lifecycle_facts.c.graph_id,
+            self._store.select(graphs, graphs.c.graph_id).where(graphs.c.name == name),
+        )
+        return (
+            self._store.select(graphs, *columns)
+            .where(graphs.c.name == name, graphs.c.graph_id.not_in(retired))
+            .order_by(graphs.c.created_at.desc(), graphs.c.graph_id.desc())
+            .limit(1)
+        )
 
     def get_many(self, graph_ids: Sequence[str]) -> dict[str, Graph]:
         """``get``'s batched sibling — every requested id's

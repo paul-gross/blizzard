@@ -103,7 +103,6 @@ def _reads(engine: Engine) -> dict[str, object]:
         "paused": registry(RunnerRegistryStore._paused_many),
         "local_pause": registry(RunnerRegistryStore._local_pause_detail_many),
         "lifecycle": registry(RunnerRegistryStore._lifecycle_many),
-        "graph_retired": registry(lambda conn, keys: GraphStore(store)._retired_among(conn, keys)),
     }
 
 

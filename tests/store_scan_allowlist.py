@@ -430,7 +430,7 @@ HUB_ALLOWED_SCANS: list[Allowance] = [
     IndexWalkAllowance(
         IReadChunkDecisionsRepository,
         "live_decisions_for",
-        ("chunk_migrations", "chunk_restarts", "decisions", "escalations", "transitions"),
+        ("chunk_migrations", "chunk_restarts", "escalations", "transitions"),
         _DECISION_CLOSURE_REASON,
     ),
     IndexWalkAllowance(

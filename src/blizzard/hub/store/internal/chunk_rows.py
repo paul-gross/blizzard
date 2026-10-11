@@ -13,12 +13,13 @@ the caller's :class:`ScopedStatements`.
 from __future__ import annotations
 
 import json
+from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Protocol, cast
+from typing import Any, Protocol, cast
 
-from sqlalchemy import Connection, Select, func, literal, select
+from sqlalchemy import Column, Connection, Select, Table, func, literal, select
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.chunk_migration import MigrationMode
@@ -39,6 +40,7 @@ from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.domain.work_items.closure import TERMINAL_CLOSE_OUTCOMES
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_terminal_predicates import chunk_is_terminal
+from blizzard.hub.store.internal.newest_fact import newer_row_exists
 from blizzard.hub.store.scoped import ScopedStatements, statements_of
 
 
@@ -288,47 +290,70 @@ def graph_id_of_batch(conn, batch: Sequence[str] | None) -> dict[str, str]:  # t
 
 
 def route_of_conn(conn: Connection, chunk_id: str) -> Route | None:
-    """Resolve the live route on the caller's connection, even inside a write.
+    """Resolve the live route on the caller's connection, even inside a write — :func:`routes_of_conn`
+    over one id."""
+    return routes_of_conn(conn, [chunk_id]).get(chunk_id)
 
-    :attr:`~blizzard.hub.domain.chunk.model.RouteHistory.newest` owns same-instant ties."""
-    # (created_at, seq) desc — must stay in lockstep with the key
-    # `RouteHistory.newest` orders by; that property, not this query, owns it.
+
+def routes_of_conn(conn: Connection, chunk_ids: Sequence[str] | None) -> dict[str, Route]:
+    """The live route of each chunk in ``chunk_ids`` that has one (``None``: every chunk), on the
+    caller's connection, so inside a write's locked connection too. SQL picks each chunk's newest
+    created and released fact; liveness stays with
+    :attr:`~blizzard.hub.domain.chunk.model.RouteHistory.newest`, which owns same-instant ties."""
     stmts = statements_of(conn)
-    created = conn.execute(
-        stmts.select(s.route_created)
-        .where(s.route_created.c.chunk_id == chunk_id)
-        .order_by(s.route_created.c.created_at.desc(), s.route_created.c.seq.desc())
-        .limit(1)
-    ).first()
-    if created is None:
-        return None
-    # (released_at, seq) desc — see the order_by above; same owner.
-    released = conn.execute(
-        stmts.select(s.route_released, s.route_released.c.released_at, s.route_released.c.seq)
-        .where(s.route_released.c.chunk_id == chunk_id)
-        .order_by(s.route_released.c.released_at.desc(), s.route_released.c.seq.desc())
-        .limit(1)
-    ).first()
-    routes_released = [RouteReleasedFact(released_at=released.released_at, seq=released.seq)] if released else []
-    routes_created = [RouteCreatedFact(created_at=created.created_at, seq=created.seq)]
-    if RouteHistory(routes_created, routes_released).newest is None:
-        return None
-    env_ids = [
-        e.environment_id
-        for e in conn.execute(
-            stmts.select(s.route_environments, s.route_environments.c.environment_id).where(
-                s.route_environments.c.route_id == created.route_id
+
+    def newest(table: Table, ts: str, *columns: Column[Any]) -> Select:  # type: ignore[type-arg]
+        # (ts, seq) — the key `RouteHistory.newest` orders by; that property, not this query, owns it.
+        rival = table.alias("rival")
+        beaten = newer_row_exists(
+            stmts,
+            rival,
+            partition=[(table.c.chunk_id, rival.c.chunk_id)],
+            order=[(table.c[ts], rival.c[ts]), (table.c.seq, rival.c.seq)],
+        )
+        query = stmts.select(table, *columns).where(~beaten)
+        return query if chunk_ids is None else query.where(table.c.chunk_id.in_(chunk_ids))
+
+    created_of = {r.chunk_id: r for r in conn.execute(newest(s.route_created, "created_at")).all()}
+    released_of = {
+        r.chunk_id: RouteReleasedFact(released_at=r.released_at, seq=r.seq)
+        for r in conn.execute(
+            newest(
+                s.route_released,
+                "released_at",
+                *(s.route_released.c[name] for name in ("chunk_id", "released_at", "seq")),
             )
         ).all()
-    ]
-    return Route(
-        chunk_id=chunk_id,
-        runner_id=created.runner_id,
-        workspace_id=created.workspace_id,
-        environment_ids=env_ids,
-        created_at=created.created_at,
-        route_id=created.route_id,
-    )
+    }
+    live = {
+        chunk_id: row
+        for chunk_id, row in created_of.items()
+        if RouteHistory(
+            [RouteCreatedFact(created_at=row.created_at, seq=row.seq)],
+            [released_of[chunk_id]] if chunk_id in released_of else [],
+        ).newest
+        is not None
+    }
+    if not live:
+        return {}
+    env_ids: dict[str, list[str]] = defaultdict(list)
+    for e in conn.execute(
+        stmts.select(
+            s.route_environments, s.route_environments.c.route_id, s.route_environments.c.environment_id
+        ).where(s.route_environments.c.route_id.in_({row.route_id for row in live.values()}))
+    ).all():
+        env_ids[e.route_id].append(e.environment_id)
+    return {
+        chunk_id: Route(
+            chunk_id=chunk_id,
+            runner_id=row.runner_id,
+            workspace_id=row.workspace_id,
+            environment_ids=env_ids[row.route_id],
+            created_at=row.created_at,
+            route_id=row.route_id,
+        )
+        for chunk_id, row in live.items()
+    }
 
 
 def lock_chunk_row(conn: Connection, chunk_id: str) -> None:

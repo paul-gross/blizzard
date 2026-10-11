@@ -10,7 +10,7 @@ from collections import defaultdict
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import or_, tuple_
+from sqlalchemy import or_
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import IClock
@@ -28,6 +28,7 @@ from blizzard.hub.store.internal.chunk_rows import (
     lock_chunk_row,
     next_artifact_seq,
 )
+from blizzard.hub.store.internal.newest_fact import newer_row_exists
 from blizzard.hub.store.scoped import ScopedConnections
 
 
@@ -74,10 +75,22 @@ class ChunkArtifactsStore:
                             epoch=a.epoch,
                         )
                     )
+                # The newest landing per (chunk, repo) — the last of the ascending-id history the marker
+                # read above leaves to its consumer's fold — so a re-landed repo costs one row.
+                later = s.delivery_repo_landed.alias("later")
+                beaten = newer_row_exists(
+                    self._store,
+                    later,
+                    partition=[
+                        (s.delivery_repo_landed.c.chunk_id, later.c.chunk_id),
+                        (s.delivery_repo_landed.c.repo, later.c.repo),
+                    ],
+                    order=[(s.delivery_repo_landed.c.id, later.c.id)],
+                )
                 for row in conn.execute(
-                    self._store.select(s.delivery_repo_landed)
-                    .where(s.delivery_repo_landed.c.chunk_id.in_(batch))
-                    .order_by(s.delivery_repo_landed.c.id)
+                    self._store.select(s.delivery_repo_landed).where(
+                        s.delivery_repo_landed.c.chunk_id.in_(batch), ~beaten
+                    )
                 ):
                     landed[row.chunk_id][row.repo] = row.commit_hash
         return {chunk_id: DeliverySources(markers[chunk_id], landed[chunk_id]) for chunk_id in chunk_ids}
@@ -140,12 +153,15 @@ class ChunkArtifactsStore:
                 # The winner is the row no newer row of the same (chunk, name) beats, in
                 # `latest_artifact`'s own order — one statement, so a superseded blob is never read.
                 newer = s.artifacts.alias("newer")
-                beaten = self._store.exists(
+                beaten = newer_row_exists(
+                    self._store,
                     newer,
-                    newer.c.chunk_id == s.artifacts.c.chunk_id,
-                    newer.c.name == s.artifacts.c.name,
-                    tuple_(newer.c.epoch, newer.c.produced_at, newer.c.artifact_id)
-                    > tuple_(s.artifacts.c.epoch, s.artifacts.c.produced_at, s.artifacts.c.artifact_id),
+                    partition=[(s.artifacts.c.chunk_id, newer.c.chunk_id), (s.artifacts.c.name, newer.c.name)],
+                    order=[
+                        (s.artifacts.c.epoch, newer.c.epoch),
+                        (s.artifacts.c.produced_at, newer.c.produced_at),
+                        (s.artifacts.c.artifact_id, newer.c.artifact_id),
+                    ],
                 )
                 for a in conn.execute(
                     self._store.select(s.artifacts).where(

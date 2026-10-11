@@ -2253,8 +2253,11 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     ),
     (IReadGardenRunRepository, "run_identity"): lambda w: w.garden_run.run_identity(w.run_chunk_1),
     (IReadGardenRunRepository, "delivered_sets"): lambda w: w.garden_run.delivered_sets(w.run_chunk_1),
-    (IReadGardenSweepsRepository, "sweeps_for_routine"): lambda w: w.garden_sweeps.sweeps_for_routine(
+    (IReadGardenSweepsRepository, "last_swept_by_scope"): lambda w: w.garden_sweeps.last_swept_by_scope(
         w.project_id, "gardening"
+    ),
+    (IReadGardenSweepsRepository, "measurements_in_window"): lambda w: w.garden_sweeps.measurements_in_window(
+        w.project_id, "gardening", since=_HUB_BASE, until=_HUB_UNTIL
     ),
     (IReadGardenTrendRepository, "facts_for_trend"): lambda w: w.garden_trend.facts_for_trend(
         w.project_id, "gardening", since=_HUB_BASE, until=_HUB_UNTIL

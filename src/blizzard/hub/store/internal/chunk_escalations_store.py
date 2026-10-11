@@ -8,8 +8,6 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import tuple_
-
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.model import EscalationOpen
 from blizzard.hub.domain.chunk.ports.escalations import IWriteChunkEscalationsRepository
@@ -24,6 +22,7 @@ from blizzard.hub.store.internal.chunk_rows import (
     record_hub_lease,
 )
 from blizzard.hub.store.internal.chunk_terminal_predicates import maybe_live
+from blizzard.hub.store.internal.newest_fact import newer_row_exists
 from blizzard.hub.store.scoped import ScopedConnections
 
 
@@ -40,7 +39,7 @@ class ChunkEscalationsStore:
     ) -> list[EscalationOpen]:
         """Every open escalation fleet-wide, each decided by ``ChunkFacts.open_escalation``
         (#293) — the rule's one implementation, never a second derivation from raw rows."""
-        candidates = self._escalation_candidates(self._newest_escalation_per_chunk(project, chunk_id))
+        candidates = list(self._newest_escalation_per_chunk(project, chunk_id))
         facts_by_id = self._facts.load_facts_for(candidates)
         return [
             EscalationOpen(
@@ -152,10 +151,15 @@ class ChunkEscalationsStore:
             return True
 
     def _newest_escalation_per_chunk(self, project: ProjectId | None = None, chunk_id: str | None = None):  # type: ignore[no-untyped-def]
-        """The newest ``escalations`` row per chunk, over the chunks that might still be
-        live — a chunk a terminal fact settles, or one grouped away or deleted, can never
-        hold an open escalation, so it is excluded in the query rather than loaded and
-        dropped by the fold."""
+        """The newest ``escalations`` row per chunk, over the chunks whose newest escalation *might*
+        still be open — a chunk a terminal fact settles, or one grouped away or deleted, can never
+        hold an open escalation, and neither can one a later lease or requeue supersedes, so each is
+        excluded in the query rather than loaded and dropped by the fold.
+
+        A **drop-only** narrowing, sound because each superseding arm (a lease minted, or a requeue
+        recorded, strictly after the escalation) is one ``ChunkFacts.open_escalation`` also has
+        (``src/blizzard/hub/domain/chunk/model.py``), so a chunk dropped here is one the fold would drop too; arms
+        it lacks (completion) only leave extra work for the fold, never a wrong answer."""
         live_chunk_ids = self._store.select(s.chunks, s.chunks.c.chunk_id).where(
             maybe_live(self._store), s.chunks.c.chunk_id.not_in(ephemeral_ids_select(self._store))
         )
@@ -165,43 +169,28 @@ class ChunkEscalationsStore:
             live_chunk_ids = live_chunk_ids.where(s.chunks.c.chunk_id == chunk_id)
         with self._store.read("_newest_escalation_per_chunk") as conn:
             newer = s.escalations.alias("newer")
-            beaten = self._store.exists(
+            beaten = newer_row_exists(
+                self._store,
                 newer,
-                newer.c.chunk_id == s.escalations.c.chunk_id,
-                tuple_(newer.c.recorded_at, newer.c.id) > tuple_(s.escalations.c.recorded_at, s.escalations.c.id),
+                partition=[(s.escalations.c.chunk_id, newer.c.chunk_id)],
+                order=[(s.escalations.c.recorded_at, newer.c.recorded_at), (s.escalations.c.id, newer.c.id)],
+            )
+            leased_since = self._store.exists(
+                s.lease_facts,
+                s.lease_facts.c.chunk_id == s.escalations.c.chunk_id,
+                s.lease_facts.c.minted_at > s.escalations.c.recorded_at,
+            )
+            requeued_since = self._store.exists(
+                s.requeues,
+                s.requeues.c.chunk_id == s.escalations.c.chunk_id,
+                s.requeues.c.requeued_at > s.escalations.c.recorded_at,
             )
             rows = conn.execute(
-                self._store.select(s.escalations).where(s.escalations.c.chunk_id.in_(live_chunk_ids), ~beaten)
+                self._store.select(s.escalations).where(
+                    s.escalations.c.chunk_id.in_(live_chunk_ids), ~beaten, ~leased_since, ~requeued_since
+                )
             ).all()
             return {e.chunk_id: e for e in rows}
-
-    def _escalation_candidates(self, newest_by_chunk) -> list[str]:  # type: ignore[no-untyped-def]
-        """Chunks whose newest escalation *might* still be open — a **drop-only** narrowing that
-        trades the two statements above (the lease and requeue reads) for a smaller batch into
-        ``load_facts_for``: fewer rows in that one read, not fewer calls. Sound because every arm
-        below is one the authoritative rule also has, so a chunk dropped here is one
-        ``open_escalation`` would drop too; arms it lacks (completion) only leave extra work for
-        the fold, never a wrong answer."""
-        if not newest_by_chunk:
-            return []
-        chunk_ids = list(newest_by_chunk)
-        with self._store.read("_escalation_candidates") as conn:
-            lease_rows = conn.execute(
-                self._store.select(s.lease_facts).where(s.lease_facts.c.chunk_id.in_(chunk_ids))
-            ).all()
-            requeue_rows = conn.execute(
-                self._store.select(s.requeues).where(s.requeues.c.chunk_id.in_(chunk_ids))
-            ).all()
-        superseding: dict[str, list[datetime]] = {}
-        for lease in lease_rows:
-            superseding.setdefault(lease.chunk_id, []).append(lease.minted_at)
-        for rq in requeue_rows:
-            superseding.setdefault(rq.chunk_id, []).append(rq.requeued_at)
-        return [
-            chunk_id
-            for chunk_id, newest in newest_by_chunk.items()
-            if not any(at > newest.recorded_at for at in superseding.get(chunk_id, ()))
-        ]
 
 
 def _conforms_escalations(x: ChunkEscalationsStore) -> IWriteChunkEscalationsRepository:

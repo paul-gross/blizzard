@@ -10,7 +10,7 @@ import json
 from collections.abc import Iterable, Sequence
 from datetime import datetime
 
-from sqlalchemy import ColumnElement, Connection, and_
+from sqlalchemy import ColumnElement, Connection, Select, and_
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.store.batching import id_batches
@@ -29,6 +29,7 @@ from blizzard.hub.store.internal.chunk_rows import (
     next_artifact_seq,
 )
 from blizzard.hub.store.internal.chunk_terminal_predicates import chunk_is_terminal
+from blizzard.hub.store.internal.newest_fact import newer_row_exists
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements, statements_of
 
 #: Every fact table whose ``decision_id`` column closes a decision — the resolving
@@ -65,35 +66,49 @@ class ChunkDecisionsStore:
             return self._decision_row(conn, row) if row is not None else None
 
     def decision_for_chunk(self, chunk_id: str) -> GateDecision | None:
-        """The newest not-yet-transitioned decision is live — filtered in SQL via
-        :meth:`_not_closed_clause`, so only the one surviving row (if any) ever gets
+        """The newest not-yet-transitioned decision is live — picked in SQL by
+        :meth:`_newest_live_decisions_select`, so only the one surviving row (if any) ever gets
         hydrated."""
         with self._store.read("decision_for_chunk") as conn:
-            row = conn.execute(
-                self._store.select(s.decisions)
-                .where(s.decisions.c.chunk_id == chunk_id, self._not_closed_clause(self._store))
-                .order_by(s.decisions.c.submitted_at.desc(), s.decisions.c.decision_id.desc())
-                .limit(1)
-            ).one_or_none()
+            row = conn.execute(self._newest_live_decisions_select([chunk_id])).one_or_none()
             return self._decision_row(conn, row) if row is not None else None
 
     @staticmethod
-    def _not_closed_clause(stmts: ScopedStatements) -> ColumnElement[bool]:
-        """True when the decision is still live: no closure table holds a row for its id, ANDed across
-        every table — each ``NOT EXISTS`` built through ``stmts``, so it reads only the scope's facts."""
-        return and_(
-            *(
-                ~stmts.exists(table, table.c.decision_id == s.decisions.c.decision_id)
-                for table in _DECISION_CLOSURE_TABLES
-            )
+    def _not_closed_clause(stmts: ScopedStatements, decision_id: ColumnElement[str]) -> ColumnElement[bool]:
+        """True when the decision whose id is ``decision_id`` (the column of ``s.decisions`` or of an alias of
+        it) is still live: no closure table holds a row for its id, ANDed across every table — each
+        ``NOT EXISTS`` built through ``stmts``, so it reads only the scope's facts."""
+        return and_(*(~stmts.exists(table, table.c.decision_id == decision_id) for table in _DECISION_CLOSURE_TABLES))
+
+    def _newest_live_decisions_select(self, chunk_ids: Sequence[str]) -> Select:  # type: ignore[type-arg]
+        """The newest not-yet-transitioned decision of each chunk in ``chunk_ids``, one row per chunk:
+        a decision no newer not-closed decision of its chunk beats, in ``(submitted_at, decision_id)``
+        order. The not-closed rule binds the competing row too — an older open decision under a newer
+        closed one is still the answer."""
+        rival = s.decisions.alias("rival")
+        beaten = newer_row_exists(
+            self._store,
+            rival,
+            partition=[(s.decisions.c.chunk_id, rival.c.chunk_id)],
+            order=[
+                (s.decisions.c.submitted_at, rival.c.submitted_at),
+                (s.decisions.c.decision_id, rival.c.decision_id),
+            ],
+            where=self._not_closed_clause(self._store, rival.c.decision_id),
+        )
+        return self._store.select(s.decisions).where(
+            s.decisions.c.chunk_id.in_(chunk_ids),
+            self._not_closed_clause(self._store, s.decisions.c.decision_id),
+            ~beaten,
         )
 
     def live_decisions_for(self, chunk_ids: Iterable[str]) -> dict[str, LiveDecisionStatus]:
         """See :meth:`~blizzard.hub.domain.chunk.ports.decisions.IReadChunkDecisionsRepository.live_decisions_for` —
         set-based throughout, unlike :meth:`_decision_row`'s per-decision
-        choices reads, sharing its closure rule via :func:`decision_closure_ids`.
-        Newest-first per chunk, same "newest not-yet-transitioned" semantics as
-        :meth:`decision_for_chunk`. Batched (`bzh:bulk-reconstitution`)."""
+        choices reads, sharing its closure rule via :data:`_DECISION_CLOSURE_TABLES`.
+        The newest not-yet-transitioned decision per chunk, the same semantics as
+        :meth:`decision_for_chunk`, both through :meth:`_newest_live_decisions_select`.
+        Batched (`bzh:bulk-reconstitution`)."""
         ids = list(chunk_ids)
         if not ids:
             return {}
@@ -104,16 +119,11 @@ class ChunkDecisionsStore:
             return result
 
     def _live_decisions_batch(self, conn: Connection, chunk_ids: Sequence[str]) -> dict[str, LiveDecisionStatus]:
-        rows = conn.execute(
-            self._store.select(s.decisions)
-            .where(s.decisions.c.chunk_id.in_(chunk_ids))
-            .order_by(s.decisions.c.submitted_at.desc())
-        ).all()
+        rows = conn.execute(self._newest_live_decisions_select(chunk_ids)).all()
         if not rows:
             return {}
-        decision_ids = [row.decision_id for row in rows]
         resolved_choice_of: dict[str, str] = {}
-        for id_batch in id_batches(decision_ids):
+        for id_batch in id_batches([row.decision_id for row in rows]):
             resolved_choice_of.update(
                 {
                     r.decision_id: r.choice
@@ -126,19 +136,16 @@ class ChunkDecisionsStore:
                     ).all()
                 }
             )
-        transitioned_ids = decision_closure_ids(conn, decision_ids)
-        result: dict[str, LiveDecisionStatus] = {}
-        for row in rows:  # newest-first; the newest not-yet-transitioned decision is live
-            if row.chunk_id in result or row.decision_id in transitioned_ids:
-                continue
-            result[row.chunk_id] = LiveDecisionStatus(
+        return {
+            row.chunk_id: LiveDecisionStatus(
                 decision_id=row.decision_id,
                 node_id=row.node_id,
                 epoch=row.epoch,
                 resolved_choice=resolved_choice_of.get(row.decision_id),
                 transitioned=False,
             )
-        return result
+            for row in rows
+        }
 
     def list_open_decisions(self) -> list[GateDecision]:
         """The gates still awaiting a resolution, hydrated in one batched pass through :meth:`_hydrate`.
@@ -380,7 +387,7 @@ def decision_closure_ids(conn: Connection, decision_ids: Sequence[str] | None) -
     closed: set[str] = set()
     for batch in id_batches(decision_ids) if decision_ids is not None else [None]:
         stmt = stmts.select(s.decisions, s.decisions.c.decision_id).where(
-            ~ChunkDecisionsStore._not_closed_clause(stmts)
+            ~ChunkDecisionsStore._not_closed_clause(stmts, s.decisions.c.decision_id)
         )
         if batch is not None:
             stmt = stmt.where(s.decisions.c.decision_id.in_(batch))
