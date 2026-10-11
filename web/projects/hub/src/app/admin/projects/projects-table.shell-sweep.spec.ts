@@ -7,8 +7,8 @@ import type { ProjectRowVm } from './projects.model';
 
 /**
  * The projects table's real-render proof (the tooled half of `blizzard-context:/verification/blizzard.md`'s
- * `web:shell-sweep` method): at every width, with a project name, slug and description of any length and the
- * "no runner" badge showing, the page never scrolls sideways and the badge and revision stay on screen.
+ * `web:shell-sweep` method): at every width, with a project name of any length, every figure and the longest
+ * "needs a …" badge showing, the page never scrolls sideways and the badge and revision stay on screen.
  * A real CSS layout claim jsdom cannot make.
  *
  * Excluded from the default `ng test hub` run (`angular.json`'s `test.exclude`) because it needs
@@ -17,8 +17,22 @@ import type { ProjectRowVm } from './projects.model';
 /** A name with no break opportunity, so the row cannot wrap its way out of the width. */
 const LONG = 'averylongprojectnamethatapersonmightreallygiveandthatmustnotpushthepagesideways';
 const ROWS: readonly ProjectRowVm[] = [
-  { key: 'proj_long', name: LONG, slug: LONG, description: `${LONG} ${LONG}`, revision: 128, unserved: true },
-  { key: 'proj_b', name: 'Blizzard', slug: 'blizzard', description: 'The platform', revision: 4, unserved: false },
+  {
+    key: 'proj_long',
+    name: LONG,
+    revision: 128,
+    figures: ['12 linked sources', '10 linked repos', '1024 in queue'],
+    needs: 'needs a work source, a repository, a runner',
+    wired: false,
+  },
+  {
+    key: 'proj_b',
+    name: 'Blizzard',
+    revision: 4,
+    figures: ['3 linked sources', '3 linked repos', '5 in queue'],
+    needs: null,
+    wired: true,
+  },
 ];
 
 async function sweep(width: number) {
@@ -48,7 +62,7 @@ async function sweep(width: number) {
     const table = root.querySelector<HTMLElement>('[data-testid="projects-table"]')!;
     expect(table.getBoundingClientRect().right, `the table overruns ${width}px`).toBeLessThanOrEqual(width);
 
-    const badge = root.querySelector<HTMLElement>('[data-testid="projects-table-unserved-proj_long"]')!;
+    const badge = root.querySelector<HTMLElement>('[data-testid="projects-table-needs-proj_long"]')!;
     const box = badge.getBoundingClientRect();
     expect(box.width, 'the badge has no width').toBeGreaterThan(0);
     expect(box.right, `the badge is pushed off screen at ${width}px`).toBeLessThanOrEqual(width);

@@ -12,12 +12,13 @@
 }
 .top {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 4px 8px;
   min-width: 0;
 }
 .title {
-  flex: 1;
+  flex: 1 1 8ch;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -28,10 +29,22 @@
   align-items: center;
   gap: 6px;
   flex: none;
+  max-width: 100%;
+  margin-left: auto;
 }
 .rev {
   color: var(--label);
   font-size: var(--fs-label);
+}
+.rev b {
+  color: var(--text);
+  font-weight: normal;
+}
+.wired {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
 }
 .sub {
   display: flex;
@@ -45,7 +58,4 @@
 .sub span {
   overflow-wrap: anywhere;
   min-width: 0;
-}
-.slug {
-  color: var(--text);
 }

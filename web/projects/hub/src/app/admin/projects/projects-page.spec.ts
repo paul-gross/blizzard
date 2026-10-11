@@ -68,6 +68,14 @@ describe('ProjectsPage', () => {
       if (path === '/api/runners') return { runners: [SERVING] };
       if (path === '/api/projects/proj_b') return BLIZZARD;
       if (path === '/api/projects/proj_w') return WINTER;
+      if (path === '/api/projects/proj_b/source-links') {
+        return { source_links: [{ project_id: 'proj_b', name: 'jira', linked: true, revision: 1 }] };
+      }
+      if (path === '/api/projects/proj_b/repository-links') {
+        return { repository_links: [{ project_id: 'proj_b', name: 'core', linked: true, revision: 1 }] };
+      }
+      if (path.endsWith('-links')) return {};
+      if (path === '/api/chunk-counts') return { ready: 2, running: 1, done: 4 };
       return {};
     });
     TestBed.configureTestingModule({
@@ -87,13 +95,28 @@ describe('ProjectsPage', () => {
     return { harness, el: harness.routeNativeElement as HTMLElement, router: TestBed.inject(Router) };
   }
 
-  it('lists every project on All, badging the one no live runner serves', async () => {
+  it('lists every project on All with its figures, marking the wired one and what the other needs', async () => {
     const { el } = await open('/admin/projects');
-    expect(el.querySelector('[data-testid="projects-table-row-proj_b"]')).not.toBeNull();
     expect(el.querySelector('[data-testid="projects-table-row-proj_w"]')).not.toBeNull();
-    expect(el.querySelector('[data-testid="projects-table-unserved-proj_b"]')).toBeNull();
-    expect(el.querySelector('[data-testid="projects-table-unserved-proj_w"]')).not.toBeNull();
+    const figures = el.querySelector('[data-testid="projects-table-figures-proj_b"]')!.textContent!;
+    expect(figures).toContain('1 linked source');
+    expect(figures).toContain('1 linked repo');
+    expect(figures).toContain('3 in queue');
+    expect(el.querySelector('[data-testid="projects-table-wired-proj_b"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="projects-table-needs-proj_w"]')!.textContent).toContain(
+      'needs a work source, a repository, a runner',
+    );
     expect(el.querySelector('[data-testid="admin-projects-detail-empty"]')).not.toBeNull();
+    expect(stub.forRoute('/api/chunk-counts', 'GET').map((call) => call.search)).toEqual(
+      expect.arrayContaining(['?project=blizzard', '?project=winter']),
+    );
+  });
+
+  it('heads the list with the tenant and puts New project beside it', async () => {
+    const { el } = await open('/admin/projects');
+    const head = el.querySelector('.s-head')!;
+    expect(head.textContent).toContain('Projects');
+    expect(head.querySelector('[data-testid="admin-projects-new"]')).not.toBeNull();
   });
 
   it('opens a picked project by its id', async () => {
@@ -110,7 +133,7 @@ describe('ProjectsPage', () => {
     expect(el.querySelector('[data-testid="projects-table-row-proj_w"]')).not.toBeNull();
   });
 
-  it('creates a project from slug, name and description, then opens it', async () => {
+  it('creates a project from its slug and description, naming it by the slug, then opens it', async () => {
     const { harness, el, router } = await open('/admin/projects');
     el.querySelector<HTMLElement>('[data-testid="admin-projects-new"]')!.click();
     await settle(harness.fixture);
@@ -118,7 +141,6 @@ describe('ProjectsPage', () => {
     expect(dialog.querySelector('[data-testid="admin-projects-create-hint"]')!.textContent).toContain('former slug');
     for (const [key, value] of [
       ['slug', 'nova'],
-      ['name', 'Nova'],
       ['description', 'A new body of work'],
     ]) {
       const input = dialog.querySelector<HTMLInputElement>(`[data-testid="admin-projects-create-field-${key}"]`)!;
@@ -131,7 +153,7 @@ describe('ProjectsPage', () => {
 
     expect(stub.forRoute('/api/projects', 'POST')[0].body).toEqual({
       slug: 'nova',
-      name: 'Nova',
+      name: 'nova',
       description: 'A new body of work',
     });
     expect(router.url).toBe('/admin/projects/proj_n');

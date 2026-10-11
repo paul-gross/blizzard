@@ -1,9 +1,34 @@
 <nav fleetKitTabStrip class="subnav" data-testid="admin-subnav">
-  <a fleetKitTab routerLink="members" routerLinkActive="active" data-testid="admin-tab-members">Members</a>
-  <a fleetKitTab routerLink="projects" routerLinkActive="active" data-testid="admin-tab-projects">Projects</a>
-  <a fleetKitTab routerLink="work-sources" routerLinkActive="active" data-testid="admin-tab-work-sources">Work sources</a>
-  <a fleetKitTab routerLink="repositories" routerLinkActive="active" data-testid="admin-tab-repositories">Repositories</a>
-  <a fleetKitTab routerLink="secrets" routerLinkActive="active" data-testid="admin-tab-secrets">Secrets</a>
+  <a fleetKitTab routerLink="members" routerLinkActive="active" data-testid="admin-tab-members"
+    >Members
+    @if (counts().members !== null) {
+      <span class="cnt">{{ counts().members }}</span>
+    }
+  </a>
+  <a fleetKitTab routerLink="projects" routerLinkActive="active" data-testid="admin-tab-projects"
+    >Projects
+    @if (counts().projects !== null) {
+      <span class="cnt">{{ counts().projects }}</span>
+    }
+  </a>
+  <a fleetKitTab routerLink="work-sources" routerLinkActive="active" data-testid="admin-tab-work-sources"
+    >Work sources
+    @if (counts().sources !== null) {
+      <span class="cnt">{{ counts().sources }}</span>
+    }
+  </a>
+  <a fleetKitTab routerLink="repositories" routerLinkActive="active" data-testid="admin-tab-repositories"
+    >Repositories
+    @if (counts().repositories !== null) {
+      <span class="cnt">{{ counts().repositories }}</span>
+    }
+  </a>
+  <a fleetKitTab routerLink="secrets" routerLinkActive="active" data-testid="admin-tab-secrets"
+    >Secrets
+    @if (counts().secrets !== null) {
+      <span class="cnt">{{ counts().secrets }}</span>
+    }
+  </a>
   <a fleetKitTab routerLink="changes" routerLinkActive="active" data-testid="admin-tab-changes">Changes</a>
 </nav>
 <div class="body">

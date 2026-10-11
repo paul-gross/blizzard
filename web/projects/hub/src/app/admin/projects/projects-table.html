@@ -18,23 +18,31 @@
           <span class="top">
             <span class="title">{{ row.name }}</span>
             <span class="right">
-              @if (row.unserved) {
+              @if (row.needs; as needs) {
                 <fleet-kit-badge
-                  tone="needs"
+                  tone="waiting"
                   variant="soft"
-                  [attr.data-testid]="'projects-table-unserved-' + row.key"
-                  >no runner</fleet-kit-badge
+                  [attr.data-testid]="'projects-table-needs-' + row.key"
+                  >{{ needs }}</fleet-kit-badge
                 >
+              } @else if (row.wired) {
+                <span
+                  class="wired"
+                  role="img"
+                  aria-label="wired"
+                  [attr.data-testid]="'projects-table-wired-' + row.key"
+                ></span>
               }
-              <span class="rev">r{{ row.revision }}</span>
+              <span class="rev">r<b>{{ row.revision }}</b></span>
             </span>
           </span>
-          <span class="sub">
-            <span class="slug">{{ row.slug }}</span>
-            @if (row.description) {
-              <span>{{ row.description }}</span>
-            }
-          </span>
+          @if (row.figures.length > 0) {
+            <span class="sub" [attr.data-testid]="'projects-table-figures-' + row.key">
+              @for (figure of row.figures; track figure) {
+                <span>{{ figure }}</span>
+              }
+            </span>
+          }
         </fleet-kit-select-row>
       </li>
     }

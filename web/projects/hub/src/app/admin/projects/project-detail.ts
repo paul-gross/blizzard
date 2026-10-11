@@ -4,6 +4,7 @@ import {
   computed,
   effect,
   inject,
+  linkedSignal,
   signal,
   type TemplateRef,
   viewChild,
@@ -16,10 +17,11 @@ import {
   FleetWhen,
   type KitAsyncStateValue,
   KitAsyncState,
-  KitBadge,
   KitButton,
   type KitFact,
   KitFactList,
+  type KitTabOption,
+  KitTabs,
   RecordKind,
   restingAsyncState,
   ViewportService,
@@ -28,17 +30,21 @@ import { LensLink } from 'fleet/shell';
 import { map } from 'rxjs';
 
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
+import { TenantContext } from '../../core/auth/tenant-context';
 import { ProjectLens, lensLink } from '../../core/project-lens';
 import { injectHubRunnersQuery } from '../../core/runners.query';
 import { type ConfigFormValues, configEdit } from '../config-edit.model';
+import { injectActorName } from '../actor-names';
 import { ConfigFormDialog } from '../config-form-dialog';
 import { lastChange, revisionRows } from '../config-history.model';
 import { injectConfigHistoryQuery } from '../config-history.query';
 import { ConfigRevisions } from '../config-revisions';
+import { tenantNameOf } from '../members/members-page.model';
 import { injectRepositoriesQuery } from '../repositories/repositories.query';
 import { injectWorkSourcesQuery } from '../work-sources/work-sources.query';
 import { ProjectLinkDialog } from './project-link-dialog';
 import { ProjectLinkPanel } from './project-link-panel';
+import { ProjectOverviewCard } from './project-overview-card';
 import { injectEditProjectMutation, injectProjectLinkMutation, type ProjectLinkKind } from './projects.mutations';
 import {
   failureFor,
@@ -46,7 +52,6 @@ import {
   overviewCallout,
   type PanelFailure,
   PROJECT_FIELDS,
-  projectFacts,
   type ProjectLinkRowVm,
   projectFormValues,
   projectPatch,
@@ -57,14 +62,24 @@ import {
   sourceChoices,
   sourceLinkRows,
 } from './projects.model';
-import { injectProjectQuery, injectProjectRepositoryLinksQuery, injectProjectSourceLinksQuery } from './projects.query';
+import { linkCount, projectFacts, projectTabs, servedByLines } from './project-overview.model';
+import {
+  injectProjectChunkCountsQuery,
+  injectProjectQuery,
+  injectProjectRepositoryLinksQuery,
+  injectProjectSourceLinksQuery,
+} from './projects.query';
+
+/** The project page's tabs: what it is and who serves it, then each kind of link it holds. */
+export type ProjectTab = 'overview' | 'sources' | 'repositories';
 
 /**
  * The selected project — the right-hand child of `/admin/projects`, mounted by both its bare
  * child (nothing selected) and `:key`. The key is the project's id; an older link naming a
- * slug or a former slug still opens it, and the URL is rewritten to the id. It answers "is
- * this project wired?": where its work comes from, where it may land, who serves it — with a
- * callout for what is missing — and edits the project and its links.
+ * slug or a former slug still opens it, and the URL is rewritten to the id. Its Overview tab
+ * answers "is this project wired?": where its work comes from, where it may land, who serves
+ * it — with a callout for what is missing — each card opening the tab that edits it; the
+ * Linked sources and Linked repositories tabs link and unlink.
  */
 @Component({
   selector: 'app-project-detail',
@@ -74,12 +89,13 @@ import { injectProjectQuery, injectProjectRepositoryLinksQuery, injectProjectSou
     ConfigRevisions,
     FleetWhen,
     KitAsyncState,
-    KitBadge,
     KitButton,
     KitFactList,
+    KitTabs,
     LensLink,
     ProjectLinkDialog,
     ProjectLinkPanel,
+    ProjectOverviewCard,
     RouterLink,
   ],
   templateUrl: './project-detail.html',
@@ -104,6 +120,13 @@ export class ProjectDetail {
   private readonly repositoriesQuery = injectRepositoriesQuery(() => true);
   private readonly runnersQuery = injectHubRunnersQuery();
   private readonly historyQuery = injectConfigHistoryQuery(RecordKind.PROJECT, () => this.projectId());
+  private readonly countsQuery = injectProjectChunkCountsQuery(() => this.project()?.slug ?? null);
+
+  /** The open tab — Overview again whenever another project opens. */
+  protected readonly tab = linkedSignal<string | null, ProjectTab>({
+    source: this.projectId,
+    computation: () => 'overview',
+  });
 
   protected readonly state = computed<KitAsyncStateValue>(() =>
     restingAsyncState(this.key() === null, this.projectQuery, this.project() === null),
@@ -118,15 +141,25 @@ export class ProjectDetail {
   protected readonly servedBy = computed(() =>
     projectServedBy(this.projectId(), this.runnersQuery.data()),
   );
+  protected readonly servedLines = computed(() => servedByLines(this.servedBy()));
+  protected readonly tabs = computed<readonly KitTabOption[]>(() =>
+    projectTabs(linkCount(this.sourceLinksQuery.data()), linkCount(this.repositoryLinksQuery.data())),
+  );
   private readonly runnersRead = computed(() => this.runnersQuery.data() !== undefined);
   private readonly served = computed(() => this.servedBy().length > 0);
   protected readonly callout = computed(() =>
-    overviewCallout(this.sourceLinksQuery.data(), this.repositoryLinksQuery.data(), this.runnersRead(), this.served()),
+    overviewCallout(
+      this.sourceLinksQuery.data(),
+      this.repositoryLinksQuery.data(),
+      this.runnersRead(),
+      this.served(),
+      this.countsQuery.data()?.ready ?? null,
+    ),
   );
-  protected readonly unserved = computed(() => this.runnersRead() && !this.served());
   private readonly formerSlugs = computed(() => formerSlugs(this.historyQuery.data(), this.project()));
-  protected readonly lastChange = computed(() => lastChange(this.historyQuery.data()));
-  protected readonly revisions = computed(() => revisionRows(this.historyQuery.data()));
+  private readonly actorName = injectActorName();
+  protected readonly lastChange = computed(() => lastChange(this.historyQuery.data(), this.actorName()));
+  protected readonly revisions = computed(() => revisionRows(this.historyQuery.data(), this.actorName()));
   protected readonly revisionsState = computed<KitAsyncStateValue>(() =>
     asyncState(this.historyQuery, this.revisions().length === 0),
   );
@@ -135,12 +168,23 @@ export class ProjectDetail {
    * through `lensLink` unchanged. */
   protected readonly gardeningLink = computed(() => lensLink(['/gardening'], this.project()?.slug ?? null));
 
+  private readonly meQuery = injectMeQuery();
+  private readonly tenant = inject(TenantContext);
+  private readonly tenantName = computed(() =>
+    tenantNameOf(this.tenant.resolver()(this.meQuery.data()?.tenants ?? [])),
+  );
+  private readonly createdTemplate = viewChild<TemplateRef<unknown>>('createdFact');
   private readonly revisionTemplate = viewChild<TemplateRef<unknown>>('revisionFact');
   protected readonly facts = computed<readonly KitFact[]>(() =>
-    projectFacts(this.project(), this.formerSlugs(), this.revisionTemplate()),
+    projectFacts(this.project(), {
+      tenant: this.tenantName(),
+      former: this.formerSlugs(),
+      counts: this.countsQuery.data(),
+      created: this.createdTemplate(),
+      revision: this.revisionTemplate(),
+    }),
   );
 
-  private readonly meQuery = injectMeQuery();
   /** Writes are a desktop with `config:edit`. */
   protected readonly canEdit = computed(
     () => this.viewport.mode() !== 'mobile' && hasPermission(this.meQuery.data(), 'config:edit'),
@@ -177,6 +221,10 @@ export class ProjectDetail {
         void this.router.navigate(this.lens.link(['/admin', 'projects', project.project_id]), { replaceUrl: true });
       }
     });
+  }
+
+  protected onTab(value: string): void {
+    if (value === 'overview' || value === 'sources' || value === 'repositories') this.tab.set(value);
   }
 
   protected onEdit(): void {

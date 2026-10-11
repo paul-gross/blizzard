@@ -10,6 +10,7 @@ import {
 } from 'fleet';
 
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
+import { TenantContext } from '../../core/auth/tenant-context';
 import { lensedProject } from '../../core/lensed-project';
 import { ProjectLens, lensLink } from '../../core/project-lens';
 import { injectProjectsQuery } from '../../core/projects.query';
@@ -18,13 +19,24 @@ import { injectHubRunnersQuery } from '../../core/runners.query';
 import { type ConfigFormValues, createBody } from '../config-edit.model';
 import { ConfigFormDialog } from '../config-form-dialog';
 import { injectCreateProjectMutation } from './projects.mutations';
-import { PROJECT_FIELDS, projectRows, SLUG_HINT, servedProjectIds } from './projects.model';
+import { tenantNameOf } from '../members/members-page.model';
+import {
+  listedProjects,
+  PROJECT_FIELDS,
+  projectCreate,
+  projectRows,
+  projectsCaption,
+  SLUG_HINT,
+  servedProjectIds,
+} from './projects.model';
+import { injectProjectFigures } from './projects.query';
 import { ProjectsTable } from './projects-table';
 
 /**
  * `/admin/projects` — the tenant's projects beside a `<router-outlet>` holding the project the
  * URL names by id (`project-detail.ts`). On All it lists every project; under a project lens it
- * lists that one project and opens it. A project no live runner serves carries a badge.
+ * lists that one project and opens it. Each row tells how the project is wired — its linked
+ * sources and repositories and its queue — and what it still needs, a runner among them.
  */
 @Component({
   selector: 'app-projects-page',
@@ -46,17 +58,23 @@ export class ProjectsPage {
   private readonly lensId = computed(
     () => lensedProject(this.projectsQuery.data(), this.lens.slug())?.project_id ?? null,
   );
+  private readonly listed = computed(() => listedProjects(this.projectsQuery.data(), this.lensId()));
+  private readonly figures = injectProjectFigures(() => this.listed());
   private readonly servedIds = computed(() =>
     servedProjectIds(this.projectsQuery.data() ?? [], this.runnersQuery.data()),
   );
   protected readonly rows = computed(() =>
-    projectRows(this.projectsQuery.data() ?? [], this.servedIds(), this.lensId()),
+    projectRows(this.listed(), this.figures(), this.servedIds(), this.lensId()),
   );
   protected readonly state = computed<KitAsyncStateValue>(() =>
     asyncState(this.projectsQuery, this.rows().length === 0),
   );
 
   private readonly meQuery = injectMeQuery();
+  private readonly tenant = inject(TenantContext);
+  protected readonly caption = computed(() =>
+    projectsCaption(tenantNameOf(this.tenant.resolver()(this.meQuery.data()?.tenants ?? []))),
+  );
   protected readonly createMutation = injectCreateProjectMutation();
   protected readonly fields = PROJECT_FIELDS;
   protected readonly slugHint = SLUG_HINT;
@@ -90,10 +108,10 @@ export class ProjectsPage {
   }
 
   protected onCreate(values: ConfigFormValues): void {
-    const body = createBody(this.fields, values);
+    const body = projectCreate(createBody(this.fields, values));
     this.createError.set(null);
     this.createMutation.mutate(
-      { slug: String(body['slug'] ?? ''), name: String(body['name'] ?? ''), description: String(body['description'] ?? '') },
+      body,
       {
         onSuccess: (project) => {
           this.createOpen.set(false);

@@ -1,5 +1,6 @@
 import type { ConfigChangeView } from 'fleet';
 
+import { type ActorName, RAW_ACTOR } from '../actor-names';
 import { recordKindLabel, recordRoute } from '../config-links.model';
 import type { ConfigRowVm } from '../config-record-list';
 
@@ -41,9 +42,9 @@ export interface ChangeEntryVm {
 /**
  * Groups the newest-first change log into entries: rows sharing a non-null
  * `apply_id` are one entry, placed where its newest row falls; every other row is
- * its own entry.
+ * its own entry. `name` names each entry's actor.
  */
-export function changeEntries(changes: readonly ConfigChangeView[]): readonly ChangeEntry[] {
+export function changeEntries(changes: readonly ConfigChangeView[], name: ActorName = RAW_ACTOR): readonly ChangeEntry[] {
   const entries: { key: string; applyId: string | null; changes: ConfigChangeView[] }[] = [];
   const byApply = new Map<string, ConfigChangeView[]>();
   for (const change of changes) {
@@ -63,7 +64,7 @@ export function changeEntries(changes: readonly ConfigChangeView[]): readonly Ch
   }
   return entries.map((entry) => ({
     ...entry,
-    actor: entry.changes[0].actor,
+    actor: name(entry.changes[0].actor),
     door: entry.changes[0].door,
     at: entry.changes[0].recorded_at,
   }));

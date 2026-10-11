@@ -1,8 +1,8 @@
-import type { TemplateRef } from '@angular/core';
 import type {
+  ChunkCountsView,
   ConfigChangeView,
   KitAsyncStateValue,
-  KitFact,
+  ProjectCreateRequest,
   ProjectPatchRequest,
   ProjectView,
   RepositoryLinkView,
@@ -16,45 +16,113 @@ import { servingRunners } from '../../core/project-serving';
 import type { ConfigFieldDef, ConfigFormValues } from '../config-edit.model';
 
 /** A project's form: its handle, its display name and what it is for. Every field stays
- * editable — a slug change keeps the old one resolving until another project takes it. */
+ * editable — a slug change keeps the old one resolving until another project takes it. A create
+ * may leave the name out: it defaults to the slug. */
 export const PROJECT_FIELDS: readonly ConfigFieldDef[] = [
   { key: 'slug', label: 'Slug', kind: 'text', required: true },
-  { key: 'name', label: 'Name', kind: 'text', required: true },
+  { key: 'name', label: 'Name', kind: 'text' },
   { key: 'description', label: 'Description', kind: 'text' },
 ];
+
+/** The create a new project's form sends: a name left empty is the slug. */
+export function projectCreate(body: Readonly<Record<string, string | boolean | null>>): ProjectCreateRequest {
+  const text = (key: string): string => (typeof body[key] === 'string' ? (body[key] as string).trim() : '');
+  const slug = text('slug');
+  return { slug, name: text('name') || slug, description: text('description') };
+}
 
 /** What the slug field means, under the form. */
 export const SLUG_HINT =
   'Lowercase letters, digits and single hyphens. A former slug keeps opening this project until another project takes it.';
 
+/** The projects a list shows: every one on All, only the lensed one under a lens. */
+export function listedProjects(projects: readonly ProjectView[] | undefined, lensId: string | null): readonly ProjectView[] {
+  return (projects ?? []).filter((project) => lensId === null || project.project_id === lensId);
+}
+
+/** The list's caption, naming the tenant once it is known. */
+export function projectsCaption(tenantName: string): string {
+  return tenantName === '' ? 'Projects' : `Projects in ${tenantName}`;
+}
+
+/** What one project's own reads hold for its list row — each `undefined` until it answers. */
+export interface ProjectFigures {
+  readonly sourceLinks?: readonly SourceLinkView[];
+  readonly repositoryLinks?: readonly RepositoryLinkView[];
+  readonly counts?: ChunkCountsView;
+}
+
 /** One row of the projects list. The key is the project's id: nothing holds a slug as a key. */
 export interface ProjectRowVm {
   readonly key: string;
   readonly name: string;
-  readonly slug: string;
-  readonly description: string;
   readonly revision: number;
-  /** Whether no live runner serves the project, so its ready work waits. */
-  readonly unserved: boolean;
+  /** How the project is wired, in order: its linked sources, its linked repositories, its queue — each once read. */
+  readonly figures: readonly string[];
+  /** What it still needs to take work in, land it and get it done (`needs a runner`), `null` while it is wired or
+   * not yet judged. */
+  readonly needs: string | null;
+  /** Whether every read the judgment rests on has answered and the project lacks nothing. */
+  readonly wired: boolean;
 }
 
-/** The projects list, by display name; under a lens, only the lensed project. */
+function plural(count: number, one: string, many: string): string {
+  return `${count} ${count === 1 ? one : many}`;
+}
+
+/** The links in force — an unlinked link stays in the listing with `linked: false`. */
+function inForce(links: readonly (SourceLinkView | RepositoryLinkView)[]): number {
+  return links.filter((link) => link.linked).length;
+}
+
+/** The chunks a project has waiting or under way: ready, plus running. */
+export function inQueue(counts: ChunkCountsView): number {
+  return counts.ready + counts.running;
+}
+
+/** A row's figures, each once its read answers. */
+export function rowFigures(figures: ProjectFigures | undefined): readonly string[] {
+  const out: string[] = [];
+  if (figures?.sourceLinks) out.push(plural(inForce(figures.sourceLinks), 'linked source', 'linked sources'));
+  if (figures?.repositoryLinks) out.push(plural(inForce(figures.repositoryLinks), 'linked repo', 'linked repos'));
+  if (figures?.counts) out.push(`${inQueue(figures.counts)} in queue`);
+  return out;
+}
+
+/** What a project lacks, or `null` until its links and the runners are all read. */
+export function rowMissing(figures: ProjectFigures | undefined, served: boolean | null): readonly string[] | null {
+  if (!figures?.sourceLinks || !figures.repositoryLinks || served === null) return null;
+  return missingWiring(figures.sourceLinks, figures.repositoryLinks, served);
+}
+
+/** The list's word for what a project lacks: `needs a work source, a runner`. */
+export function needsText(missing: readonly string[]): string {
+  return `needs a ${missing.join(', a ')}`;
+}
+
+/** The projects list, by display name; under a lens, only the lensed project. A project is judged wired or wanting
+ * only once its links and the runners are read. */
 export function projectRows(
   projects: readonly ProjectView[],
+  figures: ReadonlyMap<string, ProjectFigures>,
   servedIds: ReadonlySet<string> | null,
   lensId: string | null,
 ): readonly ProjectRowVm[] {
   return projects
     .filter((project) => lensId === null || project.project_id === lensId)
-    .map((project) => ({
-      key: project.project_id,
-      name: project.name,
-      slug: project.slug,
-      description: project.description,
-      revision: project.revision,
-      unserved: servedIds !== null && !servedIds.has(project.project_id),
-    }))
-    .sort((a, b) => a.name.localeCompare(b.name) || a.slug.localeCompare(b.slug));
+    .sort((a, b) => a.name.localeCompare(b.name) || a.slug.localeCompare(b.slug))
+    .map((project) => {
+      const own = figures.get(project.project_id);
+      const missing = rowMissing(own, servedIds === null ? null : servedIds.has(project.project_id));
+      return {
+        key: project.project_id,
+        name: project.name,
+        revision: project.revision,
+        figures: rowFigures(own),
+        needs: missing !== null && missing.length > 0 ? needsText(missing) : null,
+        wired: missing !== null && missing.length === 0,
+      };
+    });
 }
 
 /** The ids of the projects at least one live runner serves, or `null` before the runners are read. */
@@ -206,11 +274,17 @@ export function missingWiring(
   return missing;
 }
 
-/** The overview's callout for what a project lacks, or `null` when it is wired. */
-export function wiringCallout(missing: readonly string[]): string | null {
+/** The overview's callout for what a project lacks, or `null` when it is wired. With no runner it says how many of
+ * its chunks wait, once `ready` is read. */
+export function wiringCallout(missing: readonly string[], ready: number | null = null): string | null {
   if (missing.length === 0) return null;
   const lacks = `This project has no ${missing.join(' and no ')} yet.`;
-  return missing.includes('runner') ? `${lacks} No runner serves it, so its ready work waits in the queue.` : lacks;
+  if (!missing.includes('runner')) return lacks;
+  const waits =
+    ready === null || ready === 0
+      ? 'Its ready work waits in the queue until a runner serves it.'
+      : `Its ${plural(ready, 'ready chunk waits', 'ready chunks wait')} in the queue until a runner serves it.`;
+  return `${lacks} ${waits}`;
 }
 
 /** The live runners serving the project, none while nothing is selected. */
@@ -227,27 +301,10 @@ export function overviewCallout(
   repositoryLinks: readonly RepositoryLinkView[] | undefined,
   runnersRead: boolean,
   served: boolean,
+  ready: number | null = null,
 ): string | null {
   if (!sourceLinks || !repositoryLinks || !runnersRead) return null;
-  return wiringCallout(missingWiring(sourceLinks, repositoryLinks, served));
-}
-
-/** The project's facts: its slug and the slugs it left, what it is for, its id, and its
- * revision rendered by `revision` (who last changed it, through which door). */
-export function projectFacts(
-  project: ProjectView | null,
-  former: readonly string[],
-  revision: TemplateRef<unknown> | undefined,
-): readonly KitFact[] {
-  if (project === null) return [];
-  const facts: KitFact[] = [
-    { label: 'Slug', value: project.slug, testid: 'admin-projects-slug' },
-    { label: 'Former slugs', value: former.length > 0 ? former.join(', ') : '—', testid: 'admin-projects-former-slugs' },
-    { label: 'Description', value: project.description || '—' },
-    { label: 'Id', value: project.project_id },
-  ];
-  if (revision) facts.push({ label: 'Revision', template: revision, testid: 'admin-projects-revision' });
-  return facts;
+  return wiringCallout(missingWiring(sourceLinks, repositoryLinks, served), ready);
 }
 
 /** A failed write held against the panel it came from. */

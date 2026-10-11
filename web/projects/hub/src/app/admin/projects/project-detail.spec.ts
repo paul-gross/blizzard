@@ -50,8 +50,22 @@ const HISTORY = {
   ],
 };
 
-/** An operator who may change configuration. */
-const EDITOR = { ...OPERATOR_ME_RESPONSE, permissions: [...OPERATOR_ME_RESPONSE.permissions, 'config:edit'] };
+/** An operator who may change configuration and read the members. */
+const EDITOR = {
+  ...OPERATOR_ME_RESPONSE,
+  permissions: [...OPERATOR_ME_RESPONSE.permissions, 'config:edit', 'user:manage'],
+};
+const MEMBERS = [
+  {
+    user_id: 'ada',
+    display_name: 'Ada Lovelace',
+    username: 'ada',
+    email: null,
+    hub_admin: false,
+    role: 'admin',
+    created_at: '2026-10-01T00:00:00Z',
+  },
+];
 
 function lensOn(project: ProjectView | null) {
   const slug = project?.slug ?? null;
@@ -81,6 +95,8 @@ describe('ProjectDetail', () => {
       if (path === '/api/repositories') return REPOSITORIES;
       if (path === '/api/runners') return { runners };
       if (path === '/api/config/changes') return HISTORY;
+      if (path === '/api/members') return MEMBERS;
+      if (path === '/api/chunk-counts') return { ready: 2, running: 1, done: 4 };
       return {};
     });
     TestBed.configureTestingModule({
@@ -102,17 +118,45 @@ describe('ProjectDetail', () => {
 
   const text = (el: HTMLElement, testid: string) => el.querySelector(`[data-testid="${testid}"]`)?.textContent ?? '';
 
-  it('shows the project, the slug it left, its links, and what it lacks', async () => {
+  async function click(harness: RouterTestingHarness, el: HTMLElement, testid: string) {
+    el.querySelector<HTMLElement>(`[data-testid="${testid}"]`)!.click();
+    await settle(harness.fixture);
+  }
+
+  it('overviews the project: its facts, where work comes from and lands, and what it lacks', async () => {
     const { el } = await open('/admin/projects/proj_b');
     expect(text(el, 'admin-projects-detail')).toContain('Blizzard');
+    expect(text(el, 'admin-projects-description')).toContain('The platform');
     expect(text(el, 'admin-projects-former-slugs')).toContain('default');
+    expect(text(el, 'admin-projects-queue')).toContain('2 ready · 1 running · 4 done');
+    expect(text(el, 'admin-projects-draws')).toContain('jira');
+    expect(text(el, 'admin-projects-draws')).toContain('jira · acme.atlassian.net');
+    expect(text(el, 'admin-projects-lands')).toContain('No repository is linked');
+    expect(text(el, 'admin-projects-served-by')).toContain('No runner serves this project.');
+    expect(text(el, 'admin-projects-callout')).toContain('no repository and no runner');
+    expect(text(el, 'admin-projects-callout')).toContain('Its 2 ready chunks wait in the queue');
+    expect(text(el, 'admin-projects-tab-sources')).toContain('2');
+    expect(text(el, 'admin-projects-tab-repositories')).toContain('0');
+  });
+
+  it('names who made each revision by their member name', async () => {
+    const { el } = await open('/admin/projects/proj_b');
+    expect(text(el, 'admin-projects-last-change')).toContain('by Ada Lovelace via board');
+    expect(text(el, 'admin-projects-revisions')).toContain('Ada Lovelace via board');
+    expect(text(el, 'admin-projects-revisions')).not.toContain('ada via');
+  });
+
+  it('opens the Linked sources tab from its overview card, where the links are edited', async () => {
+    const { harness, el } = await open('/admin/projects/proj_b');
+    expect(el.querySelector('[data-testid="admin-projects-sources-rows"]')).toBeNull();
+    await click(harness, el, 'admin-projects-draws-open');
     expect(text(el, 'admin-projects-sources-rows')).toContain('hub');
     expect(text(el, 'admin-projects-sources-rows')).toContain('jira · acme.atlassian.net');
     expect(el.querySelector('[data-testid="admin-projects-sources-unlink-hub"]')).toBeNull();
     expect(el.querySelector('[data-testid="admin-projects-sources-unlink-jira"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="admin-projects-served-by-open"]')).toBeNull();
+    await click(harness, el, 'admin-projects-tab-repositories');
     expect(text(el, 'admin-projects-repositories-empty')).toContain('No repository is linked');
-    expect(text(el, 'admin-projects-callout')).toContain('no repository and no runner');
-    expect(el.querySelector('[data-testid="admin-projects-detail-unserved"]')).not.toBeNull();
   });
 
   it('names the runners that serve it and drops the runner from the callout', async () => {
@@ -127,8 +171,8 @@ describe('ProjectDetail', () => {
     };
     const { el } = await open('/admin/projects/proj_b', [serving]);
     expect(text(el, 'admin-projects-served-by')).toContain('desk');
+    expect(text(el, 'admin-projects-served-by')).toContain('online');
     expect(text(el, 'admin-projects-callout')).not.toContain('runner');
-    expect(el.querySelector('[data-testid="admin-projects-detail-unserved"]')).toBeNull();
   });
 
   it('opens a project named by a former slug and rewrites the URL to its id', async () => {
@@ -158,6 +202,7 @@ describe('ProjectDetail', () => {
 
   it('links a source the project does not link yet, and unlinks one at its revision', async () => {
     const { harness, el } = await open('/admin/projects/proj_b');
+    await click(harness, el, 'admin-projects-tab-sources');
     el.querySelector<HTMLElement>('[data-testid="admin-projects-sources-link"]')!.click();
     await settle(harness.fixture);
     const dialog = document.querySelector('[data-testid="admin-projects-link-source-dialog"]')!;

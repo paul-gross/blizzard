@@ -6,7 +6,10 @@
   [attr.aria-labelledby]="listCaption() ? listCaptionId() : null"
 >
   @if (listCaption()) {
-    <div class="s-head"><span class="tag" [id]="listCaptionId()">{{ listCaption() }}</span></div>
+    <div class="s-head">
+      <span class="tag" [id]="listCaptionId()">{{ listCaption() }}</span>
+      <ng-content select="[kit-master-detail-list-action]" />
+    </div>
   }
   <ng-content select="[kit-master-detail-list]" />
 </div>

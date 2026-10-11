@@ -5,8 +5,15 @@ import { ProjectsTable } from './projects-table';
 import type { ProjectRowVm } from './projects.model';
 
 const ROWS: readonly ProjectRowVm[] = [
-  { key: 'proj_b', name: 'Blizzard', slug: 'blizzard', description: 'The platform', revision: 4, unserved: false },
-  { key: 'proj_c', name: 'Celestial', slug: 'celestial', description: '', revision: 1, unserved: true },
+  {
+    key: 'proj_b',
+    name: 'Blizzard',
+    revision: 4,
+    figures: ['3 linked sources', '3 linked repos', '5 in queue'],
+    needs: null,
+    wired: true,
+  },
+  { key: 'proj_c', name: 'Celestial', revision: 1, figures: [], needs: 'needs a runner', wired: false },
 ];
 
 describe('ProjectsTable', () => {
@@ -23,14 +30,19 @@ describe('ProjectsTable', () => {
     return { fixture, el: fixture.nativeElement as HTMLElement };
   }
 
-  it('shows each project with its slug and revision, and badges the one no runner serves', async () => {
+  it('shows each project with its revision and figures, a dot when wired and what a wanting one needs', async () => {
     const { el } = await mount(ROWS);
     const blizzard = el.querySelector('[data-testid="projects-table-row-proj_b"]')!.textContent!;
     expect(blizzard).toContain('Blizzard');
-    expect(blizzard).toContain('blizzard');
     expect(blizzard).toContain('r4');
-    expect(el.querySelector('[data-testid="projects-table-unserved-proj_b"]')).toBeNull();
-    expect(el.querySelector('[data-testid="projects-table-unserved-proj_c"]')!.textContent).toContain('no runner');
+    expect(el.querySelector('[data-testid="projects-table-figures-proj_b"]')!.textContent).toContain(
+      '3 linked sources',
+    );
+    expect(el.querySelector('[data-testid="projects-table-wired-proj_b"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="projects-table-needs-proj_b"]')).toBeNull();
+    expect(el.querySelector('[data-testid="projects-table-needs-proj_c"]')!.textContent).toContain('needs a runner');
+    expect(el.querySelector('[data-testid="projects-table-wired-proj_c"]')).toBeNull();
+    expect(el.querySelector('[data-testid="projects-table-figures-proj_c"]')).toBeNull();
   });
 
   it('picks a project by its id', async () => {

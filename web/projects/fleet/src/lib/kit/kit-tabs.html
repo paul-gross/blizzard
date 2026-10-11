@@ -11,6 +11,9 @@
       (click)="choose.emit(option.value)"
     >
       {{ option.label }}
+      @if (option.count !== undefined && option.count !== null) {
+        <span class="cnt">{{ option.count }}</span>
+      }
     </button>
   }
 </div>

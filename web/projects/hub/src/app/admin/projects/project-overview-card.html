@@ -1,0 +1,20 @@
+<section class="card" [attr.data-testid]="testid()">
+  <header class="hdr">
+    <h3 class="section">{{ heading() }}</h3>
+    @if (opens()) {
+      <fleet-kit-button variant="primary" [testid]="testid() + '-open'" (click)="open.emit()">open</fleet-kit-button>
+    }
+  </header>
+  @if (lines().length > 0) {
+    <ul class="lines">
+      @for (line of lines(); track line.name) {
+        <li>
+          <span class="name">{{ line.name }}</span>
+          <span class="detail">{{ line.detail }}</span>
+        </li>
+      }
+    </ul>
+  } @else {
+    <p class="no-lines">{{ none() }}</p>
+  }
+</section>

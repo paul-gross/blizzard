@@ -6,6 +6,8 @@ import { KitTab, KitTabStrip } from './kit-tab';
 export interface KitTabOption {
   readonly value: string;
   readonly label: string;
+  /** How many the tab holds, shown after its label; none when absent. */
+  readonly count?: number | null;
   /** Optional per-tab test hook, forwarded to the rendered tab button. */
   readonly testid?: string;
 }

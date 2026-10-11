@@ -4,9 +4,9 @@ import { KitAsyncState, type KitAsyncStateValue, KitBadge, KitSelectRow } from '
 import type { ProjectRowVm } from './projects.model';
 
 /**
- * The tenant's projects as a selection list — each row the project's name, its slug, what it
- * is for and its revision, with a "no runner" badge on a project no live runner serves.
- * Presentational: rows in, picks out by project id.
+ * The tenant's projects as a selection list — each row the project's name and revision over how
+ * it is wired (its linked sources, its linked repositories, its queue), with a dot on a wired
+ * project and a badge naming what a wanting one needs. Presentational: rows in, picks out by id.
  */
 @Component({
   selector: 'app-projects-table',
