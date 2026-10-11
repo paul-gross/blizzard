@@ -717,6 +717,14 @@ transitions = Table(
 # Leading chunk_id also serves chunk-only filters.
 Index("ix_transitions_tenant_chunk_id_epoch", transitions.c.tenant_id, transitions.c.chunk_id, transitions.c.epoch)
 
+# Serves the per-chunk "superseded by a newer fact" check, which a (tenant_id, recorded_at) index walks tenant-wide.
+Index(
+    "ix_transitions_tenant_chunk_id_recorded_at",
+    transitions.c.tenant_id,
+    transitions.c.chunk_id,
+    transitions.c.recorded_at,
+)
+
 # (tenant_id, recorded_at, transition_id) for one tenant's ordered reads.
 Index(
     "ix_transitions_tenant_recorded_at_transition_id",
@@ -752,6 +760,12 @@ chunk_migrations = Table(
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_chunk_migrations_tenant_id"), nullable=False),
 )
 Index("ix_chunk_migrations_tenant_chunk_id", chunk_migrations.c.tenant_id, chunk_migrations.c.chunk_id)
+Index(
+    "ix_chunk_migrations_tenant_chunk_id_recorded_at",
+    chunk_migrations.c.tenant_id,
+    chunk_migrations.c.chunk_id,
+    chunk_migrations.c.recorded_at,
+)
 # (tenant_id, recorded_at, migration_id) for one tenant's ordered reads.
 Index(
     "ix_chunk_migrations_tenant_recorded_at_migration_id",
@@ -1640,6 +1654,12 @@ chunk_restarts = Table(
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_chunk_restarts_tenant_id"), nullable=False),
 )
 Index("ix_chunk_restarts_tenant_chunk_id", chunk_restarts.c.tenant_id, chunk_restarts.c.chunk_id)
+Index(
+    "ix_chunk_restarts_tenant_chunk_id_recorded_at",
+    chunk_restarts.c.tenant_id,
+    chunk_restarts.c.chunk_id,
+    chunk_restarts.c.recorded_at,
+)
 # (tenant_id, recorded_at, id) for one tenant's ordered reads.
 Index(
     "ix_chunk_restarts_tenant_recorded_at_id",

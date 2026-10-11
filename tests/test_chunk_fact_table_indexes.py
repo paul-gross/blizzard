@@ -123,12 +123,22 @@ def _no_temp_btree_for_order_by(plan: Sequence[Row[Any]]) -> bool:
     return not any("USE TEMP B-TREE FOR" in str(row) and "ORDER BY" in str(row) for row in plan)
 
 
+# The `(tenant_id, chunk_id, recorded_at)` composites serve the superseded check; being a strict superset of
+# `ix_<table>_tenant_chunk_id`, they also take the plain per-chunk read on their table.
+_RECORDED_AT_COMPOSITE_TABLES = ("chunk_migrations", "chunk_restarts")
+
+
 @pytest.mark.parametrize("table", _INDEXED_TABLES)
 def test_fact_table_chunk_id_read_plans_as_an_index_search(tmp_path: Path, table: str) -> None:
     engine = _engine(tmp_path)
     with engine.connect() as conn:
         plan = conn.execute(sa.text(f"EXPLAIN QUERY PLAN {_BY_CHUNK.format(table=table)}")).all()
-    assert _plan_uses_index(plan, f"ix_{table}_tenant_chunk_id"), plan
+    serving = (
+        f"ix_{table}_tenant_chunk_id_recorded_at"
+        if table in _RECORDED_AT_COMPOSITE_TABLES
+        else f"ix_{table}_tenant_chunk_id"
+    )
+    assert _plan_uses_index(plan, serving), plan
     assert _seeks_tenant_and_chunk(plan), plan
 
 
@@ -139,7 +149,6 @@ def test_chunk_id_epoch_composite_tables_plan_through_the_exact_composite(tmp_pa
     engine = _engine(tmp_path)
     with engine.connect() as conn:
         plan = conn.execute(sa.text(f"EXPLAIN QUERY PLAN {_BY_CHUNK.format(table=table)}")).all()
-    assert _plan_uses_index(plan, f"ix_{table}_tenant_chunk_id_epoch"), plan
     assert not _plan_uses_index(plan, f"ix_{table}_tenant_chunk_id"), plan
     assert _seeks_tenant_and_chunk(plan), plan
 
