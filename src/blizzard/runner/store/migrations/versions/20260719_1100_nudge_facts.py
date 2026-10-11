@@ -9,16 +9,28 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+import sqlalchemy as sa
 from alembic import op
 
-from blizzard.runner.store.schema import nudge_facts
+from blizzard.foundation.store.utc import UtcDateTime
+
 
 revision: str = "20260719_1100_runner_nudge_facts"
 down_revision: str | None = "20260719_1000_runner_attachments"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-_TABLES = (nudge_facts,)
+_frozen_metadata = sa.MetaData()
+_nudge_facts = sa.Table(
+    "nudge_facts",
+    _frozen_metadata,
+    sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
+    sa.Column("lease_id", sa.String(), nullable=False),
+    sa.Column("epoch", sa.Integer(), nullable=False),
+    sa.Column("nudged_at", UtcDateTime(), nullable=False),
+)
+
+_TABLES = (_nudge_facts,)
 
 
 def upgrade() -> None:

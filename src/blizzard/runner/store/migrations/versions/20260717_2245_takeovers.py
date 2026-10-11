@@ -13,7 +13,6 @@ import sqlalchemy as sa
 from alembic import op
 
 from blizzard.foundation.store.utc import UtcDateTime
-from blizzard.runner.store.schema import takeover_ends
 
 revision: str = "20260717_2245_runner_takeovers"
 down_revision: str | None = "20260717_0446_runner_pause_parks"
@@ -32,7 +31,14 @@ _takeovers = sa.Table(
     sa.Column("fence_epoch", sa.Integer(), nullable=True),
     sa.Column("opened_at", UtcDateTime(), nullable=False),
 )
-_TABLES = (_takeovers, takeover_ends)
+_takeover_ends = sa.Table(
+    "takeover_ends",
+    _frozen_metadata,
+    sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
+    sa.Column("takeover_id", sa.String(), nullable=False),
+    sa.Column("ended_at", UtcDateTime(), nullable=False),
+)
+_TABLES = (_takeovers, _takeover_ends)
 
 
 def upgrade() -> None:

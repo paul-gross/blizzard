@@ -11,7 +11,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-from blizzard.runner.store.schema import park_facts, park_resumes
+from blizzard.foundation.store.utc import UtcDateTime
+
 
 revision: str = "20260713_1801_runner_asks_and_parks"
 down_revision: str | None = "20260713_1635_runner_heartbeats"
@@ -31,7 +32,24 @@ _asks = sa.Table(
     sa.Column("session_id", sa.String(), nullable=True),
     sa.Column("asked_at", sa.DateTime(), nullable=False),
 )
-_TABLES = (_asks, park_facts, park_resumes)
+_park_facts = sa.Table(
+    "park_facts",
+    _frozen_metadata,
+    sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
+    sa.Column("lease_id", sa.String(), nullable=False),
+    sa.Column("chunk_id", sa.String(), nullable=False),
+    sa.Column("question_id", sa.String(), nullable=False),
+    sa.Column("parked_at", UtcDateTime(), nullable=False),
+)
+_park_resumes = sa.Table(
+    "park_resumes",
+    _frozen_metadata,
+    sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
+    sa.Column("lease_id", sa.String(), nullable=False),
+    sa.Column("question_id", sa.String(), nullable=False),
+    sa.Column("resumed_at", UtcDateTime(), nullable=False),
+)
+_TABLES = (_asks, _park_facts, _park_resumes)
 
 
 def upgrade() -> None:
