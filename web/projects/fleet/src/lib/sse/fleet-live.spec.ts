@@ -178,6 +178,7 @@ describe('FleetLiveUpdates', () => {
   });
 
   it('does not abort an active query refetch when a frame flushes', async () => {
+    queryClient.setQueryData(['hub', 'queue'], 'cached');
     let resolveRead!: (value: string) => void;
     const queryFn = vi.fn(({ signal }: { signal: AbortSignal }) => {
       signal.addEventListener('abort', aborted);
@@ -188,6 +189,8 @@ describe('FleetLiveUpdates', () => {
     const unsubscribe = observer.subscribe(vi.fn());
     try {
       expect(queryFn).toHaveBeenCalledTimes(1);
+      expect(observer.getCurrentResult().isFetching).toBe(true);
+      expect(observer.getCurrentResult().data).toBe('cached');
       const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
       TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
       const source = FakeEventSource.instances[0];
@@ -195,9 +198,9 @@ describe('FleetLiveUpdates', () => {
       source.emitNamed('queue-changed', JSON.stringify({}));
       vi.advanceTimersByTime(INVALIDATION_COALESCE_WINDOW_MS);
 
-      expect(invalidate).toHaveBeenCalledWith({ queryKey: ['hub', 'queue'] }, { cancelRefetch: false });
       expect(aborted).not.toHaveBeenCalled();
       expect(queryFn).toHaveBeenCalledTimes(1);
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: ['hub', 'queue'] }, { cancelRefetch: false });
       resolveRead('ready');
       await vi.waitFor(() => expect(observer.getCurrentResult().data).toBe('ready'));
       expect(aborted).not.toHaveBeenCalled();
