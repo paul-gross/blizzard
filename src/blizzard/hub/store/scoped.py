@@ -57,9 +57,16 @@ from datetime import datetime
 from typing import Any
 
 import sqlalchemy as sa
-from sqlalchemy import Connection, Engine, Exists, event
-from sqlalchemy.sql import Alias, ColumnElement, Delete, FromClause, Insert, Join, Select, TableClause, Update
+from sqlalchemy import Connection, Engine, event
+from sqlalchemy.sql import ColumnElement, FromClause, Insert, TableClause
 
+from blizzard.foundation.store.key_scoping import (
+    KeyedStatements,
+    KeyScoping,
+    base_table,
+    execute_time_rows,
+    key_name,
+)
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.tenancy import StoreScope, TenantClosed, UnknownTenant
@@ -105,32 +112,28 @@ class ProjectKeyMissing(ValueError):
         self.table = table
 
 
-def _key_name(key: Any) -> str:
-    """A values key's column name: the key itself, or the ``key`` of a column object."""
-    return key if isinstance(key, str) else str(getattr(key, "key", key))
-
-
-def _base_table(from_: FromClause) -> TableClause | None:
-    """The table an alias (of an alias…) names, or the table itself; ``None`` for a join, a
-    subquery, or any other derived FROM."""
-    while isinstance(from_, Alias):
-        from_ = from_.element
-    return from_ if isinstance(from_, TableClause) else None
+#: The hub's partition of its tables by tenant: keyed by ``tenant_id``, every table carrying it but those on
+#: ``GLOBAL_TABLES``.
+TENANT_SCOPING = KeyScoping(
+    key_column=TENANT_COLUMN,
+    owns=lambda table: table.name not in s.GLOBAL_TABLES,
+    owner="tenant-owned",
+    key_supplied=TenantKeySupplied,
+)
 
 
 def is_tenant_owned(table: FromClause) -> bool:
     """Whether ``table`` (or the table an alias of it names) is tenant-owned: it has a
     ``tenant_id`` column and is not on ``GLOBAL_TABLES``. A join or a subquery is not a table and
     owns nothing itself."""
-    base = _base_table(table)
-    return base is not None and TENANT_COLUMN in base.c and base.name not in s.GLOBAL_TABLES
+    return TENANT_SCOPING.is_keyed(table)
 
 
 def is_project_keyed(table: FromClause) -> bool:
     """Whether ``table`` (or the table an alias of it names) is tenant-owned and keyed by a project: it has a
     ``project_id`` column that holds no ``NULL``. ``config_changes`` is not — its ``project_id`` is null for a
     tenant-wide record."""
-    base = _base_table(table)
+    base = base_table(table)
     return (
         base is not None and is_tenant_owned(base) and PROJECT_COLUMN in base.c and not base.c[PROJECT_COLUMN].nullable
     )
@@ -140,7 +143,7 @@ def _entry_names(entry: Mapping[Any, Any] | Sequence[Any], table: TableClause) -
     """The column names one row of a multi-row ``VALUES`` fills: a mapping's keys, or the leading columns a
     positional row fills in order."""
     if isinstance(entry, Mapping):
-        return {_key_name(key) for key in entry}
+        return {key_name(key) for key in entry}
     return {column.key for column in list(table.columns)[: len(entry)]}
 
 
@@ -150,7 +153,7 @@ def _names_project(insert: Insert, table: TableClause, rows: Sequence[Mapping[st
 
     SQLAlchemy keeps what a statement names itself only on private attributes until it compiles the statement."""
     named = [*(insert._values or {}), *(insert._select_names or ())]
-    if any(_key_name(key) == PROJECT_COLUMN for key in named):
+    if any(key_name(key) == PROJECT_COLUMN for key in named):
         return True
     entries = [entry for batch in insert._multi_values for entry in batch]
     if entries and all(PROJECT_COLUMN in _entry_names(entry, table) for entry in entries):
@@ -158,22 +161,15 @@ def _names_project(insert: Insert, table: TableClause, rows: Sequence[Mapping[st
     return all(PROJECT_COLUMN in row for row in rows)
 
 
-def _preserved(from_: FromClause) -> Iterator[FromClause]:
-    """The tables (or aliases) in ``from_`` whose rows a read of it returns unconditionally: both
-    sides of an inner join, only the left side of an outer join."""
-    if isinstance(from_, Join):
-        yield from _preserved(from_.left)
-        if not from_.isouter:
-            yield from _preserved(from_.right)
-    elif _base_table(from_) is not None:
-        yield from_
-
-
-class ScopedStatements:
-    """Statement builders bound to one :class:`StoreScope`; each applies the scope's tenant to
-    every tenant-owned table it names."""
+class ScopedStatements(KeyedStatements):
+    """Statement builders bound to one :class:`StoreScope` — the key-scoping core's builders
+    (:class:`KeyedStatements`) under :data:`TENANT_SCOPING`; each applies the scope's tenant to every tenant-owned table
+    it names. An insert into a project-keyed table names its row's ``project_id``: ``insert_rows`` and
+    ``insert_from_select`` refuse with :class:`ProjectKeyMissing` as they build, and ``insert``, whose values arrive
+    after it builds, when the statement executes."""
 
     def __init__(self, scope: StoreScope) -> None:
+        KeyedStatements.__init__(self, TENANT_SCOPING, scope.tenant)
         self._scope = scope
 
     @property
@@ -183,75 +179,15 @@ class ScopedStatements:
     def tenant_predicates(self, from_: FromClause) -> list[ColumnElement[bool]]:
         """``tenant_id = <tenant>`` for each tenant-owned table a read of ``from_`` returns rows
         of unconditionally — empty for a global table or a derived FROM."""
-        return [t.c[TENANT_COLUMN] == self._scope.tenant for t in _preserved(from_) if is_tenant_owned(t)]
+        return self.key_predicates(from_)
 
-    def select(self, from_: FromClause, *cols: Any) -> Select[Any]:
-        """``SELECT cols`` (every column of ``from_`` when none are named) ``FROM from_``, confined
-        to the tenant. ``from_`` may be a table, an alias, or a join :meth:`scope_join` built."""
-        stmt: Select[Any] = sa.select(*cols).select_from(from_) if cols else sa.select(from_)
-        predicates = self.tenant_predicates(from_)
-        return stmt.where(*predicates) if predicates else stmt
-
-    def exists(self, from_: FromClause, *criteria: ColumnElement[bool]) -> Exists:
-        """``EXISTS (SELECT 1 FROM from_ WHERE criteria)`` confined to the tenant; it correlates
-        to an enclosing query like any ``EXISTS``, and ``~`` makes it ``NOT EXISTS``."""
-        return self.select(from_, sa.literal_column("1")).where(*criteria).exists()
-
-    def scope_join(
-        self, left: FromClause, right: FromClause, onclause: ColumnElement[bool], *, isouter: bool = False
-    ) -> Join:
-        """``left JOIN right ON onclause`` with the right side's tenant predicate in the ``ON`` —
-        so a ``LEFT OUTER JOIN`` keeps its unmatched left rows. The left side is scoped by the
-        :meth:`select` that reads the join."""
-        return sa.join(left, right, sa.and_(onclause, *self.tenant_predicates(right)), isouter=isouter)
-
-    def insert(self, table: TableClause) -> Insert:
-        """``INSERT INTO table`` with ``tenant_id`` stamped into every row's values. On a project-keyed table the
-        caller names ``project_id`` in a later ``values()`` or in each execute-time row; the statement is refused
-        with :class:`ProjectKeyMissing` when it executes naming none."""
-        stmt = sa.insert(table)
-        return stmt.values({TENANT_COLUMN: self._scope.tenant}) if is_tenant_owned(table) else stmt
-
-    def insert_rows(self, table: TableClause, rows: Sequence[Mapping[Any, Any]]) -> Insert:
-        """``INSERT INTO table VALUES (row), (row), …`` — one statement for all ``rows``, with
-        ``tenant_id`` stamped into each. A row naming ``tenant_id`` itself is refused, and so, on a
-        project-keyed table, is a row naming no ``project_id``."""
-        if not rows:
-            raise ValueError(f"no rows to insert into {table.name}")
-        if not is_tenant_owned(table):
-            return sa.insert(table).values(list(rows))
-        if any(_key_name(key) == TENANT_COLUMN for row in rows for key in row):
-            raise TenantKeySupplied(table.name)
-        named = [{_key_name(k): v for k, v in row.items()} for row in rows]
-        if is_project_keyed(table) and any(PROJECT_COLUMN not in row for row in named):
+    def _check_rows(self, table: TableClause, rows: Sequence[Mapping[str, Any]]) -> None:
+        if is_project_keyed(table) and any(PROJECT_COLUMN not in row for row in rows):
             raise ProjectKeyMissing(table.name)
-        tenant = self._scope.tenant
-        return sa.insert(table).values([{**row, TENANT_COLUMN: tenant} for row in named])
 
-    def insert_from_select(self, table: TableClause, names: Sequence[str], select: Select[Any]) -> Insert:
-        """``INSERT INTO table (names…, tenant_id) SELECT …, <tenant>`` — ``select``'s columns fill
-        ``names`` in order and the scope's tenant fills ``tenant_id`` as a literal column. The
-        rows read are the caller's to confine: build ``select`` with :meth:`select`. ``names``
-        naming ``tenant_id`` itself is refused, and so, on a project-keyed table, are ``names``
-        lacking ``project_id``."""
-        if not is_tenant_owned(table):
-            return sa.insert(table).from_select(names, select)
-        if TENANT_COLUMN in names:
-            raise TenantKeySupplied(table.name)
+    def _check_names(self, table: TableClause, names: Sequence[str]) -> None:
         if is_project_keyed(table) and PROJECT_COLUMN not in names:
             raise ProjectKeyMissing(table.name)
-        tenant = sa.literal(self._scope.tenant, type_=table.c[TENANT_COLUMN].type)
-        return sa.insert(table).from_select([*names, TENANT_COLUMN], select.add_columns(tenant))
-
-    def update(self, table: TableClause) -> Update:
-        """``UPDATE table`` confined to the tenant's rows."""
-        stmt = sa.update(table)
-        return stmt.where(table.c[TENANT_COLUMN] == self._scope.tenant) if is_tenant_owned(table) else stmt
-
-    def delete(self, table: TableClause) -> Delete:
-        """``DELETE FROM table`` confined to the tenant's rows."""
-        stmt = sa.delete(table)
-        return stmt.where(table.c[TENANT_COLUMN] == self._scope.tenant) if is_tenant_owned(table) else stmt
 
 
 def statements_of(conn: Connection) -> ScopedStatements:
@@ -261,17 +197,6 @@ def statements_of(conn: Connection) -> ScopedStatements:
     if not isinstance(scope, StoreScope):
         raise UnscopedConnection("this connection carries no store scope; open it through ScopedConnections")
     return ScopedStatements(scope)
-
-
-def _execute_time_rows(multiparams: Sequence[Any], params: Mapping[str, Any]) -> list[Mapping[str, Any]]:
-    """The parameter rows one execute binds: each ``executemany`` row, or its single parameter set."""
-    rows: list[Mapping[str, Any]] = []
-    for item in multiparams:
-        if isinstance(item, Mapping):
-            rows.append(item)
-        elif isinstance(item, Sequence) and not isinstance(item, str):
-            rows.extend(row for row in item if isinstance(row, Mapping))
-    return rows or [params]
 
 
 def _check_execute_time_keys(
@@ -284,18 +209,12 @@ def _check_execute_time_keys(
     """A ``before_execute`` listener on one scoped ``Connection``: an insert or update of a
     tenant-owned table may not carry ``tenant_id`` among its execute-time parameters, and an insert
     into a project-keyed table names ``project_id`` for every row it writes."""
-    if not isinstance(clauseelement, Insert | Update) or not is_tenant_owned(clauseelement.table):
+    rows = execute_time_rows(multiparams, params)
+    TENANT_SCOPING.refuse_supplied_key(clauseelement, rows)
+    if not isinstance(clauseelement, Insert) or not is_tenant_owned(clauseelement.table):
         return
-    rows = _execute_time_rows(multiparams, params)
-    table = _base_table(clauseelement.table)
-    if any(TENANT_COLUMN in row for row in rows):
-        raise TenantKeySupplied(table.name if table is not None else str(clauseelement.table))
-    if (
-        isinstance(clauseelement, Insert)
-        and table is not None
-        and is_project_keyed(table)
-        and not _names_project(clauseelement, table, rows)
-    ):
+    table = base_table(clauseelement.table)
+    if table is not None and is_project_keyed(table) and not _names_project(clauseelement, table, rows):
         raise ProjectKeyMissing(table.name)
 
 
