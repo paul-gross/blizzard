@@ -15,6 +15,7 @@ from datetime import datetime
 from sqlalchemy import ColumnElement, Join, func
 
 from blizzard.foundation.run_mode import RunMode
+from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.garden.runs.history import (
     DeliveredSet,
     DeliveredSetRaw,
@@ -146,17 +147,22 @@ class GardenRunStore:
     def _delivered_sets_by_chunk(self, conn, chunk_ids: list[str]) -> dict[str, list[DeliveredSet]]:  # type: ignore[no-untyped-def]
         if not chunk_ids:
             return {}
-        rows = conn.execute(
-            self._store.select(
-                finding_sets,
-                finding_sets.c.chunk_id,
-                finding_sets.c.finding_set_id,
-                finding_sets.c.revisions,
-                finding_sets.c.measurement,
+        rows = []
+        for batch in id_batches(chunk_ids):
+            rows.extend(
+                conn.execute(
+                    self._store.select(
+                        finding_sets,
+                        finding_sets.c.chunk_id,
+                        finding_sets.c.finding_set_id,
+                        finding_sets.c.revisions,
+                        finding_sets.c.measurement,
+                    )
+                    .where(finding_sets.c.chunk_id.in_(batch))
+                    .order_by(finding_sets.c.finding_set_id)
+                ).all()
             )
-            .where(finding_sets.c.chunk_id.in_(chunk_ids))
-            .order_by(finding_sets.c.finding_set_id)
-        ).all()
+        rows.sort(key=lambda row: row.finding_set_id)
         counts_by_set = self._fact_counts_by_set(conn, [row.finding_set_id for row in rows])
         grouped: dict[str, list[DeliveredSet]] = defaultdict(list)
         for row in rows:
@@ -187,14 +193,15 @@ class GardenRunStore:
         }
         if not finding_set_ids:
             return counts
-        rows = conn.execute(
-            statements_of(conn)
-            .select(finding_facts, finding_facts.c.finding_set_id, finding_facts.c.kind, func.count().label("n"))
-            .where(finding_facts.c.finding_set_id.in_(finding_set_ids), finding_facts.c.kind.in_(_SET_COUNT_KINDS))
-            .group_by(finding_facts.c.finding_set_id, finding_facts.c.kind)
-        ).all()
-        for row in rows:
-            counts[row.finding_set_id][row.kind] = row.n
+        for batch in id_batches(finding_set_ids):
+            rows = conn.execute(
+                statements_of(conn)
+                .select(finding_facts, finding_facts.c.finding_set_id, finding_facts.c.kind, func.count().label("n"))
+                .where(finding_facts.c.finding_set_id.in_(batch), finding_facts.c.kind.in_(_SET_COUNT_KINDS))
+                .group_by(finding_facts.c.finding_set_id, finding_facts.c.kind)
+            ).all()
+            for row in rows:
+                counts[row.finding_set_id][row.kind] = row.n
         return counts
 
     @staticmethod

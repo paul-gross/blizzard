@@ -589,6 +589,24 @@ def _seed_promoted_with_open_decision(store: ChunkStores, chunk_id: str) -> None
     )
 
 
+def test_load_all_facts_query_count_is_independent_of_decision_count_above_the_batch_size(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(batching_module, "BATCH_SIZE", 3)
+    (tmp_path / "small").mkdir()
+    (tmp_path / "large").mkdir()
+    small, small_engine, _small_clock = _store(tmp_path / "small")
+    _seed_promoted_with_open_decision(small, "ch_small")
+    large, large_engine, _large_clock = _store(tmp_path / "large")
+    for i in range(10):  # more than three batches of decisions under the lowered cap
+        _seed_promoted_with_open_decision(large, f"ch_large_{i}")
+
+    small_count = count_queries(small_engine, small.facts.load_all_facts)
+    large_count = count_queries(large_engine, large.facts.load_all_facts)
+
+    assert small_count == large_count
+
+
 def test_load_facts_for_query_count_scales_with_batch_count_not_id_count(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
