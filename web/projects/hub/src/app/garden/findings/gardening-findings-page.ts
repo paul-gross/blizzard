@@ -7,6 +7,7 @@ import { injectChildRouteParam } from '../../core/route-state';
 import { injectFindingsBucketFilters } from './gardening-findings-bucket-filters';
 import { findingListRows } from './gardening-findings-page.model';
 import { ProjectLens } from '../../core/project-lens';
+import { firstRowToOpen } from '../core/garden-first-row';
 
 /**
  * The `/gardening/findings` sub-tab — the findings triage list and its filter row,
@@ -101,6 +102,17 @@ export class GardeningFindingsPage {
    * navigation is happening.
    */
   constructor() {
+    effect(() => {
+      const query = this.filters.bucketQuery;
+      const settled = !query.isPending() && !query.isError();
+      const ids = this.findingListRows().map((row) => row.findingId);
+      const first = firstRowToOpen(this.findingId(), ids, settled, this.mobile());
+      if (first === null) return;
+      void this.router.navigate(this.lens.link(['/gardening', 'findings', first]), {
+        replaceUrl: true,
+        queryParamsHandling: 'preserve',
+      });
+    });
     effect(() => {
       const id = this.findingId();
       if (id === null) return;

@@ -9,11 +9,32 @@
   flex: 1;
   min-height: 0;
 }
-.lead {
-  margin: 0;
-  padding: 8px 12px;
-  color: var(--label);
+/* The breadcrumb — `Gardening › All projects`, and what the doorway asks of the operator. */
+.crumbs {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  margin: -8px -8px 8px;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--bezel);
   font-size: var(--fs-sm);
+}
+.crumb.current {
+  color: var(--snow);
+}
+.sep {
+  color: var(--label-dim);
+}
+.crumb-hint {
+  margin-left: 4px;
+  color: var(--label);
+  font-size: var(--fs-xs);
+}
+.panel-hint {
+  color: var(--label);
+  font-size: var(--fs-xs);
 }
 .cards {
   display: grid;
@@ -50,24 +71,36 @@
   font-size: var(--fs-xs);
 }
 .facts {
-  display: grid;
-  grid-template-columns: max-content 1fr;
   margin: 0;
+  padding: 0;
+  list-style: none;
   font-size: var(--fs-sm);
 }
-.facts dt,
-.facts dd {
-  margin: 0;
-  padding: 5px 10px;
+.facts li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 10px;
   border-bottom: 1px solid var(--line);
 }
-.facts dt {
+.fact-label {
+  flex: none;
   color: var(--label);
   font-size: var(--fs-xs);
 }
-.facts dd {
+.fact {
   min-width: 0;
+  color: var(--snow);
   overflow-wrap: anywhere;
+}
+.fact-right {
+  flex: none;
+  margin-left: auto;
+  color: var(--label);
+  font-size: var(--fs-xs);
+}
+.fact-right.sweeping {
+  color: var(--cyan);
 }
 .unplanted,
 .unserved {
@@ -83,16 +116,19 @@
   border-top: 1px solid var(--line);
 }
 .card-foot {
-  margin-top: auto;
   padding: 6px 10px;
-  border-top: 1px solid var(--line);
 }
+/* The way in, drawn as the kit's primary button: it is the card's one action. */
 .open {
+  display: inline-block;
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  background: var(--overlay-30);
   color: var(--cyan);
   text-decoration: none;
   font-size: var(--fs-sm);
 }
 .open:hover,
 .open:focus-visible {
-  text-decoration: underline;
+  border-color: var(--cyan);
 }

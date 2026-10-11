@@ -6,7 +6,7 @@ import { type GardenProposalView, type ProjectView, type RoutineView, type RunRo
 import { type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
 
 import { GardeningDoorway } from './gardening-doorway';
-import { doorwayCards, waitingLabel } from './gardening-doorway.model';
+import { doorwayCards, doorwayTenantName, doorwayTitle, openGardenLabel, sweepingLabel, waitingLabel } from './gardening-doorway.model';
 
 /** The doorway's tenant-wide reads, for a tenant of two projects — `blizzard` planted and served, `winter` neither. */
 const DOORWAY_PROJECTS = [
@@ -26,9 +26,31 @@ const DOORWAY_ROUTINES = [
 ] as RoutineView[];
 
 const DOORWAY_RUNS = [
-  { chunk_id: 'ch_1', project_id: 'proj_b' },
-  { chunk_id: 'ch_2', project_id: 'proj_b' },
-] as RunRowView[];
+  {
+    chunk_id: 'ch_1',
+    project_id: 'proj_b',
+    outcome: 'running',
+    minted_at: '2026-03-09T00:00:00Z',
+    delivered: [],
+  },
+  {
+    chunk_id: 'ch_2',
+    project_id: 'proj_b',
+    outcome: 'done',
+    minted_at: '2026-03-05T00:00:00Z',
+    delivered: [{ finding_set_id: 'fs_1', added_count: 3, gone_count: 0 }],
+  },
+  {
+    chunk_id: 'ch_3',
+    project_id: 'proj_b',
+    outcome: 'done',
+    minted_at: '2026-03-01T00:00:00Z',
+    delivered: [
+      { finding_set_id: 'fs_1', added_count: 1, gone_count: 2 },
+      { finding_set_id: 'fs_2', added_count: 1, gone_count: 0 },
+    ],
+  },
+] as unknown as RunRowView[];
 
 const DOORWAY_PROPOSALS = [
   { proposal_id: 'gp_1', project_id: 'proj_b', closure: null },
@@ -56,6 +78,8 @@ function doorwayRoute(method: string, path: string): unknown {
       return { proposals: DOORWAY_PROPOSALS, next_cursor: null };
     case '/api/runners':
       return { runners: DOORWAY_RUNNERS };
+    case '/api/me':
+      return { tenants: [{ tenant_id: 't_1', name: 'grosscode', role: 'owner', permissions: [] }] };
     default:
       return {};
   }
@@ -79,14 +103,25 @@ describe('doorwayCards', () => {
         slug: 'blizzard',
         routines: ['garden-weekly'],
         scopes: 2,
-        runs: 2,
+        inProgress: 1,
+        findings: 5,
+        lastRun: '2026-03-05T00:00:00Z',
         waiting: 1,
         unplanted: false,
         unserved: false,
       }),
     );
     expect(winter).toEqual(
-      expect.objectContaining({ slug: 'winter', routines: [], scopes: 0, runs: 0, waiting: 1, unplanted: true }),
+      expect.objectContaining({
+        slug: 'winter',
+        routines: [],
+        scopes: 0,
+        inProgress: 0,
+        findings: 0,
+        lastRun: null,
+        waiting: 1,
+        unplanted: true,
+      }),
     );
   });
 
@@ -107,6 +142,26 @@ describe('doorwayCards', () => {
   it('counts a waiting proposal in the singular and the plural', () => {
     expect(waitingLabel(1)).toBe('1 proposal waiting');
     expect(waitingLabel(3)).toBe('3 proposals waiting');
+  });
+
+  it('reads a project idle, or how many of its runs are sweeping', () => {
+    expect(sweepingLabel(0)).toBe('idle');
+    expect(sweepingLabel(1)).toBe('1 run in progress');
+    expect(sweepingLabel(2)).toBe('2 runs in progress');
+  });
+
+  it('writes the way in with a possessive that follows the name', () => {
+    expect(openGardenLabel('Default')).toBe("Open Default's garden");
+    expect(openGardenLabel('Widgets')).toBe("Open Widgets' garden");
+  });
+
+  it('names the tenant only once the shell has one selected', () => {
+    const tenant = { tenant_id: 't_1', name: 'grosscode', role: 'owner', permissions: [] };
+    expect(doorwayTenantName({ kind: 'selected', tenant, tenants: [tenant] } as never)).toBe('grosscode');
+    expect(doorwayTenantName({ kind: 'choose', tenants: [tenant] } as never)).toBe('');
+    expect(doorwayTenantName(null)).toBe('');
+    expect(doorwayTitle('grosscode')).toBe('Gardens in grosscode');
+    expect(doorwayTitle('')).toBe('Gardens');
   });
 });
 
@@ -129,6 +184,17 @@ describe('GardeningDoorway', () => {
     return fixture.nativeElement as HTMLElement;
   }
 
+  it('says where it is — every project\'s gardening — and whose gardens these are', async () => {
+    const el = await render();
+
+    const crumbs = el.querySelector('[data-testid="gardening-doorway-crumbs"]')?.textContent ?? '';
+    expect(crumbs).toContain('Gardening');
+    expect(crumbs).toContain('All projects');
+    expect(crumbs).toContain('gardening belongs to a project — pick one to go in');
+    expect(el.textContent).toContain('Gardens in grosscode');
+    expect(el.querySelector('[data-testid="gardening-doorway-hint"]')?.textContent).toContain('each project tends its own');
+  });
+
   it('reads the tenant-wide lists, never a project\'s nested ones', async () => {
     await render();
 
@@ -150,6 +216,15 @@ describe('GardeningDoorway', () => {
     expect(blizzard.querySelector('[data-testid="gardening-doorway-unserved"]')).toBeNull();
     const open = blizzard.querySelector<HTMLAnchorElement>('[data-testid="gardening-doorway-open-blizzard"]')!;
     expect(open.getAttribute('href')).toBe('/p/blizzard/gardening/runs');
+
+    expect(open.textContent).toContain("Open Blizzard's garden");
+    expect(blizzard.querySelector('[data-testid="gardening-doorway-sweeping-blizzard"]')?.textContent).toContain(
+      '1 run in progress',
+    );
+    expect(blizzard.querySelector('[data-testid="gardening-doorway-findings-blizzard"]')?.textContent).toContain(
+      '5 from the last runs',
+    );
+    expect(blizzard.textContent).toContain('last run');
 
     const winter = el.querySelector('[data-testid="gardening-doorway-card-winter"]')!;
     expect(winter.textContent).toContain('Nothing planted yet');

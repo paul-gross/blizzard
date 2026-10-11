@@ -144,11 +144,11 @@ describe('GardeningRunsPage', () => {
     expect(el.querySelector('[data-testid="gardening-run-row-ch_2"] .rl-body--escalated')).toBeTruthy();
   });
 
-  it('keeps a detail pane mounted on the bare route, with no row highlighted', async () => {
+  it('opens the first row on the bare route, beside its detail pane', async () => {
     const { el } = await mount();
 
     expect(el.querySelector('[data-testid="run-detail-stub"]')).toBeTruthy();
-    expect(el.querySelector('[data-testid="gardening-run-row-ch_1"]')?.classList.contains('selected')).toBe(false);
+    expect(el.querySelector('[data-testid="gardening-run-row-ch_1"]')?.classList.contains('selected')).toBe(true);
   });
 
   it('highlights the row the child route names', async () => {

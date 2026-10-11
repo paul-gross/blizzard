@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject } from '@angular/core';
 import { Router, RouterOutlet } from '@angular/router';
 import { asyncState, KitMasterDetail, KitPanel, type GraphSummaryView, type KitAsyncStateValue, type RoutineView, ViewportService } from 'fleet';
 import { FleetRoutineList, type RoutineListRowVm } from './routine-list';
@@ -8,6 +8,8 @@ import { injectHubRoutinesQuery } from '../core/routines.query';
 import { injectChildRouteParam } from '../../core/route-state';
 import { presentRoutineName, routineListRows } from './gardening-routines-page.model';
 import { ProjectLens } from '../../core/project-lens';
+import { injectLensedProject } from '../../core/lensed-project';
+import { firstRowToOpen } from '../core/garden-first-row';
 
 /**
  * The `/gardening/routines` sub-tab (`plans/garden/user-interface.md` §Declaring
@@ -38,6 +40,11 @@ export class GardeningRoutinesPage {
   private readonly viewport = inject(ViewportService);
 
   protected readonly mobile = computed(() => this.viewport.mode() === 'mobile');
+
+  private readonly project = injectLensedProject();
+
+  /** The project every row listed here belongs to: its name once read, its slug until then. */
+  protected readonly projectName = computed(() => this.project()?.name ?? this.lens.slug() ?? '');
 
   private readonly routinesQuery = injectHubRoutinesQuery();
   private readonly graphsQuery = injectHubGraphsQuery();
@@ -70,4 +77,17 @@ export class GardeningRoutinesPage {
   protected readonly listState = computed<KitAsyncStateValue>(() =>
     asyncState(this.routinesQuery, this.routines().length === 0),
   );
+
+  constructor() {
+    effect(() => {
+      const settled = !this.routinesQuery.isPending() && !this.routinesQuery.isError();
+      const names = this.listRows().map((row) => row.name);
+      const first = firstRowToOpen(this.routineNameParam(), names, settled, this.mobile());
+      if (first === null) return;
+      void this.router.navigate(this.lens.link(['/gardening', 'routines', first]), {
+        replaceUrl: true,
+        queryParamsHandling: 'preserve',
+      });
+    });
+  }
 }

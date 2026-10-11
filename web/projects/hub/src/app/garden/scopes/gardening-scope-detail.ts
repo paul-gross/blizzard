@@ -3,11 +3,12 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
 import { errorMessage, injectPendingMutationVariables, isPendingFor, restingAsyncState, type KitAsyncStateValue, type ScopeView } from 'fleet';
 import { FleetScopePanel, type RelatedRoutineVm, type ScopePanelVm } from './scope-panel';
-import { relatedRoutineRows, scopeBySlug, scopeOverrideRetired, scopePanelVm } from './gardening-scope-detail.model';
+import { relatedRoutineRows, sameSlugProjects, scopeBySlug, scopeOverrideRetired, scopePanelVm } from './gardening-scope-detail.model';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { injectEditScopeMutation, type ScopeEditVars } from './scope-edit.mutations';
 import { injectHubRoutinesQuery } from '../core/routines.query';
 import { injectHubScopeRoutinesQuery, injectHubScopesQuery } from '../core/scopes.query';
+import { injectLensedProject } from '../../core/lensed-project';
 import { injectScopeLifecycleMutation, type ScopeLifecycleVars } from './scope-lifecycle.mutations';
 import { editScopeMutationKey, scopeLifecycleMutationKey } from '../../core/mutation-keys';
 import { type ScopeDescriptionEditEvent } from './scope-list';
@@ -47,6 +48,16 @@ export class GardeningScopeDetail {
 
   private readonly routinesQuery = injectHubRoutinesQuery();
   private readonly scopesQuery = injectHubScopesQuery();
+  private readonly tenantScopesQuery = injectHubScopesQuery({ tenantWide: true });
+  private readonly project = injectLensedProject();
+
+  /** The project the scope belongs to, for the chip beside its slug. */
+  protected readonly projectName = computed(() => this.project()?.name ?? null);
+
+  /** The other projects holding a scope of the selected scope's slug. */
+  protected readonly sameSlugIn = computed(() =>
+    sameSlugProjects(this.selectedScope(), this.project()?.project_id ?? null, this.tenantScopesQuery.data() ?? []),
+  );
   private readonly meQuery = injectMeQuery();
   private readonly editScopeMutation = injectEditScopeMutation();
   private readonly scopeLifecycleMutation = injectScopeLifecycleMutation();

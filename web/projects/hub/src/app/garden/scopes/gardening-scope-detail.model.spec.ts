@@ -1,7 +1,7 @@
 import type { RoutineView, ScopeView } from 'fleet';
 import { describe, expect, it } from 'vitest';
 
-import { relatedRoutineRows, scopeBySlug, scopeOverrideRetired, scopePanelVm } from './gardening-scope-detail.model';
+import { relatedRoutineRows, sameSlugProjects, scopeBySlug, scopeOverrideRetired, scopePanelVm } from './gardening-scope-detail.model';
 
 const BLIZZARD: ScopeView = { slug: 'blizzard', description: 'The whole repo', created_at: '2026-01-01T00:00:00Z' };
 const DOCS: ScopeView = { slug: 'docs', description: 'Docs only', created_at: '2026-01-01T00:00:00Z' };
@@ -93,5 +93,22 @@ describe('scopePanelVm', () => {
     const vm = scopePanelVm(BLIZZARD, true, null);
     expect(vm?.retired).toBe(false);
     expect(vm?.renderedRetired).toBe(true);
+  });
+});
+
+describe('sameSlugProjects', () => {
+  const scope = (slug: string, project_id: string | null, project_name: string | null) =>
+    ({ slug, description: '', created_at: '2026-01-01T00:00:00Z', project_id, project_name }) as ScopeView;
+  const HUB_API = scope('hub-api', 'p_b', 'blizzard');
+
+  it('names every other project holding a scope of the same slug, by name', () => {
+    const tenant = [HUB_API, scope('hub-api', 'p_w', 'winter'), scope('cli', 'p_w', 'winter'), scope('hub-api', 'p_a', 'alpha')];
+    expect(sameSlugProjects(HUB_API, 'p_b', tenant)).toEqual(['alpha', 'winter']);
+  });
+
+  it('names none when only this project holds the slug, or before the scope and project are known', () => {
+    expect(sameSlugProjects(HUB_API, 'p_b', [HUB_API, scope('cli', 'p_w', 'winter')])).toEqual([]);
+    expect(sameSlugProjects(null, 'p_b', [HUB_API])).toEqual([]);
+    expect(sameSlugProjects(HUB_API, null, [HUB_API, scope('hub-api', 'p_w', 'winter')])).toEqual([]);
   });
 });

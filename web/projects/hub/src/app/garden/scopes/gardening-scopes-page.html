@@ -7,13 +7,14 @@
   [hasSelection]="scopeSlugParam() !== null"
   (back)="onBack()"
 >
-  <fleet-kit-panel kit-master-detail-list class="gs-left" label="Scopes">
+  <fleet-kit-panel kit-master-detail-list class="gs-left" [label]="'Scopes · ' + projectName()">
     <app-scope-list
       [rows]="scopeRows()"
       [selectedSlug]="selectedScopeSlug()"
       [state]="scopesState()"
       (scopePick)="selectScope($event)"
     />
+    <p class="list-foot" data-testid="gardening-scopes-foot">unique within {{ projectName() }}</p>
   </fleet-kit-panel>
   <fleet-kit-panel kit-master-detail-detail class="gs-right" label="Scope">
     <router-outlet />

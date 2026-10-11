@@ -252,9 +252,13 @@ describe('gardening sub-tab layout shell sweep (web:shell-sweep)', () => {
           `1280px: ${spec.left} and ${spec.right} do not sit side by side`,
         ).toBeLessThanOrEqual(right!.getBoundingClientRect().left);
 
+        // Desktop opens the list's first row; a phone's bare route is the list screen, so each width starts there.
+        expect(router.url, '1280px: the bare route did not open the first row').not.toBe(spec.url);
+
         for (const width of [740, 700, 390, 320]) {
           await page.viewport(width, 800);
           viewport.setOverride('mobile');
+          await router.navigateByUrl(spec.url);
           await settle(fixture);
 
           left = root.querySelector<HTMLElement>(spec.left);
@@ -306,6 +310,7 @@ describe('gardening sub-tab layout shell sweep (web:shell-sweep)', () => {
     try {
       await page.viewport(390, 800);
       viewport.setOverride('mobile');
+      await router.navigateByUrl('/gardening/scopes');
       await settle(fixture);
 
       const listScroller = root.querySelector<HTMLElement>('.gs-left .p-body')!;

@@ -16,9 +16,12 @@ import { injectProjectFilter, lensedKey } from 'fleet/shell';
  * gardening doorway reads, grouping them by project. Feeds the gardening run dialog's scope picker and the routines
  * panel's scope list. Scopes change rarely and carry no SSE event of their own, `injectHubRoutinesQuery`'s own
  * standing.
+ *
+ * `tenantWide` reads the whole tenant even under a lens, for a figure that sets one project beside the others.
  */
-export function injectHubScopesQuery() {
-  const project = injectProjectFilter();
+export function injectHubScopesQuery(options: { readonly tenantWide?: boolean } = {}) {
+  const filter = injectProjectFilter();
+  const project = options.tenantWide === true ? () => null : filter;
   return injectQuery(() => {
     const lens = project();
     return {

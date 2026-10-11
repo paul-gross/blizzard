@@ -706,7 +706,7 @@ const HUB_LAYERS = {
   'garden/core': [],
   'garden/proposals': ['garden/core'],
   'garden/runs': ['garden/core'],
-  'garden/scopes': ['garden/core'],
+  'garden/scopes': ['garden/core', 'garden/runs'],
   'garden/findings': ['garden/core', 'garden/proposals'],
   'garden/routines': ['garden/core', 'garden/runs', 'graphs'],
   'garden/doorway': ['garden/core', 'garden/proposals', 'garden/runs'],

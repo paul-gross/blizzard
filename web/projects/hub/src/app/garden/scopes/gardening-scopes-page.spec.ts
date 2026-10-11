@@ -55,6 +55,7 @@ describe('GardeningScopesPage', () => {
     const scopes = opts.scopes ?? [SCOPE];
     stub = stubRequestClient(hubClient, (method, path) => {
       if (method === 'GET' && path === '/api/scopes') return scopes;
+      if (method === 'GET' && path === '/api/runs') return [];
       return {};
     });
     await TestBed.configureTestingModule({
@@ -84,12 +85,12 @@ describe('GardeningScopesPage', () => {
     expect(el.querySelector('[data-testid="gardening-scope-row-stale-scope"]')?.textContent).toContain('retired');
   });
 
-  it('keeps a detail pane mounted on the bare route, with no row highlighted', async () => {
+  it('opens the first row on the bare route, beside its detail pane', async () => {
     const { el } = await render();
 
     expect(el.querySelector('[data-testid="scope-detail-stub"]')).toBeTruthy();
     expect(el.querySelector('[data-testid="gardening-scope-row-blizzard"]')?.classList.contains('selected')).toBe(
-      false,
+      true,
     );
   });
 

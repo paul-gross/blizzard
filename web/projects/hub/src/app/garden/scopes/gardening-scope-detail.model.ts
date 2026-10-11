@@ -50,3 +50,19 @@ export function scopePanelVm(
     relatedRoutines,
   };
 }
+
+/**
+ * The names of the other projects holding a scope of `scope`'s slug, by name — a slug is unique only inside its
+ * project, so these are different records sharing a name. Empty with no scope, or until the lensed project is read.
+ */
+export function sameSlugProjects(
+  scope: ScopeView | null,
+  projectId: string | null,
+  tenantScopes: readonly ScopeView[],
+): readonly string[] {
+  if (scope === null || projectId === null) return [];
+  const names = tenantScopes
+    .filter((other) => other.slug === scope.slug && other.project_id != null && other.project_id !== projectId)
+    .map((other) => other.project_name ?? other.project_slug ?? other.project_id ?? '');
+  return [...new Set(names)].sort((a, b) => a.localeCompare(b));
+}

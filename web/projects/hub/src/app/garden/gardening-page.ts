@@ -2,46 +2,57 @@ import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/c
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { filter, map } from 'rxjs';
-import { KitCountBadge, KitMenu, KitMenuItemRadio, KitMenuPanel, KitTab, KitTabStrip } from 'fleet';
+import { FLEET_CLOCK, KitMenu, KitMenuItemRadio, KitMenuPanel, KitTab, KitTabStrip } from 'fleet';
+import { LensLink } from 'fleet/shell';
 
 import { injectLensedProject } from '../core/lensed-project';
 import { ProjectLens } from '../core/project-lens';
 import { injectProjectsQuery } from '../core/projects.query';
 import { injectHubRunnersQuery } from '../core/runners.query';
 import { gardenPathOf } from './garden-lens.guard';
-import { gardenProjectChoices, gardenUnserved, surfaceLabel, waitingProposalCount } from './gardening-page.model';
+import { GARDENING_DOORWAY_URL } from './core/garden-project';
+import { injectHubRoutinesQuery } from './core/routines.query';
+import { defaultRoutineWindow } from './core/routine-window';
+import { injectHubScopesQuery } from './core/scopes.query';
+import {
+  gardenProjectChoices,
+  gardenSurfaceCounts,
+  gardenSurfaceTabs,
+  gardenUnserved,
+  surfaceLabel,
+  surfaceOf,
+  waitingLabel,
+} from './gardening-page.model';
 import { injectHubGardenProposalsQuery } from './proposals/garden-proposals.query';
+import { injectHubRunsQuery } from './runs/garden-runs.query';
 
 /**
  * One project's garden — the `/p/{project}/gardening` route, a top-level tab beside the board, not a
  * panel inside it (`blizzard-product:/delivered/garden/user-interface.md` §Where it
  * lives). The app shell above this page is untouched; this page owns only its own
- * second strip, divided along the garden machinery's own nouns, in this fixed order
- * — runs, findings, proposals, routines, scopes — each a real child route
- * (`gardening.routes.ts`) so a sub-tab is a deep link, not this component's own selection
- * state. All five are unrelated concepts (a scope is where a routine sweeps, a
- * routine is a declared strategy, a run is a sweep, a finding is a durable record a
- * sweep may add to or resolve, a proposal is a suggestion waiting on a person), so
- * each gets its own tab and its own list.
+ * second strip, divided along the garden's surfaces in this fixed order — scopes, routines, runs and findings,
+ * proposals — each a real child route (`gardening.routes.ts`) so a tab is a deep link, not this component's own
+ * selection state. Runs and findings share a surface: a run is a sweep and its findings are what it found, so the
+ * surface switches between the run list and the findings list, each its own route.
  *
- * Above the strip, the breadcrumb `Gardening › {project} › {surface}` is the lens shown in place: its project crumb
- * switches the lens and keeps the surface, and its last choice, All projects, opens the doorway. A project no live
- * runner serves says so here, since nothing its garden raises is worked until one does.
+ * Above the strip, the breadcrumb `Gardening › {project} › {surface}` is the lens shown in place: `Gardening` opens the
+ * doorway, and the project crumb switches the lens and keeps the surface, each choice showing that project's proposals
+ * waiting. A project no live runner serves says so here, since nothing its garden raises is worked until one does.
  *
- * Only Proposals carries a waiting count, since only proposals are waiting on
- * somebody — Scopes, routines, runs, and findings accumulate, they do not wait. The
- * count comes off the same proposals read the docket itself reads, so the two never disagree.
+ * Each tab counts its own list, from the read the list itself makes, so the two never disagree. Proposals counts the
+ * ones waiting on a person and is the one count drawn in amber: scopes, routines and runs accumulate, they do not wait.
+ * The strip's right-hand line says whose records these are.
  */
 @Component({
   selector: 'app-gardening-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    KitCountBadge,
     KitMenu,
     KitMenuItemRadio,
     KitMenuPanel,
     KitTab,
     KitTabStrip,
+    LensLink,
     RouterLink,
     RouterLinkActive,
     RouterOutlet,
@@ -52,7 +63,12 @@ import { injectHubGardenProposalsQuery } from './proposals/garden-proposals.quer
 export class GardeningPage {
   private readonly lens = inject(ProjectLens);
   private readonly router = inject(Router);
+  private readonly window = defaultRoutineWindow(inject(FLEET_CLOCK)());
+  private readonly scopesQuery = injectHubScopesQuery();
+  private readonly routinesQuery = injectHubRoutinesQuery();
+  private readonly runsQuery = injectHubRunsQuery(() => this.window.since);
   private readonly proposalsQuery = injectHubGardenProposalsQuery();
+  private readonly tenantProposalsQuery = injectHubGardenProposalsQuery({ tenantWide: true });
   private readonly projectsQuery = injectProjectsQuery();
   private readonly runnersQuery = injectHubRunnersQuery();
   private readonly project = injectLensedProject();
@@ -64,9 +80,20 @@ export class GardeningPage {
     { initialValue: this.router.url },
   );
 
-  /** How many proposals are waiting on a person right now — the strip's own
-   * "urgent count" (only Proposals carries one, per the plan). */
-  protected readonly proposalsWaitingCount = computed(() => waitingProposalCount(this.proposalsQuery.data() ?? []));
+  /** The doorway's address, for the `Gardening` crumb's link target. */
+  protected readonly doorwayUrl = GARDENING_DOORWAY_URL;
+
+  /** The strip's four tabs, each with its list's count. */
+  protected readonly tabs = computed(() =>
+    gardenSurfaceTabs(
+      gardenSurfaceCounts({
+        scopes: this.scopesQuery.data(),
+        routines: this.routinesQuery.data(),
+        runs: this.runsQuery.data(),
+        proposals: this.proposalsQuery.data(),
+      }),
+    ),
+  );
 
   /** The slug the lens is on — the project crumb's checked choice. */
   protected readonly lensSlug = this.lens.slug;
@@ -74,16 +101,31 @@ export class GardeningPage {
   /** The project crumb's text: the project's name once read, its slug until then. */
   protected readonly projectName = computed(() => this.project()?.name ?? this.lens.slug() ?? '');
 
-  protected readonly projectChoices = computed(() => gardenProjectChoices(this.projectsQuery.data() ?? []));
+  protected readonly projectChoices = computed(() =>
+    gardenProjectChoices(this.projectsQuery.data() ?? [], this.tenantProposalsQuery.data()),
+  );
 
-  /** The surface crumb: the tab the URL names. */
-  protected readonly surface = computed(() => surfaceLabel(gardenPathOf(this.url()).tab));
+  private readonly tab = computed(() => gardenPathOf(this.url()).tab);
+
+  /** The surface the URL is on — the active tab. */
+  protected readonly surface = computed(() => surfaceOf(this.tab()));
+
+  /** The surface crumb: the surface's label. */
+  protected readonly surfaceLabel = computed(() => surfaceLabel(this.tab()));
 
   protected readonly unserved = computed(() => gardenUnserved(this.project(), this.runnersQuery.data()));
 
-  /** Switches the lens to `slug`, keeping the tab — or opens the doorway for All. */
+  protected readonly waitingLabel = waitingLabel;
+
+  /** Switches the lens to `slug`, keeping the surface — or opens the doorway for All. */
   protected chooseProject(slug: string | null): void {
     if (slug === this.lens.slug()) return;
     void this.lens.switchTo(slug);
+  }
+
+  /** The `Gardening` crumb: back to the doorway, on All. */
+  protected openDoorway(event: Event): void {
+    event.preventDefault();
+    void this.router.navigateByUrl(this.doorwayUrl);
   }
 }

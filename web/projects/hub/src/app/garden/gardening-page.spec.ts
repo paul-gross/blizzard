@@ -16,6 +16,9 @@ describe('GardeningPage (blizzard#397)', () => {
   async function render(proposals: readonly unknown[]) {
     stub = stubRequestClient(hubClient, (method, path) => {
       if (method === 'GET' && path === '/api/garden-proposals') return { proposals, next_cursor: null };
+      if (method === 'GET' && path === '/api/scopes') return [{ slug: 'a' }, { slug: 'b' }];
+      if (method === 'GET' && path === '/api/routines') return [{ name: 'nightly' }];
+      if (method === 'GET' && path === '/api/runs') return [];
       return {};
     });
     await TestBed.configureTestingModule({
@@ -31,33 +34,25 @@ describe('GardeningPage (blizzard#397)', () => {
     return fixture;
   }
 
-  it('renders the five deep-linkable sub-tabs, in order', async () => {
+  it('renders the four surfaces in their order, runs and findings sharing one', async () => {
     const fixture = await render([]);
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="gardening-tab-scopes"]')?.textContent).toContain('Scopes');
-    expect(el.querySelector('[data-testid="gardening-tab-routines"]')?.textContent).toContain('Routines');
-    expect(el.querySelector('[data-testid="gardening-tab-runs"]')?.textContent).toContain('Runs');
-    expect(el.querySelector('[data-testid="gardening-tab-findings"]')?.textContent).toContain('Findings');
-    expect(el.querySelector('[data-testid="gardening-tab-proposals"]')?.textContent).toContain('Proposals');
     const tabs = Array.from(el.querySelectorAll('[fleetKitTab]')).map((t) => t.getAttribute('data-testid'));
-    expect(tabs).toEqual([
-      'gardening-tab-runs',
-      'gardening-tab-findings',
-      'gardening-tab-proposals',
-      'gardening-tab-routines',
-      'gardening-tab-scopes',
-    ]);
+    expect(tabs).toEqual(['gardening-tab-scopes', 'gardening-tab-routines', 'gardening-tab-runs', 'gardening-tab-proposals']);
+    expect(el.querySelector('[data-testid="gardening-tab-runs"]')?.textContent).toContain('Runs & findings');
   });
 
-  it('omits the proposals count when nothing is waiting', async () => {
+  it('draws the proposals count plain when nothing is waiting', async () => {
     const fixture = await render([]);
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="gardening-proposals-count"]')).toBeNull();
+    const count = el.querySelector('[data-testid="gardening-tab-count-proposals"]');
+    expect(count?.textContent).toBe('0');
+    expect(count?.classList.contains('hot')).toBe(false);
   });
 
-  it('carries the waiting count on Proposals only, and no count on the other four tabs', async () => {
+  it('counts each list on its tab, Proposals counting the waiting ones in amber', async () => {
     const fixture = await render([
       { proposal_id: 'gp_1', routine_name: 'comments', class: 'x', body: 'b', created_at: '2026-01-01T00:00:00Z', findings: [] },
       {
@@ -71,13 +66,15 @@ describe('GardeningPage (blizzard#397)', () => {
       },
     ]);
     const el = fixture.nativeElement as HTMLElement;
+    const count = (surface: string) => el.querySelector(`[data-testid="gardening-tab-count-${surface}"]`);
 
     // Only gp_1 (no closure) is still waiting.
-    expect(el.querySelector('[data-testid="gardening-proposals-count"]')?.textContent).toBe('1');
-    expect(el.querySelector('[data-testid="gardening-tab-scopes"] .badge')).toBeNull();
-    expect(el.querySelector('[data-testid="gardening-tab-routines"] .badge')).toBeNull();
-    expect(el.querySelector('[data-testid="gardening-tab-runs"] .badge')).toBeNull();
-    expect(el.querySelector('[data-testid="gardening-tab-findings"] .badge')).toBeNull();
+    expect(count('proposals')?.textContent).toBe('1');
+    expect(count('proposals')?.classList.contains('hot')).toBe(true);
+    expect(count('scopes')?.textContent).toBe('2');
+    expect(count('routines')?.textContent).toBe('1');
+    expect(count('runs')?.textContent).toBe('0');
+    expect(count('scopes')?.classList.contains('hot')).toBe(false);
   });
 });
 
@@ -95,12 +92,23 @@ describe('GardeningPage under a project lens', () => {
     { project_id: 'proj_b', slug: 'blizzard', name: 'Blizzard' },
     { project_id: 'proj_w', slug: 'winter', name: 'Winter' },
   ];
+  const waiting = (id: string, project_id: string) => ({
+    proposal_id: id,
+    project_id,
+    routine_name: 'comments',
+    class: 'x',
+    body: 'b',
+    created_at: '2026-01-01T00:00:00Z',
+    findings: [],
+  });
+  const TENANT_PROPOSALS = [waiting('gp_1', 'proj_w'), waiting('gp_2', 'proj_w'), waiting('gp_3', 'proj_b')];
 
   async function render(runners: readonly unknown[], url = '/p/blizzard/gardening/scopes') {
     stub = stubRequestClient(hubClient, (method, path) => {
       if (method !== 'GET') return {};
       if (path === '/api/projects') return { projects: PROJECTS };
       if (path === '/api/runners') return { runners };
+      if (path === '/api/garden-proposals') return { proposals: TENANT_PROPOSALS, next_cursor: null };
       if (path.endsWith('/garden-proposals')) return { proposals: [], next_cursor: null };
       return {};
     });
@@ -109,6 +117,7 @@ describe('GardeningPage under a project lens', () => {
       providers: [
         provideZonelessChangeDetection(),
         provideRouter([
+          { path: 'gardening', component: TestGardenTab },
           { path: 'gardening/:tab', component: TestGardenTab },
           {
             path: 'p/:projectSlug/gardening',
@@ -146,6 +155,53 @@ describe('GardeningPage under a project lens', () => {
     await settle(fixture, 8);
 
     expect(router.url).toBe('/p/winter/gardening/scopes');
+  });
+
+  it('lists each project with its proposals waiting, under a header naming the surface a switch keeps', async () => {
+    const { fixture } = await render([]);
+
+    document.querySelector<HTMLElement>('[data-testid="gardening-crumb-project"]')!.click();
+    await settle(fixture, 4);
+
+    expect(document.querySelector('[data-testid="gardening-crumb-project-head"]')?.textContent).toContain(
+      'Switch project — stays on Scopes',
+    );
+    expect(document.querySelector('[data-testid="gardening-crumb-waiting-winter"]')?.textContent).toContain(
+      '2 proposals waiting',
+    );
+    expect(document.querySelector('[data-testid="gardening-crumb-waiting-blizzard"]')?.textContent).toContain(
+      '1 proposal waiting',
+    );
+  });
+
+  it('opens the doorway from the Gardening crumb', async () => {
+    const { fixture, router, el } = await render([]);
+
+    el.querySelector<HTMLElement>('[data-testid="gardening-crumb-doorway"]')!.click();
+    await settle(fixture, 8);
+
+    expect(router.url).toBe('/gardening');
+  });
+
+  it('says whose records the strip holds', async () => {
+    const { el } = await render([]);
+
+    expect(el.querySelector('[data-testid="gardening-owner"]')?.textContent).toContain('every record here belongs to Blizzard');
+  });
+
+  it('keeps a findings link on the Runs & findings tab, with a switch between its two lists', async () => {
+    const { el } = await render([], '/p/blizzard/gardening/findings');
+
+    expect(el.querySelector('[data-testid="gardening-tab-runs"]')?.classList.contains('active')).toBe(true);
+    expect(el.querySelector('[data-testid="gardening-crumb-surface"]')?.textContent).toContain('Runs & findings');
+    expect(el.querySelector('[data-testid="gardening-switch-findings"]')?.classList.contains('on')).toBe(true);
+    expect(el.querySelector('[data-testid="gardening-switch-runs"]')?.classList.contains('on')).toBe(false);
+  });
+
+  it('shows no runs and findings switch on another surface', async () => {
+    const { el } = await render([]);
+
+    expect(el.querySelector('[data-testid="gardening-runs-switch"]')).toBeNull();
   });
 
   it('opens the doorway from the project crumb\'s All projects choice', async () => {

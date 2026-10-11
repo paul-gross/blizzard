@@ -121,3 +121,8 @@ export function proposalListRows(proposals: readonly GardenProposalView[]): read
     createdAt: p.created_at,
   }));
 }
+
+/** A waiting figure's text: "1 proposal waiting", "3 proposals waiting". */
+export function waitingLabel(count: number): string {
+  return `${count} proposal${count === 1 ? '' : 's'} waiting`;
+}

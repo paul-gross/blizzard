@@ -18,4 +18,25 @@
 }
 .sc-flag {
   display: inline-block;
+  flex: none;
+}
+.sc-top {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.sc-slug {
+  flex: 1;
+}
+.sc-swept {
+  flex: none;
+  color: var(--label);
+  font-size: var(--fs-xs);
+}
+.sc-desc {
+  margin-top: 2px;
+  color: var(--label);
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
 }

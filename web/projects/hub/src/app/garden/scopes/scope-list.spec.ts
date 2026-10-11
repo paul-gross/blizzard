@@ -4,8 +4,8 @@ import { TestBed } from '@angular/core/testing';
 import { FleetScopeList, type ScopeRowVm } from './scope-list';
 
 const ROWS: readonly ScopeRowVm[] = [
-  { slug: 'blizzard', description: 'the blizzard monorepo', retired: false },
-  { slug: 'stale-scope', description: 'no longer tended', retired: true },
+  { slug: 'blizzard', description: 'the blizzard monorepo', retired: false, lastSwept: '2026-03-05T00:00:00Z' },
+  { slug: 'stale-scope', description: 'no longer tended', retired: true, lastSwept: null },
 ];
 
 describe('FleetScopeList', () => {
@@ -36,6 +36,15 @@ describe('FleetScopeList', () => {
 
     const retired = el.querySelector('[data-testid="gardening-scope-row-stale-scope"]');
     expect(retired?.textContent).toContain('retired');
+  });
+
+  it("shows each scope's description, and when it was last swept only for a swept scope", async () => {
+    const fixture = await mount({});
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="gardening-scope-row-blizzard"]')?.textContent).toContain('the blizzard monorepo');
+    expect(el.querySelector('[data-testid="gardening-scope-swept-blizzard"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="gardening-scope-swept-stale-scope"]')).toBeNull();
   });
 
   it('reflects selectedSlug onto the matching row only', async () => {

@@ -7,13 +7,14 @@
   [hasSelection]="routineNameParam() !== null"
   (back)="onBack()"
 >
-  <fleet-kit-panel kit-master-detail-list class="gr-left" label="Routines">
+  <fleet-kit-panel kit-master-detail-list class="gr-left" [label]="'Routines · ' + projectName()">
     <app-routine-list
       [rows]="listRows()"
       [selectedName]="selectedRoutineName()"
       [state]="listState()"
       (routinePick)="selectRoutine($event)"
     />
+    <p class="list-foot" data-testid="gardening-routines-foot">a routine runs a graph from the tenant's shared library</p>
   </fleet-kit-panel>
   <div kit-master-detail-detail class="gr-right">
     <router-outlet />

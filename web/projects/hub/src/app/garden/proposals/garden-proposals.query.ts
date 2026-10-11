@@ -13,9 +13,12 @@ import { DRAIN_LIMIT, drainPages } from '../../core/paginated-read';
  * `refetchInterval` is correct until a garden event exists to invalidate it. The
  * read is keyset-paginated on the hub; {@link drainPages} follows
  * `next_cursor` to exhaustion so this query still resolves the whole list.
+ *
+ * `tenantWide` reads the whole tenant even under a lens, for a figure that sets one project beside the others.
  */
-export function injectHubGardenProposalsQuery() {
-  const project = injectProjectFilter();
+export function injectHubGardenProposalsQuery(options: { readonly tenantWide?: boolean } = {}) {
+  const filter = injectProjectFilter();
+  const project = options.tenantWide === true ? () => null : filter;
   return injectQuery(() => {
     const lens = project();
     return {

@@ -217,12 +217,12 @@ describe('GardeningFindingsPage', () => {
     expect(await pressed(el, 'gardening-findings-scope-all')).toBe('true');
   });
 
-  it('keeps a detail pane mounted on the bare route, with no row highlighted', async () => {
+  it('opens the first row on the bare route, beside its detail pane', async () => {
     const { el } = await mount({ routeOverride: withBucket });
 
     expect(el.querySelector('[data-testid="finding-detail-stub"]')).toBeTruthy();
     expect(el.querySelector('[data-testid="gardening-finding-row-fnd_10"]')?.classList.contains('selected')).toBe(
-      false,
+      true,
     );
   });
 
@@ -352,7 +352,7 @@ describe('GardeningFindingsPage', () => {
         await pick(el, 'gardening-findings-scope-item-all');
         await settle(fixture);
 
-        expect(router.url).toBe('/gardening/findings?scope=all');
+        expect(router.url).toBe('/gardening/findings/fnd_10?scope=all');
         expect(await pressed(el, 'gardening-findings-scope-item-all')).toBe('true');
         expect(await pressed(el, 'gardening-findings-scope-all')).toBe('false');
         expect(el.querySelector('[data-testid="gardening-finding-row-fnd_30"]')).toBeTruthy();
@@ -417,14 +417,14 @@ describe('GardeningFindingsPage', () => {
 
       await pick(el, 'gardening-finding-class-item-unused-import');
 
-      expect(router.url).toBe('/gardening/findings?class=unused-import');
+      expect(router.url).toBe('/gardening/findings/fnd_11?class=unused-import');
       expect(el.querySelector('[data-testid="gardening-finding-row-fnd_10"]')).toBeNull();
       expect(el.querySelector('[data-testid="gardening-finding-row-fnd_11"]')).toBeTruthy();
       expect(el.querySelector('[data-testid="gardening-finding-row-fnd_14"]')).toBeTruthy();
 
       await pick(el, 'gardening-finding-state-item-gone');
 
-      expect(router.url).toBe('/gardening/findings?class=unused-import&state=gone');
+      expect(router.url).toBe('/gardening/findings/fnd_11?class=unused-import&state=gone');
       expect(el.querySelector('[data-testid="gardening-finding-row-fnd_11"]')).toBeTruthy();
       expect(el.querySelector('[data-testid="gardening-finding-row-fnd_14"]')).toBeNull();
     });
@@ -443,7 +443,7 @@ describe('GardeningFindingsPage', () => {
       expect(await pressed(el, 'gardening-finding-state-all')).toBe('true');
     });
 
-    it('clears a selected finding that a filter change removes from the bucket, keeping the filter itself', async () => {
+    it('moves a selected finding that a filter change removes to the first row left, keeping the filter itself', async () => {
       const { router, el } = await mount({
         url: '/gardening/findings/fnd_10',
         routeOverride: withBucket,
@@ -456,7 +456,7 @@ describe('GardeningFindingsPage', () => {
       // filtered rows without touching the routine/scope query itself.
       await pick(el, 'gardening-finding-class-item-unused-import');
 
-      expect(router.url).toBe('/gardening/findings?class=unused-import');
+      expect(router.url).toBe('/gardening/findings/fnd_11?class=unused-import');
     });
 
     it('does not clear a selection while the bucket read triggered by a routine/scope pick is still pending', async () => {

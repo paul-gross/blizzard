@@ -1,6 +1,8 @@
 <app-scope-panel
   [vm]="scopePanelVm()"
   [state]="scopePanelState()"
+  [project]="projectName()"
+  [sameSlugIn]="sameSlugIn()"
   [canEdit]="canEditScopes()"
   [actionError]="scopeActionError()"
   [editPending]="editPending()"

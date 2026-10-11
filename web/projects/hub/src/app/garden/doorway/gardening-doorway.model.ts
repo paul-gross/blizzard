@@ -10,7 +10,13 @@ import type {
 import { lensLink } from '../../core/project-lens';
 import { servingRunners } from '../../core/project-serving';
 import { GARDENING_DOORWAY_URL, GARDENING_FIRST_TAB } from '../core/garden-project';
-import { isGardenProposalWaiting } from '../proposals/gardening-proposals-page.model';
+import type { TenantResolution } from '../../core/auth/tenant-context';
+import { isGardenProposalWaiting, waitingLabel } from '../proposals/gardening-proposals-page.model';
+
+export { waitingLabel };
+
+/** The outcomes of a run still sweeping: the card counts these as in progress. */
+const IN_PROGRESS: ReadonlySet<string> = new Set(['running', 'delivering']);
 
 /** One project's card on the gardening doorway — its garden's standing at a glance, and the way in. */
 export interface DoorwayCard {
@@ -23,8 +29,12 @@ export interface DoorwayCard {
   readonly routines: readonly string[];
   /** How many of the project's scopes are not retired. */
   readonly scopes: number;
-  /** How many runs the project minted in the reporting window. */
-  readonly runs: number;
+  /** How many of the project's runs in the reporting window are still sweeping. */
+  readonly inProgress: number;
+  /** How many findings the project's runs in the reporting window added. */
+  readonly findings: number;
+  /** When the project's newest finished run in the reporting window was minted; `null` when none finished. */
+  readonly lastRun: string | null;
   /** How many of the project's proposals wait on a person. */
   readonly waiting: number;
   /** Whether nothing is planted yet: no scope and no routine. */
@@ -55,6 +65,8 @@ export function doorwayCards(reads: DoorwayReads): readonly DoorwayCard[] {
       const id = project.project_id;
       const routines = ownedBy(reads.routines, id).filter((routine) => routine.retired !== true);
       const scopes = ownedBy(reads.scopes, id).filter((scope) => scope.retired !== true);
+      const runs = ownedBy(reads.runs, id);
+      const finished = runs.filter((run) => run.outcome === 'done');
       return {
         projectId: id,
         slug: project.slug,
@@ -62,7 +74,9 @@ export function doorwayCards(reads: DoorwayReads): readonly DoorwayCard[] {
         link: lensLink([GARDENING_DOORWAY_URL, GARDENING_FIRST_TAB], project.slug),
         routines: routines.map((routine) => routine.name),
         scopes: scopes.length,
-        runs: ownedBy(reads.runs, id).length,
+        inProgress: runs.filter((run) => IN_PROGRESS.has(run.outcome)).length,
+        findings: runs.reduce((sum, run) => sum + run.delivered.reduce((added, set) => added + set.added_count, 0), 0),
+        lastRun: newest(finished.map((run) => run.minted_at)),
         waiting: ownedBy(reads.proposals, id).filter(isGardenProposalWaiting).length,
         unplanted: routines.length === 0 && scopes.length === 0,
         unserved: reads.runners === undefined ? null : servingRunners(id, reads.runners).length === 0,
@@ -70,7 +84,26 @@ export function doorwayCards(reads: DoorwayReads): readonly DoorwayCard[] {
     });
 }
 
-/** The waiting badge's text: "1 proposal waiting", "3 proposals waiting". */
-export function waitingLabel(count: number): string {
-  return `${count} proposal${count === 1 ? '' : 's'} waiting`;
+function newest(instants: readonly string[]): string | null {
+  return instants.reduce<string | null>((seen, at) => (seen === null || Date.parse(at) > Date.parse(seen) ? at : seen), null);
+}
+
+/** The scopes row's right-hand state: "idle", or how many runs are sweeping. */
+export function sweepingLabel(inProgress: number): string {
+  return inProgress === 0 ? 'idle' : `${inProgress} run${inProgress === 1 ? '' : 's'} in progress`;
+}
+
+/** The way-in's text, its possessive following the name: "Open Default's garden", "Open Widgets' garden". */
+export function openGardenLabel(name: string): string {
+  return `Open ${name}${/s$/i.test(name) ? "'" : "'s"} garden`;
+}
+
+/** The tenant a garden doorway shows, from the identity's memberships settled by `resolve`; empty until settled. */
+export function doorwayTenantName(resolution: TenantResolution | null): string {
+  return resolution?.kind === 'selected' ? resolution.tenant.name : '';
+}
+
+/** The doorway panel's title: "Gardens in {tenant}", or "Gardens" while the tenant is not yet named. */
+export function doorwayTitle(tenantName: string): string {
+  return tenantName === '' ? 'Gardens' : `Gardens in ${tenantName}`;
 }
