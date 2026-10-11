@@ -199,10 +199,12 @@ class MatchedPeek:
         served: Collection[str],
     ) -> MatchedPeek:
         chunks = services.queue.ordered_ready(statuses=statuses)
-        markings = _blocked_markings(services, statuses)
-        chunk_ids = [chunk.chunk_id for chunk in chunks]
-        facts = services.chunks.facts.load_facts_for(chunk_ids)
-        graph_ids = sorted({chunk.graph_id for chunk in chunks})
+        policy = QueueMatchPolicy.of(request.policy)
+        served_chunks = [chunk for chunk in chunks if chunk.project_id in served]
+        candidates = served_chunks[:1] if policy is QueueMatchPolicy.HOLD else served_chunks
+        markings = _blocked_markings(services, statuses, [chunk.chunk_id for chunk in candidates])
+        facts = services.chunks.facts.movement_facts_for([chunk.chunk_id for chunk in candidates])
+        graph_ids = sorted({chunk.graph_id for chunk in candidates})
         graphs = services.graphs.get_many(graph_ids)
         entry = select_matched_entry(
             chunks,
@@ -211,7 +213,7 @@ class MatchedPeek:
             facts=facts,
             capabilities=_domain_capabilities(request.capabilities),
             blocked=markings,
-            policy=QueueMatchPolicy.of(request.policy),
+            policy=policy,
         )
         project_id = entry.chunk.project_id if entry is not None else None
         return cls(entry, services.projects.get(project_id) if project_id is not None else None)

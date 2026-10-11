@@ -94,6 +94,8 @@ _STATUS_FAMILIES: frozenset[str] = frozenset(
     }
 )
 
+_MOVEMENT_FAMILIES: frozenset[str] = frozenset({"transitions", "migrations", "restarts"})
+
 
 #: Each status family's tables — the change probe's list, so a new family joins it here.
 _STATUS_FAMILY_TABLES: dict[str, tuple[Table, ...]] = {
@@ -179,6 +181,13 @@ class ChunkFactsStore:
             return {}
         with self._store.read("load_facts_for") as conn:
             return self._load(conn, chunk_ids)
+
+    def movement_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
+        """Only the transition, migration and restart rows used to derive the current node."""
+        if not chunk_ids:
+            return {}
+        with self._store.read("movement_facts_for") as conn:
+            return self._load(conn, chunk_ids, families=_MOVEMENT_FAMILIES)
 
     def status_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
         """`load_facts_for`'s status-only sibling — every id's :class:`ChunkFacts`, keyed

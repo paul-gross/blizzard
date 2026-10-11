@@ -33,6 +33,10 @@ class IReadChunkFactsRepository(Protocol):
         is silently dropped, the same as :meth:`load_facts` returning ``None`` for it."""
         ...
 
+    def movement_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
+        """The movement families needed by :meth:`ChunkFacts.current_node_id`, for the named chunks."""
+        ...
+
     def load_live_statuses(self) -> dict[str, ChunkStatus]:
         """Every non-ephemeral, non-terminal chunk's derived :class:`ChunkStatus`, keyed by
         chunk id (``bzh:live-set-read``) — terminal chunks are excluded in the store query,

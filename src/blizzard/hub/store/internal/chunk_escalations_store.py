@@ -35,10 +35,12 @@ class ChunkEscalationsStore:
         self._clock = clock
         self._facts = facts
 
-    def list_open_escalations(self, *, project: ProjectId | None = None) -> list[EscalationOpen]:
+    def list_open_escalations(
+        self, *, project: ProjectId | None = None, chunk_id: str | None = None
+    ) -> list[EscalationOpen]:
         """Every open escalation fleet-wide, each decided by ``ChunkFacts.open_escalation``
         (#293) — the rule's one implementation, never a second derivation from raw rows."""
-        candidates = self._escalation_candidates(self._newest_escalation_per_chunk(project))
+        candidates = self._escalation_candidates(self._newest_escalation_per_chunk(project, chunk_id))
         facts_by_id = self._facts.load_facts_for(candidates)
         return [
             EscalationOpen(
@@ -149,7 +151,7 @@ class ChunkEscalationsStore:
             )
             return True
 
-    def _newest_escalation_per_chunk(self, project: ProjectId | None = None):  # type: ignore[no-untyped-def]
+    def _newest_escalation_per_chunk(self, project: ProjectId | None = None, chunk_id: str | None = None):  # type: ignore[no-untyped-def]
         """The newest ``escalations`` row per chunk, over the chunks that might still be
         live — a chunk a terminal fact settles, or one grouped away or deleted, can never
         hold an open escalation, so it is excluded in the query rather than loaded and
@@ -159,6 +161,8 @@ class ChunkEscalationsStore:
         )
         if project is not None:
             live_chunk_ids = live_chunk_ids.where(s.chunks.c.project_id == project)
+        if chunk_id is not None:
+            live_chunk_ids = live_chunk_ids.where(s.chunks.c.chunk_id == chunk_id)
         with self._store.read("_newest_escalation_per_chunk") as conn:
             newer = s.escalations.alias("newer")
             beaten = self._store.exists(

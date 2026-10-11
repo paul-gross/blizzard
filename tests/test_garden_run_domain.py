@@ -106,6 +106,9 @@ class _FakeChunkFacts:
     def load_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
         return {chunk_id: f for chunk_id in chunk_ids if (f := self.facts.get(chunk_id)) is not None}
 
+    def movement_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
+        return self.load_facts_for(chunk_ids)
+
     def status_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
         return self.load_facts_for(chunk_ids)
 

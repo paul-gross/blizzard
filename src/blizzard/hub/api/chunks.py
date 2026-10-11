@@ -289,6 +289,11 @@ def list_chunks(
     )
     # The page's projects — one batched read, narrowed to the page.
     projects = services.projects.get_many(sorted({c.project_id for c in page_chunks if c.project_id is not None}))
+    # Config revisions are read once per distinct source on each request, never cached across requests.
+    sources = {
+        name: services.work_sources.get(name)
+        for name in sorted({pointer.source for chunk in page_chunks for pointer in chunk.work_refs})
+    }
     return ChunksPageView(
         chunks=[
             ChunkView.injected(
@@ -305,6 +310,7 @@ def list_chunks(
                 ),
                 runner_names=runner_names,
                 projects=projects,
+                sources=sources,
             ).summary()
             for chunk in page_chunks
         ],
