@@ -482,6 +482,7 @@ class FakeHub:
         self.hub_advance_calls: list[str] = []  # chunk ids `hub_advance` was called for (#66)
         self.hub_advance_responses: dict[str, HubAdvanceResponse] = {}
         self.rekey_calls: list[str] = []  # chunk ids `rekey_route_token` was called for
+        self.get_question_calls: list[str] = []  # question ids `get_question` was called for
         self.rekey_responses: dict[str, str] = {}  # chunk_id -> the plaintext to hand back
 
     @property
@@ -632,6 +633,7 @@ class FakeHub:
         )
 
     def get_question(self, question_id: str) -> HubQuestion:
+        self.get_question_calls.append(question_id)
         return self.questions[question_id]
 
     def register_runner(
