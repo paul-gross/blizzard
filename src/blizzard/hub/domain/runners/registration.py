@@ -748,8 +748,6 @@ class RetiredRunnerGuard:
     def __init__(self, *, registry: IReadRunnerRegistry) -> None:
         self._registry = registry
 
-    # runner_id resolves the retired-runner guard, a domain rule (bzh:domain-takes-objects).
-    # ast-grep-ignore: bzh:domain-takes-objects
     def refuse_if_retired(self, runner_id: str, *, action: str) -> None:
         """Raise :class:`RunnerRetired` when ``runner_id`` names a retired runner. A runner the
         hub never added passes — it has no row, so there is nothing to be retired."""
