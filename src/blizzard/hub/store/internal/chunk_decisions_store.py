@@ -370,9 +370,10 @@ class ChunkDecisionsStore:
 
 
 def decision_closure_ids(conn: Connection, decision_ids: Sequence[str] | None) -> set[str]:
-    """The ids among ``decision_ids`` — every decision when ``None`` — closed by a fact in :data:`_DECISION_CLOSURE_TABLES`
-    — :meth:`ChunkDecisionsStore._not_closed_clause`'s own predicate, inverted, so every
-    closure read (the live decision, the bulk status read, the chunk facts) shares one rule."""
+    """The ids among ``decision_ids`` — every decision when ``None`` — closed by a fact in
+    :data:`_DECISION_CLOSURE_TABLES` —
+    :meth:`ChunkDecisionsStore._not_closed_clause`'s own predicate, inverted, so every closure read (the live
+    decision, the bulk status read, the chunk facts) shares one rule."""
     if decision_ids is not None and not decision_ids:
         return set()
     stmts = statements_of(conn)

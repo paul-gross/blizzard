@@ -386,9 +386,7 @@ class ChunkFactsStore:
                 resolved_ids = self._resolved_ids(conn, decision_ids) | {
                     r.decision_id for r in restart_rows if r.decision_id is not None
                 }
-            closed_ids = decision_closure_ids(
-                conn, None if batch is None else [d.decision_id for d in decision_rows]
-            )
+            closed_ids = decision_closure_ids(conn, None if batch is None else [d.decision_id for d in decision_rows])
             for d in decision_rows:
                 decisions[d.chunk_id].append(
                     DecisionFact(
