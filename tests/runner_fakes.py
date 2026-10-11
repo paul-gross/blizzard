@@ -10,6 +10,7 @@ from __future__ import annotations
 import shutil
 import tempfile
 import threading
+import weakref
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -1426,8 +1427,13 @@ def make_context(
     # Load-bearing — unlike `worker_stdout_dir`, never the empty-disables convention,
     # so an unset config falls back to a fresh throwaway directory rather than "" (which
     # would make every `FakeHarness.judge` write raise `IsADirectoryError`/`FileNotFoundError`).
-    _elicitation_root = resolved_config.elicitation_output_dir or tempfile.mkdtemp(prefix="blizzard-elicit-")
+    # The fallback directory is removed when its `ElicitationFiles` is discarded — derived contexts
+    # (`dataclasses.replace`) share that instance, so it outlives any one `LoopContext`.
+    _fallback_root = None if resolved_config.elicitation_output_dir else tempfile.mkdtemp(prefix="blizzard-elicit-")
+    _elicitation_root = resolved_config.elicitation_output_dir or _fallback_root or ""
     _elicitation_files = ElicitationFiles(_elicitation_root)
+    if _fallback_root is not None:
+        weakref.finalize(_elicitation_files, shutil.rmtree, _fallback_root, ignore_errors=True)
     _stores = make_stores(store)
     _identity = RunnerIdentityHolder()
     if registered:
@@ -1436,7 +1442,7 @@ def make_context(
         )
         store.record_runner_identity(seeded)
         _identity.hold(seeded)
-    return LoopContext(
+    context = LoopContext(
         stores=_stores,
         clock=_clock,
         hub=_hub,
@@ -1479,6 +1485,7 @@ def make_context(
         harnesses=_harnesses,
         harness_versions=harness_versions,
     )
+    return context
 
 
 def _default_harness_registry(harness: IHarnessAdapter | None) -> HarnessRegistry:
