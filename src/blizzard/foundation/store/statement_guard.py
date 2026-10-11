@@ -310,7 +310,7 @@ def _leaf_name(leaf: FromClause, table: Table) -> str:
     return f"{table.name} (as {leaf.name})" if isinstance(leaf, Alias) else table.name
 
 
-def _conjuncts(condition: ClauseElement | None) -> Iterator[ClauseElement]:
+def _conjuncts(condition: Any) -> Iterator[ClauseElement]:
     if condition is None:
         return
     if isinstance(condition, Grouping):
@@ -336,7 +336,7 @@ def _key_leaf(side: ClauseElement, leaves: Iterable[FromClause], column: str) ->
     return next((leaf for leaf in leaves if side.table is leaf), None)
 
 
-def _is_value(side: ClauseElement) -> bool:
+def _is_value(side: Any) -> bool:
     """Whether ``side`` is a bound value — a parameter or a literal, possibly grouped or cast — naming no column."""
     while isinstance(side, Grouping | Cast | TypeCoerce):
         side = side.clause if isinstance(side, Cast | TypeCoerce) else side.element
