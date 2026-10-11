@@ -3,7 +3,7 @@ mutable configuration columns."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
@@ -54,18 +54,26 @@ class IReadChunkRecordRepository(Protocol):
 
     def list_all(self) -> list[Chunk]: ...
 
+    def newest_done(self, *, limit: int, project: ProjectId | None = None) -> list[str]:
+        """The ids of the ``limit`` most recently finished ``done`` chunks, newest first —
+        :meth:`ChunkFacts.completed_at` order, ``chunk_id`` breaking a same-instant tie.
+        ``project`` narrows the ranking to that project's chunks."""
+        ...
+
     def list_page(
         self,
         *,
         cursor: str | None = None,
         limit: int,
         done_since: datetime | None = None,
+        done_kept: Collection[str] = (),
         project: ProjectId | None = None,
     ) -> ChunkPage:
         """``list_all``'s bounded sibling: newest-minted first, ``chunk_id`` breaking a
         same-instant tie. ``cursor`` is a prior
         :attr:`ChunkPage.next_cursor`; any other raises :class:`~blizzard.hub.domain.kernel.pagination.MalformedCursor`.
-        ``done_since`` drops chunks settled ``done`` before it — sound, not exact: a tie stays in.
+        ``done_since`` drops chunks settled ``done`` before it — sound, not exact: a tie stays in —
+        except the ids in ``done_kept``, which it never drops.
         ``project`` narrows the walk to that project's chunks, in the same order; a cursor from a
         walk under one ``project`` continues only that walk."""
         ...

@@ -544,6 +544,13 @@ HUB_ALLOWED_SCANS: list[Allowance] = [
         ),
         _TENANT_SNAPSHOT_REASON,
     ),
+    IndexWalkAllowance(
+        IReadChunkRecordRepository,
+        "newest_done",
+        ("chunk_completed", "chunks"),
+        "the board's done floor ranks every `done` chunk of the scope by a derived completion instant no index "
+        "orders, and returns only the newest `BOARD_DONE_FLOOR` ids — a fleet-sized walk by design, one statement.",
+    ),
     IndexWalkAllowance(IReadChunkRecordRepository, "list_page", ("chunks",), _PAGED_LISTING_REASON),
     IndexWalkAllowance(
         IReadChunkRecordRepository,
