@@ -1,6 +1,6 @@
 import { Component, afterRenderEffect, provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+import { QueryClient, QueryObserver, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
 import { HUB_PROJECT_FILTER } from '../core/project-filter';
@@ -144,6 +144,66 @@ describe('FleetLiveUpdates', () => {
 
     const registryHits = invalidate.mock.calls.filter((call) => call[0]?.queryKey?.[1] === 'runners');
     expect(registryHits).toHaveLength(1);
+  });
+
+  it('collapses 100 frames within one second into one invalidation per key', () => {
+    expect(INVALIDATION_COALESCE_WINDOW_MS).toBe(1000);
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
+    const source = FakeEventSource.instances[0];
+    source.open();
+
+    for (let i = 0; i < 100; i++) {
+      source.emitNamed('queue-changed', JSON.stringify({}));
+      vi.advanceTimersByTime(9);
+    }
+    expect(invalidate).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(100);
+    expect(invalidate.mock.calls.filter((call) => call[0]?.queryKey?.[1] === 'queue')).toHaveLength(1);
+  });
+
+  it('flushes a continuous stream once per elapsed second without extending the first window', () => {
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
+    const source = FakeEventSource.instances[0];
+    source.open();
+
+    for (let second = 1; second <= 3; second++) {
+      for (let tenth = 0; tenth < 10; tenth++) {
+        source.emitNamed('queue-changed', JSON.stringify({}));
+        vi.advanceTimersByTime(100);
+      }
+      expect(invalidate.mock.calls.filter((call) => call[0]?.queryKey?.[1] === 'queue')).toHaveLength(second);
+    }
+  });
+
+  it('does not abort an active query refetch when a frame flushes', async () => {
+    let resolveRead!: (value: string) => void;
+    const queryFn = vi.fn(({ signal }: { signal: AbortSignal }) => {
+      signal.addEventListener('abort', aborted);
+      return new Promise<string>((resolve) => { resolveRead = resolve; });
+    });
+    const aborted = vi.fn();
+    const observer = new QueryObserver(queryClient, { queryKey: ['hub', 'queue'], queryFn });
+    const unsubscribe = observer.subscribe(vi.fn());
+    try {
+      expect(queryFn).toHaveBeenCalledTimes(1);
+      const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+      TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
+      const source = FakeEventSource.instances[0];
+      source.open();
+      source.emitNamed('queue-changed', JSON.stringify({}));
+      vi.advanceTimersByTime(INVALIDATION_COALESCE_WINDOW_MS);
+
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: ['hub', 'queue'] }, { cancelRefetch: false });
+      expect(aborted).not.toHaveBeenCalled();
+      expect(queryFn).toHaveBeenCalledTimes(1);
+      resolveRead('ready');
+      await vi.waitFor(() => expect(observer.getCurrentResult().data).toBe('ready'));
+      expect(aborted).not.toHaveBeenCalled();
+    } finally {
+      unsubscribe();
+    }
   });
 
   it('preserves distinct keys from different frames in the same window (issue #310)', () => {

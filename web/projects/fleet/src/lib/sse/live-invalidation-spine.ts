@@ -176,7 +176,7 @@ export class LiveInvalidationSpine<TPayload extends object, TType extends string
     const keys = [...this.pendingInvalidations.values()];
     this.pendingInvalidations.clear();
     for (const queryKey of keys) {
-      void this.opts.queryClient.invalidateQueries({ queryKey });
+      void this.opts.queryClient.invalidateQueries({ queryKey }, { cancelRefetch: false });
     }
   }
 }

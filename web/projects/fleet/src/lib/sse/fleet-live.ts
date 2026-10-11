@@ -46,14 +46,11 @@ export function hubEventStreamUrl(project: string | null): string {
 
 /**
  * How long {@link LiveInvalidationSpine.dispatch} accumulates invalidation keys before
- * flushing them as one pass. A burst of frames — a batch promote, a
- * runner claiming several chunks — would otherwise fire one `invalidateQueries` call
- * per key per frame; this window lets the overlapping key sets from a burst collapse
- * into a single pass instead. 250ms: short enough that a quiet stream's lone event
- * still reads as prompt, long enough that same-tick bursts (the common case for a
- * hub emitting several events off one transition) actually overlap in the window.
+ * flushing them as one pass. The first frame starts a fixed one-second window;
+ * later frames join that pass without postponing it, so even a steady stream
+ * invalidates each key at most once per second.
  */
-export const INVALIDATION_COALESCE_WINDOW_MS = 250;
+export const INVALIDATION_COALESCE_WINDOW_MS = 1000;
 
 /** The named event types the hub broadcasts, in the generated {@link HubEventType}'s order. */
 export const HUB_EVENT_TYPES: readonly HubEventType[] = Object.values(HubEventType);
