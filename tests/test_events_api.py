@@ -15,7 +15,7 @@ import pytest
 from blizzard.foundation.event_log import EventLogSeverity
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
-from tests.support import build_hub, chunk_stores, seed_chunk, seed_graph, seed_lease
+from tests.support import build_hub, chunk_stores, count_rows_read, seed_chunk, seed_graph, seed_lease
 
 pytestmark = pytest.mark.component
 
@@ -265,3 +265,60 @@ def test_naive_since_with_open_escalation_does_not_500(tmp_path: Path) -> None:
     # `2020-01-01T00:00:00` — valid ISO-8601, no timezone offset, well before the escalation.
     feed = _events(hub, since="2020-01-01T00:00:00")
     assert [e["kind"] for e in feed] == ["needs-human"]
+
+
+def test_chunk_filtered_escalations_do_not_read_other_open_chunks(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    store = chunk_stores(hub.engine, hub.clock)
+    at = hub.clock.now()
+    with hub.engine.begin() as conn:
+        seed_graph(conn, "gr_escalation", at=at)
+        seed_chunk(conn, "ch_target", graph_id="gr_escalation", at=at)
+    store.escalations.record_escalation(
+        "ch_target",
+        epoch=1,
+        takeover_command="resume",
+        at=at,
+        admission=EpochAdmission.AT_OR_ABOVE,
+        cause=None,
+        detail=None,
+    )
+
+    def filtered() -> None:
+        assert [row["chunk_id"] for row in _events(hub, chunk_id="ch_target")] == ["ch_target"]
+
+    baseline = count_rows_read(hub.engine, filtered)
+    for i in range(8):
+        chunk_id = f"ch_other_{i}"
+        with hub.engine.begin() as conn:
+            seed_chunk(conn, chunk_id, graph_id="gr_escalation", at=at)
+        store.escalations.record_escalation(
+            chunk_id,
+            epoch=1,
+            takeover_command="resume",
+            at=at,
+            admission=EpochAdmission.AT_OR_ABOVE,
+            cause=None,
+            detail=None,
+        )
+    assert count_rows_read(hub.engine, filtered) == baseline
+    assert len(_events(hub, severity="critical", limit=2)) == 2
+
+
+def test_noncritical_and_runner_filtered_events_skip_escalation_store(tmp_path: Path) -> None:
+    from dataclasses import replace
+
+    from tests.support import serve_default_tenant
+
+    hub = build_hub(tmp_path)
+
+    class NoEscalations:
+        def list_open_escalations(self, **kwargs):  # type: ignore[no-untyped-def]
+            raise AssertionError("escalation read should be skipped")
+
+    serve_default_tenant(
+        hub,
+        replace(hub.services, chunks=replace(hub.services.chunks, escalations=NoEscalations())),  # type: ignore[arg-type]
+    )
+    assert _events(hub, severity="warning") == []
+    assert _events(hub, runner_id="r1") == []

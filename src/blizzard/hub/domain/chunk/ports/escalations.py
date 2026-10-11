@@ -14,11 +14,10 @@ from blizzard.hub.domain.projects.model import ProjectId
 class IReadChunkEscalationsRepository(Protocol):
     """Read-only chunk-escalations access."""
 
-    def list_open_escalations(self, *, project: ProjectId | None = None) -> list[EscalationOpen]:
-        """Every currently-open escalation, **fleet-wide**, or of ``project``'s chunks alone when one is named.
-
-        Each decided by :meth:`ChunkFacts.open_escalation` — the rule's one implementation
-        (#293). Low-volume, so the candidate scan is full."""
+    def list_open_escalations(
+        self, *, project: ProjectId | None = None, chunk_id: str | None = None
+    ) -> list[EscalationOpen]:
+        """Open escalations for the project and/or chunk, decided by :meth:`ChunkFacts.open_escalation`."""
         ...
 
 

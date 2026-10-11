@@ -140,11 +140,17 @@ def list_events(
         limit=limit,
         lens=_feed_lens(services, project),
     )
-    escalations = [
-        e
-        for e in services.chunks.escalations.list_open_escalations(project=project)
-        if e.matches(severity=severity, runner_id=runner_id, chunk_id=chunk_id, since=since_utc)
-    ]
+    # Escalations project as critical, runner-less events. Without a chunk filter, their
+    # candidate scan is intentional: open-ness is derived by ChunkFacts and volume is low.
+    escalations = (
+        [
+            e
+            for e in services.chunks.escalations.list_open_escalations(project=project, chunk_id=chunk_id)
+            if e.matches(severity=severity, runner_id=runner_id, chunk_id=chunk_id, since=since_utc)
+        ]
+        if (severity is None or severity is EventLogSeverity.CRITICAL) and runner_id is None
+        else []
+    )
     rows = EventFeed.of(events, escalations).rows[:limit]
     return Events(rows, _runner_names(services, (row.runner_id for row in rows))).response()
 

@@ -14,17 +14,23 @@ import pytest
 
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.model import ChunkFacts, WorkRef
+from blizzard.hub.domain.config.changes import RecordKind
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.kernel.pagination import MAX_LIMIT
 from blizzard.hub.domain.runners.route import Route
+from blizzard.hub.live_config import ConfigObjectCache
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_route_store import ChunkRouteStore
 from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
+from blizzard.hub.store.internal.config_revisions_store import ConfigRevisionsStore
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.work_sources.registry import BuiltWorkSource, StoreWorkSourceRegistry
 from tests.support import (
+    FakeWorkSource,
     build_hub,
     count_queries,
+    count_rows_read,
     hub_store_connections,
     ingest,
     make_ready,
@@ -65,6 +71,62 @@ def test_list_chunks_query_count_is_independent_of_fleet_size(tmp_path: Path) ->
 
     assert results == {"small": 3, "large": 9}
     assert small_count == large_count
+
+
+def test_list_resolves_store_backed_sources_once_per_name_and_only_on_the_page(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, work_sources={"default": FakeWorkSource(), "other": FakeWorkSource(name="other")})
+    # Ingest with the fixture registry, then swap in the production registry and cache.
+    for i in range(5):
+        ingest(hub, [{"source": "default", "ref": str(i)}, {"source": "other", "ref": str(i)}])
+    scoped = hub_store_connections(hub.engine)
+
+    class CountingRevisions(ConfigRevisionsStore):
+        def __init__(self, store: ScopedConnections) -> None:
+            super().__init__(store)
+            self.calls: list[str] = []
+
+        def revisions(self, kind: RecordKind, key: str):  # type: ignore[no-untyped-def]
+            self.calls.append(key)
+            return super().revisions(kind, key)
+
+    revisions = CountingRevisions(scoped)
+    registry = StoreWorkSourceRegistry(
+        records=hub.services.work_source_records,
+        objects=ConfigObjectCache(revisions),
+        build=lambda record: BuiltWorkSource(record, FakeWorkSource(name=record.name), lambda: None),
+        built_in=hub.work_sources.get("hub"),  # type: ignore[arg-type]
+    )
+    serve_default_tenant(hub, replace(hub.services, work_sources=registry))
+
+    def page() -> None:
+        resp = hub.client.get("/api/chunks", params={"limit": 2})
+        assert resp.status_code == 200, resp.text
+        assert len(resp.json()["chunks"]) == 2
+        for row in resp.json()["chunks"]:
+            assert [(p["label"], p["web_url"]) for p in row["work_refs"]] == [
+                (
+                    f"default#{row['work_refs'][0]['ref']}",
+                    f"http://forge.local/acme/widget/issues/{row['work_refs'][0]['ref']}",
+                ),
+                (
+                    f"other#{row['work_refs'][1]['ref']}",
+                    f"http://forge.local/acme/widget/issues/{row['work_refs'][1]['ref']}",
+                ),
+            ]
+
+    page()  # Warm graph and source adapters before measuring either population.
+    assert revisions.calls == ["default", "other"]
+    before = count_queries(hub.engine, page)
+    rows_before = count_rows_read(hub.engine, page)
+    assert revisions.calls[-2:] == ["default", "other"]
+    graph_id = hub.client.get("/api/chunks", params={"limit": 1}).json()["chunks"][0]["graph_id"]
+    for i in range(5, 11):
+        # Off-page rows are older than the two page entries.
+        with hub.engine.begin() as conn:
+            seed_chunk(conn, f"ch_off_{i}", graph_id=graph_id, at=_T0)
+    assert count_queries(hub.engine, page) == before
+    assert count_rows_read(hub.engine, page) == rows_before
+    assert revisions.calls[-2:] == ["default", "other"]
 
 
 class _CountingFactsStore(ChunkFactsStore):

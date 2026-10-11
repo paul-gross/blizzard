@@ -7,6 +7,7 @@ tenant's order, at their whole-order positions and never reranked. Every queue e
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
@@ -14,16 +15,20 @@ from typing import Any
 import pytest
 
 from blizzard.hub.domain.projects.model import ProjectId
+from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from tests.support import (
     HubHarness,
     build_hub,
+    capture_statements,
     count_queries,
     default_project,
     default_tenant,
+    hub_store_connections,
     ingest,
     link_project,
     seed_project,
     seed_runner,
+    serve_default_tenant,
 )
 
 pytestmark = pytest.mark.component
@@ -124,6 +129,53 @@ def test_a_dependency_on_another_projects_chunk_still_holds_back_its_dependent(t
     token = seed_runner(hub, "r-default", projects=("default",))
 
     assert _peek(hub, token) == []
+
+
+@pytest.mark.parametrize("policy", ["hold", "pass-over"])
+def test_matched_peek_reconstitutes_only_served_candidates(tmp_path: Path, policy: str) -> None:
+    hub, _ = _two_project_hub(tmp_path)
+    _ingest(hub, "foreign-head", "beta")
+    served_head = _ingest(hub, "served-head", "default")
+    served_next = _ingest(hub, "served-next", "default")
+    token = seed_runner(hub, "r-default", projects=("default",))
+    assert (
+        hub.client.patch(f"/api/chunks/{served_head}", json={"default_harnesses": ["unavailable"]}).status_code == 202
+    )
+
+    class CandidateFacts(ChunkFactsStore):
+        def __init__(self) -> None:
+            super().__init__(hub_store_connections(hub.engine), hub.clock)
+            self.requested: list[list[str]] = []
+
+        def movement_facts_for(self, chunk_ids):  # type: ignore[no-untyped-def]
+            self.requested.append(list(chunk_ids))
+            return super().movement_facts_for(chunk_ids)
+
+    facts = CandidateFacts()
+    serve_default_tenant(hub, replace(hub.services, chunks=replace(hub.services.chunks, facts=facts)))
+
+    def measured() -> tuple[list[tuple[str, int]], int]:
+        with capture_statements(hub.engine) as statements:
+            entries = _peek(hub, token, policy=policy)
+        # Whole-order/status reads necessarily grow with the fleet. Count the candidate
+        # fact and graph projections separately from those ordering inputs.
+        candidates = [(sql, params) for sql, params in statements if "FROM graphs " in sql and "JOIN" not in sql]
+        with hub.engine.connect() as conn:
+            rows = sum(
+                conn.exec_driver_sql(f"SELECT count(*) FROM ({sql})", params).scalar_one() for sql, params in candidates
+            )
+        return entries, rows
+
+    expected = [] if policy == "hold" else [(served_next, 2)]
+    entries, rows = measured()
+    assert entries == expected
+    assert facts.requested[-1] == ([served_head] if policy == "hold" else [served_head, served_next])
+    for i in range(6):
+        _ingest(hub, f"foreign-{i}", "beta")
+    after, after_rows = measured()
+    assert after == expected
+    assert after_rows == rows
+    assert facts.requested[-1] == ([served_head] if policy == "hold" else [served_head, served_next])
 
 
 @pytest.mark.parametrize(("path", "ready", "runner"), _READS, ids=[read[0] for read in _READS])

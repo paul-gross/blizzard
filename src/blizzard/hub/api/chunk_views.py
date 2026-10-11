@@ -35,6 +35,7 @@ from blizzard.hub.domain.operations.edit import is_graph_editable
 from blizzard.hub.domain.projects.model import Project, ProjectId
 from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.forge.web import branch_url as forge_branch_url
+from blizzard.hub.work_sources.source import IWorkSource
 from blizzard.wire.chunk import (
     ArtifactView,
     BlockedView,
@@ -165,6 +166,8 @@ class ChunkView:
     runner_names: Mapping[str, str] | None = None
     #: Projects by id — the caller's own batched read; ``None`` makes each render read the chunk's own project.
     projects: Mapping[ProjectId, Project] | None = None
+    #: Request-scoped source resolution; absent on the single-chunk lazy path.
+    sources: Mapping[str, IWorkSource | None] | None = None
 
     @classmethod
     def of(
@@ -203,6 +206,7 @@ class ChunkView:
         delivery: DeliveryRead | None = None,
         runner_names: Mapping[str, str] | None = None,
         projects: Mapping[ProjectId, Project] | None = None,
+        sources: Mapping[str, IWorkSource | None] | None = None,
     ) -> ChunkView:
         """The bulk-read counterpart to :meth:`of`: a fan-out list read injects
         already-fetched facts, route, pointer live-holders, runner names and projects, skipping
@@ -219,6 +223,7 @@ class ChunkView:
             delivery=delivery,
             runner_names=runner_names,
             projects=projects,
+            sources=sources,
         )
 
     def _project_fields(self) -> ProjectLabelFields:
@@ -318,7 +323,9 @@ class ChunkView:
         holders = self._resolved_live_holders()
         views: list[WorkRefView] = []
         for p in self.chunk.work_refs:
-            source = self.services.work_sources.get(p.source)
+            source = (
+                self.sources.get(p.source) if self.sources is not None else self.services.work_sources.get(p.source)
+            )
             views.append(
                 WorkRefView(
                     source=p.source,
