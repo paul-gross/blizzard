@@ -446,6 +446,9 @@ class _NoRunners:
     def get_runner(self, runner_id: str) -> None:
         return None
 
+    def is_retired(self, runner_id: str) -> bool:
+        return False
+
 
 _NO_RETIREMENTS = RetiredRunnerGuard(registry=cast(IReadRunnerRegistry, _NoRunners()))
 

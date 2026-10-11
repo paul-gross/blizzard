@@ -70,8 +70,25 @@ def _identity_values(record: TranscriptSlice) -> dict[str, object]:
 
 
 def _segments_for_chunk_stmt(stmts: ScopedStatements, chunk_id: str) -> Select[Any]:
+    c = s.transcript_segments.c
     return (
-        stmts.select(s.transcript_segments)
+        stmts.select(
+            s.transcript_segments,
+            c.segment_id,
+            c.node_id,
+            c.epoch,
+            c.spawn_generation,
+            c.turn_range_start,
+            c.turn_range_end,
+            c.final,
+            c.rejected,
+            c.record_truncated,
+            c.byte_count,
+            c.harness_id,
+            c.normalizer_version,
+            c.harness_version,
+            c.received_at,
+        )
         .where(s.transcript_segments.c.chunk_id == chunk_id)
         .order_by(s.transcript_segments.c.segment_id, s.transcript_segments.c.turn_range_start)
     )
