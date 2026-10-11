@@ -363,9 +363,10 @@ export const chunkCountsApiChunkCountsGet = <ThrowOnError extends boolean = fals
  * The fleet chunk list — derived status per chunk, bounded and keyset-paginated;
  * ``?project=`` narrows the rows to that project's chunks, in the same order.
  *
- * Only the page's own rows render, but live-holder and blocked-marking derivation still
- * see the whole fleet — a pointer this page renders can be held live by a
- * chunk outside it, same for a dependent's prerequisite.
+ * Reads only what the page renders: facts, routes, blocked markings, and live holders are
+ * each resolved for the page's chunks and pointers through narrowed, batched reads. A pointer
+ * the page renders held live by a chunk outside it, or a dependent's prerequisite outside it,
+ * still resolves — the narrowing happens in the store, not by dropping the off-page side.
  */
 export const listChunksApiChunksGet = <ThrowOnError extends boolean = false>(options?: Options<ListChunksApiChunksGetData, ThrowOnError>): RequestResult<ListChunksApiChunksGetResponses, ListChunksApiChunksGetErrors, ThrowOnError> => (options?.client ?? client).get<ListChunksApiChunksGetResponses, ListChunksApiChunksGetErrors, ThrowOnError>({ url: '/api/chunks', ...options });
 

@@ -17372,7 +17372,7 @@
     },
     "/api/chunks": {
       "get": {
-        "description": "The fleet chunk list \u2014 derived status per chunk, bounded and keyset-paginated;\n``?project=`` narrows the rows to that project's chunks, in the same order.\n\nOnly the page's own rows render, but live-holder and blocked-marking derivation still\nsee the whole fleet \u2014 a pointer this page renders can be held live by a\nchunk outside it, same for a dependent's prerequisite.",
+        "description": "The fleet chunk list \u2014 derived status per chunk, bounded and keyset-paginated;\n``?project=`` narrows the rows to that project's chunks, in the same order.\n\nReads only what the page renders: facts, routes, blocked markings, and live holders are\neach resolved for the page's chunks and pointers through narrowed, batched reads. A pointer\nthe page renders held live by a chunk outside it, or a dependent's prerequisite outside it,\nstill resolves \u2014 the narrowing happens in the store, not by dropping the off-page side.",
         "operationId": "list_chunks_api_chunks_get",
         "parameters": [
           {
