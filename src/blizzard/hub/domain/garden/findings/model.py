@@ -367,10 +367,14 @@ class IReadFindingRepository(Protocol):
         not just a merely `gone` one."""
         ...
 
-    def list_for_routine(self, project_id: str, routine_name: str, *, include_gone: bool = False) -> list[Finding]:
+    def list_for_routine(
+        self, project_id: str, routine_name: str, *, include_gone: bool = False, exclude_exited: bool = False
+    ) -> list[Finding]:
         """Every finding live on `routine_name`, across every scope it holds
         — `list_for`'s scope-narrowed sibling, minus the `scope_slug` filter.
-        Live only, unless `include_gone`, which also surfaces every exited finding."""
+        Live only, unless `include_gone`, which also surfaces every exited finding;
+        `exclude_exited` drops an exited finding in the query itself, so its rows and
+        facts are never read however many have exited."""
         ...
 
     def list_across_routines(
@@ -382,10 +386,17 @@ class IReadFindingRepository(Protocol):
         ...
 
     def list_by_source(
-        self, project_id: str, *, scope_slug: str, source: str, include_gone: bool = False
+        self,
+        project_id: str,
+        *,
+        scope_slug: str,
+        source: str,
+        include_gone: bool = False,
+        exclude_exited: bool = False,
     ) -> list[Finding]:
         """Every finding under `scope_slug` carrying `source` — filtered
-        on `ix_findings_tenant_project_scope_source`, indexed unlike `list_across_routines`."""
+        on `ix_findings_tenant_project_scope_source`, indexed unlike `list_across_routines`.
+        `exclude_exited` is `list_for_routine`'s."""
         ...
 
     def count_by_class(self, project_id: str, routine_name: str, class_: str) -> int:

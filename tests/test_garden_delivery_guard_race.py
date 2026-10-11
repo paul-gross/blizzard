@@ -260,7 +260,7 @@ class _Buckets:
 
     def for_run(self, run: RunContext) -> FindingBucket:
         self.reads += 1
-        return FindingBucket(citable=[], exited_ids=frozenset())
+        return FindingBucket(citable=[])
 
 
 class _Formats:

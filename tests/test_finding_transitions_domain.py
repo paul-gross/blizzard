@@ -310,4 +310,3 @@ def test_a_run_may_cite_exactly_the_findings_the_table_lets_it_observe_or_flag_g
     bucket = FindingBucket.of([finding], own_scope="runner")
     citable = finding in bucket.citable
     assert citable == finding.allows("observed") == finding.allows("gone")
-    assert (finding.finding_id in bucket.exited_ids) is not citable

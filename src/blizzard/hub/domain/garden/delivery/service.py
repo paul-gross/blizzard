@@ -86,6 +86,7 @@ class GardenDeliveryRecorder:
                 bucket=self._buckets.for_run(run),
                 formats=self._formats,
                 resolve_commit=resolve_commit,
+                resolve_exited=lambda ids: self._buckets.exited_among(run, ids),
             )
             outcome = self._materialize.deliver(
                 validated,

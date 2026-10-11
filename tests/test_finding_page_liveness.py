@@ -15,7 +15,7 @@ from sqlalchemy import Engine, insert
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
-from blizzard.hub.domain.garden.findings.model import FACT_KINDS, FindingFact, derive_liveness
+from blizzard.hub.domain.garden.findings.model import EXIT_KINDS, FACT_KINDS, FindingFact, derive_liveness
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
@@ -149,3 +149,47 @@ def test_page_cost_is_flat_in_exited_finding_count(tmp_path: Path) -> None:
     assert measured[0][0] == measured[1][0]
     assert measured[0][1] == measured[1][1]
     assert measured[0][2:] == measured[1][2:]
+
+
+def test_exclude_exited_keeps_exactly_the_findings_derive_liveness_does_not_exit(tmp_path: Path) -> None:
+    store, engine = _store_and_engine(tmp_path)
+    project = default_project(engine)
+    fixtures = _fixtures()
+    for finding_id, facts in fixtures.items():
+        _finding(engine, finding_id, facts)
+
+    kept = store.list_for_routine(project, "nightly", include_gone=True, exclude_exited=True)
+    everything = store.list_for_routine(project, "nightly", include_gone=True)
+
+    assert len(everything) == len(fixtures)
+    assert [f.finding_id for f in kept] == [f.finding_id for f in everything if not f.exited]
+    assert {f.finding_id for f in kept} == {
+        fid for fid, facts in fixtures.items() if not facts or derive_liveness(_as_facts(facts)).state not in EXIT_KINDS
+    }
+    assert [f.finding_id for f in store.list_by_source(project, scope_slug="blizzard", source="routine")] == [
+        f.finding_id for f in everything if f.live
+    ]
+    assert [
+        f.finding_id
+        for f in store.list_by_source(
+            project, scope_slug="blizzard", source="routine", include_gone=True, exclude_exited=True
+        )
+    ] == [f.finding_id for f in kept]
+
+
+def test_bucket_read_cost_is_flat_in_exited_finding_count(tmp_path: Path) -> None:
+    measured = []
+    for exited in (1, 12):
+        (tmp_path / f"e{exited}").mkdir()
+        store, engine = _store_and_engine(tmp_path / f"e{exited}")
+        project = default_project(engine)
+        for index in range(exited):
+            _finding(engine, f"fin_x{index}", [("add", 0), *[("observed", n) for n in range(1, 8)], ("wont-fix", 9)])
+        _finding(engine, "fin_live", [("add", 0)])
+        _finding(engine, "fin_gone", [("add", 0), ("gone", 1)])
+
+        def read(store: FindingStore = store, project: str = project):  # type: ignore[no-untyped-def]
+            return store.list_for_routine(project, "nightly", include_gone=True, exclude_exited=True)
+
+        measured.append((count_queries(engine, read), count_rows_read(engine, read), [f.finding_id for f in read()]))
+    assert measured[0] == measured[1]

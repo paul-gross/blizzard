@@ -42,6 +42,11 @@ class GardenDeliveryRejected(Exception):
 LiveFindings = Mapping[str, str]
 
 
+# Which of the given ids are exited findings this run's bucket would otherwise hold: one bulk read
+# over only the ids a delivery cites, so exited history is never read whole.
+ExitedResolver = Callable[[frozenset[str]], frozenset[str]]
+
+
 # The GitHub adapter already fetches the commit body carrying `authored_at`, so widening
 # `CommitResolver` to return it costs no extra forge round trip.
 @domain_model
@@ -257,13 +262,14 @@ def validate_delivery(
     bucket: FindingBucket,
     formats: IGardenFormats,
     resolve_commit: CommitResolver | None = None,
+    resolve_exited: ExitedResolver = lambda _ids: frozenset(),
 ) -> ValidatedDelivery:
     """The delivery node's whole check: `delta_artifacts`/`proposal_artifacts` map each
     artifact name to its unparsed raw JSON text; `formats` parses each.
-    `bucket` is the run's :class:`FindingBucket`: what it may cite. Raises :class:`GardenDeliveryRejected` on the
+    `bucket` is the run's :class:`FindingBucket`: what it may cite; `resolve_exited` is asked once about the
+    cited ids the bucket lacks, only to tell an exited id from an unknown one in the message. Raises :class:`GardenDeliveryRejected` on the
     first failure; on success returns a :class:`ValidatedDelivery`, nothing durable."""
     live_findings: LiveFindings = {f.finding_id: f.scope_slug for f in bucket.citable}
-    exited_ids = bucket.exited_ids
     gone_settlements = {f.finding_id: f.run_gone() for f in bucket.citable}
     deltas = [formats.finding_delta(name, raw) for name, raw in delta_artifacts.items()]
     proposals: list[ProposalCandidate] = []
@@ -273,6 +279,12 @@ def validate_delivery(
         check_proposal_refs(name, candidates)
         proposals.extend(candidates)
         proposal_sources.extend(name for _ in candidates)
+
+    cited = {
+        entry for delta in deltas for op in delta.findings if not isinstance(op, FindingAddOp) for entry in (op.id,)
+    } | {entry for proposal in proposals for entry in proposal.findings if is_finding_id_shaped(entry)}
+    absent = frozenset(i for i in cited if is_finding_id_shaped(i) and i not in live_findings)
+    exited_ids = resolve_exited(absent) if absent else frozenset()
 
     if resolve_commit is not None:
         # Memoize per delivery: many findings sharing one `introduced` commit must not

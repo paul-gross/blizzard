@@ -51,14 +51,12 @@ def test_a_gone_or_delivered_finding_stays_citable(state: str) -> None:
     bucket = FindingBucket.of([_finding("fin_1", state=state)], own_scope="runner")
 
     assert [f.finding_id for f in bucket.citable] == ["fin_1"]
-    assert bucket.exited_ids == frozenset()
 
 
-def test_an_exited_finding_is_only_an_id() -> None:
+def test_an_exited_finding_is_not_citable() -> None:
     bucket = FindingBucket.of([_finding("fin_1", state="wont-fix"), _finding("fin_2")], own_scope="runner")
 
     assert [f.finding_id for f in bucket.citable] == ["fin_2"]
-    assert bucket.exited_ids == frozenset({"fin_1"})
 
 
 def test_a_finding_read_twice_appears_once() -> None:
