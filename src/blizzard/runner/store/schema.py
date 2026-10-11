@@ -40,6 +40,7 @@ leases = Table(
     Column("harness_id", String, nullable=True),  # owner of session_id; together they identify a concrete session
     Column("pgid", Integer, nullable=True),  # the current generation's owned process group
     Column("created_at", UtcDateTime, nullable=False),
+    info={"scope": "runner"},
 )
 Index("ix_leases_chunk_id_epoch", leases.c.chunk_id, leases.c.epoch)
 
@@ -53,6 +54,7 @@ env_bindings = Table(
     Column("environment_id", String, nullable=False),  # opaque provider id
     Column("workdir", String, nullable=False),  # provider-returned working directory
     Column("bound_at", UtcDateTime, nullable=False),
+    info={"scope": "runner"},
 )
 
 # --- Outbound buffer (store-and-forward, per-runner monotonic seq) ----------
@@ -71,6 +73,7 @@ outbound_buffer = Table(
     # Retention/pending-floor contract: see
     # `IWriteOutboundRepository.prune_outbound`'s own docstring.
     sqlite_autoincrement=True,
+    info={"scope": "runner"},
 )
 
 # `pending_outbound`/`pending_submission_lease_ids` both filter on
@@ -89,6 +92,7 @@ heartbeats = Table(
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("lease_id", String, nullable=False),  # the attempt the beat belongs to (BLIZZARD_LEASE_ID)
     Column("beat_at", UtcDateTime, nullable=False),  # injected-clock stamp of the tool call
+    info={"scope": "runner"},
 )
 
 # Serves `max(beat_at) WHERE lease_id = ?`: trailing `beat_at` lets sqlite
@@ -118,6 +122,7 @@ lease_context = Table(
     Column("graph_name", String, nullable=True),
     Column("work_refs", Text, nullable=True),
     Column("recorded_at", UtcDateTime, nullable=False),
+    info={"scope": "runner"},
 )
 
 # --- Lease spawns (the spawn generation of each attempt) ----------
@@ -144,6 +149,7 @@ lease_spawns = Table(
     Column("identified_at", UtcDateTime, nullable=True),
     # The other way a provisional generation closes: identity never arrived.
     Column("identity_failed_at", UtcDateTime, nullable=True),
+    info={"scope": "runner"},
 )
 
 # --- Lease closures (closed iff a closure fact exists — facts-not-status) -----
@@ -160,6 +166,7 @@ lease_closures = Table(
     Column("closed_at", UtcDateTime, nullable=False),
     # Why an escalating closure escalated (an ``EscalationCause``); NULL on every other closure.
     Column("escalation_cause", String, nullable=True),
+    info={"scope": "runner"},
 )
 # The trace sweep's window read, in cursor order.
 Index("ix_lease_closures_closed_at_lease_id", lease_closures.c.closed_at, lease_closures.c.lease_id)
@@ -177,6 +184,7 @@ trace_cursor = Table(
     Column("lease_id", String, nullable=False),  # empty on an opening row
     Column("span_count", Integer, nullable=False),
     Column("recorded_at", UtcDateTime, nullable=False),
+    info={"scope": "runner"},
 )
 Index("ix_trace_cursor_recorded_at_id", trace_cursor.c.recorded_at, trace_cursor.c.id)
 
@@ -186,6 +194,7 @@ trace_export_latch = Table(
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("kind", String, nullable=False),  # trace-export-failed | trace-export-recovered
     Column("recorded_at", UtcDateTime, nullable=False),
+    info={"scope": "runner"},
 )
 Index("ix_trace_export_latch_recorded_at_id", trace_export_latch.c.recorded_at, trace_export_latch.c.id)
 Index(
@@ -206,6 +215,7 @@ binding_releases = Table(
     Column("environment_id", String, nullable=False),
     Column("released_at", UtcDateTime, nullable=False),
     Column("lease_epoch_floor", Integer, nullable=True),  # newest local mint when this binding was released
+    info={"scope": "runner"},
 )
 
 # `HELD_BINDING` correlates on exactly this triple, once per `env_bindings`
@@ -235,6 +245,7 @@ asks = Table(
     Column("session_id", String, nullable=True),  # the session to resume around the answer
     Column("harness_id", String, nullable=True),
     Column("asked_at", UtcDateTime, nullable=False),
+    info={"scope": "runner"},
 )
 
 # --- Park / resume (the chunk's dormancy on a question) ----------------------
@@ -250,6 +261,7 @@ park_facts = Table(
     Column("chunk_id", String, nullable=False),
     Column("question_id", String, nullable=False),  # the ask this park is on
     Column("parked_at", UtcDateTime, nullable=False),
+    info={"scope": "runner"},
 )
 
 park_resumes = Table(
@@ -259,6 +271,7 @@ park_resumes = Table(
     Column("lease_id", String, nullable=False),
     Column("question_id", String, nullable=False),
     Column("resumed_at", UtcDateTime, nullable=False),
+    info={"scope": "runner"},
 )
 
 # --- Pause park / resume (dormancy on an operator pause) ---------
@@ -272,7 +285,8 @@ pause_parks = Table(
     Column("chunk_id", String, nullable=False),
     Column("parked_at", UtcDateTime, nullable=False),
     # The in-flight elicitation the park's interrupt signalled, or NULL.
-    Column("interrupted_elicitation_id", Integer, nullable=True),
+    Column("interrupted_elicitation_id", Integer, nullable=True, info={"refers_to": "in_flight_elicitations.id"}),
+    info={"scope": "runner"},
 )
 
 pause_park_resumes = Table(
@@ -281,6 +295,7 @@ pause_park_resumes = Table(
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("lease_id", String, nullable=False),
     Column("resumed_at", UtcDateTime, nullable=False),
+    info={"scope": "runner"},
 )
 
 # --- Resume intent (the restart resume marker) -------------------------------
@@ -292,6 +307,7 @@ resume_intents = Table(
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("lease_id", String, nullable=False),
     Column("marked_at", UtcDateTime, nullable=False),
+    info={"scope": "runner"},
 )
 
 resume_clears = Table(
@@ -300,6 +316,7 @@ resume_clears = Table(
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("lease_id", String, nullable=False),
     Column("cleared_at", UtcDateTime, nullable=False),
+    info={"scope": "runner"},
 )
 
 # --- Session-end signal (the durable "declared done" fact) -------------------
@@ -311,6 +328,7 @@ session_ends = Table(
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("lease_id", String, nullable=False),  # BLIZZARD_LEASE_ID the SessionEnd hook inherited
     Column("ended_at", UtcDateTime, nullable=False),  # injected-clock stamp of the session's exit
+    info={"scope": "runner"},
 )
 
 # --- Hub control mirror (the declarative pause brake) ------------------------
@@ -322,6 +340,7 @@ hub_control = Table(
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("paused", Boolean, nullable=False),
     Column("updated_at", UtcDateTime, nullable=False),
+    info={"scope": "runner"},
 )
 
 # --- Runner identity (who this runner is at its hub) -------------------------
@@ -340,6 +359,7 @@ runner_identity = Table(
     # When a hub last answered the served-projects declaration; NULL until one has, which tells "no answer
     # yet" apart from an answer serving nothing (no ``hub_served_projects`` rows either way).
     Column("projects_answered_at", UtcDateTime, nullable=True),
+    info={"scope": "runner"},
 )
 
 # --- Served projects (the hub's latest answer to the runner's declaration) ----
@@ -358,6 +378,7 @@ hub_served_projects = Table(
     Column("name", String, nullable=True),
     Column("answered_at", UtcDateTime, nullable=False),
     UniqueConstraint("position", name="uq_hub_served_projects_position"),
+    info={"scope": "runner"},
 )
 
 # --- Local pause facts (the runner's own brake) -------------------
@@ -371,6 +392,7 @@ local_pause_facts = Table(
     Column("set_at", UtcDateTime, nullable=False),
     Column("set_by", String, nullable=False),
     Column("reason", String, nullable=True),  # None on an unreasoned pause/clear
+    info={"scope": "runner"},
 )
 
 # --- Workspace prompt override (runtime-settable spawn preamble) --
@@ -382,6 +404,7 @@ workspace_prompt = Table(
     Column("workspace_id", String, primary_key=True),
     Column("prompt", Text, nullable=False),
     Column("updated_at", UtcDateTime, nullable=False),
+    info={"scope": "host"},
 )
 
 # --- Daemon liveness (when the runner was last known alive) -------
@@ -392,6 +415,7 @@ daemon_liveness = Table(
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("alive_at", UtcDateTime, nullable=False),  # injected-clock stamp of the newest tick
+    info={"scope": "host"},
 )
 
 # --- Takeovers (the operator's session over a parked chunk) -------
@@ -409,6 +433,7 @@ takeovers = Table(
     Column("fence_epoch", Integer, nullable=True),  # set only when a live worker was force-killed
     Column("hold_epoch", Integer, nullable=True),  # the chunk's latest epoch when the takeover opened
     Column("opened_at", UtcDateTime, nullable=False),
+    info={"scope": "runner"},
 )
 
 takeover_ends = Table(
@@ -417,6 +442,7 @@ takeover_ends = Table(
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("takeover_id", String, nullable=False),
     Column("ended_at", UtcDateTime, nullable=False),
+    info={"scope": "runner"},
 )
 
 # --- Requeues (the explicit hand-back after a human hold) --------
@@ -428,6 +454,7 @@ requeues = Table(
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("chunk_id", String, nullable=False),
     Column("requeued_at", UtcDateTime, nullable=False),  # supersedes an earlier escalation
+    info={"scope": "runner"},
 )
 
 # --- Escalation closures (the hub ended a chunk this box escalated — #292) ---
@@ -440,6 +467,7 @@ escalation_closures = Table(
     Column("chunk_id", String, nullable=False),
     Column("reason", String, nullable=False),  # the hub status observed: `stopped` or `done`
     Column("closed_at", UtcDateTime, nullable=False),
+    info={"scope": "runner"},
 )
 
 # --- Usage facts (cost/token telemetry per invocation) -----------
@@ -472,6 +500,7 @@ usage_facts = Table(
     # False = a pre-reading row, whose cost_usd is the harness's figure rather than a share.
     Column("cost_is_share", Boolean, nullable=False, server_default=false()),
     Column("recorded_at", UtcDateTime, nullable=False),
+    info={"scope": "runner"},
 )
 
 # --- Route capability tokens (the runner's stash) ---------------
@@ -483,6 +512,7 @@ route_tokens = Table(
     Column("chunk_id", String, primary_key=True),
     Column("token", Text, nullable=False),
     Column("acquired_at", UtcDateTime, nullable=False),
+    info={"scope": "runner"},
 )
 
 # --- Lease capability tokens -------------------------------------
@@ -494,6 +524,7 @@ lease_tokens = Table(
     Column("lease_id", String, primary_key=True),
     Column("token_hash", Text, nullable=False),
     Column("minted_at", UtcDateTime, nullable=False),
+    info={"scope": "runner"},
 )
 # A request that carries only the token finds its lease by hash.
 Index("ix_lease_tokens_token_hash", lease_tokens.c.token_hash)
@@ -512,6 +543,7 @@ attachments = Table(
     Column("name", String, nullable=False),
     Column("content", Text, nullable=False),
     Column("attached_at", UtcDateTime, nullable=False),
+    info={"scope": "runner"},
 )
 
 # `attachments_for_lease` groups by `name` within one lease's rows for
@@ -528,6 +560,7 @@ nudge_facts = Table(
     Column("lease_id", String, nullable=False),
     Column("epoch", Integer, nullable=False),
     Column("nudged_at", UtcDateTime, nullable=False),
+    info={"scope": "runner"},
 )
 
 # --- Check results + the checks-ran guard -----------------------
@@ -547,6 +580,7 @@ check_results = Table(
     Column("passed", Boolean, nullable=False),
     Column("output_tail", Text, nullable=False),
     Column("ran_at", UtcDateTime, nullable=False),
+    info={"scope": "runner"},
 )
 
 checks_ran = Table(
@@ -556,6 +590,7 @@ checks_ran = Table(
     Column("lease_id", String, nullable=False),
     Column("epoch", Integer, nullable=False),
     Column("ran_at", UtcDateTime, nullable=False),
+    info={"scope": "runner"},
 )
 
 # --- In-flight judgement elicitations --------------------------
@@ -582,6 +617,7 @@ in_flight_elicitations = Table(
     # matches `outbound_buffer`/`transcript_outbound_buffer`'s own fix
     # (blizzard-context:/standards/persistence.md) rather than leave that link ambiguous.
     sqlite_autoincrement=True,
+    info={"scope": "runner"},
 )
 
 # --- Transcript invocation boundaries -------------------------
@@ -604,6 +640,7 @@ invocation_boundaries = Table(
     Column("opened_at", UtcDateTime, nullable=False),
     Column("closed_at", UtcDateTime, nullable=True),
     Column("closed_reason", String, nullable=True),
+    info={"scope": "runner"},
 )
 Index("ix_invocation_boundaries_lease_id", invocation_boundaries.c.lease_id)
 
@@ -619,6 +656,7 @@ invocation_boundary_advances = Table(
     Column("start_position", String, nullable=True),
     Column("start_unreadable", Boolean, nullable=False, server_default=false()),
     Column("advanced_at", UtcDateTime, nullable=False),
+    info={"scope": "runner"},
 )
 Index(
     "ix_invocation_boundary_advances_boundary",
@@ -636,6 +674,7 @@ jwt_jti_seen = Table(
     Column("jti", String, primary_key=True),
     Column("aud", String, nullable=False),
     Column("expires_at", UtcDateTime, nullable=False),
+    info={"scope": "host"},
 )
 
 # --- Git-commit declarations -------------------------------------
@@ -654,6 +693,7 @@ git_commit_declarations = Table(
     Column("branch", String, nullable=False),
     Column("commit", String, nullable=False),
     Column("declared_at", UtcDateTime, nullable=False),
+    info={"scope": "runner"},
 )
 
 # --- Session preamble facts (the standing prose last sent) ------
@@ -668,6 +708,7 @@ session_preamble_facts = Table(
     Column("blizzard_digest", String, nullable=False),  # sha256 of the resolved layer 1
     Column("workspace_digest", String, nullable=False),  # sha256 of the resolved layer 2
     Column("recorded_at", UtcDateTime, nullable=False),
+    info={"scope": "runner"},
 )
 
 # --- External subscription usage samples ------------------------
@@ -687,6 +728,7 @@ external_usage_samples = Table(
     # The closed-set SampleMissReason value on a miss, NULL on a successful sample.
     # Read-only for this table's own writer — never derived at read time.
     Column("miss_reason", String, nullable=True),
+    info={"scope": "host"},
 )
 
 # `prune_external_usage_samples`'s per-slug newest-attempt lookup reads
@@ -701,6 +743,7 @@ credential_renewal_claims = Table(
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("slug", String, nullable=False),
     Column("claimed_at", UtcDateTime, nullable=False),
+    info={"scope": "host"},
 )
 
 Index(
@@ -714,7 +757,7 @@ credential_renewal_outcomes = Table(
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
     # The claim this outcome closes; at most one outcome per claim.
-    Column("claim_id", Integer, nullable=False, unique=True),
+    Column("claim_id", Integer, nullable=False, unique=True, info={"refers_to": "credential_renewal_claims.id"}),
     # The closed-set RenewalOutcomeKind value: "renewed" or "failed".
     Column("kind", String, nullable=False),
     # The closed-set RenewalFailureReason value on a failure, NULL on a renewal.
@@ -726,6 +769,7 @@ credential_renewal_outcomes = Table(
         "('renewer_unavailable', 'timed_out', 'vendor_refused', 'protocol_error')",
         name="ck_credential_renewal_outcomes_failure_reason",
     ),
+    info={"scope": "host"},
 )
 
 # --- Live session-context samples (the warn lane) ----------------------------
@@ -742,6 +786,7 @@ context_samples = Table(
     # The last main-chain turn's prompt size; NULL = attempted but unmeasurable.
     Column("context_tokens", Integer, nullable=True),
     Column("sampled_at", UtcDateTime, nullable=False),
+    info={"scope": "runner"},
 )
 
 # --- Transcript segments (the segment ledger) ---------------
@@ -791,6 +836,7 @@ transcript_segments = Table(
     Column("supersedes", String, nullable=True),  # re-ship only: the segment this replaces
     Column("finalized_at", UtcDateTime, nullable=True),  # NULL = still open; set by step close
     Column("stamped_at", UtcDateTime, nullable=False),
+    info={"scope": "runner"},
 )
 
 # Every per-chunk read filters `chunk_id` and orders by `stamped_at, segment_id`;
@@ -823,6 +869,7 @@ transcript_outbound_buffer = Table(
     # A pruned row's rowid must never be reissued as a later `seq`; recorded `bzh:sql-portable`
     # exemption in blizzard-context:/standards/persistence.md. Pinned in tests/test_pin_runner_store.py.
     sqlite_autoincrement=True,
+    info={"scope": "runner"},
 )
 
 # --- Graph artifacts (the pinned mint's `artifacts:` declarations) ------
@@ -837,6 +884,7 @@ graph_artifacts = Table(
     Column("kind", String, nullable=False),
     Column("content", Text, nullable=False),
     Column("recorded_at", UtcDateTime, nullable=False),
+    info={"scope": "host"},
 )
 
 # --- Selftest results — latest-wins-per-harness_id (bzh:facts-not-status) ---
@@ -849,6 +897,7 @@ selftest_results = Table(
     Column("status", String, nullable=False),  # "passed" / "failed" — SelfTestStatus's terminal values
     Column("error", Text, nullable=True),
     Column("recorded_at", UtcDateTime, nullable=False),
+    info={"scope": "runner"},
 )
 
 # --- Provider-overload backoff facts --------------------------
@@ -871,6 +920,7 @@ overload_facts = Table(
     Column("streak_ordinal", Integer, nullable=False),
     Column("observed_at", UtcDateTime, nullable=False),
     Column("resume_after", UtcDateTime, nullable=True),  # NULL = a recorded fall-through
+    info={"scope": "runner"},
 )
 
 overload_resets = Table(
@@ -880,4 +930,5 @@ overload_resets = Table(
     Column("lease_id", String, nullable=False),
     Column("epoch", Integer, nullable=False),
     Column("reset_at", UtcDateTime, nullable=False),
+    info={"scope": "runner"},
 )
