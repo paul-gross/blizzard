@@ -1,0 +1,154 @@
+<ng-template #createdFact>
+  @if (project(); as p) {
+    <fleet-when [iso]="p.created_at" />
+  }
+</ng-template>
+<ng-template #revisionFact>
+  r{{ project()?.revision }}
+  @if (lastChange(); as last) {
+    <span class="dim" data-testid="admin-projects-last-change">
+      · <fleet-when [iso]="last.at" /> by {{ last.actor }} via {{ last.door }}
+    </span>
+  }
+</ng-template>
+<fleet-kit-async-state
+  [state]="state()"
+  placement="inline"
+  loadingText="Loading…"
+  errorText="Failed to load this project."
+  emptyText="Pick a project to see what it links and who serves it."
+  emptyTestid="admin-projects-detail-empty"
+  errorTestid="admin-projects-detail-error"
+>
+  @if (project(); as p) {
+    <article class="record" data-testid="admin-projects-detail">
+      <header class="hdr">
+        <h2 class="name">{{ p.name }}</h2>
+        @if (p.description) {
+          <span class="desc" data-testid="admin-projects-description">{{ p.description }}</span>
+        }
+        <span class="grow"></span>
+        @if (canEdit()) {
+          <fleet-kit-button testid="admin-projects-edit" (click)="onEdit()">Edit</fleet-kit-button>
+        }
+      </header>
+      <fleet-kit-tabs [options]="tabs()" [activeValue]="tab()" (choose)="onTab($event)" />
+
+      @switch (tab()) {
+        @case ('overview') {
+          @if (callout(); as text) {
+            <p class="callout" role="status" data-testid="admin-projects-callout">{{ text }}</p>
+          }
+          <fleet-kit-fact-list [rows]="facts()" testid="admin-projects-facts" />
+
+          <div class="cards">
+            <app-project-overview-card
+              heading="Draws work from"
+              [lines]="sourceRows()"
+              none="No work source is linked."
+              testid="admin-projects-draws"
+              [opens]="true"
+              (open)="onTab('sources')"
+            />
+            <app-project-overview-card
+              heading="May land in"
+              [lines]="repositoryRows()"
+              none="No repository is linked, so nothing this project does can land."
+              testid="admin-projects-lands"
+              [opens]="true"
+              (open)="onTab('repositories')"
+            />
+            <app-project-overview-card
+              heading="Served by"
+              [lines]="servedLines()"
+              none="No runner serves this project."
+              testid="admin-projects-served-by"
+            />
+          </div>
+
+          <p class="pointer" data-testid="admin-projects-gardening">
+            Gardening — this project's scopes, routines, runs, findings and proposals — lives under
+            <a [routerLink]="gardeningLink() | lensLink">Gardening</a> with the lens on <b>{{ p.name }}</b>.
+          </p>
+
+          <h3 class="section">Revisions</h3>
+          <app-config-revisions [rows]="revisions()" [state]="revisionsState()" testidPrefix="admin-projects" />
+        }
+        @case ('sources') {
+          <app-project-link-panel
+            heading="Linked"
+            explainer="Work sources belong to the tenant and are shared. Unlinking stops new ingest into this project from that source; nothing already ingested moves."
+            [rows]="sourceRows()"
+            emptyText="No work source is linked."
+            linkLabel="+ Link a source"
+            [canEdit]="canEdit()"
+            [pendingName]="pendingUnlink()"
+            [error]="sourceError()"
+            testid="admin-projects-sources"
+            (link)="onLinkOpen('source')"
+            (unlink)="onUnlink('source', $event)"
+          />
+        }
+        @case ('repositories') {
+          <app-project-link-panel
+            heading="Linked"
+            explainer="Repositories belong to the tenant. A chunk of this project may land only in the repositories linked here. Unlinking stops landings from the next step; nothing already landed moves."
+            [rows]="repositoryRows()"
+            emptyText="No repository is linked, so nothing this project does can land."
+            linkLabel="+ Link a repository"
+            [canEdit]="canEdit()"
+            [pendingName]="pendingUnlink()"
+            [error]="repositoryError()"
+            testid="admin-projects-repositories"
+            (link)="onLinkOpen('repository')"
+            (unlink)="onUnlink('repository', $event)"
+          />
+        }
+      }
+    </article>
+
+    @if (editOpen()) {
+      <app-config-form-dialog
+        [heading]="'Edit ' + p.name"
+        mode="edit"
+        [fields]="fields"
+        [initial]="shown()"
+        [hint]="slugHint"
+        submitLabel="Save"
+        [submitError]="editError()"
+        [submitting]="editMutation.isPending()"
+        testidPrefix="admin-projects-edit"
+        (closed)="editOpen.set(false)"
+        (submitted)="onSave($event)"
+      />
+    }
+    @if (linkOpen() === 'source') {
+      <app-project-link-dialog
+        [heading]="'Link a work source to ' + p.name"
+        fieldLabel="Work source"
+        [choices]="sourceChoices()"
+        note="Linking changes nothing in the source and nothing already ingested."
+        noneText="This project links every work source in the tenant. Add one under Work sources."
+        [submitting]="linkMutation.isPending()"
+        [submitError]="linkError()"
+        testidPrefix="admin-projects-link-source"
+        (closed)="linkOpen.set(null)"
+        (submitted)="onLink('source', $event)"
+      />
+    }
+    @if (linkOpen() === 'repository') {
+      <app-project-link-dialog
+        [heading]="'Link a repository to ' + p.name"
+        fieldLabel="Repository"
+        [choices]="repositoryChoices()"
+        note="Linking lets this project's chunks land here. Projects that share a repository land on its one branch, taking turns."
+        noneText="This project links every repository in the tenant. Add one under Repositories."
+        [submitting]="linkMutation.isPending()"
+        [submitError]="linkError()"
+        testidPrefix="admin-projects-link-repository"
+        (closed)="linkOpen.set(null)"
+        (submitted)="onLink('repository', $event)"
+      />
+    }
+  }
+</fleet-kit-async-state>

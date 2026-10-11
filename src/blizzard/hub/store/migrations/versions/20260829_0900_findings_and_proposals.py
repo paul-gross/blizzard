@@ -1,7 +1,7 @@
 """findings, finding_facts, finding_sets, garden_proposals, garden_proposal_findings.
-One hand-written revision mints all five; every table but the last is a
-frozen local literal at its as-shipped shape (`bzh:frozen-revisions`), each reshaped by
-a later revision. `garden_proposal_findings` is never reshaped, so it still imports live.
+One hand-written revision mints all five, each a frozen local literal
+(`bzh:frozen-revisions`): the first four at their as-shipped shape, each reshaped by a
+later revision, and `garden_proposal_findings` at its declared shape.
 
 Revision ID: 20260829_0900_findings_and_proposals
 Revises: 20260828_1000_scopes_and_routines
@@ -15,7 +15,6 @@ import sqlalchemy as sa
 from alembic import op
 
 from blizzard.foundation.store.utc import UtcDateTime
-from blizzard.hub.store.schema import garden_proposal_findings
 
 revision: str = "20260829_0900_findings_and_proposals"
 down_revision: str | None = "20260828_1000_scopes_and_routines"
@@ -80,7 +79,17 @@ _garden_proposals = sa.Table(
 )
 sa.Index("ix_garden_proposals_routine_class", _garden_proposals.c.routine_name, _garden_proposals.c.class_)
 
-_TABLES = (_findings, _finding_sets, _finding_facts, _garden_proposals, garden_proposal_findings)
+# Frozen (``bzh:frozen-revisions``): ``garden_proposal_findings`` is a local literal of the hub store's declared
+# shape.
+_garden_proposal_findings = sa.Table(
+    "garden_proposal_findings",
+    _frozen_metadata,
+    sa.Column("proposal_id", sa.String, sa.ForeignKey("garden_proposals.proposal_id"), primary_key=True),
+    sa.Column("finding_id", sa.String, sa.ForeignKey("findings.finding_id"), primary_key=True),
+)
+sa.Index("ix_garden_proposal_findings_finding_id", _garden_proposal_findings.c.finding_id)
+
+_TABLES = (_findings, _finding_sets, _finding_facts, _garden_proposals, _garden_proposal_findings)
 
 
 def upgrade() -> None:

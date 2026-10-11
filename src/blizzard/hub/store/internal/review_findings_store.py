@@ -1,12 +1,12 @@
 """SQLAlchemy adapter for the review-findings-materialization seam (package-private).
 All ``sqlalchemy`` usage is confined here (``bzh:dependency-
 inversion``). One ``store.write`` transaction per :meth:`ReviewFindingsStore.deliver`
-call — every row a :class:`ReviewFindingsPlan` carries, plus any scope it names and its
-own idempotence marker, land together or not at all."""
+call — every row a :class:`ReviewFindingsPlan` carries, plus any scope it names (minted in the
+reviewed chunk's project, with its ``create`` change) and its own idempotence marker, land together
+or not at all."""
 
 from __future__ import annotations
 
-from sqlalchemy import insert, select
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.artifacts import ArtifactKind
@@ -17,9 +17,11 @@ from blizzard.hub.domain.garden.review.materialize import (
     ReviewFindingsOutcome,
     ReviewFindingsPlan,
 )
-from blizzard.hub.store.errors import HubStoreConnections
+from blizzard.hub.domain.garden.scopes import ScopeMint
 from blizzard.hub.store.internal.chunk_rows import fence, lock_chunk_row, next_artifact_seq
-from blizzard.hub.store.schema import artifacts, finding_facts, findings, scopes
+from blizzard.hub.store.internal.scope_store import ensure_scope, scope_ids_of
+from blizzard.hub.store.schema import artifacts, chunks, finding_facts, findings
+from blizzard.hub.store.scoped import ScopedConnections, statements_of
 
 #: Keyed on `chunk_id` alone: a chunk owes at most one review-findings delivery.
 _DELIVERED_MARKER_NAME = "review-findings-delivered"
@@ -30,7 +32,7 @@ class ReviewFindingsStore:
     clock (`bzh:injected-clock`) — every timestamp arrives already stamped on
     `ReviewFindingsPlan.at`."""
 
-    def __init__(self, store: HubStoreConnections) -> None:
+    def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
     def already_delivered(self, *, chunk_id: str) -> bool:
@@ -40,26 +42,31 @@ class ReviewFindingsStore:
     @staticmethod
     def _marker(conn, *, chunk_id: str):  # type: ignore[no-untyped-def]
         return conn.execute(
-            select(artifacts.c.artifact_id).where(
-                (artifacts.c.chunk_id == chunk_id) & (artifacts.c.name == _DELIVERED_MARKER_NAME)
-            )
+            statements_of(conn)
+            .select(artifacts, artifacts.c.artifact_id)
+            .where((artifacts.c.chunk_id == chunk_id) & (artifacts.c.name == _DELIVERED_MARKER_NAME))
         ).first()
 
     @staticmethod
-    def _mint_scope_if_unseen(conn, slug: str, description: str, at) -> None:  # type: ignore[no-untyped-def]
-        """Mint `slug` if this select finds it unseen. The insert runs in its own
-        savepoint, not the outer `deliver` transaction, so a concurrent mint of the same
-        slug loses the race with an `IntegrityError` that rolls back only this nested
+    def _mint_scope_if_unseen(conn, mint: ScopeMint) -> None:  # type: ignore[no-untyped-def]
+        """Mint the scope — a fresh `scp_` id stamped at the plan's instant — with its `create` change if
+        its project holds no scope of its slug. The write runs in its own savepoint, not the outer `deliver`
+        transaction, so a concurrent mint of the same slug loses the race on `uq_scopes_project_slug` with an
+        `IntegrityError` that rolls back only this nested
         write — the rest of the delivery still commits, first-write-wins like
         `ScopeStore.ensure`. Invisible on sqlite, which serializes writers."""
-        existing = conn.execute(select(scopes.c.slug).where(scopes.c.slug == slug)).first()
-        if existing is not None:
-            return
         try:
             with conn.begin_nested():
-                conn.execute(insert(scopes).values(slug=slug, description=description, created_at=at))
+                ensure_scope(conn, mint)
         except IntegrityError:
             pass
+
+    @staticmethod
+    def _project_of(conn, chunk_id: str) -> str:  # type: ignore[no-untyped-def]
+        """The project of the reviewed chunk, read in the delivery's own transaction."""
+        return conn.execute(
+            statements_of(conn).select(chunks, chunks.c.project_id).where(chunks.c.chunk_id == chunk_id)
+        ).scalar_one()
 
     def deliver(self, plan: ReviewFindingsPlan, *, admission: EpochAdmission) -> ReviewFindingsOutcome:
         with self._store.write("deliver") as conn:
@@ -69,16 +76,19 @@ class ReviewFindingsStore:
             if fence(conn, plan.chunk_id, epoch=plan.epoch, admission=admission) is not None:
                 return ReviewFindingsOutcome.FENCED
 
+            project_id = self._project_of(conn, plan.chunk_id)
             for scope_slug in plan.scope_slugs:
-                self._mint_scope_if_unseen(conn, scope_slug, plan.new_scope_description, plan.at)
+                self._mint_scope_if_unseen(conn, plan.scope_mint(scope_slug, project_id))
 
             if plan.new_findings:
+                scope_ids = scope_ids_of(conn, [f.scope_slug for f in plan.new_findings], project_id)
                 conn.execute(
-                    insert(findings),
+                    self._store.insert(findings).values(project_id=project_id),
                     [
                         {
                             "finding_id": f.finding_id,
                             "routine_name": None,
+                            "scope_id": scope_ids.get(f.scope_slug),
                             "scope_slug": f.scope_slug,
                             "class_": f.class_,
                             "locus": f.locus,
@@ -94,7 +104,7 @@ class ReviewFindingsStore:
                 )
             if plan.facts:
                 conn.execute(
-                    insert(finding_facts),
+                    self._store.insert(finding_facts),
                     [
                         {
                             "finding_id": fact.finding_id,
@@ -109,7 +119,7 @@ class ReviewFindingsStore:
                 )
 
             conn.execute(
-                insert(artifacts).values(
+                self._store.insert(artifacts).values(
                     artifact_id=Id.mint_at(IdPrefix.ARTIFACT, plan.at).value,
                     chunk_id=plan.chunk_id,
                     node_id=plan.node_id,

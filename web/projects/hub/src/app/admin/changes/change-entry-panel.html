@@ -20,7 +20,7 @@
         @for (row of entry.rows; track row.id) {
           <li class="change" [attr.data-testid]="'admin-change-row-' + row.id">
             @if (row.route; as route) {
-              <a class="record" [routerLink]="route">{{ row.title }}</a>
+              <a class="record" [routerLink]="route | lensLink">{{ row.title }}</a>
             } @else {
               <span class="record">{{ row.title }}</span>
             }

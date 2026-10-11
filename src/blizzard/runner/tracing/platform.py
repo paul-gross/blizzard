@@ -9,7 +9,7 @@ from collections.abc import Mapping
 
 from blizzard.foundation.platform_tracing.handle import SpanStamp
 from blizzard.runner.hub.identity import ICurrentRunnerIdentity
-from blizzard.runner.tracing.attributes import RUNNER_ID, RUNNER_NAME
+from blizzard.runner.tracing.attributes import RUNNER_ID, RUNNER_NAME, TENANT, TENANT_NAME
 
 PLATFORM_INSTRUMENTATION_SCOPE = "blizzard.runner.platform"
 PLATFORM_INSTRUMENTATION_SCOPE_VERSION = "1"
@@ -18,12 +18,17 @@ TICK_STEP = "blizzard.tick.step"
 
 
 def identity_stamp(identity: ICurrentRunnerIdentity) -> SpanStamp:
-    """What each of the runner's platform spans carries: the id and name of its latest registration, read
-    as the span starts — so a rename by restart shows from that registration on — and nothing before the
-    first, so no span is exported until then."""
+    """What each of the runner's platform spans carries: the id and name of its latest registration and the
+    tenant its hub answered with, read as the span starts — so a rename by restart shows from that
+    registration on — and nothing before the first, so no span is exported until then. The tenant rides
+    only once a hub that names it has answered."""
 
     def stamp() -> Mapping[str, str] | None:
         current = identity.current()
-        return None if current is None else {RUNNER_ID: current.runner_id, RUNNER_NAME: current.runner_name}
+        if current is None:
+            return None
+        stamped = {RUNNER_ID: current.runner_id, RUNNER_NAME: current.runner_name}
+        tenant = {TENANT: current.tenant_id, TENANT_NAME: current.tenant_name}
+        return stamped | {key: value for key, value in tenant.items() if value is not None}
 
     return stamp

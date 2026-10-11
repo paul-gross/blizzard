@@ -12,14 +12,42 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-from blizzard.hub.store.schema import runner_lifecycle_facts, runner_token_revocations
+from blizzard.foundation.store.utc import UtcDateTime
 
 revision: str = "20260928_1100_runner_retirement"
 down_revision: str | None = "20260928_1000_queue_positions_chunk_id_index"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-_TABLES = (runner_lifecycle_facts, runner_token_revocations)
+# Frozen (``bzh:frozen-revisions``): ``runner_lifecycle_facts`` and ``runner_token_revocations`` are local
+# literals of the hub store's declared shape. ``runner_registrations`` is an FK-resolution stub: never created,
+# never dropped.
+_frozen_metadata = sa.MetaData()
+sa.Table(
+    "runner_registrations",
+    _frozen_metadata,
+    sa.Column("runner_id", sa.String, primary_key=True),
+)
+_runner_lifecycle_facts = sa.Table(
+    "runner_lifecycle_facts",
+    _frozen_metadata,
+    sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
+    sa.Column("runner_id", sa.String, sa.ForeignKey("runner_registrations.runner_id"), nullable=False),
+    sa.Column("retired", sa.Boolean, nullable=False),
+    sa.Column("set_at", UtcDateTime, nullable=False),
+    sa.Column("set_by", sa.String, nullable=False),
+)
+_runner_token_revocations = sa.Table(
+    "runner_token_revocations",
+    _frozen_metadata,
+    sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
+    sa.Column("runner_id", sa.String, sa.ForeignKey("runner_registrations.runner_id"), nullable=False),
+    sa.Column("token_hash", sa.Text, nullable=False, index=True),
+    sa.Column("revoked_at", UtcDateTime, nullable=False),
+    sa.Column("revoked_by", sa.String, nullable=False),
+)
+
+_TABLES = (_runner_lifecycle_facts, _runner_token_revocations)
 _INDEX_NAME = "ix_route_created_runner_id"
 
 

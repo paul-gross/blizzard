@@ -1,0 +1,10 @@
+<fleet-kit-menu-panel testid="mobile-titlebar-project-panel">
+  @for (choice of choices(); track choice.slug) {
+    <fleet-kit-menu-item-radio
+      [checked]="choice.slug === current()"
+      [testid]="'mobile-titlebar-project-' + (choice.slug ?? 'all')"
+      (triggered)="choose(choice)"
+      >{{ choice.label }}</fleet-kit-menu-item-radio
+    >
+  }
+</fleet-kit-menu-panel>

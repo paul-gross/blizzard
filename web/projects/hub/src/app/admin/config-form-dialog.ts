@@ -40,6 +40,8 @@ export class ConfigFormDialog {
   readonly submitLabel = input.required<string>();
   readonly submitting = input(false);
   readonly submitError = input<string | null>(null);
+  /** A standing note under the fields — what a value means or what changing it does. */
+  readonly hint = input<string | null>(null);
   readonly testidPrefix = input.required<string>();
 
   readonly closed = output<void>();

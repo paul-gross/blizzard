@@ -5,6 +5,7 @@ network call, and never a raise, whatever the transport does."""
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 
 import httpx
@@ -12,7 +13,9 @@ import pytest
 
 from blizzard.hub.domain.config.repositories import ConfiguredRepository, RepositoryFields
 from blizzard.hub.domain.config.secrets import SecretName, SecretNotFound, SecretValue
-from blizzard.hub.domain.garden.delivery.validation import CommitResolution
+from blizzard.hub.domain.garden.delivery.validation import CommitResolution, CommitResolver
+from blizzard.hub.domain.projects.links import RepositoryLink
+from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.forge.internal.commit_resolver import GitHubCommitResolver
 from blizzard.hub.forge.repository_commits import RepositoryCommitResolver
 
@@ -126,10 +129,28 @@ def _row(name: str, *, owner: str = _OWNER, forge: str = _FORGE_URL, secret: str
     )
 
 
-def _bound(rows, values, handler) -> RepositoryCommitResolver:  # type: ignore[no-untyped-def]
+class _Links:
+    """The standing repository links per project; only ``repositories_of`` is read."""
+
+    def __init__(self, linked: dict[ProjectId, set[str]]) -> None:
+        self.linked = linked
+
+    def repositories_of(self, project_id: ProjectId) -> list[RepositoryLink]:
+        names = sorted(self.linked.get(project_id, set()))
+        return [RepositoryLink(project_id=project_id, repository_name=name, revision=1) for name in names]
+
+
+_PROJECT = ProjectId("widgets")
+
+
+def _bound(rows, values, handler, *, linked: set[str] | None = None) -> CommitResolver:  # type: ignore[no-untyped-def]
+    """The resolver of :data:`_PROJECT`, which links ``linked`` — every row when ``None``."""
     return RepositoryCommitResolver(
-        repositories=_Records(rows), secrets=_Secrets(values), forge=GitHubCommitResolver(_client(handler))
-    )
+        repositories=_Records(rows),
+        secrets=_Secrets(values),
+        forge=GitHubCommitResolver(_client(handler)),
+        links=_Links({_PROJECT: linked if linked is not None else {row.name for row in rows}}),  # type: ignore[arg-type]
+    ).for_project(_PROJECT)
 
 
 def test_a_cited_repository_resolves_against_its_record_each_call() -> None:
@@ -142,9 +163,9 @@ def test_a_cited_repository_resolves_against_its_record_each_call() -> None:
     values = {"tok": "first"}
     resolver = _bound([_row("widget")], values, handler)
 
-    resolver.resolve("widget", _SHA)
+    resolver("widget", _SHA)
     values["tok"] = "second"
-    resolver.resolve("acme/widget", _SHA)
+    resolver("acme/widget", _SHA)
 
     assert [r.url for r in seen] == [f"{_FORGE_URL}/repos/acme/widget/commits/{_SHA}"] * 2
     assert [r.headers["authorization"] for r in seen] == ["token first", "token second"]
@@ -156,13 +177,51 @@ def test_a_repository_no_record_names_degrades_to_none_without_a_request() -> No
 
     resolver = _bound([_row("widget"), _row("old", retired=True)], {"tok": "t"}, handler)
 
-    assert resolver.resolve("gadget", _SHA) is None
-    assert resolver.resolve("old", _SHA) is None
-    assert resolver.resolve("someone-else/widget", _SHA) is None
+    assert resolver("gadget", _SHA) is None
+    assert resolver("old", _SHA) is None
+    assert resolver("someone-else/widget", _SHA) is None
 
 
 def test_an_unrevealable_secret_degrades_to_none_without_a_request() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         pytest.fail("must not contact the forge without a token")
 
-    assert _bound([_row("widget")], {}, handler).resolve("widget", _SHA) is None
+    assert _bound([_row("widget")], {}, handler)("widget", _SHA) is None
+
+
+def test_only_the_projects_linked_repositories_reach_the_forge() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200)
+
+    resolver = _bound([_row("widget"), _row("gadget")], {"tok": "t"}, handler, linked={"widget"})
+
+    assert resolver("gadget", _SHA) is None
+    assert resolver("widget", _SHA) == CommitResolution(exists=True, authored_at=None)
+    assert [r.url for r in seen] == [f"{_FORGE_URL}/repos/acme/widget/commits/{_SHA}"]
+
+
+def test_the_projects_links_are_read_on_each_call() -> None:
+    linked = {"widget"}
+    bound = _bound([_row("widget")], {"tok": "t"}, lambda request: httpx.Response(200), linked=linked)
+
+    assert bound("widget", _SHA) is not None
+    linked.clear()
+    assert bound("widget", _SHA) is None
+
+
+def test_a_name_ambiguous_across_the_tenant_resolves_to_the_record_the_project_links() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200)
+
+    fork = _row("widget-fork", owner="other")
+    rows = [_row("widget"), replace(fork, fields=replace(fork.fields, repo="widget"))]
+
+    assert _bound(rows, {"tok": "t"}, handler, linked={"widget", "widget-fork"})("widget", _SHA) is None
+    assert _bound(rows, {"tok": "t"}, handler, linked={"widget-fork"})("widget", _SHA) is not None
+    assert [r.url for r in seen] == [f"{_FORGE_URL}/repos/other/widget/commits/{_SHA}"]

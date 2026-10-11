@@ -7,9 +7,54 @@
 .subnav {
   flex: none;
 }
-[data-testid='gardening-tab-proposals'] fleet-kit-count-badge {
+/* A tab's count: its list's length, beside its label; Proposals' turns amber while any wait on a person. */
+.cnt {
   margin-left: 6px;
-  vertical-align: middle;
+  color: var(--snow);
+}
+.cnt.hot {
+  color: var(--amber-hi);
+}
+/* Whose records these are, at the strip's right end. It gives way first on a narrow screen, where the crumb above
+ * already names the project. */
+.owner {
+  margin-left: auto;
+  align-self: center;
+  padding: 0 14px;
+  color: var(--label);
+  white-space: nowrap;
+}
+.owner b {
+  color: var(--snow);
+  font-weight: normal;
+}
+@media (max-width: 720px) {
+  .owner {
+    display: none;
+  }
+}
+/* Runs and findings share a surface; this pair switches between its two lists. */
+.surface-switch {
+  display: flex;
+  flex: none;
+  gap: 6px;
+  padding: 8px 8px 0;
+  font-size: var(--fs-sm);
+}
+.surface-switch a {
+  padding: 2px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--label);
+  text-decoration: none;
+}
+.surface-switch a.on {
+  border-color: var(--amber-hi);
+  color: var(--amber-hi);
+}
+.surface-switch a:focus-visible {
+  outline: 1px solid var(--cyan);
+  outline-offset: 1px;
 }
 /* No longer the scroller (each tab's own two-column grid owns that split,
  * `gardening-scopes-page.css` and its siblings) — a flex column so the active
@@ -21,4 +66,65 @@
   display: flex;
   flex-direction: column;
   padding: 8px;
+}
+/* The breadcrumb — `Gardening › {project} › {surface}`, the lens shown in place. */
+.crumbs {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--bezel);
+  font-size: var(--fs-sm);
+  overflow-x: auto;
+}
+.crumb {
+  color: var(--label);
+  white-space: nowrap;
+}
+.crumb.current {
+  color: var(--snow);
+}
+.crumb-link {
+  color: var(--cyan);
+  text-decoration: none;
+}
+.crumb-link:hover,
+.crumb-link:focus-visible {
+  text-decoration: underline;
+}
+/* The project menu: what a choice keeps, then each project with its proposals waiting. */
+.menu-head {
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--line);
+  color: var(--label);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+.menu-choice {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  min-width: 0;
+}
+.menu-waiting {
+  color: var(--label);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+.sep {
+  color: var(--label-dim);
+}
+.project-crumb [trigger] {
+  color: var(--amber-hi);
+  white-space: nowrap;
+}
+.unserved {
+  flex: none;
+  margin: 0;
+  padding: 6px 14px;
+  border-bottom: 1px solid var(--line);
+  color: var(--amber-hi);
+  font-size: var(--fs-sm);
 }

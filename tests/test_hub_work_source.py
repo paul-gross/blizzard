@@ -10,9 +10,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
-from sqlalchemy import Engine, insert, select
+from sqlalchemy import Engine, insert
 
-from blizzard.auth_core import Role
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.garden_proposals import GardenProposalOrigin
 from blizzard.foundation.ids import Id, IdPrefix
@@ -27,6 +26,7 @@ from blizzard.hub.domain.garden.findings.model import FindingExitService
 from blizzard.hub.domain.garden.proposals.resolution import GardenProposalDeliveryResolution
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.operations.delete import DeleteService
+from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.domain.work_items.editing import (
     WithdrawalLostToClosure,
@@ -44,7 +44,16 @@ from blizzard.hub.work_sources.closer import WorkItemGoneError
 from blizzard.hub.work_sources.editor import WorkItemRefUnknownError
 from blizzard.hub.work_sources.internal.hub_work_source import HubWorkSource
 from blizzard.hub.work_sources.source import WorkSourceError
-from tests.support import chunk_stores, hub_store_connections, migrate_to, seed_chunk_record, seed_graph, seed_work_item
+from tests.support import (
+    chunk_stores,
+    default_project,
+    hub_store_connections,
+    migrate_to,
+    seed_chunk_record,
+    seed_graph,
+    seed_work_item,
+    stamp,
+)
 
 pytestmark = pytest.mark.component
 
@@ -77,7 +86,6 @@ def _user(users: UserRepository, *, username: str) -> User:
         username=username,
         display_name=username,
         email=None,
-        role=Role.CONTRIBUTOR,
         created_at=_T0,
     )
     users.create(user)
@@ -108,11 +116,6 @@ def test_parse_rejects_a_token_shaped_for_another_source(tmp_path: Path) -> None
 def test_label_renders_the_reserved_name_colon_ref(tmp_path: Path) -> None:
     source, _, _, _, _, _ = _source(tmp_path)
     assert source.label(WorkRef(source="hub", ref="42")) == "hub:42"
-
-
-def test_branch_url_is_always_none(tmp_path: Path) -> None:
-    source, _, _, _, _, _ = _source(tmp_path)
-    assert source.branch_url("acme/widget", "feat/x") is None
 
 
 def test_forge_reference_is_always_none(tmp_path: Path) -> None:
@@ -305,6 +308,7 @@ def test_create_allocates_an_open_item(tmp_path: Path) -> None:
         author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         stated_priority=WorkItemPriority.HIGH,
         graph=_graph(engine),
+        project_id=ProjectId(default_project(engine)),
     )
 
     assert created.item.title == "t"
@@ -324,6 +328,7 @@ def test_create_mints_a_not_ready_chunk_pinned_to_the_graph_and_holding_the_ref(
         author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         stated_priority=None,
         graph=graph,
+        project_id=ProjectId(default_project(engine)),
     )
 
     chunk = chunks.record.get(created.chunk_id)
@@ -343,6 +348,7 @@ def test_edit_replaces_fields_and_stamps_edited_at_leaving_created_at_and_ref(tm
         author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         stated_priority=None,
         graph=_graph(engine),
+        project_id=ProjectId(default_project(engine)),
     )
     pointer = WorkRef(source="hub", ref=created.item.ref)
     clock.advance(timedelta(days=1))
@@ -365,6 +371,7 @@ def test_an_empty_edit_stamps_edited_at_leaving_the_fields_unchanged(tmp_path: P
         author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         stated_priority=WorkItemPriority.HIGH,
         graph=_graph(engine),
+        project_id=ProjectId(default_project(engine)),
     )
     pointer = WorkRef(source="hub", ref=created.item.ref)
     clock.advance(timedelta(days=1))
@@ -386,6 +393,7 @@ def test_withdraw_sets_the_withdrawn_closure(tmp_path: Path) -> None:
         author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         stated_priority=None,
         graph=_graph(engine),
+        project_id=ProjectId(default_project(engine)),
     )
     with chunks.exclusive.locked([created.chunk_id]) as handle:
         chunks.lifecycle.record_stop_locked(handle, created.chunk_id, by="operator", at=_T0)
@@ -405,6 +413,7 @@ def test_edit_and_withdraw_of_a_closed_item_are_refused(tmp_path: Path) -> None:
         author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         stated_priority=None,
         graph=_graph(engine),
+        project_id=ProjectId(default_project(engine)),
     )
     pointer = WorkRef(source="hub", ref=created.item.ref)
     with chunks.exclusive.locked([created.chunk_id]) as handle:
@@ -428,6 +437,7 @@ def test_withdraw_deletes_an_unacquired_holder_and_withdraws_the_item(tmp_path: 
         author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         stated_priority=None,
         graph=_graph(engine),
+        project_id=ProjectId(default_project(engine)),
     )
     pointer = WorkRef(source="hub", ref=created.item.ref)
 
@@ -451,6 +461,7 @@ def test_withdraw_of_an_item_the_cascade_already_closed_is_refused(tmp_path: Pat
         author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         stated_priority=None,
         graph=_graph(engine),
+        project_id=ProjectId(default_project(engine)),
     )
     pointer = WorkRef(source="hub", ref=created.item.ref)
     source.withdraw(pointer, by="operator")  # cascades: deletes the unacquired holder too
@@ -469,6 +480,7 @@ def test_withdraw_is_refused_while_an_acquired_chunk_holds_the_ref(tmp_path: Pat
         author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         stated_priority=None,
         graph=_graph(engine),
+        project_id=ProjectId(default_project(engine)),
     )
     pointer = WorkRef(source="hub", ref=created.item.ref)
     with chunks.exclusive.locked([created.chunk_id]) as handle:
@@ -502,6 +514,7 @@ def test_withdraw_is_refused_while_the_unacquired_holder_is_a_standing_prerequis
         author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         stated_priority=None,
         graph=graph,
+        project_id=ProjectId(default_project(engine)),
     )
     pointer = WorkRef(source="hub", ref=created.item.ref)
     # The holder is left unacquired (no route recorded) — the cascade reaches
@@ -527,6 +540,7 @@ def test_withdraw_succeeds_once_the_holding_chunk_is_no_longer_live(tmp_path: Pa
         author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         stated_priority=None,
         graph=_graph(engine),
+        project_id=ProjectId(default_project(engine)),
     )
     pointer = WorkRef(source="hub", ref=created.item.ref)
     with chunks.exclusive.locked([created.chunk_id]) as handle:
@@ -617,9 +631,10 @@ def _seed_accepted_proposal(engine: Engine, *, pointer: WorkRef, finding_id: str
     `pointer` — the shape `close()` must resolve through. Returns the proposal id."""
     store = hub_store_connections(engine)
     with engine.begin() as conn:
-        conn.execute(insert(s.scopes).values(slug="blizzard", description="", created_at=_T0))
+        conn.execute(insert(s.scopes).values(stamp(s.scopes, slug="blizzard", description="", created_at=_T0)))
     FindingStore(store).add(
         finding_id,
+        project_id=default_project(engine),
         routine_name="nightly",
         scope_slug="blizzard",
         class_="stale-docstring",
@@ -631,6 +646,7 @@ def _seed_accepted_proposal(engine: Engine, *, pointer: WorkRef, finding_id: str
     proposal_id = "gprop_1"
     GardenProposalStore(store).create(
         proposal_id,
+        project_id=default_project(engine),
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="fix-the-source",
@@ -642,14 +658,17 @@ def _seed_accepted_proposal(engine: Engine, *, pointer: WorkRef, finding_id: str
     with engine.begin() as conn:
         conn.execute(
             insert(s.garden_proposal_closures).values(
-                proposal_id=proposal_id,
-                closure="accepted",
-                reason=None,
-                closed_by="u_1",
-                closed_at=_T0,
-                item_outcome="minted",
-                source=pointer.source,
-                ref=pointer.ref,
+                stamp(
+                    s.garden_proposal_closures,
+                    proposal_id=proposal_id,
+                    closure="accepted",
+                    reason=None,
+                    closed_by="u_1",
+                    closed_at=_T0,
+                    item_outcome="minted",
+                    source=pointer.source,
+                    ref=pointer.ref,
+                )
             )
         )
     return proposal_id
@@ -674,9 +693,9 @@ def test_close_delivers_the_accepted_proposals_live_finding_attributed_to_it(tmp
     assert finding.state == "delivered"
     with engine.connect() as conn:
         fact = conn.execute(
-            select(s.finding_facts).where(
-                s.finding_facts.c.finding_id == "fin_1", s.finding_facts.c.kind == "delivered"
-            )
+            hub_store_connections(engine)
+            .select(s.finding_facts)
+            .where(s.finding_facts.c.finding_id == "fin_1", s.finding_facts.c.kind == "delivered")
         ).one()
     assert fact.proposal_id == proposal_id
     assert fact.actor == "u_1"
@@ -707,9 +726,9 @@ def test_close_of_a_withdrawn_item_still_delivers_the_accepted_proposals_live_fi
     assert finding.state == "delivered"
     with engine.connect() as conn:
         fact = conn.execute(
-            select(s.finding_facts).where(
-                s.finding_facts.c.finding_id == "fin_1", s.finding_facts.c.kind == "delivered"
-            )
+            hub_store_connections(engine)
+            .select(s.finding_facts)
+            .where(s.finding_facts.c.finding_id == "fin_1", s.finding_facts.c.kind == "delivered")
         ).one()
     assert fact.proposal_id == proposal_id
 
@@ -732,7 +751,9 @@ def test_close_run_twice_appends_only_one_delivery(tmp_path: Path) -> None:
     source.close(pointer, trace=None)
 
     with engine.connect() as conn:
-        facts = conn.execute(select(s.finding_facts).where(s.finding_facts.c.finding_id == "fin_1")).all()
+        facts = conn.execute(
+            hub_store_connections(engine).select(s.finding_facts).where(s.finding_facts.c.finding_id == "fin_1")
+        ).all()
     assert [f.kind for f in facts] == ["add", "delivered"]
 
 
@@ -753,10 +774,12 @@ def test_close_never_redelivers_a_proposal_a_legacy_resolved_fact_already_closed
     with engine.begin() as conn:
         conn.execute(
             insert(s.finding_facts).values(
-                finding_id="fin_1", kind="resolved", recorded_at=_T0, proposal_id=proposal_id
+                stamp(s.finding_facts, finding_id="fin_1", kind="resolved", recorded_at=_T0, proposal_id=proposal_id)
             )
         )
-        conn.execute(insert(s.finding_facts).values(finding_id="fin_1", kind="observed", recorded_at=_T0))
+        conn.execute(
+            insert(s.finding_facts).values(stamp(s.finding_facts, finding_id="fin_1", kind="observed", recorded_at=_T0))
+        )
 
     source.close(pointer, trace=None)
 
@@ -765,15 +788,16 @@ def test_close_never_redelivers_a_proposal_a_legacy_resolved_fact_already_closed
     assert finding.state == "live"
     with engine.connect() as conn:
         delivered = conn.execute(
-            select(s.finding_facts).where(
-                s.finding_facts.c.finding_id == "fin_1", s.finding_facts.c.kind == "delivered"
-            )
+            hub_store_connections(engine)
+            .select(s.finding_facts)
+            .where(s.finding_facts.c.finding_id == "fin_1", s.finding_facts.c.kind == "delivered")
         ).all()
     assert delivered == []
 
 
 def test_close_with_no_garden_proposal_behind_it_leaves_findings_untouched(tmp_path: Path) -> None:
     source, items, _, _, engine, _ = _source(tmp_path)
+    project = default_project(engine)
     graph = _graph(engine)
     created = seed_work_item(
         items,
@@ -784,9 +808,10 @@ def test_close_with_no_garden_proposal_behind_it_leaves_findings_untouched(tmp_p
     pointer = WorkRef(source="hub", ref=created.ref)
     # A finding exists, but no proposal or closure names this item at all.
     with engine.begin() as conn:
-        conn.execute(insert(s.scopes).values(slug="blizzard", description="", created_at=_T0))
+        conn.execute(insert(s.scopes).values(stamp(s.scopes, slug="blizzard", description="", created_at=_T0)))
     FindingStore(hub_store_connections(engine)).add(
         "fin_1",
+        project_id=project,
         routine_name="nightly",
         scope_slug="blizzard",
         class_="stale-docstring",
@@ -896,10 +921,25 @@ def test_every_minting_door_refuses_a_blank_title_or_body(
     author = WorkItemAuthor.user("u_1")
 
     with pytest.raises(WorkItemFieldBlank) as created:
-        edits.create(source="hub", title=title, body=body, author=author, stated_priority=None, graph=graph)
+        edits.create(
+            source="hub",
+            title=title,
+            body=body,
+            author=author,
+            stated_priority=None,
+            graph=graph,
+            project_id=ProjectId(default_project(engine)),
+        )
     with pytest.raises(WorkItemFieldBlank) as accepted:
         edits.accept_create(
-            "gp_1", title=title, body=body, author=author, graph=graph, reason=None, closed_by="operator"
+            "gp_1",
+            title=title,
+            body=body,
+            author=author,
+            graph=graph,
+            project_id=ProjectId(default_project(engine)),
+            reason=None,
+            closed_by="operator",
         )
 
     assert {created.value.field_name, accepted.value.field_name} == {field_name}

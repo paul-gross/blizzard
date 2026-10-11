@@ -740,7 +740,7 @@
       "short_help": "Become the blizzard-runner daemon: the reconciliation loop + the local API."
     },
     "init": {
-      "help": "Scaffold config + data dir + a migrated store under DIRECTORY, then join the runner to its\nhub. Idempotent.\n\nA runner holding no token is added at the hub \u2014 under your `blizzard hub login` session when you\nhold one \u2014 and its token written to DIRECTORY/.env. DIRECTORY defaults to $BZ_RUNNER_DIR, then the cwd.",
+      "help": "Scaffold config + data dir + a migrated store under DIRECTORY, then join the runner to its\nhub. Idempotent.\n\nA runner holding no token is added at the hub \u2014 under your `blizzard hub login` session when you\nhold one, in the tenant --tenant names or else the only one you may enter \u2014 and its token\nwritten to DIRECTORY/.env. A held token whose runner serves another tenant than --tenant names stops: a\nrunner never moves between tenants. A fresh config serves the projects --project names, else\n`default`; the runner is added serving them, or, with none named, the tenant's only project.\nDIRECTORY defaults to $BZ_RUNNER_DIR, then the cwd.",
       "params": [
         {
           "hidden": false,
@@ -776,6 +776,30 @@
           "required": false,
           "secondary_opts": [],
           "type": "boolean"
+        },
+        {
+          "help": "Add the runner in this tenant, by id; needed only when you may enter several.",
+          "hidden": false,
+          "kind": "option",
+          "name": "tenant_id",
+          "opts": [
+            "--tenant"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": "text"
+        },
+        {
+          "help": "A project the runner serves, by id or slug; repeat for several. Default: `default` in a fresh config.",
+          "hidden": false,
+          "kind": "option",
+          "name": "projects",
+          "opts": [
+            "--project"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": "text"
         }
       ],
       "path": "runner init",
@@ -1280,6 +1304,32 @@
       ],
       "path": "runner status",
       "short_help": "The machine-local view: capacities, held environments, open asks, escalations, open takeovers."
+    },
+    "store": {
+      "commands": {
+        "reset": {
+          "help": "Move the store under DIRECTORY aside under a timestamped name, then migrate a fresh one.\n\nNothing is deleted: the old store keeps its undelivered events and in-flight leases beside the\nnew one. Refused while the runner's daemon answers on its socket, and for a store that is not a\nSQLite file. DIRECTORY defaults to $BZ_RUNNER_DIR, then the cwd.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "directory",
+              "opts": [
+                "directory"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "runner store reset",
+          "short_help": "Move the store under DIRECTORY aside under a timestamped name, then migrate a fresh one."
+        }
+      },
+      "help": "Administer the runner's local store while its daemon is down.",
+      "params": [],
+      "path": "runner store",
+      "short_help": "Administer the runner's local store while its daemon is down."
     },
     "takeover": {
       "help": "Take over a parked chunk: exec the interactive resume command in this terminal. The\ntakeover fact is recorded before anything else runs, so no loop step can respawn or judge the\nsession while it is open; the lease token travels only in the response body and the exec, never\nprinted. ``--force`` supersedes a live worker attempt instead of refusing. An interrupted session\nstill closes the takeover.",

@@ -11,7 +11,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from sqlalchemy import select
 from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.sql import ClauseElement, visitors
 from sqlalchemy.sql.elements import TextClause
@@ -20,8 +19,12 @@ from blizzard.hub.domain.kernel.pagination import encode_cursor
 from blizzard.hub.domain.observability.analytics.operational import OperationalCriteria
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal import analytics_operational_store as store_module
+from blizzard.hub.store.scoped import ScopedStatements
+from blizzard.hub.tenancy import StoreScope, TenantId
 
 pytestmark = pytest.mark.unit
+
+_STMTS = ScopedStatements(StoreScope(TenantId("ten_analytics")))
 
 #: Every filter set at once, so no branch of the statement builder goes uncompiled.
 _CRITERIA = OperationalCriteria(
@@ -32,28 +35,30 @@ _CRITERIA = OperationalCriteria(
 def _executed_statements() -> dict[str, ClauseElement]:
     m = store_module
     return {
-        "_lease_min_stmt": m._lease_min_stmt(),
-        "_duration_lease_min_stmt": m._duration_lease_min_stmt(_CRITERIA),
-        "_source_chunks_stmt": m._source_chunks_stmt("github"),
-        "_duration_window_groups_stmt": m._duration_window_groups_stmt(_CRITERIA),
-        "_duration_rows_stmt": m._duration_rows_stmt(_CRITERIA),
-        "_spend_filtered_stmt": m._spend_filtered_stmt(select(s.usage_facts), _CRITERIA),
-        "_spend_group_stmt": m._spend_group_stmt(_CRITERIA, group_col=s.usage_facts.c.node_id),
-        "_spend_by_node_stmt": m._spend_by_node_stmt(_CRITERIA),
-        "_spend_by_graph_stmt": m._spend_by_graph_stmt(_CRITERIA),
-        "_spend_by_chunk_stmt": m._spend_by_chunk_stmt(
-            _CRITERIA, cursor=encode_cursor("ch_01J9Z3M0P8QK7V2S4W6X8Y0A1B"), limit=200
+        "_lease_min_stmt": m._lease_min_stmt(
+            _STMTS,
         ),
-        "_judged_distribution_stmt": m._judged_distribution_stmt(_CRITERIA),
-        "_candidate_lease_epochs_stmt": m._candidate_lease_epochs_stmt(_CRITERIA),
-        "_candidate_chunk_ids_stmt": m._candidate_chunk_ids_stmt(_CRITERIA),
-        "_chunk_max_lease_epoch_stmt": m._chunk_max_lease_epoch_stmt(_CRITERIA),
-        "_chunk_transitions_stmt": m._chunk_transitions_stmt(_CRITERIA),
-        "_chunk_migrations_stmt": m._chunk_migrations_stmt(_CRITERIA),
-        "_chunk_bounces_stmt": m._chunk_bounces_stmt(_CRITERIA),
-        "_chunks_graph_stmt": m._chunks_graph_stmt(_CRITERIA),
-        "_candidate_graph_ids_stmt": m._candidate_graph_ids_stmt(_CRITERIA),
-        "_graph_entry_nodes_stmt": m._graph_entry_nodes_stmt(_CRITERIA),
+        "_duration_lease_min_stmt": m._duration_lease_min_stmt(_STMTS, _CRITERIA),
+        "_source_chunks_stmt": m._source_chunks_stmt(_STMTS, "github"),
+        "_duration_window_groups_stmt": m._duration_window_groups_stmt(_STMTS, _CRITERIA),
+        "_duration_rows_stmt": m._duration_rows_stmt(_STMTS, _CRITERIA),
+        "_spend_filtered_stmt": m._spend_filtered_stmt(_STMTS, _CRITERIA, *s.usage_facts.c),
+        "_spend_group_stmt": m._spend_group_stmt(_STMTS, _CRITERIA, group_col=s.usage_facts.c.node_id),
+        "_spend_by_node_stmt": m._spend_by_node_stmt(_STMTS, _CRITERIA),
+        "_spend_by_graph_stmt": m._spend_by_graph_stmt(_STMTS, _CRITERIA),
+        "_spend_by_chunk_stmt": m._spend_by_chunk_stmt(
+            _STMTS, _CRITERIA, cursor=encode_cursor("ch_01J9Z3M0P8QK7V2S4W6X8Y0A1B"), limit=200
+        ),
+        "_judged_distribution_stmt": m._judged_distribution_stmt(_STMTS, _CRITERIA),
+        "_candidate_lease_epochs_stmt": m._candidate_lease_epochs_stmt(_STMTS, _CRITERIA),
+        "_candidate_chunk_ids_stmt": m._candidate_chunk_ids_stmt(_STMTS, _CRITERIA),
+        "_chunk_max_lease_epoch_stmt": m._chunk_max_lease_epoch_stmt(_STMTS, _CRITERIA),
+        "_chunk_transitions_stmt": m._chunk_transitions_stmt(_STMTS, _CRITERIA),
+        "_chunk_migrations_stmt": m._chunk_migrations_stmt(_STMTS, _CRITERIA),
+        "_chunk_bounces_stmt": m._chunk_bounces_stmt(_STMTS, _CRITERIA),
+        "_chunks_graph_stmt": m._chunks_graph_stmt(_STMTS, _CRITERIA),
+        "_candidate_graph_ids_stmt": m._candidate_graph_ids_stmt(_STMTS, _CRITERIA),
+        "_graph_entry_nodes_stmt": m._graph_entry_nodes_stmt(_STMTS, _CRITERIA),
     }
 
 
@@ -68,7 +73,7 @@ def test_duration_statements_narrow_via_a_correlated_subquery_not_a_bound_id_lis
     """Pinned structurally — a row-value ``IN (SELECT ...)`` keyed on the whole
     ``(chunk_id, epoch)`` pair, not ``chunk_id`` alone (which still matches a bare
     ``"IN (SELECT"`` check but leaks a migrated chunk's other-graph epoch)."""
-    stmt = getattr(store_module, builder_name)(_CRITERIA)
+    stmt = getattr(store_module, builder_name)(_STMTS, _CRITERIA)
     sql = str(stmt.compile(dialect=sqlite.dialect()))
     assert re.search(r"\(\w+\.chunk_id, \w+\.epoch\) IN \(SELECT", sql), sql
 
@@ -77,7 +82,7 @@ def test_graph_entry_nodes_narrows_via_a_correlated_subquery_not_a_bound_id_list
     """``graphs.graph_id`` is a per-mint id, so a materialized list bound one host
     parameter per graph version any chunk has ever run — pinned structurally, the same
     correlated-subquery shape used above."""
-    sql = str(store_module._graph_entry_nodes_stmt(_CRITERIA).compile(dialect=sqlite.dialect()))
+    sql = str(store_module._graph_entry_nodes_stmt(_STMTS, _CRITERIA).compile(dialect=sqlite.dialect()))
     assert "graph_id IN (SELECT" in sql, sql
 
 

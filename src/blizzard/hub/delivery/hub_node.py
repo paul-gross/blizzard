@@ -8,6 +8,7 @@ durable, and map the outcome to an authored edge. Structurally agentless
 from __future__ import annotations
 
 import json
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import timedelta
 
@@ -62,6 +63,9 @@ from blizzard.hub.domain.graph.model import (
     RunStep,
 )
 from blizzard.hub.domain.observability.tracing.platform import RUN_STEP_EXIT_CODE, RUN_STEP_NAME, RUN_STEP_SPAN
+from blizzard.hub.domain.projects.links import IReadProjectLinks
+from blizzard.hub.domain.projects.model import IReadProjectRepository
+from blizzard.hub.tenancy import TenantId
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
 
 _HUB_RUNNER_ID = "hub"
@@ -86,13 +90,22 @@ _CP_HUBNODE_AFTER_MARKER_BEFORE_NEXT = crashpoint(
 # A kill leaves the slot live; the stale bound reclaims it, with pending derived from the poll fact.
 _CP_HUBNODE_AFTER_POLL_BEFORE_SLOT_RELEASE = crashpoint(
     "hubnode.after-poll.before-slot-release",
-    "the poll-attempt fact is durable; the fleet-wide slot is not yet released",
+    "the poll-attempt fact is durable; the tenant's slot is not yet released",
 )
 # Fires after marker and intents are durable in one transaction, before drain.
 _CP_CLOSE_AFTER_ENQUEUE_BEFORE_DRAIN = crashpoint(
     "close.after-enqueue.before-drain", "a landing marker and its close intents are durable; no drain has run yet"
 )
 _MARKER_PREFIX = "merged/"
+#: The event each resolution outcome records — ``None`` where the resolution stands. Every refused
+#: outcome routes the ``hub-log.<outcome>`` step before any command runs.
+REFUSAL_EVENT: Mapping[RepositoryOutcome, EventLogKind | None] = {
+    RepositoryOutcome.RESOLVED: None,
+    RepositoryOutcome.NOTHING_TO_RESOLVE: None,
+    RepositoryOutcome.UNRESOLVED: "repository-unresolved",
+    RepositoryOutcome.NOT_LINKED: "repository-not-linked",
+    RepositoryOutcome.DISAGREE: "repositories-disagree",
+}
 # Bound on the step output a bounce envelope carries; the full text is the `hub-log.<step>` asset.
 BOUNCE_OUTPUT_TAIL_CHARS = 2000
 
@@ -216,6 +229,20 @@ ENV_WORK_ITEMS = "BZ_HUB_WORK_ITEMS"
 ENV_CHUNK_URL = "BZ_HUB_CHUNK_URL"
 # "1" if the graph declares a `git_commit`-kind `produces:`, else "0".
 ENV_EXPECT_GIT_COMMITS = "BZ_HUB_EXPECT_GIT_COMMITS"
+# The chunk's project: its id, and its slug as the visit starts.
+ENV_PROJECT_ID = "BZ_HUB_PROJECT_ID"
+ENV_PROJECT = "BZ_HUB_PROJECT"
+
+
+@domain_model
+@dataclass(frozen=True)
+class LandingProject:
+    """The project a chunk lands for, read as a hub node visit starts: its id, its slug, and the
+    names of the repository records it links. A chunk record carrying no project links nothing."""
+
+    project_id: str = ""
+    slug: str = ""
+    linked: frozenset[str] = frozenset()
 
 
 class UnconvergedDeliveryError(RuntimeError):
@@ -302,6 +329,7 @@ class HubEnv:
     marker_token: str = ""
     work_items: tuple[dict[str, str | None], ...] = ()
     public_url: str | None = None
+    project: LandingProject = LandingProject()
 
     @property
     def vars(self) -> dict[str, str]:  # ast-grep-ignore: bzh:property-delegates
@@ -339,6 +367,9 @@ class HubEnv:
             env[ENV_FEATURE_TITLE] = self.feature_title
         if self.marker_token:
             env[ENV_MARKER_TOKEN] = self.marker_token
+        if self.project.project_id:
+            env[ENV_PROJECT_ID] = self.project.project_id
+            env[ENV_PROJECT] = self.project.slug
         return env
 
 
@@ -412,7 +443,10 @@ class HubNodeExecutor:
         workdir: IHubWorkdir,
         clock: IClock,
         marker_authority: MarkerAuthority,
+        tenant: Callable[[], TenantId],
         repositories: IReadRepositoryRecordRepository,
+        links: IReadProjectLinks,
+        projects: IReadProjectRepository,
         secrets: ISecretReader,
         marker_callback_base_url: str = "",
         public_url: str | None = None,
@@ -430,7 +464,10 @@ class HubNodeExecutor:
         self._workdir = workdir
         self._clock = clock
         self._marker_authority = marker_authority
+        self._tenant = tenant
         self._repositories = repositories
+        self._links = links
+        self._projects = projects
         self._secrets = secrets
         self._marker_callback_base_url = marker_callback_base_url
         self._public_url = public_url
@@ -460,8 +497,15 @@ class HubNodeExecutor:
         )
         # Only a fresh marker counts as landed; replay must not double-count.
         if wrote and name.startswith(_MARKER_PREFIX) and is_landed_revision(content):
+            repo = name.removeprefix(_MARKER_PREFIX)
             self._delivery.record_delivery_repo_landed(
-                chunk_id, repo=name.removeprefix(_MARKER_PREFIX), commit_hash=content, at=self._clock.now()
+                chunk_id,
+                repo=repo,
+                commit_hash=content,
+                repository_name=self._marker_authority.repository_name(
+                    chunk_id, node_id=node_id, epoch=epoch, repo=repo
+                ),
+                at=self._clock.now(),
             )
         return wrote
 
@@ -476,7 +520,7 @@ class HubNodeExecutor:
         facts = self._facts.load_facts(chunk.chunk_id)
         poll_history = facts.hub_node_poll_history(node_id=node.node_id, epoch=epoch) if facts is not None else []
         if poll_history and now - poll_history[-1].polled_at < PollPolicy.of(node).interval:
-            return None  # not yet due — never touches the fleet-wide slot
+            return None  # not yet due — never touches the tenant's slot
         slot_id = self._hub_exec.acquire_hub_exec_slot(
             chunk.chunk_id, node_id=node.node_id, at=now, stale_after=self._slot_stale_after
         )
@@ -493,10 +537,10 @@ class HubNodeExecutor:
             self._hub_exec.release_hub_exec_slot(slot_id, at=self._clock.now())
 
     def release_orphaned_slots(self) -> int:
-        """Release every live hub-execution slot — a boot step, not a per-request one: a live row
-        when the hub starts belongs to a run the previous process died in, so the chunk resumes on
-        its next request rather than after ``slot_stale_after``. Sound while one hub process serves
-        the store; only the daemon's startup calls it."""
+        """Release every live hub-execution slot of this executor's tenant — a boot step, not a
+        per-request one: a live row when the hub starts belongs to a run the previous process died
+        in, so the chunk resumes on its next request rather than after ``slot_stale_after``. Sound
+        while one hub process serves the store; only the daemon's startup calls it."""
         return self._hub_exec.release_live_hub_exec_slots(at=self._clock.now())
 
     def _run_acquired(
@@ -532,7 +576,9 @@ class HubNodeExecutor:
         artifacts = self._artifacts.load_artifacts(chunk.chunk_id)
         # Minted before the env is built and revoked once this call is done with it, so
         # it is live only for this (chunk, node, epoch) visit.
-        marker_token = self._marker_authority.issue(chunk.chunk_id, node_id=node.node_id, epoch=epoch)
+        marker_token = self._marker_authority.issue(
+            chunk.chunk_id, node_id=node.node_id, epoch=epoch, tenant=self._tenant()
+        )
         try:
             try:
                 git_commits = GitCommits.of(artifacts)
@@ -540,8 +586,13 @@ class HubNodeExecutor:
                 # Routed as a `failure` rather than allowed to escape, which would
                 # crash-loop the tick (tests/test_pin_hub_delivery.py).
                 return self._refuse(chunk, graph, node, epoch=epoch, step="unconverged-delivery", detail=str(exc))
+            project = self._landing_project(chunk)
             resolution = resolve_chunk_repositories(
-                git_commits.origins(), self._repositories.list_all(include_retired=True), minted_at=chunk.minted_at
+                git_commits.origins(),
+                self._repositories.list_all(include_retired=True),
+                minted_at=chunk.minted_at,
+                linked=project.linked,
+                project=project.slug,
             )
             refusal = self._resolution_refusal(resolution)
             token: str | None = None
@@ -552,9 +603,16 @@ class HubNodeExecutor:
                     refusal = ("repository-secret-unavailable", str(exc))
             if refusal is not None:
                 step, detail = refusal
-                if resolution.outcome in (RepositoryOutcome.UNRESOLVED, RepositoryOutcome.DISAGREE):
-                    self._record_refusal_event(chunk, node, resolution, epoch=epoch)
+                self._record_refusal_event(chunk, node, resolution, epoch=epoch)
                 return self._refuse(chunk, graph, node, epoch=epoch, step=step, detail=detail)
+            # The records the visit's landed markers name, fixed as it starts: an unlink while a
+            # step runs does not change what the step lands in.
+            self._marker_authority.hold_repositories(
+                chunk.chunk_id,
+                node_id=node.node_id,
+                epoch=epoch,
+                names=dict(zip(resolution.qualified, resolution.names, strict=True)),
+            )
             env = HubEnv(
                 chunk=chunk,
                 node=node,
@@ -572,6 +630,7 @@ class HubNodeExecutor:
                 marker_token=marker_token,
                 work_items=self._resolve_work_items(chunk),
                 public_url=self._public_url,
+                project=project,
             ).vars
 
             choice_names = frozenset(c.name for c in node.choices)
@@ -640,17 +699,28 @@ class HubNodeExecutor:
         finally:
             self._marker_authority.revoke(chunk.chunk_id, node_id=node.node_id, epoch=epoch)
 
+    def _landing_project(self, chunk: Chunk) -> LandingProject:
+        """The chunk's project and the repository records it links, read now."""
+        if chunk.project_id is None:
+            return LandingProject()
+        project = self._projects.get(chunk.project_id)
+        return LandingProject(
+            project_id=chunk.project_id,
+            slug=project.slug if project is not None else chunk.project_id,
+            linked=frozenset(link.repository_name for link in self._links.repositories_of(chunk.project_id)),
+        )
+
     @staticmethod
     def _resolution_refusal(resolution: RepositoryResolution) -> tuple[str, str] | None:
         """The ``(hub-log step, detail)`` a refused resolution routes with, or ``None`` when it stands."""
-        if resolution.outcome in (RepositoryOutcome.UNRESOLVED, RepositoryOutcome.DISAGREE):
-            return resolution.outcome.value, resolution.detail
-        return None
+        if REFUSAL_EVENT[resolution.outcome] is None:
+            return None
+        return resolution.outcome.value, resolution.detail
 
     def _record_refusal_event(self, chunk: Chunk, node: Node, resolution: RepositoryResolution, *, epoch: int) -> None:
-        kind: EventLogKind = (
-            "repository-unresolved" if resolution.outcome is RepositoryOutcome.UNRESOLVED else "repositories-disagree"
-        )
+        kind = REFUSAL_EVENT[resolution.outcome]
+        if kind is None:
+            return
         self._events.record(
             kind=kind,
             runner_id=None,
@@ -714,8 +784,13 @@ class HubNodeExecutor:
         cause = "poll-timeout"
         loaded = self._artifacts.load_artifacts(chunk.chunk_id)
         rows = GitCommits.of(loaded)
+        project = self._landing_project(chunk)
         resolution = resolve_chunk_repositories(
-            rows.origins(), self._repositories.list_all(include_retired=True), minted_at=chunk.minted_at
+            rows.origins(),
+            self._repositories.list_all(include_retired=True),
+            minted_at=chunk.minted_at,
+            linked=project.linked,
+            project=project.slug,
         )
         envelope_payload = BounceEnvelope.of(
             cause=cause,

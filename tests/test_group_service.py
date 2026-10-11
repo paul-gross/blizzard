@@ -19,19 +19,34 @@ import pytest
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
-from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, DependencyEdge, RouteCreatedFact, WorkRef
+from blizzard.hub.domain.chunk.model import (
+    Chunk,
+    ChunkFacts,
+    ChunkProjectMissing,
+    DependencyEdge,
+    RouteCreatedFact,
+    WorkRef,
+)
 from blizzard.hub.domain.chunk.ports.dependencies import FoldMint, FoldTarget, IWriteChunkDependenciesRepository
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.work_refs import IWriteChunkWorkRefsRepository
-from blizzard.hub.domain.operations.queue import ChunkNotGroupable, FoldWouldCloseCycle, GroupService
+from blizzard.hub.domain.operations.queue import (
+    ChunkNotGroupable,
+    ChunksInDifferentProjects,
+    FoldWouldCloseCycle,
+    GroupService,
+)
+from blizzard.hub.domain.projects.model import ProjectId
 
 pytestmark = pytest.mark.unit
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
+_ALPHA = ProjectId("proj_alpha")
+_BETA = ProjectId("proj_beta")
 
 
-def _chunk(chunk_id: str, *, work_refs: list[WorkRef] | None = None) -> Chunk:
-    return Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=work_refs or [], minted_at=_T0)
+def _chunk(chunk_id: str, *, work_refs: list[WorkRef] | None = None, project_id: ProjectId | None = _ALPHA) -> Chunk:
+    return Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=work_refs or [], minted_at=_T0, project_id=project_id)
 
 
 def _edge(
@@ -453,3 +468,43 @@ def test_merge_ids_naming_only_the_survivor_fold_nothing_and_carry_no_grouped_id
     assert dependencies.fold_calls == 0
     assert work_refs.added == []
     assert result.grouped_id is None
+
+
+def test_a_merge_id_of_another_project_refuses_the_whole_fold_and_writes_nothing() -> None:
+    chunks = {
+        "chk_survivor": _chunk("chk_survivor"),
+        "chk_same": _chunk("chk_same"),
+        "chk_other": _chunk("chk_other", project_id=_BETA),
+    }
+    facts = {cid: _not_ready_facts() for cid in chunks}
+    service, work_refs, dependencies = _service(chunks, facts)
+
+    with pytest.raises(ChunksInDifferentProjects) as raised:
+        service.group("chk_survivor", ["chk_same", "chk_other"])
+
+    refused = raised.value
+    assert (refused.survivor_id, refused.chunk_id) == ("chk_survivor", "chk_other")
+    assert (refused.survivor_project, refused.chunk_project) == (_ALPHA, _BETA)
+    assert dependencies.fold_calls == 0
+    assert work_refs.added == []
+
+
+def test_a_status_refusal_comes_before_the_project_refusal() -> None:
+    """Every merge id is admitted by status first: a running chunk of another project is
+    refused as not groupable, not as another project's."""
+    chunks = {"chk_survivor": _chunk("chk_survivor"), "chk_other": _chunk("chk_other", project_id=_BETA)}
+    facts = {"chk_survivor": _not_ready_facts(), "chk_other": _running_facts()}
+    service, _, _ = _service(chunks, facts)
+
+    with pytest.raises(ChunkNotGroupable):
+        service.group("chk_survivor", ["chk_other"])
+
+
+def test_a_hand_built_record_naming_no_project_is_refused_rather_than_folded() -> None:
+    chunks = {"chk_survivor": _chunk("chk_survivor"), "chk_bare": _chunk("chk_bare", project_id=None)}
+    facts = {cid: _not_ready_facts() for cid in chunks}
+    service, work_refs, _ = _service(chunks, facts)
+
+    with pytest.raises(ChunkProjectMissing):
+        service.group("chk_survivor", ["chk_bare"])
+    assert work_refs.added == []

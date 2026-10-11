@@ -1,11 +1,16 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject } from '@angular/core';
 import { Router, RouterOutlet } from '@angular/router';
-import { asyncState, KitMasterDetail, KitPanel, type KitAsyncStateValue, type ScopeView, ViewportService } from 'fleet';
+import { FLEET_CLOCK, asyncState, KitMasterDetail, KitPanel, type KitAsyncStateValue, type ScopeView, ViewportService } from 'fleet';
 import { FleetScopeList, type ScopeRowVm } from './scope-list';
 import { injectHubScopesQuery } from '../core/scopes.query';
 
 import { injectChildRouteParam } from '../../core/route-state';
 import { presentScopeSlug, scopeRows } from './gardening-scopes-page.model';
+import { ProjectLens } from '../../core/project-lens';
+import { injectLensedProject } from '../../core/lensed-project';
+import { firstRowToOpen } from '../core/garden-first-row';
+import { defaultRoutineWindow } from '../core/routine-window';
+import { injectHubRunsQuery } from '../runs/garden-runs.query';
 
 /**
  * The `/gardening/scopes` sub-tab (`plans/garden/user-interface.md` §Declaring and
@@ -29,12 +34,20 @@ import { presentScopeSlug, scopeRows } from './gardening-scopes-page.model';
   styleUrl: './gardening-scopes-page.css',
 })
 export class GardeningScopesPage {
+  private readonly lens = inject(ProjectLens);
+
   private readonly router = inject(Router);
   private readonly viewport = inject(ViewportService);
 
   protected readonly mobile = computed(() => this.viewport.mode() === 'mobile');
 
   private readonly scopesQuery = injectHubScopesQuery();
+  private readonly window = defaultRoutineWindow(inject(FLEET_CLOCK)());
+  private readonly runsQuery = injectHubRunsQuery(() => this.window.since);
+  private readonly project = injectLensedProject();
+
+  /** The project every scope listed here belongs to: its name once read, its slug until then. */
+  protected readonly projectName = computed(() => this.project()?.name ?? this.lens.slug() ?? '');
   private readonly scopes = computed<readonly ScopeView[]>(() => this.scopesQuery.data() ?? []);
 
   /** The `scopeSlug` the active detail child names — the selection lives on that
@@ -50,16 +63,29 @@ export class GardeningScopesPage {
   );
 
   protected selectScope(slug: string): void {
-    void this.router.navigate(['/gardening', 'scopes', slug], { queryParamsHandling: 'preserve' });
+    void this.router.navigate(this.lens.link(['/gardening', 'scopes', slug]), { queryParamsHandling: 'preserve' });
   }
 
   protected onBack(): void {
-    void this.router.navigate(['/gardening', 'scopes'], { queryParamsHandling: 'preserve' });
+    void this.router.navigate(this.lens.link(['/gardening', 'scopes']), { queryParamsHandling: 'preserve' });
   }
 
-  protected readonly scopeRows = computed<readonly ScopeRowVm[]>(() => scopeRows(this.scopes()));
+  protected readonly scopeRows = computed<readonly ScopeRowVm[]>(() => scopeRows(this.scopes(), this.runsQuery.data() ?? []));
 
   protected readonly scopesState = computed<KitAsyncStateValue>(() =>
     asyncState(this.scopesQuery, this.scopeRows().length === 0),
   );
+
+  constructor() {
+    effect(() => {
+      const settled = !this.scopesQuery.isPending() && !this.scopesQuery.isError();
+      const slugs = this.scopeRows().map((row) => row.slug);
+      const first = firstRowToOpen(this.scopeSlugParam(), slugs, settled, this.mobile());
+      if (first === null) return;
+      void this.router.navigate(this.lens.link(['/gardening', 'scopes', first]), {
+        replaceUrl: true,
+        queryParamsHandling: 'preserve',
+      });
+    });
+  }
 }

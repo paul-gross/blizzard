@@ -8,13 +8,14 @@ from typing import Protocol
 
 from blizzard.hub.domain.chunk.model import EscalationOpen
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
+from blizzard.hub.domain.projects.model import ProjectId
 
 
 class IReadChunkEscalationsRepository(Protocol):
     """Read-only chunk-escalations access."""
 
-    def list_open_escalations(self) -> list[EscalationOpen]:
-        """Every currently-open escalation, **fleet-wide**.
+    def list_open_escalations(self, *, project: ProjectId | None = None) -> list[EscalationOpen]:
+        """Every currently-open escalation, **fleet-wide**, or of ``project``'s chunks alone when one is named.
 
         Each decided by :meth:`ChunkFacts.open_escalation` — the rule's one implementation
         (#293). Low-volume, so the candidate scan is full."""

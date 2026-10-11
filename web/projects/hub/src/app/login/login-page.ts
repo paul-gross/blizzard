@@ -4,6 +4,7 @@ import { asyncState, KitAsyncState, type KitAsyncStateValue } from 'fleet';
 import { LoginButtons } from '../core/auth/login-buttons';
 import { consumeReturnUrl, safeAuthorizeReturnTo } from '../core/auth/auth-redirect';
 import { injectAuthProvidersQuery } from '../core/auth/providers.query';
+import { refusalText } from './sign-in-refusal';
 
 /** `localStorage` key the last provider signed in with is remembered under —
  * pinned by `login-page.spec.ts`'s "writes the last-used provider to
@@ -18,6 +19,10 @@ const LAST_PROVIDER_KEY = 'fleet.auth.last-provider';
  *
  * An empty providers list (the hub's own answer — never re-derived here) renders
  * no buttons.
+ *
+ * It is also where the hub sends a sign-in it turned away, as
+ * `/login?refusal=<code>`: the page says why ({@link refusalText}) above the
+ * buttons, so the person can sign in again with another account.
  */
 @Component({
   selector: 'app-login-page',
@@ -39,6 +44,9 @@ export class LoginPage {
    * stashed via {@link consumeReturnUrl}. */
   protected readonly returnTo =
     safeAuthorizeReturnTo(this.route.snapshot.queryParamMap.get('return_to')) ?? consumeReturnUrl();
+
+  /** Why the hub turned the last sign-in away, `null` when it did not. */
+  protected readonly refusal = refusalText(this.route.snapshot.queryParamMap.get('refusal'));
 
   protected readonly providers = computed(() => this.providersQuery.data() ?? []);
 

@@ -1,6 +1,8 @@
 import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { BoardHeader, hubApi } from 'fleet';
+import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+import { BoardHeader, hubApi, hubClient } from 'fleet';
+import { OPERATOR_ME_RESPONSE, stubRequestClient } from 'fleet/testing';
 import { page } from 'vitest/browser';
 
 import { AppNavMenu } from './app-nav-menu';
@@ -19,21 +21,27 @@ import { AppNavMenu } from './app-nav-menu';
  * (`runner/src/app/shell/nav/app-nav.shell-sweep.spec.ts`).
  *
  * The hub shell projects only {@link AppNavMenu} into `BoardHeader`'s
- * `[header-trailing]` slot — no username, no other content-dependent width —
- * so, unlike the runner shell, sweeping identity length here would be a
- * needless no-op axis; width is the only variable that can move this shell's
- * menu, so width is the only one swept.
+ * `[header-trailing]` slot — no username — but its tagline names the tenant the
+ * board is in, and a tenant's name is any length. The fixture carries a long one,
+ * so the sweep proves the brand truncates it rather than let it carry the menu
+ * off-viewport.
  */
 @Component({
   selector: 'app-test-hub-shell',
   imports: [BoardHeader, AppNavMenu],
   template: `
-    <fleet-board-header [counts]="counts" [spendToday]="spendToday" [spendYesterday]="spendYesterday">
+    <fleet-board-header
+      [tagline]="tagline"
+      [counts]="counts"
+      [spendToday]="spendToday"
+      [spendYesterday]="spendYesterday"
+    >
       <app-nav-menu header-trailing />
     </fleet-board-header>
   `,
 })
 class TestHubShell {
+  readonly tagline = 'Northwind Interplanetary Logistics and Freight Forwarding, Research Division';
   // A busy fleet across every lane plus both spend cells — the header's own
   // widest natural content, so a narrowing sweep tests the tightest fit it
   // ever actually renders rather than an emptier, easier-to-fit board.
@@ -83,9 +91,10 @@ describe('hub shell sweep (web:shell-sweep, issue #163/#171)', () => {
     window.addEventListener('error', onError);
     window.addEventListener('unhandledrejection', onRejection);
 
+    const stub = stubRequestClient(hubClient, (_method, path) => (path === '/api/me' ? OPERATOR_ME_RESPONSE : {}));
     await TestBed.configureTestingModule({
       imports: [TestHubShell],
-      providers: [provideZonelessChangeDetection()],
+      providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient())],
     }).compileComponents();
     const fixture = TestBed.createComponent(TestHubShell);
     const root = fixture.nativeElement as HTMLElement;
@@ -127,6 +136,7 @@ describe('hub shell sweep (web:shell-sweep, issue #163/#171)', () => {
         ).toBeLessThanOrEqual(window.innerWidth);
       }
     } finally {
+      stub.restore();
       root.remove();
       window.removeEventListener('error', onError);
       window.removeEventListener('unhandledrejection', onRejection);

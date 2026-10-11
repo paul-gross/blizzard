@@ -34,11 +34,18 @@ class Door(StrEnum):
 
 
 class RecordKind(StrEnum):
+    """The kind of configured record a change row names. A project's ``record_key`` is its id, never its slug; a
+    project link's is the linked source's or repository's name. Linking, unlinking and re-linking are ``create``,
+    ``retire`` and ``enable``."""
+
     WORK_SOURCE = "work_source"
     SECRET = "secret"
     REPOSITORY = "repository"
     SCOPE = "scope"
     ROUTINE = "routine"
+    PROJECT = "project"
+    PROJECT_SOURCE_LINK = "project_source_link"
+    PROJECT_REPOSITORY_LINK = "project_repository_link"
 
 
 class ChangeOp(StrEnum):
@@ -132,6 +139,9 @@ class ConfigChange:
     op: ChangeOp
     diff: tuple[FieldChange, ...] = ()
     apply_id: str | None = None
+    #: The project whose record this is: set for a project, its links, a scope or a routine, whose key means
+    #: something only inside that project; ``None`` for a tenant-wide record.
+    project_id: str | None = None
     id: int | None = None
 
     @classmethod
@@ -144,8 +154,11 @@ class ConfigChange:
         op: ChangeOp,
         changes: tuple[FieldChange, ...],
         at: datetime,
+        *,
+        project_id: str | None = None,
     ) -> ConfigChange:
-        """The change row ``ctx`` writes to ``kind``/``key`` at ``revision``."""
+        """The change row ``ctx`` writes to ``kind``/``key`` at ``revision``, in ``project_id`` when the record
+        belongs to one."""
         return cls(
             recorded_at=at,
             actor=ctx.actor,
@@ -156,6 +169,7 @@ class ConfigChange:
             op=op,
             diff=changes,
             apply_id=ctx.apply_id,
+            project_id=project_id,
         )
 
 
@@ -173,9 +187,16 @@ class RecordRef:
 
 class IReadConfigChanges(Protocol):
     def page(
-        self, *, before: int | None, limit: int, record_kind: RecordKind | None, record_key: str | None
+        self,
+        *,
+        before: int | None,
+        limit: int,
+        record_kind: RecordKind | None,
+        record_key: str | None,
+        project_id: str | None = None,
     ) -> list[ConfigChange]:
-        """Newest-first by ``id``, strictly below ``before`` when given, at most ``limit`` rows."""
+        """Newest-first by ``id``, strictly below ``before`` when given, at most ``limit`` rows; only the rows of
+        ``project_id`` when given."""
         ...
 
 

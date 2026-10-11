@@ -1,0 +1,66 @@
+<fleet-kit-panel class="members-table" [attr.aria-label]="label()" data-testid="members-table" [label]="label()">
+  @if (members().length === 0) {
+    <fleet-kit-async-state state="empty" placement="inline" emptyText="No members yet." emptyTestid="members-table-empty" />
+  } @else {
+    <table>
+      <thead>
+        <tr>
+          <th>Username</th>
+          <th>Display name</th>
+          <th>Email</th>
+          <th>Identities</th>
+          <th>Role</th>
+          <th>Created</th>
+          <th><span class="visually-hidden">Actions</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (member of members(); track member.user_id) {
+          <tr data-testid="members-table-row" [attr.data-user-id]="member.user_id">
+            <td data-testid="members-table-username">
+              {{ member.username }}
+              @if (member.hub_admin) {
+                <span class="hub-admin" data-testid="members-table-hub-admin" title="Hub administrator">hub admin</span>
+              }
+            </td>
+            <td data-testid="members-table-display-name">{{ member.display_name }}</td>
+            <td data-testid="members-table-email">{{ member.email ?? '—' }}</td>
+            <td data-testid="members-table-identities">
+              {{ member.identities?.length ? member.identities!.map((i) => i.provider_name).join(', ') : '—' }}
+            </td>
+            <td>
+              @if (canChangeRole(member)) {
+                <fleet-kit-select
+                  [ariaLabel]="'Role for ' + member.username"
+                  testid="members-table-role-select"
+                  [options]="roleOptions(member)"
+                  [selectedValue]="member.role"
+                  [disabled]="isPending(member)"
+                  (choose)="onRoleChange(member, $event)"
+                />
+              } @else {
+                <span data-testid="members-table-role-static">{{ member.role }}{{ isSelf(member) ? ' (you)' : '' }}</span>
+              }
+            </td>
+            <td>
+              <fleet-when data-testid="members-table-created-at" [iso]="member.created_at" />
+            </td>
+            <td class="actions">
+              @if (canRevoke(member)) {
+                <fleet-kit-button
+                  variant="danger"
+                  testid="members-table-revoke"
+                  [ariaLabel]="'Revoke ' + member.username"
+                  [disabled]="isPending(member)"
+                  (click)="revoke.emit(member)"
+                >
+                  Revoke
+                </fleet-kit-button>
+              }
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  }
+</fleet-kit-panel>

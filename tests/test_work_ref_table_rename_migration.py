@@ -17,6 +17,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner
+from tests.support import hub_scoped_engine
 
 pytestmark = pytest.mark.component
 
@@ -86,19 +87,19 @@ def _seeded_store(tmp_path: Path) -> tuple[str, MigrationRunner]:
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     runner.upgrade(_BEFORE)
-    engine = create_engine_from_url(db_url)
+    engine = hub_scoped_engine(create_engine_from_url(db_url))
     _seed(engine)
     engine.dispose()
     return db_url, runner
 
 
 def _rows(db_url: str, table: sa.Table) -> dict[str, tuple[str, str]]:
-    with create_engine_from_url(db_url).connect() as conn:
+    with hub_scoped_engine(create_engine_from_url(db_url)).connect() as conn:
         return {r.chunk_id: (r.source, r.ref) for r in conn.execute(sa.select(table))}
 
 
 def _tables(db_url: str) -> set[str]:
-    with create_engine_from_url(db_url).connect() as conn:
+    with hub_scoped_engine(create_engine_from_url(db_url)).connect() as conn:
         return set(sa.inspect(conn).get_table_names())
 
 
@@ -128,7 +129,7 @@ def test_the_chunk_id_foreign_key_survives_the_rename(tmp_path: Path) -> None:
 
     runner.upgrade(_RENAME)
 
-    with create_engine_from_url(db_url).connect() as conn:
+    with hub_scoped_engine(create_engine_from_url(db_url)).connect() as conn:
         fks = sa.inspect(conn).get_foreign_keys("chunk_work_refs")
     assert any(fk["referred_table"] == "chunks" and fk["constrained_columns"] == ["chunk_id"] for fk in fks), (
         f"expected a chunk_id -> chunks.chunk_id foreign key, got {fks!r}"

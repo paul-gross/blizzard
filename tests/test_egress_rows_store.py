@@ -13,10 +13,9 @@ from blizzard.hub.domain.observability.egress.rows import AttributedUsage, Expor
 from blizzard.hub.domain.observability.tracing.steps import StepKind, identify_steps
 from blizzard.hub.domain.observability.tracing.summary import summarize_step
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.internal.trace_store import TraceStore
 from tests import trace_fixtures as fx
-from tests.support import HubHarness, hub_store_connections, ingest
-from tests.trace_hub import claim, label, pass_build, trace_hub
+from tests.support import HubHarness, ingest, stamp
+from tests.trace_hub import claim, pass_build, trace_hub, trace_store
 
 pytestmark = pytest.mark.component
 
@@ -38,86 +37,113 @@ def _plant(hub: HubHarness, chunk_id: str, build_node_id: str) -> None:
     with hub.engine.begin() as conn:
         conn.execute(
             sa.insert(s.work_items).values(
-                work_item_id="wi_planted",
-                source="default",
-                ref="1",
-                title=SENTINELS["chunk title"],
-                body=SENTINELS["chunk body"],
-                author_kind="fleet",
-                author_payload="{}",
-                created_at=now,
-                edited_at=now,
+                stamp(
+                    s.work_items,
+                    work_item_id="wi_planted",
+                    source="default",
+                    ref="1",
+                    title=SENTINELS["chunk title"],
+                    body=SENTINELS["chunk body"],
+                    author_kind="fleet",
+                    author_payload="{}",
+                    created_at=now,
+                    edited_at=now,
+                )
             )
         )
         conn.execute(
             sa.insert(s.questions).values(
-                question_id="qn_planted",
-                chunk_id=chunk_id,
-                node_id=build_node_id,
-                runner_id="r1",
-                epoch=1,
-                question=SENTINELS["ask"],
-                options="[]",
-                asked_at=now,
+                stamp(
+                    s.questions,
+                    question_id="qn_planted",
+                    chunk_id=chunk_id,
+                    node_id=build_node_id,
+                    runner_id="r1",
+                    epoch=1,
+                    question=SENTINELS["ask"],
+                    options="[]",
+                    asked_at=now,
+                )
             )
         )
         conn.execute(
             sa.insert(s.question_answers).values(
-                question_id="qn_planted",
-                answer=SENTINELS["answer"],
-                answered_by=SENTINELS["resolver login"],
-                answered_at=now,
+                stamp(
+                    s.question_answers,
+                    question_id="qn_planted",
+                    answer=SENTINELS["answer"],
+                    answered_by=SENTINELS["resolver login"],
+                    answered_at=now,
+                )
             )
         )
         conn.execute(
             sa.insert(s.chunk_bounces).values(
-                chunk_id=chunk_id,
-                epoch=1,
-                cause="checks",
-                envelope=SENTINELS["envelope"] + SENTINELS["check output"],
-                recorded_at=now,
+                stamp(
+                    s.chunk_bounces,
+                    chunk_id=chunk_id,
+                    epoch=1,
+                    cause="checks",
+                    envelope=SENTINELS["envelope"] + SENTINELS["check output"],
+                    recorded_at=now,
+                )
             )
         )
         conn.execute(
             sa.insert(s.decisions).values(
-                decision_id="dec_planted",
-                chunk_id=chunk_id,
-                node_id=build_node_id,
-                node_name="build",
-                epoch=1,
-                choices=f'[{{"name": "approve", "description": "{SENTINELS["choice description"]}"}}]',
-                submitted_at=now,
+                stamp(
+                    s.decisions,
+                    decision_id="dec_planted",
+                    chunk_id=chunk_id,
+                    node_id=build_node_id,
+                    node_name="build",
+                    epoch=1,
+                    choices=f'[{{"name": "approve", "description": "{SENTINELS["choice description"]}"}}]',
+                    submitted_at=now,
+                )
             )
         )
         conn.execute(
             sa.insert(s.decision_resolutions).values(
-                decision_id="dec_planted", choice="approve", resolved_by=SENTINELS["resolver login"], resolved_at=now
+                stamp(
+                    s.decision_resolutions,
+                    decision_id="dec_planted",
+                    choice="approve",
+                    resolved_by=SENTINELS["resolver login"],
+                    resolved_at=now,
+                )
             )
         )
         conn.execute(
             sa.insert(s.usage_facts).values(
-                chunk_id=chunk_id,
-                node_id=build_node_id,
-                epoch=1,
-                runner_id="r1",
-                kind="spawn",
-                model="claude-x",
-                input_tokens=1,
-                output_tokens=2,
-                cache_read_tokens=3,
-                cache_create_tokens=4,
-                cost_usd=0.5,
-                recorded_at=now,
+                stamp(
+                    s.usage_facts,
+                    chunk_id=chunk_id,
+                    node_id=build_node_id,
+                    epoch=1,
+                    runner_id="r1",
+                    kind="spawn",
+                    model="claude-x",
+                    input_tokens=1,
+                    output_tokens=2,
+                    cache_read_tokens=3,
+                    cache_create_tokens=4,
+                    cost_usd=0.5,
+                    recorded_at=now,
+                )
             )
         )
         conn.execute(
             sa.insert(s.escalations).values(
-                chunk_id=chunk_id,
-                epoch=1,
-                takeover_command=SENTINELS["takeover"],
-                wrapped_takeover_command=SENTINELS["takeover"],
-                decision_id="dec_planted",
-                recorded_at=now + timedelta(seconds=1),
+                stamp(
+                    s.escalations,
+                    chunk_id=chunk_id,
+                    epoch=1,
+                    takeover_command=SENTINELS["takeover"],
+                    wrapped_takeover_command=SENTINELS["takeover"],
+                    decision_id="dec_planted",
+                    recorded_at=now + timedelta(seconds=1),
+                )
             )
         )
 
@@ -132,9 +158,7 @@ def test_planted_content_hydrated_through_the_store_never_reaches_a_row(tmp_path
     hub.clock.advance(timedelta(seconds=5))
     pass_build(hub, chunk_id, graph)
 
-    facts = TraceStore(
-        hub_store_connections(hub.engine), graphs=hub.services.graphs, names=hub.services.registry, label=label
-    ).step_facts_for([chunk_id])[chunk_id]
+    facts = trace_store(hub).step_facts_for([chunk_id])[chunk_id]
     steps = identify_steps(facts)
     closed = [st for st in steps if st.close is not None]
     assert {st.kind for st in closed} == {StepKind.RUNNER, StepKind.GATE}

@@ -1,5 +1,5 @@
 <div class="ap">
-  <a class="back-row" [routerLink]="['/board', 'chunk', chunkId()]" data-testid="mobile-artifact-back">
+  <a class="back-row" [routerLink]="['/board', 'chunk', chunkId()] | lensLink" data-testid="mobile-artifact-back">
     <fleet-kit-back-bar [label]="backLabel()" />
   </a>
   <div class="ap-body">

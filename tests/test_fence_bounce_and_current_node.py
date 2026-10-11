@@ -15,7 +15,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import func
 
 from blizzard.hub.delivery.command_runner import CommandResult
 from blizzard.hub.domain.chunk.model import DecisionChoice
@@ -28,6 +28,7 @@ from tests.support import (
     build_hub,
     chunk_facts_of,
     chunk_stores,
+    hub_store_connections,
     pointer_token,
     report_lease,
 )
@@ -39,7 +40,7 @@ pytestmark = pytest.mark.component
 
 def _count(hub, table, chunk_id: str, **where) -> int:  # type: ignore[no-untyped-def]
     with hub.engine.begin() as conn:
-        query = select(func.count()).select_from(table).where(table.c.chunk_id == chunk_id)
+        query = hub_store_connections(hub.engine).select(table, func.count()).where(table.c.chunk_id == chunk_id)
         for name, value in where.items():
             query = query.where(table.c[name] == value)
         return conn.execute(query).scalar_one()

@@ -13,7 +13,7 @@ from blizzard.cli.window import refuse_future_until, replay_windows, resume_sinc
 from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.roles import dto
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.hub.cli.command import FleetCommand
+from blizzard.hub.cli.command import AdminCommand
 from blizzard.hub.cli.context import CliContext
 
 #: A replay runs inside the request, and a week-long window outlasts the default client timeout.
@@ -58,7 +58,7 @@ def traces_group() -> None:
     """Operator verbs over fleet-trace export."""
 
 
-@traces_group.command("status", cls=FleetCommand)
+@traces_group.command("status", cls=AdminCommand)
 def traces_status(cli: CliContext) -> None:
     """Whether tracing is on, the endpoint's origin, the cursor and its lag, the last export, and the
     last error. A credential in the endpoint is never shown."""
@@ -66,7 +66,7 @@ def traces_status(cli: CliContext) -> None:
     cli.show(status, StatusView(status))
 
 
-@traces_group.command("replay", cls=FleetCommand)
+@traces_group.command("replay", cls=AdminCommand)
 @since_option(required=True)
 @until_option(required=True)
 @click.option("--dry-run", is_flag=True, default=False, help="Count what would be told; export nothing.")

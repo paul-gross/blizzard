@@ -15,10 +15,14 @@ from sqlalchemy.exc import IntegrityError
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner
+from tests.support import hub_scoped_engine
 
 pytestmark = pytest.mark.component
 
 _BEFORE = "20260920_1100_hub_usage_harness_provenance"  # the head just before finding_delivered_state
+_AFTER = (
+    "20260920_1200_finding_delivered_state"  # the revision under test; later revisions require a tenant on these rows
+)
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 _T1 = datetime(2026, 1, 2, tzinfo=UTC)
 
@@ -85,10 +89,10 @@ def test_upgrade_admits_delivered_and_preserves_existing_rows(tmp_path: Path) ->
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     runner.upgrade(_BEFORE)
-    engine = create_engine_from_url(db_url)
+    engine = hub_scoped_engine(create_engine_from_url(db_url))
     _seed(engine)
 
-    runner.upgrade("head")
+    runner.upgrade(_AFTER)
 
     with engine.connect() as conn:
         rows = conn.execute(
@@ -108,9 +112,9 @@ def test_upgrade_still_rejects_a_kind_outside_the_widened_vocabulary(tmp_path: P
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     runner.upgrade(_BEFORE)
-    engine = create_engine_from_url(db_url)
+    engine = hub_scoped_engine(create_engine_from_url(db_url))
     _seed(engine)
-    runner.upgrade("head")
+    runner.upgrade(_AFTER)
 
     with pytest.raises(IntegrityError), engine.begin() as conn:
         conn.execute(sa.insert(_OLD_FINDING_FACTS).values(finding_id="fin_1", kind="bogus", recorded_at=_T1))
@@ -120,9 +124,9 @@ def test_downgrade_narrows_the_constraint_and_preserves_existing_rows(tmp_path: 
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     runner.upgrade(_BEFORE)
-    engine = create_engine_from_url(db_url)
+    engine = hub_scoped_engine(create_engine_from_url(db_url))
     _seed(engine)
-    runner.upgrade("head")
+    runner.upgrade(_AFTER)
 
     runner.downgrade(_BEFORE)
 
@@ -138,12 +142,12 @@ def test_downgrade_then_upgrade_round_trips(tmp_path: Path) -> None:
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     runner.upgrade(_BEFORE)
-    engine = create_engine_from_url(db_url)
+    engine = hub_scoped_engine(create_engine_from_url(db_url))
     _seed(engine)
-    runner.upgrade("head")
+    runner.upgrade(_AFTER)
 
     runner.downgrade(_BEFORE)
-    runner.upgrade("head")
+    runner.upgrade(_AFTER)
 
     with engine.begin() as conn:
         conn.execute(

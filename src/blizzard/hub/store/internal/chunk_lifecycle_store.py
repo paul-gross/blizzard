@@ -8,12 +8,9 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import update
-
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.lifecycle import IWriteChunkLifecycleRepository
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import (
     conn_of,
     enqueue_close_intents,
@@ -21,12 +18,13 @@ from blizzard.hub.store.internal.chunk_rows import (
     next_route_seq,
     route_of_conn,
 )
+from blizzard.hub.store.scoped import ScopedConnections
 
 
 class ChunkLifecycleStore:
     """The chunk's terminal and paused/resumed facts."""
 
-    def __init__(self, store: HubStoreConnections) -> None:
+    def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
     def is_ephemeral(self, chunk_id: str) -> bool:
@@ -37,7 +35,7 @@ class ChunkLifecycleStore:
         """Append a ``chunk.paused``/``chunk.resumed`` fact — newest-fact-wins."""
         with self._store.write("record_pause") as conn:
             result = conn.execute(
-                s.chunk_pause_facts.insert().values(chunk_id=chunk_id, paused=paused, set_at=at, set_by=by)
+                self._store.insert(s.chunk_pause_facts).values(chunk_id=chunk_id, paused=paused, set_at=at, set_by=by)
             )
             key = result.inserted_primary_key
             return int(key[0]) if key is not None else 0
@@ -46,7 +44,7 @@ class ChunkLifecycleStore:
         """Append a ``chunk.paused`` fact on ``handle``'s already-locked connection
         (``bzh:store-exclusive-write``)."""
         result = conn_of(handle).execute(
-            s.chunk_pause_facts.insert().values(chunk_id=chunk_id, paused=True, set_at=at, set_by=by)
+            self._store.insert(s.chunk_pause_facts).values(chunk_id=chunk_id, paused=True, set_at=at, set_by=by)
         )
         key = result.inserted_primary_key
         return int(key[0]) if key is not None else 0
@@ -62,13 +60,17 @@ class ChunkLifecycleStore:
         release's own timestamp is never older than the wait it just cleared. The slot
         release is unconditional."""
         conn = conn_of(handle)
-        result = conn.execute(s.chunk_stopped.insert().values(chunk_id=chunk_id, stopped_at=at, stopped_by=by))
+        result = conn.execute(
+            self._store.insert(s.chunk_stopped).values(chunk_id=chunk_id, stopped_at=at, stopped_by=by)
+        )
         if route_of_conn(conn, chunk_id) is not None:
             conn.execute(
-                s.route_released.insert().values(chunk_id=chunk_id, released_at=at, seq=next_route_seq(conn, chunk_id))
+                self._store.insert(s.route_released).values(
+                    chunk_id=chunk_id, released_at=at, seq=next_route_seq(conn, chunk_id)
+                )
             )
         conn.execute(
-            update(s.hub_exec_slot)
+            self._store.update(s.hub_exec_slot)
             .where((s.hub_exec_slot.c.holder_chunk_id == chunk_id) & (s.hub_exec_slot.c.released_at.is_(None)))
             .values(released_at=at)
         )
@@ -84,13 +86,17 @@ class ChunkLifecycleStore:
         a fresh row. ``at`` is passed in, stamped by the caller after the row lock — see
         :meth:`record_stop_locked` for why the ordering matters."""
         conn = conn_of(handle)
-        result = conn.execute(s.chunk_completed.insert().values(chunk_id=chunk_id, completed_at=at, completed_by=by))
+        result = conn.execute(
+            self._store.insert(s.chunk_completed).values(chunk_id=chunk_id, completed_at=at, completed_by=by)
+        )
         if route_of_conn(conn, chunk_id) is not None:
             conn.execute(
-                s.route_released.insert().values(chunk_id=chunk_id, released_at=at, seq=next_route_seq(conn, chunk_id))
+                self._store.insert(s.route_released).values(
+                    chunk_id=chunk_id, released_at=at, seq=next_route_seq(conn, chunk_id)
+                )
             )
         conn.execute(
-            update(s.hub_exec_slot)
+            self._store.update(s.hub_exec_slot)
             .where((s.hub_exec_slot.c.holder_chunk_id == chunk_id) & (s.hub_exec_slot.c.released_at.is_(None)))
             .values(released_at=at)
         )

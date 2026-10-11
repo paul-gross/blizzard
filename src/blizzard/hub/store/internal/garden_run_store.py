@@ -12,7 +12,7 @@ import json
 from collections import defaultdict
 from datetime import datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import ColumnElement, Join, func
 
 from blizzard.foundation.run_mode import RunMode
 from blizzard.hub.domain.garden.runs.history import (
@@ -22,33 +22,41 @@ from blizzard.hub.domain.garden.runs.history import (
     RunDeliveries,
     RunIdentity,
 )
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.schema import (
     artifacts,
     chunk_work_refs,
     chunks,
     finding_facts,
     finding_sets,
+    scopes,
     work_item_runs,
     work_items,
 )
+from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements, statements_of
 
-# The chunk -> chunk_work_refs -> work_items -> work_item_runs join every read here
-# starts from — a run's own identity, minted once at `RunService.run`'s own act.
-_RUN_IDENTITY_JOIN = (
-    chunks.join(chunk_work_refs, chunk_work_refs.c.chunk_id == chunks.c.chunk_id)
-    .join(
+
+def _run_identity_join(stmts: ScopedStatements) -> Join:
+    """The chunk -> chunk_work_refs -> work_items -> work_item_runs -> scopes join every read
+    here starts from — a run's own identity, minted once at `RunService.run`'s own act. Each
+    joined side is confined to the tenant in its own ``ON``, and the natural-key join onto
+    ``work_items`` carries tenant equality there too."""
+    with_refs = stmts.scope_join(chunks, chunk_work_refs, chunk_work_refs.c.chunk_id == chunks.c.chunk_id)
+    with_items = stmts.scope_join(
+        with_refs,
         work_items,
-        (work_items.c.source == chunk_work_refs.c.source) & (work_items.c.ref == chunk_work_refs.c.ref),
+        (work_items.c.tenant_id == chunk_work_refs.c.tenant_id)
+        & (work_items.c.source == chunk_work_refs.c.source)
+        & (work_items.c.ref == chunk_work_refs.c.ref),
     )
-    .join(work_item_runs, work_item_runs.c.work_item_id == work_items.c.work_item_id)
-)
+    with_runs = stmts.scope_join(with_items, work_item_runs, work_item_runs.c.work_item_id == work_items.c.work_item_id)
+    return stmts.scope_join(with_runs, scopes, scopes.c.scope_id == work_item_runs.c.scope_id)
+
 
 _IDENTITY_COLUMNS = (
     chunks.c.chunk_id,
     chunks.c.minted_at,
     work_item_runs.c.routine_name,
-    work_item_runs.c.scope_slug,
+    scopes.c.slug.label("scope_slug"),
     work_item_runs.c.mode,
 )
 
@@ -57,14 +65,16 @@ _IDENTITY_COLUMNS = (
 # delivery path; a person's own exit verb or `reopened` carries no `finding_set_id`.
 _SET_COUNT_KINDS = ("add", "observed", "gone")
 
-# A chunk that absorbed another's work refs (`GroupService.group`) carries more than one
-# `chunk_work_refs` row — a run's own identity is always the lowest-id one, its mint-time row.
-_CANONICAL_WORK_REF = chunk_work_refs.c.id == (
-    select(func.min(chunk_work_refs.c.id))
-    .where(chunk_work_refs.c.chunk_id == chunks.c.chunk_id)
-    .correlate(chunks)
-    .scalar_subquery()
-)
+
+def _canonical_work_ref(stmts: ScopedStatements) -> ColumnElement[bool]:
+    """A chunk that absorbed another's work refs (`GroupService.group`) carries more than one
+    `chunk_work_refs` row — a run's own identity is always the lowest-id one, its mint-time row."""
+    return chunk_work_refs.c.id == (
+        stmts.select(chunk_work_refs, func.min(chunk_work_refs.c.id))
+        .where(chunk_work_refs.c.chunk_id == chunks.c.chunk_id)
+        .correlate(chunks)
+        .scalar_subquery()
+    )
 
 
 def _identity_of(row: object) -> RunIdentity:
@@ -80,17 +90,17 @@ def _identity_of(row: object) -> RunIdentity:
 class GardenRunStore:
     """Read-only garden-run adapter over the hub store engine."""
 
-    def __init__(self, store: HubStoreConnections) -> None:
+    def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
-    def runs_in_window(self, *, since: datetime, until: datetime) -> list[RunDeliveries]:
+    def runs_in_window(self, *, since: datetime, until: datetime, project_id: str | None = None) -> list[RunDeliveries]:
+        stmt = self._store.select(_run_identity_join(self._store), *_IDENTITY_COLUMNS).where(
+            chunks.c.minted_at >= since, chunks.c.minted_at < until, _canonical_work_ref(self._store)
+        )
+        if project_id is not None:
+            stmt = stmt.where(chunks.c.project_id == project_id)
         with self._store.read("runs_in_window") as conn:
-            rows = conn.execute(
-                select(*_IDENTITY_COLUMNS)
-                .select_from(_RUN_IDENTITY_JOIN)
-                .where(chunks.c.minted_at >= since, chunks.c.minted_at < until, _CANONICAL_WORK_REF)
-                .order_by(chunks.c.minted_at.desc(), chunks.c.chunk_id.desc())
-            ).all()
+            rows = conn.execute(stmt.order_by(chunks.c.minted_at.desc(), chunks.c.chunk_id.desc())).all()
             delivered_by_chunk = self._delivered_sets_by_chunk(conn, [row.chunk_id for row in rows])
         return [
             RunDeliveries(identity=_identity_of(row), delivered=delivered_by_chunk.get(row.chunk_id, []))
@@ -100,22 +110,24 @@ class GardenRunStore:
     def run_identity(self, chunk_id: str) -> RunIdentity | None:
         with self._store.read("run_identity") as conn:
             row = conn.execute(
-                select(*_IDENTITY_COLUMNS)
-                .select_from(_RUN_IDENTITY_JOIN)
-                .where(chunks.c.chunk_id == chunk_id, _CANONICAL_WORK_REF)
+                self._store.select(_run_identity_join(self._store), *_IDENTITY_COLUMNS).where(
+                    chunks.c.chunk_id == chunk_id, _canonical_work_ref(self._store)
+                )
             ).one_or_none()
         return _identity_of(row) if row is not None else None
 
     def delivered_sets(self, chunk_id: str) -> list[DeliveredSetRaw]:
         with self._store.read("delivered_sets") as conn:
             rows = conn.execute(
-                select(
+                self._store.select(
+                    self._store.scope_join(
+                        finding_sets, artifacts, finding_sets.c.artifact_id == artifacts.c.artifact_id
+                    ),
                     finding_sets.c.finding_set_id,
                     finding_sets.c.revisions,
                     finding_sets.c.measurement,
                     artifacts.c.data,
                 )
-                .select_from(finding_sets.join(artifacts, finding_sets.c.artifact_id == artifacts.c.artifact_id))
                 .where(finding_sets.c.chunk_id == chunk_id)
                 .order_by(finding_sets.c.finding_set_id)
             ).all()
@@ -135,7 +147,8 @@ class GardenRunStore:
         if not chunk_ids:
             return {}
         rows = conn.execute(
-            select(
+            self._store.select(
+                finding_sets,
                 finding_sets.c.chunk_id,
                 finding_sets.c.finding_set_id,
                 finding_sets.c.revisions,
@@ -164,7 +177,7 @@ class GardenRunStore:
     def _fact_counts_by_set(conn, finding_set_ids: list[str]) -> dict[str, dict[str, int]]:  # type: ignore[no-untyped-def]
         """How many `add`/`observed`/`gone` facts each delivered set's own delivery
         recorded — one `GROUP BY` query for every id in `finding_set_ids`
-        (index-backed on `ix_finding_facts_finding_set_id`), the `FindingStore._facts_for_many`
+        (index-backed on `ix_finding_facts_tenant_finding_set_id`), the `FindingStore._facts_for_many`
         shape, so the list read never issues one count query per row. `add`/`observed`/`gone`
         are named explicitly rather than left to whatever `finding_set_id` happens to
         carry, so an exit or `reopened` fact — which src/blizzard/hub/store/schema.py records with no
@@ -175,7 +188,8 @@ class GardenRunStore:
         if not finding_set_ids:
             return counts
         rows = conn.execute(
-            select(finding_facts.c.finding_set_id, finding_facts.c.kind, func.count().label("n"))
+            statements_of(conn)
+            .select(finding_facts, finding_facts.c.finding_set_id, finding_facts.c.kind, func.count().label("n"))
             .where(finding_facts.c.finding_set_id.in_(finding_set_ids), finding_facts.c.kind.in_(_SET_COUNT_KINDS))
             .group_by(finding_facts.c.finding_set_id, finding_facts.c.kind)
         ).all()
@@ -186,13 +200,14 @@ class GardenRunStore:
     @staticmethod
     def _add_finding_ids_by_set(conn, finding_set_ids: list[str]) -> dict[str, list[str]]:  # type: ignore[no-untyped-def]
         """Every listed set's own `add` facts' finding ids, in insertion order, read in one
-        query (index-backed on `ix_finding_facts_finding_set_id`). A set with no linked `add`
+        query (index-backed on `ix_finding_facts_tenant_finding_set_id`). A set with no linked `add`
         fact maps to an empty list."""
         grouped: dict[str, list[str]] = {finding_set_id: [] for finding_set_id in finding_set_ids}
         if not finding_set_ids:
             return grouped
         rows = conn.execute(
-            select(finding_facts.c.finding_set_id, finding_facts.c.finding_id)
+            statements_of(conn)
+            .select(finding_facts, finding_facts.c.finding_set_id, finding_facts.c.finding_id)
             .where(finding_facts.c.finding_set_id.in_(finding_set_ids), finding_facts.c.kind == "add")
             .order_by(finding_facts.c.finding_set_id, finding_facts.c.id.asc())
         ).all()

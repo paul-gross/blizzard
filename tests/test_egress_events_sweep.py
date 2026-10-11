@@ -11,7 +11,6 @@ from pathlib import Path
 
 import duckdb
 import pytest
-import sqlalchemy as sa
 
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub import app as hub_app
@@ -23,12 +22,13 @@ from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.event_rows import derivation_id
 from blizzard.hub.domain.observability.egress.repository import EventsPosition
 from blizzard.hub.domain.observability.transcripts import TranscriptSlice
-from blizzard.hub.store import schema
 from blizzard.hub.store.internal.egress_store import EgressStore
+from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
+from tests.hub_event_rows import hub_event_detail, hub_event_rows, hub_events_of
 from tests.repo_files import repo_root
-from tests.support import HubHarness, hub_store_connections
+from tests.support import HubHarness, hub_level_connections, hub_store_connections
 from tests.test_egress_sweep import _closed_step, _kinds, _node_id
 from tests.trace_hub import trace_hub
 
@@ -59,7 +59,7 @@ class _Events:
         self.chunk_id = _closed_step(self.hub, self.graph, 1)
 
     def sweep(self) -> None:
-        sweep = self.hub.services.egress_export
+        sweep = self.hub.hub_services.egress_export
         assert sweep is not None
         self.hub.clock.advance(timedelta(seconds=1))
         sweep.sweep()
@@ -112,7 +112,7 @@ class _Events:
 
     def reads_version(self, version: str, monkeypatch: pytest.MonkeyPatch) -> None:
         """Make the sweep read ``version`` as the hub's current extractor version, as an upgrade does."""
-        sweep = self.hub.services.egress_export
+        sweep = self.hub.hub_services.egress_export
         assert sweep is not None
         monkeypatch.setattr(sweep, "_extractor_version", version)
         monkeypatch.setattr(sweep_module, "EXTRACTOR_VERSION", version)
@@ -291,7 +291,10 @@ def test_status_reports_the_events_cursor_and_its_lag_and_reset_moves_it(tmp_pat
     resp = hub.client.post("/api/egress/reset", json={"dataset": "events", "to": iso_utc(derived_at - timedelta(1))})
     assert resp.status_code == 200, resp.text
     assert resp.json()["direction"] == "repeated"
-    moved = EgressStore(hub_store_connections(hub.engine)).newest_cursor("events")
+    usage = build_hub_scoped_reads(hub_level_connections(hub.engine)).corpus
+    moved = EgressStore(
+        hub_store_connections(hub.engine), hub_events=hub_events_of(hub.engine), usage=usage
+    ).newest_cursor("events")
     assert moved is not None
     assert moved.events == EventsPosition(derived_at - timedelta(1))
     world.sweep()
@@ -304,14 +307,14 @@ def test_a_hashing_policy_without_its_key_keeps_exporting_everything_but_events(
 ) -> None:
     world = _Events(tmp_path, file_paths=file_paths)
     hub = world.hub
-    hub_app._announce_rejected_egress(_config(tmp_path, file_paths=file_paths), hub.services)
+    hub_app._announce_rejected_egress(_config(tmp_path, file_paths=file_paths), hub.hub_services)
     world.segment("sg_a")
     world.derive("sg_a", 1)
     world.sweep()
 
     assert _kinds(hub) == ["egress-config-rejected"]
-    with hub.engine.connect() as conn:
-        detail = json.loads(conn.execute(sa.select(schema.event_log.c.detail)).scalar_one())
+    [row] = hub_event_rows(hub.engine)
+    detail = hub_event_detail(row)
     assert detail == {"setting": "egress.path_key_env", "value": "BZ_EGRESS_PATH_KEY"}
     assert len(world.rows("steps")) == 1
     assert world.files("invocations")
@@ -339,7 +342,7 @@ def test_a_hashing_policy_without_its_key_keeps_exporting_everything_but_events(
 
 def test_a_hashing_policy_with_its_key_exports_events_and_records_no_rejection(tmp_path: Path) -> None:
     world = _Events(tmp_path, file_paths="hashed", path_key=b"k" * 32)
-    hub_app._announce_rejected_egress(_config(tmp_path, file_paths="hashed"), world.hub.services)
+    hub_app._announce_rejected_egress(_config(tmp_path, file_paths="hashed"), world.hub.hub_services)
     world.segment("sg_a")
     world.derive("sg_a", 1)
     world.sweep()

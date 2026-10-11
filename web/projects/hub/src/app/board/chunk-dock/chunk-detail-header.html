@@ -7,7 +7,7 @@
       class="id"
       data-testid="detail-id"
       [attr.title]="detail().chunk_id"
-      [routerLink]="[...linkBase(), detail().chunk_id]"
+      [routerLink]="[...linkBase(), detail().chunk_id] | lensLink"
       >{{ detail().chunk_id }}</a
     >
     <span class="d-sub">
@@ -42,13 +42,13 @@
       @for (id of blockedBy(); track id) {
         <span class="sep" aria-hidden="true">·</span>
         <span class="st edge" data-testid="detail-blocked-by"
-          >blocked by <a class="edge-ref" [routerLink]="[...linkBase(), id]" [title]="id">{{ shortId(id) }}</a></span
+          >blocked by <a class="edge-ref" [routerLink]="[...linkBase(), id] | lensLink" [title]="id">{{ shortId(id) }}</a></span
         >
       }
       @for (id of blocking(); track id) {
         <span class="sep" aria-hidden="true">·</span>
         <span class="st edge" data-testid="detail-blocking"
-          >blocking <a class="edge-ref" [routerLink]="[...linkBase(), id]" [title]="id">{{ shortId(id) }}</a></span
+          >blocking <a class="edge-ref" [routerLink]="[...linkBase(), id] | lensLink" [title]="id">{{ shortId(id) }}</a></span
         >
       }
     </span>

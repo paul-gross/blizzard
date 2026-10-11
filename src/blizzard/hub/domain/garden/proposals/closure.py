@@ -25,6 +25,7 @@ from blizzard.hub.domain.garden.proposals.model import (
     verb_legal_from,
 )
 from blizzard.hub.domain.graph.model import Graph
+from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.work_items.editing import WorkItemEditService
 
 
@@ -307,6 +308,7 @@ class GardenProposalClosureService:
             body=accept.body,
             author=WorkItemAuthor.user(by),
             graph=self._default_graph(),
+            project_id=ProjectId(proposal.project_id),
             reason=accept.reason,
             closed_by=by,
         )

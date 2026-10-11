@@ -4,6 +4,7 @@ import { FleetWhen, KitAsyncState, type KitAsyncStateValue } from 'fleet';
 
 import { ConfigFieldDiff } from '../config-field-diff';
 import type { ChangeEntryVm } from './changes.model';
+import { LensLink } from 'fleet/shell';
 
 /**
  * A change log entry's detail — who made it, through which door, and when, then each
@@ -13,7 +14,7 @@ import type { ChangeEntryVm } from './changes.model';
 @Component({
   selector: 'app-change-entry-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ConfigFieldDiff, FleetWhen, KitAsyncState, RouterLink],
+  imports: [ConfigFieldDiff, FleetWhen, KitAsyncState, RouterLink, LensLink],
   templateUrl: './change-entry-panel.html',
   styleUrl: './change-entry-panel.css',
 })

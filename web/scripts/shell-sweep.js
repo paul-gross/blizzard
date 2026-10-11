@@ -102,6 +102,14 @@
  *     config surfaces: a desktop detail carries its write controls and a
  *     phone's carries none and shows the CLI command, both without horizontal
  *     overflow at 1280/390/320px.
+ *   - projects/hub/src/app/admin/members/members-table.shell-sweep.spec.ts — the
+ *     members table: with a tenant name and member details of any length, the
+ *     page never scrolls sideways at 360/768/1280px; a table wider than a
+ *     phone scrolls inside its panel, where the revoke button stays reachable.
+ *   - projects/hub/src/app/admin/projects/projects-table.shell-sweep.spec.ts — the
+ *     projects table: with a project name, slug and description of any length
+ *     and the "no runner" badge showing, the page never scrolls sideways at
+ *     360/768/1280px and the badge stays on screen.
  *   - projects/hub/src/app/garden/garden-runs.shell-sweep.spec.ts — the
  *     gardening runs-and-findings tab's two presentational components
  *     (blizzard#401 Phase 3): `FleetRunList`'s escalated row carries a
@@ -250,6 +258,18 @@
  *   - projects/runner/src/app/board/chunk-dock/chunk-detail-view-provenance.shell-sweep.spec.ts — the
  *     escalation resume box's harness-provenance badge (blizzard#441) renders beside the
  *     resume command with no horizontal overflow at 390px.
+ *   - projects/hub/src/app/core/auth/tenant-picker.shell-sweep.spec.ts — the tenant
+ *     picker's options share one width, the widest's, whatever their names' lengths,
+ *     and stay inside the viewport at 390px and 320px.
+ *   - projects/hub/src/app/shell/nav/project-lens-control.shell-sweep.spec.ts — the
+ *     project lens control in the view-tab row: a tenant with many long-named projects
+ *     never pushes the row past the viewport (the chips scroll inside the control),
+ *     and every route tab and the lens's own choice stay on screen and hit-testable
+ *     at every desktop width.
+ *   - projects/hub/src/app/garden/doorway/gardening-doorway.shell-sweep.spec.ts — the
+ *     gardening doorway on All: one card per project reflows to a single column at
+ *     phone widths with no horizontal overflow, a long project name or routine list
+ *     wraps inside its card, and every card's way in stays on screen.
  */
 
 const { spawnSync } = require('node:child_process');
@@ -276,6 +296,8 @@ const SWEEPS = [
   { project: 'hub', spec: 'projects/hub/src/app/garden/routines/routine-panel.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/scopes/scope-panel.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/admin/admin-config.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/admin/members/members-table.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/admin/projects/projects-table.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/garden-runs.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/findings/finding-fact-timeline.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/routines/gardening-routines-page.shell-sweep.spec.ts' },
@@ -309,6 +331,9 @@ const SWEEPS = [
   { project: 'fleet', spec: 'projects/fleet/src/lib/chunk/chunk-detail/chunk-timeline-provenance.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/chunk/chunk-detail/chunk-timeline-forensics.shell-sweep.spec.ts' },
   { project: 'runner', spec: 'projects/runner/src/app/board/chunk-dock/chunk-detail-view-provenance.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/core/auth/tenant-picker.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/shell/nav/project-lens-control.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/garden/doorway/gardening-doorway.shell-sweep.spec.ts' },
 ];
 
 /** Every `*.shell-sweep.spec.ts` under `projects/`, repo-relative and POSIX-separated.

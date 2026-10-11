@@ -21,8 +21,10 @@ from blizzard.hub import app as hub_app
 from blizzard.hub import runtime as hub_runtime
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.chunk.model import WorkRef
+from blizzard.hub.tenancy import StoreScope
 from blizzard.hub.work_sources.annotator import WorkStatusMarker
 from blizzard.hub.work_sources.internal.github_work_source import GitHubWorkSource
+from blizzard.hub.work_sources.source import IWorkSourceRegistry
 from tests.support import forge_state, free_port, github_double
 
 pytestmark = pytest.mark.component
@@ -74,6 +76,8 @@ def _create(client: TestClient, forge_url: str, *, annotate: bool = False) -> No
         },
     )
     assert created.status_code == 201, created.text
+    linked = client.put("/api/projects/default/source-links/widget")
+    assert linked.status_code == 200, linked.text
 
 
 def _ingest(client: TestClient, token: str) -> httpx.Response:
@@ -86,8 +90,14 @@ def _promote(client: TestClient, token: str) -> None:
     assert client.post(f"/api/chunks/{resp.json()['chunk_id']}/promote").status_code == 202
 
 
+def _sources(services: HubServices) -> IWorkSourceRegistry:
+    tenant = services.tenants.open_tenants.only()
+    assert tenant is not None
+    return services.tenants.open_services(StoreScope(tenant)).work_sources
+
+
 def _adapter(services: HubServices) -> GitHubWorkSource:
-    source = services.work_sources.get("widget")
+    source = _sources(services).get("widget")
     assert isinstance(source, GitHubWorkSource)
     return source
 
@@ -102,8 +112,8 @@ def test_a_source_created_mid_run_claims_ingest_with_no_rebuild(
     _create(client, forge_url)
 
     assert _ingest(client, "widget:1").status_code == 201
-    assert services.work_sources.names() == ["widget", "hub"]
-    assert services.work_sources.get("widget") is not None
+    assert _sources(services).names() == ["widget", "hub"]
+    assert _sources(services).get("widget") is not None
 
 
 def test_a_secret_replace_reaches_the_next_get_and_a_later_one_closes_the_replaced_client(
@@ -132,12 +142,12 @@ def test_a_locator_edit_reaches_the_next_resolve(
     _create(client, forge[1])
     old_url = "https://github.com/acme/widget/issues/7"
     new_url = "https://github.com/acme/gadget/issues/7"
-    assert services.work_sources.resolve(old_url) == WorkRef(source="widget", ref="7")
+    assert _sources(services).resolve(old_url) == WorkRef(source="widget", ref="7")
 
     assert client.patch("/api/work-sources/widget", json={"locator": "acme/gadget"}).status_code == 200
 
-    assert services.work_sources.resolve(old_url) is None
-    assert services.work_sources.resolve(new_url) == WorkRef(source="widget", ref="7")
+    assert _sources(services).resolve(old_url) is None
+    assert _sources(services).resolve(new_url) == WorkRef(source="widget", ref="7")
 
 
 def test_the_annotation_sweep_reads_the_annotating_set_each_pass(
@@ -173,10 +183,10 @@ def test_a_retired_source_refuses_ingest_while_its_ingested_item_still_closes_an
 
     refused = _ingest(client, "widget:2")
     assert refused.status_code == 422
-    assert services.work_sources.names() == ["hub"]
-    assert services.work_sources.annotating_names() == []
-    closer = services.work_sources.closer("widget")
-    annotator = services.work_sources.annotator("widget")
+    assert _sources(services).names() == ["hub"]
+    assert _sources(services).annotating_names() == []
+    closer = _sources(services).closer("widget")
+    annotator = _sources(services).annotator("widget")
     assert closer is not None and annotator is not None
     pointer = WorkRef(source="widget", ref="1")
     annotator.set_status(pointer, WorkStatusMarker.IN_PROGRESS)
@@ -193,7 +203,7 @@ def test_a_retired_source_whose_secret_is_retired_reads_as_absent_not_as_an_erro
     assert client.post("/api/work-sources/widget/retire").status_code == 200
     assert client.post("/api/secrets/gh/retire").status_code == 200
 
-    assert services.work_sources.get("widget") is None
-    assert services.work_sources.closer("widget") is None
-    assert services.work_sources.annotator("widget") is None
-    assert services.work_sources.label_clearer("widget") is None
+    assert _sources(services).get("widget") is None
+    assert _sources(services).closer("widget") is None
+    assert _sources(services).annotator("widget") is None
+    assert _sources(services).label_clearer("widget") is None

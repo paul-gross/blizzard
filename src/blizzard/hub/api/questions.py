@@ -17,15 +17,16 @@ from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
-from blizzard.hub.api.auth_session import require
-from blizzard.hub.api.deps import get_services
+from blizzard.hub.api.auth_session import require, tenant_bound
+from blizzard.hub.api.deps import Services
 from blizzard.hub.auth.models import ResolvedIdentity
-from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.chunk.model import ChunkFacts, NodeQuestion, QuestionClosed
 from blizzard.hub.domain.execution.questions import AskedQuestion
 from blizzard.wire.question import AnswerRequest, AnswerResult, QuestionAsked, QuestionView
 
-router = APIRouter(prefix="/api", tags=["questions"], dependencies=[Depends(reject_runner_principal)])
+router = APIRouter(
+    prefix="/api", tags=["questions"], dependencies=[Depends(reject_runner_principal), Depends(tenant_bound)]
+)
 
 
 def question_view(row: NodeQuestion, runner_names: Mapping[str, str]) -> QuestionView:
@@ -71,16 +72,17 @@ def asked_question(fact: QuestionAsked) -> AskedQuestion:
 @router.post(
     "/questions", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require(Permission.QUESTION_ANSWER))]
 )
-def ask_question(fact: QuestionAsked, services: Annotated[HubServices, Depends(get_services)]) -> dict[str, str]:
+def ask_question(fact: QuestionAsked, services: Services) -> dict[str, str]:
     """Land a ``question.asked`` row — the chunk parks ``waiting_on_human``; 409 when fenced out."""
-    if services.chunks.record.get(fact.chunk_id) is None:
+    chunk = services.chunks.record.get(fact.chunk_id)
+    if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {fact.chunk_id}")
     change = chunk_events.ChunkChanged.before(services, fact.chunk_id)
     refusal = services.questions.record_asked(asked_question(fact))
     if refusal is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=refusal.detail)
     key = f"questions:{fact.question_id}"
-    services.events.publish_question_asked(fact.chunk_id, fact.question_id, key=key)
+    services.events.publish_question_asked(fact.chunk_id, fact.question_id, key=key, project_id=chunk.project_id)
     change.publish(cause="question-asked", key=key)
     return {"question_id": fact.question_id}
 
@@ -89,7 +91,7 @@ def ask_question(fact: QuestionAsked, services: Annotated[HubServices, Depends(g
 def answer_question(
     question_id: str,
     request: AnswerRequest,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.QUESTION_ANSWER))],
 ) -> object:
     """Answer a question first-write-wins; 409 carries the winning answer.
@@ -120,15 +122,21 @@ def answer_question(
     # The winning answer row alone flips the chunk out of waiting_on_human; the question's
     # own chunk_id never changes, so the pre-answer read already named it — no re-read.
     key = f"question_answers:{question_id}"
-    services.events.publish_question_answered(pre_answer.chunk_id, question_id, key=key)
-    chunk_events.ChunkChanged.of(services, pre_answer.chunk_id, prev_status=change.prev_status).publish(
-        cause="question-answered", key=key
+    state = chunk_events.ChunkFrameState.load(services, pre_answer.chunk_id)
+    services.events.publish_question_answered(
+        pre_answer.chunk_id,
+        question_id,
+        key=key,
+        project_id=state.chunk.project_id if state.chunk is not None else None,
+    )
+    chunk_events.ChunkChanged.of(services, pre_answer.chunk_id, prev_status=change.prev_status).publish_from(
+        state, cause="question-answered", key=key
     )
     return result
 
 
 @router.get("/questions", response_model=list[QuestionView], dependencies=[Depends(require(Permission.FLEET_VIEW))])
-def list_open_questions(services: Annotated[HubServices, Depends(get_services)]) -> list[QuestionView]:
+def list_open_questions(services: Services) -> list[QuestionView]:
     """Every open (unanswered) question across the fleet — the ``hub status`` surface."""
     rows = services.chunks.questions.list_open_questions()
     runner_names = services.registry.names_for(row.runner_id for row in rows)

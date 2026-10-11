@@ -21,6 +21,7 @@ from fastapi import Depends, FastAPI, Request, status
 from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy import Engine
 
 from blizzard import __version__
 from blizzard.foundation.forwarded import TrustedProxies
@@ -40,30 +41,44 @@ from blizzard.foundation.trace_attributes import CHUNK_ID
 from blizzard.foundation.trace_export.internal.otlp import OtlpTraceExporter
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.foundation.web import Frontend, install_schema_components
+from blizzard.hub.api.admin_events import router as admin_events_router
+from blizzard.hub.api.admin_tenants import router as admin_tenants_router
 from blizzard.hub.api.analytics import router as analytics_router
 from blizzard.hub.api.auth_login import router as auth_login_router
+from blizzard.hub.api.auth_session import refuse_closed_tenant
 from blizzard.hub.api.chunk_dependencies import router as chunk_dependencies_router
 from blizzard.hub.api.chunks import router as chunks_router
 from blizzard.hub.api.config import router as config_router
 from blizzard.hub.api.decisions import router as decisions_router
 from blizzard.hub.api.egress import router as egress_router
 from blizzard.hub.api.events import router as events_router
+from blizzard.hub.api.findings import project_router as project_findings_router
 from blizzard.hub.api.findings import router as findings_router
 from blizzard.hub.api.fleet import claim_router as fleet_claim_router
 from blizzard.hub.api.fleet import router as fleet_router
 from blizzard.hub.api.fleet_identity import router as fleet_identity_router
+from blizzard.hub.api.garden_proposals import project_router as project_garden_proposals_router
 from blizzard.hub.api.garden_proposals import router as garden_proposals_router
+from blizzard.hub.api.garden_runs import project_router as project_garden_runs_router
 from blizzard.hub.api.garden_runs import router as garden_runs_router
 from blizzard.hub.api.graphs import router as graphs_router
 from blizzard.hub.api.health import router as health_router
+from blizzard.hub.api.hub_admins import router as hub_admins_router
 from blizzard.hub.api.idp import router as idp_router
+from blizzard.hub.api.invitations import router as invitations_router
 from blizzard.hub.api.me import router as me_router
+from blizzard.hub.api.members import grants_router as member_grants_router
+from blizzard.hub.api.members import router as members_router
+from blizzard.hub.api.project_params import refuse_project_required
+from blizzard.hub.api.projects import router as projects_router
 from blizzard.hub.api.questions import router as questions_router
 from blizzard.hub.api.queue import router as queue_router
 from blizzard.hub.api.readiness import router as readiness_router
 from blizzard.hub.api.repositories import router as repositories_router
+from blizzard.hub.api.routines import project_router as project_routines_router
 from blizzard.hub.api.routines import router as routines_router
 from blizzard.hub.api.runners import router as runners_router
+from blizzard.hub.api.scopes import project_router as project_scopes_router
 from blizzard.hub.api.scopes import router as scopes_router
 from blizzard.hub.api.secrets import router as secrets_router
 from blizzard.hub.api.secrets import sanitized_validation_response
@@ -76,8 +91,9 @@ from blizzard.hub.api.work_sources import router as work_sources_router
 from blizzard.hub.auth.bootstrap import Superuser
 from blizzard.hub.composition import (
     HubServices,
+    LiveConfig,
+    TenantStores,
     build_config_authoring,
-    build_live_config,
     build_process_core,
     build_services,
 )
@@ -93,12 +109,16 @@ from blizzard.hub.domain.observability.tracing.attributes import (
     resource_attributes,
 )
 from blizzard.hub.domain.observability.transcripts import TranscriptCaps
+from blizzard.hub.domain.projects.declarations import ImportLinks
+from blizzard.hub.domain.projects.model import ProjectRequired
 from blizzard.hub.domain.runners.registration import RunnerRetired
-from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.secrets import KeyCoverage, hub_key_provider, require_hub_key
 from blizzard.hub.secrets.rotation import RotationResult, rotate_keys
+from blizzard.hub.store.tenant_guard import install_tenant_guard
+from blizzard.hub.tenancy import StoreScope, TenantClosed, TenantId, UnknownTenant
 from blizzard.hub.work_sources.internal.factory import WorkSourceEntry
+from blizzard.hub.work_sources.source import IWorkSourceRegistry
 from blizzard.wire.components import HUB_SCHEMA_COMPONENTS
 
 #: The transcript-event derivation sweep's own interval — a module
@@ -107,6 +127,9 @@ EVENT_DERIVATION_INTERVAL_SECONDS = 60
 
 #: The close-intent drain sweep's own interval.
 CLOSE_DRAIN_INTERVAL_SECONDS = 60
+
+#: The tenant-teardown sweep's own interval — each pass drains every deletion underway by one bounded pass.
+TENANT_TEARDOWN_INTERVAL_SECONDS = 30
 
 #: How long the hub's shutdown waits for buffered platform spans to leave.
 PLATFORM_TRACING_SHUTDOWN_SECONDS = 3.0
@@ -138,7 +161,7 @@ class Sweep:
     @classmethod
     def all(cls, app: FastAPI) -> Iterator[Sweep]:
         """The forge-status sweep, plus the always-on
-        event-derivation and close-drain sweeps, plus the trace-export
+        event-derivation, close-drain and tenant-teardown sweeps, plus the trace-export
         sweep when tracing is enabled, plus the fact-egress sweep when a directory is configured — none on the
         store-free app. Each sweep's jitter is drawn uniformly from ``[0, interval_seconds)``
         here so their recurring cadence decorrelates from its second pass
@@ -171,6 +194,14 @@ class Sweep:
             app.state.shutdown,
             "blizzard.hub.work_closure",
             jitter_seconds=random.uniform(0, CLOSE_DRAIN_INTERVAL_SECONDS),
+            tracer=tracer,
+        )
+        yield cls(
+            services.tenant_teardown_sweep,
+            TENANT_TEARDOWN_INTERVAL_SECONDS,
+            app.state.shutdown,
+            "blizzard.hub.tenant_teardown",
+            jitter_seconds=random.uniform(0, TENANT_TEARDOWN_INTERVAL_SECONDS),
             tracer=tracer,
         )
         if services.trace_export is not None:
@@ -240,38 +271,67 @@ def _refuse_retired_runner(_request: Request, exc: Exception) -> JSONResponse:
     return JSONResponse(status_code=status.HTTP_403_FORBIDDEN, content={"detail": str(exc)})
 
 
+def open_hub_engine(db_url: str) -> Engine:
+    """The hub process's engine, opened after the tenant statement guard is installed — so a hub started with
+    ``BLIZZARD_TENANT_GUARD=1`` checks every statement it runs."""
+    install_tenant_guard()
+    return create_engine_from_url(db_url)
+
+
 def rotate_secret_keys(config: HubConfig, environ: Mapping[str, str]) -> RotationResult:
-    """The offline ``rotate-key`` wiring: the store and key source opened directly, no app."""
-    engine = create_engine_from_url(config.db_url)
+    """The offline ``rotate-key`` wiring: the store and key source opened directly, no app; every open
+    tenant's secrets re-sealed."""
+    engine = open_hub_engine(config.db_url)
     try:
-        return rotate_keys(build_process_core(engine).secrets, environ, data_dir=config.data_dir)
+        tenants = build_process_core(engine).every_open()
+        return rotate_keys([stores.secrets for stores in tenants], environ, data_dir=config.data_dir)
     finally:
         engine.dispose()
 
 
-def import_legacy_config(config: HubConfig, environ: Mapping[str, str]) -> ImportResult:
+def import_legacy_config(
+    config: HubConfig, environ: Mapping[str, str], *, tenant: TenantId | None = None
+) -> ImportResult:
     """The offline ``import-legacy`` wiring: the hub key's existence checked before a provider is
-    built, then the store and key source opened directly, no app."""
+    built, then the store and key source opened directly, no app. The import writes into ``tenant``,
+    or into the hub's only open tenant when none is named, linking what it creates to that tenant's only project."""
     require_hub_key(environ, data_dir=config.data_dir)
     legacy = read_legacy_keys(config.config_path, environ)
-    engine = create_engine_from_url(config.db_url)
+    engine = open_hub_engine(config.db_url)
     try:
         core = build_process_core(engine)
-        authoring = build_config_authoring(core, secret_keys=hub_key_provider(environ, data_dir=config.data_dir))
+        target = _legacy_import_tenant(core.open_tenants(), named=tenant)
+        stores = core.open(StoreScope(target))
+        authoring = build_config_authoring(stores, secret_keys=hub_key_provider(environ, data_dir=config.data_dir))
         existing = ExistingConfig(
-            secrets=frozenset(secret.name for secret in core.secrets.list_all()),
-            work_sources=tuple(core.work_source_records.list_all(include_retired=True)),
-            repositories=tuple(core.repository_records.list_all(include_retired=True)),
+            secrets=frozenset(secret.name for secret in stores.secrets.list_all()),
+            work_sources=tuple(stores.work_source_records.list_all(include_retired=True)),
+            repositories=tuple(stores.repository_records.list_all(include_retired=True)),
         )
         return authoring.import_legacy(
             legacy,
             {name: environ[name] for name in legacy.variables},
-            core.config_import.commit_coordinates(),
+            stores.config_import.commit_coordinates(),
             existing,
-            recorded=core.config_import.recorded(),
+            recorded=stores.config_import.recorded(),
+            links=ImportLinks(stores.projects),
         )
     finally:
         engine.dispose()
+
+
+def _legacy_import_tenant(open_tenants: Mapping[TenantId, str], *, named: TenantId | None) -> TenantId:
+    """The tenant an import writes into: the named one, which must be open, else the only open one."""
+    if named is not None:
+        if named not in open_tenants:
+            raise ConfigError(f"no open tenant has the id {named}")
+        return named
+    if len(open_tenants) == 1:
+        return next(iter(open_tenants))
+    if not open_tenants:
+        raise ConfigError("the hub holds no open tenant to import into")
+    listing = "; ".join(f"{tenant} ({name})" for tenant, name in sorted(open_tenants.items()))
+    raise ConfigError(f"the hub holds several tenants — name the one to import into with --tenant: {listing}")
 
 
 async def _validation_error(request: Request, exc: Exception) -> JSONResponse:
@@ -327,14 +387,14 @@ def create_app(
     app.state.config = config
     app.state.readiness = readiness
     app.state.services = services
-    # The event broker is always present (cheap, in-memory) so the SSE stream opens
-    # cleanly even on the store-free app.
-    app.state.events = services.events if services is not None else EventBroker()
     # Set on shutdown by ``_lifespan``; every SSE stream races it.
     app.state.shutdown = asyncio.Event()
 
     app.add_exception_handler(RunnerRetired, _refuse_retired_runner)
     app.add_exception_handler(RequestValidationError, _validation_error)
+    app.add_exception_handler(TenantClosed, refuse_closed_tenant)
+    app.add_exception_handler(UnknownTenant, refuse_closed_tenant)
+    app.add_exception_handler(ProjectRequired, refuse_project_required)
 
     # API routers first, so /api/* always wins over the web mount at /.
     app.include_router(health_router)
@@ -359,12 +419,25 @@ def create_app(
     app.include_router(runners_router)
     app.include_router(spend_router)
     app.include_router(users_router)
+    app.include_router(members_router)
+    app.include_router(member_grants_router)
+    app.include_router(hub_admins_router)
+    app.include_router(invitations_router)
     app.include_router(transcripts_router)
     app.include_router(analytics_router)
     app.include_router(traces_router)
     app.include_router(egress_router)
+    app.include_router(admin_tenants_router)
+    app.include_router(admin_events_router)
     app.include_router(work_sources_router)
     app.include_router(repositories_router)
+    app.include_router(projects_router)
+    # A project's gardening, nested under `/api/projects/{project}` after the project routes themselves.
+    app.include_router(project_scopes_router)
+    app.include_router(project_routines_router)
+    app.include_router(project_findings_router)
+    app.include_router(project_garden_proposals_router)
+    app.include_router(project_garden_runs_router)
     # Outside the fleet gate — pinned by `tests/test_fleet_identity.py`'s tokenless-401 case.
     app.include_router(fleet_identity_router)
     # The runner-authenticated fleet router — a fleet verb is authenticated
@@ -411,7 +484,7 @@ def build_hosted_app(
         scope=PLATFORM_INSTRUMENTATION_SCOPE,
         scope_version=PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
     )
-    engine = create_engine_from_url(config.db_url)
+    engine = open_hub_engine(config.db_url)
     platform_tracing.instrument_engine(engine)
     reader = SqlAlchemyStoreStatusReader(engine)
     expected = migration_runner(config).script_head()
@@ -420,18 +493,20 @@ def build_hosted_app(
     core = build_process_core(engine)
     # Minted here on first start when no key source exists yet.
     secret_keys = hub_key_provider(os.environ, data_dir=config.data_dir)
-    live = build_live_config(core, secret_keys=secret_keys)
-    work_source_registry = WorkSourceEntry.registry(
-        records=core.work_source_records,
-        objects=live.objects,
-        secrets=live.secrets,
-        users=core.users,
-        work_item_store=core.work_item_store,
-        edits=core.work_item_edits,
-        resolution=core.garden_proposal_resolution,
-        close_forge_writes_enabled=config.close_forge_writes_enabled,
-        instrument_client=platform_tracing.instrument_client,
-    )
+
+    def work_source_registry(stores: TenantStores, live: LiveConfig) -> IWorkSourceRegistry:
+        return WorkSourceEntry.registry(
+            records=stores.work_source_records,
+            objects=live.objects,
+            secrets=live.secrets,
+            users=core.users,
+            work_item_store=stores.work_item_store,
+            edits=stores.work_item_edits,
+            resolution=stores.garden_proposal_resolution,
+            close_forge_writes_enabled=config.close_forge_writes_enabled,
+            instrument_client=platform_tracing.instrument_client,
+        )
+
     tracing = TracingSettings.of(os.environ)
 
     # The provider-login seam is built only under `oauth`: under `none`
@@ -447,9 +522,7 @@ def build_hosted_app(
 
     services = build_services(
         core,
-        events=EventBroker(),
         work_sources=work_source_registry,
-        secrets=live.secrets,
         hub_workdir_root=config.data_dir / "hub_workdirs",
         hub_marker_callback_base_url=f"http://{config.host}:{config.port}",
         public_url=config.public_url,
@@ -480,15 +553,20 @@ def build_hosted_app(
     # Only once the store is at the expected schema head: a store mid-migration must
     # fail *readiness*, not *boot* (pinned: `test_ready_probe_false_on_unmigrated_store`).
     if readiness.evaluate().ready:
+        tenants = core.every_open()
         try:
-            LegacyStart.of(core.config_import, read_legacy_keys(config.config_path, os.environ)).check()
+            LegacyStart.of(
+                [stores.config_import for stores in tenants], read_legacy_keys(config.config_path, os.environ)
+            ).check()
         except LegacyStartRefused as refusal:
             raise ConfigError(str(refusal)) from refusal
         OrphanedProviders.of(config, services).check()
-        KeyCoverage.of(core.secrets, secret_keys).check()
-        # Before the hub serves.
-        services.hub_node.release_orphaned_slots()
-        Superuser(email=config.auth.superuser, users=services.users, auth=services.auth).ensure()
+        KeyCoverage.of([stores.secrets for stores in tenants], secret_keys).check()
+        # Before the hub serves, in each open tenant.
+        for stores in tenants:
+            services.tenants.open_services(stores.scope).hub_node.release_orphaned_slots()
+        Superuser(email=config.auth.superuser, auth=services.auth).ensure()
+        _announce_started(expected, services)
         _announce_rejected_tracing(tracing, services)
         _announce_rejected_egress(config.egress, services)
     app = create_app(config, readiness=readiness, services=services, platform_tracing=platform_tracing)
@@ -497,17 +575,24 @@ def build_hosted_app(
     return app
 
 
+def _announce_started(revision: str | None, services: HubServices) -> None:
+    """Every start that reaches a migrated store records one ``hub-started`` in the hub's own event log, naming the
+    version and the store revision it serves."""
+    services.hub_event_log.record(
+        kind="hub-started",
+        message=f"hub {__version__} started on store revision {revision}",
+        detail={"version": __version__, "revision": revision},
+        at=services.clock.now(),
+    )
+
+
 def _announce_rejected_tracing(tracing: TracingSettings, services: HubServices) -> None:
     """A rejected tracing setting never stops startup: the hub serves with tracing off and
-    records one hub-wide ``trace-config-rejected`` per start, naming the setting."""
+    records one ``trace-config-rejected`` in the hub's own event log per start, naming the setting."""
     if tracing.state != "rejected":
         return
-    services.event_log.record(
+    services.hub_event_log.record(
         kind="trace-config-rejected",
-        runner_id=None,
-        chunk_id=None,
-        lease_id=None,
-        node_name=None,
         message=tracing.rejection_message("hub"),
         detail={"setting": tracing.setting, "value": tracing.value},
         at=services.clock.now(),
@@ -515,10 +600,10 @@ def _announce_rejected_tracing(tracing: TracingSettings, services: HubServices) 
 
 
 def _announce_rejected_egress(egress: EgressConfig, services: HubServices) -> None:
-    """An export the hub cannot fully honor never stops startup, and records one hub-wide ``egress-config-rejected``
-    per start. Without its format's extra the export is off and the event names the format; without the path hash
-    key a hashing file path policy needs, only the events dataset is off and the event names the variable — never
-    a key value."""
+    """An export the hub cannot fully honor never stops startup, and records one ``egress-config-rejected`` in the
+    hub's own event log per start. Without its format's extra the export is off and the event names the format;
+    without the path hash key a hashing file path policy needs, only the events dataset is off and the event names the
+    variable — never a key value."""
     unavailable = services.egress_unavailable
     variable = services.egress_missing_path_key
     if unavailable is not None:
@@ -529,12 +614,8 @@ def _announce_rejected_egress(egress: EgressConfig, services: HubServices) -> No
         detail = {"setting": "egress.path_key_env", "value": variable}
     else:
         return
-    services.event_log.record(
+    services.hub_event_log.record(
         kind="egress-config-rejected",
-        runner_id=None,
-        chunk_id=None,
-        lease_id=None,
-        node_name=None,
         message=message,
         detail=detail,
         at=services.clock.now(),

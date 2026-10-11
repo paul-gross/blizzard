@@ -8,15 +8,29 @@ import type { Router } from '@angular/router';
  * across tabs/sessions. */
 const RETURN_URL_KEY = 'fleet.auth.return-to';
 
-/** Routes the app to `/login`, first stashing the current route (unless already on
- * `/login`, which would otherwise clobber a real return location with `/login`
- * itself) for {@link consumeReturnUrl} to read back once the dance completes. The one
+/** Whether `url` is one of the pages a person reaches without a session — sign-in (and the refusals it shows) and an
+ * invitation's landing. The app root renders them outside the shell whatever the session, and an unauthenticated
+ * response never redirects away from one. */
+export function isPublicUrl(url: string): boolean {
+  const path = url.split(/[?#]/, 1)[0];
+  return path === '/login' || path === '/invite' || path.startsWith('/invite/');
+}
+
+/** The route the router is on, or the one it is navigating to while a navigation runs — at boot, before the first
+ * navigation ends, that is the page the tab opened on. */
+function landingUrl(router: Router): string {
+  const navigation = router.currentNavigation();
+  return navigation === null ? router.url : router.serializeUrl(navigation.extractedUrl);
+}
+
+/** Routes the app to `/login`, first stashing the current route for {@link consumeReturnUrl} to read back once the
+ * dance completes. On a public page ({@link isPublicUrl}) it does nothing: `/login` is already there and keeps its
+ * query (a refusal, a resumed authorize request), and an invitation's landing is meant to be read signed out. The one
  * place the hub app decides "an unauthenticated hub response means log in again". */
 export function redirectToLogin(router: Router): void {
-  const current = router.url;
-  if (!current.startsWith('/login')) {
-    sessionStorage.setItem(RETURN_URL_KEY, current);
-  }
+  const current = landingUrl(router);
+  if (isPublicUrl(current)) return;
+  sessionStorage.setItem(RETURN_URL_KEY, current);
   void router.navigateByUrl('/login');
 }
 

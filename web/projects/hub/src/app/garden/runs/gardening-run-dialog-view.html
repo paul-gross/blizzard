@@ -23,7 +23,7 @@
       </p>
       <a
         class="board-link"
-        [routerLink]="['/board', 'chunk', run.chunk_id]"
+        [routerLink]="['/board', 'chunk', run.chunk_id] | lensLink"
         data-testid="run-confirmation-board-link"
         >View on the board</a
       >

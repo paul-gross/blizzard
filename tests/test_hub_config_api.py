@@ -18,7 +18,7 @@ _DEMO = {"name": "demo", "provider": "github", "locator": "acme/demo", "secret":
 
 @pytest.fixture
 def hub(tmp_path: Path) -> HubHarness:
-    hub = build_hub(tmp_path, repositories=())
+    hub = build_hub(tmp_path, repositories=(), link=False)
     assert hub.client.post("/api/secrets", json={"name": "gh", "value": _SENTINEL}).status_code == 201
     return hub
 
@@ -196,7 +196,13 @@ def test_the_change_log_pages_newest_first_and_filters(hub: HubHarness) -> None:
     _create(hub)
     hub.client.patch("/api/work-sources/demo", json={"annotate": False})
     full = hub.client.get("/api/config/changes").json()
-    assert [c["op"] for c in full["changes"]] == ["edit", "create", "create"]
+    # The oldest row is the store's default project's, which the migration wrote.
+    assert [(c["record_kind"], c["op"]) for c in full["changes"]] == [
+        ("work_source", "edit"),
+        ("work_source", "create"),
+        ("secret", "create"),
+        ("project", "create"),
+    ]
     assert full["next_before"] is None
     edit = full["changes"][0]
     assert edit["diff"] == [{"field": "annotate", "old": True, "new": False}]
@@ -211,7 +217,7 @@ def test_the_change_log_pages_newest_first_and_filters(hub: HubHarness) -> None:
     assert len(first["changes"]) == 2
     assert first["next_before"] == first["changes"][-1]["id"]
     rest = hub.client.get("/api/config/changes", params={"limit": 2, "before": first["next_before"]}).json()
-    assert [c["op"] for c in rest["changes"]] == ["create"]
+    assert [c["op"] for c in rest["changes"]] == ["create", "create"]
     assert rest["next_before"] is None
     assert len(_changes(hub, record_key="gh")) == 1
     assert hub.client.get("/api/config/changes", params={"limit": 201}).status_code == 422
@@ -254,7 +260,7 @@ def test_no_secret_value_reaches_a_change_row_or_the_log_route(hub: HubHarness) 
 
 
 def test_writes_need_config_edit_and_reads_need_fleet_view(tmp_path: Path) -> None:
-    hub = build_hub(tmp_path, auth_mode="oauth", repositories=())
+    hub = build_hub(tmp_path, auth_mode="oauth", repositories=(), link=False)
     admin = {"Authorization": f"Bearer {seed_session(hub, seed_user(hub, username='ada', role=Role.ADMIN))}"}
     contributor = {
         "Authorization": f"Bearer {seed_session(hub, seed_user(hub, username='con', role=Role.CONTRIBUTOR))}"
@@ -376,7 +382,7 @@ def test_repository_retire_and_enable_move_the_revision_and_guard_the_secret(hub
 
 
 def test_repository_writes_need_config_edit_and_reads_need_fleet_view(tmp_path: Path) -> None:
-    hub = build_hub(tmp_path, auth_mode="oauth", repositories=())
+    hub = build_hub(tmp_path, auth_mode="oauth", repositories=(), link=False)
     admin = {"Authorization": f"Bearer {seed_session(hub, seed_user(hub, username='ada', role=Role.ADMIN))}"}
     contributor = {
         "Authorization": f"Bearer {seed_session(hub, seed_user(hub, username='con', role=Role.CONTRIBUTOR))}"
@@ -557,6 +563,10 @@ def test_applying_an_export_writes_nothing(hub: HubHarness) -> None:
     assert exported.status_code == 200
     document = exported.json()
     assert document["version"] == 1
+    assert list(document)[:2] == ["version", "projects"]
+    assert document["projects"] == [
+        {"slug": "default", "name": "Default", "description": "", "sources": [], "repositories": []}
+    ]
     assert document["secrets"] == ["gh"]
     assert [w["name"] for w in document["work_sources"]] == ["demo"]
     assert [r["name"] for r in document["repositories"]] == ["blizzard"]
@@ -571,7 +581,7 @@ def test_applying_an_export_writes_nothing(hub: HubHarness) -> None:
     }
     before = _changes(hub)
     replay = _apply_json(hub, document)
-    assert [o["op"] for o in replay.json()["outcomes"]] == ["unchanged", "unchanged"]
+    assert [o["op"] for o in replay.json()["outcomes"]] == ["unchanged", "unchanged", "unchanged"]
     assert _changes(hub) == before
 
 
@@ -735,7 +745,10 @@ def test_an_export_with_scopes_and_routines_applies_back_as_a_no_op(hub: HubHarn
     ).json()
     hub.client.post(f"/api/routines/{retired['routine_id']}/retire", json={})
     document = hub.client.get("/api/config/export").json()
-    assert document["scopes"] == [{"slug": "core", "description": "the core"}, {"slug": "edge", "description": ""}]
+    assert document["scopes"] == [
+        {"slug": "core", "description": "the core", "project": "default"},
+        {"slug": "edge", "description": "", "project": "default"},
+    ]
     assert document["routines"] == [
         {
             "name": "nightly",
@@ -745,6 +758,7 @@ def test_an_export_with_scopes_and_routines_applies_back_as_a_no_op(hub: HubHarn
             "default_effort": None,
             "default_harnesses": [],
             "scopes": ["core", "edge"],
+            "project": "default",
         }
     ]
     before = _changes(hub)

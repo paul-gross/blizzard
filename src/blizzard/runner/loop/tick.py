@@ -13,6 +13,9 @@ from typing import Protocol
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.harness.capability_snapshot import TickCapabilities
 from blizzard.runner.hub.chunk_status_cache import MemoizingChunkViewCache
+from blizzard.runner.hub.identity import IdentityState
+from blizzard.runner.lifecycle.identity_check import IdentityCheck
+from blizzard.runner.lifecycle.registration import Registration
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.steps import (
     Advance,
@@ -69,17 +72,29 @@ def _tick(ctx: LoopContext) -> None:
         chunk_views=MemoizingChunkViewCache(ctx.hub),
         capabilities=TickCapabilities(ctx.harnesses, ctx.harness_versions, ctx.harness_health),
     )
-    ctx.chunk_views.prime(_primed_chunk_ids(ctx))
+    # Before any other hub call: until the token is verified to name the store's runner, `ctx.hub`
+    # answers every call as an outage, so nothing below can read another runner's chunks as its own.
+    _traced(ctx, IdentityCheck)
+    # A token naming another runner drives no lease and delivers nothing; liveness, retention and
+    # the observation samples below stay local and keep running, so the status stays readable.
+    refusing = ctx.identity_verdict.verdict().state is IdentityState.MISMATCHED
+    if not refusing:
+        ctx.chunk_views.prime(_primed_chunk_ids(ctx))
+    elif ctx.identity_verdict.registration_checks():
+        # A hub with no identity read: the registration reply is the only check, so it alone keeps
+        # running while refusing, or a restored token could never be seen.
+        _traced(ctx, Registration)
     # The spend-ceiling kill-switch — first, so it brakes the same tick it fires in.
     _traced(ctx, SpendCeiling)
-    _traced(ctx, Reap)  # startup recovery IS reap running early
-    _traced(ctx, Resume)  # before ADVANCE — else a killed-mid-work worker reads as done
-    _traced(ctx, Pull)
-    _traced(ctx, Fill)
-    _traced(ctx, Advance)
-    # After every fact-lane-draining step — bounded (the real bound is in
-    # `src/blizzard/runner/transcripts/transcript_drain.py`), so it delays nothing fleet-truth-bearing.
-    _traced(ctx, TranscriptDrain)
+    if not refusing:
+        _traced(ctx, Reap)  # startup recovery IS reap running early
+        _traced(ctx, Resume)  # before ADVANCE — else a killed-mid-work worker reads as done
+        _traced(ctx, Pull)
+        _traced(ctx, Fill)
+        _traced(ctx, Advance)
+        # After every fact-lane-draining step — bounded (the real bound is in
+        # `src/blizzard/runner/transcripts/transcript_drain.py`), so it delays nothing fleet-truth-bearing.
+        _traced(ctx, TranscriptDrain)
     # Not load-bearing: each prune preserves what this tick's other readers see
     # — placed here only so a fact just enqueued isn't pruned the same tick it lands.
     _traced(ctx, Retention)

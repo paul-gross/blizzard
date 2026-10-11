@@ -37,7 +37,7 @@
                     <a
                       class="gr"
                       data-testid="selection-graph"
-                      [routerLink]="[...linkBase, graphId]"
+                      [routerLink]="[...linkBase, graphId] | lensLink"
                       (click)="$event.stopPropagation()"
                       >{{ row.graphName }}/</a
                     >

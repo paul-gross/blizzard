@@ -12,11 +12,18 @@ from pathlib import Path
 from typing import cast
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import func
 
 from blizzard.hub.domain.chunk.ports.hub_exec import IWriteChunkHubExecRepository
 from blizzard.hub.store import schema as s
-from tests.support import assert_all_timestamps_utc, build_hub, emitted_events, ingest, report_lease
+from tests.support import (
+    assert_all_timestamps_utc,
+    build_hub,
+    emitted_events,
+    hub_store_connections,
+    ingest,
+    report_lease,
+)
 
 pytestmark = pytest.mark.component
 
@@ -165,7 +172,9 @@ def test_completing_an_already_done_chunk_writes_no_second_fact(tmp_path: Path) 
 
     with hub.engine.connect() as conn:
         count = conn.execute(
-            select(func.count()).select_from(s.chunk_completed).where(s.chunk_completed.c.chunk_id == chunk_id)
+            hub_store_connections(hub.engine)
+            .select(s.chunk_completed, func.count())
+            .where(s.chunk_completed.c.chunk_id == chunk_id)
         ).scalar_one()
     assert count == 1
 

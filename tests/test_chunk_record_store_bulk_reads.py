@@ -18,7 +18,7 @@ from blizzard.foundation.store import batching as batching_module
 from blizzard.hub.domain.chunk.model import Chunk, WorkRef
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.store.internal.chunk_rows import record_deleted_row, record_grouped_row_conn
-from tests.support import chunk_stores, count_queries, migrate_to, seed_chunk_record, seed_graph
+from tests.support import chunk_stores, count_queries, hub_store_connections, migrate_to, seed_chunk_record, seed_graph
 
 pytestmark = pytest.mark.component
 
@@ -40,10 +40,10 @@ def test_get_many_matches_get_across_a_normal_ephemeral_and_unknown_id(tmp_path:
     store, engine = _store(tmp_path)
     _mint(store, "ch_live", work_refs=[WorkRef(source="default", ref="1")])
     _mint(store, "ch_grouped")
-    with engine.begin() as conn:
+    with hub_store_connections(engine).write("seed") as conn:
         record_grouped_row_conn(conn, "ch_grouped", grouped_into="ch_live", at=_T0)
     _mint(store, "ch_deleted")
-    with engine.begin() as conn:
+    with hub_store_connections(engine).write("seed") as conn:
         record_deleted_row(conn, "ch_deleted", by="op", at=_T0)
 
     result = store.record.get_many(["ch_live", "ch_grouped", "ch_deleted", "ch_never_minted"])
@@ -56,7 +56,7 @@ def test_records_for_on_a_locked_handle_matches_record_per_id(tmp_path: Path) ->
     store, engine = _store(tmp_path)
     _mint(store, "ch_live", work_refs=[WorkRef(source="default", ref="1")])
     _mint(store, "ch_grouped")
-    with engine.begin() as conn:
+    with hub_store_connections(engine).write("seed") as conn:
         record_grouped_row_conn(conn, "ch_grouped", grouped_into="ch_live", at=_T0)
 
     with store.exclusive.locked(["ch_live", "ch_grouped"]) as handle:
@@ -90,7 +90,7 @@ def test_graph_id_of_many_matches_per_id_resolution_across_ephemeral_and_unknown
     store, engine = _store(tmp_path)
     _mint(store, "ch_live")
     _mint(store, "ch_grouped")
-    with engine.begin() as conn:
+    with hub_store_connections(engine).write("seed") as conn:
         record_grouped_row_conn(conn, "ch_grouped", grouped_into="ch_live", at=_T0)
 
     result = store.record.graph_id_of_many(["ch_live", "ch_grouped", "ch_never_minted"])
@@ -119,7 +119,7 @@ def test_list_page_excludes_ephemeral_ids_across_a_batch_boundary(
     for chunk_id in ids:
         _mint(store, chunk_id)
     grouped = {"ch_batch_1", "ch_batch_4"}
-    with engine.begin() as conn:
+    with hub_store_connections(engine).write("seed") as conn:
         for chunk_id in grouped:
             record_grouped_row_conn(conn, chunk_id, grouped_into="ch_batch_0", at=_T0)
 

@@ -12,7 +12,7 @@
             class="artifact-link"
             data-testid="artifact-link"
             [attr.data-artifact-key]="art.key"
-            [routerLink]="[...linkBase(), chunkId()]"
+            [routerLink]="[...linkBase(), chunkId()] | lensLink"
             [queryParams]="{ tab: 'artifacts', artifact: art.key }"
           >
             <fleet-chunk-detail-artifact-body [artifact]="art" body="summary" />

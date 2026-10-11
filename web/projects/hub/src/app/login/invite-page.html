@@ -1,0 +1,16 @@
+<div class="login" data-testid="invite-page">
+  <h1 class="title">blizzard</h1>
+  <p class="subtitle">You've been invited</p>
+  <p class="notice" data-testid="invite-page-notice">Sign in with the account that uses the invited email address to accept.</p>
+  <div class="body">
+    <fleet-kit-async-state
+      [state]="state()"
+      loadingText="LOADING PROVIDERS…"
+      errorText="LOGIN UNAVAILABLE"
+      emptyText="No login providers configured."
+      emptyTestid="invite-no-providers"
+    >
+      <app-login-buttons [providers]="providers()" [invite]="token" />
+    </fleet-kit-async-state>
+  </div>
+</div>

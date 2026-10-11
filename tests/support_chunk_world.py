@@ -11,7 +11,7 @@ from sqlalchemy import insert
 from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.store import schema as s
-from tests.support import HubHarness, build_hub, chunk_stores, seed_chunk_record, seed_graph
+from tests.support import HubHarness, build_hub, chunk_stores, seed_chunk_record, seed_graph, stamp
 
 OLD = timedelta(days=30)
 
@@ -35,27 +35,34 @@ def transition(hub: HubHarness, chunk_id: str, to_node: str, *, epoch: int, ago:
     with hub.engine.begin() as conn:
         conn.execute(
             insert(s.transitions).values(
-                transition_id=f"tr_{chunk_id}_{epoch}_{to_node}_{n}",
-                chunk_id=chunk_id,
-                graph_id="gr_1",
-                from_node_id=None,
-                to_node_id=to_node,
-                epoch=epoch,
-                runner_id="r",
-                recorded_at=hub.clock.now() - ago,
+                stamp(
+                    s.transitions,
+                    transition_id=f"tr_{chunk_id}_{epoch}_{to_node}_{n}",
+                    chunk_id=chunk_id,
+                    graph_id="gr_1",
+                    from_node_id=None,
+                    to_node_id=to_node,
+                    epoch=epoch,
+                    runner_id="r",
+                    recorded_at=hub.clock.now() - ago,
+                )
             )
         )
 
 
 def stop(hub: HubHarness, chunk_id: str, *, ago: timedelta) -> None:
     with hub.engine.begin() as conn:
-        conn.execute(insert(s.chunk_stopped).values(chunk_id=chunk_id, stopped_at=hub.clock.now() - ago))
+        conn.execute(
+            insert(s.chunk_stopped).values(stamp(s.chunk_stopped, chunk_id=chunk_id, stopped_at=hub.clock.now() - ago))
+        )
 
 
 def complete(hub: HubHarness, chunk_id: str, *, ago: timedelta) -> None:
     with hub.engine.begin() as conn:
         conn.execute(
-            insert(s.chunk_completed).values(chunk_id=chunk_id, completed_at=hub.clock.now() - ago, completed_by="op")
+            insert(s.chunk_completed).values(
+                stamp(s.chunk_completed, chunk_id=chunk_id, completed_at=hub.clock.now() - ago, completed_by="op")
+            )
         )
 
 
@@ -90,12 +97,15 @@ def every_branch(hub: HubHarness) -> None:
         with hub.engine.begin() as conn:
             conn.execute(
                 insert(s.chunk_restarts).values(
-                    chunk_id=f"ch_restarted_{label}",
-                    graph_id="gr_1",
-                    to_node_id="nd_1",
-                    epoch=2,
-                    restarted_by="op",
-                    recorded_at=hub.clock.now() - ago,
+                    stamp(
+                        s.chunk_restarts,
+                        chunk_id=f"ch_restarted_{label}",
+                        graph_id="gr_1",
+                        to_node_id="nd_1",
+                        epoch=2,
+                        restarted_by="op",
+                        recorded_at=hub.clock.now() - ago,
+                    )
                 )
             )
 
@@ -104,13 +114,16 @@ def every_branch(hub: HubHarness) -> None:
         with hub.engine.begin() as conn:
             conn.execute(
                 insert(s.chunk_migrations).values(
-                    migration_id=f"mg_{label}",
-                    chunk_id=f"ch_migrated_{label}",
-                    from_graph_id="gr_1",
-                    to_graph_id="gr_1",
-                    landed_node_id="nd_1",
-                    epoch=1,
-                    recorded_at=hub.clock.now() - ago,  # a tie with the terminal transition
+                    stamp(
+                        s.chunk_migrations,
+                        migration_id=f"mg_{label}",
+                        chunk_id=f"ch_migrated_{label}",
+                        from_graph_id="gr_1",
+                        to_graph_id="gr_1",
+                        landed_node_id="nd_1",
+                        epoch=1,
+                        recorded_at=hub.clock.now() - ago,  # a tie with the terminal transition
+                    )
                 )
             )
 
@@ -135,4 +148,8 @@ def every_branch(hub: HubHarness) -> None:
     mint(hub, "ch_deleted_live", ago=OLD)
     with hub.engine.begin() as conn:
         for chunk_id in ("ch_deleted_done", "ch_deleted_live"):
-            conn.execute(insert(s.chunk_deleted).values(chunk_id=chunk_id, deleted_at=hub.clock.now(), deleted_by="op"))
+            conn.execute(
+                insert(s.chunk_deleted).values(
+                    stamp(s.chunk_deleted, chunk_id=chunk_id, deleted_at=hub.clock.now(), deleted_by="op")
+                )
+            )

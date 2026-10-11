@@ -4,6 +4,10 @@ A **scope** is an operator-authored slug plus a description; a **routine** names
 scope, and model/effort run defaults. Both are hub-stored records — the hub indexes and hands back a scope slug, never
 resolving what it names, and nothing here filters by scope; that is a separate surface.
 
+Both belong to a project: a scope's slug and a routine's name are unique within it. Every verb that creates one, or
+names one by slug or name, takes `--project <id|slug>` when the tenant holds several projects, and a listing verb takes
+it to show one project's records ([projects.md](./projects.md#a-call-that-names-no-project)).
+
 ## Scopes
 
 `blizzard hub scope create <slug> [--description]`, `list`, `show <slug>`, `edit <slug> --description <text>`, `retire <slug>`, and

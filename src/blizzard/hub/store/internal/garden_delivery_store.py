@@ -8,8 +8,6 @@ from __future__ import annotations
 
 import json
 
-from sqlalchemy import insert, select
-
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.store.batching import id_batches
@@ -19,9 +17,10 @@ from blizzard.hub.domain.garden.delivery.materialize import (
     DeliveryPlan,
     IWriteGardenDeliveryRepository,
 )
-from blizzard.hub.store.errors import HubStoreConnections
+from blizzard.hub.domain.garden.delivery.validation import GardenDeliveryRejected
 from blizzard.hub.store.internal.chunk_rows import fence, lock_chunk_row, next_artifact_seq
-from blizzard.hub.store.internal.finding_store import lock_findings, moved_findings
+from blizzard.hub.store.internal.finding_store import findings_outside_project, lock_findings, moved_findings
+from blizzard.hub.store.internal.scope_store import scope_ids_of
 from blizzard.hub.store.schema import (
     artifacts,
     finding_facts,
@@ -30,6 +29,7 @@ from blizzard.hub.store.schema import (
     garden_proposal_findings,
     garden_proposals,
 )
+from blizzard.hub.store.scoped import ScopedConnections, statements_of
 
 _DELIVERED_MARKER_NAME = "garden-delivered"
 
@@ -39,7 +39,7 @@ class GardenDeliveryStore:
     clock (`bzh:injected-clock`) — every timestamp arrives already stamped on
     `DeliveryPlan.at`, so this adapter makes no time decisions, only insert decisions."""
 
-    def __init__(self, store: HubStoreConnections) -> None:
+    def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
     def already_delivered(self, *, chunk_id: str, node_id: str, epoch: int) -> bool:
@@ -49,7 +49,9 @@ class GardenDeliveryStore:
     @staticmethod
     def _marker(conn, *, chunk_id: str, node_id: str, epoch: int):  # type: ignore[no-untyped-def]
         return conn.execute(
-            select(artifacts.c.artifact_id).where(
+            statements_of(conn)
+            .select(artifacts, artifacts.c.artifact_id)
+            .where(
                 (artifacts.c.chunk_id == chunk_id)
                 & (artifacts.c.node_id == node_id)
                 & (artifacts.c.epoch == epoch)
@@ -82,9 +84,9 @@ class GardenDeliveryStore:
                 already_materialized = {
                     row.artifact_id: row.finding_set_id
                     for row in conn.execute(
-                        select(finding_sets.c.artifact_id, finding_sets.c.finding_set_id).where(
-                            finding_sets.c.artifact_id.in_([d.finding_set.artifact_id for d in plan.deltas])
-                        )
+                        self._store.select(
+                            finding_sets, finding_sets.c.artifact_id, finding_sets.c.finding_set_id
+                        ).where(finding_sets.c.artifact_id.in_([d.finding_set.artifact_id for d in plan.deltas]))
                     )
                 }
                 surviving_deltas = [d for d in plan.deltas if d.finding_set.artifact_id not in already_materialized]
@@ -107,8 +109,11 @@ class GardenDeliveryStore:
                     already_recorded_by_ref = {
                         (row.finding_set_id, row.ref): row.finding_id
                         for row in conn.execute(
-                            select(
-                                finding_facts.c.finding_set_id, finding_facts.c.ref, finding_facts.c.finding_id
+                            self._store.select(
+                                finding_facts,
+                                finding_facts.c.finding_set_id,
+                                finding_facts.c.ref,
+                                finding_facts.c.finding_id,
                             ).where(
                                 finding_facts.c.finding_set_id.in_({fsid for fsid, _ in dropped_refs})
                                 & (finding_facts.c.kind == "add")
@@ -131,7 +136,9 @@ class GardenDeliveryStore:
                 already_delivered = {
                     (row.source_artifact_id, row.ref)
                     for row in conn.execute(
-                        select(garden_proposals.c.source_artifact_id, garden_proposals.c.ref).where(
+                        self._store.select(
+                            garden_proposals, garden_proposals.c.source_artifact_id, garden_proposals.c.ref
+                        ).where(
                             garden_proposals.c.source_artifact_id.in_({p.source_artifact_id for p in plan.proposals})
                         )
                     )
@@ -148,14 +155,26 @@ class GardenDeliveryStore:
             if moved_findings(conn, {fid: state for fid, state in plan.expect.items() if fid in written}):
                 return DeliveryOutcome.GUARD_LOST
             finding_set_rows = [d.finding_set for d in surviving_deltas]
+            # Every delta names the run's own scope (validation), stored before the run was minted;
+            # a slug the run's project does not hold maps to no id, which the NOT NULL link refuses.
+            scope_ids = (
+                scope_ids_of(
+                    conn,
+                    [f.scope_slug for f in new_findings] + [fs.scope_slug for fs in finding_set_rows],
+                    plan.run.project_id,
+                )
+                if new_findings or finding_set_rows
+                else {}
+            )
 
             if new_findings:
                 conn.execute(
-                    insert(findings),
+                    self._store.insert(findings).values(project_id=plan.run.project_id),
                     [
                         {
                             "finding_id": f.finding_id,
                             "routine_name": f.routine_name,
+                            "scope_id": scope_ids.get(f.scope_slug),
                             "scope_slug": f.scope_slug,
                             "class_": f.class_,
                             "locus": f.locus,
@@ -169,12 +188,13 @@ class GardenDeliveryStore:
                 )
             if finding_set_rows:
                 conn.execute(
-                    insert(finding_sets),
+                    self._store.insert(finding_sets).values(project_id=plan.run.project_id),
                     [
                         {
                             "finding_set_id": fs.finding_set_id,
                             "artifact_id": fs.artifact_id,
                             "chunk_id": plan.chunk_id,
+                            "scope_id": scope_ids.get(fs.scope_slug),
                             "scope_slug": fs.scope_slug,
                             "routine_name": plan.run.routine_name,
                             "revisions": json.dumps(fs.revisions),
@@ -185,7 +205,7 @@ class GardenDeliveryStore:
                 )
             if facts:
                 conn.execute(
-                    insert(finding_facts),
+                    self._store.insert(finding_facts),
                     [
                         {
                             "finding_id": fact.finding_id,
@@ -201,7 +221,7 @@ class GardenDeliveryStore:
                 )
             if surviving_proposals:
                 conn.execute(
-                    insert(garden_proposals),
+                    self._store.insert(garden_proposals).values(project_id=plan.run.project_id),
                     [
                         {
                             "proposal_id": p.proposal_id,
@@ -227,12 +247,19 @@ class GardenDeliveryStore:
                     if finding_id in ref_substitutions or finding_id not in uninserted_finding_ids
                 ]
                 if links:
-                    conn.execute(insert(garden_proposal_findings), links)
+                    cited = [link["finding_id"] for link in links]
+                    outside = findings_outside_project(conn, cited, plan.run.project_id)
+                    if outside:
+                        raise GardenDeliveryRejected(
+                            f"finding {outside[0]!r} belongs to another project than routine "
+                            f"{plan.run.routine_name!r}'s — nothing was written"
+                        )
+                    conn.execute(self._store.insert(garden_proposal_findings), links)
 
             # Always written, even when every delta was already materialized: this visit
             # is a genuinely new (chunk_id, node_id, epoch) and owes its idempotence key.
             conn.execute(
-                insert(artifacts).values(
+                self._store.insert(artifacts).values(
                     artifact_id=Id.mint_at(IdPrefix.ARTIFACT, plan.at).value,
                     chunk_id=plan.chunk_id,
                     node_id=plan.node_id,

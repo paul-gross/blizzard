@@ -4,6 +4,7 @@ import { type ChunkStatus, STATUS_TONE, KitAsyncState, type KitAsyncStateValue, 
 import { CapabilityBadgeGroup } from './capability-badge-group';
 import { GateBadgeGroup } from './gate-badge-group';
 import { localPauseHint, runnerSeenLabel, runnerToggleHint, type RunnerRow } from './runner-rows';
+import { ServedProjectGroup } from './served-project-group';
 import { SubscriptionPaceGroup } from './subscription-pace-group';
 
 /**
@@ -15,7 +16,7 @@ import { SubscriptionPaceGroup } from './subscription-pace-group';
 @Component({
   selector: 'app-runner-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CapabilityBadgeGroup, GateBadgeGroup, KitAsyncState, KitBadge, KitButton, KitPanel, KitSlotBar, SubscriptionPaceGroup],
+  imports: [CapabilityBadgeGroup, GateBadgeGroup, KitAsyncState, KitBadge, KitButton, KitPanel, KitSlotBar, ServedProjectGroup, SubscriptionPaceGroup],
   templateUrl: './runner-view.html',
   styleUrl: './runner-view.css',
 })

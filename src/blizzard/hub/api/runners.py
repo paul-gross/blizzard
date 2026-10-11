@@ -7,6 +7,7 @@ Controllers stay read-only over the store (``bzh:controller-read-only``);
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Annotated, ClassVar
@@ -19,10 +20,11 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
-from blizzard.hub.api.auth_session import require
-from blizzard.hub.api.deps import get_services
+from blizzard.hub.api.auth_session import require, tenant_bound
+from blizzard.hub.api.deps import Services
 from blizzard.hub.auth.models import ResolvedIdentity
-from blizzard.hub.composition import HubServices
+from blizzard.hub.composition import TenantServices
+from blizzard.hub.domain.projects.model import Project, ProjectId
 from blizzard.hub.domain.runners.registration import (
     PerSubscriptionUsageView,
     RunnerHoldsRoutes,
@@ -31,7 +33,9 @@ from blizzard.hub.domain.runners.registration import (
     RunnerNotRetired,
     RunnerRegistration,
     RunnerRetired,
+    ServedEntry,
 )
+from blizzard.hub.domain.runners.served import UnknownServedProject
 from blizzard.wire.runner import (
     ExternalSubscriptionUsageWindowView,
     RunnerAddRequest,
@@ -45,6 +49,7 @@ from blizzard.wire.runner import (
     RunnerRetireResponse,
     RunnerTokenRevocationResponse,
     RunnerView,
+    ServedProjectView,
 )
 from blizzard.wire.runner import (
     RunnerCapability as RunnerCapabilityWire,
@@ -53,7 +58,9 @@ from blizzard.wire.runner import (
     SubscriptionUsageView as SubscriptionUsageViewWire,
 )
 
-router = APIRouter(prefix="/api", tags=["runners"], dependencies=[Depends(reject_runner_principal)])
+router = APIRouter(
+    prefix="/api", tags=["runners"], dependencies=[Depends(reject_runner_principal), Depends(tenant_bound)]
+)
 
 
 @dataclass(frozen=True)
@@ -61,7 +68,7 @@ class RunnerBrake:
     """One operator write of a runner's fleet pause brake. Which way the brake moves is
     the subclass's, and is the only thing that differs between the two verbs."""
 
-    services: HubServices
+    services: TenantServices
     runner_id: str
     by: str
 
@@ -85,7 +92,11 @@ class RunnerBrake:
         # reports the brake this call just set, not its pre-write value.
         refreshed = self.services.registry.get_runner(self.runner_id)
         assert refreshed is not None  # just set_paused succeeded, so the runner exists
-        return registry_view(self.services.fleet.get_liveness(refreshed), now=self.services.clock.now())
+        return registry_view(
+            self.services.fleet.get_liveness(refreshed),
+            now=self.services.clock.now(),
+            projects=served_projects(self.services, refreshed.served),
+        )
 
 
 class Paused(RunnerBrake):
@@ -98,7 +109,7 @@ class Resumed(RunnerBrake):
     kind = "resumed"
 
 
-def runner_view(liveness: RunnerLiveness, *, now: datetime) -> RunnerView:
+def runner_view(liveness: RunnerLiveness, *, now: datetime, projects: Mapping[ProjectId, Project]) -> RunnerView:
     """The runner's own view of its registration — the fleet read, which only a runner that
     has registered reaches."""
     r = liveness.registration
@@ -123,12 +134,16 @@ def runner_view(liveness: RunnerLiveness, *, now: datetime) -> RunnerView:
         retired_at=_iso_or_none(r.retired_at),
         retired_by=r.retired_by,
         gates=list(r.gates),
+        projects=served_views(r.served, projects),
     )
 
 
-def registry_view(liveness: RunnerLiveness, *, now: datetime) -> RunnerRegistryView:
+def registry_view(
+    liveness: RunnerLiveness, *, now: datetime, projects: Mapping[ProjectId, Project]
+) -> RunnerRegistryView:
     """One runner as the operator registry shows it — a never-connected runner included, with
-    no workspace, registration, contact or capabilities until it first registers."""
+    no workspace, registration, contact or capabilities until it first registers. ``projects``
+    holds the projects its served declaration resolved to (:func:`served_projects`)."""
     r = liveness.registration
     return RunnerRegistryView(
         runner_id=r.runner_id,
@@ -151,7 +166,30 @@ def registry_view(liveness: RunnerLiveness, *, now: datetime) -> RunnerRegistryV
         retired_at=_iso_or_none(r.retired_at),
         retired_by=r.retired_by,
         gates=list(r.gates),
+        projects=served_views(r.served, projects),
     )
+
+
+def served_projects(services: TenantServices, served: Iterable[ServedEntry]) -> Mapping[ProjectId, Project]:
+    """The projects the served entries resolved to, in one read."""
+    ids = sorted({ProjectId(e.project_id) for e in served if e.project_id is not None})
+    return services.projects.get_many(ids) if ids else {}
+
+
+def served_views(served: Iterable[ServedEntry], projects: Mapping[ProjectId, Project]) -> list[ServedProjectView]:
+    """Each served entry as declared, with the project it resolved to named by its slug and name as they stand."""
+    views: list[ServedProjectView] = []
+    for entry in served:
+        project = projects.get(ProjectId(entry.project_id)) if entry.project_id is not None else None
+        views.append(
+            ServedProjectView(
+                entry=entry.entry,
+                project_id=entry.project_id,
+                slug=None if project is None else project.slug,
+                name=None if project is None else project.name,
+            )
+        )
+    return views
 
 
 def _iso_or_none(value: datetime | None) -> str | None:
@@ -194,7 +232,7 @@ def _capability_views(r: RunnerRegistration) -> list[RunnerCapabilityWire]:
     ]
 
 
-def _registration(services: HubServices, runner_id: str) -> RunnerRegistration:
+def _registration(services: TenantServices, runner_id: str) -> RunnerRegistration:
     """The runner's loaded registration, 404 on an unknown one."""
     registration = services.registry.get_runner(runner_id)
     if registration is None:
@@ -202,9 +240,18 @@ def _registration(services: HubServices, runner_id: str) -> RunnerRegistration:
     return registration
 
 
-def _reread(services: HubServices, runner_id: str) -> RunnerRegistryView:
+def _reread(services: TenantServices, runner_id: str) -> RunnerRegistryView:
     """The runner read back after a write, so the response reports what the write set."""
-    return registry_view(services.fleet.get_liveness(_registration(services, runner_id)), now=services.clock.now())
+    return _detail(services, _registration(services, runner_id))
+
+
+def _detail(services: TenantServices, registration: RunnerRegistration) -> RunnerRegistryView:
+    """One runner's registry view, its served projects read alongside."""
+    return registry_view(
+        services.fleet.get_liveness(registration),
+        now=services.clock.now(),
+        projects=served_projects(services, registration.served),
+    )
 
 
 @router.post(
@@ -214,13 +261,18 @@ def _reread(services: HubServices, runner_id: str) -> RunnerRegistryView:
 )
 def add_runner(
     request: RunnerAddRequest,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.RUNNER_ADD))],
 ) -> RunnerAddResponse:
     """Add a runner under the initial ``name`` — the hub mints its id and bearer token together,
     and the plaintext token is returned once. The runner is never connected until it first
-    registers with that token. Names are not unique: adding a held name adds another runner."""
-    added = services.enrollment.add(request.name, by=identity.username)
+    registers with that token. Names are not unique: adding a held name adds another runner.
+    ``projects`` is what it serves until a registration declares otherwise; an entry that names no
+    project of the tenant is refused 422, and nothing is added."""
+    try:
+        added = services.enrollment.add(request.name, by=identity.username, projects=request.projects)
+    except UnknownServedProject as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     services.events.publish_runner_changed(added.runner_id, kind="added", runner_name=added.name, by=identity.username)
     return RunnerAddResponse(runner_id=added.runner_id, runner_name=added.name, token=added.token)
 
@@ -231,7 +283,7 @@ def add_runner(
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(require(Permission.RUNNER_ADD))],
 )
-def enroll_runner(runner_id: str, services: Annotated[HubServices, Depends(get_services)]) -> RunnerEnrollmentResponse:
+def enroll_runner(runner_id: str, services: Services) -> RunnerEnrollmentResponse:
     """Rotate ``runner_id``'s bearer token — the plaintext is returned once, and the token it
     replaces stops resolving, the one ``add`` minted included.
 
@@ -249,26 +301,24 @@ def enroll_runner(runner_id: str, services: Annotated[HubServices, Depends(get_s
     "/runners", response_model=RunnerRegistryListResponse, dependencies=[Depends(require(Permission.FLEET_VIEW))]
 )
 def list_runners(
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     include_retired: Annotated[bool, Query()] = False,
 ) -> RunnerRegistryListResponse:
     """The fleet registry — every added runner, oldest first, with its connection condition and
     paused state; a retired runner excluded by default, included and marked when ``include_retired``."""
     now = services.clock.now()
-    return RunnerRegistryListResponse(
-        runners=[
-            registry_view(item, now=now) for item in services.fleet.list_with_liveness(include_retired=include_retired)
-        ]
-    )
+    listed = services.fleet.list_with_liveness(include_retired=include_retired)
+    projects = served_projects(services, (e for item in listed for e in item.registration.served))
+    return RunnerRegistryListResponse(runners=[registry_view(item, now=now, projects=projects) for item in listed])
 
 
 @router.get(
     "/runners/{runner_id}", response_model=RunnerRegistryView, dependencies=[Depends(require(Permission.FLEET_VIEW))]
 )
-def get_runner(runner_id: str, services: Annotated[HubServices, Depends(get_services)]) -> RunnerRegistryView:
+def get_runner(runner_id: str, services: Services) -> RunnerRegistryView:
     """One runner's connection condition and paused state — the operator's detail read,
     symmetric with the list. 404 on unknown."""
-    return registry_view(services.fleet.get_liveness(_registration(services, runner_id)), now=services.clock.now())
+    return _detail(services, _registration(services, runner_id))
 
 
 @router.post(
@@ -276,9 +326,7 @@ def get_runner(runner_id: str, services: Annotated[HubServices, Depends(get_serv
     response_model=RunnerRegistryView,
     dependencies=[Depends(require(Permission.RUNNER_PAUSE))],
 )
-def pause_runner(
-    runner_id: str, request: RunnerPauseRequest, services: Annotated[HubServices, Depends(get_services)]
-) -> RunnerRegistryView:
+def pause_runner(runner_id: str, request: RunnerPauseRequest, services: Services) -> RunnerRegistryView:
     """Set a runner's pause brake — no new claims; in-flight chunks run on."""
     return Paused(services, runner_id, request.by).set()
 
@@ -288,9 +336,7 @@ def pause_runner(
     response_model=RunnerRegistryView,
     dependencies=[Depends(require(Permission.RUNNER_PAUSE))],
 )
-def resume_runner(
-    runner_id: str, request: RunnerPauseRequest, services: Annotated[HubServices, Depends(get_services)]
-) -> RunnerRegistryView:
+def resume_runner(runner_id: str, request: RunnerPauseRequest, services: Services) -> RunnerRegistryView:
     """Clear a runner's pause brake — it resumes claiming on its next pull."""
     return Resumed(services, runner_id, request.by).set()
 
@@ -300,9 +346,7 @@ def resume_runner(
     response_model=RunnerRetireResponse,
     dependencies=[Depends(require(Permission.RUNNER_RETIRE))],
 )
-def retire_runner(
-    runner_id: str, request: RunnerRetireRequest, services: Annotated[HubServices, Depends(get_services)]
-) -> RunnerRetireResponse:
+def retire_runner(runner_id: str, request: RunnerRetireRequest, services: Services) -> RunnerRetireResponse:
     """Retire a runner — its token is revoked and its claims and registrations refused;
     409 naming each held chunk unless ``force``, which releases them. Re-running on a
     retired runner re-runs the release pass."""
@@ -336,9 +380,7 @@ def retire_runner(
     response_model=RunnerRegistryView,
     dependencies=[Depends(require(Permission.RUNNER_RETIRE))],
 )
-def reinstate_runner(
-    runner_id: str, request: RunnerLifecycleRequest, services: Annotated[HubServices, Depends(get_services)]
-) -> RunnerRegistryView:
+def reinstate_runner(runner_id: str, request: RunnerLifecycleRequest, services: Services) -> RunnerRegistryView:
     """Reinstate a retired runner — it stays unenrolled until enrolled afresh; 409 when not retired."""
     registration = _registration(services, runner_id)
     try:
@@ -362,7 +404,7 @@ def reinstate_runner(
     dependencies=[Depends(require(Permission.RUNNER_RETIRE))],
 )
 def revoke_runner_token(
-    runner_id: str, request: RunnerLifecycleRequest, services: Annotated[HubServices, Depends(get_services)]
+    runner_id: str, request: RunnerLifecycleRequest, services: Services
 ) -> RunnerTokenRevocationResponse:
     """Revoke a runner's token — it stays added and must be re-enrolled; 409 when unenrolled."""
     registration = _registration(services, runner_id)

@@ -388,8 +388,9 @@ def test_ingest_batch_frame_sequence_matches_per_fact_publish(tmp_path: Path) ->
 def test_delete_routes_degrade_branch_query_count_is_unaffected(tmp_path: Path) -> None:
     """``DELETE /api/chunks/{id}``'s degrade branch (the gone-chunk read ``ChunkFrameState``
     skips ``from_graph``/route reads for) issues a pinned statement count, including the row
-    lock ``DeleteService`` takes first inside its own write transaction and its fresh
-    re-read of the chunk under that lock (``bzh:store-exclusive-write``)."""
+    lock ``DeleteService`` takes first inside its own write transaction, that transaction's
+    open-tenant check, and its fresh re-read of the chunk under that lock
+    (``bzh:store-exclusive-write``)."""
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [{"source": "default", "ref": "del"}], promote=False)
 
@@ -397,7 +398,7 @@ def test_delete_routes_degrade_branch_query_count_is_unaffected(tmp_path: Path) 
         resp = hub.client.request("DELETE", f"/api/chunks/{chunk_id}", json={})
         assert resp.status_code == 202, resp.text
 
-    assert count_queries(hub.engine, call) == 70
+    assert count_queries(hub.engine, call) == 71
 
 
 def test_before_many_snapshots_carry_prev_status_only_and_read_fewer_statements(tmp_path: Path) -> None:

@@ -25,6 +25,7 @@ async function render(
     fleetStale: boolean;
     gates: string[];
     identity: Pick<runnerApi.RunnerStatusView, 'runner_id' | 'runner_name'>;
+    verdict: runnerApi.IdentityVerdictView;
   }> = {},
 ) {
   await TestBed.configureTestingModule({
@@ -32,7 +33,12 @@ async function render(
     providers: [provideZonelessChangeDetection()],
   }).compileComponents();
   const fixture = TestBed.createComponent(LocalInfoView);
-  fixture.componentRef.setInput('view', { ...RUNNER_STATUS, ...overrides.identity, gates: overrides.gates ?? [] });
+  fixture.componentRef.setInput('view', {
+    ...RUNNER_STATUS,
+    ...overrides.identity,
+    gates: overrides.gates ?? [],
+    identity: overrides.verdict ?? null,
+  });
   fixture.componentRef.setInput('lastFlushLabel', '-30s');
   fixture.componentRef.setInput('lastTickLabel', '-15s');
   if (overrides.fleet !== undefined) fixture.componentRef.setInput('fleet', overrides.fleet);
@@ -69,6 +75,41 @@ describe('LocalInfoView', () => {
     expect(id.textContent).toBe('rn_01KXKVVF1J3D6H6VYZ3XYNABF3');
     expect(id.getAttribute('title')).toBe('rn_01KXKVVF1J3D6H6VYZ3XYNABF3');
     expect(getComputedStyle(id).whiteSpace).toBe('nowrap');
+  });
+
+  it('names both runners and the reset command while its token names another runner', async () => {
+    const { el } = await render({
+      verdict: {
+        state: 'mismatched',
+        store_runner_id: 'rn_store',
+        token_runner_id: 'rn_other',
+        checked_at: '2026-07-16T11:59:45.000Z',
+        reset_command: 'blizzard runner store reset /runner',
+      },
+    });
+
+    const row = el.querySelector('[data-testid="runner-verdict"]')!;
+    expect(row.textContent).toContain('REFUSING');
+    expect(row.querySelector('[data-testid="verdict-token"]')?.textContent).toBe('rn_other');
+    expect(row.querySelector('[data-testid="verdict-store"]')?.textContent).toBe('rn_store');
+    expect(row.querySelector('[data-testid="verdict-reset"]')?.textContent).toBe('blizzard runner store reset /runner');
+  });
+
+  it('reads verified once its token resolves to its own runner, and leaves the row out with no verdict', async () => {
+    const matched = await render({
+      verdict: {
+        state: 'matched',
+        store_runner_id: 'rn_store',
+        token_runner_id: 'rn_store',
+        checked_at: '2026-07-16T11:59:45.000Z',
+        reset_command: 'blizzard runner store reset /runner',
+      },
+    });
+    expect(matched.el.querySelector('[data-testid="runner-verdict"]')?.textContent?.trim()).toBe('VERIFIED');
+
+    TestBed.resetTestingModule();
+    const absent = await render();
+    expect(absent.el.querySelector('[data-testid="runner-verdict"]')).toBeNull();
   });
 
   it('shows its configured name as not registered before the first registration', async () => {

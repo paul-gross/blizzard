@@ -12,7 +12,17 @@ import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.hub.domain.chunk.model import ChunkVerb, verb_legal_from
-from tests.support import build_hub, make_ready, pointer_token, report_lease
+from blizzard.hub.domain.config.repositories import RepositoryFields
+from tests.support import (
+    FakeWorkSource,
+    HubHarness,
+    build_hub,
+    create_repositories,
+    fixture_repository,
+    make_ready,
+    pointer_token,
+    report_lease,
+)
 
 pytestmark = pytest.mark.component
 
@@ -70,11 +80,14 @@ _BUILD_ARTIFACT = {
 }
 
 
-def test_detail_carries_the_full_aggregate(tmp_path: Path) -> None:
-    hub = build_hub(tmp_path)
+def _pass_build(
+    hub: HubHarness, artifacts: list[dict[str, str]], pointer: dict[str, str] = _POINTER
+) -> tuple[str, dict[str, str]]:
+    """Ingest ``pointer`` onto the gate graph and pass its build node producing ``artifacts``;
+    the chunk's id and its graph's node ids by name."""
     graph = hub.client.post("/api/graphs", json={"definition_yaml": _GATE_YAML})
     nodes = {n["name"]: n["node_id"] for n in graph.json()["nodes"]}
-    chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
+    chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(pointer)]}).json()["chunk_id"]
     make_ready(hub, chunk_id)
 
     hub.client.post(
@@ -82,16 +95,22 @@ def test_detail_carries_the_full_aggregate(tmp_path: Path) -> None:
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e1", "e2"]},
     )
     report_lease(hub, chunk_id, epoch=1, seq=1)
-    hub.client.post(
+    completed = hub.client.post(
         f"/api/fleet/chunks/{chunk_id}/completions",
-        json={
-            "choice": "pass",
-            "epoch": 1,
-            "runner_id": "r1",
-            "from_node_id": nodes["build"],
-            "artifacts": [_BUILD_ARTIFACT],
-        },
+        json={"choice": "pass", "epoch": 1, "runner_id": "r1", "from_node_id": nodes["build"], "artifacts": artifacts},
     )
+    assert completed.status_code == 200, completed.text
+    return chunk_id, nodes
+
+
+def _branch_urls(hub: HubHarness, chunk_id: str) -> dict[str, str | None]:
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    return {art["name"]: art["branch_url"] for art in detail["artifacts"] if art["kind"] == "git_commit"}
+
+
+def test_detail_carries_the_full_aggregate(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id, nodes = _pass_build(hub, [_BUILD_ARTIFACT])
 
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
 
@@ -121,7 +140,7 @@ def test_detail_carries_the_full_aggregate(tmp_path: Path) -> None:
     assert step["choice_name"] == "pass"
 
     # Inline artifact store — the git-commit reference (the hub stores the pointer),
-    # with the forge branch link derived from the chunk's issue-shaped pointer.
+    # with the branch link on the forge of the repository record the commit resolves to.
     assert len(detail["artifacts"]) == 1
     art = detail["artifacts"][0]
     assert art["kind"] == "git_commit"
@@ -130,11 +149,53 @@ def test_detail_carries_the_full_aggregate(tmp_path: Path) -> None:
         "feature/widget",
         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     )
-    assert art["branch_url"] == "http://forge.local/acme/widget/tree/feature/widget"
+    assert art["branch_url"] == "http://forge.fixture/acme/widget/tree/feature/widget"
 
     # The open gate decision with its choices.
     assert detail["decision"]["node_name"] == "approve-gate"
     assert {c["name"] for c in detail["decision"]["choices"]} == {"approve", "reject"}
+
+
+def test_a_tracker_sourced_chunk_links_its_branch_through_the_repository_its_commit_lands_in(
+    tmp_path: Path,
+) -> None:
+    """The work ref's source is a tracker on no forge of the commit's; the link is the linked
+    repository record's own forge, its web origin derived from the record's API base."""
+    hub = build_hub(
+        tmp_path,
+        work_sources={"tracker": FakeWorkSource(name="tracker", repo="corp/tracker")},
+        repositories=[
+            RepositoryFields(
+                forge_api_url="https://ghe.example/api/v3",
+                owner="acme",
+                repo="widget",
+                base_branch="main",
+                secret_name="fixture-forge-token",
+            )
+        ],
+    )
+    chunk_id, _ = _pass_build(hub, [_BUILD_ARTIFACT], pointer={"source": "tracker", "ref": "PROJ-7"})
+
+    assert _branch_urls(hub, chunk_id) == {"acme/widget": "https://ghe.example/acme/widget/tree/feature/widget"}
+
+
+def test_a_commit_in_a_repository_its_project_does_not_link_or_no_record_names_has_no_branch_link(
+    tmp_path: Path,
+) -> None:
+    hub = build_hub(tmp_path)
+    create_repositories(hub.client, [fixture_repository("gadget", "http://forge.fixture", owner="acme")], project=None)
+    commits = [
+        _BUILD_ARTIFACT,
+        {**_BUILD_ARTIFACT, "name": "acme/gadget", "repo": "acme/gadget"},
+        {**_BUILD_ARTIFACT, "name": "acme/unknown", "repo": "acme/unknown"},
+    ]
+    chunk_id, _ = _pass_build(hub, commits)
+
+    assert _branch_urls(hub, chunk_id) == {
+        "acme/widget": "http://forge.fixture/acme/widget/tree/feature/widget",
+        "acme/gadget": None,
+        "acme/unknown": None,
+    }
 
 
 def test_detail_carries_the_pinned_graphs_name_and_created_at(tmp_path: Path) -> None:

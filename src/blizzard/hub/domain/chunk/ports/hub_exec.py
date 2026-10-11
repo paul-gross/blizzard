@@ -1,5 +1,5 @@
 """The chunk-hub-exec repository seam — the generic hub command node's
-(#65) fleet-wide serialization slot and its transition/poll bookkeeping."""
+per-tenant serialization slot and its transition/poll bookkeeping."""
 
 from __future__ import annotations
 
@@ -14,8 +14,8 @@ class IReadChunkHubExecRepository(Protocol):
     """Read-only chunk-hub-exec access."""
 
     def count_live_hub_exec_slots(self) -> int:
-        """The number of currently-live hub-execution slots — the invariant checker's
-        ``hub:one-live-exec-slot`` probe (should never exceed 1)."""
+        """The number of this tenant's currently-live hub-execution slots — the invariant
+        checker's ``hub:one-live-exec-slot`` probe (should never exceed 1)."""
         ...
 
 
@@ -23,7 +23,7 @@ class IWriteChunkHubExecRepository(IReadChunkHubExecRepository, Protocol):
     """Read-write chunk-hub-exec access."""
 
     def acquire_hub_exec_slot(self, chunk_id: str, *, node_id: str, at: datetime, stale_after: timedelta) -> str | None:
-        """Acquire the fleet-wide hub-execution serialization slot, or ``None`` if busy.
+        """Acquire this tenant's hub-execution serialization slot, or ``None`` if busy.
         A FACT-based lease (``bzh:facts-not-status``), not an in-process lock: insert-if-
         none-live in one transaction. Not reentrant: a live slot defers every request, the
         holder chunk's own included, unless older than ``stale_after``, when it is reclaimed."""
@@ -34,8 +34,8 @@ class IWriteChunkHubExecRepository(IReadChunkHubExecRepository, Protocol):
         ...
 
     def release_live_hub_exec_slots(self, *, at: datetime) -> int:
-        """Release every live hub-execution slot and return how many — the boot-time sweep of
-        a dead process's runs, sound only while one hub process serves the store."""
+        """Release every live hub-execution slot of this tenant and return how many — the
+        boot-time sweep of a dead process's runs, sound only while one hub process serves the store."""
         ...
 
     def record_hub_step_transition(

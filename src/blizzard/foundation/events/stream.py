@@ -8,12 +8,12 @@ out the real interval. Names no daemon's own vocabulary."""
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 
 from fastapi import Request
 
-from blizzard.foundation.events.broker import EventBroker
+from blizzard.foundation.events.broker import Event, EventBroker
 from blizzard.foundation.roles import domain_model
 
 #: Keepalive cadence for an idle connection — shorter than typical proxy idle timeouts.
@@ -41,7 +41,9 @@ class Cursor:
 class Stream:
     """One subscriber's live connection — its broker, its request, its resume cursor,
     its daemon's reserved open-of-stream comment, and (optionally) the shutdown signal
-    and keepalive interval it races its live wait against."""
+    and keepalive interval it races its live wait against, the predicate selecting which
+    events it is sent, and the principal it is opened for. Without ``admits`` every event is
+    sent."""
 
     broker: EventBroker | None
     request: Request
@@ -49,12 +51,18 @@ class Stream:
     reserved_comment: str
     shutdown: asyncio.Event | None = None
     keepalive_seconds: float = DEFAULT_KEEPALIVE_SECONDS
+    #: Whether an event is sent to this subscriber — awaited on the event loop, so it never reads a store
+    #: there. Applied alike to the replay tail and to live events; a refused event is skipped.
+    admits: Callable[[Event], Awaitable[bool]] | None = None
+    #: The principal the subscription is opened for, so its broker can end that principal's streams.
+    owner: str | None = None
 
     async def frames(self) -> AsyncIterator[bytes]:
-        """Yield the reserved comment, the buffered replay tail, then live events forever. Subscribing
-        *before* reading the replay tail means an event published in the window between the two is caught by
-        one side or the other; dedup by monotonic id makes the seam exact. Each live-wait races ``shutdown``
-        against the queue read, so the generator returns promptly instead of on its next keepalive wake. It
+        """Yield the reserved comment, the buffered replay tail, then live events until the broker closes.
+        Subscribing *before* reading the replay tail means an event published in the window between the two is
+        caught by one side or the other; dedup by monotonic id makes the seam exact. Each live-wait races
+        ``shutdown`` and the broker's close against the queue read, so the generator returns promptly instead
+        of on its next keepalive wake — after a close, once it has sent the events already queued. It
         unsubscribes on any exit."""
         broker = self.broker
         if broker is None:
@@ -63,7 +71,7 @@ class Stream:
             return
 
         shutdown = self.shutdown if self.shutdown is not None else asyncio.Event()
-        sub = broker.subscribe()
+        sub = broker.subscribe(self.owner)
         # A cursor above this broker's high-water mark is a prior instance's id — degrade it to 0
         # (``Cursor.of``'s own fallback) for one value shared by the replay and the dedup below.
         latest = broker.latest_id()
@@ -72,30 +80,51 @@ class Stream:
         try:
             yield self.reserved_comment.encode()
             for event in broker.replay_since(resume_from):
-                yield event.framed().encode()
+                if await self._admits(event):
+                    yield event.framed().encode()
                 last_sent = event.id
             while True:
                 if await self.request.is_disconnected():
                     return
                 get_task = asyncio.ensure_future(sub.queue.get())
                 shutdown_task = asyncio.ensure_future(shutdown.wait())
+                ended_task = asyncio.ensure_future(sub.ended.wait())
+                tasks = (get_task, shutdown_task, ended_task)
                 try:
                     done, _ = await asyncio.wait(
-                        {get_task, shutdown_task}, timeout=self.keepalive_seconds, return_when=asyncio.FIRST_COMPLETED
+                        set(tasks), timeout=self.keepalive_seconds, return_when=asyncio.FIRST_COMPLETED
                     )
                 finally:
-                    for task in (get_task, shutdown_task):
+                    for task in tasks:
                         if not task.done():
                             task.cancel()
                 if shutdown_task in done:
                     return
-                if get_task not in done:
+                if not done:
                     yield b": keepalive\n\n"
                     continue
-                event = get_task.result()
-                if event.id <= last_sent:
-                    continue  # already emitted in the replay tail (dedup at the seam)
-                yield event.framed().encode()
-                last_sent = event.id
+                events = [get_task.result()] if get_task in done else []
+                ended = ended_task in done
+                if ended:
+                    events.extend(_queued(sub.queue))
+                for event in events:
+                    if event.id <= last_sent:
+                        continue  # already emitted in the replay tail (dedup at the seam)
+                    if await self._admits(event):
+                        yield event.framed().encode()
+                    last_sent = event.id
+                if ended:
+                    return
         finally:
             broker.unsubscribe(sub)
+
+    async def _admits(self, event: Event) -> bool:
+        return True if self.admits is None else await self.admits(event)
+
+
+def _queued(queue: asyncio.Queue[Event]) -> list[Event]:
+    """Everything ``queue`` holds now, without waiting."""
+    events: list[Event] = []
+    while not queue.empty():
+        events.append(queue.get_nowait())
+    return events

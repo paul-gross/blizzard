@@ -17,7 +17,7 @@ from click.testing import CliRunner
 from blizzard.auth_core import Role
 from blizzard.hub.api.marker_auth import _MARKER_TOKEN_HEADER
 from blizzard.hub.cli import hub as hub_group
-from tests.support import build_hub, pointer_token, seed_session, seed_user
+from tests.support import build_hub, default_tenant, pointer_token, seed_session, seed_user
 
 _CALLBACK_URL = "http://callback/hub-markers"
 _MARKER_TOKEN = "test-marker-token"
@@ -100,7 +100,9 @@ def test_record_marker_is_accepted_by_a_real_oauth_hub(tmp_path: Path, monkeypat
     assert resp.status_code == 201, resp.text
     chunk_id = resp.json()["chunk_id"]
     node_id, epoch = "nd_merge", 1
-    token = hub.services.marker_authority.issue(chunk_id, node_id=node_id, epoch=epoch)
+    token = hub.hub_services.marker_authority.issue(
+        chunk_id, node_id=node_id, epoch=epoch, tenant=default_tenant(hub.engine)
+    )
     callback_url = f"/api/chunks/{chunk_id}/hub-markers?node_id={node_id}&epoch={epoch}"
     _set_env(monkeypatch, callback_url=callback_url, token=token)
 

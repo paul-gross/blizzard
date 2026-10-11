@@ -4,15 +4,17 @@ dataset's read-only projection of the derivation markers, their events and the d
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
+from functools import total_ordering
 from typing import TYPE_CHECKING, Protocol
 
-from blizzard.foundation.event_log import EventLogKind
+from blizzard.foundation.event_log import HubEventKind
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.observability.analytics.events import DerivationMarker, DropFact
 from blizzard.hub.domain.observability.egress.rows import AttributedUsage
 from blizzard.hub.domain.observability.tracing.cursor import CursorKey
+from blizzard.hub.tenancy import TenantId
 
 if TYPE_CHECKING:
     from blizzard.hub.domain.observability.egress.event_rows import EventDerivation
@@ -28,14 +30,27 @@ class UsagePosition:
 
 
 @domain_model
-@dataclass(frozen=True, order=True)
+@total_ordering
+@dataclass(frozen=True)
 class EventsPosition:
     """A position in the ``events`` dataset's total order: the source's time (``derived_at`` or ``dropped_at``),
-    then the segment, then the extractor version, empty for a drop so it sorts before any derivation beside it."""
+    then the segment, then the extractor version, empty for a drop so it sorts before any derivation beside it,
+    then the tenant — segment ids are runner-minted, so two tenants may each hold an item at one time, segment
+    and version.
+
+    A position with no tenant stands past every tenant's item at its own time, segment and version: where a
+    reset starts, and what a position recorded without its tenant resumes from."""
 
     at: datetime
     segment_id: str = ""
     extractor_version: str = ""
+    tenant: TenantId | None = None
+
+    def __lt__(self, other: EventsPosition) -> bool:
+        return self._order() < other._order()
+
+    def _order(self) -> tuple[datetime, str, str, bool, str]:
+        return (self.at, self.segment_id, self.extractor_version, self.tenant is None, self.tenant or "")
 
 
 @domain_model
@@ -94,8 +109,16 @@ class IReadEgress(Protocol):
         """Up to ``limit`` usage facts past ``position`` and recorded at or before ``until``, in position order."""
         ...
 
-    def newest_egress_latch(self) -> EventLogKind | None:
+    def newest_egress_latch(self) -> HubEventKind | None:
         """The kind of the newest ``egress-write-failed`` or ``egress-write-recovered`` event, or ``None``."""
+        ...
+
+
+class IReadUsageCorpus(Protocol):
+    """The egress sweep's usage pages, read across every open tenant."""
+
+    def usage_after(self, position: UsagePosition, until: datetime, limit: int) -> Sequence[AttributedUsage]:
+        """As :meth:`IReadEgress.usage_after`, over every open tenant's usage facts, each tagged with its tenant."""
         ...
 
 
@@ -110,6 +133,9 @@ class EpochKey:
 
     chunk_id: str
     epoch: int
+    #: The tenant the row was read in — carried beside it, not part of its identity: equality, order and
+    #: hashing stay on the fields above. ``None`` where no tenant was read.
+    tenant: TenantId | None = field(default=None, compare=False)
 
 
 class IReadEgressEvents(Protocol):

@@ -9,15 +9,15 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import Connection, insert, select
+from sqlalchemy import Connection
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.garden_proposals import GardenProposalClosureKind, GardenProposalItemOutcome
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.garden.proposals.closure import GardenProposalClosure, IWriteGardenProposalClosureRepository
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.schema import garden_proposal_closures, garden_proposals
+from blizzard.hub.store.scoped import ScopedConnections, statements_of
 
 
 def insert_garden_proposal_closure_row(
@@ -38,16 +38,21 @@ def insert_garden_proposal_closure_row(
     Locks the proposal's own row first with the same no-op ``UPDATE``
     ``GardenProposalStore._is_closed`` uses, so this closing write and a concurrent
     edit/attach/detach contend on the same row instead of racing across two tables."""
+    stmts = statements_of(conn)
     conn.execute(
-        garden_proposals.update().where(garden_proposals.c.proposal_id == proposal_id).values(proposal_id=proposal_id)
+        stmts.update(garden_proposals)
+        .where(garden_proposals.c.proposal_id == proposal_id)
+        .values(proposal_id=proposal_id)
     )
     already = conn.execute(
-        select(garden_proposal_closures.c.id).where(garden_proposal_closures.c.proposal_id == proposal_id)
+        stmts.select(garden_proposal_closures, garden_proposal_closures.c.id).where(
+            garden_proposal_closures.c.proposal_id == proposal_id
+        )
     ).first()
     if already is not None:
         return False
     conn.execute(
-        insert(garden_proposal_closures).values(
+        stmts.insert(garden_proposal_closures).values(
             proposal_id=proposal_id,
             closure=closure.value,
             reason=reason,
@@ -65,13 +70,15 @@ class GardenProposalClosureStore:
     """Read-write garden-proposal-closure adapter over the hub store engine — the pass
     and accept-declining-to-mint writes, plus every closure read."""
 
-    def __init__(self, store: HubStoreConnections) -> None:
+    def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
     def get(self, proposal_id: str) -> GardenProposalClosure | None:
         with self._store.read("get") as conn:
             row = conn.execute(
-                select(garden_proposal_closures).where(garden_proposal_closures.c.proposal_id == proposal_id)
+                self._store.select(garden_proposal_closures).where(
+                    garden_proposal_closures.c.proposal_id == proposal_id
+                )
             ).one_or_none()
         return self._of(row) if row is not None else None
 
@@ -84,18 +91,20 @@ class GardenProposalClosureStore:
         with self._store.read("get_many") as conn:
             for batch in id_batches(proposal_ids):
                 rows = conn.execute(
-                    select(garden_proposal_closures).where(garden_proposal_closures.c.proposal_id.in_(batch))
+                    self._store.select(garden_proposal_closures).where(
+                        garden_proposal_closures.c.proposal_id.in_(batch)
+                    )
                 ).all()
                 result.update({row.proposal_id: self._of(row) for row in rows})
         return result
 
     def find_by_item(self, source: str, ref: str) -> GardenProposalClosure | None:
-        """Filtered on `ix_garden_proposal_closures_source_ref` — `source`/`ref` are
+        """Filtered on `ix_garden_proposal_closures_tenant_source_ref` — `source`/`ref` are
         null on a pass or a declined accept, so an unminted item never joins a row here
         regardless of what a caller passes."""
         with self._store.read("find_by_item") as conn:
             row = conn.execute(
-                select(garden_proposal_closures).where(
+                self._store.select(garden_proposal_closures).where(
                     garden_proposal_closures.c.source == source, garden_proposal_closures.c.ref == ref
                 )
             ).one_or_none()

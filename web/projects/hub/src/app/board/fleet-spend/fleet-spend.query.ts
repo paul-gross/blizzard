@@ -1,6 +1,13 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import { fleetSpendApiSpendGet, type FleetSpendView, LIVE_COVERED_POLL_BACKSTOP_MS, hubFleetSpendKey } from 'fleet/shell';
+import {
+  fleetSpendApiSpendGet,
+  type FleetSpendView,
+  LIVE_COVERED_POLL_BACKSTOP_MS,
+  hubFleetSpendKey,
+  injectProjectFilter,
+  lensedKey,
+} from 'fleet/shell';
 
 /**
  * Hub `GET /api/spend?since=&until=` read — the fleet-wide usage/cost total over a
@@ -10,21 +17,32 @@ import { fleetSpendApiSpendGet, type FleetSpendView, LIVE_COVERED_POLL_BACKSTOP_
  * both ride in the query key so a new window is its own cache entry — `until` included,
  * or two windows sharing a `since` but differing in `until` would collide on one entry.
  * `until` is omitted from the request when the accessor returns `undefined` — an
- * open-ended tail.
+ * open-ended tail. Under a project lens the read sends `?project=` and keys on it, so the total is the lensed project's
+ * own spend. `enabled` holds the read back while it is false — the app root reads it before the tenant it is
+ * scoped to may be settled.
  */
-export function injectHubFleetSpendQuery(since: () => string, until: () => string | undefined = () => undefined) {
-  return injectQuery(() => ({
-    queryKey: [...hubFleetSpendKey, since(), until()],
-    queryFn: async (): Promise<FleetSpendView> => {
-      const { data, error } = await fleetSpendApiSpendGet({
-        query: { since: since(), until: until() },
-        throwOnError: false,
-      });
-      if (error) throw error;
-      return data as FleetSpendView;
-    },
-    // Covered by chunk-changed (EVENT_INVALIDATION_REGISTRY, sse/fleet-live.ts) — usage
-    // rides the same fact a chunk-changed frame reports. See LIVE_COVERED_POLL_BACKSTOP_MS.
-    refetchInterval: LIVE_COVERED_POLL_BACKSTOP_MS,
-  }));
+export function injectHubFleetSpendQuery(
+  since: () => string,
+  until: () => string | undefined = () => undefined,
+  enabled: () => boolean = () => true,
+) {
+  const projectFilter = injectProjectFilter();
+  return injectQuery(() => {
+    const project = projectFilter();
+    return {
+      queryKey: lensedKey([...hubFleetSpendKey, since(), until()], project),
+      enabled: enabled(),
+      queryFn: async (): Promise<FleetSpendView> => {
+        const { data, error } = await fleetSpendApiSpendGet({
+          query: { since: since(), until: until(), project: project ?? undefined },
+          throwOnError: false,
+        });
+        if (error) throw error;
+        return data as FleetSpendView;
+      },
+      // Covered by chunk-changed (EVENT_INVALIDATION_REGISTRY, sse/fleet-live.ts) — usage
+      // rides the same fact a chunk-changed frame reports. See LIVE_COVERED_POLL_BACKSTOP_MS.
+      refetchInterval: LIVE_COVERED_POLL_BACKSTOP_MS,
+    };
+  });
 }

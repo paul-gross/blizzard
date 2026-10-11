@@ -3,6 +3,7 @@ import { RouterLink } from '@angular/router';
 
 import { compactRef, type hubApi, KitAsyncState, type KitAsyncStateValue, KitBadge, KitSelectRow, FleetWhen, type Tone } from 'fleet';
 import { findingSeverityTone, findingStateTone, isFindingExited, isFindingGoneFlagged } from './finding-state';
+import { LensLink } from 'fleet/shell';
 
 /** One row of the findings triage bucket list (`hub finding list`'s own read),
  * pared to what a 320px master-column row actually shows — the summary as the
@@ -93,7 +94,7 @@ export type FindingTriageVerb = 'resolve' | 'confirm-gone' | 'wont-fix' | 'not-a
 @Component({
   selector: 'app-finding-list',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitBadge, KitSelectRow, FleetWhen, RouterLink],
+  imports: [KitAsyncState, KitBadge, KitSelectRow, FleetWhen, RouterLink, LensLink],
   templateUrl: './finding-list.html',
   styleUrl: './finding-list.css',
 })

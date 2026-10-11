@@ -16,6 +16,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
+from tests.support import hub_scoped_engine
 
 pytestmark = pytest.mark.component
 
@@ -33,7 +34,7 @@ def test_upgrade_creates_close_intents_and_backfills_the_source_agnostic_set(tmp
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
 
     runner.upgrade(_BEFORE)
-    engine = create_engine_from_url(db_url)
+    engine = hub_scoped_engine(create_engine_from_url(db_url))
     with engine.begin() as conn:
         conn.execute(
             insert(s.graphs).values(graph_id="gr_1", name="g", entry_node_id="nd_1", definition_yaml="", created_at=_T0)
@@ -131,6 +132,6 @@ def test_downgrade_drops_close_intents(tmp_path: Path) -> None:
     runner.upgrade("head")
     runner.downgrade(_BEFORE)
 
-    engine = create_engine_from_url(db_url)
+    engine = hub_scoped_engine(create_engine_from_url(db_url))
     with engine.connect() as conn:
         assert not conn.dialect.has_table(conn, "close_intents")

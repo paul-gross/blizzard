@@ -13,10 +13,12 @@ from sqlalchemy import (
     Column,
     Float,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     LargeBinary,
     MetaData,
+    PrimaryKeyConstraint,
     String,
     Table,
     Text,
@@ -27,23 +29,82 @@ from blizzard.foundation.store.utc import UtcDateTime
 
 metadata = MetaData()
 
+# --- Hub-unique columns ----------------------------------------------------------
+# ``info={"hub_unique": True}`` marks a column whose value is unique across the whole hub, so a
+# key holding it needs no ``tenant_id``: a hub-minted id, or a runner id the hub minted. An
+# autoincrement surrogate is hub-unique without a mark, and so is a foreign key onto a marked column.
+
+# --- The global list -----------------------------------------------------------
+# Every table that carries no tenant key, each with why it is global. Every other table is
+# tenant-owned. A name here may precede the revision that creates its table.
+
+GLOBAL_TABLES: frozenset[str] = frozenset(
+    {
+        "tenants",  # the boundary itself
+        "tenant_deletions",  # the boundary itself: the audit of a teardown outlives its tenant
+        "users",  # identity is resolved before a tenant is
+        "identities",  # identity is resolved before a tenant is
+        "sessions",  # identity is resolved before a tenant is
+        "auth_state",  # identity is resolved before a tenant is
+        "auth_facts",  # the sign-in and security log of hub-level identities
+        "superuser_bootstrap",  # the first claim of the hub administrator role
+        "hub_admin_facts",  # who holds the hub administrator role, the role above every tenant
+        "config_import_facts",  # the hub-level carry-over of a file-configured hub, read at startup
+        "membership_facts",  # carries tenant_id as data, but is read hub-wide to list a person's tenants
+        "hub_event_log",  # occurrences of the hub's own machinery, which concern no tenant
+        "trace_cursor",  # trace export is hub configuration with one destination
+        "egress_cursor",  # fact egress is hub configuration with one destination
+    }
+)
+
+# --- The tenant boundary -------------------------------------------------------
+# A tenant is named by its id alone; ``name`` is a display label, unique nowhere and never
+# resolved. ``created_by`` is the creating user's id, or ``migration`` for the carried-over tenant.
+
+tenants = Table(
+    "tenants",
+    metadata,
+    Column("tenant_id", String, primary_key=True),  # ten_<ulid>
+    Column("name", String, nullable=False),
+    Column("created_at", UtcDateTime, nullable=False),
+    Column("created_by", String, nullable=False),
+)
+
+# The audit of one tenant's teardown, written when the tenant closes (``closed_at``); ``rows_removed``
+# counts up as the drain removes rows, and ``deleted_at`` is recorded when the deletion completes —
+# unset while it is underway. One per tenant: the row a drain locks, and the answer to a repeated
+# delete. It outlives the tenant it names, so ``tenant_id`` carries no foreign key.
+tenant_deletions = Table(
+    "tenant_deletions",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("tenant_id", String, nullable=False),
+    Column("name", String, nullable=False),
+    Column("closed_at", UtcDateTime, nullable=False),
+    Column("deleted_at", UtcDateTime, nullable=True),
+    Column("deleted_by", String, nullable=False),
+    Column("rows_removed", Integer, nullable=True),
+    UniqueConstraint("tenant_id", name="uq_tenant_deletions_tenant_id"),
+)
+
 # --- Workflow graphs (immutable definitions, reified) -------------------------
 
 graphs = Table(
     "graphs",
     metadata,
-    Column("graph_id", String, primary_key=True),  # gr_<ulid>
+    Column("graph_id", String, primary_key=True, info={"hub_unique": True}),  # gr_<ulid>
     Column("name", String, nullable=False),
     Column("entry_node_id", String, nullable=False),
     Column("definition_yaml", Text, nullable=False),  # the inlined source, for audit/re-export
     Column("created_at", UtcDateTime, nullable=False),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_graphs_tenant_id"), nullable=False),
 )
-Index("ix_graphs_name", graphs.c.name)
+Index("ix_graphs_tenant_name", graphs.c.tenant_id, graphs.c.name)
 
 graph_nodes = Table(
     "graph_nodes",
     metadata,
-    Column("node_id", String, primary_key=True),  # nd_<ulid>
+    Column("node_id", String, primary_key=True, info={"hub_unique": True}),  # nd_<ulid>
     Column("graph_id", String, ForeignKey("graphs.graph_id"), nullable=False),
     Column("name", String, nullable=False),
     Column("executor", String, nullable=False),  # runner | hub
@@ -67,34 +128,37 @@ graph_nodes = Table(
     # Pending-poll cadence (#66); null uses the executor defaults.
     Column("poll_interval_seconds", Integer, nullable=True),
     Column("poll_timeout_seconds", Integer, nullable=True),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_graph_nodes_tenant_id"), nullable=False),
     # Null/false disallows proposed work items.
 )
-Index("ix_graph_nodes_graph_id", graph_nodes.c.graph_id)
+Index("ix_graph_nodes_tenant_graph_id", graph_nodes.c.tenant_id, graph_nodes.c.graph_id)
 
 graph_choices = Table(
     "graph_choices",
     metadata,
-    Column("choice_id", String, primary_key=True),  # cho_<ulid>
+    Column("choice_id", String, primary_key=True, info={"hub_unique": True}),  # cho_<ulid>
     Column("node_id", String, ForeignKey("graph_nodes.node_id"), nullable=False),
     Column("name", String, nullable=False),
     Column("description", Text, nullable=False),
     # Null/false is ungated (#114).
     Column("requires_checks", Boolean, nullable=True),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_graph_choices_tenant_id"), nullable=False),
 )
-Index("ix_graph_choices_node_id", graph_choices.c.node_id)
+Index("ix_graph_choices_tenant_node_id", graph_choices.c.tenant_id, graph_choices.c.node_id)
 
 graph_edges = Table(
     "graph_edges",
     metadata,
-    Column("edge_id", String, primary_key=True),
+    Column("edge_id", String, primary_key=True, info={"hub_unique": True}),
     Column("from_node_id", String, ForeignKey("graph_nodes.node_id"), nullable=False),
     Column("choice_id", String, ForeignKey("graph_choices.choice_id"), nullable=False),
     Column("to_node_name", String, nullable=False),  # a node name, the reserved 'done', or 'graph:<name>' (#90)
     Column("prompt_addendum", Text, nullable=True),  # inlined arrival context
     # Cross-graph model override (#90); null keeps the current model.
     Column("to_graph_model", String, nullable=True),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_graph_edges_tenant_id"), nullable=False),
 )
-Index("ix_graph_edges_from_node_id", graph_edges.c.from_node_id)
+Index("ix_graph_edges_tenant_from_node_id", graph_edges.c.tenant_id, graph_edges.c.from_node_id)
 
 # Named sessions keyed by `(graph_id, name)`.
 graph_sessions = Table(
@@ -114,7 +178,9 @@ graph_sessions = Table(
     Column("compaction_window", String, nullable=True),
     # Ordered JSON harness preferences; null is unconstrained.
     Column("harnesses", Text, nullable=True),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_graph_sessions_tenant_id"), nullable=False),
 )
+Index("ix_graph_sessions_tenant_graph_id", graph_sessions.c.tenant_id, graph_sessions.c.graph_id)
 
 # Graph artifacts keyed by `(graph_id, name)`.
 graph_artifacts = Table(
@@ -124,7 +190,9 @@ graph_artifacts = Table(
     Column("name", String, primary_key=True),
     Column("ordinal", Integer, nullable=False),  # authored `artifacts:` position — every read orders by it
     Column("content", Text, nullable=False),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_graph_artifacts_tenant_id"), nullable=False),
 )
+Index("ix_graph_artifacts_tenant_graph_id", graph_artifacts.c.tenant_id, graph_artifacts.c.graph_id)
 
 # --- Graph lifecycle facts (graph.retired / graph.enabled) -------------------
 
@@ -136,8 +204,11 @@ graph_lifecycle_facts = Table(
     Column("retired", Boolean, nullable=False),  # retired derives from the newest fact
     Column("set_at", UtcDateTime, nullable=False),
     Column("set_by", String, nullable=False),  # who flipped it — recorded on the fact
+    Column(
+        "tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_graph_lifecycle_facts_tenant_id"), nullable=False
+    ),
 )
-Index("ix_graph_lifecycle_facts_graph_id", graph_lifecycle_facts.c.graph_id)
+Index("ix_graph_lifecycle_facts_tenant_graph_id", graph_lifecycle_facts.c.tenant_id, graph_lifecycle_facts.c.graph_id)
 
 # Follow-latest policy: newest fact wins; null inherits the hub setting.
 graph_policy_facts = Table(
@@ -148,36 +219,85 @@ graph_policy_facts = Table(
     Column("follow_latest", Boolean, nullable=True),
     Column("set_at", UtcDateTime, nullable=False),
     Column("set_by", String, nullable=False),
+    Column(
+        "tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_graph_policy_facts_tenant_id"), nullable=False
+    ),
+)
+Index("ix_graph_policy_facts_tenant_id", graph_policy_facts.c.tenant_id)
+
+# --- Projects (configured records inside a tenant; a hub-minted id, a slug named per tenant) ---
+# A project is named by its id everywhere; ``slug`` is the handle people type, unique within the
+# tenant and editable, and ``name`` a display label, unique nowhere and never resolved.
+
+projects = Table(
+    "projects",
+    metadata,
+    Column("project_id", String, nullable=False, info={"hub_unique": True}),  # proj_<ulid>
+    Column("slug", String, nullable=False),
+    Column("name", String, nullable=False),
+    Column("description", Text, nullable=False),
+    Column("revision", Integer, nullable=False),
+    Column("created_at", UtcDateTime, nullable=False),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_projects_tenant_id"), nullable=False),
+    PrimaryKeyConstraint("project_id", name="pk_projects"),
+    UniqueConstraint("tenant_id", "slug", name="uq_projects_tenant_slug"),
 )
 
-# --- Scopes (operator-authored, slug-keyed buckets) ---
+# A slug a project moved away from; at most one project holds a given former slug.
+project_former_slugs = Table(
+    "project_former_slugs",
+    metadata,
+    Column("slug", String, nullable=False),
+    Column(
+        "project_id", String, ForeignKey("projects.project_id", name="fk_project_former_slugs_projects"), nullable=False
+    ),
+    Column("left_at", UtcDateTime, nullable=False),
+    Column(
+        "tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_project_former_slugs_tenant_id"), nullable=False
+    ),
+    PrimaryKeyConstraint("tenant_id", "slug", name="pk_project_former_slugs"),
+)
+
+# --- Scopes (operator-authored buckets: a surrogate id, a slug named per project) ---
 
 scopes = Table(
     "scopes",
     metadata,
-    Column("slug", String, primary_key=True),
+    Column("scope_id", String, nullable=False, info={"hub_unique": True}),  # scp_<ulid>
+    Column("slug", String, nullable=False),
     Column("description", Text, nullable=False),
     Column("created_at", UtcDateTime, nullable=False),
     Column("revision", Integer, nullable=False, server_default="1"),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_scopes_tenant_id"), nullable=False),
+    Column("project_id", String, ForeignKey("projects.project_id", name="fk_scopes_projects"), nullable=False),
+    PrimaryKeyConstraint("scope_id", name="pk_scopes"),
+    UniqueConstraint("project_id", "slug", name="uq_scopes_project_slug"),
 )
+
+# A scope by slug across the tenant's projects, for the reads that name no project.
+Index("ix_scopes_tenant_slug", scopes.c.tenant_id, scopes.c.slug)
 
 # Scope retire/enable facts: append-only, newest wins.
 scope_lifecycle_facts = Table(
     "scope_lifecycle_facts",
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
-    Column("slug", String, ForeignKey("scopes.slug"), nullable=False),
+    Column("scope_id", String, ForeignKey("scopes.scope_id", name="fk_scope_lifecycle_facts_scopes"), nullable=False),
     Column("retired", Boolean, nullable=False),  # retired derives from the newest fact
     Column("set_at", UtcDateTime, nullable=False),
     Column("set_by", String, nullable=False),
+    Column(
+        "tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_scope_lifecycle_facts_tenant_id"), nullable=False
+    ),
 )
+Index("ix_scope_lifecycle_facts_tenant_id", scope_lifecycle_facts.c.tenant_id)
 
 # --- Secrets (write-only credentials, sealed under a hub-key generation) ---
 
 secrets = Table(
     "secrets",
     metadata,
-    Column("name", String, primary_key=True),
+    Column("name", String, nullable=False),
     Column("ciphertext", Text, nullable=False),  # base64 AES-256-GCM output
     Column("nonce", Text, nullable=False),  # base64 96-bit nonce, fresh per write
     Column("key_id", String, nullable=False),  # the hub-key generation that sealed it
@@ -185,6 +305,8 @@ secrets = Table(
     Column("replaced_at", UtcDateTime, nullable=False),
     Column("replaced_by", String, nullable=False),
     Column("created_at", UtcDateTime, nullable=False),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_secrets_tenant_id"), nullable=False),
+    PrimaryKeyConstraint("tenant_id", "name", name="pk_secrets"),
 )
 
 # Secret retire/enable facts: append-only, newest wins.
@@ -192,28 +314,40 @@ secret_lifecycle_facts = Table(
     "secret_lifecycle_facts",
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
-    Column("name", String, ForeignKey("secrets.name"), nullable=False),
+    Column("name", String, nullable=False),
     Column("retired", Boolean, nullable=False),
     Column("set_at", UtcDateTime, nullable=False),
     Column("set_by", String, nullable=False),
+    Column(
+        "tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_secret_lifecycle_facts_tenant_id"), nullable=False
+    ),
+    ForeignKeyConstraint(
+        ["tenant_id", "name"], ["secrets.tenant_id", "secrets.name"], name="fk_secret_lifecycle_facts_secrets"
+    ),
 )
+Index("ix_secret_lifecycle_facts_tenant_id", secret_lifecycle_facts.c.tenant_id)
 
 # --- Work sources (configured records; secret_name references a secret, never a value) ---
 
 work_sources = Table(
     "work_sources",
     metadata,
-    Column("name", String, primary_key=True),
+    Column("name", String, nullable=False),
     Column("provider", String, nullable=False),
     Column("locator", String, nullable=False),
     Column("api_base", String, nullable=True),
     Column("web_base", String, nullable=True),
     Column("annotate", Boolean, nullable=False),
-    Column("secret_name", String, ForeignKey("secrets.name"), nullable=True),
+    Column("secret_name", String, nullable=True),
     Column("revision", Integer, nullable=False),
     Column("created_at", UtcDateTime, nullable=False),
     Column("created_by", String, nullable=False),
-    UniqueConstraint("provider", "locator", name="uq_work_sources_provider_locator"),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_work_sources_tenant_id"), nullable=False),
+    PrimaryKeyConstraint("tenant_id", "name", name="pk_work_sources"),
+    UniqueConstraint("tenant_id", "provider", "locator", name="uq_work_sources_tenant_provider_locator"),
+    ForeignKeyConstraint(
+        ["tenant_id", "secret_name"], ["secrets.tenant_id", "secrets.name"], name="fk_work_sources_secrets"
+    ),
 )
 
 # Work source retire/enable facts: append-only, newest wins.
@@ -221,27 +355,44 @@ work_source_lifecycle_facts = Table(
     "work_source_lifecycle_facts",
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
-    Column("name", String, ForeignKey("work_sources.name"), nullable=False),
+    Column("name", String, nullable=False),
     Column("retired", Boolean, nullable=False),
     Column("set_at", UtcDateTime, nullable=False),
     Column("set_by", String, nullable=False),
+    Column(
+        "tenant_id",
+        String,
+        ForeignKey("tenants.tenant_id", name="fk_work_source_lifecycle_facts_tenant_id"),
+        nullable=False,
+    ),
+    ForeignKeyConstraint(
+        ["tenant_id", "name"],
+        ["work_sources.tenant_id", "work_sources.name"],
+        name="fk_work_source_lifecycle_facts_work_sources",
+    ),
 )
+Index("ix_work_source_lifecycle_facts_tenant_id", work_source_lifecycle_facts.c.tenant_id)
 
 # --- Repositories (configured records; secret_name references a secret, never a value) ---
 
 repositories = Table(
     "repositories",
     metadata,
-    Column("name", String, primary_key=True),
+    Column("name", String, nullable=False),
     Column("forge_api_url", String, nullable=False),
     Column("owner", String, nullable=False),
     Column("repo", String, nullable=False),
     Column("base_branch", String, nullable=False),
-    Column("secret_name", String, ForeignKey("secrets.name"), nullable=False),
+    Column("secret_name", String, nullable=False),
     Column("revision", Integer, nullable=False),
     Column("created_at", UtcDateTime, nullable=False),
     Column("created_by", String, nullable=False),
-    UniqueConstraint("forge_api_url", "owner", "repo", name="uq_repositories_coordinate"),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_repositories_tenant_id"), nullable=False),
+    PrimaryKeyConstraint("tenant_id", "name", name="pk_repositories"),
+    UniqueConstraint("tenant_id", "forge_api_url", "owner", "repo", name="uq_repositories_tenant_coordinate"),
+    ForeignKeyConstraint(
+        ["tenant_id", "secret_name"], ["secrets.tenant_id", "secrets.name"], name="fk_repositories_secrets"
+    ),
 )
 
 # Repository retire/enable facts: append-only, newest wins.
@@ -249,10 +400,140 @@ repository_lifecycle_facts = Table(
     "repository_lifecycle_facts",
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
-    Column("name", String, ForeignKey("repositories.name"), nullable=False),
+    Column("name", String, nullable=False),
     Column("retired", Boolean, nullable=False),
     Column("set_at", UtcDateTime, nullable=False),
     Column("set_by", String, nullable=False),
+    Column(
+        "tenant_id",
+        String,
+        ForeignKey("tenants.tenant_id", name="fk_repository_lifecycle_facts_tenant_id"),
+        nullable=False,
+    ),
+    ForeignKeyConstraint(
+        ["tenant_id", "name"],
+        ["repositories.tenant_id", "repositories.name"],
+        name="fk_repository_lifecycle_facts_repositories",
+    ),
+)
+Index("ix_repository_lifecycle_facts_tenant_id", repository_lifecycle_facts.c.tenant_id)
+
+# --- Project links (a project's work sources and the repositories it may land in) ---
+
+# A project draws from a work source through a link: a configured record of its own, with a revision and
+# change facts; unlinking is its retirement, and linked/unlinked derives from the newest fact.
+project_source_links = Table(
+    "project_source_links",
+    metadata,
+    Column(
+        "project_id", String, ForeignKey("projects.project_id", name="fk_project_source_links_projects"), nullable=False
+    ),
+    Column("source_name", String, nullable=False),
+    Column("revision", Integer, nullable=False),
+    Column(
+        "tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_project_source_links_tenant_id"), nullable=False
+    ),
+    PrimaryKeyConstraint("project_id", "source_name", name="pk_project_source_links"),
+    ForeignKeyConstraint(
+        ["tenant_id", "source_name"],
+        ["work_sources.tenant_id", "work_sources.name"],
+        name="fk_project_source_links_work_sources",
+    ),
+)
+# Which projects link source X.
+Index("ix_project_source_links_tenant_source", project_source_links.c.tenant_id, project_source_links.c.source_name)
+
+project_source_link_facts = Table(
+    "project_source_link_facts",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("project_id", String, nullable=False),
+    Column("source_name", String, nullable=False),
+    Column("linked", Boolean, nullable=False),
+    Column("set_at", UtcDateTime, nullable=False),
+    Column("set_by", String, nullable=False),
+    Column(
+        "tenant_id",
+        String,
+        ForeignKey("tenants.tenant_id", name="fk_project_source_link_facts_tenant_id"),
+        nullable=False,
+    ),
+    ForeignKeyConstraint(
+        ["project_id", "source_name"],
+        ["project_source_links.project_id", "project_source_links.source_name"],
+        name="fk_project_source_link_facts_links",
+    ),
+)
+# A link's newest fact.
+Index(
+    "ix_project_source_link_facts_tenant_link",
+    project_source_link_facts.c.tenant_id,
+    project_source_link_facts.c.project_id,
+    project_source_link_facts.c.source_name,
+    project_source_link_facts.c.id,
+)
+
+# A project may land in a repository through a link: a configured record of its own, with a revision and
+# change facts; unlinking is its retirement, and linked/unlinked derives from the newest fact.
+project_repository_links = Table(
+    "project_repository_links",
+    metadata,
+    Column(
+        "project_id",
+        String,
+        ForeignKey("projects.project_id", name="fk_project_repository_links_projects"),
+        nullable=False,
+    ),
+    Column("repository_name", String, nullable=False),
+    Column("revision", Integer, nullable=False),
+    Column(
+        "tenant_id",
+        String,
+        ForeignKey("tenants.tenant_id", name="fk_project_repository_links_tenant_id"),
+        nullable=False,
+    ),
+    PrimaryKeyConstraint("project_id", "repository_name", name="pk_project_repository_links"),
+    ForeignKeyConstraint(
+        ["tenant_id", "repository_name"],
+        ["repositories.tenant_id", "repositories.name"],
+        name="fk_project_repository_links_repositories",
+    ),
+)
+# Which projects link repository X.
+Index(
+    "ix_project_repository_links_tenant_repository",
+    project_repository_links.c.tenant_id,
+    project_repository_links.c.repository_name,
+)
+
+project_repository_link_facts = Table(
+    "project_repository_link_facts",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("project_id", String, nullable=False),
+    Column("repository_name", String, nullable=False),
+    Column("linked", Boolean, nullable=False),
+    Column("set_at", UtcDateTime, nullable=False),
+    Column("set_by", String, nullable=False),
+    Column(
+        "tenant_id",
+        String,
+        ForeignKey("tenants.tenant_id", name="fk_project_repository_link_facts_tenant_id"),
+        nullable=False,
+    ),
+    ForeignKeyConstraint(
+        ["project_id", "repository_name"],
+        ["project_repository_links.project_id", "project_repository_links.repository_name"],
+        name="fk_project_repository_link_facts_links",
+    ),
+)
+# A link's newest fact.
+Index(
+    "ix_project_repository_link_facts_tenant_link",
+    project_repository_link_facts.c.tenant_id,
+    project_repository_link_facts.c.project_id,
+    project_repository_link_facts.c.repository_name,
+    project_repository_link_facts.c.id,
 )
 
 # --- Configuration change log (one fact row per committed write to a configured record) ---
@@ -270,8 +551,21 @@ config_changes = Table(
     Column("op", String, nullable=False),  # create | edit | retire | enable | replace
     Column("diff", Text, nullable=False),  # JSON [{field, old, new}]; never a secret value
     Column("apply_id", String, nullable=True),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_config_changes_tenant_id"), nullable=False),
+    # The project the changed record belongs to — a project, its links, a scope, a routine; null for a
+    # tenant-wide record (a work source, a repository, a secret).
+    Column("project_id", String, ForeignKey("projects.project_id", name="fk_config_changes_projects"), nullable=True),
 )
-Index("ix_config_changes_record", config_changes.c.record_kind, config_changes.c.record_key, config_changes.c.id)
+Index(
+    "ix_config_changes_tenant_record",
+    config_changes.c.tenant_id,
+    config_changes.c.record_kind,
+    config_changes.c.record_key,
+    config_changes.c.id,
+)
+Index(
+    "ix_config_changes_tenant_project_id", config_changes.c.tenant_id, config_changes.c.project_id, config_changes.c.id
+)
 
 # One append-only fact per carry-over of a file-configured hub into its records.
 config_import_facts = Table(
@@ -288,10 +582,10 @@ config_import_facts = Table(
 routines = Table(
     "routines",
     metadata,
-    Column("routine_id", String, primary_key=True),  # rtn_<ulid>
+    Column("routine_id", String, primary_key=True, info={"hub_unique": True}),  # rtn_<ulid>
     Column("name", String, nullable=False),
     Column("graph_name", String, nullable=False),  # a graph *name*, not a graph_id
-    Column("default_scope_slug", String, ForeignKey("scopes.slug"), nullable=False),
+    Column("default_scope_id", String, ForeignKey("scopes.scope_id", name="fk_routines_scopes"), nullable=False),
     # Nullable JSON model preferences and effort; empty means express none.
     Column("default_model", Text, nullable=True),
     Column("default_effort", String, nullable=True),
@@ -299,19 +593,26 @@ routines = Table(
     Column("default_harnesses", Text, nullable=True),
     Column("created_at", UtcDateTime, nullable=False),
     Column("revision", Integer, nullable=False, server_default="1"),
-    UniqueConstraint("name", name="uq_routines_name"),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_routines_tenant_id"), nullable=False),
+    Column("project_id", String, ForeignKey("projects.project_id", name="fk_routines_projects"), nullable=False),
+    UniqueConstraint("project_id", "name", name="uq_routines_project_name"),
 )
+
+# A routine by name across the tenant's projects, for the reads that name no project.
+Index("ix_routines_tenant_name", routines.c.tenant_id, routines.c.name)
 
 # Mutable routine-to-scope membership.
 
 routine_scopes = Table(
     "routine_scopes",
     metadata,
-    Column("routine_id", String, ForeignKey("routines.routine_id"), primary_key=True),
-    Column("scope_slug", String, ForeignKey("scopes.slug"), primary_key=True),
+    Column("routine_id", String, ForeignKey("routines.routine_id"), nullable=False),
+    Column("scope_id", String, ForeignKey("scopes.scope_id", name="fk_routine_scopes_scopes"), nullable=False),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_routine_scopes_tenant_id"), nullable=False),
+    PrimaryKeyConstraint("routine_id", "scope_id", name="pk_routine_scopes"),
 )
 
-Index("ix_routine_scopes_scope_slug", routine_scopes.c.scope_slug)
+Index("ix_routine_scopes_tenant_scope_id", routine_scopes.c.tenant_id, routine_scopes.c.scope_id)
 
 # The routine's reversible retire/enable brake — scope_lifecycle_facts's own shape.
 routine_lifecycle_facts = Table(
@@ -322,14 +623,21 @@ routine_lifecycle_facts = Table(
     Column("retired", Boolean, nullable=False),  # retired derives from the newest fact
     Column("set_at", UtcDateTime, nullable=False),
     Column("set_by", String, nullable=False),
+    Column(
+        "tenant_id",
+        String,
+        ForeignKey("tenants.tenant_id", name="fk_routine_lifecycle_facts_tenant_id"),
+        nullable=False,
+    ),
 )
+Index("ix_routine_lifecycle_facts_tenant_id", routine_lifecycle_facts.c.tenant_id)
 
 # --- Chunks and their work refs (chunk.minted) ------------------------------
 
 chunks = Table(
     "chunks",
     metadata,
-    Column("chunk_id", String, primary_key=True),  # ch_<ulid>
+    Column("chunk_id", String, primary_key=True, info={"hub_unique": True}),  # ch_<ulid>
     Column("graph_id", String, ForeignKey("graphs.graph_id"), nullable=False),  # pinned at mint
     Column("minted_at", UtcDateTime, nullable=False),
     # Retained, unread legacy column; inserts use the migration's server default.
@@ -341,9 +649,20 @@ chunks = Table(
     Column("default_harnesses", Text, nullable=True),
     # Next-transition migration intent, JSON; null while unset.
     Column("intended_migration", Text, nullable=True),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_chunks_tenant_id"), nullable=False),
+    # Set once at mint; every chunk-owned fact reaches its project through it.
+    Column("project_id", String, ForeignKey("projects.project_id", name="fk_chunks_projects"), nullable=False),
 )
-# (minted_at, chunk_id) for newest-first bounded reads since a timestamp.
-Index("ix_chunks_minted_at_chunk_id", chunks.c.minted_at, chunks.c.chunk_id)
+# (tenant_id, minted_at, chunk_id) for newest-first bounded reads since a timestamp.
+Index("ix_chunks_tenant_minted_at_chunk_id", chunks.c.tenant_id, chunks.c.minted_at, chunks.c.chunk_id)
+# The same, within one project — and the join a project's chunk-owned rows are read through.
+Index(
+    "ix_chunks_tenant_project_minted_at_chunk_id",
+    chunks.c.tenant_id,
+    chunks.c.project_id,
+    chunks.c.minted_at,
+    chunks.c.chunk_id,
+)
 
 chunk_work_refs = Table(
     "chunk_work_refs",
@@ -352,21 +671,29 @@ chunk_work_refs = Table(
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
     Column("source", String, nullable=False),
     Column("ref", String, nullable=False),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_chunk_work_refs_tenant_id"), nullable=False),
 )
-Index("ix_chunk_work_refs_chunk_id", chunk_work_refs.c.chunk_id)
-# Leading source column also serves source-only filters.
-Index("ix_chunk_work_refs_source_ref", chunk_work_refs.c.source, chunk_work_refs.c.ref)
+Index("ix_chunk_work_refs_tenant_chunk_id", chunk_work_refs.c.tenant_id, chunk_work_refs.c.chunk_id)
+# Its (tenant_id, source) prefix also serves a source-only filter within the tenant.
+Index(
+    "ix_chunk_work_refs_tenant_source_ref",
+    chunk_work_refs.c.tenant_id,
+    chunk_work_refs.c.source,
+    chunk_work_refs.c.ref,
+)
 
 # --- Keyed write locks ----------------------------------------------------------
 
 # Lock-only rows: a decision whose race has no existing row to lock locks one of these
 # instead (``bzh:store-exclusive-write``). Holds no state and is never read as a fact;
-# rows are inserted once and never deleted.
+# rows are inserted once and never deleted. Keyed by the tenant: the keys are names a tenant chooses.
 keyed_locks = Table(
     "keyed_locks",
     metadata,
-    Column("namespace", String, primary_key=True),
-    Column("key", String, primary_key=True),
+    Column("namespace", String, nullable=False),
+    Column("key", String, nullable=False),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_keyed_locks_tenant_id"), nullable=False),
+    PrimaryKeyConstraint("tenant_id", "namespace", "key", name="pk_keyed_locks"),
 )
 
 # --- Movement record (transition.recorded) ------------------------------------
@@ -374,7 +701,7 @@ keyed_locks = Table(
 transitions = Table(
     "transitions",
     metadata,
-    Column("transition_id", String, primary_key=True),  # tr_<ulid>
+    Column("transition_id", String, primary_key=True, info={"hub_unique": True}),  # tr_<ulid>
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
     # Historical graph pin; not a FK to the chunk's mutable pin.
     Column("graph_id", String, nullable=False),
@@ -385,15 +712,23 @@ transitions = Table(
     Column("epoch", Integer, nullable=False),  # the fencing epoch checked against latest
     Column("runner_id", String, nullable=False),  # reporting author, or the hub coordinator
     Column("recorded_at", UtcDateTime, nullable=False),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_transitions_tenant_id"), nullable=False),
 )
 # Leading chunk_id also serves chunk-only filters.
-Index("ix_transitions_chunk_id_epoch", transitions.c.chunk_id, transitions.c.epoch)
+Index("ix_transitions_tenant_chunk_id_epoch", transitions.c.tenant_id, transitions.c.chunk_id, transitions.c.epoch)
 
-# Newest-first bounded reads on the high-volume transition table.
+# (tenant_id, recorded_at, transition_id) for one tenant's ordered reads.
+Index(
+    "ix_transitions_tenant_recorded_at_transition_id",
+    transitions.c.tenant_id,
+    transitions.c.recorded_at,
+    transitions.c.transition_id,
+)
+# The hub-wide twin: the trace sweep's closing-candidates read pages every open tenant's rows in this order.
 Index("ix_transitions_recorded_at_transition_id", transitions.c.recorded_at, transitions.c.transition_id)
 
 # Transitions into a given node.
-Index("ix_transitions_to_node_id", transitions.c.to_node_id)
+Index("ix_transitions_tenant_to_node_id", transitions.c.tenant_id, transitions.c.to_node_id)
 
 # --- Cross-graph migration record (chunk_migrations) ---------------
 # Its own fact, never a ``transitions`` row (``bzh:migration-not-transition``).
@@ -401,7 +736,7 @@ Index("ix_transitions_to_node_id", transitions.c.to_node_id)
 chunk_migrations = Table(
     "chunk_migrations",
     metadata,
-    Column("migration_id", String, primary_key=True),  # mg_<ulid>
+    Column("migration_id", String, primary_key=True, info={"hub_unique": True}),  # mg_<ulid>
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
     Column("from_node_id", String, nullable=True),  # the node the migrating choice left
     Column("from_graph_id", String, nullable=False),  # the graph migrated out of
@@ -414,9 +749,17 @@ chunk_migrations = Table(
     Column("recorded_at", UtcDateTime, nullable=False),
     # Migration cause; null for legacy rows.
     Column("source", String, nullable=True),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_chunk_migrations_tenant_id"), nullable=False),
 )
-Index("ix_chunk_migrations_chunk_id", chunk_migrations.c.chunk_id)
-# (recorded_at, migration_id) for newest-first bounded reads since a timestamp.
+Index("ix_chunk_migrations_tenant_chunk_id", chunk_migrations.c.tenant_id, chunk_migrations.c.chunk_id)
+# (tenant_id, recorded_at, migration_id) for one tenant's ordered reads.
+Index(
+    "ix_chunk_migrations_tenant_recorded_at_migration_id",
+    chunk_migrations.c.tenant_id,
+    chunk_migrations.c.recorded_at,
+    chunk_migrations.c.migration_id,
+)
+# The hub-wide twin: the trace sweep's closing-candidates read pages every open tenant's rows in this order.
 Index("ix_chunk_migrations_recorded_at_migration_id", chunk_migrations.c.recorded_at, chunk_migrations.c.migration_id)
 
 # --- Artifacts (the chunk artifact store) --------------------------------------
@@ -424,7 +767,7 @@ Index("ix_chunk_migrations_recorded_at_migration_id", chunk_migrations.c.recorde
 artifacts = Table(
     "artifacts",
     metadata,
-    Column("artifact_id", String, primary_key=True),  # art_<ulid>
+    Column("artifact_id", String, primary_key=True, info={"hub_unique": True}),  # art_<ulid>
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
     Column("node_id", String, nullable=False),  # exact provenance
     Column("node_name", String, nullable=False),  # the {node} store-key component (name, not id)
@@ -437,9 +780,16 @@ artifacts = Table(
     Column("produced_at", UtcDateTime, nullable=False),
     # Durable write order, assigned under the chunk-row lock; not unique.
     Column("seq", Integer, nullable=False),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_artifacts_tenant_id"), nullable=False),
 )
 # Leading chunk_id also serves chunk-only artifact reads.
-Index("ix_artifacts_chunk_id_node_id_epoch", artifacts.c.chunk_id, artifacts.c.node_id, artifacts.c.epoch)
+Index(
+    "ix_artifacts_tenant_chunk_id_node_id_epoch",
+    artifacts.c.tenant_id,
+    artifacts.c.chunk_id,
+    artifacts.c.node_id,
+    artifacts.c.epoch,
+)
 
 # --- Findings and finding sets -----------------------------------
 # Finding liveness and observation counts derive from append-only finding_facts.
@@ -447,10 +797,12 @@ Index("ix_artifacts_chunk_id_node_id_epoch", artifacts.c.chunk_id, artifacts.c.n
 findings = Table(
     "findings",
     metadata,
-    Column("finding_id", String, primary_key=True),  # fin_<ulid>
+    Column("finding_id", String, primary_key=True, info={"hub_unique": True}),  # fin_<ulid>
     # Routine name; null for review-sourced findings.
     Column("routine_name", String, nullable=True),
-    Column("scope_slug", String, ForeignKey("scopes.slug"), nullable=False),
+    Column("scope_id", String, ForeignKey("scopes.scope_id", name="fk_findings_scopes"), nullable=False),
+    # The scope's slug as the label the finding reads key on, resolved within the row's tenant.
+    Column("scope_slug", String, nullable=False),
     Column("class", String, key="class_", nullable=False),  # the deployment's own vocabulary; opaque to the hub
     Column("locus", String, nullable=False),  # a repo-relative path, optionally :line/::symbol; opaque to the hub
     Column("summary", Text, nullable=False),
@@ -462,14 +814,40 @@ findings = Table(
     # Review severity; null for routine-sourced findings.
     Column("severity", String, nullable=True),
     # The chunk whose review raised this finding — null for a routine-sourced finding.
-    Column("raised_by_chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=True),
+    Column(
+        "raised_by_chunk_id",
+        String,
+        ForeignKey("chunks.chunk_id", name="fk_findings_raised_by_chunk_id"),
+        nullable=True,
+    ),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_findings_tenant_id"), nullable=False),
+    Column("project_id", String, ForeignKey("projects.project_id", name="fk_findings_projects"), nullable=False),
     CheckConstraint("source IN ('routine', 'review')", name="ck_findings_source"),
 )
 
-Index("ix_findings_routine_scope", findings.c.routine_name, findings.c.scope_slug)
-Index("ix_findings_routine_class", findings.c.routine_name, findings.c.class_)
-# Findings by (scope_slug, source), across routines.
-Index("ix_findings_scope_source", findings.c.scope_slug, findings.c.source)
+# A project's bucket by (routine_name, scope_slug), and its recurrence by (routine_name, class).
+Index(
+    "ix_findings_tenant_project_routine_scope",
+    findings.c.tenant_id,
+    findings.c.project_id,
+    findings.c.routine_name,
+    findings.c.scope_slug,
+)
+Index(
+    "ix_findings_tenant_project_routine_class",
+    findings.c.tenant_id,
+    findings.c.project_id,
+    findings.c.routine_name,
+    findings.c.class_,
+)
+# A project's findings by (scope_slug, source), across routines.
+Index(
+    "ix_findings_tenant_project_scope_source",
+    findings.c.tenant_id,
+    findings.c.project_id,
+    findings.c.scope_slug,
+    findings.c.source,
+)
 
 # Append-only finding changes; first/last seen and counts derive here.
 
@@ -484,13 +862,29 @@ finding_facts = Table(
     # Who recorded a human-driven fact — null for a run-driven add/observed/gone.
     Column("actor", String, nullable=True),
     # Proposal answered by a delivered fact; null for hand/later resolutions.
-    Column("proposal_id", String, ForeignKey("garden_proposals.proposal_id"), nullable=True),
+    Column(
+        "proposal_id",
+        String,
+        ForeignKey("garden_proposals.proposal_id", name="fk_finding_facts_proposal_id_garden_proposals"),
+        nullable=True,
+    ),
     # The absorbing finding, set only on a `superseded` fact.
-    Column("superseded_by", String, ForeignKey("findings.finding_id"), nullable=True),
+    Column(
+        "superseded_by",
+        String,
+        ForeignKey("findings.finding_id", name="fk_finding_facts_superseded_by_findings"),
+        nullable=True,
+    ),
     # Delivery set for add/observed/gone; null for exits and legacy facts.
-    Column("finding_set_id", String, ForeignKey("finding_sets.finding_set_id"), nullable=True),
+    Column(
+        "finding_set_id",
+        String,
+        ForeignKey("finding_sets.finding_set_id", name="fk_finding_facts_finding_set_id_finding_sets"),
+        nullable=True,
+    ),
     # Submission-local ref on add facts; null otherwise.
     Column("ref", String, nullable=True),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_finding_facts_tenant_id"), nullable=False),
     CheckConstraint(
         "kind IN ('add', 'observed', 'gone', 'delivered', 'resolved', 'gone-confirmed', 'wont-fix',"
         " 'not-a-finding', 'superseded', 'reopened')",
@@ -498,35 +892,48 @@ finding_facts = Table(
     ),
 )
 
-Index("ix_finding_facts_finding_id_id", finding_facts.c.finding_id, finding_facts.c.id)
+Index(
+    "ix_finding_facts_tenant_finding_id_id", finding_facts.c.tenant_id, finding_facts.c.finding_id, finding_facts.c.id
+)
 
 # Facts by finding_set_id.
-Index("ix_finding_facts_finding_set_id", finding_facts.c.finding_set_id)
+Index("ix_finding_facts_tenant_finding_set_id", finding_facts.c.tenant_id, finding_facts.c.finding_set_id)
+Index("ix_finding_facts_tenant_proposal_id", finding_facts.c.tenant_id, finding_facts.c.proposal_id)
 
 # One delivered set per artifact, holding scope, revisions and measurement.
 
 finding_sets = Table(
     "finding_sets",
     metadata,
-    Column("finding_set_id", String, primary_key=True),  # fins_<ulid>
+    Column("finding_set_id", String, primary_key=True, info={"hub_unique": True}),  # fins_<ulid>
     Column("artifact_id", String, ForeignKey("artifacts.artifact_id"), nullable=False, unique=True),
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),  # the run that delivered it
-    Column("scope_slug", String, ForeignKey("scopes.slug"), nullable=False),
+    Column("scope_id", String, ForeignKey("scopes.scope_id", name="fk_finding_sets_scopes"), nullable=False),
+    # The scope's slug as the label the set's reads key on, resolved within the row's tenant.
+    Column("scope_slug", String, nullable=False),
     # Routine name; a chunk's mixed-source pointers cannot identify it.
     Column("routine_name", String, nullable=False, server_default=""),
     Column("revisions", Text, nullable=False),  # JSON {repo: revision} (`bzh:sql-portable`)
     Column("measurement", Text, nullable=True),  # opaque, routine-strategy-defined; null when none was recorded
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_finding_sets_tenant_id"), nullable=False),
+    Column("project_id", String, ForeignKey("projects.project_id", name="fk_finding_sets_projects"), nullable=False),
 )
 
-Index("ix_finding_sets_chunk_id", finding_sets.c.chunk_id)
-Index("ix_finding_sets_routine_scope", finding_sets.c.routine_name, finding_sets.c.scope_slug)
+Index("ix_finding_sets_tenant_chunk_id", finding_sets.c.tenant_id, finding_sets.c.chunk_id)
+Index(
+    "ix_finding_sets_tenant_project_routine_scope",
+    finding_sets.c.tenant_id,
+    finding_sets.c.project_id,
+    finding_sets.c.routine_name,
+    finding_sets.c.scope_slug,
+)
 
 # --- Garden proposals (distinct from work-item proposals) --------
 
 garden_proposals = Table(
     "garden_proposals",
     metadata,
-    Column("proposal_id", String, primary_key=True),  # gprop_<ulid>
+    Column("proposal_id", String, primary_key=True, info={"hub_unique": True}),  # gprop_<ulid>
     # Mint-time origin, never inferred from routine_name.
     Column("origin", String, nullable=False, server_default="routine-run"),
     # Required for routine-run; optional for operator origin.
@@ -538,8 +945,12 @@ garden_proposals = Table(
     Column("body", Text, nullable=False),
     Column("created_at", UtcDateTime, nullable=False),
     # Delivery idempotence key; null outside delivery. No FK (SQLite drop-column).
-    Column("source_artifact_id", String, nullable=True),
+    Column("source_artifact_id", String, nullable=True, info={"hub_unique": True}),
     Column("ref", String, nullable=True),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_garden_proposals_tenant_id"), nullable=False),
+    Column(
+        "project_id", String, ForeignKey("projects.project_id", name="fk_garden_proposals_projects"), nullable=False
+    ),
     CheckConstraint("origin IN ('routine-run', 'operator')", name="ck_garden_proposals_origin"),
     CheckConstraint(
         "origin != 'routine-run' OR routine_name IS NOT NULL", name="ck_garden_proposals_routine_run_has_routine"
@@ -549,7 +960,13 @@ garden_proposals = Table(
     ),
 )
 
-Index("ix_garden_proposals_routine_class", garden_proposals.c.routine_name, garden_proposals.c.class_)
+Index(
+    "ix_garden_proposals_tenant_project_routine_class",
+    garden_proposals.c.tenant_id,
+    garden_proposals.c.project_id,
+    garden_proposals.c.routine_name,
+    garden_proposals.c.class_,
+)
 Index(
     "ux_garden_proposals_source_artifact_ref",
     garden_proposals.c.source_artifact_id,
@@ -564,9 +981,26 @@ garden_proposal_findings = Table(
     metadata,
     Column("proposal_id", String, ForeignKey("garden_proposals.proposal_id"), primary_key=True),
     Column("finding_id", String, ForeignKey("findings.finding_id"), primary_key=True),
+    Column(
+        "tenant_id",
+        String,
+        ForeignKey("tenants.tenant_id", name="fk_garden_proposal_findings_tenant_id"),
+        nullable=False,
+    ),
 )
 
-Index("ix_garden_proposal_findings_finding_id", garden_proposal_findings.c.finding_id)
+Index(
+    "ix_garden_proposal_findings_tenant_finding_id",
+    garden_proposal_findings.c.tenant_id,
+    garden_proposal_findings.c.finding_id,
+)
+# (tenant_id, proposal_id, finding_id): one proposal's findings, already in finding order.
+Index(
+    "ix_garden_proposal_findings_tenant_proposal_id",
+    garden_proposal_findings.c.tenant_id,
+    garden_proposal_findings.c.proposal_id,
+    garden_proposal_findings.c.finding_id,
+)
 
 # --- Garden proposal closures (terminal, unique per proposal) -----
 
@@ -582,12 +1016,19 @@ garden_proposal_closures = Table(
     Column("item_outcome", String, nullable=True),  # minted | declined; null on a pass
     Column("source", String, nullable=True),  # the minted item's pointer; null when none
     Column("ref", String, nullable=True),
+    Column(
+        "tenant_id",
+        String,
+        ForeignKey("tenants.tenant_id", name="fk_garden_proposal_closures_tenant_id"),
+        nullable=False,
+    ),
     UniqueConstraint("proposal_id", name="uq_garden_proposal_closures_proposal_id"),
 )
 
-# Unique (source, ref): at most one closure per work item.
+# Unique (tenant_id, source, ref): at most one closure per work item.
 Index(
-    "ix_garden_proposal_closures_source_ref",
+    "ix_garden_proposal_closures_tenant_source_ref",
+    garden_proposal_closures.c.tenant_id,
     garden_proposal_closures.c.source,
     garden_proposal_closures.c.ref,
     unique=True,
@@ -604,10 +1045,13 @@ lease_facts = Table(
     Column("runner_id", String, nullable=False),
     Column("minted_at", UtcDateTime, nullable=False),
     Column("lease_id", String, nullable=True),  # the lease the mint named; null when it named none
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_lease_facts_tenant_id"), nullable=False),
 )
 # Leading chunk_id also serves chunk-only filters.
-Index("ix_lease_facts_chunk_id_epoch", lease_facts.c.chunk_id, lease_facts.c.epoch)
-# Lease facts by minted_at range.
+Index("ix_lease_facts_tenant_chunk_id_epoch", lease_facts.c.tenant_id, lease_facts.c.chunk_id, lease_facts.c.epoch)
+# (tenant_id, minted_at) for one tenant's ordered reads.
+Index("ix_lease_facts_tenant_minted_at", lease_facts.c.tenant_id, lease_facts.c.minted_at)
+# The hub-wide twin: the egress backfill reads every open tenant's epochs minted in a window.
 Index("ix_lease_facts_minted_at", lease_facts.c.minted_at)
 
 # --- Epoch owners (first owner wins; null runner_id means hub) -----
@@ -619,9 +1063,13 @@ epoch_owners = Table(
     Column("epoch", Integer, nullable=False),
     Column("runner_id", String, nullable=True),
     Column("recorded_at", UtcDateTime, nullable=False),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_epoch_owners_tenant_id"), nullable=False),
     UniqueConstraint("chunk_id", "epoch", name="uq_epoch_owners_chunk_id_epoch"),
 )
-# (recorded_at, id) for ordered reads since a timestamp.
+# (tenant_id, recorded_at, id) for one tenant's ordered reads.
+Index("ix_epoch_owners_tenant_recorded_at_id", epoch_owners.c.tenant_id, epoch_owners.c.recorded_at, epoch_owners.c.id)
+Index("ix_epoch_owners_tenant_chunk_id", epoch_owners.c.tenant_id, epoch_owners.c.chunk_id, epoch_owners.c.epoch)
+# The hub-wide twin: the trace sweep's closing-candidates read pages every open tenant's rows in this order.
 Index("ix_epoch_owners_recorded_at_id", epoch_owners.c.recorded_at, epoch_owners.c.id)
 
 # --- Routes (route.created / route.released) ----------------------------------
@@ -629,7 +1077,7 @@ Index("ix_epoch_owners_recorded_at_id", epoch_owners.c.recorded_at, epoch_owners
 route_created = Table(
     "route_created",
     metadata,
-    Column("route_id", String, primary_key=True),
+    Column("route_id", String, primary_key=True, info={"hub_unique": True}),
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
     Column("runner_id", String, nullable=False),
     Column("workspace_id", String, nullable=False),
@@ -637,12 +1085,28 @@ route_created = Table(
     # The monotonic route-event tiebreak (see work.RouteHistory) — a
     # per-chunk counter shared with route_released.seq, assigned in real write order.
     Column("seq", Integer, nullable=False),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_route_created_tenant_id"), nullable=False),
 )
-Index("ix_route_created_chunk_id", route_created.c.chunk_id)
+# One chunk's routes, already in creation order.
+Index(
+    "ix_route_created_tenant_chunk_id",
+    route_created.c.tenant_id,
+    route_created.c.chunk_id,
+    route_created.c.created_at,
+    route_created.c.seq,
+)
 # Routes by runner_id.
-Index("ix_route_created_runner_id", route_created.c.runner_id)
-# (created_at, route_id) for newest-first bounded reads since a timestamp.
-Index("ix_route_created_created_at_route_id", route_created.c.created_at, route_created.c.route_id)
+# One runner's routed chunks, each once.
+Index(
+    "ix_route_created_tenant_runner_id", route_created.c.tenant_id, route_created.c.runner_id, route_created.c.chunk_id
+)
+# (tenant_id, created_at, route_id) for newest-first bounded reads since a timestamp.
+Index(
+    "ix_route_created_tenant_created_at_route_id",
+    route_created.c.tenant_id,
+    route_created.c.created_at,
+    route_created.c.route_id,
+)
 
 route_environments = Table(
     "route_environments",
@@ -650,7 +1114,11 @@ route_environments = Table(
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("route_id", String, ForeignKey("route_created.route_id"), nullable=False),
     Column("environment_id", String, nullable=False),  # opaque
+    Column(
+        "tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_route_environments_tenant_id"), nullable=False
+    ),
 )
+Index("ix_route_environments_tenant_route_id", route_environments.c.tenant_id, route_environments.c.route_id)
 
 route_released = Table(
     "route_released",
@@ -661,9 +1129,24 @@ route_released = Table(
     # See route_created.seq — the same per-chunk counter, so a created/released pair
     # tied on timestamp is still totally ordered by real write order.
     Column("seq", Integer, nullable=False),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_route_released_tenant_id"), nullable=False),
 )
-Index("ix_route_released_chunk_id", route_released.c.chunk_id)
-# Explicit id tie-break for portable newest-first reads.
+# One chunk's releases, already in release order.
+Index(
+    "ix_route_released_tenant_chunk_id",
+    route_released.c.tenant_id,
+    route_released.c.chunk_id,
+    route_released.c.released_at,
+    route_released.c.seq,
+)
+# (tenant_id, released_at, id) for one tenant's ordered reads.
+Index(
+    "ix_route_released_tenant_released_at_id",
+    route_released.c.tenant_id,
+    route_released.c.released_at,
+    route_released.c.id,
+)
+# The hub-wide twin: the trace sweep's closing-candidates read pages every open tenant's rows in this order.
 Index("ix_route_released_released_at_id", route_released.c.released_at, route_released.c.id)
 
 # --- Route capability tokens (route_token_minted) ----------------
@@ -676,8 +1159,11 @@ route_token_minted = Table(
     Column("token_hash", Text, nullable=False),
     Column("seq", Integer, nullable=False),
     Column("minted_at", UtcDateTime, nullable=False),
+    Column(
+        "tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_route_token_minted_tenant_id"), nullable=False
+    ),
 )
-Index("ix_route_token_minted_chunk_id", route_token_minted.c.chunk_id)
+Index("ix_route_token_minted_tenant_chunk_id", route_token_minted.c.tenant_id, route_token_minted.c.chunk_id)
 
 # --- Delivery landing facts (per-repo, then whole-chunk) ----------------------
 
@@ -689,8 +1175,13 @@ delivery_repo_landed = Table(
     Column("repo", String, nullable=False),
     Column("commit_hash", String, nullable=False),
     Column("landed_at", UtcDateTime, nullable=False),
+    # The name of the repository record the landing resolved to — null on a row landed before it was recorded.
+    Column("repository_name", String, nullable=True),
+    Column(
+        "tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_delivery_repo_landed_tenant_id"), nullable=False
+    ),
 )
-Index("ix_delivery_repo_landed_chunk_id", delivery_repo_landed.c.chunk_id)
+Index("ix_delivery_repo_landed_tenant_chunk_id", delivery_repo_landed.c.tenant_id, delivery_repo_landed.c.chunk_id)
 
 delivery_landed = Table(
     "delivery_landed",
@@ -698,8 +1189,9 @@ delivery_landed = Table(
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
     Column("landed_at", UtcDateTime, nullable=False),  # terminal: all repos landed
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_delivery_landed_tenant_id"), nullable=False),
 )
-Index("ix_delivery_landed_chunk_id", delivery_landed.c.chunk_id)
+Index("ix_delivery_landed_tenant_chunk_id", delivery_landed.c.tenant_id, delivery_landed.c.chunk_id)
 
 # --- Delivery closure facts (work_item_closures) -----------------
 # One row per close-attempt outcome; `closed`/`gone` are terminal, `failed` is retried.
@@ -714,8 +1206,12 @@ work_item_closures = Table(
     Column("outcome", String, nullable=False),
     Column("reason", String, nullable=True),
     Column("recorded_at", UtcDateTime, nullable=False),
+    Column(
+        "tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_work_item_closures_tenant_id"), nullable=False
+    ),
     UniqueConstraint("chunk_id", "source", "ref", "outcome", name="uq_work_item_closures_chunk_source_ref_outcome"),
 )
+Index("ix_work_item_closures_tenant_id", work_item_closures.c.tenant_id)
 
 # --- Close intent outbox (close_intents) ---------------------------------------
 # One row per work ref a landing or completion owes a closure attempt; `retired_at` NULL is pending, never deleted.
@@ -729,8 +1225,10 @@ close_intents = Table(
     Column("ref", String, nullable=False),
     Column("enqueued_at", UtcDateTime, nullable=False),
     Column("retired_at", UtcDateTime, nullable=True),  # null = pending; set when the drainer retires it
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_close_intents_tenant_id"), nullable=False),
     UniqueConstraint("chunk_id", "source", "ref", name="uq_close_intents_chunk_source_ref"),
 )
+Index("ix_close_intents_tenant_id", close_intents.c.tenant_id)
 # A pending-intents filter on `retired_at IS NULL` — sqlite indexes NULLs too, so a
 # plain index still serves it.
 Index("ix_close_intents_pending", close_intents.c.retired_at)
@@ -745,8 +1243,11 @@ close_intent_attempts = Table(
     Column("intent_id", Integer, ForeignKey("close_intents.id"), nullable=False),
     Column("attempted_at", UtcDateTime, nullable=False),
     Column("outcome", String, nullable=False),  # skipped | failed
+    Column(
+        "tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_close_intent_attempts_tenant_id"), nullable=False
+    ),
 )
-Index("ix_close_intent_attempts_intent_id", close_intent_attempts.c.intent_id)
+Index("ix_close_intent_attempts_tenant_intent_id", close_intent_attempts.c.tenant_id, close_intent_attempts.c.intent_id)
 
 # --- Delivery kick-backs (chunk_bounces — #64) --------------------------------
 # Contention, not failure: consumes no node retry, natural-keyed ``(chunk_id, epoch)``.
@@ -760,23 +1261,28 @@ chunk_bounces = Table(
     Column("cause", String, nullable=False),  # conflict | checks | master-moved
     Column("envelope", Text, nullable=False),  # JSON kick-back payload
     Column("recorded_at", UtcDateTime, nullable=False),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_chunk_bounces_tenant_id"), nullable=False),
 )
 # (chunk_id, epoch) serves both a plain chunk_id filter and a per-attempt (chunk_id,
 # epoch) anti-join, at no extra write cost over a single-column index.
-Index("ix_chunk_bounces_chunk_id_epoch", chunk_bounces.c.chunk_id, chunk_bounces.c.epoch)
+Index(
+    "ix_chunk_bounces_tenant_chunk_id_epoch", chunk_bounces.c.tenant_id, chunk_bounces.c.chunk_id, chunk_bounces.c.epoch
+)
 
-# --- The fleet-wide hub-execution serialization slot (#65) -------------------
-# A live slot has ``released_at IS NULL``; one at a time, reclaimable past its TTL.
+# --- The hub-execution serialization slot, one per tenant --------------------
+# A live slot has ``released_at IS NULL``; one at a time per tenant, reclaimable past its TTL.
 
 hub_exec_slot = Table(
     "hub_exec_slot",
     metadata,
-    Column("slot_id", String, primary_key=True),  # hes_<ulid>
+    Column("slot_id", String, primary_key=True, info={"hub_unique": True}),  # hes_<ulid>
     Column("holder_chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
     Column("node_id", String, nullable=False),
     Column("acquired_at", UtcDateTime, nullable=False),
     Column("released_at", UtcDateTime, nullable=True),  # null while live
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_hub_exec_slot_tenant_id"), nullable=False),
 )
+Index("ix_hub_exec_slot_tenant_id", hub_exec_slot.c.tenant_id)
 
 # --- The generic hub command node's pending-poll attempts (#66) --------------
 # One append-only row per poll attempt; pending-ness derives from them, never memory.
@@ -789,8 +1295,9 @@ hub_node_poll = Table(
     Column("node_id", String, nullable=False),
     Column("epoch", Integer, nullable=False),
     Column("polled_at", UtcDateTime, nullable=False),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_hub_node_poll_tenant_id"), nullable=False),
 )
-Index("ix_hub_node_poll_chunk_id", hub_node_poll.c.chunk_id)
+Index("ix_hub_node_poll_tenant_chunk_id", hub_node_poll.c.tenant_id, hub_node_poll.c.chunk_id)
 
 # --- Readiness: the not-ready resting state and its promotion --------
 # A chunk with no ``chunk_promoted`` row derives ``not_ready`` and is never claimed.
@@ -801,10 +1308,16 @@ chunk_promoted = Table(
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
     Column("promoted_at", UtcDateTime, nullable=False),  # not_ready -> ready
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_chunk_promoted_tenant_id"), nullable=False),
 )
-Index("ix_chunk_promoted_chunk_id", chunk_promoted.c.chunk_id)
+Index("ix_chunk_promoted_tenant_chunk_id", chunk_promoted.c.tenant_id, chunk_promoted.c.chunk_id)
 # Explicit id tie-break for portable newest-first reads.
-Index("ix_chunk_promoted_promoted_at_id", chunk_promoted.c.promoted_at, chunk_promoted.c.id)
+Index(
+    "ix_chunk_promoted_tenant_promoted_at_id",
+    chunk_promoted.c.tenant_id,
+    chunk_promoted.c.promoted_at,
+    chunk_promoted.c.id,
+)
 
 # --- Facts that make the derivation precedence correct (shaped) -------------
 
@@ -816,9 +1329,17 @@ chunk_stopped = Table(
     Column("stopped_at", UtcDateTime, nullable=False),  # terminal operator abandonment
     # Who stopped it — nullable: a row predating the column reads back `None`.
     Column("stopped_by", String, nullable=True),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_chunk_stopped_tenant_id"), nullable=False),
 )
-Index("ix_chunk_stopped_chunk_id", chunk_stopped.c.chunk_id)
-# Explicit id tie-break for portable newest-first reads.
+Index("ix_chunk_stopped_tenant_chunk_id", chunk_stopped.c.tenant_id, chunk_stopped.c.chunk_id)
+# (tenant_id, stopped_at, id) for one tenant's ordered reads.
+Index(
+    "ix_chunk_stopped_tenant_stopped_at_id",
+    chunk_stopped.c.tenant_id,
+    chunk_stopped.c.stopped_at,
+    chunk_stopped.c.id,
+)
+# The hub-wide twin: the trace sweep's closing-candidates read pages every open tenant's rows in this order.
 Index("ix_chunk_stopped_stopped_at_id", chunk_stopped.c.stopped_at, chunk_stopped.c.id)
 
 # An operator's manual completion — outranks a ``chunk_stopped`` row recorded
@@ -830,9 +1351,17 @@ chunk_completed = Table(
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
     Column("completed_at", UtcDateTime, nullable=False),
     Column("completed_by", String, nullable=False),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_chunk_completed_tenant_id"), nullable=False),
 )
-Index("ix_chunk_completed_chunk_id", chunk_completed.c.chunk_id)
-# Explicit id tie-break for portable newest-first reads.
+Index("ix_chunk_completed_tenant_chunk_id", chunk_completed.c.tenant_id, chunk_completed.c.chunk_id)
+# (tenant_id, completed_at, id) for one tenant's ordered reads.
+Index(
+    "ix_chunk_completed_tenant_completed_at_id",
+    chunk_completed.c.tenant_id,
+    chunk_completed.c.completed_at,
+    chunk_completed.c.id,
+)
+# The hub-wide twin: the trace sweep's closing-candidates read pages every open tenant's rows in this order.
 Index("ix_chunk_completed_completed_at_id", chunk_completed.c.completed_at, chunk_completed.c.id)
 
 # The fact that makes an unacquired chunk ephemeral by deletion — a
@@ -844,9 +1373,15 @@ chunk_deleted = Table(
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
     Column("deleted_at", UtcDateTime, nullable=False),
     Column("deleted_by", String, nullable=False),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_chunk_deleted_tenant_id"), nullable=False),
 )
 # Explicit id tie-break for portable newest-first reads.
-Index("ix_chunk_deleted_deleted_at_id", chunk_deleted.c.deleted_at, chunk_deleted.c.id)
+Index(
+    "ix_chunk_deleted_tenant_deleted_at_id",
+    chunk_deleted.c.tenant_id,
+    chunk_deleted.c.deleted_at,
+    chunk_deleted.c.id,
+)
 
 # --- Chunk dependency edges --------------------------------------
 # One row per edge; ``released_at``/``released_by`` set once, together — never deleted.
@@ -854,16 +1389,27 @@ Index("ix_chunk_deleted_deleted_at_id", chunk_deleted.c.deleted_at, chunk_delete
 chunk_dependencies = Table(
     "chunk_dependencies",
     metadata,
-    Column("dependency_id", String, primary_key=True),  # dep_<ulid>
+    Column("dependency_id", String, primary_key=True, info={"hub_unique": True}),  # dep_<ulid>
     Column("dependent_chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
     Column("prerequisite_chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
     Column("declared_at", UtcDateTime, nullable=False),
     Column("declared_by", String, nullable=False),
     Column("released_at", UtcDateTime, nullable=True),  # null while standing
     Column("released_by", String, nullable=True),
+    Column(
+        "tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_chunk_dependencies_tenant_id"), nullable=False
+    ),
 )
-Index("ix_chunk_dependencies_dependent_chunk_id", chunk_dependencies.c.dependent_chunk_id)
-Index("ix_chunk_dependencies_prerequisite_chunk_id", chunk_dependencies.c.prerequisite_chunk_id)
+Index(
+    "ix_chunk_dependencies_tenant_dependent_chunk_id",
+    chunk_dependencies.c.tenant_id,
+    chunk_dependencies.c.dependent_chunk_id,
+)
+Index(
+    "ix_chunk_dependencies_tenant_prerequisite_chunk_id",
+    chunk_dependencies.c.tenant_id,
+    chunk_dependencies.c.prerequisite_chunk_id,
+)
 
 escalations = Table(
     "escalations",
@@ -881,9 +1427,12 @@ escalations = Table(
     Column("cause", Text, nullable=True),
     Column("detail", Text, nullable=True),
     Column("recorded_at", UtcDateTime, nullable=False),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_escalations_tenant_id"), nullable=False),
 )
-Index("ix_escalations_chunk_id", escalations.c.chunk_id)
-# Explicit id tie-break for portable newest-first reads.
+Index("ix_escalations_tenant_chunk_id", escalations.c.tenant_id, escalations.c.chunk_id)
+# (tenant_id, recorded_at, id) for one tenant's ordered reads.
+Index("ix_escalations_tenant_recorded_at_id", escalations.c.tenant_id, escalations.c.recorded_at, escalations.c.id)
+# The hub-wide twin: the trace sweep's closing-candidates read pages every open tenant's rows in this order.
 Index("ix_escalations_recorded_at_id", escalations.c.recorded_at, escalations.c.id)
 
 # --- Usage facts (usage.recorded) --------------------------------
@@ -912,12 +1461,14 @@ usage_facts = Table(
     # `docs/deployment/spend.md`'s "Estimated cost" section.
     Column("estimated_cost_usd", Float, nullable=True),
     Column("recorded_at", UtcDateTime, nullable=False),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_usage_facts_tenant_id"), nullable=False),
 )
-Index("ix_usage_facts_chunk_id", usage_facts.c.chunk_id)
+Index("ix_usage_facts_tenant_chunk_id", usage_facts.c.tenant_id, usage_facts.c.chunk_id)
 # The analytics spend-by-node grouping — otherwise a temp B-tree.
-Index("ix_usage_facts_node_id", usage_facts.c.node_id)
-# (recorded_at, id) for recorded_at ranges and reads past a (recorded_at, id) position —
-# one composite whose leading column serves both, so a second single-column index never competes.
+Index("ix_usage_facts_tenant_node_id", usage_facts.c.tenant_id, usage_facts.c.node_id)
+# (tenant_id, recorded_at, id) for one tenant's ordered reads.
+Index("ix_usage_facts_tenant_recorded_at_id", usage_facts.c.tenant_id, usage_facts.c.recorded_at, usage_facts.c.id)
+# The hub-wide twin: the egress sweep pages every open tenant's usage in this order.
 Index("ix_usage_facts_recorded_at_id", usage_facts.c.recorded_at, usage_facts.c.id)
 
 # --- Questions and answers (the ask/answer rendezvous) ----------------------
@@ -926,7 +1477,7 @@ Index("ix_usage_facts_recorded_at_id", usage_facts.c.recorded_at, usage_facts.c.
 questions = Table(
     "questions",
     metadata,
-    Column("question_id", String, primary_key=True),  # qn_<ulid> (runner-minted)
+    Column("question_id", String, nullable=False),  # qn_<ulid> (runner-minted), unique within its tenant
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),  # the parked chunk
     Column("node_id", String, nullable=True),  # the node the worker parked at
     Column("session_id", String, nullable=True),  # the dormant session to resume around the answer
@@ -936,24 +1487,43 @@ questions = Table(
     Column("question", Text, nullable=False),
     Column("options", Text, nullable=False),  # JSON list[str] of offered choices (may be empty)
     Column("asked_at", UtcDateTime, nullable=False),  # reap clock stops for the chunk from here
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_questions_tenant_id"), nullable=False),
+    PrimaryKeyConstraint("tenant_id", "question_id", name="pk_questions"),
 )
-Index("ix_questions_chunk_id", questions.c.chunk_id)
-# (asked_at, question_id) for newest-first bounded reads since a timestamp.
-Index("ix_questions_asked_at_question_id", questions.c.asked_at, questions.c.question_id)
+Index("ix_questions_tenant_chunk_id", questions.c.tenant_id, questions.c.chunk_id)
+# (tenant_id, asked_at, question_id) for newest-first bounded reads since a timestamp.
+Index(
+    "ix_questions_tenant_asked_at_question_id",
+    questions.c.tenant_id,
+    questions.c.asked_at,
+    questions.c.question_id,
+)
 
 question_answers = Table(
     "question_answers",
     metadata,
-    # The primary key IS the question id: the CAS that makes answers first-write-wins —
+    # The primary key IS the question's key: the CAS that makes answers first-write-wins —
     # a racing second insert collides and the loser reads back the winning row.
-    Column("question_id", String, ForeignKey("questions.question_id"), primary_key=True),
+    Column("question_id", String, nullable=False),
     Column("answer", Text, nullable=False),  # the chosen option or free text, carried into the resume prompt
     Column("answered_by", String, nullable=False),  # who won the CAS
     Column("answered_at", UtcDateTime, nullable=False),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_question_answers_tenant_id"), nullable=False),
+    PrimaryKeyConstraint("tenant_id", "question_id", name="pk_question_answers"),
+    ForeignKeyConstraint(
+        ["tenant_id", "question_id"],
+        ["questions.tenant_id", "questions.question_id"],
+        name="fk_question_answers_questions",
+    ),
 )
-# (answered_at, question_id) for newest-first bounded reads since a timestamp; the
-# PK IS the question id, so it also serves as the row's own tie-break column.
-Index("ix_question_answers_answered_at_question_id", question_answers.c.answered_at, question_answers.c.question_id)
+# (tenant_id, answered_at, question_id) for newest-first bounded reads since a timestamp;
+# the question id is the row's own tie-break column within the tenant.
+Index(
+    "ix_question_answers_tenant_answered_at_question_id",
+    question_answers.c.tenant_id,
+    question_answers.c.answered_at,
+    question_answers.c.question_id,
+)
 
 answer_deliveries = Table(
     "answer_deliveries",
@@ -961,10 +1531,17 @@ answer_deliveries = Table(
     # answer.delivered (runner-minted): the resume-with-answer executed. Board detail
     # only — the chunk's status already flipped to running at question.answered.
     Column("id", Integer, primary_key=True, autoincrement=True),
-    Column("question_id", String, ForeignKey("questions.question_id"), nullable=False),
+    Column("question_id", String, nullable=False),
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
     Column("delivered_at", UtcDateTime, nullable=False),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_answer_deliveries_tenant_id"), nullable=False),
+    ForeignKeyConstraint(
+        ["tenant_id", "question_id"],
+        ["questions.tenant_id", "questions.question_id"],
+        name="fk_answer_deliveries_questions",
+    ),
 )
+Index("ix_answer_deliveries_tenant_question_id", answer_deliveries.c.tenant_id, answer_deliveries.c.question_id)
 
 # --- Human gates: decisions and their resolutions -------------
 # Resolved-ness derives: a decision with a resolution row is resolved.
@@ -972,7 +1549,7 @@ answer_deliveries = Table(
 decisions = Table(
     "decisions",
     metadata,
-    Column("decision_id", String, primary_key=True),  # dec_<ulid>
+    Column("decision_id", String, primary_key=True, info={"hub_unique": True}),  # dec_<ulid>
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
     Column("node_id", String, nullable=False),  # the gate node awaiting the decision
     Column("node_name", String, nullable=False),  # the node's name — what runner gate-config matches
@@ -981,9 +1558,24 @@ decisions = Table(
     Column("submitted_at", UtcDateTime, nullable=False),
     # The runner whose configuration imposed this gate — a fact of the write; `NULL` when the graph declared it.
     Column("imposed_by_runner_id", String, nullable=True),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_decisions_tenant_id"), nullable=False),
 )
-Index("ix_decisions_chunk_id", decisions.c.chunk_id)
-# (submitted_at, decision_id) for newest-first bounded reads since a timestamp.
+# (tenant_id, chunk_id, submitted_at, decision_id): one chunk's decisions, already in submission order.
+Index(
+    "ix_decisions_tenant_chunk_id",
+    decisions.c.tenant_id,
+    decisions.c.chunk_id,
+    decisions.c.submitted_at,
+    decisions.c.decision_id,
+)
+# (tenant_id, submitted_at, decision_id) for one tenant's ordered reads.
+Index(
+    "ix_decisions_tenant_submitted_at_decision_id",
+    decisions.c.tenant_id,
+    decisions.c.submitted_at,
+    decisions.c.decision_id,
+)
+# The hub-wide twin: the trace sweep's closing-candidates read pages every open tenant's rows in this order.
 Index("ix_decisions_submitted_at_decision_id", decisions.c.submitted_at, decisions.c.decision_id)
 
 decision_resolutions = Table(
@@ -995,11 +1587,15 @@ decision_resolutions = Table(
     Column("choice", String, nullable=False),  # the picked choice name — routes the resolving transition
     Column("resolved_by", String, nullable=False),
     Column("resolved_at", UtcDateTime, nullable=False),
+    Column(
+        "tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_decision_resolutions_tenant_id"), nullable=False
+    ),
 )
-# (resolved_at, decision_id) for newest-first bounded reads since a timestamp; the
+# (tenant_id, resolved_at, decision_id) for newest-first bounded reads since a timestamp; the
 # PK IS the decision id, so it also serves as the row's own tie-break column.
 Index(
-    "ix_decision_resolutions_resolved_at_decision_id",
+    "ix_decision_resolutions_tenant_resolved_at_decision_id",
+    decision_resolutions.c.tenant_id,
     decision_resolutions.c.resolved_at,
     decision_resolutions.c.decision_id,
 )
@@ -1013,12 +1609,13 @@ requeues = Table(
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
     Column("requeued_at", UtcDateTime, nullable=False),  # supersedes an earlier escalation
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_requeues_tenant_id"), nullable=False),
 )
-Index("ix_requeues_chunk_id", requeues.c.chunk_id)
-# (requeued_at, id) for newest-first bounded reads since a timestamp, portable
+Index("ix_requeues_tenant_chunk_id", requeues.c.tenant_id, requeues.c.chunk_id)
+# (tenant_id, requeued_at, id) for newest-first bounded reads since a timestamp, portable
 # across sqlite and postgres (`bzh:sql-portable`; only sqlite implicitly appends the
 # rowid as a tie-break).
-Index("ix_requeues_requeued_at_id", requeues.c.requeued_at, requeues.c.id)
+Index("ix_requeues_tenant_requeued_at_id", requeues.c.tenant_id, requeues.c.requeued_at, requeues.c.id)
 
 # An operator's forced move of a chunk onto a node, now — a movement fact of
 # its own, never a transition: nothing judged it and no edge was taken.
@@ -1040,11 +1637,17 @@ chunk_restarts = Table(
     Column("decision_id", String, nullable=True),
     Column("restarted_by", String, nullable=False),
     Column("recorded_at", UtcDateTime, nullable=False),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_chunk_restarts_tenant_id"), nullable=False),
 )
-Index("ix_chunk_restarts_chunk_id", chunk_restarts.c.chunk_id)
-# (recorded_at, id) for newest-first bounded reads since a timestamp, portable
-# across sqlite and postgres (`bzh:sql-portable`; only sqlite implicitly appends the
-# rowid as a tie-break).
+Index("ix_chunk_restarts_tenant_chunk_id", chunk_restarts.c.tenant_id, chunk_restarts.c.chunk_id)
+# (tenant_id, recorded_at, id) for one tenant's ordered reads.
+Index(
+    "ix_chunk_restarts_tenant_recorded_at_id",
+    chunk_restarts.c.tenant_id,
+    chunk_restarts.c.recorded_at,
+    chunk_restarts.c.id,
+)
+# The hub-wide twin: the trace sweep's closing-candidates read pages every open tenant's rows in this order.
 Index("ix_chunk_restarts_recorded_at_id", chunk_restarts.c.recorded_at, chunk_restarts.c.id)
 
 # --- Chunk pause facts (chunk.paused / chunk.resumed) -----------
@@ -1058,12 +1661,18 @@ chunk_pause_facts = Table(
     Column("paused", Boolean, nullable=False),  # paused derives from the newest fact
     Column("set_at", UtcDateTime, nullable=False),
     Column("set_by", String, nullable=False),  # who flipped it — recorded on the fact
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_chunk_pause_facts_tenant_id"), nullable=False),
 )
-Index("ix_chunk_pause_facts_chunk_id", chunk_pause_facts.c.chunk_id)
-# (set_at, id) for newest-first bounded reads since a timestamp, portable across
+Index("ix_chunk_pause_facts_tenant_chunk_id", chunk_pause_facts.c.tenant_id, chunk_pause_facts.c.chunk_id)
+# (tenant_id, set_at, id) for newest-first bounded reads since a timestamp, portable across
 # sqlite and postgres (`bzh:sql-portable`; only sqlite implicitly appends the rowid as
 # a tie-break).
-Index("ix_chunk_pause_facts_set_at_id", chunk_pause_facts.c.set_at, chunk_pause_facts.c.id)
+Index(
+    "ix_chunk_pause_facts_tenant_set_at_id",
+    chunk_pause_facts.c.tenant_id,
+    chunk_pause_facts.c.set_at,
+    chunk_pause_facts.c.id,
+)
 
 # --- Store-and-forward high-water mark (per-runner idempotency) ---------------
 # The greatest per-runner seq already applied; a fact at or below it is re-acked, not applied.
@@ -1071,10 +1680,12 @@ Index("ix_chunk_pause_facts_set_at_id", chunk_pause_facts.c.set_at, chunk_pause_
 runner_high_water = Table(
     "runner_high_water",
     metadata,
-    Column("runner_id", String, primary_key=True),
+    Column("runner_id", String, primary_key=True, info={"hub_unique": True}),
     Column("seq", Integer, nullable=False),  # greatest applied per-runner seq
     Column("updated_at", UtcDateTime, nullable=False),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_runner_high_water_tenant_id"), nullable=False),
 )
+Index("ix_runner_high_water_tenant_id", runner_high_water.c.tenant_id)
 
 # --- Queue shaping: ready-queue ordering ----------------------
 # A chunk's effective position is its newest fact, else its ``minted_at`` as a unix stamp.
@@ -1086,9 +1697,10 @@ queue_positions = Table(
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
     Column("position", Float, nullable=False),  # lower sorts earlier; newest fact per chunk wins
     Column("set_at", UtcDateTime, nullable=False),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_queue_positions_tenant_id"), nullable=False),
 )
 # Live-set reads look positions up by candidate chunk id (`bzh:live-set-read`).
-Index("ix_queue_positions_chunk_id", queue_positions.c.chunk_id)
+Index("ix_queue_positions_tenant_chunk_id", queue_positions.c.tenant_id, queue_positions.c.chunk_id)
 
 # --- Queue shaping: grouping (chunk.grouped) -----------------------------------
 # A grouped chunk is EPHEMERAL: removed from every listing, deriving no status at all.
@@ -1100,11 +1712,17 @@ chunk_grouped = Table(
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),  # the merged-away chunk
     Column("grouped_into", String, ForeignKey("chunks.chunk_id"), nullable=False),  # the survivor
     Column("grouped_at", UtcDateTime, nullable=False),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_chunk_grouped_tenant_id"), nullable=False),
 )
-# (grouped_at, id) for newest-first bounded reads since a timestamp, portable
+# (tenant_id, grouped_at, id) for newest-first bounded reads since a timestamp, portable
 # across sqlite and postgres (`bzh:sql-portable`; only sqlite implicitly appends the
 # rowid as a tie-break).
-Index("ix_chunk_grouped_grouped_at_id", chunk_grouped.c.grouped_at, chunk_grouped.c.id)
+Index(
+    "ix_chunk_grouped_tenant_grouped_at_id",
+    chunk_grouped.c.tenant_id,
+    chunk_grouped.c.grouped_at,
+    chunk_grouped.c.id,
+)
 
 # --- The fleet registry (runner.added / registered / paused / resumed) --------
 # A row is inserted when a runner is added and refreshed in place by each registration.
@@ -1113,7 +1731,7 @@ runner_registrations = Table(
     "runner_registrations",
     metadata,
     # The hub-minted id — the runner's one identity, and every runner-id column's value.
-    Column("runner_id", String, primary_key=True),
+    Column("runner_id", String, primary_key=True, info={"hub_unique": True}),
     # The display name the runner last registered with (or was added under) — not unique,
     # so deliberately unindexed: nothing looks a runner up by it.
     Column("name", String, nullable=False),
@@ -1143,7 +1761,14 @@ runner_registrations = Table(
     Column("subscriptions", Text, nullable=True),
     # The node names the runner declared it holds for a human decision, JSON `list[str]`; `NULL` reads as none.
     Column("gates", Text, nullable=True),
+    # The projects the runner serves, JSON `list[dict]` of `{entry, project_id}`: each entry as declared and the
+    # project it resolved to; `NULL` reads as serving nothing.
+    Column("projects", Text, nullable=True),
+    Column(
+        "tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_runner_registrations_tenant_id"), nullable=False
+    ),
 )
+Index("ix_runner_registrations_tenant_id", runner_registrations.c.tenant_id)
 
 runner_pause_facts = Table(
     "runner_pause_facts",
@@ -1153,7 +1778,11 @@ runner_pause_facts = Table(
     Column("paused", Boolean, nullable=False),  # paused derives from the newest fact
     Column("set_at", UtcDateTime, nullable=False),
     Column("set_by", String, nullable=False),  # who flipped it — recorded on the fact
+    Column(
+        "tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_runner_pause_facts_tenant_id"), nullable=False
+    ),
 )
+Index("ix_runner_pause_facts_tenant_id", runner_pause_facts.c.tenant_id)
 
 # Retirement — ``retired`` derives from the newest row; reinstate is a ``retired=False`` fact.
 runner_lifecycle_facts = Table(
@@ -1164,7 +1793,11 @@ runner_lifecycle_facts = Table(
     Column("retired", Boolean, nullable=False),  # retired derives from the newest fact
     Column("set_at", UtcDateTime, nullable=False),
     Column("set_by", String, nullable=False),
+    Column(
+        "tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_runner_lifecycle_facts_tenant_id"), nullable=False
+    ),
 )
+Index("ix_runner_lifecycle_facts_tenant_id", runner_lifecycle_facts.c.tenant_id)
 
 # Every revoked token hash, never cleared — a revoked token is refused, not merely unresolved.
 runner_token_revocations = Table(
@@ -1175,7 +1808,14 @@ runner_token_revocations = Table(
     Column("token_hash", Text, nullable=False, index=True),
     Column("revoked_at", UtcDateTime, nullable=False),
     Column("revoked_by", String, nullable=False),
+    Column(
+        "tenant_id",
+        String,
+        ForeignKey("tenants.tenant_id", name="fk_runner_token_revocations_tenant_id"),
+        nullable=False,
+    ),
 )
+Index("ix_runner_token_revocations_tenant_id", runner_token_revocations.c.tenant_id)
 
 # The runner's *own* brake, as reported to us — a separate table because the
 # hub only ever reads it. No ForeignKey: a fact can arrive before its registration does.
@@ -1191,17 +1831,24 @@ runner_local_pause_facts = Table(
     # The composed cause string off the fact's payload — nullable, since a
     # manual pause carries none.
     Column("reason", Text, nullable=True),
+    Column(
+        "tenant_id",
+        String,
+        ForeignKey("tenants.tenant_id", name="fk_runner_local_pause_facts_tenant_id"),
+        nullable=False,
+    ),
 )
+Index("ix_runner_local_pause_facts_tenant_id", runner_local_pause_facts.c.tenant_id)
 
 # The runner's latest sampled external-usage snapshot, one row per declared subscription
-# — advisory. No ForeignKey: a raise would stall the rail.
+# — advisory. No ForeignKey on runner_id: a raise would stall the rail.
 runner_external_usage = Table(
     "runner_external_usage",
     metadata,
-    Column("runner_id", String, primary_key=True),
+    Column("runner_id", String, nullable=False, info={"hub_unique": True}),
     # The runner-unique join key within `runner_id` — a row predating declared
     # subscriptions backfills to the legacy Anthropic slug.
-    Column("slug", String, primary_key=True),
+    Column("slug", String, nullable=False),
     # The declaration's operator-facing label, reported alongside `slug`.
     Column("name", String, nullable=False),
     Column("sampled_at", UtcDateTime, nullable=False),
@@ -1209,13 +1856,18 @@ runner_external_usage = Table(
     # wholesale on every sample, never queried by its members.
     Column("windows", Text, nullable=False),
     Column("updated_at", UtcDateTime, nullable=False),
+    Column(
+        "tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_runner_external_usage_tenant_id"), nullable=False
+    ),
+    PrimaryKeyConstraint("runner_id", "slug", name="pk_runner_external_usage"),
 )
+Index("ix_runner_external_usage_tenant_id", runner_external_usage.c.tenant_id)
 
-# The runner's newest external-usage *miss* per slug — sibling to `runner_external_usage`, no FK.
+# The runner's newest external-usage *miss* per slug — sibling to `runner_external_usage`, no FK on runner_id.
 runner_external_usage_misses = Table(
     "runner_external_usage_misses",
     metadata,
-    Column("runner_id", String, primary_key=True),
+    Column("runner_id", String, primary_key=True, info={"hub_unique": True}),
     Column("slug", String, primary_key=True),
     # The declaration's operator-facing label, reported alongside `slug`.
     Column("name", String, nullable=False),
@@ -1224,10 +1876,17 @@ runner_external_usage_misses = Table(
     # token, a refresh token, or a path.
     Column("reason", String, nullable=False),
     Column("updated_at", UtcDateTime, nullable=False),
+    Column(
+        "tenant_id",
+        String,
+        ForeignKey("tenants.tenant_id", name="fk_runner_external_usage_misses_tenant_id"),
+        nullable=False,
+    ),
 )
+Index("ix_runner_external_usage_misses_tenant_id", runner_external_usage_misses.c.tenant_id)
 
 # --- The identity spine: users, provider identities, sessions -----
-# ``role`` is a coarse tag expanded through a static map, never a stored permission list.
+# An account carries no role: what a user may do is their memberships and the hub administrator facts.
 
 users = Table(
     "users",
@@ -1236,7 +1895,6 @@ users = Table(
     Column("username", String, nullable=False, unique=True),
     Column("display_name", String, nullable=False),
     Column("email", String, nullable=True),
-    Column("role", String, nullable=False),  # blizzard.auth_core.Role value
     Column("created_at", UtcDateTime, nullable=False),
 )
 
@@ -1291,6 +1949,8 @@ auth_state = Table(
     Column("created_at", UtcDateTime, nullable=False),
     Column("expires_at", UtcDateTime, nullable=False),
     Column("user_id", String, nullable=True),  # cli_login rows only — see note above
+    # The sha256 hex of the invitation token a provider_login row was started with; NULL for every other sign-in.
+    Column("invitation_token_hash", String, nullable=True),
 )
 
 # The append-only, non-chunk auth/security event log (``bzh:facts-not-status``) — these
@@ -1317,6 +1977,84 @@ superuser_bootstrap = Table(
     Column("updated_at", UtcDateTime, nullable=False),
 )
 
+# --- Memberships and hub administrators ----------------------------------------------
+# Both are facts (``bzh:facts-not-status``): the newest row per key is in force. A membership grants one user one
+# role in one tenant, and a ``NULL`` role revokes it; ``tenant_id`` is data here, since a person's memberships are
+# read hub-wide, before any tenant is known. ``set_by`` names the granting user's id, or ``migration``,
+# ``bootstrap``, or — for a membership granted under ``auth.mode = "none"`` — ``operator``.
+
+membership_facts = Table(
+    "membership_facts",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_membership_facts_tenant_id"), nullable=False),
+    Column("user_id", String, ForeignKey("users.id", name="fk_membership_facts_user_id"), nullable=False),
+    Column("role", String, nullable=True),  # guest | contributor | admin; NULL revokes
+    Column("set_at", UtcDateTime, nullable=False),
+    Column("set_by", String, nullable=False),
+)
+
+# One membership's newest fact is a seek on ``(tenant_id, user_id)``, and a tenant's members a walk of its
+# ``tenant_id`` range; a person's memberships across tenants seek on ``user_id``.
+Index(
+    "ix_membership_facts_tenant_user", membership_facts.c.tenant_id, membership_facts.c.user_id, membership_facts.c.id
+)
+Index("ix_membership_facts_user_id", membership_facts.c.user_id)
+
+hub_admin_facts = Table(
+    "hub_admin_facts",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("user_id", String, ForeignKey("users.id", name="fk_hub_admin_facts_user_id"), nullable=False),
+    Column("granted", Boolean, nullable=False),
+    Column("set_at", UtcDateTime, nullable=False),
+    Column("set_by", String, nullable=False),
+)
+
+Index("ix_hub_admin_facts_user_id", hub_admin_facts.c.user_id)
+
+# --- Invitations -----------------------------------------------------------------
+# One invitation admits one email address into one tenant with one role. ``email`` is stored
+# lowercased; ``token_hash`` is the sha256 of the link's token, which is never stored.
+
+invitations = Table(
+    "invitations",
+    metadata,
+    Column("invitation_id", String, primary_key=True, info={"hub_unique": True}),  # inv_<ulid>
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_invitations_tenant_id"), nullable=False),
+    Column("email", String, nullable=False),
+    Column("role", String, nullable=False),  # blizzard.auth_core.Role value
+    Column("token_hash", String, nullable=False),
+    Column("created_by", String, nullable=False),
+    Column("created_at", UtcDateTime, nullable=False),
+    Column("expires_at", UtcDateTime, nullable=False),
+)
+
+Index("ix_invitations_tenant_id", invitations.c.tenant_id)
+Index("ix_invitations_token_hash", invitations.c.token_hash)
+
+# What became of an invitation (``bzh:facts-not-status``): ``accepted`` with the accepting
+# user, or ``revoked`` with the revoking admin. At most one per invitation — it is used once.
+invitation_facts = Table(
+    "invitation_facts",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_invitation_facts_tenant_id"), nullable=False),
+    Column(
+        "invitation_id",
+        String,
+        ForeignKey("invitations.invitation_id", name="fk_invitation_facts_invitation_id"),
+        nullable=False,
+    ),
+    Column("kind", String, nullable=False),
+    Column("actor_user_id", String, nullable=False),
+    Column("recorded_at", UtcDateTime, nullable=False),
+    UniqueConstraint("invitation_id", name="uq_invitation_facts_invitation_id"),
+    CheckConstraint("kind IN ('accepted', 'revoked')", name="ck_invitation_facts_kind"),
+)
+
+Index("ix_invitation_facts_tenant_id", invitation_facts.c.tenant_id)
+
 # --- Operational event log (event_log) ---------------------------
 # ``chunk_id``/``runner_id`` are nullable — runner-scoped/hub-authored, respectively. ``detail`` is opaque JSON.
 
@@ -1333,10 +2071,28 @@ event_log = Table(
     Column("node_name", String, nullable=True),
     Column("message", Text, nullable=False),
     Column("detail", Text, nullable=True),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_event_log_tenant_id"), nullable=False),
 )
 
 # The read's own sort key (newest-first) — indexed so ordering never scans the table.
-Index("ix_event_log_recorded_at", event_log.c.recorded_at)
+Index("ix_event_log_tenant_recorded_at", event_log.c.tenant_id, event_log.c.recorded_at)
+
+# The hub's own occurrences — its exports, startup, migration check, and tenant teardowns —
+# which concern no tenant, chunk, or runner. Read only by hub administrators.
+hub_event_log = Table(
+    "hub_event_log",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("recorded_at", UtcDateTime, nullable=False),
+    Column("severity", String, nullable=False),
+    Column("kind", String, nullable=False),
+    Column("message", Text, nullable=False),
+    Column("detail", Text, nullable=True),
+)
+
+Index("ix_hub_event_log_recorded_at", hub_event_log.c.recorded_at)
+# The exports' newest-of-a-kind reads (their failure and latch) — each a seek to one kind's newest row.
+Index("ix_hub_event_log_kind_recorded_at", hub_event_log.c.kind, hub_event_log.c.recorded_at)
 
 # --- Trace export cursor (trace_cursor) ---------------------------------------
 # Append-only, one row per advancing sweep; the newest row is the position.
@@ -1377,6 +2133,9 @@ egress_cursor = Table(
     # The events position after ``position_at``; a drop's version is empty. Null for the other datasets.
     Column("segment_id", String, nullable=True),
     Column("extractor_version", String, nullable=True),
+    # The events position's tenant: null for the other datasets, and for an events position recorded without one,
+    # which stands past every tenant at its time, segment and version.
+    Column("events_tenant_id", String, nullable=True),
 )
 Index(
     "ix_egress_cursor_dataset_recorded_at_id", egress_cursor.c.dataset, egress_cursor.c.recorded_at, egress_cursor.c.id
@@ -1428,17 +2187,33 @@ transcript_segments = Table(
     # A per-record fingerprint of `(turn_range_start, rejected, content)`,
     # so a bulk candidacy read detects a content change without reading `content` at all.
     Column("content_digest", String, nullable=False),
-    UniqueConstraint("segment_id", "turn_range_start", name="uq_transcript_segments_segment_turn_start"),
+    Column(
+        "tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_transcript_segments_tenant_id"), nullable=False
+    ),
+    UniqueConstraint(
+        "tenant_id", "segment_id", "turn_range_start", name="uq_transcript_segments_tenant_segment_turn_start"
+    ),
 )
 
-Index("ix_transcript_segments_chunk_id", transcript_segments.c.chunk_id)
-Index("ix_transcript_segments_runner_received_at", transcript_segments.c.runner_id, transcript_segments.c.received_at)
-Index("ix_transcript_segments_segment_id", transcript_segments.c.segment_id)
+# (tenant_id, chunk_id, segment_id, turn_range_start): one chunk's segments, already in reading order.
+Index(
+    "ix_transcript_segments_tenant_chunk_id",
+    transcript_segments.c.tenant_id,
+    transcript_segments.c.chunk_id,
+    transcript_segments.c.segment_id,
+    transcript_segments.c.turn_range_start,
+)
+Index(
+    "ix_transcript_segments_tenant_runner_received_at",
+    transcript_segments.c.tenant_id,
+    transcript_segments.c.runner_id,
+    transcript_segments.c.received_at,
+)
 # A visible-segment read's `NOT IN (SELECT supersedes ...)` anti-join.
-Index("ix_transcript_segments_supersedes", transcript_segments.c.supersedes)
-# (final, chunk_id): a visible-segment read's outer `WHERE final = TRUE`, `final`
-# leading because it is the more selective predicate; `chunk_id` second lets an `IN
-# (chunks)` probe and a `DISTINCT` ride the same index.
+Index("ix_transcript_segments_tenant_supersedes", transcript_segments.c.tenant_id, transcript_segments.c.supersedes)
+# (final, chunk_id): the hub-wide visible-segment read's outer `WHERE final = TRUE`,
+# `final` leading because it is the more selective predicate; `chunk_id` second lets an
+# `IN (chunks)` probe and a `DISTINCT` ride the same index.
 Index("ix_transcript_segments_final_chunk_id", transcript_segments.c.final, transcript_segments.c.chunk_id)
 
 # --- Transcript lane high-water mark (own table, not runner_high_water) --------
@@ -1447,10 +2222,14 @@ Index("ix_transcript_segments_final_chunk_id", transcript_segments.c.final, tran
 transcript_high_water = Table(
     "transcript_high_water",
     metadata,
-    Column("runner_id", String, primary_key=True),
+    Column("runner_id", String, primary_key=True, info={"hub_unique": True}),
     Column("seq", Integer, nullable=False),
     Column("updated_at", UtcDateTime, nullable=False),
+    Column(
+        "tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_transcript_high_water_tenant_id"), nullable=False
+    ),
 )
+Index("ix_transcript_high_water_tenant_id", transcript_high_water.c.tenant_id)
 
 # --- Derived transcript events — one row per occurrence, re-derivable ---
 # from `transcript_segments` at any later extractor version (`bzh:facts-not-status`: an
@@ -1492,20 +2271,21 @@ transcript_events = Table(
     # The turn's own instant, never the hub's receipt instant; nullable for an
     # untimed turn.
     Column("occurred_at", UtcDateTime, nullable=True),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_transcript_events_tenant_id"), nullable=False),
     UniqueConstraint(
+        "tenant_id",
         "segment_id",
         "extractor_version",
         "kind",
         "turn_path",
         "occurrence",
-        name="uq_transcript_events_natural_key",
+        name="uq_transcript_events_tenant_natural_key",
     ),
 )
 
-Index("ix_transcript_events_chunk_id", transcript_events.c.chunk_id)
-Index("ix_transcript_events_segment_id", transcript_events.c.segment_id)
-Index("ix_transcript_events_subject", transcript_events.c.subject)
-Index("ix_transcript_events_tool", transcript_events.c.tool)
+Index("ix_transcript_events_tenant_chunk_id", transcript_events.c.tenant_id, transcript_events.c.chunk_id)
+Index("ix_transcript_events_tenant_subject", transcript_events.c.tenant_id, transcript_events.c.subject)
+Index("ix_transcript_events_tenant_tool", transcript_events.c.tenant_id, transcript_events.c.tool)
 # (extractor_version, id) for a per-extractor cursor read: `extractor_version = ? AND
 # id > cursor ORDER BY id`.
 Index("ix_transcript_events_extractor_version_id", transcript_events.c.extractor_version, transcript_events.c.id)
@@ -1516,8 +2296,8 @@ Index("ix_transcript_events_extractor_version_id", transcript_events.c.extractor
 transcript_event_derivations = Table(
     "transcript_event_derivations",
     metadata,
-    Column("segment_id", String, primary_key=True),
-    Column("extractor_version", String, primary_key=True),
+    Column("segment_id", String, nullable=False),
+    Column("extractor_version", String, nullable=False),
     # A fingerprint of the segment's stored content as of this derivation — compared
     # against the segment's current fingerprint to detect a content change (a rejected
     # record later accepted, a late record landing) that the sweep must re-derive over.
@@ -1527,13 +2307,29 @@ transcript_event_derivations = Table(
     # False when the segment held a content hole (a rejected record) at derivation time —
     # declared, never silently indistinguishable from a session that read nothing.
     Column("complete", Boolean, nullable=False),
+    Column(
+        "tenant_id",
+        String,
+        ForeignKey("tenants.tenant_id", name="fk_transcript_event_derivations_tenant_id"),
+        nullable=False,
+    ),
+    PrimaryKeyConstraint("tenant_id", "segment_id", "extractor_version", name="pk_transcript_event_derivations"),
 )
-# (derived_at, segment_id, extractor_version) for ordered reads past a position.
+# (tenant_id, derived_at, segment_id, extractor_version) for one tenant's ordered reads past a position.
 Index(
-    "ix_transcript_event_derivations_derived_at_segment_id_extractor_version",
+    "ix_transcript_event_derivations_tenant_derived_at",
+    transcript_event_derivations.c.tenant_id,
     transcript_event_derivations.c.derived_at,
     transcript_event_derivations.c.segment_id,
     transcript_event_derivations.c.extractor_version,
+)
+# The hub-wide twin: the egress sweep pages every open tenant's markers in this order.
+Index(
+    "ix_transcript_event_derivations_egress_order",
+    transcript_event_derivations.c.derived_at,
+    transcript_event_derivations.c.segment_id,
+    transcript_event_derivations.c.extractor_version,
+    transcript_event_derivations.c.tenant_id,
 )
 
 # --- Transcript segment drops — append-only: one row per time a segment's derived events and
@@ -1551,14 +2347,31 @@ transcript_event_drops = Table(
     Column("epoch", Integer, nullable=False),
     Column("spawn_generation", Integer, nullable=False),
     Column("dropped_at", UtcDateTime, nullable=False),
+    Column(
+        "tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_transcript_event_drops_tenant_id"), nullable=False
+    ),
 )
+# (tenant_id, dropped_at, segment_id) for one tenant's ordered reads.
 Index(
-    "ix_transcript_event_drops_dropped_at_segment_id",
+    "ix_transcript_event_drops_tenant_dropped_at_segment_id",
+    transcript_event_drops.c.tenant_id,
     transcript_event_drops.c.dropped_at,
     transcript_event_drops.c.segment_id,
 )
+# The hub-wide twin: the egress sweep pages every open tenant's drops in this order.
+Index(
+    "ix_transcript_event_drops_egress_order",
+    transcript_event_drops.c.dropped_at,
+    transcript_event_drops.c.segment_id,
+    transcript_event_drops.c.tenant_id,
+)
 # Drops by (chunk_id, epoch).
-Index("ix_transcript_event_drops_chunk_id_epoch", transcript_event_drops.c.chunk_id, transcript_event_drops.c.epoch)
+Index(
+    "ix_transcript_event_drops_tenant_chunk_id_epoch",
+    transcript_event_drops.c.tenant_id,
+    transcript_event_drops.c.chunk_id,
+    transcript_event_drops.c.epoch,
+)
 
 # --- Work items (hub-owned work items) ---------------------------
 # A mutable entity row, not a fact table: title/body/edited_at change in place, and
@@ -1569,7 +2382,7 @@ Index("ix_transcript_event_drops_chunk_id_epoch", transcript_event_drops.c.chunk
 work_items = Table(
     "work_items",
     metadata,
-    Column("work_item_id", String, primary_key=True),  # wi_<ulid>
+    Column("work_item_id", String, primary_key=True, info={"hub_unique": True}),  # wi_<ulid>
     Column("source", String, nullable=False),  # the WorkRef.source that owns this item ("hub")
     Column("ref", String, nullable=False),  # the WorkRef.ref, allocated from work_item_sequence
     Column("title", String, nullable=False),
@@ -1592,10 +2405,12 @@ work_items = Table(
     Column("routine_name", String, nullable=True),
     Column("scope_slug", String, nullable=True),
     Column("run_mode", String, nullable=True),
-    UniqueConstraint("source", "ref", name="uq_work_items_source_ref"),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_work_items_tenant_id"), nullable=False),
+    Column("project_id", String, ForeignKey("projects.project_id", name="fk_work_items_projects"), nullable=False),
+    UniqueConstraint("tenant_id", "source", "ref", name="uq_work_items_tenant_source_ref"),
 )
 
-Index("ix_work_items_source", work_items.c.source)
+Index("ix_work_items_tenant_source", work_items.c.tenant_id, work_items.c.source)
 
 # --- Work item runs (a run's identity) -----------------------
 # What routine, scope, and mode a work item's run is executing under — minted together
@@ -1607,9 +2422,12 @@ work_item_runs = Table(
     metadata,
     Column("work_item_id", String, ForeignKey("work_items.work_item_id"), primary_key=True),
     Column("routine_name", String, nullable=False),
-    Column("scope_slug", String, ForeignKey("scopes.slug"), nullable=False),
+    Column("scope_id", String, ForeignKey("scopes.scope_id", name="fk_work_item_runs_scopes"), nullable=False),
     Column("mode", String, nullable=False),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_work_item_runs_tenant_id"), nullable=False),
+    Column("project_id", String, ForeignKey("projects.project_id", name="fk_work_item_runs_projects"), nullable=False),
 )
+Index("ix_work_item_runs_tenant_id", work_item_runs.c.tenant_id)
 
 # A per-source allocation counter, one row per source, so ``ref`` allocation never
 # reads ``MAX(ref)+1`` (two concurrent first allocations on an empty source would both
@@ -1618,8 +2436,12 @@ work_item_runs = Table(
 work_item_sequence = Table(
     "work_item_sequence",
     metadata,
-    Column("source", String, primary_key=True),
+    Column("source", String, nullable=False),
     Column("next_ref", Integer, nullable=False),
+    Column(
+        "tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_work_item_sequence_tenant_id"), nullable=False
+    ),
+    PrimaryKeyConstraint("tenant_id", "source", name="pk_work_item_sequence"),
 )
 
 # --- Forge annotation memory (forge_annotation_facts) --------------------------
@@ -1632,6 +2454,14 @@ forge_annotation_facts = Table(
     Column("source_name", String, nullable=False),
     Column("annotating", Boolean, nullable=False),
     Column("recorded_at", UtcDateTime, nullable=False),
+    Column(
+        "tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_forge_annotation_facts_tenant_id"), nullable=False
+    ),
 )
 
-Index("ix_forge_annotation_facts_source_name_id", forge_annotation_facts.c.source_name, forge_annotation_facts.c.id)
+Index(
+    "ix_forge_annotation_facts_tenant_source_name_id",
+    forge_annotation_facts.c.tenant_id,
+    forge_annotation_facts.c.source_name,
+    forge_annotation_facts.c.id,
+)

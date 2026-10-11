@@ -16,9 +16,10 @@ from blizzard.foundation.store import batching as batching_module
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.chunk.model import Chunk, HubWorkItem, WorkItemAuthor, WorkRef
+from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
-from tests.support import hub_store_connections, seed_graph, seed_work_item
+from tests.support import default_project, hub_store_connections, seed_graph, seed_work_item
 
 pytestmark = pytest.mark.component
 
@@ -34,13 +35,19 @@ def _store_and_engine(tmp_path: Path) -> tuple[WorkItemStore, Engine]:
     return WorkItemStore(hub_store_connections(engine)), engine
 
 
-def _seed(store: WorkItemStore, *, source: str, chunk_id: str) -> HubWorkItem:
+def _seed(store: WorkItemStore, engine: Engine, *, source: str, chunk_id: str) -> HubWorkItem:
     """``seed_work_item``'s shape, with an explicit ``chunk_id`` — its own ``ch_{ref}``
     naming collides across sources, since each source's ``ref`` allocation starts at 1
     independently."""
     ref = store.allocate_ref(source)
     pointer = WorkRef(source=source, ref=ref)
-    chunk = Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=[pointer], minted_at=_NOW)
+    chunk = Chunk(
+        chunk_id=chunk_id,
+        graph_id="gr_1",
+        work_refs=[pointer],
+        minted_at=_NOW,
+        project_id=ProjectId(default_project(engine)),
+    )
     return store.create_with_chunk(
         pointer=pointer,
         title="t",
@@ -53,9 +60,9 @@ def _seed(store: WorkItemStore, *, source: str, chunk_id: str) -> HubWorkItem:
 
 
 def test_get_many_matches_get_across_two_sources_an_unknown_ref_and_an_unseen_source(tmp_path: Path) -> None:
-    store, _ = _store_and_engine(tmp_path)
-    hub_item = _seed(store, source="hub", chunk_id="ch_hub_1")
-    forge_item = _seed(store, source="forge", chunk_id="ch_forge_1")
+    store, engine = _store_and_engine(tmp_path)
+    hub_item = _seed(store, engine, source="hub", chunk_id="ch_hub_1")
+    forge_item = _seed(store, engine, source="forge", chunk_id="ch_forge_1")
 
     result = store.get_many(
         [

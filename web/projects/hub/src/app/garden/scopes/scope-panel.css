@@ -19,6 +19,28 @@
 .sp-head h3 {
   margin: 0;
 }
+/* The project chip: the scope's owner, in the lens's own amber. */
+.sp-project {
+  flex: none;
+  padding: 1px 6px;
+  border: 1px solid var(--amber);
+  color: var(--amber-hi);
+  font-size: var(--fs-xs);
+}
+.sp-grow {
+  flex: 1;
+}
+/* Another project's scope of the same slug: a different record, called out so the shared name never misleads. */
+.sp-same-slug {
+  margin: 12px 0 0;
+  padding: 8px 12px;
+  border-left: 2px solid var(--cyan);
+  background: var(--overlay-20);
+  font-size: var(--fs-sm);
+}
+.sp-same-slug code {
+  color: var(--amber-hi);
+}
 .sp-description {
   margin: 0;
   color: var(--amber);

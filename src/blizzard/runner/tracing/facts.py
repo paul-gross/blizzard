@@ -28,10 +28,13 @@ class LeaseGrantFact:
 @dataclass(frozen=True)
 class RunnerFact:
     """The ``runner_identity`` row: the id and name of the runner's latest registration, which every lease's
-    spans carry — a lease minted before that registration included."""
+    spans carry — a lease minted before that registration included — and the tenant its hub answered with,
+    ``None`` until a hub that names it answers."""
 
     runner_id: str
     runner_name: str
+    tenant_id: str | None = None
+    tenant_name: str | None = None
 
 
 @domain_model

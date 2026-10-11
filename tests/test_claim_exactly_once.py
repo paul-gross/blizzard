@@ -92,7 +92,7 @@ def test_two_hub_processes_racing_a_claim_over_one_store_yield_exactly_one_winne
     process serves the same store, since it shares no Python object, let alone a
     ``threading.Lock``, with the first. ``build_hub`` supports exactly this: a second call
     over the same ``tmp_path`` reopens the store the first one wrote, wiring an entirely
-    separate ``HubServices`` — its own engine, its own ``ClaimService`` — mirroring two
+    separate ``TenantServices`` — its own engine, its own ``ClaimService`` — mirroring two
     ``blizzard-hub host`` instances against one store."""
     first = build_hub(tmp_path)
     chunk_id = first.client.post(

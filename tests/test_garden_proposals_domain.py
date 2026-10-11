@@ -36,11 +36,13 @@ from blizzard.hub.domain.kernel.unset import UnsetType
 
 pytestmark = pytest.mark.unit
 
+_PROJECT = "proj_test"
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 
 def _finding(finding_id: str) -> Finding:
     return Finding(
+        project_id=_PROJECT,
         finding_id=finding_id,
         routine_name="nightly",
         scope_slug="runner",
@@ -74,6 +76,7 @@ class _FakeGardenProposalRepo:
         self,
         proposal_id: str,
         *,
+        project_id: str,
         origin: GardenProposalOrigin,
         routine_name: str | None,
         created_by: str | None = None,
@@ -85,6 +88,7 @@ class _FakeGardenProposalRepo:
     ) -> GardenProposal:
         self.created.append((proposal_id, origin, routine_name, created_by, class_, title, body, findings, at))
         return GardenProposal(
+            project_id=project_id,
             proposal_id=proposal_id,
             origin=origin,
             routine_name=routine_name,
@@ -104,6 +108,7 @@ class _FakeGardenProposalRepo:
         class_ = "c" if isinstance(edit.class_, UnsetType) else edit.class_
         body = "b" if isinstance(edit.body, UnsetType) else edit.body
         return GardenProposal(
+            project_id=_PROJECT,
             proposal_id=proposal_id,
             origin=GardenProposalOrigin.OPERATOR,
             routine_name=None,
@@ -120,6 +125,7 @@ class _FakeGardenProposalRepo:
             return None
         self.attached.append((proposal_id, list(finding_ids)))
         return GardenProposal(
+            project_id=_PROJECT,
             proposal_id=proposal_id,
             origin=GardenProposalOrigin.OPERATOR,
             routine_name=None,
@@ -136,6 +142,7 @@ class _FakeGardenProposalRepo:
             return None
         self.detached.append((proposal_id, list(finding_ids)))
         return GardenProposal(
+            project_id=_PROJECT,
             proposal_id=proposal_id,
             origin=GardenProposalOrigin.OPERATOR,
             routine_name=None,
@@ -156,7 +163,14 @@ def _as_write_repo(repo: _FakeGardenProposalRepo) -> IWriteGardenProposalReposit
 
 
 def _routine(name: str = "nightly") -> Routine:
-    return Routine(routine_id="routine_1", name=name, graph_name="g", default_scope_slug="runner", created_at=_T0)
+    return Routine(
+        routine_id="routine_1",
+        name=name,
+        graph_name="g",
+        default_scope_slug="runner",
+        created_at=_T0,
+        project_id=_PROJECT,
+    )
 
 
 def test_create_operator_mints_with_operator_origin_no_routine_and_the_callers_id() -> None:
@@ -168,7 +182,13 @@ def test_create_operator_mints_with_operator_origin_no_routine_and_the_callers_i
     )
 
     proposal = authoring.create_operator(
-        created_by="operator", routine=None, class_="c", title="t", body="b", findings=[_finding("fin_1")]
+        project_id=_PROJECT,
+        created_by="operator",
+        routine=None,
+        class_="c",
+        title="t",
+        body="b",
+        findings=[_finding("fin_1")],
     )
 
     assert proposal.proposal_id.startswith("gprop_")
@@ -189,7 +209,13 @@ def test_create_operator_names_the_resolved_routine() -> None:
     )
 
     proposal = authoring.create_operator(
-        created_by="operator", routine=_routine("nightly"), class_="c", title="t", body="b", findings=[]
+        project_id=_PROJECT,
+        created_by="operator",
+        routine=_routine("nightly"),
+        class_="c",
+        title="t",
+        body="b",
+        findings=[],
     )
 
     assert proposal.routine_name == "nightly"
@@ -205,7 +231,9 @@ def test_create_operator_rejects_an_exited_finding() -> None:
     gone = replace(_finding("fin_1"), live=False, state="wont-fix")
 
     with pytest.raises(GardenProposalFindingExitedError):
-        authoring.create_operator(created_by="operator", routine=None, class_="c", title="t", body="b", findings=[gone])
+        authoring.create_operator(
+            project_id=_PROJECT, created_by="operator", routine=None, class_="c", title="t", body="b", findings=[gone]
+        )
 
     assert repo.created == []
 
@@ -220,6 +248,7 @@ def test_create_operator_rejects_the_same_finding_named_twice() -> None:
 
     with pytest.raises(DuplicateProposalFindingError):
         authoring.create_operator(
+            project_id=_PROJECT,
             created_by="operator",
             routine=None,
             class_="c",
@@ -240,13 +269,16 @@ def test_create_operator_rejects_a_blank_class() -> None:
     )
 
     with pytest.raises(GardenProposalBlankFieldError):
-        authoring.create_operator(created_by="operator", routine=None, class_=" ", title="t", body="b", findings=[])
+        authoring.create_operator(
+            project_id=_PROJECT, created_by="operator", routine=None, class_=" ", title="t", body="b", findings=[]
+        )
 
     assert repo.created == []
 
 
 def _proposal(proposal_id: str) -> GardenProposal:
     return GardenProposal(
+        project_id=_PROJECT,
         proposal_id=proposal_id,
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
@@ -534,9 +566,9 @@ class _FakeReadGardenProposalRepo:
     closed_ids: set[str] = field(default_factory=set)
 
     def list_for_routine(
-        self, routine_name: str, *, state: RoutineProposalState = RoutineProposalState.ALL
+        self, project_id: str, routine_name: str, *, state: RoutineProposalState = RoutineProposalState.ALL
     ) -> list[GardenProposal]:
-        proposals = self.by_routine.get(routine_name, [])
+        proposals = [p for p in self.by_routine.get(routine_name, []) if p.project_id == project_id]
         if state is RoutineProposalState.OPEN:
             return [p for p in proposals if p.proposal_id not in self.closed_ids]
         if state is RoutineProposalState.CLOSED:
@@ -586,7 +618,7 @@ def test_open_reader_excludes_a_proposal_already_carrying_a_closure() -> None:
     closures = _FakeGardenProposalClosureRepo(closed={"gprop_2": _closure("gprop_2")})
     reader = RoutineGardenProposalReader(proposals=cast(Any, proposals), closures=cast(Any, closures))
 
-    open_proposals = reader.list_for_routine("nightly", RoutineProposalState.OPEN)
+    open_proposals = reader.list_for_routine(_PROJECT, "nightly", RoutineProposalState.OPEN)
 
     assert [p.proposal_id for p, _ in open_proposals] == ["gprop_1"]
 
@@ -596,7 +628,7 @@ def test_open_reader_returns_everything_when_none_are_closed() -> None:
     closures = _FakeGardenProposalClosureRepo()
     reader = RoutineGardenProposalReader(proposals=cast(Any, proposals), closures=cast(Any, closures))
 
-    open_proposals = reader.list_for_routine("nightly", RoutineProposalState.OPEN)
+    open_proposals = reader.list_for_routine(_PROJECT, "nightly", RoutineProposalState.OPEN)
 
     assert [p.proposal_id for p, _ in open_proposals] == ["gprop_1"]
 
@@ -606,7 +638,7 @@ def test_open_reader_is_empty_for_a_routine_with_no_proposals() -> None:
         proposals=cast(Any, _FakeReadGardenProposalRepo()), closures=cast(Any, _FakeGardenProposalClosureRepo())
     )
 
-    assert reader.list_for_routine("nightly", RoutineProposalState.OPEN) == []
+    assert reader.list_for_routine(_PROJECT, "nightly", RoutineProposalState.OPEN) == []
 
 
 def test_list_for_routine_closed_returns_only_closed_proposals_with_their_closure() -> None:
@@ -616,7 +648,7 @@ def test_list_for_routine_closed_returns_only_closed_proposals_with_their_closur
     closures = _FakeGardenProposalClosureRepo(closed={"gprop_closed": _closure("gprop_closed")})
     reader = RoutineGardenProposalReader(proposals=cast(Any, proposals), closures=cast(Any, closures))
 
-    rows = reader.list_for_routine("nightly", RoutineProposalState.CLOSED)
+    rows = reader.list_for_routine(_PROJECT, "nightly", RoutineProposalState.CLOSED)
 
     assert [p.proposal_id for p, _ in rows] == ["gprop_closed"]
     closure = rows[0][1]
@@ -631,7 +663,7 @@ def test_list_for_routine_all_returns_every_proposal_with_its_closure_when_one_e
     closures = _FakeGardenProposalClosureRepo(closed={"gprop_closed": _closure("gprop_closed")})
     reader = RoutineGardenProposalReader(proposals=cast(Any, proposals), closures=cast(Any, closures))
 
-    rows = reader.list_for_routine("nightly", RoutineProposalState.ALL)
+    rows = reader.list_for_routine(_PROJECT, "nightly", RoutineProposalState.ALL)
 
     assert [(p.proposal_id, c.reason if c else None) for p, c in rows] == [
         ("gprop_open", None),
@@ -646,7 +678,7 @@ def test_list_for_routine_defaults_to_open() -> None:
     closures = _FakeGardenProposalClosureRepo(closed={"gprop_2": _closure("gprop_2")})
     reader = RoutineGardenProposalReader(proposals=cast(Any, proposals), closures=cast(Any, closures))
 
-    rows = reader.list_for_routine("nightly")
+    rows = reader.list_for_routine(_PROJECT, "nightly")
 
     assert [(p.proposal_id, c) for p, c in rows] == [("gprop_1", None)]
 

@@ -3,11 +3,12 @@ import { RecordKind, type RecordRefView } from 'fleet';
 import type { ConfigLinkVm } from './config-record-panel';
 
 /** The route each record kind's surface lives at — the fleet's records under admin, the
- * gardening records under gardening. */
-const SURFACE_SEGMENT: Record<RecordKind, readonly string[]> = {
+ * gardening records under gardening. A kind the board has no surface for has no entry. */
+const SURFACE_SEGMENT: Partial<Record<RecordKind, readonly string[]>> = {
   [RecordKind.WORK_SOURCE]: ['/admin', 'work-sources'],
   [RecordKind.REPOSITORY]: ['/admin', 'repositories'],
   [RecordKind.SECRET]: ['/admin', 'secrets'],
+  [RecordKind.PROJECT]: ['/admin', 'projects'],
   [RecordKind.SCOPE]: ['/gardening', 'scopes'],
   [RecordKind.ROUTINE]: ['/gardening', 'routines'],
 };

@@ -1,0 +1,50 @@
+:host {
+  display: block;
+  flex: 1;
+  min-height: 0;
+}
+.members-table {
+  min-height: 0;
+  overflow-y: auto;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+}
+th {
+  text-align: left;
+  color: var(--label);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: var(--fs-label);
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--line);
+}
+td {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--line);
+}
+.hub-admin {
+  margin-left: 6px;
+  padding: 0 4px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: var(--label);
+  font-size: var(--fs-label);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.actions {
+  text-align: right;
+  white-space: nowrap;
+}
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

@@ -16,11 +16,12 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.chunk.model import Chunk, WorkItemAuthor, WorkRef, mint_chunk
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
+from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal.run_context_store import RunContextStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
-from tests.support import chunk_stores, hub_store_connections, seed_chunk, seed_graph
+from tests.support import chunk_stores, default_project, hub_store_connections, seed_chunk, seed_graph, seed_scope
 
 pytestmark = pytest.mark.component
 
@@ -34,15 +35,24 @@ def _stores(tmp_path: Path) -> tuple[WorkItemStore, ChunkStores, RunContextStore
     with engine.begin() as conn:
         seed_graph(conn, "gr_1", at=_NOW)
     conns = hub_store_connections(engine)
+    seed_scope(conns, "blizzard", at=_NOW)
     return WorkItemStore(conns), chunk_stores(engine, FixedClock(_NOW)), RunContextStore(conns), engine
 
 
 def test_item_lands_open_and_carries_the_runs_indexed_values(tmp_path: Path) -> None:
-    items, _chunks, run_context, _engine = _stores(tmp_path)
+    items, _chunks, run_context, engine = _stores(tmp_path)
     pointer = WorkRef(source="hub", ref=items.allocate_ref("hub"))
-    chunk = mint_chunk([pointer], graph_id="gr_1", at=_NOW, default_model=["opus"], default_effort="high")
+    chunk = mint_chunk(
+        [pointer],
+        graph_id="gr_1",
+        at=_NOW,
+        project_id=ProjectId(default_project(engine)),
+        default_model=["opus"],
+        default_effort="high",
+    )
 
     items.create_run_with_chunk(
+        project_id=default_project(engine),
         pointer=pointer,
         title="gardening run (full)",
         body="Routine: gardening (graph: default)",
@@ -69,11 +79,19 @@ def test_item_lands_open_and_carries_the_runs_indexed_values(tmp_path: Path) -> 
 
 
 def test_chunk_lands_not_ready_carrying_the_routines_defaults(tmp_path: Path) -> None:
-    items, chunks, _run_context, _engine = _stores(tmp_path)
+    items, chunks, _run_context, engine = _stores(tmp_path)
     pointer = WorkRef(source="hub", ref=items.allocate_ref("hub"))
-    chunk = mint_chunk([pointer], graph_id="gr_1", at=_NOW, default_model=["opus"], default_effort="high")
+    chunk = mint_chunk(
+        [pointer],
+        graph_id="gr_1",
+        at=_NOW,
+        project_id=ProjectId(default_project(engine)),
+        default_model=["opus"],
+        default_effort="high",
+    )
 
     items.create_run_with_chunk(
+        project_id=default_project(engine),
         pointer=pointer,
         title="t",
         body="b",
@@ -104,10 +122,17 @@ def test_a_failing_write_rolls_back_the_whole_composite(tmp_path: Path) -> None:
     with engine.begin() as conn:
         seed_chunk(conn, "ch_collide", graph_id="gr_1", at=_NOW)
     pointer = WorkRef(source="hub", ref=items.allocate_ref("hub"))
-    colliding_chunk = Chunk(chunk_id="ch_collide", graph_id="gr_1", work_refs=[pointer], minted_at=_NOW)
+    colliding_chunk = Chunk(
+        chunk_id="ch_collide",
+        graph_id="gr_1",
+        work_refs=[pointer],
+        minted_at=_NOW,
+        project_id=ProjectId(default_project(engine)),
+    )
 
     with pytest.raises(HubStoreError):
         items.create_run_with_chunk(
+            project_id=default_project(engine),
             pointer=pointer,
             title="t",
             body="b",

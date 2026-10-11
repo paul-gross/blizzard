@@ -45,6 +45,7 @@ from blizzard.runner.composition import RunnerProcess, build_runner_platform_tra
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.hub.identity import RunnerIdentityHolder
 from blizzard.runner.hub.internal.http_hub import HttpHubClient
+from blizzard.runner.lifecycle.identity_check import IdentityCheck
 from blizzard.runner.lifecycle.registration import Registration
 from blizzard.runner.loop_wiring import LoopWiring
 from blizzard.runner.store.schema import route_tokens
@@ -888,15 +889,17 @@ class RunnerSweep:
         self._config = config
 
     def plant(self) -> None:
-        """Register the runner over the graph, then run the sweep's first pass. The sweep tells nothing until the
-        runner holds its hub identity, and its first pass starts the cursor at now — so the pass must follow the
-        first registration and precede every lease's close."""
+        """Register the runner over the graph — after the identity check, as at the head of a tick, since every hub
+        call but that check waits on its verdict — then run the sweep's first pass. The sweep tells nothing until
+        the runner holds its hub identity, and its first pass starts the cursor at now — so the pass must follow
+        the first registration and precede every lease's close."""
         if self.process is None or self._sweep is None:
             return
         config = self._config
         with httpx.Client(base_url=config.hub_url, headers=config.auth_headers(), timeout=30.0) as client:
             ctx = LoopWiring.of(config).context(HttpHubClient(client), self.process)
             try:
+                IdentityCheck(ctx).run()
                 Registration(ctx).run()
             finally:
                 ctx.usage_http_client.close()

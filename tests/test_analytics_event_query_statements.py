@@ -10,7 +10,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from sqlalchemy import select
 from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.sql import ClauseElement, visitors
 from sqlalchemy.sql.elements import TextClause
@@ -19,8 +18,12 @@ from blizzard.hub.domain.kernel.pagination import encode_cursor
 from blizzard.hub.domain.observability.analytics.queries import EventQueryCriteria
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal import analytics_event_query_store as store_module
+from blizzard.hub.store.scoped import ScopedStatements
+from blizzard.hub.tenancy import StoreScope, TenantId
 
 pytestmark = pytest.mark.unit
+
+_STMTS = ScopedStatements(StoreScope(TenantId("ten_analytics")))
 
 #: Every filter set at once, so no branch of the statement builders goes uncompiled.
 _CRITERIA = EventQueryCriteria(
@@ -39,10 +42,10 @@ _CRITERIA = EventQueryCriteria(
 def _executed_statements() -> dict[str, ClauseElement]:
     m = store_module
     return {
-        "_filtered_stmt": m._filtered_stmt(select(s.transcript_events), _CRITERIA),
-        "_events_stmt": m._events_stmt(_CRITERIA, cursor=encode_cursor(7), limit=200),
-        "_counts_stmt": m._counts_stmt(_CRITERIA, group_col=s.transcript_events.c.subject, kind="file_read"),
-        "_counts_by_node_stmt": m._counts_by_node_stmt(_CRITERIA),
+        "_filtered_stmt": m._filtered_stmt(_STMTS, _STMTS.select(s.transcript_events), _CRITERIA),
+        "_events_stmt": m._events_stmt(_STMTS, _CRITERIA, cursor=encode_cursor(7), limit=200),
+        "_counts_stmt": m._counts_stmt(_STMTS, _CRITERIA, group_col=s.transcript_events.c.subject, kind="file_read"),
+        "_counts_by_node_stmt": m._counts_by_node_stmt(_STMTS, _CRITERIA),
     }
 
 

@@ -177,6 +177,23 @@ export type AddedFindingView = {
 };
 
 /**
+ * AdminGraphSyncResponse
+ *
+ * ``POST /api/admin/graphs/sync``'s report — one reconciliation per open tenant. ``ok`` is false iff any tenant's
+ * is.
+ */
+export type AdminGraphSyncResponse = {
+    /**
+     * Ok
+     */
+    ok: boolean;
+    /**
+     * Tenants
+     */
+    tenants?: Array<TenantGraphSync>;
+};
+
+/**
  * AnalyticsChunkSpendResponse
  *
  * A bounded page — ``next_cursor`` is ``None`` exactly when this
@@ -712,6 +729,18 @@ export type BacklogPeekEntry = {
      */
     position: number;
     /**
+     * Project Id
+     */
+    project_id?: string | null;
+    /**
+     * Project Name
+     */
+    project_name?: string | null;
+    /**
+     * Project Slug
+     */
+    project_slug?: string | null;
+    /**
      * Work Refs
      */
     work_refs?: Array<WorkRefModel>;
@@ -905,6 +934,10 @@ export type ChunkChangedPayload = {
      * Prev Status
      */
     prev_status?: string | null;
+    /**
+     * Project Id
+     */
+    project_id?: string | null;
     /**
      * Runner Id
      */
@@ -1222,6 +1255,18 @@ export type ChunkDetail = {
     pause?: PauseView | null;
     pending?: PendingView | null;
     /**
+     * Project Id
+     */
+    project_id?: string | null;
+    /**
+     * Project Name
+     */
+    project_name?: string | null;
+    /**
+     * Project Slug
+     */
+    project_slug?: string | null;
+    /**
      * Questions
      */
     questions?: Array<QuestionView>;
@@ -1320,6 +1365,10 @@ export type ChunkGroupResponse = {
  */
 export type ChunkIngestRequest = {
     /**
+     * Project
+     */
+    project?: string | null;
+    /**
      * Tokens
      */
     tokens: Array<string>;
@@ -1335,6 +1384,18 @@ export type ChunkIngestResponse = {
      * Chunk Id
      */
     chunk_id: string;
+    /**
+     * Project Id
+     */
+    project_id?: string | null;
+    /**
+     * Project Name
+     */
+    project_name?: string | null;
+    /**
+     * Project Slug
+     */
+    project_slug?: string | null;
 };
 
 /**
@@ -1432,6 +1493,18 @@ export type ChunkPatchResponse = {
      */
     graph_id: string;
     intended_migration?: IntendedMigrationView | null;
+    /**
+     * Project Id
+     */
+    project_id?: string | null;
+    /**
+     * Project Name
+     */
+    project_name?: string | null;
+    /**
+     * Project Slug
+     */
+    project_slug?: string | null;
 };
 
 /**
@@ -1511,6 +1584,18 @@ export type ChunkStatusView = {
      */
     latest_epoch?: number | null;
     pause?: PauseView | null;
+    /**
+     * Project Id
+     */
+    project_id?: string | null;
+    /**
+     * Project Name
+     */
+    project_name?: string | null;
+    /**
+     * Project Slug
+     */
+    project_slug?: string | null;
     /**
      * Restart Epochs
      */
@@ -1601,6 +1686,18 @@ export type ChunkSummary = {
      * Open Prs
      */
     open_prs?: Array<PrView>;
+    /**
+     * Project Id
+     */
+    project_id?: string | null;
+    /**
+     * Project Name
+     */
+    project_name?: string | null;
+    /**
+     * Project Slug
+     */
+    project_slug?: string | null;
     /**
      * Runner Id
      */
@@ -1892,6 +1989,10 @@ export type ConfigChangeView = {
      */
     op: string;
     /**
+     * Project Id
+     */
+    project_id?: string | null;
+    /**
      * Record Key
      */
     record_key: string;
@@ -1929,11 +2030,16 @@ export type ConfigChangesPage = {
  * ConfigDocument
  *
  * A declarative configuration document. Each entry is the kind's own document model, so a field an
- * entry omits is left as stored; scopes reconcile before routines, so a routine may name a scope the
- * same document declares; ``secrets`` lists secret names that must already be active.
- * ``GET /api/config/export`` writes every field of every entry.
+ * entry omits is left as stored; projects reconcile before scopes and routines, and scopes before
+ * routines, so an entry may name a project or a scope the same document declares; ``secrets`` lists
+ * secret names that must already be active. ``GET /api/config/export`` writes every field of every
+ * entry, ``projects`` first, and names every project by its slug.
  */
 export type ConfigDocument = {
+    /**
+     * Projects
+     */
+    projects?: Array<ProjectDocument>;
     /**
      * Repositories
      */
@@ -1941,11 +2047,11 @@ export type ConfigDocument = {
     /**
      * Routines
      */
-    routines?: Array<RoutineDocument>;
+    routines?: Array<RoutineEntry>;
     /**
      * Scopes
      */
-    scopes?: Array<ScopeDocument>;
+    scopes?: Array<ScopeEntry>;
     /**
      * Secrets
      */
@@ -1992,6 +2098,10 @@ export type DecisionOpenedPayload = {
      * Key
      */
     key?: string | null;
+    /**
+     * Project Id
+     */
+    project_id?: string | null;
 };
 
 /**
@@ -2050,6 +2160,10 @@ export type DecisionResolvedPayload = {
      * Key
      */
     key?: string | null;
+    /**
+     * Project Id
+     */
+    project_id?: string | null;
 };
 
 /**
@@ -2538,6 +2652,10 @@ export type EventLoggedPayload = {
      */
     kind: string;
     /**
+     * Project Id
+     */
+    project_id?: string | null;
+    /**
      * Runner Id
      */
     runner_id: string | null;
@@ -2786,6 +2904,18 @@ export type FindingDetailView = {
      * Observed Count
      */
     observed_count: number;
+    /**
+     * Project Id
+     */
+    project_id?: string | null;
+    /**
+     * Project Name
+     */
+    project_name?: string | null;
+    /**
+     * Project Slug
+     */
+    project_slug?: string | null;
     /**
      * Raised By Chunk Id
      */
@@ -3046,6 +3176,18 @@ export type FindingView = {
      */
     observed_count: number;
     /**
+     * Project Id
+     */
+    project_id?: string | null;
+    /**
+     * Project Name
+     */
+    project_name?: string | null;
+    /**
+     * Project Slug
+     */
+    project_slug?: string | null;
+    /**
      * Raised By Chunk Id
      */
     raised_by_chunk_id?: string | null;
@@ -3251,6 +3393,18 @@ export type GardenProposalAcceptResponse = {
     findings: Array<string>;
     origin: GardenProposalOrigin;
     /**
+     * Project Id
+     */
+    project_id?: string | null;
+    /**
+     * Project Name
+     */
+    project_name?: string | null;
+    /**
+     * Project Slug
+     */
+    project_slug?: string | null;
+    /**
      * Proposal Id
      */
     proposal_id: string;
@@ -3344,6 +3498,18 @@ export type GardenProposalCountsRowView = {
      * Passed
      */
     passed: number;
+    /**
+     * Project Id
+     */
+    project_id?: string | null;
+    /**
+     * Project Name
+     */
+    project_name?: string | null;
+    /**
+     * Project Slug
+     */
+    project_slug?: string | null;
     /**
      * Routine Name
      */
@@ -3517,6 +3683,18 @@ export type GardenProposalView = {
      */
     findings: Array<string>;
     origin: GardenProposalOrigin;
+    /**
+     * Project Id
+     */
+    project_id?: string | null;
+    /**
+     * Project Name
+     */
+    project_name?: string | null;
+    /**
+     * Project Slug
+     */
+    project_slug?: string | null;
     /**
      * Proposal Id
      */
@@ -3961,6 +4139,30 @@ export type HttpValidationError = {
 };
 
 /**
+ * HubAdminView
+ *
+ * One hub administrator.
+ */
+export type HubAdminView = {
+    /**
+     * Display Name
+     */
+    display_name: string;
+    /**
+     * Email
+     */
+    email: string | null;
+    /**
+     * User Id
+     */
+    user_id: string;
+    /**
+     * Username
+     */
+    username: string;
+};
+
+/**
  * HubAdvanceResponse
  *
  * The result of one on-demand hub-advance. A generic hub command node runs ``run:`` to
@@ -4014,6 +4216,40 @@ export const HubEventType = {
  * Every hub SSE frame kind — the ``event:`` name a frame carries.
  */
 export type HubEventType = typeof HubEventType[keyof typeof HubEventType];
+
+/**
+ * HubEventView
+ *
+ * One row of the hub's own event log.
+ */
+export type HubEventView = {
+    /**
+     * Detail
+     */
+    detail?: {
+        [key: string]: unknown;
+    } | null;
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Kind
+     */
+    kind: string;
+    /**
+     * Message
+     */
+    message: string;
+    /**
+     * Recorded At
+     */
+    recorded_at: string;
+    /**
+     * Severity
+     */
+    severity: string;
+};
 
 /**
  * HubMarkerRequest
@@ -4074,12 +4310,16 @@ export const IdPrefix = {
     SEG: 'seg',
     WI: 'wi',
     RTN: 'rtn',
+    SCP: 'scp',
     FIN: 'fin',
     FINS: 'fins',
     GPROP: 'gprop',
     DEP: 'dep',
     APL: 'apl',
-    RN: 'rn'
+    RN: 'rn',
+    TEN: 'ten',
+    INV: 'inv',
+    PROJ: 'proj'
 } as const;
 
 /**
@@ -4130,6 +4370,102 @@ export type IntendedMigrationView = {
      * Node Name
      */
     node_name?: string | null;
+};
+
+/**
+ * InvitationCreateRequest
+ *
+ * Invite ``email`` into the request's tenant as ``role``, for ``expires_in`` whole days.
+ */
+export type InvitationCreateRequest = {
+    /**
+     * Email
+     */
+    email: string;
+    /**
+     * Expires In
+     */
+    expires_in?: number;
+    role: Role;
+};
+
+/**
+ * InvitationCreateResponse
+ *
+ * The issued invitation and its link's token. ``token`` is visible only here, once — only its sha256 is kept;
+ * the link handed to the invited person ends ``/invite/<token>``.
+ */
+export type InvitationCreateResponse = {
+    invitation: InvitationView;
+    /**
+     * Token
+     */
+    token: string;
+};
+
+/**
+ * InvitationListResponse
+ *
+ * Every invitation of the request's tenant, oldest first.
+ */
+export type InvitationListResponse = {
+    /**
+     * Invitations
+     */
+    invitations: Array<InvitationView>;
+};
+
+/**
+ * InvitationState
+ *
+ * What became of an invitation: ``live`` until it is accepted, revoked, or expires, whichever comes first.
+ */
+export const InvitationState = {
+    LIVE: 'live',
+    ACCEPTED: 'accepted',
+    EXPIRED: 'expired',
+    REVOKED: 'revoked'
+} as const;
+
+/**
+ * InvitationState
+ *
+ * What became of an invitation: ``live`` until it is accepted, revoked, or expires, whichever comes first.
+ */
+export type InvitationState = typeof InvitationState[keyof typeof InvitationState];
+
+/**
+ * InvitationView
+ *
+ * One invitation as its tenant's admins see it — never its token.
+ */
+export type InvitationView = {
+    /**
+     * Accepted By
+     */
+    accepted_by?: string | null;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Created By
+     */
+    created_by: string;
+    /**
+     * Email
+     */
+    email: string;
+    /**
+     * Expires At
+     */
+    expires_at: string;
+    /**
+     * Invitation Id
+     */
+    invitation_id: string;
+    role: Role;
+    state: InvitationState;
 };
 
 /**
@@ -4200,7 +4536,10 @@ export type LeaseTranscriptView = {
 /**
  * MeResponse
  *
- * The resolved identity's wire view.
+ * The resolved identity's wire view. ``role`` and ``permissions`` are those of the tenant
+ * the request resolves — the one ``X-Blizzard-Tenant`` names among ``tenants``, else the
+ * caller's only membership. With no such tenant ``role`` is null and ``permissions`` holds
+ * only the hub-level permissions of a hub administrator.
  */
 export type MeResponse = {
     /**
@@ -4212,10 +4551,18 @@ export type MeResponse = {
      */
     display_name: string;
     /**
+     * Hub Admin
+     */
+    hub_admin?: boolean;
+    /**
      * Permissions
      */
     permissions: Array<Permission>;
-    role: Role;
+    role: Role | null;
+    /**
+     * Tenants
+     */
+    tenants?: Array<MeTenant>;
     /**
      * User Id
      */
@@ -4224,6 +4571,29 @@ export type MeResponse = {
      * Username
      */
     username: string;
+};
+
+/**
+ * MeTenant
+ *
+ * One tenant the caller holds a membership in: its id (the value an
+ * ``X-Blizzard-Tenant`` header names), its name, the membership's role, and every
+ * permission the caller holds there.
+ */
+export type MeTenant = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Permissions
+     */
+    permissions: Array<Permission>;
+    role: Role;
+    /**
+     * Tenant Id
+     */
+    tenant_id: string;
 };
 
 /**
@@ -4242,6 +4612,60 @@ export type MeasurementReadingView = {
      * Scope Slug
      */
     scope_slug: string;
+};
+
+/**
+ * MemberRoleRequest
+ *
+ * ``PUT /api/members/{user_id}`` body — the membership role to grant: ``guest``, ``contributor`` or ``admin``.
+ */
+export type MemberRoleRequest = {
+    role: Role;
+};
+
+/**
+ * MemberView
+ *
+ * One member of the request's tenant.
+ */
+export type MemberView = {
+    /**
+     * Assignable Roles
+     */
+    assignable_roles?: Array<Role>;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Display Name
+     */
+    display_name: string;
+    /**
+     * Email
+     */
+    email: string | null;
+    /**
+     * Hub Admin
+     */
+    hub_admin: boolean;
+    /**
+     * Identities
+     */
+    identities?: Array<UserIdentityView>;
+    /**
+     * Revocable
+     */
+    revocable?: boolean;
+    role: Role;
+    /**
+     * User Id
+     */
+    user_id: string;
+    /**
+     * Username
+     */
+    username: string;
 };
 
 /**
@@ -4570,7 +4994,11 @@ export const Permission = {
     USER_MANAGE: 'user:manage',
     TRANSCRIPT_READ: 'transcript:read',
     ANALYTICS_ADMIN: 'analytics:admin',
-    CONFIG_EDIT: 'config:edit'
+    CONFIG_EDIT: 'config:edit',
+    TENANT_ADMIN: 'tenant:admin',
+    MEMBERSHIP_GRANT_ANY: 'membership:grant-any',
+    HUB_ADMIN_GRANT: 'hub-admin:grant',
+    EXPORT_ADMIN: 'export:admin'
 } as const;
 
 /**
@@ -4614,6 +5042,123 @@ export type ProducesEntry = {
 };
 
 /**
+ * ProjectCreateRequest
+ *
+ * A new project: a ``slug`` of 1-64 lowercase letters, digits and single inner hyphens, unique among the tenant's
+ * current slugs, and a display ``name``.
+ */
+export type ProjectCreateRequest = {
+    /**
+     * Description
+     */
+    description?: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Slug
+     */
+    slug: string;
+};
+
+/**
+ * ProjectDocument
+ *
+ * A project as a document entry, named by its slug. A ``name`` or ``description`` the entry omits is left as
+ * stored; a project the document creates needs a ``name``. A ``sources`` or ``repositories`` list the entry states
+ * is the project's whole set of links of that kind — a name it leaves out is unlinked; a list it omits is left
+ * as stored. A slug a project left is refused: name that project by its current slug.
+ */
+export type ProjectDocument = {
+    /**
+     * Description
+     */
+    description?: string;
+    /**
+     * Name
+     */
+    name?: string | null;
+    /**
+     * Repositories
+     */
+    repositories?: Array<string>;
+    /**
+     * Slug
+     */
+    slug: string;
+    /**
+     * Sources
+     */
+    sources?: Array<string>;
+};
+
+/**
+ * ProjectPatchRequest
+ *
+ * A sparse edit: an absent field is unchanged, a present one is set, and an explicit ``null`` is refused on every
+ * field. A slug the project leaves keeps resolving to it until another project takes it.
+ */
+export type ProjectPatchRequest = {
+    /**
+     * Description
+     */
+    description?: string | null;
+    /**
+     * Name
+     */
+    name?: string | null;
+    /**
+     * Slug
+     */
+    slug?: string | null;
+};
+
+/**
+ * ProjectView
+ *
+ * One project — the ``GET /api/projects`` listing row and every project verb's view.
+ */
+export type ProjectView = {
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Description
+     */
+    description: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Project Id
+     */
+    project_id: string;
+    /**
+     * Revision
+     */
+    revision: number;
+    /**
+     * Slug
+     */
+    slug: string;
+};
+
+/**
+ * ProjectsListView
+ *
+ * Every project of the tenant, by slug — ``GET /api/projects``.
+ */
+export type ProjectsListView = {
+    /**
+     * Projects
+     */
+    projects?: Array<ProjectView>;
+};
+
+/**
  * ProviderSummary
  *
  * One configured provider, as ``GET /api/auth/providers`` lists it.
@@ -4645,6 +5190,10 @@ export type QuestionAnsweredPayload = {
      * Key
      */
     key?: string | null;
+    /**
+     * Project Id
+     */
+    project_id?: string | null;
     /**
      * Question Id
      */
@@ -4718,6 +5267,10 @@ export type QuestionAskedPayload = {
      * Key
      */
     key?: string | null;
+    /**
+     * Project Id
+     */
+    project_id?: string | null;
     /**
      * Question Id
      */
@@ -4846,6 +5399,18 @@ export type QueuePeekEntry = {
      * Position
      */
     position: number;
+    /**
+     * Project Id
+     */
+    project_id?: string | null;
+    /**
+     * Project Name
+     */
+    project_name?: string | null;
+    /**
+     * Project Slug
+     */
+    project_slug?: string | null;
     /**
      * Work Refs
      */
@@ -5009,17 +5574,28 @@ export type ReceiverStatus = {
 
 /**
  * RecordKind
+ *
+ * The kind of configured record a change row names. A project's ``record_key`` is its id, never its slug; a
+ * project link's is the linked source's or repository's name. Linking, unlinking and re-linking are ``create``,
+ * ``retire`` and ``enable``.
  */
 export const RecordKind = {
     WORK_SOURCE: 'work_source',
     SECRET: 'secret',
     REPOSITORY: 'repository',
     SCOPE: 'scope',
-    ROUTINE: 'routine'
+    ROUTINE: 'routine',
+    PROJECT: 'project',
+    PROJECT_SOURCE_LINK: 'project_source_link',
+    PROJECT_REPOSITORY_LINK: 'project_repository_link'
 } as const;
 
 /**
  * RecordKind
+ *
+ * The kind of configured record a change row names. A project's ``record_key`` is its id, never its slug; a
+ * project link's is the linked source's or repository's name. Linking, unlinking and re-linking are ``create``,
+ * ``retire`` and ``enable``.
  */
 export type RecordKind = typeof RecordKind[keyof typeof RecordKind];
 
@@ -5082,6 +5658,42 @@ export type RepositoryDocument = {
      * Secret Name
      */
     secret_name: string;
+};
+
+/**
+ * RepositoryLinkView
+ *
+ * A project's link to a repository, named ``name``. ``linked`` is false once the link is retired (unlinked).
+ */
+export type RepositoryLinkView = {
+    /**
+     * Linked
+     */
+    linked: boolean;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Project Id
+     */
+    project_id: string;
+    /**
+     * Revision
+     */
+    revision: number;
+};
+
+/**
+ * RepositoryLinksView
+ *
+ * A project's standing repository links by repository name — ``GET /api/projects/{project}/repository-links``.
+ */
+export type RepositoryLinksView = {
+    /**
+     * Repository Links
+     */
+    repository_links?: Array<RepositoryLinkView>;
 };
 
 /**
@@ -5260,7 +5872,7 @@ export type Role = typeof Role[keyof typeof Role];
 /**
  * RoleAssignmentRequest
  *
- * ``POST /api/users/{id}/role`` body — the target role, by its wire value.
+ * ``POST /api/users/{id}/role`` body — the target role, by its wire value; ``pending`` revokes.
  */
 export type RoleAssignmentRequest = {
     /**
@@ -5460,45 +6072,6 @@ export type RoutineCreateRequest = {
 };
 
 /**
- * RoutineDocument
- *
- * A routine as a document entry, keyed by its immutable ``name`` — the model whose JSON Schema
- * ``GET /api/config/schema/routines`` serves. ``scopes`` is the linked scope set, the default scope
- * always among it; an entry that omits it leaves the stored set. Every scope an entry names must be
- * stored or declared in the same document, and ``graph_name`` must name an enabled graph.
- */
-export type RoutineDocument = {
-    /**
-     * Default Effort
-     */
-    default_effort?: string | null;
-    /**
-     * Default Harnesses
-     */
-    default_harnesses?: Array<string>;
-    /**
-     * Default Model
-     */
-    default_model?: Array<string>;
-    /**
-     * Default Scope Slug
-     */
-    default_scope_slug: string;
-    /**
-     * Graph Name
-     */
-    graph_name: string;
-    /**
-     * Name
-     */
-    name: string;
-    /**
-     * Scopes
-     */
-    scopes?: Array<string>;
-};
-
-/**
  * RoutineEditRequest
  *
  * A sparse edit: an absent field is unchanged, a present one is set. A present
@@ -5530,6 +6103,47 @@ export type RoutineEditRequest = {
      * Name
      */
     name?: string | null;
+};
+
+/**
+ * RoutineEntry
+ *
+ * A routine entry of a document: the routine, in ``project`` — an id or a slug; named as a scope entry's is.
+ * Its default and linked scopes are scopes of that project.
+ */
+export type RoutineEntry = {
+    /**
+     * Default Effort
+     */
+    default_effort?: string | null;
+    /**
+     * Default Harnesses
+     */
+    default_harnesses?: Array<string>;
+    /**
+     * Default Model
+     */
+    default_model?: Array<string>;
+    /**
+     * Default Scope Slug
+     */
+    default_scope_slug: string;
+    /**
+     * Graph Name
+     */
+    graph_name: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Project
+     */
+    project?: string | null;
+    /**
+     * Scopes
+     */
+    scopes?: Array<string>;
 };
 
 /**
@@ -5675,6 +6289,18 @@ export type RoutineView = {
      */
     name: string;
     /**
+     * Project Id
+     */
+    project_id?: string | null;
+    /**
+     * Project Name
+     */
+    project_name?: string | null;
+    /**
+     * Project Slug
+     */
+    project_slug?: string | null;
+    /**
      * Retired
      */
     retired?: boolean;
@@ -5699,6 +6325,18 @@ export type RunDeltaView = {
     escalation: RunEscalationView | null;
     mode: RunMode;
     outcome: ChunkStatus;
+    /**
+     * Project Id
+     */
+    project_id?: string | null;
+    /**
+     * Project Name
+     */
+    project_name?: string | null;
+    /**
+     * Project Slug
+     */
+    project_slug?: string | null;
     /**
      * Routine Name
      */
@@ -5767,6 +6405,18 @@ export type RunRowView = {
     mode: RunMode;
     outcome: ChunkStatus;
     /**
+     * Project Id
+     */
+    project_id?: string | null;
+    /**
+     * Project Name
+     */
+    project_name?: string | null;
+    /**
+     * Project Slug
+     */
+    project_slug?: string | null;
+    /**
      * Routine Name
      */
     routine_name: string;
@@ -5787,6 +6437,10 @@ export type RunnerAddRequest = {
      * Name
      */
     name: string;
+    /**
+     * Projects
+     */
+    projects?: Array<string> | null;
 };
 
 /**
@@ -6025,8 +6679,8 @@ export type RunnerIdentityRefusal = {
 /**
  * RunnerIdentityView
  *
- * Who the presented runner bearer token belongs to — its hub-minted id and current name.
- * Answering records nothing: no registration, no liveness.
+ * Who the presented runner bearer token belongs to — its hub-minted id and current name, and
+ * the tenant it was added in. Answering records nothing: no registration, no liveness.
  */
 export type RunnerIdentityView = {
     /**
@@ -6037,6 +6691,14 @@ export type RunnerIdentityView = {
      * Runner Name
      */
     runner_name: string;
+    /**
+     * Tenant Id
+     */
+    tenant_id?: string | null;
+    /**
+     * Tenant Name
+     */
+    tenant_name?: string | null;
 };
 
 /**
@@ -6088,6 +6750,10 @@ export type RunnerRegistrationRequest = {
      */
     name?: string | null;
     /**
+     * Projects
+     */
+    projects?: Array<string> | null;
+    /**
      * Redirect Uris
      */
     redirect_uris?: Array<string>;
@@ -6108,14 +6774,19 @@ export type RunnerRegistrationRequest = {
 /**
  * RunnerRegistrationResponse
  *
- * The registered runner's hub-minted id and current name, and whether this call was its
- * first registration since it was added.
+ * The registered runner's hub-minted id and current name, whether this call was its first
+ * registration since it was added, and the tenant it serves. Registration doubles as the
+ * heartbeat, so a renamed tenant reaches the runner on its next tick.
  */
 export type RunnerRegistrationResponse = {
     /**
      * First Registration
      */
     first_registration: boolean;
+    /**
+     * Projects
+     */
+    projects?: Array<ServedProjectView> | null;
     /**
      * Runner Id
      */
@@ -6124,6 +6795,14 @@ export type RunnerRegistrationResponse = {
      * Runner Name
      */
     runner_name?: string | null;
+    /**
+     * Tenant Id
+     */
+    tenant_id?: string | null;
+    /**
+     * Tenant Name
+     */
+    tenant_name?: string | null;
 };
 
 /**
@@ -6193,6 +6872,10 @@ export type RunnerRegistryView = {
      * Online
      */
     online: boolean;
+    /**
+     * Projects
+     */
+    projects?: Array<ServedProjectView>;
     /**
      * Registered At
      */
@@ -6357,6 +7040,10 @@ export type RunnerView = {
      */
     online: boolean;
     /**
+     * Projects
+     */
+    projects?: Array<ServedProjectView>;
+    /**
      * Registered At
      */
     registered_at: string;
@@ -6432,23 +7119,6 @@ export type ScopeCreateRequest = {
 };
 
 /**
- * ScopeDocument
- *
- * A scope as a document entry — the model whose JSON Schema ``GET /api/config/schema/scopes``
- * serves. A ``description`` the entry omits is left as stored, and is empty on a create.
- */
-export type ScopeDocument = {
-    /**
-     * Description
-     */
-    description?: string;
-    /**
-     * Slug
-     */
-    slug: string;
-};
-
-/**
  * ScopeEditRequest
  *
  * A sparse edit: an absent field is unchanged, a present one is set; ``null`` is
@@ -6459,6 +7129,28 @@ export type ScopeEditRequest = {
      * Description
      */
     description?: string | null;
+};
+
+/**
+ * ScopeEntry
+ *
+ * A scope entry of a document: the scope, in ``project`` — an id or a slug. With no ``project``, the
+ * tenant's only project, counted as the document leaves the tenant; with several, the entry is refused
+ * ``project_required``.
+ */
+export type ScopeEntry = {
+    /**
+     * Description
+     */
+    description?: string;
+    /**
+     * Project
+     */
+    project?: string | null;
+    /**
+     * Slug
+     */
+    slug: string;
 };
 
 /**
@@ -6512,6 +7204,18 @@ export type ScopeView = {
      * Description
      */
     description: string;
+    /**
+     * Project Id
+     */
+    project_id?: string | null;
+    /**
+     * Project Name
+     */
+    project_name?: string | null;
+    /**
+     * Project Slug
+     */
+    project_slug?: string | null;
     /**
      * Retired
      */
@@ -6587,6 +7291,32 @@ export type SecretView = {
 };
 
 /**
+ * ServedProjectView
+ *
+ * One entry of the projects a runner serves: the ``entry`` as declared — a project id or slug — and the project
+ * it resolves to in the runner's tenant. ``project_id``, ``slug`` and ``name`` are ``None`` for an entry that
+ * resolves to no project, which serves nothing until a project answers to it.
+ */
+export type ServedProjectView = {
+    /**
+     * Entry
+     */
+    entry: string;
+    /**
+     * Name
+     */
+    name?: string | null;
+    /**
+     * Project Id
+     */
+    project_id?: string | null;
+    /**
+     * Slug
+     */
+    slug?: string | null;
+};
+
+/**
  * SessionMode
  *
  * Per-node session freshness.
@@ -6658,6 +7388,49 @@ export type SidechainSegmentViewOutput = {
      * Turns
      */
     turns: Array<TurnSegmentViewOutput>;
+};
+
+/**
+ * SourceLinkView
+ *
+ * A project's link to a work source, named ``name``. ``linked`` is false once the link is retired (unlinked).
+ * The built-in ``hub`` source is linked to every project: it has no stored link, so no ``revision``, and cannot be
+ * unlinked.
+ */
+export type SourceLinkView = {
+    /**
+     * Built In
+     */
+    built_in?: boolean;
+    /**
+     * Linked
+     */
+    linked: boolean;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Project Id
+     */
+    project_id: string;
+    /**
+     * Revision
+     */
+    revision?: number | null;
+};
+
+/**
+ * SourceLinksView
+ *
+ * A project's standing source links by source name, the built-in ``hub`` source among them —
+ * ``GET /api/projects/{project}/source-links``.
+ */
+export type SourceLinksView = {
+    /**
+     * Source Links
+     */
+    source_links?: Array<SourceLinkView>;
 };
 
 /**
@@ -6744,6 +7517,113 @@ export type SystemArtifactView = {
      * Name
      */
     name: string;
+};
+
+/**
+ * TenantCreateRequest
+ *
+ * ``POST /api/admin/tenants``: the new tenant's name — a label, never refused for being taken — and, optionally,
+ * the user to make its first admin.
+ */
+export type TenantCreateRequest = {
+    /**
+     * Admin User Id
+     */
+    admin_user_id?: string | null;
+    /**
+     * Name
+     */
+    name: string;
+};
+
+/**
+ * TenantDeletionResponse
+ *
+ * ``DELETE /api/admin/tenants/{tenant_id}``: ``deleted`` with the rows its deletion removed (``200``), or
+ * ``deleting`` while the ``tenant_teardown`` sweep carries it on (``202``).
+ */
+export type TenantDeletionResponse = {
+    /**
+     * Rows Removed
+     */
+    rows_removed?: number | null;
+    /**
+     * State
+     */
+    state: 'deleted' | 'deleting';
+    /**
+     * Tenant Id
+     */
+    tenant_id: string;
+};
+
+/**
+ * TenantGraphSync
+ *
+ * One tenant's packaged-graph reconciliation: ``ok`` is false iff any of its entries failed.
+ */
+export type TenantGraphSync = {
+    /**
+     * Entries
+     */
+    entries?: Array<GraphSyncEntry>;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Ok
+     */
+    ok: boolean;
+    /**
+     * Tenant Id
+     */
+    tenant_id: string;
+};
+
+/**
+ * TenantRenameRequest
+ *
+ * ``PATCH /api/admin/tenants/{tenant_id}``: the tenant's new name.
+ */
+export type TenantRenameRequest = {
+    /**
+     * Name
+     */
+    name: string;
+};
+
+/**
+ * TenantView
+ *
+ * One tenant: its id, its name, when and by whom it was created, whether it is ``open`` or ``deleting``, and —
+ * while it is ``deleting`` — when its deletion began.
+ */
+export type TenantView = {
+    /**
+     * Closed At
+     */
+    closed_at?: string | null;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Created By
+     */
+    created_by: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * State
+     */
+    state: 'open' | 'deleting';
+    /**
+     * Tenant Id
+     */
+    tenant_id: string;
 };
 
 /**
@@ -7393,7 +8273,8 @@ export type UserIdentityView = {
 /**
  * UserView
  *
- * One ``users`` row — the listing/assignment response shape.
+ * One member as the deprecated ``/api/users`` routes render them — ``role`` is ``superuser`` for a hub
+ * administrator, else the membership's role, ``pending`` once revoked.
  */
 export type UserView = {
     /**
@@ -7958,6 +8839,11 @@ export type SecretCreateRequestWritable = {
     value: string;
 };
 
+/**
+ * The id of the tenant the request acts in. A caller with one membership may omit it; a runner or marker token acts in its own tenant, and a header naming another is refused 400.
+ */
+export type TenantHeader = string;
+
 export type ListActivityApiActivityGetData = {
     body?: never;
     path?: never;
@@ -7970,6 +8856,10 @@ export type ListActivityApiActivityGetData = {
          * Limit
          */
         limit?: number;
+        /**
+         * Project
+         */
+        project?: string | null;
     };
     url: '/api/activity';
 };
@@ -7991,6 +8881,257 @@ export type ListActivityApiActivityGetResponses = {
 };
 
 export type ListActivityApiActivityGetResponse = ListActivityApiActivityGetResponses[keyof ListActivityApiActivityGetResponses];
+
+export type HubEventsApiAdminEventsGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/admin/events';
+};
+
+export type HubEventsApiAdminEventsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type HubEventsApiAdminEventsGetError = HubEventsApiAdminEventsGetErrors[keyof HubEventsApiAdminEventsGetErrors];
+
+export type HubEventsApiAdminEventsGetResponses = {
+    /**
+     * Response Hub Events Api Admin Events Get
+     *
+     * Successful Response
+     */
+    200: Array<HubEventView>;
+};
+
+export type HubEventsApiAdminEventsGetResponse = HubEventsApiAdminEventsGetResponses[keyof HubEventsApiAdminEventsGetResponses];
+
+export type SyncEveryTenantApiAdminGraphsSyncPostData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/admin/graphs/sync';
+};
+
+export type SyncEveryTenantApiAdminGraphsSyncPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminGraphSyncResponse;
+};
+
+export type SyncEveryTenantApiAdminGraphsSyncPostResponse = SyncEveryTenantApiAdminGraphsSyncPostResponses[keyof SyncEveryTenantApiAdminGraphsSyncPostResponses];
+
+export type ListHubAdminsApiAdminHubAdminsGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/admin/hub-admins';
+};
+
+export type ListHubAdminsApiAdminHubAdminsGetResponses = {
+    /**
+     * Response List Hub Admins Api Admin Hub Admins Get
+     *
+     * Successful Response
+     */
+    200: Array<HubAdminView>;
+};
+
+export type ListHubAdminsApiAdminHubAdminsGetResponse = ListHubAdminsApiAdminHubAdminsGetResponses[keyof ListHubAdminsApiAdminHubAdminsGetResponses];
+
+export type RevokeHubAdminApiAdminHubAdminsUserIdDeleteData = {
+    body?: never;
+    path: {
+        /**
+         * User Id
+         */
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/admin/hub-admins/{user_id}';
+};
+
+export type RevokeHubAdminApiAdminHubAdminsUserIdDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RevokeHubAdminApiAdminHubAdminsUserIdDeleteError = RevokeHubAdminApiAdminHubAdminsUserIdDeleteErrors[keyof RevokeHubAdminApiAdminHubAdminsUserIdDeleteErrors];
+
+export type RevokeHubAdminApiAdminHubAdminsUserIdDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type RevokeHubAdminApiAdminHubAdminsUserIdDeleteResponse = RevokeHubAdminApiAdminHubAdminsUserIdDeleteResponses[keyof RevokeHubAdminApiAdminHubAdminsUserIdDeleteResponses];
+
+export type GrantHubAdminApiAdminHubAdminsUserIdPutData = {
+    body?: never;
+    path: {
+        /**
+         * User Id
+         */
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/admin/hub-admins/{user_id}';
+};
+
+export type GrantHubAdminApiAdminHubAdminsUserIdPutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GrantHubAdminApiAdminHubAdminsUserIdPutError = GrantHubAdminApiAdminHubAdminsUserIdPutErrors[keyof GrantHubAdminApiAdminHubAdminsUserIdPutErrors];
+
+export type GrantHubAdminApiAdminHubAdminsUserIdPutResponses = {
+    /**
+     * Successful Response
+     */
+    200: HubAdminView;
+};
+
+export type GrantHubAdminApiAdminHubAdminsUserIdPutResponse = GrantHubAdminApiAdminHubAdminsUserIdPutResponses[keyof GrantHubAdminApiAdminHubAdminsUserIdPutResponses];
+
+export type ListTenantsApiAdminTenantsGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/admin/tenants';
+};
+
+export type ListTenantsApiAdminTenantsGetResponses = {
+    /**
+     * Response List Tenants Api Admin Tenants Get
+     *
+     * Successful Response
+     */
+    200: Array<TenantView>;
+};
+
+export type ListTenantsApiAdminTenantsGetResponse = ListTenantsApiAdminTenantsGetResponses[keyof ListTenantsApiAdminTenantsGetResponses];
+
+export type CreateTenantApiAdminTenantsPostData = {
+    body: TenantCreateRequest;
+    headers?: {
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/admin/tenants';
+};
+
+export type CreateTenantApiAdminTenantsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateTenantApiAdminTenantsPostError = CreateTenantApiAdminTenantsPostErrors[keyof CreateTenantApiAdminTenantsPostErrors];
+
+export type CreateTenantApiAdminTenantsPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: TenantView;
+};
+
+export type CreateTenantApiAdminTenantsPostResponse = CreateTenantApiAdminTenantsPostResponses[keyof CreateTenantApiAdminTenantsPostResponses];
+
+export type DeleteTenantApiAdminTenantsTenantIdDeleteData = {
+    body?: never;
+    path: {
+        /**
+         * Tenant Id
+         */
+        tenant_id: string;
+    };
+    query?: never;
+    url: '/api/admin/tenants/{tenant_id}';
+};
+
+export type DeleteTenantApiAdminTenantsTenantIdDeleteErrors = {
+    /**
+     * No tenant has the id.
+     */
+    404: unknown;
+    /**
+     * The tenant is the hub's only open tenant.
+     */
+    409: unknown;
+    /**
+     * The tenant was deleted.
+     */
+    410: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeleteTenantApiAdminTenantsTenantIdDeleteError = DeleteTenantApiAdminTenantsTenantIdDeleteErrors[keyof DeleteTenantApiAdminTenantsTenantIdDeleteErrors];
+
+export type DeleteTenantApiAdminTenantsTenantIdDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    200: TenantDeletionResponse;
+    /**
+     * The deletion is underway.
+     */
+    202: TenantDeletionResponse;
+};
+
+export type DeleteTenantApiAdminTenantsTenantIdDeleteResponse = DeleteTenantApiAdminTenantsTenantIdDeleteResponses[keyof DeleteTenantApiAdminTenantsTenantIdDeleteResponses];
+
+export type RenameTenantApiAdminTenantsTenantIdPatchData = {
+    body: TenantRenameRequest;
+    path: {
+        /**
+         * Tenant Id
+         */
+        tenant_id: string;
+    };
+    query?: never;
+    url: '/api/admin/tenants/{tenant_id}';
+};
+
+export type RenameTenantApiAdminTenantsTenantIdPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RenameTenantApiAdminTenantsTenantIdPatchError = RenameTenantApiAdminTenantsTenantIdPatchErrors[keyof RenameTenantApiAdminTenantsTenantIdPatchErrors];
+
+export type RenameTenantApiAdminTenantsTenantIdPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: TenantView;
+};
+
+export type RenameTenantApiAdminTenantsTenantIdPatchResponse = RenameTenantApiAdminTenantsTenantIdPatchResponses[keyof RenameTenantApiAdminTenantsTenantIdPatchResponses];
 
 export type CountsByAgentTypeApiAnalyticsCountsAgentTypesGetData = {
     body?: never;
@@ -8048,6 +9189,10 @@ export type CountsByAgentTypeApiAnalyticsCountsAgentTypesGetData = {
          * Effort
          */
         effort?: string | null;
+        /**
+         * Project
+         */
+        project?: string | null;
     };
     url: '/api/analytics/counts/agent-types';
 };
@@ -8122,6 +9267,10 @@ export type CountsByFileApiAnalyticsCountsFilesGetData = {
          * Effort
          */
         effort?: string | null;
+        /**
+         * Project
+         */
+        project?: string | null;
     };
     url: '/api/analytics/counts/files';
 };
@@ -8200,6 +9349,10 @@ export type CountsByNodeApiAnalyticsCountsNodesGetData = {
          * Effort
          */
         effort?: string | null;
+        /**
+         * Project
+         */
+        project?: string | null;
     };
     url: '/api/analytics/counts/nodes';
 };
@@ -8266,6 +9419,10 @@ export type CountsBySkillApiAnalyticsCountsSkillsGetData = {
          * Effort
          */
         effort?: string | null;
+        /**
+         * Project
+         */
+        project?: string | null;
     };
     url: '/api/analytics/counts/skills';
 };
@@ -8308,6 +9465,10 @@ export type DurationsByGraphApiAnalyticsDurationsGraphsGetData = {
          * Until
          */
         until?: string | null;
+        /**
+         * Project
+         */
+        project?: string | null;
     };
     url: '/api/analytics/durations/graphs';
 };
@@ -8350,6 +9511,10 @@ export type DurationsByNodeApiAnalyticsDurationsNodesGetData = {
          * Until
          */
         until?: string | null;
+        /**
+         * Project
+         */
+        project?: string | null;
     };
     url: '/api/analytics/durations/nodes';
 };
@@ -8436,6 +9601,10 @@ export type ListEventsApiAnalyticsEventsGetData = {
          * Effort
          */
         effort?: string | null;
+        /**
+         * Project
+         */
+        project?: string | null;
     };
     url: '/api/analytics/events';
 };
@@ -8514,6 +9683,10 @@ export type StreamEventsApiAnalyticsEventsNdjsonGetData = {
          * Effort
          */
         effort?: string | null;
+        /**
+         * Project
+         */
+        project?: string | null;
     };
     url: '/api/analytics/events/ndjson';
 };
@@ -8556,6 +9729,10 @@ export type OutcomesByNodeApiAnalyticsOutcomesNodesGetData = {
          * Until
          */
         until?: string | null;
+        /**
+         * Project
+         */
+        project?: string | null;
     };
     url: '/api/analytics/outcomes/nodes';
 };
@@ -8631,6 +9808,10 @@ export type SpendByChunkApiAnalyticsSpendChunksGetData = {
          * Until
          */
         until?: string | null;
+        /**
+         * Project
+         */
+        project?: string | null;
     };
     url: '/api/analytics/spend/chunks';
 };
@@ -8673,6 +9854,10 @@ export type StreamChunkSpendApiAnalyticsSpendChunksNdjsonGetData = {
          * Until
          */
         until?: string | null;
+        /**
+         * Project
+         */
+        project?: string | null;
     };
     url: '/api/analytics/spend/chunks/ndjson';
 };
@@ -8719,6 +9904,10 @@ export type SpendByGraphApiAnalyticsSpendGraphsGetData = {
          * Until
          */
         until?: string | null;
+        /**
+         * Project
+         */
+        project?: string | null;
     };
     url: '/api/analytics/spend/graphs';
 };
@@ -8765,6 +9954,10 @@ export type SpendByNodeApiAnalyticsSpendNodesGetData = {
          * Until
          */
         until?: string | null;
+        /**
+         * Project
+         */
+        project?: string | null;
     };
     url: '/api/analytics/spend/nodes';
 };
@@ -8943,6 +10136,10 @@ export type AuthorizeApiAuthNameAuthorizeGetData = {
          * Return To
          */
         return_to?: string | null;
+        /**
+         * Invite
+         */
+        invite?: string | null;
     };
     url: '/api/auth/{name}/authorize';
 };
@@ -9012,6 +10209,10 @@ export type GetBacklogApiBacklogGetData = {
          * Limit
          */
         limit?: number;
+        /**
+         * Project
+         */
+        project?: string | null;
     };
     url: '/api/backlog';
 };
@@ -9087,9 +10288,23 @@ export type RepositionBacklogApiBacklogPositionPostResponse = RepositionBacklogA
 export type ChunkCountsApiChunkCountsGetData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * Project
+         */
+        project?: string | null;
+    };
     url: '/api/chunk-counts';
 };
+
+export type ChunkCountsApiChunkCountsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ChunkCountsApiChunkCountsGetError = ChunkCountsApiChunkCountsGetErrors[keyof ChunkCountsApiChunkCountsGetErrors];
 
 export type ChunkCountsApiChunkCountsGetResponses = {
     /**
@@ -9116,6 +10331,10 @@ export type ListChunksApiChunksGetData = {
          * Board Window
          */
         board_window?: boolean;
+        /**
+         * Project
+         */
+        project?: string | null;
     };
     url: '/api/chunks';
 };
@@ -9874,6 +11093,10 @@ export type ListChangesApiConfigChangesGetData = {
          * Record Key
          */
         record_key?: string | null;
+        /**
+         * Project
+         */
+        project?: string | null;
     };
     url: '/api/config/changes';
 };
@@ -10086,6 +11309,10 @@ export type ListEventsApiEventsGetData = {
          * Limit
          */
         limit?: number;
+        /**
+         * Project
+         */
+        project?: string | null;
     };
     url: '/api/events';
 };
@@ -10136,6 +11363,10 @@ export type ListFindingsApiFindingsGetData = {
          * Limit
          */
         limit?: number;
+        /**
+         * Project
+         */
+        project?: string | null;
     };
     url: '/api/findings';
 };
@@ -11182,9 +12413,23 @@ export type GetQuestionApiFleetQuestionsQuestionIdGetResponse = GetQuestionApiFl
 export type PeekQueueApiFleetQueuePeekGetData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * Project
+         */
+        project?: string | null;
+    };
     url: '/api/fleet/queue/peek';
 };
+
+export type PeekQueueApiFleetQueuePeekGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PeekQueueApiFleetQueuePeekGetError = PeekQueueApiFleetQueuePeekGetErrors[keyof PeekQueueApiFleetQueuePeekGetErrors];
 
 export type PeekQueueApiFleetQueuePeekGetResponses = {
     /**
@@ -11333,9 +12578,23 @@ export type HeartbeatRunnerApiFleetRunnersRunnerIdHeartbeatsPostResponse = Heart
 export type GetScopesApiFleetScopesGetData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * Chunk Id
+         */
+        chunk_id?: string | null;
+    };
     url: '/api/fleet/scopes';
 };
+
+export type GetScopesApiFleetScopesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetScopesApiFleetScopesGetError = GetScopesApiFleetScopesGetErrors[keyof GetScopesApiFleetScopesGetErrors];
 
 export type GetScopesApiFleetScopesGetResponses = {
     /**
@@ -11453,6 +12712,10 @@ export type ListGardenProposalsApiGardenProposalsGetData = {
          * Origin
          */
         origin?: GardenProposalOrigin | null;
+        /**
+         * Project
+         */
+        project?: string | null;
     };
     url: '/api/garden-proposals';
 };
@@ -11909,6 +13172,77 @@ export type HealthApiHealthGetResponses = {
 
 export type HealthApiHealthGetResponse = HealthApiHealthGetResponses[keyof HealthApiHealthGetResponses];
 
+export type ListInvitationsApiInvitationsGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/invitations';
+};
+
+export type ListInvitationsApiInvitationsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: InvitationListResponse;
+};
+
+export type ListInvitationsApiInvitationsGetResponse = ListInvitationsApiInvitationsGetResponses[keyof ListInvitationsApiInvitationsGetResponses];
+
+export type CreateInvitationApiInvitationsPostData = {
+    body: InvitationCreateRequest;
+    path?: never;
+    query?: never;
+    url: '/api/invitations';
+};
+
+export type CreateInvitationApiInvitationsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateInvitationApiInvitationsPostError = CreateInvitationApiInvitationsPostErrors[keyof CreateInvitationApiInvitationsPostErrors];
+
+export type CreateInvitationApiInvitationsPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: InvitationCreateResponse;
+};
+
+export type CreateInvitationApiInvitationsPostResponse = CreateInvitationApiInvitationsPostResponses[keyof CreateInvitationApiInvitationsPostResponses];
+
+export type RevokeInvitationApiInvitationsInvitationIdRevocationsPostData = {
+    body?: never;
+    path: {
+        /**
+         * Invitation Id
+         */
+        invitation_id: string;
+    };
+    query?: never;
+    url: '/api/invitations/{invitation_id}/revocations';
+};
+
+export type RevokeInvitationApiInvitationsInvitationIdRevocationsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RevokeInvitationApiInvitationsInvitationIdRevocationsPostError = RevokeInvitationApiInvitationsInvitationIdRevocationsPostErrors[keyof RevokeInvitationApiInvitationsInvitationIdRevocationsPostErrors];
+
+export type RevokeInvitationApiInvitationsInvitationIdRevocationsPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: InvitationView;
+};
+
+export type RevokeInvitationApiInvitationsInvitationIdRevocationsPostResponse = RevokeInvitationApiInvitationsInvitationIdRevocationsPostResponses[keyof RevokeInvitationApiInvitationsInvitationIdRevocationsPostResponses];
+
 export type MeApiMeGetData = {
     body?: never;
     path?: never;
@@ -11924,6 +13258,983 @@ export type MeApiMeGetResponses = {
 };
 
 export type MeApiMeGetResponse = MeApiMeGetResponses[keyof MeApiMeGetResponses];
+
+export type ListMembersApiMembersGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/members';
+};
+
+export type ListMembersApiMembersGetResponses = {
+    /**
+     * Response List Members Api Members Get
+     *
+     * Successful Response
+     */
+    200: Array<MemberView>;
+};
+
+export type ListMembersApiMembersGetResponse = ListMembersApiMembersGetResponses[keyof ListMembersApiMembersGetResponses];
+
+export type RevokeMembershipApiMembersUserIdDeleteData = {
+    body?: never;
+    path: {
+        /**
+         * User Id
+         */
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/members/{user_id}';
+};
+
+export type RevokeMembershipApiMembersUserIdDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RevokeMembershipApiMembersUserIdDeleteError = RevokeMembershipApiMembersUserIdDeleteErrors[keyof RevokeMembershipApiMembersUserIdDeleteErrors];
+
+export type RevokeMembershipApiMembersUserIdDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type RevokeMembershipApiMembersUserIdDeleteResponse = RevokeMembershipApiMembersUserIdDeleteResponses[keyof RevokeMembershipApiMembersUserIdDeleteResponses];
+
+export type GrantMembershipApiMembersUserIdPutData = {
+    body: MemberRoleRequest;
+    path: {
+        /**
+         * User Id
+         */
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/members/{user_id}';
+};
+
+export type GrantMembershipApiMembersUserIdPutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GrantMembershipApiMembersUserIdPutError = GrantMembershipApiMembersUserIdPutErrors[keyof GrantMembershipApiMembersUserIdPutErrors];
+
+export type GrantMembershipApiMembersUserIdPutResponses = {
+    /**
+     * Successful Response
+     */
+    200: MemberView;
+};
+
+export type GrantMembershipApiMembersUserIdPutResponse = GrantMembershipApiMembersUserIdPutResponses[keyof GrantMembershipApiMembersUserIdPutResponses];
+
+export type ListProjectsApiProjectsGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/projects';
+};
+
+export type ListProjectsApiProjectsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: ProjectsListView;
+};
+
+export type ListProjectsApiProjectsGetResponse = ListProjectsApiProjectsGetResponses[keyof ListProjectsApiProjectsGetResponses];
+
+export type CreateProjectApiProjectsPostData = {
+    body: ProjectCreateRequest;
+    headers?: {
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/projects';
+};
+
+export type CreateProjectApiProjectsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateProjectApiProjectsPostError = CreateProjectApiProjectsPostErrors[keyof CreateProjectApiProjectsPostErrors];
+
+export type CreateProjectApiProjectsPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: ProjectView;
+};
+
+export type CreateProjectApiProjectsPostResponse = CreateProjectApiProjectsPostResponses[keyof CreateProjectApiProjectsPostResponses];
+
+export type GetProjectApiProjectsProjectGetData = {
+    body?: never;
+    path: {
+        /**
+         * Project
+         */
+        project: string;
+    };
+    query?: never;
+    url: '/api/projects/{project}';
+};
+
+export type GetProjectApiProjectsProjectGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetProjectApiProjectsProjectGetError = GetProjectApiProjectsProjectGetErrors[keyof GetProjectApiProjectsProjectGetErrors];
+
+export type GetProjectApiProjectsProjectGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: ProjectView;
+};
+
+export type GetProjectApiProjectsProjectGetResponse = GetProjectApiProjectsProjectGetResponses[keyof GetProjectApiProjectsProjectGetResponses];
+
+export type PatchProjectApiProjectsProjectPatchData = {
+    body: ProjectPatchRequest;
+    headers?: {
+        /**
+         * If-Match
+         */
+        'if-match'?: number | null;
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
+    path: {
+        /**
+         * Project
+         */
+        project: string;
+    };
+    query?: never;
+    url: '/api/projects/{project}';
+};
+
+export type PatchProjectApiProjectsProjectPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PatchProjectApiProjectsProjectPatchError = PatchProjectApiProjectsProjectPatchErrors[keyof PatchProjectApiProjectsProjectPatchErrors];
+
+export type PatchProjectApiProjectsProjectPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: ProjectView;
+};
+
+export type PatchProjectApiProjectsProjectPatchResponse = PatchProjectApiProjectsProjectPatchResponses[keyof PatchProjectApiProjectsProjectPatchResponses];
+
+export type ListProjectFindingsApiProjectsProjectFindingsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Project
+         */
+        project: string;
+    };
+    query?: {
+        /**
+         * Routine
+         */
+        routine?: string | null;
+        /**
+         * Scope
+         */
+        scope?: string | null;
+        /**
+         * Source
+         */
+        source?: string | null;
+        /**
+         * Include Gone
+         */
+        include_gone?: boolean;
+        /**
+         * Cursor
+         */
+        cursor?: string | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/projects/{project}/findings';
+};
+
+export type ListProjectFindingsApiProjectsProjectFindingsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListProjectFindingsApiProjectsProjectFindingsGetError = ListProjectFindingsApiProjectsProjectFindingsGetErrors[keyof ListProjectFindingsApiProjectsProjectFindingsGetErrors];
+
+export type ListProjectFindingsApiProjectsProjectFindingsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: FindingsPageView;
+};
+
+export type ListProjectFindingsApiProjectsProjectFindingsGetResponse = ListProjectFindingsApiProjectsProjectFindingsGetResponses[keyof ListProjectFindingsApiProjectsProjectFindingsGetResponses];
+
+export type ListProjectGardenProposalsApiProjectsProjectGardenProposalsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Project
+         */
+        project: string;
+    };
+    query?: {
+        /**
+         * Cursor
+         */
+        cursor?: string | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Origin
+         */
+        origin?: GardenProposalOrigin | null;
+    };
+    url: '/api/projects/{project}/garden-proposals';
+};
+
+export type ListProjectGardenProposalsApiProjectsProjectGardenProposalsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListProjectGardenProposalsApiProjectsProjectGardenProposalsGetError = ListProjectGardenProposalsApiProjectsProjectGardenProposalsGetErrors[keyof ListProjectGardenProposalsApiProjectsProjectGardenProposalsGetErrors];
+
+export type ListProjectGardenProposalsApiProjectsProjectGardenProposalsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: GardenProposalsPageView;
+};
+
+export type ListProjectGardenProposalsApiProjectsProjectGardenProposalsGetResponse = ListProjectGardenProposalsApiProjectsProjectGardenProposalsGetResponses[keyof ListProjectGardenProposalsApiProjectsProjectGardenProposalsGetResponses];
+
+export type CreateProjectGardenProposalApiProjectsProjectGardenProposalsPostData = {
+    body: GardenProposalCreateRequest;
+    path: {
+        /**
+         * Project
+         */
+        project: string;
+    };
+    query?: never;
+    url: '/api/projects/{project}/garden-proposals';
+};
+
+export type CreateProjectGardenProposalApiProjectsProjectGardenProposalsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateProjectGardenProposalApiProjectsProjectGardenProposalsPostError = CreateProjectGardenProposalApiProjectsProjectGardenProposalsPostErrors[keyof CreateProjectGardenProposalApiProjectsProjectGardenProposalsPostErrors];
+
+export type CreateProjectGardenProposalApiProjectsProjectGardenProposalsPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: GardenProposalView;
+};
+
+export type CreateProjectGardenProposalApiProjectsProjectGardenProposalsPostResponse = CreateProjectGardenProposalApiProjectsProjectGardenProposalsPostResponses[keyof CreateProjectGardenProposalApiProjectsProjectGardenProposalsPostResponses];
+
+export type ListRepositoryLinksApiProjectsProjectRepositoryLinksGetData = {
+    body?: never;
+    path: {
+        /**
+         * Project
+         */
+        project: string;
+    };
+    query?: never;
+    url: '/api/projects/{project}/repository-links';
+};
+
+export type ListRepositoryLinksApiProjectsProjectRepositoryLinksGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListRepositoryLinksApiProjectsProjectRepositoryLinksGetError = ListRepositoryLinksApiProjectsProjectRepositoryLinksGetErrors[keyof ListRepositoryLinksApiProjectsProjectRepositoryLinksGetErrors];
+
+export type ListRepositoryLinksApiProjectsProjectRepositoryLinksGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: RepositoryLinksView;
+};
+
+export type ListRepositoryLinksApiProjectsProjectRepositoryLinksGetResponse = ListRepositoryLinksApiProjectsProjectRepositoryLinksGetResponses[keyof ListRepositoryLinksApiProjectsProjectRepositoryLinksGetResponses];
+
+export type LinkRepositoryApiProjectsProjectRepositoryLinksRepositoryPutData = {
+    body?: never;
+    headers?: {
+        /**
+         * If-Match
+         */
+        'if-match'?: number | null;
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
+    path: {
+        /**
+         * Repository
+         */
+        repository: string;
+        /**
+         * Project
+         */
+        project: string;
+    };
+    query?: never;
+    url: '/api/projects/{project}/repository-links/{repository}';
+};
+
+export type LinkRepositoryApiProjectsProjectRepositoryLinksRepositoryPutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type LinkRepositoryApiProjectsProjectRepositoryLinksRepositoryPutError = LinkRepositoryApiProjectsProjectRepositoryLinksRepositoryPutErrors[keyof LinkRepositoryApiProjectsProjectRepositoryLinksRepositoryPutErrors];
+
+export type LinkRepositoryApiProjectsProjectRepositoryLinksRepositoryPutResponses = {
+    /**
+     * Successful Response
+     */
+    200: RepositoryLinkView;
+};
+
+export type LinkRepositoryApiProjectsProjectRepositoryLinksRepositoryPutResponse = LinkRepositoryApiProjectsProjectRepositoryLinksRepositoryPutResponses[keyof LinkRepositoryApiProjectsProjectRepositoryLinksRepositoryPutResponses];
+
+export type UnlinkRepositoryApiProjectsProjectRepositoryLinksRepositoryRetirePostData = {
+    body?: never;
+    headers?: {
+        /**
+         * If-Match
+         */
+        'if-match'?: number | null;
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
+    path: {
+        /**
+         * Repository
+         */
+        repository: string;
+        /**
+         * Project
+         */
+        project: string;
+    };
+    query?: never;
+    url: '/api/projects/{project}/repository-links/{repository}/retire';
+};
+
+export type UnlinkRepositoryApiProjectsProjectRepositoryLinksRepositoryRetirePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UnlinkRepositoryApiProjectsProjectRepositoryLinksRepositoryRetirePostError = UnlinkRepositoryApiProjectsProjectRepositoryLinksRepositoryRetirePostErrors[keyof UnlinkRepositoryApiProjectsProjectRepositoryLinksRepositoryRetirePostErrors];
+
+export type UnlinkRepositoryApiProjectsProjectRepositoryLinksRepositoryRetirePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: RepositoryLinkView;
+};
+
+export type UnlinkRepositoryApiProjectsProjectRepositoryLinksRepositoryRetirePostResponse = UnlinkRepositoryApiProjectsProjectRepositoryLinksRepositoryRetirePostResponses[keyof UnlinkRepositoryApiProjectsProjectRepositoryLinksRepositoryRetirePostResponses];
+
+export type ListProjectRoutinesApiProjectsProjectRoutinesGetData = {
+    body?: never;
+    path: {
+        /**
+         * Project
+         */
+        project: string;
+    };
+    query?: {
+        /**
+         * Include Retired
+         */
+        include_retired?: boolean;
+    };
+    url: '/api/projects/{project}/routines';
+};
+
+export type ListProjectRoutinesApiProjectsProjectRoutinesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListProjectRoutinesApiProjectsProjectRoutinesGetError = ListProjectRoutinesApiProjectsProjectRoutinesGetErrors[keyof ListProjectRoutinesApiProjectsProjectRoutinesGetErrors];
+
+export type ListProjectRoutinesApiProjectsProjectRoutinesGetResponses = {
+    /**
+     * Response List Project Routines Api Projects  Project  Routines Get
+     *
+     * Successful Response
+     */
+    200: Array<RoutineView>;
+};
+
+export type ListProjectRoutinesApiProjectsProjectRoutinesGetResponse = ListProjectRoutinesApiProjectsProjectRoutinesGetResponses[keyof ListProjectRoutinesApiProjectsProjectRoutinesGetResponses];
+
+export type CreateProjectRoutineApiProjectsProjectRoutinesPostData = {
+    body: RoutineCreateRequest;
+    headers?: {
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
+    path: {
+        /**
+         * Project
+         */
+        project: string;
+    };
+    query?: never;
+    url: '/api/projects/{project}/routines';
+};
+
+export type CreateProjectRoutineApiProjectsProjectRoutinesPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateProjectRoutineApiProjectsProjectRoutinesPostError = CreateProjectRoutineApiProjectsProjectRoutinesPostErrors[keyof CreateProjectRoutineApiProjectsProjectRoutinesPostErrors];
+
+export type CreateProjectRoutineApiProjectsProjectRoutinesPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: RoutineView;
+};
+
+export type CreateProjectRoutineApiProjectsProjectRoutinesPostResponse = CreateProjectRoutineApiProjectsProjectRoutinesPostResponses[keyof CreateProjectRoutineApiProjectsProjectRoutinesPostResponses];
+
+export type ListProjectRunsApiProjectsProjectRunsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Project
+         */
+        project: string;
+    };
+    query?: {
+        /**
+         * Since
+         */
+        since?: string | null;
+        /**
+         * Until
+         */
+        until?: string | null;
+    };
+    url: '/api/projects/{project}/runs';
+};
+
+export type ListProjectRunsApiProjectsProjectRunsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListProjectRunsApiProjectsProjectRunsGetError = ListProjectRunsApiProjectsProjectRunsGetErrors[keyof ListProjectRunsApiProjectsProjectRunsGetErrors];
+
+export type ListProjectRunsApiProjectsProjectRunsGetResponses = {
+    /**
+     * Response List Project Runs Api Projects  Project  Runs Get
+     *
+     * Successful Response
+     */
+    200: Array<RunRowView>;
+};
+
+export type ListProjectRunsApiProjectsProjectRunsGetResponse = ListProjectRunsApiProjectsProjectRunsGetResponses[keyof ListProjectRunsApiProjectsProjectRunsGetResponses];
+
+export type ProjectRunDeltaApiProjectsProjectRunsChunkIdGetData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+        /**
+         * Project
+         */
+        project: string;
+    };
+    query?: never;
+    url: '/api/projects/{project}/runs/{chunk_id}';
+};
+
+export type ProjectRunDeltaApiProjectsProjectRunsChunkIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ProjectRunDeltaApiProjectsProjectRunsChunkIdGetError = ProjectRunDeltaApiProjectsProjectRunsChunkIdGetErrors[keyof ProjectRunDeltaApiProjectsProjectRunsChunkIdGetErrors];
+
+export type ProjectRunDeltaApiProjectsProjectRunsChunkIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: RunDeltaView;
+};
+
+export type ProjectRunDeltaApiProjectsProjectRunsChunkIdGetResponse = ProjectRunDeltaApiProjectsProjectRunsChunkIdGetResponses[keyof ProjectRunDeltaApiProjectsProjectRunsChunkIdGetResponses];
+
+export type ListProjectScopesApiProjectsProjectScopesGetData = {
+    body?: never;
+    path: {
+        /**
+         * Project
+         */
+        project: string;
+    };
+    query?: never;
+    url: '/api/projects/{project}/scopes';
+};
+
+export type ListProjectScopesApiProjectsProjectScopesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListProjectScopesApiProjectsProjectScopesGetError = ListProjectScopesApiProjectsProjectScopesGetErrors[keyof ListProjectScopesApiProjectsProjectScopesGetErrors];
+
+export type ListProjectScopesApiProjectsProjectScopesGetResponses = {
+    /**
+     * Response List Project Scopes Api Projects  Project  Scopes Get
+     *
+     * Successful Response
+     */
+    200: Array<ScopeView>;
+};
+
+export type ListProjectScopesApiProjectsProjectScopesGetResponse = ListProjectScopesApiProjectsProjectScopesGetResponses[keyof ListProjectScopesApiProjectsProjectScopesGetResponses];
+
+export type CreateProjectScopeApiProjectsProjectScopesPostData = {
+    body: ScopeCreateRequest;
+    headers?: {
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
+    path: {
+        /**
+         * Project
+         */
+        project: string;
+    };
+    query?: never;
+    url: '/api/projects/{project}/scopes';
+};
+
+export type CreateProjectScopeApiProjectsProjectScopesPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateProjectScopeApiProjectsProjectScopesPostError = CreateProjectScopeApiProjectsProjectScopesPostErrors[keyof CreateProjectScopeApiProjectsProjectScopesPostErrors];
+
+export type CreateProjectScopeApiProjectsProjectScopesPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: ScopeView;
+};
+
+export type CreateProjectScopeApiProjectsProjectScopesPostResponse = CreateProjectScopeApiProjectsProjectScopesPostResponses[keyof CreateProjectScopeApiProjectsProjectScopesPostResponses];
+
+export type GetProjectScopeApiProjectsProjectScopesSlugGetData = {
+    body?: never;
+    path: {
+        /**
+         * Slug
+         */
+        slug: string;
+        /**
+         * Project
+         */
+        project: string;
+    };
+    query?: never;
+    url: '/api/projects/{project}/scopes/{slug}';
+};
+
+export type GetProjectScopeApiProjectsProjectScopesSlugGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetProjectScopeApiProjectsProjectScopesSlugGetError = GetProjectScopeApiProjectsProjectScopesSlugGetErrors[keyof GetProjectScopeApiProjectsProjectScopesSlugGetErrors];
+
+export type GetProjectScopeApiProjectsProjectScopesSlugGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: ScopeView;
+};
+
+export type GetProjectScopeApiProjectsProjectScopesSlugGetResponse = GetProjectScopeApiProjectsProjectScopesSlugGetResponses[keyof GetProjectScopeApiProjectsProjectScopesSlugGetResponses];
+
+export type EditProjectScopeApiProjectsProjectScopesSlugPatchData = {
+    body: ScopeEditRequest;
+    headers?: {
+        /**
+         * If-Match
+         */
+        'if-match'?: number | null;
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
+    path: {
+        /**
+         * Slug
+         */
+        slug: string;
+        /**
+         * Project
+         */
+        project: string;
+    };
+    query?: never;
+    url: '/api/projects/{project}/scopes/{slug}';
+};
+
+export type EditProjectScopeApiProjectsProjectScopesSlugPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type EditProjectScopeApiProjectsProjectScopesSlugPatchError = EditProjectScopeApiProjectsProjectScopesSlugPatchErrors[keyof EditProjectScopeApiProjectsProjectScopesSlugPatchErrors];
+
+export type EditProjectScopeApiProjectsProjectScopesSlugPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: ScopeView;
+};
+
+export type EditProjectScopeApiProjectsProjectScopesSlugPatchResponse = EditProjectScopeApiProjectsProjectScopesSlugPatchResponses[keyof EditProjectScopeApiProjectsProjectScopesSlugPatchResponses];
+
+export type EnableProjectScopeApiProjectsProjectScopesSlugEnablePostData = {
+    body: ScopeLifecycleRequest;
+    headers?: {
+        /**
+         * If-Match
+         */
+        'if-match'?: number | null;
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
+    path: {
+        /**
+         * Slug
+         */
+        slug: string;
+        /**
+         * Project
+         */
+        project: string;
+    };
+    query?: never;
+    url: '/api/projects/{project}/scopes/{slug}/enable';
+};
+
+export type EnableProjectScopeApiProjectsProjectScopesSlugEnablePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type EnableProjectScopeApiProjectsProjectScopesSlugEnablePostError = EnableProjectScopeApiProjectsProjectScopesSlugEnablePostErrors[keyof EnableProjectScopeApiProjectsProjectScopesSlugEnablePostErrors];
+
+export type EnableProjectScopeApiProjectsProjectScopesSlugEnablePostResponses = {
+    /**
+     * Successful Response
+     */
+    202: ScopeView;
+};
+
+export type EnableProjectScopeApiProjectsProjectScopesSlugEnablePostResponse = EnableProjectScopeApiProjectsProjectScopesSlugEnablePostResponses[keyof EnableProjectScopeApiProjectsProjectScopesSlugEnablePostResponses];
+
+export type RetireProjectScopeApiProjectsProjectScopesSlugRetirePostData = {
+    body: ScopeLifecycleRequest;
+    headers?: {
+        /**
+         * If-Match
+         */
+        'if-match'?: number | null;
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
+    path: {
+        /**
+         * Slug
+         */
+        slug: string;
+        /**
+         * Project
+         */
+        project: string;
+    };
+    query?: never;
+    url: '/api/projects/{project}/scopes/{slug}/retire';
+};
+
+export type RetireProjectScopeApiProjectsProjectScopesSlugRetirePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RetireProjectScopeApiProjectsProjectScopesSlugRetirePostError = RetireProjectScopeApiProjectsProjectScopesSlugRetirePostErrors[keyof RetireProjectScopeApiProjectsProjectScopesSlugRetirePostErrors];
+
+export type RetireProjectScopeApiProjectsProjectScopesSlugRetirePostResponses = {
+    /**
+     * Successful Response
+     */
+    202: ScopeView;
+};
+
+export type RetireProjectScopeApiProjectsProjectScopesSlugRetirePostResponse = RetireProjectScopeApiProjectsProjectScopesSlugRetirePostResponses[keyof RetireProjectScopeApiProjectsProjectScopesSlugRetirePostResponses];
+
+export type ListProjectScopeRoutinesApiProjectsProjectScopesSlugRoutinesGetData = {
+    body?: never;
+    path: {
+        /**
+         * Slug
+         */
+        slug: string;
+        /**
+         * Project
+         */
+        project: string;
+    };
+    query?: never;
+    url: '/api/projects/{project}/scopes/{slug}/routines';
+};
+
+export type ListProjectScopeRoutinesApiProjectsProjectScopesSlugRoutinesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListProjectScopeRoutinesApiProjectsProjectScopesSlugRoutinesGetError = ListProjectScopeRoutinesApiProjectsProjectScopesSlugRoutinesGetErrors[keyof ListProjectScopeRoutinesApiProjectsProjectScopesSlugRoutinesGetErrors];
+
+export type ListProjectScopeRoutinesApiProjectsProjectScopesSlugRoutinesGetResponses = {
+    /**
+     * Response List Project Scope Routines Api Projects  Project  Scopes  Slug  Routines Get
+     *
+     * Successful Response
+     */
+    200: Array<string>;
+};
+
+export type ListProjectScopeRoutinesApiProjectsProjectScopesSlugRoutinesGetResponse = ListProjectScopeRoutinesApiProjectsProjectScopesSlugRoutinesGetResponses[keyof ListProjectScopeRoutinesApiProjectsProjectScopesSlugRoutinesGetResponses];
+
+export type ListSourceLinksApiProjectsProjectSourceLinksGetData = {
+    body?: never;
+    path: {
+        /**
+         * Project
+         */
+        project: string;
+    };
+    query?: never;
+    url: '/api/projects/{project}/source-links';
+};
+
+export type ListSourceLinksApiProjectsProjectSourceLinksGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListSourceLinksApiProjectsProjectSourceLinksGetError = ListSourceLinksApiProjectsProjectSourceLinksGetErrors[keyof ListSourceLinksApiProjectsProjectSourceLinksGetErrors];
+
+export type ListSourceLinksApiProjectsProjectSourceLinksGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: SourceLinksView;
+};
+
+export type ListSourceLinksApiProjectsProjectSourceLinksGetResponse = ListSourceLinksApiProjectsProjectSourceLinksGetResponses[keyof ListSourceLinksApiProjectsProjectSourceLinksGetResponses];
+
+export type LinkSourceApiProjectsProjectSourceLinksSourcePutData = {
+    body?: never;
+    headers?: {
+        /**
+         * If-Match
+         */
+        'if-match'?: number | null;
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
+    path: {
+        /**
+         * Source
+         */
+        source: string;
+        /**
+         * Project
+         */
+        project: string;
+    };
+    query?: never;
+    url: '/api/projects/{project}/source-links/{source}';
+};
+
+export type LinkSourceApiProjectsProjectSourceLinksSourcePutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type LinkSourceApiProjectsProjectSourceLinksSourcePutError = LinkSourceApiProjectsProjectSourceLinksSourcePutErrors[keyof LinkSourceApiProjectsProjectSourceLinksSourcePutErrors];
+
+export type LinkSourceApiProjectsProjectSourceLinksSourcePutResponses = {
+    /**
+     * Successful Response
+     */
+    200: SourceLinkView;
+};
+
+export type LinkSourceApiProjectsProjectSourceLinksSourcePutResponse = LinkSourceApiProjectsProjectSourceLinksSourcePutResponses[keyof LinkSourceApiProjectsProjectSourceLinksSourcePutResponses];
+
+export type UnlinkSourceApiProjectsProjectSourceLinksSourceRetirePostData = {
+    body?: never;
+    headers?: {
+        /**
+         * If-Match
+         */
+        'if-match'?: number | null;
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
+    path: {
+        /**
+         * Source
+         */
+        source: string;
+        /**
+         * Project
+         */
+        project: string;
+    };
+    query?: never;
+    url: '/api/projects/{project}/source-links/{source}/retire';
+};
+
+export type UnlinkSourceApiProjectsProjectSourceLinksSourceRetirePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UnlinkSourceApiProjectsProjectSourceLinksSourceRetirePostError = UnlinkSourceApiProjectsProjectSourceLinksSourceRetirePostErrors[keyof UnlinkSourceApiProjectsProjectSourceLinksSourceRetirePostErrors];
+
+export type UnlinkSourceApiProjectsProjectSourceLinksSourceRetirePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: SourceLinkView;
+};
+
+export type UnlinkSourceApiProjectsProjectSourceLinksSourceRetirePostResponse = UnlinkSourceApiProjectsProjectSourceLinksSourceRetirePostResponses[keyof UnlinkSourceApiProjectsProjectSourceLinksSourceRetirePostResponses];
 
 export type ListOpenQuestionsApiQuestionsGetData = {
     body?: never;
@@ -12014,6 +14325,10 @@ export type GetQueueApiQueueGetData = {
          * Limit
          */
         limit?: number;
+        /**
+         * Project
+         */
+        project?: string | null;
     };
     url: '/api/queue';
 };
@@ -12321,6 +14636,10 @@ export type ListRoutinesApiRoutinesGetData = {
          * Include Retired
          */
         include_retired?: boolean;
+        /**
+         * Project
+         */
+        project?: string | null;
     };
     url: '/api/routines';
 };
@@ -12396,6 +14715,10 @@ export type RoutineProposalCountsApiRoutinesProposalCountsGetData = {
          * Origin
          */
         origin?: GardenProposalOrigin | null;
+        /**
+         * Project
+         */
+        project?: string | null;
     };
     url: '/api/routines/proposal-counts';
 };
@@ -12442,6 +14765,10 @@ export type RoutineTrendApiRoutinesTrendGetData = {
          * Period Days
          */
         period_days?: number;
+        /**
+         * Project
+         */
+        project?: string | null;
     };
     url: '/api/routines/trend';
 };
@@ -13112,6 +15439,10 @@ export type ListRunsApiRunsGetData = {
          * Until
          */
         until?: string | null;
+        /**
+         * Project
+         */
+        project?: string | null;
     };
     url: '/api/runs';
 };
@@ -13169,9 +15500,23 @@ export type RunDeltaApiRunsChunkIdGetResponse = RunDeltaApiRunsChunkIdGetRespons
 export type ListScopesApiScopesGetData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * Project
+         */
+        project?: string | null;
+    };
     url: '/api/scopes';
 };
+
+export type ListScopesApiScopesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListScopesApiScopesGetError = ListScopesApiScopesGetErrors[keyof ListScopesApiScopesGetErrors];
 
 export type ListScopesApiScopesGetResponses = {
     /**
@@ -13614,6 +15959,10 @@ export type FleetSpendApiSpendGetData = {
          * Until
          */
         until?: string | null;
+        /**
+         * Project
+         */
+        project?: string | null;
     };
     url: '/api/spend';
 };
@@ -13943,7 +16292,12 @@ export type CreateWorkItemApiWorkSourcesSourceItemsPostData = {
          */
         source: string;
     };
-    query?: never;
+    query?: {
+        /**
+         * Project
+         */
+        project?: string | null;
+    };
     url: '/api/work-sources/{source}/items';
 };
 

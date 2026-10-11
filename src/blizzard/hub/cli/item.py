@@ -8,6 +8,7 @@ import httpx
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.inputs import read_body_file
+from blizzard.hub.cli.project_option import project_option, project_query
 
 
 class WorkToken(click.ParamType):
@@ -54,7 +55,8 @@ def item_group() -> None:
     default=_DEFAULT_ITEM_SOURCE,
     help=f"Work source to author at (default {_DEFAULT_ITEM_SOURCE!r}, the one source with an editor).",
 )
-def item_create(cli: CliContext, title: str, body_file: str, priority: str, source: str) -> None:
+@project_option(required_by_hub=True)
+def item_create(cli: CliContext, title: str, body_file: str, priority: str, source: str, project: str | None) -> None:
     """Author a fresh item at SOURCE, minting its resting chunk.
 
     --body-file may be '-' to read the body from stdin, so an agent can pipe a composed
@@ -64,6 +66,7 @@ def item_create(cli: CliContext, title: str, body_file: str, priority: str, sour
         "post",
         f"/api/work-sources/{source}/items",
         json_body={"title": title, "body": body, "stated_priority": priority},
+        params=project_query(project) or None,
     )
     if resp.status_code == httpx.codes.CONFLICT:
         conflict = resp.json()

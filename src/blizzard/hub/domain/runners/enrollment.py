@@ -7,6 +7,7 @@ in the same write, so the old token is refused from that instant."""
 from __future__ import annotations
 
 import secrets
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from blizzard.foundation.clock import IClock
@@ -14,7 +15,13 @@ from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.tokens import TokenHash
-from blizzard.hub.domain.runners.registration import IWriteRunnerRegistry, RunnerAddition, RunnerRegistration
+from blizzard.hub.domain.runners.registration import (
+    IWriteRunnerRegistry,
+    RunnerAddition,
+    RunnerRegistration,
+    ServedEntry,
+)
+from blizzard.hub.domain.runners.served import IServedProjects, declaration_at_add
 
 _log = get_logger("blizzard.hub.enrollment")
 
@@ -30,29 +37,39 @@ ROTATION_ACTOR = "operator"
 @dataclass(frozen=True)
 class AddedRunner:
     """A runner :meth:`RunnerEnrollmentService.add` just added: its minted id, its initial name,
-    and the plaintext bearer token minted with the id — held nowhere else, so returned once."""
+    the plaintext bearer token minted with the id — held nowhere else, so returned once — and the
+    served declaration it was added with."""
 
     runner_id: str
     name: str
     token: str
+    projects: tuple[ServedEntry, ...] = ()
 
 
 class RunnerEnrollmentService:
     """Add runners and mint or rotate their bearer tokens; the store keeps only each token's sha256 hash."""
 
-    def __init__(self, *, registry: IWriteRunnerRegistry, clock: IClock) -> None:
+    def __init__(self, *, registry: IWriteRunnerRegistry, served_projects: IServedProjects, clock: IClock) -> None:
         self._registry = registry
+        # The tenant's projects, which the served declaration resolves against.
+        self._served_projects = served_projects
         self._clock = clock
 
-    def add(self, name: str, *, by: str) -> AddedRunner:
+    def add(self, name: str, *, by: str, projects: Sequence[str] | None = None) -> AddedRunner:
         """Mint a runner's ``rn_`` id and bearer token together and record it as a never-connected
         registration under the initial ``name``, added now by ``by``. Names are not unique: adding a
-        name some runner already holds adds another runner."""
+        name some runner already holds adds another runner. ``projects`` is the served declaration it
+        starts with (:func:`~blizzard.hub.domain.runners.served.declaration_at_add`); an entry that
+        resolves to no project raises :class:`~blizzard.hub.domain.runners.served.UnknownServedProject`
+        before anything is minted."""
+        served = declaration_at_add(projects, self._served_projects)
         runner_id = Id.mint(IdPrefix.RUNNER, self._clock).value
         token = secrets.token_urlsafe(_TOKEN_BYTES)
-        self._registry.add(RunnerAddition(runner_id, name, TokenHash(token).hex, at=self._clock.now(), by=by))
-        _log.info("runner added", runner_id=runner_id, name=name, by=by)
-        return AddedRunner(runner_id=runner_id, name=name, token=token)
+        self._registry.add(
+            RunnerAddition(runner_id, name, TokenHash(token).hex, at=self._clock.now(), by=by, served=served)
+        )
+        _log.info("runner added", runner_id=runner_id, name=name, by=by, projects=[e.entry for e in served])
+        return AddedRunner(runner_id=runner_id, name=name, token=token, projects=served)
 
     def enroll(self, runner: RunnerRegistration) -> str:
         """Mint a fresh token for an added runner, connected or not, and return it once.

@@ -10,12 +10,25 @@ from typing import cast
 
 import jwt
 import pytest
+from httpx import Response
 from jwt.algorithms import RSAAlgorithm
 
 from blizzard.auth_core import Role
+from blizzard.hub.api.auth_session import TENANT_HEADER
+from blizzard.hub.auth.models import User
 from blizzard.hub.config import AUTH_MODE_NONE, AUTH_MODE_OAUTH
 from blizzard.hub.domain.runners.registration import IWriteRunnerRegistry
-from tests.support import HubHarness, added_runner, build_hub, seed_runner, seed_session, seed_user
+from tests.support import (
+    HubHarness,
+    TenantHarness,
+    added_runner,
+    build_hub,
+    default_tenant,
+    seed_membership,
+    seed_runner,
+    seed_session,
+    seed_user,
+)
 
 pytestmark = pytest.mark.component
 
@@ -192,7 +205,7 @@ def test_rotate_signing_key_requires_user_manage(tmp_path: Path) -> None:
 
 def test_rotate_signing_key_rotates_the_published_jwks(tmp_path: Path) -> None:
     hub = build_hub(tmp_path, auth_mode=AUTH_MODE_OAUTH)
-    admin = seed_user(hub, username="admin1", role=Role.ADMIN, email="admin1@example.com")
+    admin = seed_user(hub, username="admin1", role=Role.SUPERUSER, email="admin1@example.com")
     session = seed_session(hub, admin)
     hub.client.cookies.set("bz_session", session)
 
@@ -232,3 +245,94 @@ def test_authorize_refuses_a_retired_runner_distinctly_only_past_the_redirect_ma
 
     writer.record_lifecycle("runner-a", retired=False, at=hub.clock.now(), by="op")
     assert authorize("runner-a")[0] not in (400, 403)
+
+
+_BRAVO_RUNNER = "bravo-runner"
+_BRAVO_REDIRECT = "https://bravo-runner.example/api/auth/callback"
+
+
+def _bravo(hub: HubHarness) -> TenantHarness:
+    """A second tenant, ``bravo``, holding the registered runner ``_BRAVO_RUNNER``."""
+    bravo = hub.add_tenant("bravo")
+    seed_runner(bravo.services, _BRAVO_RUNNER, register=False)
+    bravo.services.fleet.register(
+        added_runner(bravo.services, _BRAVO_RUNNER),
+        "workspace-1",
+        public_url="https://bravo-runner.example",
+        redirect_uris=(_BRAVO_REDIRECT,),
+    )
+    return bravo
+
+
+def _sign_in(hub: HubHarness, user: User, client: str, redirect_uri: str, tenant: str | None = None) -> Response:
+    headers = {"Cookie": f"bz_session={seed_session(hub, user)}"}
+    if tenant is not None:
+        headers[TENANT_HEADER] = tenant
+    return hub.client.get(
+        "/api/auth/authorize",
+        params={"client": client, "redirect_uri": redirect_uri, "state": "s"},
+        headers=headers,
+        follow_redirects=False,
+    )
+
+
+def _claims(hub: HubHarness, resp: Response, audience: str) -> dict[str, object]:
+    assert resp.status_code == 200, resp.text
+    token_match = re.search(r'name="token" value="([^"]+)"', resp.text)
+    assert token_match is not None
+    jwks = hub.client.get("/api/auth/jwks.json").json()
+    kid = jwt.get_unverified_header(token_match.group(1))["kid"]
+    public_key = RSAAlgorithm.from_jwk(next(k for k in jwks["keys"] if k["kid"] == kid))  # type: ignore[arg-type]
+    return jwt.decode(
+        token_match.group(1),
+        key=public_key,  # type: ignore[arg-type]
+        algorithms=["RS256"],
+        audience=audience,
+        options={"verify_exp": False},
+    )
+
+
+def test_a_person_with_no_membership_in_the_runners_tenant_is_answered_as_an_unknown_client(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, auth_mode=AUTH_MODE_OAUTH)
+    _bravo(hub)
+    alice = seed_user(hub, username="alice", role=Role.ADMIN, email="alice@example.com")
+    root = seed_user(hub, username="root", role=Role.SUPERUSER, email="root@example.com")
+
+    unknown = _sign_in(hub, alice, "no-such-runner", _BRAVO_REDIRECT)
+    unregistered = _sign_in(hub, alice, _BRAVO_RUNNER, "https://elsewhere.example/cb")
+    not_a_member = _sign_in(hub, alice, _BRAVO_RUNNER, _BRAVO_REDIRECT)
+    hub_admin = _sign_in(hub, root, _BRAVO_RUNNER, _BRAVO_REDIRECT)
+
+    answers = {(r.status_code, r.text) for r in (unknown, unregistered, not_a_member, hub_admin)}
+    assert answers == {(400, unknown.text)}
+
+
+def test_the_runners_tenant_settles_the_sign_in_and_its_membership_role_is_the_tokens(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, auth_mode=AUTH_MODE_OAUTH)
+    bravo = _bravo(hub)
+    alice = seed_user(hub, username="alice", role=Role.ADMIN, email="alice@example.com")
+    seed_membership(hub.engine, bravo.tenant, alice.user_id, Role.GUEST)
+
+    for named in (None, default_tenant(hub.engine), bravo.tenant):
+        claims = _claims(hub, _sign_in(hub, alice, _BRAVO_RUNNER, _BRAVO_REDIRECT, named), _BRAVO_RUNNER)
+        assert claims["role"] == "guest"
+        assert set(claims) == {"sub", "username", "email", "role", "aud", "jti", "iat", "exp"}
+        assert (claims["sub"], claims["username"], claims["email"], claims["aud"]) == (
+            alice.user_id,
+            "alice",
+            "alice@example.com",
+            _BRAVO_RUNNER,
+        )
+
+
+def test_a_retired_runner_is_told_apart_only_to_a_member_of_its_tenant(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, auth_mode=AUTH_MODE_OAUTH)
+    bravo = _bravo(hub)
+    member = seed_user(hub, username="member", role=Role.GUEST, email="member@example.com")
+    seed_membership(hub.engine, bravo.tenant, member.user_id, Role.GUEST)
+    stranger = seed_user(hub, username="stranger", role=Role.ADMIN, email="stranger@example.com")
+    writer = cast(IWriteRunnerRegistry, bravo.services.registry)
+    writer.record_lifecycle(_BRAVO_RUNNER, retired=True, at=hub.clock.now(), by="op")
+
+    assert _sign_in(hub, member, _BRAVO_RUNNER, _BRAVO_REDIRECT).status_code == 403
+    assert _sign_in(hub, stranger, _BRAVO_RUNNER, _BRAVO_REDIRECT).status_code == 400

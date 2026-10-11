@@ -110,7 +110,7 @@ def _seeded_hub(tmp_path: Path):  # type: ignore[no-untyped-def]
         "/api/fleet/transcripts", json={"runner_id": "r1", "records": [_record(chunk_id, turns=turns)]}
     )
     assert push.status_code == 200, push.text
-    hub.services.event_derivation.sweep()
+    hub.hub_services.event_derivation.sweep()
     return hub, token, chunk_id
 
 
@@ -230,7 +230,7 @@ def test_events_filter_by_provenance(tmp_path: Path) -> None:
         },
     )
     assert push.status_code == 200, push.text
-    hub.services.event_derivation.sweep()
+    hub.hub_services.event_derivation.sweep()
 
     resp = hub.client.get("/api/analytics/events", params={"harness_id": "opencode"}, headers=_cookie(token))
     assert [e["subject"] for e in resp.json()["events"]] == ["src/b.py"]
@@ -384,7 +384,7 @@ def test_counts_by_agent_type_counts_the_work_done_under_a_sidechain_not_the_spa
         "/api/fleet/transcripts", json={"runner_id": "r1", "records": [_record(chunk_id, turns=[spawn])]}
     )
     assert push.status_code == 200, push.text
-    hub.services.event_derivation.sweep()
+    hub.hub_services.event_derivation.sweep()
 
     resp = hub.client.get("/api/analytics/counts/agent-types", headers=_cookie(token))
 

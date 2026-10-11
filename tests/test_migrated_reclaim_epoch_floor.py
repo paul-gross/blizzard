@@ -29,10 +29,12 @@ from tests.runner_fakes import (
     FakeProbe,
     FakeProvider,
     FakeWorktreeGit,
+    fixed_hub_token,
     make_session_resolver,
     make_store,
     make_stores,
     make_usage_recorder,
+    matched_verdict,
     registered_identity,
 )
 from tests.support import RunnerFleetClient, build_hub, ingest, report_lease
@@ -133,6 +135,9 @@ def test_migrated_chunk_reclaimed_by_a_fresh_runner_mints_above_the_hub_floor(tm
         stores=make_stores(store),
         clock=hub.clock,
         hub=_hub_client,
+        token_identity=_hub_client,
+        identity_verdict=matched_verdict(),
+        hub_token=fixed_hub_token(),
         chunk_views=ReadThroughChunkViews(_hub_client),
         provider=provider,
         process=FakeProbe(alive={(200, "start-200")}),

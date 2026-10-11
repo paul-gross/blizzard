@@ -7,6 +7,7 @@ import { type DemoConfig, demoQueryParams, readDemoConfig } from './demo-config'
 import { DemoKiosk } from './demo-kiosk';
 import { scrollersIn, slowScrollToBottom } from './demo-scroll';
 import { DemoAborted, sleep, sleepUntil, waitFor } from './demo-timing';
+import { ProjectLens } from '../core/project-lens';
 
 /**
  * The unattended demo pilot — the thing `?demo=true` hands the board to.
@@ -39,6 +40,8 @@ import { DemoAborted, sleep, sleepUntil, waitFor } from './demo-timing';
  */
 @Injectable({ providedIn: 'root' })
 export class DemoDirector {
+  private readonly lens = inject(ProjectLens);
+
   private readonly router = inject(Router);
   private readonly kiosk = inject(DemoKiosk);
 
@@ -183,7 +186,7 @@ export class DemoDirector {
   /** Navigate, carrying the demo params. Params named `null` are cleared, so a
    * route's leftovers (`?artifact` from the previous chunk) never ride along. */
   private async go(commands: readonly string[], params: Record<string, string | null>): Promise<void> {
-    await this.router.navigate([...commands], {
+    await this.router.navigate(this.lens.link([...commands]), {
       queryParams: { ...params, ...demoQueryParams(this.config) },
     });
   }

@@ -8,14 +8,23 @@ from datetime import datetime
 
 from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind, EventLogSeverity
 from blizzard.hub.domain.chunk.ports.events import IEventLogPublisher, IWriteChunkEventsRepository
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 
 
 class EventLogService:
-    """Record one ``event_log`` row and publish it live, as one act."""
+    """Record one ``event_log`` row and publish it live, as one act. A row naming a chunk publishes that chunk's
+    project with it, read off ``chunks``, so a project-filtered stream selects the frame without a read of its own."""
 
-    def __init__(self, *, events: IWriteChunkEventsRepository, publisher: IEventLogPublisher) -> None:
+    def __init__(
+        self,
+        *,
+        events: IWriteChunkEventsRepository,
+        publisher: IEventLogPublisher,
+        chunks: IReadChunkRecordRepository,
+    ) -> None:
         self._events = events
         self._publisher = publisher
+        self._chunks = chunks
 
     def record(
         self,
@@ -73,6 +82,7 @@ class EventLogService:
             detail=detail,
             at=at,
         )
+        chunk = self._chunks.get(chunk_id) if chunk_id is not None else None
         self._publisher.publish_event_logged(
             severity=severity,
             kind=kind,
@@ -80,5 +90,6 @@ class EventLogService:
             runner_id=runner_id,
             runner_name=runner_name,
             key=f"event_log:{row_id}",
+            project_id=chunk.project_id if chunk is not None else None,
         )
         return row_id

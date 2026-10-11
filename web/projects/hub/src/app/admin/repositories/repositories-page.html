@@ -1,6 +1,6 @@
 <app-config-master
   paneId="admin-repositories"
-  listCaption="Repositories"
+  [listCaption]="caption()"
   [filter]="lifecycle()"
   [rows]="rows()"
   [state]="state()"

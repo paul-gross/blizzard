@@ -308,7 +308,7 @@ def test_a_dropped_slugs_reports_persist_and_resume_when_redeclared() -> None:
 
 def test_the_rendered_view_carries_the_lapsed_condition_through_runner_view() -> None:
     registration = _registration(misses=(_miss("openai", _NOW - timedelta(minutes=1)),))
-    view = runner_view(RunnerLiveness(registration=registration, online=True), now=_NOW)
+    view = runner_view(RunnerLiveness(registration=registration, online=True), now=_NOW, projects={})
 
     assert len(view.subscriptions) == 1
     assert view.subscriptions[0].condition == CREDENTIAL_LAPSED_CONDITION
@@ -318,7 +318,7 @@ def test_the_rendered_view_carries_the_lapsed_condition_through_runner_view() ->
 
 def test_the_rendered_view_carries_an_explicit_utc_offset_on_every_instant() -> None:
     registration = _registration(records=(_record("anthropic", _NOW - timedelta(minutes=1)),))
-    view = runner_view(RunnerLiveness(registration=registration, online=True), now=_NOW)
+    view = runner_view(RunnerLiveness(registration=registration, online=True), now=_NOW, projects={})
 
     assert_utc_iso(view.subscriptions[0].sampled_at)
     assert_utc_iso(view.subscriptions[0].windows[0].resets_at)
@@ -328,13 +328,13 @@ def test_the_rendered_view_carries_an_explicit_utc_offset_on_every_instant() -> 
 
 def test_the_rendered_view_has_no_subscriptions_when_never_sampled() -> None:
     registration = _registration(records=())
-    view = runner_view(RunnerLiveness(registration=registration, online=True), now=_NOW)
+    view = runner_view(RunnerLiveness(registration=registration, online=True), now=_NOW, projects={})
     assert view.subscriptions == []
 
 
 def test_the_rendered_view_has_no_subscriptions_when_the_sample_is_stale() -> None:
     registration = _registration(records=(_record("anthropic", _NOW - timedelta(minutes=16)),))
-    view = runner_view(RunnerLiveness(registration=registration, online=True), now=_NOW)
+    view = runner_view(RunnerLiveness(registration=registration, online=True), now=_NOW, projects={})
     assert view.subscriptions == []
 
 
@@ -345,7 +345,7 @@ def test_the_rendered_view_carries_every_registered_capability() -> None:
         RunnerCapability(harness_id="codex", version=None, tiers=(), default=False, available=False),
     )
     registration = replace(registration, capabilities=capabilities)
-    view = runner_view(RunnerLiveness(registration=registration, online=True), now=_NOW)
+    view = runner_view(RunnerLiveness(registration=registration, online=True), now=_NOW, projects={})
 
     assert [c.harness_id for c in view.capabilities] == ["claude", "codex"]
     assert view.capabilities[0].version == "1.2.3"
@@ -356,7 +356,7 @@ def test_the_rendered_view_carries_every_registered_capability() -> None:
 
 def test_the_rendered_view_has_no_capabilities_when_none_were_registered() -> None:
     registration = _registration(records=())
-    view = runner_view(RunnerLiveness(registration=registration, online=True), now=_NOW)
+    view = runner_view(RunnerLiveness(registration=registration, online=True), now=_NOW, projects={})
     assert view.capabilities == []
 
 
@@ -364,7 +364,7 @@ def test_the_rendered_view_omits_a_stale_sibling_without_affecting_a_healthy_sub
     healthy = _record("anthropic", _NOW - timedelta(minutes=1))
     other = _record("openai", _NOW - timedelta(minutes=20))  # stale
     registration = _registration(records=(healthy, other))
-    view = runner_view(RunnerLiveness(registration=registration, online=True), now=_NOW)
+    view = runner_view(RunnerLiveness(registration=registration, online=True), now=_NOW, projects={})
 
     assert [s.slug for s in view.subscriptions] == ["anthropic"]
     assert view.subscriptions[0].windows[0].utilization_pct == 42.5

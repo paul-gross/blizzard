@@ -64,7 +64,9 @@ export class KitMasterDetail {
   readonly paneId = input.required<string>();
 
   /** The list pane's caption, or `null` for none — an unset caption leaves the pane
-   * with no `role="region"`/`aria-labelledby` pair at all rather than an unlabelled one. */
+   * with no `role="region"`/`aria-labelledby` pair at all rather than an unlabelled one. A
+   * `[kit-master-detail-list-action]` element sits at the caption's right — the list's own
+   * create control. */
   readonly listCaption = input<string | null>(null);
 
   /** The detail pane's caption, or `null` for none. */

@@ -71,12 +71,12 @@ def test_pending_reaches_me_but_is_refused_a_fleet_view_read(tmp_path: Path) -> 
 
     me = hub.client.get("/api/me", headers=_cookie(token))
     assert me.status_code == 200, me.text
-    assert me.json()["role"] == "pending"
+    assert (me.json()["role"], me.json()["tenants"], me.json()["hub_admin"]) == (None, [], False)
     assert me.json()["permissions"] == []
     assert me.json()["assignable_roles"] == [r.value for r in Role if r is not Role.SUPERUSER]
 
     denied = hub.client.get("/api/chunks", headers=_cookie(token))
-    assert denied.status_code == 403
+    assert denied.status_code == 404
 
 
 def test_pending_is_refused_on_the_sse_stream(tmp_path: Path) -> None:
@@ -85,7 +85,7 @@ def test_pending_is_refused_on_the_sse_stream(tmp_path: Path) -> None:
     token = seed_session(hub, pending)
 
     resp = hub.client.get("/api/events/stream", headers=_cookie(token))
-    assert resp.status_code == 403
+    assert resp.status_code == 404
 
 
 def test_pending_is_refused_ingest(tmp_path: Path) -> None:
@@ -94,7 +94,7 @@ def test_pending_is_refused_ingest(tmp_path: Path) -> None:
     token = seed_session(hub, pending)
 
     resp = hub.client.post("/api/chunks", json={"tokens": ["default:1"]}, headers=_cookie(token))
-    assert resp.status_code == 403
+    assert resp.status_code == 404
 
 
 # --- guest: every fleet:view read, refused on every mutation -------------------
@@ -189,12 +189,12 @@ def test_a_second_read_within_touch_granularity_issues_no_session_write(tmp_path
 
     hub.clock.advance(timedelta(hours=1))  # slide well past the default touch_granularity
     assert hub.client.get("/api/chunks", headers=_cookie(token)).status_code == 200
-    touched = hub.services.sessions.get_by_hash(id_hash)
+    touched = hub.hub_services.sessions.get_by_hash(id_hash)
     assert touched is not None
 
     hub.clock.advance(timedelta(minutes=1))  # under the default touch_granularity
     assert hub.client.get("/api/chunks", headers=_cookie(token)).status_code == 200
-    still = hub.services.sessions.get_by_hash(id_hash)
+    still = hub.hub_services.sessions.get_by_hash(id_hash)
     assert still is not None
     assert still.expires_at == touched.expires_at
     assert still.last_seen_at == touched.last_seen_at

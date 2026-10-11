@@ -1,0 +1,70 @@
+<nav class="crumbs" aria-label="Breadcrumb" data-testid="gardening-doorway-crumbs">
+  <span class="crumb current">Gardening</span>
+  <span class="sep" aria-hidden="true">›</span>
+  <span class="crumb current">All projects</span>
+  <span class="crumb-hint">gardening belongs to a project — pick one to go in</span>
+</nav>
+<fleet-kit-panel class="doorway" [label]="title()">
+  <span fleetKitPanelHeader class="panel-hint" data-testid="gardening-doorway-hint">each project tends its own</span>
+  <fleet-kit-async-state
+    [state]="state()"
+    emptyText="NO PROJECTS IN THIS TENANT"
+    loadingTestid="gardening-doorway-loading"
+    emptyTestid="gardening-doorway-empty"
+    errorTestid="gardening-doorway-error"
+  >
+    <ul class="cards" data-testid="gardening-doorway">
+      @for (card of cards(); track card.projectId) {
+        <li class="card" [attr.data-testid]="'gardening-doorway-card-' + card.slug">
+          <div class="card-head">
+            <span class="name">{{ card.name }}</span>
+            @if (card.waiting > 0) {
+              <fleet-kit-badge tone="waiting" variant="pill" data-testid="gardening-doorway-waiting">{{
+                waitingLabel(card.waiting)
+              }}</fleet-kit-badge>
+            }
+          </div>
+          @if (card.unplanted) {
+            <p class="unplanted">Nothing planted yet — no scopes or routines. Gardening starts with a scope.</p>
+          } @else {
+            <ul class="facts">
+              <li>
+                <span class="fact-label">routines</span>
+                <span class="fact">{{ card.routines.length > 0 ? card.routines.join(', ') : 'none' }}</span>
+              </li>
+              <li>
+                <span class="fact-label">scopes</span>
+                <span class="fact">{{ card.scopes }}</span>
+                <span
+                  class="fact-right"
+                  [class.sweeping]="card.inProgress > 0"
+                  [attr.data-testid]="'gardening-doorway-sweeping-' + card.slug"
+                  >{{ sweepingLabel(card.inProgress) }}</span
+                >
+              </li>
+              <li>
+                <span class="fact-label">findings</span>
+                <span class="fact" [attr.data-testid]="'gardening-doorway-findings-' + card.slug"
+                  >{{ card.findings }} from the last runs</span
+                >
+                @if (card.lastRun; as lastRun) {
+                  <span class="fact-right">last run <fleet-when [iso]="lastRun" /></span>
+                }
+              </li>
+            </ul>
+          }
+          @if (card.unserved === true) {
+            <p class="unserved" data-testid="gardening-doorway-unserved">
+              No runner serves this project: the work its garden raises waits until one does.
+            </p>
+          }
+          <div class="card-foot">
+            <a class="open" [routerLink]="card.link | lensLink" [attr.data-testid]="'gardening-doorway-open-' + card.slug">{{
+              openGardenLabel(card.name)
+            }}</a>
+          </div>
+        </li>
+      }
+    </ul>
+  </fleet-kit-async-state>
+</fleet-kit-panel>

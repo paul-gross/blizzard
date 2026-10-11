@@ -24,6 +24,10 @@ class GardenProposalCountsRowView(BaseModel):
     accepted_with_item: int
     accepted_without_item: int
     created: int
+    #: The project this belongs to — its id, current slug and display name; ``None`` where the hub reports none.
+    project_id: str | None = None
+    project_slug: str | None = None
+    project_name: str | None = None
 
 
 class GardenProposalCountsView(BaseModel):

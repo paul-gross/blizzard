@@ -6,6 +6,8 @@ import { FleetFindingList, type FindingListRowVm } from '../core/finding-list';
 import { injectChildRouteParam } from '../../core/route-state';
 import { injectFindingsBucketFilters } from './gardening-findings-bucket-filters';
 import { findingListRows } from './gardening-findings-page.model';
+import { ProjectLens } from '../../core/project-lens';
+import { firstRowToOpen } from '../core/garden-first-row';
 
 /**
  * The `/gardening/findings` sub-tab — the findings triage list and its filter row,
@@ -40,6 +42,8 @@ import { findingListRows } from './gardening-findings-page.model';
   },
 })
 export class GardeningFindingsPage {
+  private readonly lens = inject(ProjectLens);
+
   private readonly router = inject(Router);
   private readonly viewport = inject(ViewportService);
 
@@ -61,11 +65,11 @@ export class GardeningFindingsPage {
   );
 
   protected selectFinding(findingId: string): void {
-    void this.router.navigate(['/gardening', 'findings', findingId], { queryParamsHandling: 'preserve' });
+    void this.router.navigate(this.lens.link(['/gardening', 'findings', findingId]), { queryParamsHandling: 'preserve' });
   }
 
   protected onBack(): void {
-    void this.router.navigate(['/gardening', 'findings'], { queryParamsHandling: 'preserve' });
+    void this.router.navigate(this.lens.link(['/gardening', 'findings']), { queryParamsHandling: 'preserve' });
   }
 
   /**
@@ -99,11 +103,22 @@ export class GardeningFindingsPage {
    */
   constructor() {
     effect(() => {
+      const query = this.filters.bucketQuery;
+      const settled = !query.isPending() && !query.isError();
+      const ids = this.findingListRows().map((row) => row.findingId);
+      const first = firstRowToOpen(this.findingId(), ids, settled, this.mobile());
+      if (first === null) return;
+      void this.router.navigate(this.lens.link(['/gardening', 'findings', first]), {
+        replaceUrl: true,
+        queryParamsHandling: 'preserve',
+      });
+    });
+    effect(() => {
       const id = this.findingId();
       if (id === null) return;
       if (this.filters.bucketQuery.isPending() || this.filters.bucketQuery.isError()) return;
       if (this.findingListRows().some((row) => row.findingId === id)) return;
-      void this.router.navigate(['/gardening', 'findings'], {
+      void this.router.navigate(this.lens.link(['/gardening', 'findings']), {
         replaceUrl: true,
         queryParamsHandling: 'preserve',
       });

@@ -13,7 +13,7 @@ import pytest
 from blizzard.foundation.garden_proposals import GardenProposalOrigin
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
-from tests.support import build_hub, hub_store_connections
+from tests.support import build_hub, default_project, hub_store_connections
 
 pytestmark = pytest.mark.component
 
@@ -192,11 +192,13 @@ def test_retiring_deletes_nothing_findings_and_proposals_stay_readable(tmp_path:
     """a routine's findings, proposals, and closures are untouched
     by retiring it."""
     hub = build_hub(tmp_path)
+    project = default_project(hub.engine)
     _mint_graph(hub)
     routine = _create_routine(hub)
     finding_store = FindingStore(hub_store_connections(hub.engine))
     finding = finding_store.add(
         "fnd_1",
+        project_id=project,
         routine_name=routine["name"],
         scope_slug="blizzard",
         class_="style",
@@ -207,6 +209,7 @@ def test_retiring_deletes_nothing_findings_and_proposals_stay_readable(tmp_path:
     )
     proposal = GardenProposalStore(hub_store_connections(hub.engine)).create(
         "gprop_1",
+        project_id=project,
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name=routine["name"],
         class_="style",

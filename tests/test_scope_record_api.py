@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.auth_core import Role
-from tests.support import HubHarness, build_hub, seed_session, seed_user
+from tests.support import HubHarness, build_hub, default_project, seed_project, seed_session, seed_user
 
 pytestmark = pytest.mark.component
 
@@ -99,3 +99,18 @@ def test_the_change_row_carries_the_door_and_the_authenticated_actor(tmp_path: P
     assert (created.status_code, edited.status_code) == (201, 200)
     rows = _changes(hub, headers=admin)
     assert [(r["door"], r["actor"]) for r in rows] == [("cli", user.user_id), ("board", user.user_id)]
+
+
+def test_a_call_needing_a_project_in_a_tenant_of_two_is_refused_with_the_projects(hub: HubHarness) -> None:
+    default = default_project(hub.engine)
+    second = seed_project(hub.engine, "second")
+
+    created = hub.client.post("/api/scopes", json={"slug": "web", "description": ""})
+    read = hub.client.get("/api/scopes/blizzard")
+
+    for refused in (created, read):
+        assert refused.status_code == 422, refused.text
+        detail = refused.json()["detail"]
+        assert detail["code"] == "project_required"
+        assert {(p["project_id"], p["slug"]) for p in detail["projects"]} == {(default, "default"), (second, "second")}
+    assert [scope["slug"] for scope in hub.client.get("/api/scopes").json()] == ["blizzard"]

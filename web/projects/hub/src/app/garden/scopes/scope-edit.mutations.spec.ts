@@ -1,9 +1,10 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
 import { hubClient } from 'fleet';
+import { HUB_PROJECT_FILTER } from 'fleet/shell';
 import { type RequestClientStub, stubRequestClient } from 'fleet/testing';
 import { injectEditScopeMutation } from './scope-edit.mutations';
 
@@ -15,7 +16,7 @@ describe('injectEditScopeMutation', () => {
     stub = stubRequestClient(hubClient, () => ({ slug: 'blizzard', description: 'updated', retired: false }));
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     TestBed.configureTestingModule({
-      providers: [provideZonelessChangeDetection(), provideTanStackQuery(queryClient)],
+      providers: [provideZonelessChangeDetection(), provideTanStackQuery(queryClient), { provide: HUB_PROJECT_FILTER, useValue: signal('acme').asReadonly() }],
     });
   });
 
@@ -26,7 +27,7 @@ describe('injectEditScopeMutation', () => {
 
     await mutation.mutateAsync({ slug: 'blizzard', description: 'updated' });
 
-    const calls = stub.forRoute('/api/scopes/blizzard', 'PATCH');
+    const calls = stub.forRoute('/api/projects/acme/scopes/blizzard', 'PATCH');
     expect(calls).toHaveLength(1);
     expect(calls[0].body).toEqual({ description: 'updated' });
   });

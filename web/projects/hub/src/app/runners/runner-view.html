@@ -49,6 +49,13 @@
             <div class="r2">
               <span class="wid">{{ row.workspace_id ?? '—' }}</span>
             </div>
+            <!-- The projects this runner serves; an empty declaration and an entry naming no project are marked. -->
+            <app-served-project-group
+              [attr.data-runner-served]="row.runner_id"
+              [served]="row.served"
+              [unassigned]="row.unassigned"
+              [unresolved]="row.unresolved"
+            />
             <!-- Every harness this runner reported it can execute — one distinct
                  badge per binding, rendered whether the list is populated or
                  reported empty. -->

@@ -2,6 +2,9 @@
 
 The ``init`` / ``migrate`` verbs run while the daemon is **down** — the only carve-out
 to "only a daemon opens its own store". Everything here is deterministic and store-only.
+
+The module-level functions are this short-lived process's composition root
+(``bzh:dependency-injection``): they wire in the system clock the revisions that stamp a time read.
 """
 
 from __future__ import annotations
@@ -10,9 +13,11 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from blizzard.foundation.clock import IClock, SystemClock
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.roles import collaborator, domain_model
+from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationConnectionError, MigrationRunner
+from blizzard.hub.composition import build_process_core
 from blizzard.hub.config import CONFIG_FILENAME, ConfigError, HubConfig
 from blizzard.hub.secrets import hub_key_provider
 from blizzard.hub.store import MIGRATIONS_DIR, STORE_NAME
@@ -22,28 +27,29 @@ MIGRATE_COMMAND = "blizzard hub migrate"
 _log = get_logger("blizzard.hub.runtime")
 
 
-@domain_model
 @dataclass(frozen=True)
 class Migrations:
-    """The hub's Alembic tree, bound to one resolved config."""
+    """The hub's Alembic tree, bound to one resolved config. ``clock`` is what a revision that
+    stamps a time reads; checking the store's revision needs none."""
 
     config: HubConfig
+    clock: IClock | None = None
 
     @property
     def runner(self) -> MigrationRunner:
-        return MigrationRunner(script_location=MIGRATIONS_DIR, url=self.config.db_url)
+        return MigrationRunner(script_location=MIGRATIONS_DIR, url=self.config.db_url, clock=self.clock)
 
     def check_current(self) -> None:
         """Refuse to run on a store-revision mismatch, naming the migrate command."""
         self.runner.check_current(store=STORE_NAME, remedy=f"{MIGRATE_COMMAND} --dir {self.config.root}")
 
 
-@collaborator
 @dataclass(frozen=True)
 class Runtime:
     """A hub runtime root, administered while the daemon is down."""
 
     root: Path
+    clock: IClock
     allow_external_db: bool = False
 
     def loaded(self, root: Path) -> HubConfig:
@@ -70,7 +76,7 @@ class Runtime:
             raise ConfigError(f"cannot write the hub runtime at {root}: {exc}") from exc
 
         try:
-            Migrations(config).runner.upgrade("head")
+            Migrations(config, self.clock).runner.upgrade("head")
         except MigrationConnectionError as exc:
             raise ConfigError(f"cannot open the hub store at {config.db_url}: {exc}") from exc
         _log.info("hub store migrated to head", root=str(root), db_url=config.db_url)
@@ -78,26 +84,44 @@ class Runtime:
         return config
 
     def migrate(self, *, down: str | None = None) -> None:
-        """Apply pending revisions, or reverse to ``down`` when given."""
-        runner = Migrations(self.loaded(self.root)).runner
+        """Apply pending revisions, or reverse to ``down`` when given. An upgrade that applied any revision records
+        one ``hub-migrated`` in the hub's own event log, naming the revisions it moved between."""
+        config = self.loaded(self.root)
+        runner = Migrations(config, self.clock).runner
         if down is not None:
             runner.downgrade(down)
             _log.info("hub store downgraded", root=str(self.root), to=down)
         else:
+            before = runner.current_revision()
             runner.upgrade("head")
             _log.info("hub store upgraded to head", root=str(self.root))
+            after = runner.current_revision()
+            if after != before:
+                self._record_migrated(config, before, after)
+
+    def _record_migrated(self, config: HubConfig, before: str | None, after: str | None) -> None:
+        engine = create_engine_from_url(config.db_url)
+        try:
+            build_process_core(engine).hub_event_log.record(
+                kind="hub-migrated",
+                message=f"hub store migrated from revision {before or 'none'} to {after}",
+                detail={"from": before, "to": after},
+                at=self.clock.now(),
+            )
+        finally:
+            engine.dispose()
 
 
 def migration_runner(config: HubConfig) -> MigrationRunner:
-    return Migrations(config).runner
+    return Migrations(config, SystemClock()).runner
 
 
 def init_environment(root: Path, *, allow_external_db: bool = False) -> HubConfig:
-    return Runtime(root, allow_external_db).init()
+    return Runtime(root, SystemClock(), allow_external_db).init()
 
 
 def migrate(root: Path, *, down: str | None = None, allow_external_db: bool = False) -> None:
-    Runtime(root, allow_external_db).migrate(down=down)
+    Runtime(root, SystemClock(), allow_external_db).migrate(down=down)
 
 
 def ensure_current_revision(config: HubConfig) -> None:

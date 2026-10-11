@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -34,12 +35,22 @@ from blizzard.hub.store.schema import (
     garden_proposal_findings,
     garden_proposals,
 )
-from tests.support import hub_store_connections, seed_chunk, seed_graph
+from tests.support import (
+    default_project,
+    default_tenant,
+    hub_scoped,
+    hub_store_connections,
+    seed_chunk,
+    seed_graph,
+    stamp,
+)
+
+_PROJECT = "proj_test"
 
 pytestmark = pytest.mark.component
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
-_RUN = RunContext(routine_name="nightly", scope_slug="blizzard", mode="dry_run")
+_RUN = RunContext(project_id=_PROJECT, routine_name="nightly", scope_slug="blizzard", mode="dry_run")
 
 
 def _store_and_engine(tmp_path: Path, *, enforce_foreign_keys: bool = False) -> tuple[GardenDeliveryStore, Engine]:
@@ -57,8 +68,11 @@ def _store_and_engine(tmp_path: Path, *, enforce_foreign_keys: bool = False) -> 
 
     with engine.begin() as conn:
         conn.execute(
-            sa.text("INSERT INTO scopes (slug, description, created_at) VALUES ('blizzard', '', :now)"),
-            {"now": _NOW},
+            sa.text(
+                "INSERT INTO scopes (scope_id, slug, description, created_at, tenant_id, project_id)"
+                " VALUES ('scp_blizzard', 'blizzard', '', :now, :tenant, :project)"
+            ),
+            {"now": _NOW, "tenant": default_tenant(engine), "project": default_project(engine)},
         )
         seed_graph(conn, "gr_1", at=_NOW)
         seed_chunk(conn, "ch_1", graph_id="gr_1", at=_NOW)
@@ -66,14 +80,14 @@ def _store_and_engine(tmp_path: Path, *, enforce_foreign_keys: bool = False) -> 
     return GardenDeliveryStore(store_connections), engine
 
 
-def _full_plan(*, at: datetime = _NOW) -> DeliveryPlan:
+def _full_plan(project_id: str, *, at: datetime = _NOW) -> DeliveryPlan:
     return DeliveryPlan(
         chunk_id="ch_1",
         node_id="nd_1",
         node_name="garden-survey",
         epoch=1,
         at=at,
-        run=_RUN,
+        run=replace(_RUN, project_id=project_id),
         deltas=[
             DeltaMaterialization(
                 finding_set=NewFindingSet(
@@ -121,13 +135,14 @@ def test_deliver_writes_a_facts_own_actor_column(tmp_path: Path) -> None:
     """The `resolved` fact a `gone` op settles a `delivered` finding to
     carries the actor `GardenDelivery` threaded onto `NewFindingFact`."""
     store, engine = _store_and_engine(tmp_path)
+    project = default_project(engine)
     plan = DeliveryPlan(
         chunk_id="ch_1",
         node_id="nd_1",
         node_name="garden-deliver",
         epoch=1,
         at=_NOW,
-        run=_RUN,
+        run=replace(_RUN, project_id=project),
         deltas=[
             DeltaMaterialization(
                 finding_set=NewFindingSet(
@@ -154,23 +169,24 @@ def test_deliver_writes_a_facts_own_actor_column(tmp_path: Path) -> None:
     store.deliver(plan, admission=EpochAdmission.AT_OR_ABOVE)
 
     with engine.connect() as conn:
-        (fact,) = conn.execute(sa.select(finding_facts)).all()
+        (fact,) = conn.execute(hub_scoped(sa.select(finding_facts))).all()
     assert (fact.kind, fact.note, fact.actor) == ("resolved", "no longer reproduces", "u_1")
 
 
 def test_deliver_writes_every_row(tmp_path: Path) -> None:
     store, engine = _store_and_engine(tmp_path)
-    plan = _full_plan()
+    project = default_project(engine)
+    plan = _full_plan(project)
 
     outcome = store.deliver(plan, admission=EpochAdmission.AT_OR_ABOVE)
 
     assert outcome is DeliveryOutcome.RECORDED
     with engine.connect() as conn:
-        finding_rows = conn.execute(sa.select(findings)).all()
+        finding_rows = conn.execute(hub_scoped(sa.select(findings))).all()
         assert [r.finding_id for r in finding_rows] == ["fin_1"]
         assert finding_rows[0].class_ == "stale-docstring"
 
-        fact_rows = conn.execute(sa.select(finding_facts).order_by(finding_facts.c.id)).all()
+        fact_rows = conn.execute(hub_scoped(sa.select(finding_facts).order_by(finding_facts.c.id))).all()
         assert [(r.finding_id, r.kind, r.note) for r in fact_rows] == [
             ("fin_1", "add", None),
             ("fin_2", "observed", None),
@@ -180,20 +196,20 @@ def test_deliver_writes_every_row(tmp_path: Path) -> None:
         # finding_set it was delivered under.
         assert {r.finding_set_id for r in fact_rows} == {"fins_1"}
 
-        set_rows = conn.execute(sa.select(finding_sets)).all()
+        set_rows = conn.execute(hub_scoped(sa.select(finding_sets))).all()
         assert len(set_rows) == 1
         assert set_rows[0].finding_set_id == "fins_1"
         assert set_rows[0].chunk_id == "ch_1"
         assert set_rows[0].artifact_id == "art_placeholder"
         assert set_rows[0].routine_name == "nightly"
 
-        proposal_rows = conn.execute(sa.select(garden_proposals)).all()
+        proposal_rows = conn.execute(hub_scoped(sa.select(garden_proposals))).all()
         assert [r.proposal_id for r in proposal_rows] == ["gprop_1"]
 
-        link_rows = conn.execute(sa.select(garden_proposal_findings)).all()
+        link_rows = conn.execute(hub_scoped(sa.select(garden_proposal_findings))).all()
         assert [(r.proposal_id, r.finding_id) for r in link_rows] == [("gprop_1", "fin_1")]
 
-        marker_rows = conn.execute(sa.select(artifacts).where(artifacts.c.name == "garden-delivered")).all()
+        marker_rows = conn.execute(hub_scoped(sa.select(artifacts).where(artifacts.c.name == "garden-delivered"))).all()
         assert len(marker_rows) == 1
         assert marker_rows[0].chunk_id == "ch_1"
         assert marker_rows[0].node_id == "nd_1"
@@ -209,22 +225,26 @@ def test_deliver_writes_finding_sets_before_finding_facts_under_fk_enforcement(t
     ones an earlier delivery already recorded — fine with FK enforcement off, but a
     second, unrelated FK gap under strict enforcement this test is not about."""
     store, engine = _store_and_engine(tmp_path, enforce_foreign_keys=True)
+    project = default_project(engine)
     # `finding_sets.artifact_id` FKs to `artifacts` too — in production the routine's own
     # `produces:` step already wrote this artifact before delivery ever runs; seeded here
     # by hand only because this plan is built directly rather than through that path.
     with engine.begin() as conn:
         conn.execute(
             sa.insert(artifacts).values(
-                artifact_id="art_fk",
-                chunk_id="ch_1",
-                node_id="nd_1",
-                node_name="garden-survey",
-                epoch=1,
-                name="findings",
-                kind="asset",
-                data="{}",
-                produced_at=_NOW,
-                seq=1,
+                stamp(
+                    artifacts,
+                    artifact_id="art_fk",
+                    chunk_id="ch_1",
+                    node_id="nd_1",
+                    node_name="garden-survey",
+                    epoch=1,
+                    name="findings",
+                    kind="asset",
+                    data="{}",
+                    produced_at=_NOW,
+                    seq=1,
+                )
             )
         )
     plan = DeliveryPlan(
@@ -233,7 +253,7 @@ def test_deliver_writes_finding_sets_before_finding_facts_under_fk_enforcement(t
         node_name="garden-survey",
         epoch=1,
         at=_NOW,
-        run=_RUN,
+        run=replace(_RUN, project_id=project),
         deltas=[
             DeltaMaterialization(
                 finding_set=NewFindingSet(
@@ -268,7 +288,8 @@ def test_deliver_writes_finding_sets_before_finding_facts_under_fk_enforcement(t
 
 def test_deliver_replay_mints_nothing_new(tmp_path: Path) -> None:
     store, engine = _store_and_engine(tmp_path)
-    plan = _full_plan()
+    project = default_project(engine)
+    plan = _full_plan(project)
     first = store.deliver(plan, admission=EpochAdmission.AT_OR_ABOVE)
     assert first is DeliveryOutcome.RECORDED
 
@@ -276,12 +297,14 @@ def test_deliver_replay_mints_nothing_new(tmp_path: Path) -> None:
 
     assert second is DeliveryOutcome.ALREADY_RECORDED
     with engine.connect() as conn:
-        assert conn.execute(sa.select(sa.func.count()).select_from(findings)).scalar_one() == 1
-        assert conn.execute(sa.select(sa.func.count()).select_from(finding_facts)).scalar_one() == 3
-        assert conn.execute(sa.select(sa.func.count()).select_from(finding_sets)).scalar_one() == 1
-        assert conn.execute(sa.select(sa.func.count()).select_from(garden_proposals)).scalar_one() == 1
-        assert conn.execute(sa.select(sa.func.count()).select_from(garden_proposal_findings)).scalar_one() == 1
-        assert conn.execute(sa.select(sa.func.count()).select_from(artifacts)).scalar_one() == 1
+        assert conn.execute(hub_scoped(sa.select(sa.func.count()).select_from(findings))).scalar_one() == 1
+        assert conn.execute(hub_scoped(sa.select(sa.func.count()).select_from(finding_facts))).scalar_one() == 3
+        assert conn.execute(hub_scoped(sa.select(sa.func.count()).select_from(finding_sets))).scalar_one() == 1
+        assert conn.execute(hub_scoped(sa.select(sa.func.count()).select_from(garden_proposals))).scalar_one() == 1
+        assert (
+            conn.execute(hub_scoped(sa.select(sa.func.count()).select_from(garden_proposal_findings))).scalar_one() == 1
+        )
+        assert conn.execute(hub_scoped(sa.select(sa.func.count()).select_from(artifacts))).scalar_one() == 1
 
 
 def test_deliver_at_a_new_epoch_resolving_the_same_artifact_is_already_recorded(tmp_path: Path) -> None:
@@ -289,7 +312,8 @@ def test_deliver_at_a_new_epoch_resolving_the_same_artifact_is_already_recorded(
     materialized artifact must return ALREADY_RECORDED cleanly, not trip
     `finding_sets.artifact_id`'s unique constraint with a raw IntegrityError."""
     store, engine = _store_and_engine(tmp_path)
-    first = _full_plan()
+    project = default_project(engine)
+    first = _full_plan(project)
     assert store.deliver(first, admission=EpochAdmission.AT_OR_ABOVE) is DeliveryOutcome.RECORDED
 
     second = DeliveryPlan(
@@ -298,7 +322,7 @@ def test_deliver_at_a_new_epoch_resolving_the_same_artifact_is_already_recorded(
         node_name="garden-survey",
         epoch=2,
         at=_NOW,
-        run=_RUN,
+        run=replace(_RUN, project_id=project),
         deltas=[
             DeltaMaterialization(
                 finding_set=NewFindingSet(
@@ -317,9 +341,9 @@ def test_deliver_at_a_new_epoch_resolving_the_same_artifact_is_already_recorded(
 
     assert outcome is DeliveryOutcome.ALREADY_RECORDED
     with engine.connect() as conn:
-        set_rows = conn.execute(sa.select(finding_sets)).all()
+        set_rows = conn.execute(hub_scoped(sa.select(finding_sets))).all()
         assert [r.finding_set_id for r in set_rows] == ["fins_1"]
-        marker_rows = conn.execute(sa.select(artifacts).where(artifacts.c.name == "garden-delivered")).all()
+        marker_rows = conn.execute(hub_scoped(sa.select(artifacts).where(artifacts.c.name == "garden-delivered"))).all()
         # This fresh visit still gets its own marker, though it inserted nothing else.
         assert len(marker_rows) == 2
 
@@ -329,13 +353,14 @@ def test_deliver_with_one_delta_already_materialized_still_lands_the_other(tmp_p
     genuinely new one (`B`) must still land `B`'s rows — the broader idempotence check
     skips only `A`'s group, never bails the whole plan."""
     store, engine = _store_and_engine(tmp_path)
+    project = default_project(engine)
     first = DeliveryPlan(
         chunk_id="ch_1",
         node_id="nd_1",
         node_name="garden-survey",
         epoch=1,
         at=_NOW,
-        run=_RUN,
+        run=replace(_RUN, project_id=project),
         deltas=[
             DeltaMaterialization(
                 finding_set=NewFindingSet(
@@ -370,7 +395,7 @@ def test_deliver_with_one_delta_already_materialized_still_lands_the_other(tmp_p
         node_name="garden-survey",
         epoch=2,
         at=_NOW,
-        run=_RUN,
+        run=replace(_RUN, project_id=project),
         deltas=[
             DeltaMaterialization(
                 finding_set=NewFindingSet(
@@ -426,17 +451,17 @@ def test_deliver_with_one_delta_already_materialized_still_lands_the_other(tmp_p
 
     assert outcome is DeliveryOutcome.RECORDED
     with engine.connect() as conn:
-        finding_rows = conn.execute(sa.select(findings).order_by(findings.c.finding_id)).all()
+        finding_rows = conn.execute(hub_scoped(sa.select(findings).order_by(findings.c.finding_id))).all()
         assert [r.finding_id for r in finding_rows] == ["fin_a", "fin_b"]
 
-        fact_rows = conn.execute(sa.select(finding_facts).order_by(finding_facts.c.id)).all()
+        fact_rows = conn.execute(hub_scoped(sa.select(finding_facts).order_by(finding_facts.c.id))).all()
         assert [(r.finding_id, r.kind) for r in fact_rows] == [("fin_a", "add"), ("fin_b", "add")]
 
-        set_rows = conn.execute(sa.select(finding_sets).order_by(finding_sets.c.finding_set_id)).all()
+        set_rows = conn.execute(hub_scoped(sa.select(finding_sets).order_by(finding_sets.c.finding_set_id))).all()
         assert [r.finding_set_id for r in set_rows] == ["fins_a", "fins_b"]
         assert [r.artifact_id for r in set_rows] == ["art_a", "art_b"]
 
-        marker_rows = conn.execute(sa.select(artifacts).where(artifacts.c.name == "garden-delivered")).all()
+        marker_rows = conn.execute(hub_scoped(sa.select(artifacts).where(artifacts.c.name == "garden-delivered"))).all()
         assert len(marker_rows) == 2
 
 
@@ -445,13 +470,14 @@ def test_deliver_substitutes_a_dropped_deltas_minted_id_for_a_proposals_ref_cita
     its `ref`-carrying `add` op. A proposal in the same visit citing that ref must land on
     `fin_a`, the id the first visit actually recorded."""
     store, engine = _store_and_engine(tmp_path)
+    project = default_project(engine)
     first = DeliveryPlan(
         chunk_id="ch_1",
         node_id="nd_1",
         node_name="garden-survey",
         epoch=1,
         at=_NOW,
-        run=_RUN,
+        run=replace(_RUN, project_id=project),
         deltas=[
             DeltaMaterialization(
                 finding_set=NewFindingSet(
@@ -486,7 +512,7 @@ def test_deliver_substitutes_a_dropped_deltas_minted_id_for_a_proposals_ref_cita
         node_name="garden-survey",
         epoch=2,
         at=_NOW,
-        run=_RUN,
+        run=replace(_RUN, project_id=project),
         deltas=[
             DeltaMaterialization(
                 finding_set=NewFindingSet(
@@ -531,10 +557,10 @@ def test_deliver_substitutes_a_dropped_deltas_minted_id_for_a_proposals_ref_cita
 
     assert outcome is DeliveryOutcome.RECORDED
     with engine.connect() as conn:
-        finding_ids = {r.finding_id for r in conn.execute(sa.select(findings))}
+        finding_ids = {r.finding_id for r in conn.execute(hub_scoped(sa.select(findings)))}
         assert finding_ids == {"fin_a"}  # the phantom id was never inserted
 
-        links = conn.execute(sa.select(garden_proposal_findings)).all()
+        links = conn.execute(hub_scoped(sa.select(garden_proposal_findings))).all()
         assert [link.finding_id for link in links] == ["fin_a"]
 
 
@@ -543,7 +569,8 @@ def test_deliver_at_a_new_epoch_resolving_the_same_proposal_artifact_mints_no_du
     re-carrying the same `--proposals` artifact must mint the proposal exactly once,
     keyed `(source_artifact_id, ref)`."""
     store, engine = _store_and_engine(tmp_path)
-    first = _full_plan()
+    project = default_project(engine)
+    first = _full_plan(project)
     assert store.deliver(first, admission=EpochAdmission.AT_OR_ABOVE) is DeliveryOutcome.RECORDED
 
     second = DeliveryPlan(
@@ -552,7 +579,7 @@ def test_deliver_at_a_new_epoch_resolving_the_same_proposal_artifact_mints_no_du
         node_name="garden-survey",
         epoch=2,
         at=_NOW,
-        run=_RUN,
+        run=replace(_RUN, project_id=project),
         deltas=[],
         proposals=[
             NewProposal(
@@ -572,11 +599,11 @@ def test_deliver_at_a_new_epoch_resolving_the_same_proposal_artifact_mints_no_du
 
     assert outcome is DeliveryOutcome.ALREADY_RECORDED
     with engine.connect() as conn:
-        proposal_rows = conn.execute(sa.select(garden_proposals)).all()
+        proposal_rows = conn.execute(hub_scoped(sa.select(garden_proposals))).all()
         assert [r.proposal_id for r in proposal_rows] == ["gprop_1"]
-        link_rows = conn.execute(sa.select(garden_proposal_findings)).all()
+        link_rows = conn.execute(hub_scoped(sa.select(garden_proposal_findings))).all()
         assert [(r.proposal_id, r.finding_id) for r in link_rows] == [("gprop_1", "fin_1")]
-        marker_rows = conn.execute(sa.select(artifacts).where(artifacts.c.name == "garden-delivered")).all()
+        marker_rows = conn.execute(hub_scoped(sa.select(artifacts).where(artifacts.c.name == "garden-delivered"))).all()
         assert len(marker_rows) == 2
 
 
@@ -584,7 +611,8 @@ def test_deliver_with_one_proposal_already_delivered_still_lands_the_other(tmp_p
     """The proposal twin of the mixed-survival delta test above: a visit re-carrying an
     already-delivered proposal (`p1`) alongside a new one (`p2`) must still land `p2`."""
     store, engine = _store_and_engine(tmp_path)
-    assert store.deliver(_full_plan(), admission=EpochAdmission.AT_OR_ABOVE) is DeliveryOutcome.RECORDED
+    project = default_project(engine)
+    assert store.deliver(_full_plan(project), admission=EpochAdmission.AT_OR_ABOVE) is DeliveryOutcome.RECORDED
 
     second = DeliveryPlan(
         chunk_id="ch_1",
@@ -592,7 +620,7 @@ def test_deliver_with_one_proposal_already_delivered_still_lands_the_other(tmp_p
         node_name="garden-survey",
         epoch=2,
         at=_NOW,
-        run=_RUN,
+        run=replace(_RUN, project_id=project),
         deltas=[],
         proposals=[
             NewProposal(
@@ -622,7 +650,9 @@ def test_deliver_with_one_proposal_already_delivered_still_lands_the_other(tmp_p
 
     assert outcome is DeliveryOutcome.RECORDED
     with engine.connect() as conn:
-        proposal_rows = conn.execute(sa.select(garden_proposals).order_by(garden_proposals.c.proposal_id)).all()
+        proposal_rows = conn.execute(
+            hub_scoped(sa.select(garden_proposals).order_by(garden_proposals.c.proposal_id))
+        ).all()
         assert [r.proposal_id for r in proposal_rows] == ["gprop_1", "gprop_2"]
 
 
@@ -630,13 +660,14 @@ def test_deliver_clean_plan_records_only_the_finding_set(tmp_path: Path) -> None
     """No findings, no proposals — but an artifact's scope/revisions/measurement are
     still recorded, even for an empty delta (acceptance criterion)."""
     store, engine = _store_and_engine(tmp_path)
+    project = default_project(engine)
     plan = DeliveryPlan(
         chunk_id="ch_1",
         node_id="nd_2",
         node_name="garden-survey",
         epoch=1,
         at=_NOW,
-        run=_RUN,
+        run=replace(_RUN, project_id=project),
         deltas=[
             DeltaMaterialization(
                 finding_set=NewFindingSet(
@@ -655,12 +686,12 @@ def test_deliver_clean_plan_records_only_the_finding_set(tmp_path: Path) -> None
 
     assert outcome is DeliveryOutcome.RECORDED
     with engine.connect() as conn:
-        assert conn.execute(sa.select(sa.func.count()).select_from(findings)).scalar_one() == 0
-        assert conn.execute(sa.select(sa.func.count()).select_from(finding_facts)).scalar_one() == 0
-        assert conn.execute(sa.select(sa.func.count()).select_from(garden_proposals)).scalar_one() == 0
-        set_rows = conn.execute(sa.select(finding_sets)).all()
+        assert conn.execute(hub_scoped(sa.select(sa.func.count()).select_from(findings))).scalar_one() == 0
+        assert conn.execute(hub_scoped(sa.select(sa.func.count()).select_from(finding_facts))).scalar_one() == 0
+        assert conn.execute(hub_scoped(sa.select(sa.func.count()).select_from(garden_proposals))).scalar_one() == 0
+        set_rows = conn.execute(hub_scoped(sa.select(finding_sets))).all()
         assert len(set_rows) == 1
         assert set_rows[0].finding_set_id == "fins_2"
         assert set_rows[0].measurement is None
-        marker_rows = conn.execute(sa.select(artifacts).where(artifacts.c.name == "garden-delivered")).all()
+        marker_rows = conn.execute(hub_scoped(sa.select(artifacts).where(artifacts.c.name == "garden-delivered"))).all()
         assert len(marker_rows) == 1

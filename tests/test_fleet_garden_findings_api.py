@@ -19,7 +19,15 @@ from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.run_context_store import RunContextStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
-from tests.support import HubHarness, build_hub, hub_store_connections, seed_work_item
+from tests.support import (
+    HubHarness,
+    build_hub,
+    default_project,
+    hub_store_connections,
+    seed_scope,
+    seed_work_item,
+    stamp,
+)
 
 pytestmark = pytest.mark.component
 
@@ -35,8 +43,12 @@ def _seed_chunk(hub: HubHarness, *, with_run_context: bool = True) -> str:
     items = WorkItemStore(store_connections)
     item = seed_work_item(items, graph_id="gr_garden", author=WorkItemAuthor.user("u_1"), at=_NOW)
     if with_run_context:
+        seed_scope(store_connections, _SCOPE, at=_NOW)
         RunContextStore(store_connections).record(
-            item.work_item_id, RunContext(routine_name=_ROUTINE, scope_slug=_SCOPE, mode="dry_run")
+            item.work_item_id,
+            RunContext(
+                project_id=default_project(hub.engine), routine_name=_ROUTINE, scope_slug=_SCOPE, mode="dry_run"
+            ),
         )
     return f"ch_{item.ref}"
 
@@ -48,8 +60,10 @@ def _seed_finding(
     scope_slug: str = _SCOPE,
     routine_name: str = _ROUTINE,
 ) -> None:
+    seed_scope(hub_store_connections(hub.engine), scope_slug, at=_NOW)
     FindingStore(hub_store_connections(hub.engine)).add(
         finding_id,
+        project_id=default_project(hub.engine),
         routine_name=routine_name,
         scope_slug=scope_slug,
         class_="stale-docstring",
@@ -73,21 +87,27 @@ def _deliver_finding(hub: HubHarness, finding_id: str) -> None:
 
 
 def _seed_review_finding(hub: HubHarness, finding_id: str, *, scope_slug: str = _SCOPE, chunk_id: str = "ch_x") -> None:
+    seed_scope(hub_store_connections(hub.engine), scope_slug, at=_NOW)
     with hub.engine.begin() as conn:
         conn.execute(
             insert(s.findings).values(
-                finding_id=finding_id,
-                routine_name=None,
-                scope_slug=scope_slug,
-                class_="correctness",
-                locus="a.py:1",
-                summary="s",
-                source="review",
-                severity="should-fix",
-                raised_by_chunk_id=chunk_id,
+                stamp(
+                    s.findings,
+                    finding_id=finding_id,
+                    routine_name=None,
+                    scope_slug=scope_slug,
+                    class_="correctness",
+                    locus="a.py:1",
+                    summary="s",
+                    source="review",
+                    severity="should-fix",
+                    raised_by_chunk_id=chunk_id,
+                )
             )
         )
-        conn.execute(insert(s.finding_facts).values(finding_id=finding_id, kind="add", recorded_at=_NOW))
+        conn.execute(
+            insert(s.finding_facts).values(stamp(s.finding_facts, finding_id=finding_id, kind="add", recorded_at=_NOW))
+        )
 
 
 def test_404s_on_an_unknown_chunk(tmp_path: Path) -> None:

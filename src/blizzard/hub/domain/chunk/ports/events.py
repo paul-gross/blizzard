@@ -3,11 +3,24 @@ cross-table activity feed derived from it and the other concepts' own fact table
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
 from blizzard.foundation.event_log import EventLogSeverity
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.model import DEFAULT_EVENT_LIST_LIMIT, ActivityEntry, OperationalEvent
+from blizzard.hub.domain.projects.model import ProjectId
+
+
+@domain_model
+@dataclass(frozen=True)
+class FeedLens:
+    """A feed narrowed to ``project``: it keeps a row naming one of the project's chunks, a row naming no chunk
+    whose runner is one of ``runners`` (the runners serving the project), and a row naming neither."""
+
+    project: ProjectId
+    runners: frozenset[str]
 
 
 class IReadChunkEventsRepository(Protocol):
@@ -21,25 +34,30 @@ class IReadChunkEventsRepository(Protocol):
         chunk_id: str | None = None,
         since: datetime | None = None,
         limit: int = DEFAULT_EVENT_LIST_LIMIT,
+        lens: FeedLens | None = None,
     ) -> list[OperationalEvent]:
         """The operational event log, newest first (``recorded_at`` desc, ``id`` desc
-        tiebreak), filtered by whichever of ``severity``/``runner_id``/``chunk_id``/``since``
+        tiebreak), filtered by whichever of ``severity``/``runner_id``/``chunk_id``/``since``/``lens``
         is given and bounded by ``limit`` — the cap keeps the newest rows, whatever their
         severity."""
         ...
 
-    def activity_facts_since(self, since: datetime, *, limit: int) -> list[ActivityEntry]:
+    def activity_facts_since(
+        self, since: datetime, *, limit: int, project: ProjectId | None = None
+    ) -> list[ActivityEntry]:
         """Every ``chunk-changed``-shaped activity row across every mapped cause's fact
-        table, at or after ``since`` (AC4). ``edited`` is deliberately
+        table, at or after ``since`` (AC4), of ``project``'s chunks alone when one is named. ``edited`` is deliberately
         unrepresented: a chunk edit writes no fact row — a documented exclusion, not a
         gap. Each source table is read with its own bounded ``ORDER BY … LIMIT``, so this
         returns rows unsorted across sources."""
         ...
 
-    def activity_events_since(self, since: datetime, *, limit: int) -> list[OperationalEvent]:
+    def activity_events_since(
+        self, since: datetime, *, limit: int, lens: FeedLens | None = None
+    ) -> list[OperationalEvent]:
         """``event_log`` rows for the activity feed's ``event-logged`` half — newest
         first (``recorded_at`` desc, ``id`` desc tiebreak), a deleted chunk's rows
-        excluded, bounded by ``limit`` after that ordering. A runner-scoped row
+        excluded, narrowed by ``lens`` when given, bounded by ``limit`` after that ordering. A runner-scoped row
         (``chunk_id IS NULL``) is never excluded by the deleted-chunk filter.
 
         Distinct from :meth:`list_events`: this read also excludes a deleted chunk's rows."""
@@ -83,6 +101,8 @@ class IEventLogPublisher(Protocol):
         runner_id: str | None,
         runner_name: str | None = None,
         key: str | None = None,
+        project_id: str | None = None,
     ) -> int:
-        """Fan out one ``event-logged`` SSE frame; ``runner_name`` is omitted from it when ``None``."""
+        """Fan out one ``event-logged`` SSE frame; ``runner_name`` and ``project_id`` are omitted from it when
+        ``None``."""
         ...

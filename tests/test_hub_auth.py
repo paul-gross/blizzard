@@ -9,15 +9,17 @@ from fastapi import HTTPException
 
 from blizzard.hub.api.auth import RunnerPrincipal
 from blizzard.hub.api.fleet import FleetRequest
+from blizzard.hub.tenancy import StoreScope, TenantId
 
 pytestmark = pytest.mark.unit
 
-_PRINCIPAL = RunnerPrincipal(runner_id="runner-a", runner_name="r-claude", workspace_id="ws-a")
+_TENANT = TenantId("ten_fleet")
+_PRINCIPAL = RunnerPrincipal(runner_id="runner-a", runner_name="r-claude", workspace_id="ws-a", tenant_id=_TENANT)
 
 
 def _fleet(principal: RunnerPrincipal) -> FleetRequest:
-    # No config: `assert_owns` reads only the principal.
-    return FleetRequest(principal, config=None)  # type: ignore[arg-type]
+    # No config and no services: `assert_owns` reads only the principal.
+    return FleetRequest(principal, config=None, scope=StoreScope(_TENANT), tenant_name="acme", services=None)  # type: ignore[arg-type]
 
 
 def test_the_callers_own_runner_id_is_never_a_mismatch() -> None:

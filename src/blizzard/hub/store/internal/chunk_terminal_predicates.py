@@ -5,20 +5,25 @@
 open-decision lists and the write fence call it directly, and :func:`settled_stopped` /
 :func:`settled_done` split it into its two outcomes. Its one residue: a terminal and a non-terminal
 transition at an identical ``(recorded_at, epoch)`` leave the chunk live, since the derivation orders
-that tie by fact order and the write path cannot record it."""
+that tie by fact order and the write path cannot record it.
+
+Each predicate takes the caller's :class:`ScopedStatements`, and every ``EXISTS`` it nests is built
+through them — each correlated table and alias carries the scope's tenant on its own, so a predicate
+never reads another tenant's facts whatever the enclosing read selects from."""
 
 from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import ColumnElement, and_, exists, or_
+from sqlalchemy import ColumnElement, and_, or_
 
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.scoped import ScopedStatements
 
 
 def _done_by_transition(
-    chunk_id: ColumnElement[str], *, finished_before: datetime | None = None
+    stmts: ScopedStatements, chunk_id: ColumnElement[str], *, finished_before: datetime | None = None
 ) -> ColumnElement[bool]:
     """The chunk named by ``chunk_id`` has a transition into the reserved terminal that is its newest
     movement across transitions, migrations, and restarts. A migration or restart at the same
@@ -37,7 +42,8 @@ def _done_by_transition(
         )
 
     superseded = or_(
-        exists().where(
+        stmts.exists(
+            other,
             other.c.chunk_id == terminal.c.chunk_id,
             other.c.transition_id != terminal.c.transition_id,
             not_older(other),
@@ -47,49 +53,53 @@ def _done_by_transition(
                 other.c.epoch > terminal.c.epoch,
             ),
         ),
-        exists().where(s.chunk_migrations.c.chunk_id == terminal.c.chunk_id, not_older(s.chunk_migrations)),
-        exists().where(s.chunk_restarts.c.chunk_id == terminal.c.chunk_id, not_older(s.chunk_restarts)),
+        stmts.exists(
+            s.chunk_migrations, s.chunk_migrations.c.chunk_id == terminal.c.chunk_id, not_older(s.chunk_migrations)
+        ),
+        stmts.exists(s.chunk_restarts, s.chunk_restarts.c.chunk_id == terminal.c.chunk_id, not_older(s.chunk_restarts)),
     )
     clauses = [terminal.c.chunk_id == chunk_id, terminal.c.to_node_id == RESERVED_TERMINAL, ~superseded]
     if finished_before is not None:
         clauses.append(terminal.c.recorded_at < finished_before)
-    return exists().where(*clauses)
+    return stmts.exists(terminal, *clauses)
 
 
-def chunk_is_terminal(chunk_id: ColumnElement[str]) -> ColumnElement[bool]:
+def chunk_is_terminal(stmts: ScopedStatements, chunk_id: ColumnElement[str]) -> ColumnElement[bool]:
     """The chunk named by ``chunk_id`` — a correlated column or one bound id — is stopped or done: a
     stop, an operator completion, or a terminal transition that is its newest movement. Terminal
     refuses every later write regardless of epoch (``bzh:epoch-fencing``), so this is the derived
     status, not an epoch comparison."""
     return or_(
-        exists().where(s.chunk_stopped.c.chunk_id == chunk_id),
-        exists().where(s.chunk_completed.c.chunk_id == chunk_id),
-        _done_by_transition(chunk_id),
+        stmts.exists(s.chunk_stopped, s.chunk_stopped.c.chunk_id == chunk_id),
+        stmts.exists(s.chunk_completed, s.chunk_completed.c.chunk_id == chunk_id),
+        _done_by_transition(stmts, chunk_id),
     )
 
 
-def maybe_live() -> ColumnElement[bool]:
+def maybe_live(stmts: ScopedStatements) -> ColumnElement[bool]:
     """Drops every chunk :func:`chunk_is_terminal` settles, and never one
     :meth:`~blizzard.hub.domain.chunk.model.ChunkFacts.status` would derive non-terminal."""
-    return ~chunk_is_terminal(s.chunks.c.chunk_id)
+    return ~chunk_is_terminal(stmts, s.chunks.c.chunk_id)
 
 
-def settled_stopped() -> ColumnElement[bool]:
+def settled_stopped(stmts: ScopedStatements) -> ColumnElement[bool]:
     """The chunks that derive ``stopped``: a stop no operator completion at or after it
     outranks — the ``>=`` tie going to the completion, as
     :meth:`~blizzard.hub.domain.chunk.model.ChunkFacts.status` settles it. Exact."""
     chunk_id = s.chunks.c.chunk_id
     stop = s.chunk_stopped.alias("settling_stop")
-    return exists().where(
+    return stmts.exists(
+        stop,
         stop.c.chunk_id == chunk_id,
-        ~exists().where(
+        ~stmts.exists(
+            s.chunk_completed,
             s.chunk_completed.c.chunk_id == stop.c.chunk_id,
             s.chunk_completed.c.completed_at >= stop.c.stopped_at,
         ),
     )
 
 
-def settled_done(*, finished_before: datetime | None = None) -> ColumnElement[bool]:
+def settled_done(stmts: ScopedStatements, *, finished_before: datetime | None = None) -> ColumnElement[bool]:
     """The chunks that derive ``done`` — by an operator completion that outranks every stop,
     or, with neither fact present, by an unsuperseded terminal transition. With
     ``finished_before``, only those whose
@@ -98,9 +108,11 @@ def settled_done(*, finished_before: datetime | None = None) -> ColumnElement[bo
     chunk_id = s.chunks.c.chunk_id
     completion = s.chunk_completed.alias("settling_completion")
     by_completion: list[ColumnElement[bool]] = [
-        exists().where(
+        stmts.exists(
+            completion,
             completion.c.chunk_id == chunk_id,
-            ~exists().where(
+            ~stmts.exists(
+                s.chunk_stopped,
                 s.chunk_stopped.c.chunk_id == completion.c.chunk_id,
                 s.chunk_stopped.c.stopped_at > completion.c.completed_at,
             ),
@@ -109,14 +121,15 @@ def settled_done(*, finished_before: datetime | None = None) -> ColumnElement[bo
     if finished_before is not None:
         # ``completed_at`` is the newest completion, so every one must fall before the instant.
         by_completion.append(
-            ~exists().where(
+            ~stmts.exists(
+                s.chunk_completed,
                 s.chunk_completed.c.chunk_id == chunk_id,
                 s.chunk_completed.c.completed_at >= finished_before,
             )
         )
     by_transition = and_(
-        ~exists().where(s.chunk_stopped.c.chunk_id == chunk_id),
-        ~exists().where(s.chunk_completed.c.chunk_id == chunk_id),
-        _done_by_transition(chunk_id, finished_before=finished_before),
+        ~stmts.exists(s.chunk_stopped, s.chunk_stopped.c.chunk_id == chunk_id),
+        ~stmts.exists(s.chunk_completed, s.chunk_completed.c.chunk_id == chunk_id),
+        _done_by_transition(stmts, chunk_id, finished_before=finished_before),
     )
     return or_(and_(*by_completion), by_transition)

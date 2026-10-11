@@ -36,6 +36,10 @@ class RunRowView(BaseModel):
     outcome: ChunkStatus
     escalation: RunEscalationView | None
     delivered: list[DeliveredSetView]
+    #: The project this belongs to — its id, current slug and display name; ``None`` where the hub reports none.
+    project_id: str | None = None
+    project_slug: str | None = None
+    project_name: str | None = None
 
 
 class AddedFindingView(BaseModel):
@@ -86,3 +90,7 @@ class RunDeltaView(BaseModel):
     outcome: ChunkStatus
     escalation: RunEscalationView | None
     sets: list[DeliveredSetDeltaView]
+    #: The project this belongs to — its id, current slug and display name; ``None`` where the hub reports none.
+    project_id: str | None = None
+    project_slug: str | None = None
+    project_name: str | None = None

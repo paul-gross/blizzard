@@ -28,6 +28,8 @@ from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.health_cache import IReadHarnessHealth
 from blizzard.runner.harness.registry import IHarnessRegistry
 from blizzard.runner.harness.workspace_prompts import WorkspacePromptService
+from blizzard.runner.hub.held_token import ICurrentHubToken
+from blizzard.runner.hub.identity import IIdentityOnContact
 from blizzard.runner.leases.activity import LocalLeaseService
 from blizzard.runner.leases.asks import AskService
 from blizzard.runner.leases.liveness import LeaseLivenessService
@@ -221,6 +223,12 @@ class RunnerWiring:
     def maybe_readiness(self) -> ReadinessService | None:
         """The readiness service; ``None`` on the store-free app, which reports not ready — never refused."""
         return getattr(self.state, "readiness", None)
+
+    def maybe_identity_check(self) -> IIdentityOnContact | None:
+        return getattr(self.state, "identity_check", None)
+
+    def maybe_hub_token(self) -> ICurrentHubToken | None:
+        return getattr(self.state, "hub_token", None)
 
     def maybe_config(self) -> RunnerConfig | None:
         return getattr(self.state, "config", None)

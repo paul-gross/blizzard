@@ -1,0 +1,11 @@
+<div class="no-access" data-testid="no-access">
+  <p class="headline">You don't have access to anything here yet.</p>
+  <p class="detail">Reach out to your administrator for access.</p>
+  @if (me(); as identity) {
+    <p class="detail" data-testid="no-access-username">Signed in as {{ identity.display_name }} ({{ identity.username }})</p>
+  }
+  <fleet-kit-button testid="no-access-logout" [disabled]="logoutPending()" (click)="logout.emit()">Log out</fleet-kit-button>
+  @if (logoutError(); as error) {
+    <p class="detail" role="alert" data-testid="no-access-logout-error">{{ error }}</p>
+  }
+</div>

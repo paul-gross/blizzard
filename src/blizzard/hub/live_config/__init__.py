@@ -68,6 +68,16 @@ class ConfigObjectCache:
                 self._supersede(kind, key, held[1])
         return built
 
+    def close(self) -> None:
+        """Close and forget every object built or set aside — the tenant they were built for is no longer
+        served; a later hand-out builds afresh."""
+        with self._lock:
+            held = [obj for _, obj in self._entries.values()] + list(self._superseded.values())
+            self._entries.clear()
+            self._superseded.clear()
+        for obj in held:
+            _close(obj)
+
     def _supersede(self, kind: RecordKind, key: str, replaced: object) -> None:
         """Close what an earlier replacement set aside, and set ``replaced`` aside in its place."""
         older = self._superseded.pop((kind, key), None)

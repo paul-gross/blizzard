@@ -7,9 +7,10 @@ path, and re-running it is the re-derive path — one engine, one convergence pr
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from typing import Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
@@ -31,6 +32,7 @@ from blizzard.hub.domain.observability.analytics.extraction import (
     ITurnEventExtractor,
     extract_events,
 )
+from blizzard.hub.tenancy import TenantClosed, TenantId, UnknownTenant
 
 _log = get_logger("blizzard.hub.transcript_events")
 
@@ -123,6 +125,9 @@ def stamp_events(
     ]
 
 
+#: A tenant's candidacy when it has no visible segment.
+_NOTHING_VISIBLE = CandidacyRead(visible_segment_ids=frozenset(), candidate_segment_ids=[])
+
 #: The change probe's forced floor — bounds how stale a missed signature can leave reality.
 FORCED_FULL_PASS_FLOOR = timedelta(minutes=10)
 
@@ -138,6 +143,23 @@ def derivation_due(
     if last_full_pass_at is None or now - last_full_pass_at >= FORCED_FULL_PASS_FLOOR:
         return True
     return signature != last_signature
+
+
+class IReadDerivationCorpus(Protocol):
+    """The event-derivation sweep's corpus, read across every open tenant, and its probe."""
+
+    def derivation_signature(self) -> DerivationSignature:
+        """The hub-wide change probe over every tenant's segments and chunks."""
+        ...
+
+    def candidacy(self, extractor_version: str) -> Mapping[TenantId, CandidacyRead]:
+        """Each open tenant's visible segments and its candidates for ``extractor_version``, keyed
+        by tenant; a tenant with no visible segment has no entry."""
+        ...
+
+    def derived_segment_ids(self) -> Mapping[TenantId, frozenset[str]]:
+        """Each open tenant's segments carrying any derivation marker, keyed by tenant."""
+        ...
 
 
 class EventDerivationService:
@@ -162,6 +184,11 @@ class EventDerivationService:
         self._clock = clock
         self._extractors = extractors
         self._extractor_version = extractor_version
+
+    @property
+    def extractor_version(self) -> str:
+        """The extractor version this service derives and marks segments at."""
+        return self._extractor_version
 
     def candidacy(self, *, chunk_id: str | None = None) -> CandidacyRead:
         """:meth:`IReadTranscriptEvents.candidacy`, fixed to this service's own
@@ -233,51 +260,106 @@ class EventDerivationService:
         return ReDeriveOutcome(derived=derived, remaining=remaining)
 
 
-class EventDerivationReconciler:
-    """The standing convergence pass, stepped by the existing ``Sweep`` driver: derives
-    each candidate, then drops rows for any segment no longer visible. Holds, in memory
-    only, the last pass's :class:`~blizzard.hub.domain.observability.analytics.events.DerivationSignature`;
-    a fresh process always runs full, and :data:`FORCED_FULL_PASS_FLOOR` bounds staleness."""
+@domain_model
+@dataclass
+class DerivationTally:
+    """One derivation pass's counts, across every tenant it acted in."""
+
+    derived: int = 0
+    dropped: int = 0
+    failed: int = 0
+
+
+class TenantEventDerivation:
+    """One tenant's half of the derivation pass: derives the candidates a pass hands it and drops
+    its segments no longer visible, through ``service`` and ``events`` — both that one tenant's."""
 
     def __init__(self, *, service: EventDerivationService, events: IWriteTranscriptEvents, clock: IClock) -> None:
         self._service = service
         self._events = events
         self._clock = clock
+
+    def converge(self, candidates: Sequence[str], stale: frozenset[str], tally: DerivationTally) -> bool:
+        """Derive each of ``candidates`` and drop ``stale``'s rows, counting into ``tally``. Graph-pin
+        resolution failing skips this tenant's share of the pass and answers ``False``, so the pass
+        is retried next tick; a single segment raising during derivation only costs that segment."""
+        try:
+            pins = self._service.graph_pins_for(candidates)
+        except Exception as exc:
+            _log.warning("graph pin resolution failed, tenant skipped", fault=repr(exc))
+            return False
+        for segment_id in candidates:
+            try:
+                if self._service.derive_segment(segment_id, pins):
+                    tally.derived += 1
+            except Exception as exc:
+                tally.failed += 1
+                _log.warning("segment derivation skipped", segment_id=segment_id, fault=repr(exc))
+        self._events.drop_segments(stale, at=self._clock.now())
+        tally.dropped += len(stale)
+        return True
+
+
+class EventDerivationReconciler:
+    """The standing convergence pass, one per hub, stepped by the existing ``Sweep`` driver: derives
+    each candidate, then drops rows for any segment no longer visible. Holds, in memory only, the
+    last pass's :class:`~blizzard.hub.domain.observability.analytics.events.DerivationSignature`; a
+    fresh process always runs full, and :data:`FORCED_FULL_PASS_FLOOR` bounds staleness. ``corpus``
+    names every open tenant's segments, each beside its tenant; ``tenant`` opens a row's tenant's
+    :class:`TenantEventDerivation`, which acts on that tenant's segments alone."""
+
+    def __init__(
+        self,
+        *,
+        corpus: IReadDerivationCorpus,
+        tenant: Callable[[TenantId], TenantEventDerivation],
+        clock: IClock,
+        extractor_version: str = EXTRACTOR_VERSION,
+    ) -> None:
+        self._corpus = corpus
+        self._tenant = tenant
+        self._clock = clock
+        self._extractor_version = extractor_version
         self._last_signature: DerivationSignature | None = None
         self._last_full_pass_at: datetime | None = None
 
     def sweep(self) -> None:
-        """One convergence pass, or a skip when the probe reports nothing changed and the
-        floor isn't due. Graph-pin resolution failing skips the whole pass, logged and
-        retried next tick; a single segment raising during derivation only costs that
-        segment. ``candidacy()``'s ``visible_segment_ids`` is reused by the drop pass
-        below, not re-evaluated."""
-        signature = self._events.derivation_signature()
+        """One convergence pass, or a skip when the hub-wide probe reports nothing changed and the
+        floor isn't due. A segment is a ``(tenant, segment_id)`` pair throughout — segment ids are
+        runner-minted, so two tenants may each hold one id — and the stale set is the derived pairs
+        less the visible ones. A tenant closed since the corpus read is skipped; a tenant whose
+        graph pins fail to resolve leaves the pass unconverged, retried next tick."""
+        signature = self._corpus.derivation_signature()
         now = self._clock.now()
         if not derivation_due(self._last_signature, signature, self._last_full_pass_at, now):
             _log.info("transcript event derivation sweep skipped", reason="signature unchanged")
             return
 
-        read = self._service.candidacy()
-        try:
-            pins = self._service.graph_pins_for(read.candidate_segment_ids)
-        except Exception as exc:
-            _log.warning("graph pin resolution failed, sweep skipped", fault=repr(exc))
-            return
-        derived = 0
-        failed = 0
-        for segment_id in read.candidate_segment_ids:
+        reads = self._corpus.candidacy(self._extractor_version)
+        visible = {(tenant, segment) for tenant, read in reads.items() for segment in read.visible_segment_ids}
+        derived_pairs = {
+            (tenant, segment) for tenant, segments in self._corpus.derived_segment_ids().items() for segment in segments
+        }
+        stale: dict[TenantId, set[str]] = {}
+        for tenant, segment in derived_pairs - visible:
+            stale.setdefault(tenant, set()).add(segment)
+
+        tally = DerivationTally()
+        converged = True
+        for tenant in sorted(set(reads) | set(stale)):
+            candidates = reads.get(tenant, _NOTHING_VISIBLE).candidate_segment_ids
             try:
-                if self._service.derive_segment(segment_id, pins):
-                    derived += 1
-            except Exception as exc:
-                failed += 1
-                _log.warning("segment derivation skipped", segment_id=segment_id, fault=repr(exc))
+                converged &= self._tenant(tenant).converge(candidates, frozenset(stale.get(tenant, ())), tally)
+            except (TenantClosed, UnknownTenant):
+                _log.info("transcript event derivation skipped a closed tenant", tenant=tenant)
 
-        stale = self._events.derived_segment_ids() - read.visible_segment_ids
-        self._events.drop_segments(stale, at=self._clock.now())
+        if converged:
+            self._last_signature = signature
+            self._last_full_pass_at = now
 
-        self._last_signature = signature
-        self._last_full_pass_at = now
-
-        _log.info("transcript event derivation sweep completed", derived=derived, dropped=len(stale), failed=failed)
+        _log.info(
+            "transcript event derivation sweep completed",
+            derived=tally.derived,
+            dropped=tally.dropped,
+            failed=tally.failed,
+        )

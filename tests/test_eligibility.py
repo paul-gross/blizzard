@@ -14,6 +14,7 @@ from blizzard.hub.domain.chunk.model import Chunk, WorkRef
 from blizzard.hub.domain.execution import eligibility
 from blizzard.hub.domain.execution.eligibility import EligibilityCheck
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, Edge, Graph, Node, SessionDecl
+from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.runners.registration import RunnerCapability
 
 pytestmark = pytest.mark.unit
@@ -63,6 +64,9 @@ def _graph(nodes: list[Node], edges: list[Edge] | None = None, *, sessions: list
     )
 
 
+_PROJECT = ProjectId("proj_1")
+
+
 def _chunk(
     *,
     default_model: list[str] | None = None,
@@ -77,6 +81,7 @@ def _chunk(
         default_model=default_model or [],
         default_effort=default_effort,
         default_harnesses=default_harnesses or [],
+        project_id=_PROJECT,
     )
 
 
@@ -361,7 +366,7 @@ def test_the_predicate_the_matched_peek_and_claim_admission_agree(row) -> None: 
     from blizzard.hub.domain.chunk.model import ChunkFacts
     from blizzard.hub.domain.execution.claim import ClaimAdmission, ClaimDeniedIncompatible
     from blizzard.hub.domain.operations.queue import QueueMatchPolicy, select_matched_entry
-    from blizzard.hub.domain.runners.registration import RunnerRegistration
+    from blizzard.hub.domain.runners.registration import RunnerRegistration, ServedEntry
 
     _, graph, chunk, capabilities, expected = row
     node = graph.node_by_id(graph.entry_node_id)
@@ -377,11 +382,13 @@ def test_the_predicate_the_matched_peek_and_claim_admission_agree(row) -> None: 
         last_seen_at=now,
         hub_paused=False,
         capabilities=tuple(capabilities),
+        served=(ServedEntry(_PROJECT, _PROJECT),),
     )
 
     eligible = EligibilityCheck(chunk, graph, node, capabilities).eligible
     peeked = select_matched_entry(
         [chunk],
+        served={_PROJECT},
         graphs={graph.graph_id: graph},
         facts={chunk.chunk_id: facts},
         capabilities=capabilities,

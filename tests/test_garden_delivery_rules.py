@@ -33,10 +33,12 @@ from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.domain.graph.model import Node
 from tests.garden_artifacts import candidate, delivered_delta
 
+_PROJECT = "proj_test"
+
 pytestmark = pytest.mark.unit
 
 _AT = datetime(2026, 7, 16, 12, 0, tzinfo=UTC)
-_RUN = RunContext(routine_name="nightly", scope_slug="blizzard", mode="full")
+_RUN = RunContext(project_id=_PROJECT, routine_name="nightly", scope_slug="blizzard", mode="full")
 _CHUNK = Chunk(chunk_id="ch_1", graph_id="gr_1", work_refs=[WorkRef(source="default", ref="1")], minted_at=_AT)
 _NODE = Node(
     node_id="nd_1",

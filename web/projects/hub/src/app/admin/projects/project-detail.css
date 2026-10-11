@@ -1,0 +1,89 @@
+:host {
+  display: block;
+  min-width: 0;
+}
+.record {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.hdr {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.name {
+  margin: 0;
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.grow {
+  flex: 1;
+}
+.callout {
+  margin: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--amber-dim);
+  color: var(--amber);
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}
+.desc {
+  color: var(--label);
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.pointer {
+  margin: 0;
+  padding: 6px 10px;
+  border-left: 2px solid var(--cyan-dim);
+  color: var(--label);
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}
+.pointer b {
+  color: var(--text);
+}
+.pointer a {
+  color: var(--cyan);
+  text-decoration: none;
+}
+.pointer a:hover,
+.pointer a:focus-visible {
+  text-decoration: underline;
+}
+.section {
+  margin: 8px 0 0;
+  font-size: var(--fs-label);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--label);
+  font-weight: normal;
+}
+.dim,
+.note {
+  color: var(--label);
+}
+.note {
+  margin: 0;
+  font-size: var(--fs-sm);
+}
+.note a {
+  color: var(--cyan);
+  text-decoration: none;
+}
+.note a:hover,
+.note a:focus-visible {
+  text-decoration: underline;
+}

@@ -44,13 +44,17 @@ class IdPrefix(StrEnum):
     USER = "usr"  # a hub-local user
     SEGMENT = "seg"  # a transcript segment, the hub's idempotence key
     WORK_ITEM = "wi"  # a hub-owned work item
-    ROUTINE = "rtn"  # a routine — a scope has no prefix; its slug is its id
+    ROUTINE = "rtn"  # a routine
+    SCOPE = "scp"  # a scope — its slug is a name unique within its project, never its id
     FINDING = "fin"  # a finding — one instance a routine's run observed
     FINDING_SET = "fins"  # the set a delivered finding list mints, one per artifact
     GARDEN_PROPOSAL = "gprop"  # a garden proposal — never confused with a work-item proposal
     DEPENDENCY_EDGE = "dep"  # a chunk_dependencies row
     CONFIG_APPLY = "apl"  # one declarative config apply — groups the change rows it writes
     RUNNER = "rn"  # a runner — minted with its bearer token when the runner is added; never changes
+    TENANT = "ten"  # a tenant — minted once, never reused; its name never stands in for it
+    INVITATION = "inv"  # an invitation into one tenant
+    PROJECT = "proj"  # a project — its slug and name never stand in for it
 
 
 @domain_model

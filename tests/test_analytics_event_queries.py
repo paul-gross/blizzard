@@ -20,7 +20,7 @@ from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.analytics_event_query_store import AnalyticsEventQueryStore
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
-from tests.support import hub_store_connections, mint_graph
+from tests.support import hub_store_connections, mint_graph, stamp
 
 pytestmark = pytest.mark.component
 
@@ -152,8 +152,12 @@ def store(tmp_path: Path) -> AnalyticsEventQueryStore:
         extractor_version=_OTHER_VERSION,
     )
     with engine.begin() as conn:
-        conn.execute(insert(s.chunk_work_refs).values(chunk_id="ch_1", source="github", ref="255"))
-        conn.execute(insert(s.chunk_work_refs).values(chunk_id="ch_2", source="jira", ref="EX-1"))
+        conn.execute(
+            insert(s.chunk_work_refs).values(stamp(s.chunk_work_refs, chunk_id="ch_1", source="github", ref="255"))
+        )
+        conn.execute(
+            insert(s.chunk_work_refs).values(stamp(s.chunk_work_refs, chunk_id="ch_2", source="jira", ref="EX-1"))
+        )
 
     return store
 

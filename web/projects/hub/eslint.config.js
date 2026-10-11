@@ -1,9 +1,11 @@
 // @ts-check
 const { defineConfig } = require("eslint/config");
 const rootConfig = require("../../eslint.config.js");
+const lensLinks = require("../../eslint.lens-links.js");
 
 module.exports = defineConfig([
   ...rootConfig,
+  ...lensLinks,
   {
     files: ["**/*.ts"],
     rules: {

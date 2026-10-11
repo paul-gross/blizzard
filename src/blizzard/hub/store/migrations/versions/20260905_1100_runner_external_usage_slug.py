@@ -48,13 +48,15 @@ def upgrade() -> None:
         batch.add_column(sa.Column("slug", sa.String, nullable=True))
         batch.add_column(sa.Column("name", sa.String, nullable=True))
 
-    bind.execute(
-        _RUNNER_EXTERNAL_USAGE.update().values(slug=_LEGACY_ANTHROPIC_SLUG, name=_LEGACY_ANTHROPIC_NAME)
-    )
+    bind.execute(_RUNNER_EXTERNAL_USAGE.update().values(slug=_LEGACY_ANTHROPIC_SLUG, name=_LEGACY_ANTHROPIC_NAME))
 
     # `recreate="always"` is dialect-agnostic (``bzh:sql-portable``): one copy-based
     # rebuild widens the primary key on both sqlite and postgres, no dialect branch.
-    with op.batch_alter_table(_TABLE, recreate="always") as batch:
+    # The copy starts from the table with both key columns flagged, so the widened key
+    # replaces no narrower one the columns would otherwise declare.
+    widened = sa.Table(_TABLE, sa.MetaData(), autoload_with=bind)
+    widened.c.slug.primary_key = True
+    with op.batch_alter_table(_TABLE, recreate="always", copy_from=widened) as batch:
         batch.alter_column("slug", nullable=False)
         batch.alter_column("name", nullable=False)
         batch.create_primary_key(_PK_NAME, ["runner_id", "slug"])

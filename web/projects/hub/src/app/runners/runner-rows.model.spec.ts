@@ -1,7 +1,7 @@
 import type { RunnerRegistryView } from 'fleet';
 import type { ChunkSummary } from 'fleet/shell';
 
-import { foldRunnerRows } from './runner-rows.model';
+import { foldRunnerRows, lensRunners } from './runner-rows.model';
 
 const NOW = Date.parse('2026-07-16T12:00:00.000Z');
 
@@ -49,5 +49,51 @@ describe('foldRunnerRows', () => {
     expect(row.subscriptionPaces[0].paceBars[0].elapsedPct).toBe(50);
     expect(row.subscriptionPaces[0].freshness).toBe('fresh');
     expect(row.subscriptionPaces[0].condition).toBeNull();
+  });
+
+  it('names each project the runner serves, and marks an unassigned runner and an unresolved entry', () => {
+    const serving = {
+      runner_id: 'r_serving',
+      subscriptions: [],
+      projects: [
+        { entry: 'default', project_id: 'proj_d', slug: 'default', name: 'Default' },
+        { entry: 'proj_g', project_id: 'proj_g', slug: 'glacier', name: null },
+        { entry: 'celestial', project_id: null, slug: null, name: null },
+      ],
+    } as unknown as RunnerRegistryView;
+    const unassigned = { runner_id: 'r_none', subscriptions: [], projects: [] } as unknown as RunnerRegistryView;
+
+    const [servingRow, unassignedRow] = foldRunnerRows([serving, unassigned], [], NOW);
+
+    expect(servingRow.served).toEqual(['Default', 'glacier']);
+    expect(servingRow.unassigned).toBe(false);
+    expect(servingRow.unresolved).toEqual(['celestial']);
+    expect(unassignedRow.served).toEqual([]);
+    expect(unassignedRow.unassigned).toBe(true);
+    expect(unassignedRow.unresolved).toEqual([]);
+  });
+});
+
+describe('lensRunners', () => {
+  const declaring = (id: string, ...slugs: (string | null)[]) =>
+    ({
+      runner_id: id,
+      projects: slugs.map((slug) => ({ entry: slug ?? 'gone', project_id: slug === null ? null : `proj_${slug}`, slug, name: null })),
+    }) as unknown as RunnerRegistryView;
+
+  const runners = [
+    declaring('r_alpha', 'alpha'),
+    declaring('r_both', 'beta', 'alpha'),
+    declaring('r_beta', 'beta'),
+    declaring('r_none'),
+    declaring('r_unresolved', null),
+  ];
+
+  it('shows every runner on All', () => {
+    expect(lensRunners(runners, null)).toBe(runners);
+  });
+
+  it('shows the runners serving the lensed project, and the unassigned ones, under a lens', () => {
+    expect(lensRunners(runners, 'alpha').map((r) => r.runner_id)).toEqual(['r_alpha', 'r_both', 'r_none']);
   });
 });

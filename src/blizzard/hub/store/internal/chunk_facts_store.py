@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import Table, func, select
+from sqlalchemy import Table, and_, func
 
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
 from blizzard.foundation.clock import IClock
@@ -40,11 +40,12 @@ from blizzard.hub.domain.chunk.model import (
     UsageFact,
 )
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_decisions_store import decision_closure_ids
 from blizzard.hub.store.internal.chunk_rows import ephemeral_ids_select, graph_id_of_batch
 from blizzard.hub.store.internal.chunk_terminal_predicates import maybe_live, settled_done, settled_stopped
+from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements, statements_of
 
 #: Every fact family `ChunkFacts` carries — the default selection for `load_facts` and kin.
 _ALL_FAMILIES: frozenset[str] = frozenset(
@@ -128,8 +129,10 @@ def status_family_tables() -> tuple[Table, ...]:
 _TICK_STATUS_FAMILIES: frozenset[str] = _STATUS_FAMILIES | frozenset({"usage", "epoch_owners"})
 
 
-def _rows(conn, table, batch: Sequence[str] | None, *columns):  # type: ignore[no-untyped-def]
-    stmt = select(*columns) if columns else select(table)
+def _rows(stmts: ScopedStatements, conn, table, batch: Sequence[str] | None, *columns):  # type: ignore[no-untyped-def]
+    """``table``'s rows (or just ``columns`` of them) for the chunks in ``batch`` — every chunk's
+    when ``batch`` is ``None`` — confined to ``stmts``'s tenant."""
+    stmt = stmts.select(table, *columns)
     if batch is not None:
         stmt = stmt.where(table.c.chunk_id.in_(batch))
     return conn.execute(stmt).all()
@@ -138,7 +141,7 @@ def _rows(conn, table, batch: Sequence[str] | None, *columns):  # type: ignore[n
 class ChunkFactsStore:
     """Read-only chunk-facts adapter — the fleet's fact-derivation projection."""
 
-    def __init__(self, store: HubStoreConnections, clock: IClock) -> None:
+    def __init__(self, store: ScopedConnections, clock: IClock) -> None:
         self._store = store
         self._clock = clock
 
@@ -206,32 +209,34 @@ class ChunkFactsStore:
             statuses = self._maybe_live_statuses(conn)
         return {chunk_id: status for chunk_id, status in statuses.items() if status not in TERMINAL_STATUSES}
 
-    def status_counts(self) -> dict[ChunkStatus, int]:
+    def status_counts(self, *, project: ProjectId | None = None) -> dict[ChunkStatus, int]:
         """See :meth:`~blizzard.hub.domain.chunk.ports.facts.IReadChunkFactsRepository.status_counts` —
         the settled-terminal chunks are counted in SQL (:func:`settled_stopped`,
         :func:`settled_done`) without loading a fact row; only the :func:`maybe_live`
         candidates :meth:`load_live_statuses` already hydrates are derived per chunk."""
-        not_ephemeral = s.chunks.c.chunk_id.not_in(ephemeral_ids_select())
+        counted = s.chunks.c.chunk_id.not_in(ephemeral_ids_select(self._store))
+        if project is not None:
+            counted = and_(s.chunks.c.project_id == project, counted)
         with self._store.read("status_counts") as conn:
             stopped, done = (
-                conn.execute(select(func.count()).select_from(s.chunks).where(not_ephemeral, settled)).scalar_one()
-                for settled in (settled_stopped(), settled_done())
+                conn.execute(self._store.select(s.chunks, func.count()).where(counted, settled)).scalar_one()
+                for settled in (settled_stopped(self._store), settled_done(self._store))
             )
-            counts = Counter(self._maybe_live_statuses(conn).values())
+            counts = Counter(self._maybe_live_statuses(conn, project).values())
         counts[ChunkStatus.STOPPED] += stopped
         counts[ChunkStatus.DONE] += done
         return {status: counts[status] for status in ChunkStatus}
 
-    def _maybe_live_statuses(self, conn) -> dict[str, ChunkStatus]:  # type: ignore[no-untyped-def]
+    def _maybe_live_statuses(self, conn, project: ProjectId | None = None) -> dict[str, ChunkStatus]:  # type: ignore[no-untyped-def]
         """Every :func:`maybe_live` candidate's derived status, terminal ones included — the
         prefilter's tie residue derives here, not in SQL. Ephemeral chunks never write a
         terminal fact, so they are excluded in the same query."""
-        candidate_ids = [
-            r.chunk_id
-            for r in conn.execute(
-                select(s.chunks.c.chunk_id).where(maybe_live(), s.chunks.c.chunk_id.not_in(ephemeral_ids_select()))
-            )
-        ]
+        candidates = self._store.select(s.chunks, s.chunks.c.chunk_id).where(
+            maybe_live(self._store), s.chunks.c.chunk_id.not_in(ephemeral_ids_select(self._store))
+        )
+        if project is not None:
+            candidates = candidates.where(s.chunks.c.project_id == project)
+        candidate_ids = [r.chunk_id for r in conn.execute(candidates)]
         facts_by_id = self._load(conn, candidate_ids, families=_STATUS_FAMILIES)
         return {chunk_id: facts.status() for chunk_id, facts in facts_by_id.items()}
 
@@ -254,10 +259,13 @@ class ChunkFactsStore:
         graph_id_of = graph_id_of_batch(conn, batch)
         if not graph_id_of:
             return {}
+        # The connection's scope governs every read on it — a ``*_conn`` sibling's connection is
+        # the caller's, opened through the caller's own scoped seam.
+        stmts = statements_of(conn)
 
-        transition_rows = _rows(conn, s.transitions, batch) if "transitions" in families else []
-        migration_rows = _rows(conn, s.chunk_migrations, batch) if "migrations" in families else []
-        restart_rows = _rows(conn, s.chunk_restarts, batch) if "restarts" in families else []
+        transition_rows = _rows(stmts, conn, s.transitions, batch) if "transitions" in families else []
+        migration_rows = _rows(stmts, conn, s.chunk_migrations, batch) if "migrations" in families else []
+        restart_rows = _rows(stmts, conn, s.chunk_restarts, batch) if "restarts" in families else []
 
         # The executor map spans every graph any fetched movement fact touched, keyed by
         # (graph_id, node_id) so a node id shared by two graphs never collides — built
@@ -274,9 +282,9 @@ class ChunkFactsStore:
             executors = {
                 (r.graph_id, r.node_id): Executor(r.executor)
                 for r in conn.execute(
-                    select(s.graph_nodes.c.graph_id, s.graph_nodes.c.node_id, s.graph_nodes.c.executor).where(
-                        s.graph_nodes.c.graph_id.in_(graph_ids)
-                    )
+                    stmts.select(
+                        s.graph_nodes, s.graph_nodes.c.graph_id, s.graph_nodes.c.node_id, s.graph_nodes.c.executor
+                    ).where(s.graph_nodes.c.graph_id.in_(graph_ids))
                 ).all()
             }
 
@@ -296,17 +304,17 @@ class ChunkFactsStore:
 
         leases: dict[str, list[LeaseFact]] = defaultdict(list)
         if "leases" in families:
-            for lease in _rows(conn, s.lease_facts, batch):
+            for lease in _rows(stmts, conn, s.lease_facts, batch):
                 leases[lease.chunk_id].append(LeaseFact(epoch=lease.epoch, minted_at=lease.minted_at))
 
         epoch_owners: dict[str, list[EpochOwnerFact]] = defaultdict(list)
         if "epoch_owners" in families:
-            for owner in _rows(conn, s.epoch_owners, batch):
+            for owner in _rows(stmts, conn, s.epoch_owners, batch):
                 epoch_owners[owner.chunk_id].append(EpochOwnerFact(epoch=owner.epoch, runner_id=owner.runner_id))
 
         escalations: dict[str, list[EscalationFact]] = defaultdict(list)
         if "escalations" in families:
-            for e in _rows(conn, s.escalations, batch):
+            for e in _rows(stmts, conn, s.escalations, batch):
                 escalations[e.chunk_id].append(
                     EscalationFact(
                         epoch=e.epoch,
@@ -320,17 +328,17 @@ class ChunkFactsStore:
 
         routes_created: dict[str, list[RouteCreatedFact]] = defaultdict(list)
         if "routes_created" in families:
-            for r in _rows(conn, s.route_created, batch):
+            for r in _rows(stmts, conn, s.route_created, batch):
                 routes_created[r.chunk_id].append(RouteCreatedFact(created_at=r.created_at, seq=r.seq))
 
         routes_released: dict[str, list[RouteReleasedFact]] = defaultdict(list)
         if "routes_released" in families:
-            for r in _rows(conn, s.route_released, batch):
+            for r in _rows(stmts, conn, s.route_released, batch):
                 routes_released[r.chunk_id].append(RouteReleasedFact(released_at=r.released_at, seq=r.seq))
 
         route_tokens_minted: dict[str, list[RouteTokenMintedFact]] = defaultdict(list)
         if "route_tokens_minted" in families:
-            for t in _rows(conn, s.route_token_minted, batch):
+            for t in _rows(stmts, conn, s.route_token_minted, batch):
                 route_tokens_minted[t.chunk_id].append(
                     RouteTokenMintedFact(token_hash=t.token_hash, minted_at=t.minted_at, seq=t.seq)
                 )
@@ -339,13 +347,19 @@ class ChunkFactsStore:
         if "questions" in families:
             # Scoped to the requested batch's own questions; the whole-fleet
             # call leaves this unfiltered, building the answered set for every chunk at once.
-            answered_stmt = select(s.question_answers.c.question_id).join(
-                s.questions, s.questions.c.question_id == s.question_answers.c.question_id
+            answered_stmt = stmts.select(
+                stmts.scope_join(
+                    s.question_answers,
+                    s.questions,
+                    (s.questions.c.tenant_id == s.question_answers.c.tenant_id)
+                    & (s.questions.c.question_id == s.question_answers.c.question_id),
+                ),
+                s.question_answers.c.question_id,
             )
             if batch is not None:
                 answered_stmt = answered_stmt.where(s.questions.c.chunk_id.in_(batch))
             answered = {a.question_id for a in conn.execute(answered_stmt).all()}
-            for q in _rows(conn, s.questions, batch):
+            for q in _rows(stmts, conn, s.questions, batch):
                 questions[q.chunk_id].append(
                     QuestionFact(
                         question_id=q.question_id,
@@ -357,12 +371,15 @@ class ChunkFactsStore:
 
         decisions: dict[str, list[DecisionFact]] = defaultdict(list)
         if "decisions" in families:
-            decision_rows = _rows(conn, s.decisions, batch)
+            decision_rows = _rows(stmts, conn, s.decisions, batch)
             # A decision can also resolve via an operator restart superseding it — only signaled
             # when `restarts` is itself among the requested families, true of every current caller.
             if batch is None:
                 resolved_ids = {
-                    r.decision_id for r in conn.execute(select(s.decision_resolutions.c.decision_id)).all()
+                    r.decision_id
+                    for r in conn.execute(
+                        stmts.select(s.decision_resolutions, s.decision_resolutions.c.decision_id)
+                    ).all()
                 } | {r.decision_id for r in restart_rows if r.decision_id is not None}
             else:
                 decision_ids = [d.decision_id for d in decision_rows]
@@ -382,7 +399,7 @@ class ChunkFactsStore:
 
         requeues: dict[str, list[RequeueFact]] = defaultdict(list)
         if "requeues" in families:
-            for r in _rows(conn, s.requeues, batch):
+            for r in _rows(stmts, conn, s.requeues, batch):
                 requeues[r.chunk_id].append(RequeueFact(requeued_at=r.requeued_at))
 
         migrations: dict[str, list[MigrationFact]] = defaultdict(list)
@@ -422,7 +439,7 @@ class ChunkFactsStore:
 
         pauses: dict[str, list[PauseFact]] = defaultdict(list)
         if "pauses" in families:
-            stmt = select(s.chunk_pause_facts).order_by(s.chunk_pause_facts.c.id)
+            stmt = stmts.select(s.chunk_pause_facts).order_by(s.chunk_pause_facts.c.id)
             if batch is not None:
                 stmt = stmt.where(s.chunk_pause_facts.c.chunk_id.in_(batch))
             for p in conn.execute(stmt).all():
@@ -430,7 +447,7 @@ class ChunkFactsStore:
 
         usage: dict[str, list[UsageFact]] = defaultdict(list)
         if "usage" in families:
-            for u in _rows(conn, s.usage_facts, batch):
+            for u in _rows(stmts, conn, s.usage_facts, batch):
                 usage[u.chunk_id].append(
                     UsageFact(
                         node_id=u.node_id,
@@ -451,43 +468,47 @@ class ChunkFactsStore:
 
         landed_repos: dict[str, set[str]] = defaultdict(set)
         if "landed_repos" in families:
-            for r in _rows(conn, s.delivery_repo_landed, batch):
+            for r in _rows(stmts, conn, s.delivery_repo_landed, batch):
                 landed_repos[r.chunk_id].add(r.repo)
 
         bounces: dict[str, list[BounceFact]] = defaultdict(list)
         if "bounces" in families:
-            for b in _rows(conn, s.chunk_bounces, batch):
+            for b in _rows(stmts, conn, s.chunk_bounces, batch):
                 bounces[b.chunk_id].append(
                     BounceFact(epoch=b.epoch, cause=b.cause, envelope=b.envelope, recorded_at=b.recorded_at)
                 )
 
         hub_node_polls: dict[str, list[HubNodePollFact]] = defaultdict(list)
         if "hub_node_polls" in families:
-            for p in _rows(conn, s.hub_node_poll, batch):
+            for p in _rows(stmts, conn, s.hub_node_poll, batch):
                 hub_node_polls[p.chunk_id].append(
                     HubNodePollFact(node_id=p.node_id, epoch=p.epoch, polled_at=p.polled_at)
                 )
 
         stopped_ats: dict[str, list[datetime]] = defaultdict(list)
         if "stopped" in families:
-            for r in _rows(conn, s.chunk_stopped, batch, s.chunk_stopped.c.chunk_id, s.chunk_stopped.c.stopped_at):
+            for r in _rows(
+                stmts, conn, s.chunk_stopped, batch, s.chunk_stopped.c.chunk_id, s.chunk_stopped.c.stopped_at
+            ):
                 stopped_ats[r.chunk_id].append(r.stopped_at)
 
         completed_ats: dict[str, list[datetime]] = defaultdict(list)
         if "operator_completed" in families:
             for r in _rows(
-                conn, s.chunk_completed, batch, s.chunk_completed.c.chunk_id, s.chunk_completed.c.completed_at
+                stmts, conn, s.chunk_completed, batch, s.chunk_completed.c.chunk_id, s.chunk_completed.c.completed_at
             ):
                 completed_ats[r.chunk_id].append(r.completed_at)
 
         promoted_ids: set[str] = set()
         if "promoted" in families:
-            promoted_ids = {r.chunk_id for r in _rows(conn, s.chunk_promoted, batch, s.chunk_promoted.c.chunk_id)}
+            promoted_ids = {
+                r.chunk_id for r in _rows(stmts, conn, s.chunk_promoted, batch, s.chunk_promoted.c.chunk_id)
+            }
 
         delivery_landed_ids: set[str] = set()
         if "delivery_landed" in families:
             delivery_landed_ids = {
-                r.chunk_id for r in _rows(conn, s.delivery_landed, batch, s.delivery_landed.c.chunk_id)
+                r.chunk_id for r in _rows(stmts, conn, s.delivery_landed, batch, s.delivery_landed.c.chunk_id)
             }
 
         return {
@@ -531,14 +552,18 @@ class ChunkFactsStore:
             resolved |= {
                 r.decision_id
                 for r in conn.execute(
-                    select(s.decision_resolutions.c.decision_id).where(s.decision_resolutions.c.decision_id.in_(batch))
+                    statements_of(conn)
+                    .select(s.decision_resolutions, s.decision_resolutions.c.decision_id)
+                    .where(s.decision_resolutions.c.decision_id.in_(batch))
                 ).all()
             }
         for batch in id_batches(decision_ids):
             resolved |= {
                 r.decision_id
                 for r in conn.execute(
-                    select(s.chunk_restarts.c.decision_id).where(s.chunk_restarts.c.decision_id.in_(batch))
+                    statements_of(conn)
+                    .select(s.chunk_restarts, s.chunk_restarts.c.decision_id)
+                    .where(s.chunk_restarts.c.decision_id.in_(batch))
                 ).all()
             }
         return resolved

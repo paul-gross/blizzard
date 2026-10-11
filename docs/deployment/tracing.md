@@ -143,6 +143,8 @@ absent rather than empty when there is nothing to say.
 | `blizzard.step.kind`                       | `string`   | Whether the step was a `step` or a `gate`.                                                                                                                                                                    |
 | `blizzard.runner.id`                       | `string`   | The runner that held the step or ran the lease.                                                                                                                                                               |
 | `blizzard.runner.name`                     | `string`   | The latest registered name of the runner that held the step or ran the lease, as of when the span was told.                                                                                                   |
+| `blizzard.tenant`                          | `string`   | The tenant the runner that ran the lease serves, as its hub last answered; absent until a hub that names it answers.                                                                                          |
+| `blizzard.tenant_name`                     | `string`   | The name of the tenant the runner that ran the lease serves, as of when the span was told.                                                                                                                    |
 | `blizzard.harness.id`                      | `string`   | The harness: on a step, the one its last invocation that recorded one ran under; on a runner span, the one the lease or invocation ran under.                                                                 |
 | `blizzard.harness.version`                 | `string`   | The version of that harness.                                                                                                                                                                                  |
 | `blizzard.step.models`                     | `string[]` | The distinct models the step's invocations used, in first-use order.                                                                                                                                          |
@@ -498,7 +500,8 @@ alongside `platform = true`, a Claude Code worker exports its metrics, logs and 
   worker holding a lease token is pointed at the runner, and a takeover's attended session never is.
 - **What the runner keeps.** Claude Code's scopes only: `com.anthropic.claude_code` for metrics, `.events` for logs,
   `.tracing` for traces. Each span, data point and log record is stamped with `blizzard.caller=worker`,
-  `blizzard.chunk.id`, `blizzard.lease.id`, `blizzard.runner.id` and `blizzard.runner.name`.
+  `blizzard.chunk.id`, `blizzard.lease.id`, `blizzard.runner.id` and `blizzard.runner.name`, and with `blizzard.tenant`
+  and `blizzard.tenant_name` once the runner's hub has named its tenant.
 - **Where it goes.** Under `service.name` `blizzard-claude-code` through the runner's own OpenTelemetry settings for
   that signal. Claude Code's own resource name is `claude-code`; `[tracing.worker_program_services]` renames by scope.
 - **Judgement turns.** A judgement, a `--resume` turn, was observed exporting metrics and logs but no spans on
@@ -598,6 +601,8 @@ configures, with no daemon in between.
 | `blizzard.lease.id`               | `string` | The lease a worker's span arrived under, stamped by the runner.                                              |
 | `blizzard.runner.id`              | `string` | The runner the span belongs to, or the runner a request authenticated as.                                    |
 | `blizzard.runner.name`            | `string` | The latest registered name of the runner the span belongs to, or of the runner a request authenticated as.   |
+| `blizzard.tenant`                 | `string` | The tenant a request acts in, or the tenant the runner the span belongs to serves; absent until known.       |
+| `blizzard.tenant_name`            | `string` | The name of that tenant, as of when the span was told.                                                       |
 | `blizzard.tick.step`              | `string` | The tick step a child span covers.                                                                           |
 | `error.type`                      | `string` | The error class when the CLI's request failed.                                                               |
 | `http.request.method`             | `string` | The HTTP method of the CLI's request to a daemon.                                                            |
@@ -609,7 +614,9 @@ configures, with no daemon in between.
 
 ## Checking on tracing
 
-`blizzard hub traces status` reads `GET /api/traces/status`, open to anyone who can view the fleet. It reports:
+One trace export serves every tenant, so operating it takes `export:admin`, a hub administrator's permission
+([tenants.md](./tenants.md#hub-administrators)). `blizzard hub traces status` reads `GET /api/traces/status`. It
+reports:
 
 - **State.** Tracing is on, off, or rejected. A rejected setting is one the hub cannot honor, such as a protocol other
   than `http/protobuf`; status names the setting and its value, and the fix is to point the hub at an OpenTelemetry
@@ -636,7 +643,7 @@ memory, so they reset on a restart; `blizzard hub traces status` has no such lin
 
 `blizzard hub traces replay --since <t> --until <t>` tells every step that closed and every chunk that finished in the
 window again. It is how a window the sweep skipped, or a backend that lost spans, is filled in. A `trace-window-skipped`
-event's `since` and `until` paste straight in.
+event's `since` and `until` paste straight in. Replay takes `export:admin` too.
 
 - **Same ids as the live sweep.** A replay assembles spans the way the sweep does, so a span's trace and span ids are
   the ones it was told under before. A backend that dedupes on those ids sees no duplicates.

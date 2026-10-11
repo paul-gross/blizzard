@@ -174,6 +174,7 @@ class RepositoryOutcome(StrEnum):
     RESOLVED = "resolved"
     NOTHING_TO_RESOLVE = "nothing-to-resolve"
     UNRESOLVED = "repository-unresolved"
+    NOT_LINKED = "repository-not-linked"
     DISAGREE = "repositories-disagree"
 
 
@@ -182,11 +183,12 @@ class RepositoryOutcome(StrEnum):
 class RepositoryResolution:
     """The outcome of resolving a chunk's commit pointers. ``target`` is set exactly when
     ``outcome`` is :attr:`RepositoryOutcome.RESOLVED`; ``qualified`` maps each origin's
-    index to the ``owner/repo`` it resolved to."""
+    index to the ``owner/repo`` it resolved to, and ``names`` to its repository record's name."""
 
     outcome: RepositoryOutcome
     target: ResolvedRepository | None = None
     qualified: tuple[str, ...] = ()
+    names: tuple[str, ...] = ()
     detail: str = ""
 
 
@@ -207,28 +209,78 @@ def _candidates(origin: CommitOrigin, rows: list[ConfiguredRepository]) -> list[
     return found
 
 
+def _standing(rows: list[ConfiguredRepository], minted_at: datetime) -> list[ConfiguredRepository]:
+    """The records standing for a chunk minted at ``minted_at``: enabled, or retired after it."""
+    return [row for row in rows if row.retired_at is None or row.retired_at > minted_at]
+
+
+def _linked(rows: list[ConfiguredRepository], linked: frozenset[str] | None) -> list[ConfiguredRepository]:
+    """``rows`` narrowed to the record names in ``linked``; every row when ``linked`` is ``None``."""
+    return rows if linked is None else [row for row in rows if row.name in linked]
+
+
+def _label(origin: CommitOrigin) -> str:
+    return f"{origin.owner}/{origin.name}" if origin.owner else origin.name
+
+
+def _refusal(
+    origin: CommitOrigin,
+    found: list[ConfiguredRepository],
+    standing: list[ConfiguredRepository],
+    *,
+    linked: frozenset[str] | None,
+    project: str,
+) -> RepositoryResolution:
+    """Why ``origin`` matched other than exactly one record of ``found``, its candidates within ``linked``. A miss
+    that matches exactly one standing record of the tenant is that record not being linked; any other miss is
+    unresolved, an ambiguity naming the records it is between."""
+    label = _label(origin)
+    if found:
+        names = ", ".join(sorted(row.name for row in found))
+        return RepositoryResolution(
+            RepositoryOutcome.UNRESOLVED, detail=f"{label} is ambiguous between repository records {names}"
+        )
+    tenant_wide = [] if linked is None else _candidates(origin, standing)
+    if len(tenant_wide) == 1:
+        return RepositoryResolution(
+            RepositoryOutcome.NOT_LINKED,
+            detail=f"{label} resolves to repository record {tenant_wide[0].name}, which project {project} doesn't link",
+        )
+    if tenant_wide:
+        names = ", ".join(sorted(row.name for row in tenant_wide))
+        return RepositoryResolution(
+            RepositoryOutcome.UNRESOLVED,
+            detail=f"{label} is ambiguous between repository records {names}, none of which project {project} links",
+        )
+    return RepositoryResolution(RepositoryOutcome.UNRESOLVED, detail=f"no repository record stands for {label}")
+
+
 def resolve_chunk_repositories(
-    origins: list[CommitOrigin], rows: list[ConfiguredRepository], *, minted_at: datetime
+    origins: list[CommitOrigin],
+    rows: list[ConfiguredRepository],
+    *,
+    minted_at: datetime,
+    linked: frozenset[str] | None,
+    project: str = "",
 ) -> RepositoryResolution:
     """Resolve each commit pointer to a repository record, then require they all agree.
 
     A pointer matches a record by its bare name, narrowed by the origin's owner and forge host
     when it encodes them. Only records standing for the chunk count: an enabled one, or one
-    retired after the chunk was minted. No pointers is not a refusal — there is nothing to land."""
+    retired after the chunk was minted — and of those, only the ones ``linked`` names, the
+    chunk's project's links; ``None`` narrows nothing. Each pointer narrows before the records
+    are compared, so a name ambiguous across the tenant resolves when its project links one of
+    them. ``project`` is the label a not-linked refusal names. No pointers is not a refusal —
+    there is nothing to land."""
     if not origins:
         return RepositoryResolution(RepositoryOutcome.NOTHING_TO_RESOLVE)
-    standing = [row for row in rows if row.retired_at is None or row.retired_at > minted_at]
+    standing = _standing(rows, minted_at)
+    candidates = _linked(standing, linked)
     picked: list[ConfiguredRepository] = []
     for origin in origins:
-        found = _candidates(origin, standing)
-        label = f"{origin.owner}/{origin.name}" if origin.owner else origin.name
-        if not found:
-            return RepositoryResolution(RepositoryOutcome.UNRESOLVED, detail=f"no repository record stands for {label}")
-        if len(found) > 1:
-            names = ", ".join(sorted(row.name for row in found))
-            return RepositoryResolution(
-                RepositoryOutcome.UNRESOLVED, detail=f"{label} is ambiguous between repository records {names}"
-            )
+        found = _candidates(origin, candidates)
+        if len(found) != 1:
+            return _refusal(origin, found, standing, linked=linked, project=project)
         picked.append(found[0])
     first = picked[0].fields
     for row in picked[1:]:
@@ -248,13 +300,27 @@ def resolve_chunk_repositories(
         RepositoryOutcome.RESOLVED,
         target=ResolvedRepository(first.forge_api_url, first.owner, first.base_branch, first.secret_name),
         qualified=tuple(f"{row.fields.owner}/{row.fields.repo}" for row in picked),
+        names=tuple(row.name for row in picked),
     )
 
 
-def resolve_repository(origin: CommitOrigin, rows: list[ConfiguredRepository]) -> ConfiguredRepository | None:
-    """The single enabled record ``origin`` names, or ``None`` — unmatched or ambiguous. A
-    point-in-time lookup with no chunk to date it by, so retired records never match."""
-    found = _candidates(origin, [row for row in rows if row.retired_at is None])
+def resolve_origin_record(
+    origin: CommitOrigin, rows: list[ConfiguredRepository], *, minted_at: datetime, linked: frozenset[str] | None
+) -> ConfiguredRepository | None:
+    """The one record ``origin`` resolves to by :func:`resolve_chunk_repositories`'s rules for a
+    chunk minted at ``minted_at`` whose project links ``linked``, or ``None`` — unmatched,
+    ambiguous, or not linked."""
+    found = _candidates(origin, _linked(_standing(rows, minted_at), linked))
+    return found[0] if len(found) == 1 else None
+
+
+def resolve_repository(
+    origin: CommitOrigin, rows: list[ConfiguredRepository], *, linked: frozenset[str] | None
+) -> ConfiguredRepository | None:
+    """The single enabled record ``origin`` names among those ``linked`` names (every record
+    when ``None``), or ``None`` — unmatched or ambiguous. A point-in-time lookup with no chunk
+    to date it by, so retired records never match."""
+    found = _candidates(origin, _linked([row for row in rows if row.retired_at is None], linked))
     return found[0] if len(found) == 1 else None
 
 

@@ -128,13 +128,14 @@ class TokenRotation:
 class RunnerAddition:
     """Add a runner: a never-connected registration under ``runner_id`` and its initial ``name``,
     holding ``token_hash`` — the hash of the bearer token minted with the id — recorded as added
-    ``at`` by ``by``."""
+    ``at`` by ``by``, serving what ``served`` declares until a registration declares otherwise."""
 
     runner_id: str
     name: str
     token_hash: str
     at: datetime
     by: str
+    served: tuple[ServedEntry, ...] = ()
 
 
 def declared_name(name: str | None) -> str | None:
@@ -191,6 +192,13 @@ class RunnerRegistration:
     retired_by: str | None = None
     #: The node names the runner declared it holds for a human decision — reported, never enforced, by the hub.
     gates: tuple[str, ...] = ()
+    #: The served declaration: every entry the runner declared, each with the project it resolved to. Empty serves
+    #: nothing, and so does an entry that resolved to no project.
+    served: tuple[ServedEntry, ...] = ()
+
+    def serves(self, project_id: str) -> bool:
+        """Whether some entry of the served declaration resolved to ``project_id``."""
+        return any(entry.project_id == project_id for entry in self.served)
 
     def never_connected(self) -> bool:
         """Whether the runner was added but has never registered — no workspace, capabilities,
@@ -293,6 +301,22 @@ class DeclaredSubscription:
     slug: str
     name: str
     provider: str
+
+
+@domain_model
+@dataclass(frozen=True)
+class ServedEntry:
+    """One entry of a runner's served declaration: ``entry``, the project id or slug as declared, and
+    ``project_id``, the id of the project it resolved to — ``None`` while it resolves to no project of the tenant,
+    which serves nothing until a later resolution finds one. The id is what is served, so a slug change never strands
+    the entry. Ids are plain strings here: ``runners`` sits below ``projects`` (``bzh:domain-package-layers``)."""
+
+    entry: str
+    project_id: str | None
+
+    def resolved(self) -> bool:
+        """Whether the entry resolved to a project."""
+        return self.project_id is not None
 
 
 @domain_model
@@ -531,22 +555,6 @@ class IReadRunnerRegistry(Protocol):
         registration is absent from the result, never mapped to a placeholder."""
         ...
 
-    def is_token_revoked(self, token_hash: str) -> bool:
-        """Whether ``token_hash`` was ever revoked — revoked outright, or rotated away from."""
-        ...
-
-    def revoked_token_runner_id(self, token_hash: str) -> str | None:
-        """The runner a revoked ``token_hash`` was issued to — the one its newest revocation names —
-        or ``None`` when the hash was never revoked; one hash-indexed read. How a refused token
-        names the runner it belonged to (:func:`refuse_runner_token`)."""
-        ...
-
-    def registration_for_token_hash(self, token_hash: str) -> RunnerRegistration | None:
-        """The reverse, hash-indexed lookup a presented bearer token resolves through — the
-        mirror image of every other read here, which key on ``runner_id``. A ``runner_id`` is not
-        uniformly readable off a request, so a principal resolves from the token alone."""
-        ...
-
     def list_pause_facts_since(self, since: datetime, *, limit: int) -> list[RecordedPause]:
         """Every fact off the fleet's two pause-family fact tables at or after ``since``;
         ``registered``/``heartbeat`` carry no fact table. On this seam,
@@ -577,12 +585,14 @@ class IWriteRunnerRegistry(IReadRunnerRegistry, Protocol):
         capabilities: tuple[RunnerCapability, ...] = (),
         subscriptions: tuple[DeclaredSubscription, ...] | None = None,
         gates: tuple[str, ...] = (),
+        projects: tuple[ServedEntry, ...] | None = None,
         at: datetime,
     ) -> bool:
         """Record a registration of the added runner ``runner_id``, refreshing ``last_seen_at``; returns
         True on its first one, which also stamps ``registered_at``. ``name`` replaces the held name
-        unless ``None``; every other field is written on **every** registration, absent ones verbatim
-        to null/empty, and ``subscriptions`` alone keeps ``None`` vs ``()`` distinct. A ``runner_id``
+        unless ``None``, and ``projects`` the served declaration unless ``None``; every other field is
+        written on **every** registration, absent ones verbatim to null/empty, and ``subscriptions``
+        keeps ``None`` vs ``()`` distinct. A ``runner_id``
         with no row raises :class:`LookupError` — a registration only ever follows an add."""
         ...
 

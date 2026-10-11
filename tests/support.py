@@ -18,10 +18,11 @@ import socket
 import tempfile
 import threading
 import time
+import weakref
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from dataclasses import dataclass, field, replace
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import IO, Any
 
@@ -31,8 +32,9 @@ from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, event
 from sqlalchemy import insert as sa_insert
+from sqlalchemy.sql.base import Executable
 
-from blizzard.auth_core import Role
+from blizzard.auth_core import MEMBERSHIP_ROLES, Role
 from blizzard.foundation.clock import FixedClock, IClock
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.ids import Id, IdPrefix
@@ -45,11 +47,20 @@ from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.exporter import ITraceExporter
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.foundation.trace_spans import FinishedSpan
+from blizzard.hub.api.auth_session import TENANT_HEADER
 from blizzard.hub.app import create_app
+from blizzard.hub.auth.invitations import InvitationToken
 from blizzard.hub.auth.models import User
 from blizzard.hub.auth.oauth.provider import IOAuthProvider
 from blizzard.hub.auth.oauth.registry import OAuthProviderRegistry
-from blizzard.hub.composition import HubServices, build_hub_core, build_live_config, build_services
+from blizzard.hub.composition import (
+    HubServices,
+    LiveConfig,
+    TenantServices,
+    TenantStores,
+    build_hub_core,
+    build_services,
+)
 from blizzard.hub.config import AUTH_MODE_NONE, AUTH_MODE_OAUTH, AuthConfig, HubConfig
 from blizzard.hub.delivery.command_runner import CommandResult, IHubCommandRunner
 from blizzard.hub.delivery.workdir import IHubWorkdir
@@ -67,13 +78,20 @@ from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.config.repositories import RepositoryFields
 from blizzard.hub.domain.config.secrets import IHubKeyProvider, SecretAlreadyExists, SecretName
+from blizzard.hub.domain.config.work_sources import WorkSourceFields
 from blizzard.hub.domain.execution.auth.produces import PRODUCES_WARN
 from blizzard.hub.domain.execution.auth.route import ROUTE_TOKEN_WARN
+from blizzard.hub.domain.garden.scopes import Scope, ScopeSlug
 from blizzard.hub.domain.graph.model import Edge, Graph, Node
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.transcripts import TranscriptCaps
+from blizzard.hub.domain.projects.authoring import ProjectAuthoring
+from blizzard.hub.domain.projects.bulk_resolve import BulkProjectResolver
+from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.runners.registration import RunnerAddition, RunnerCapability, RunnerRegistration
+from blizzard.hub.domain.runners.served import resolve_served
+from blizzard.hub.domain.tenancy.administration import DEFAULT_PROJECT_SLUG
 from blizzard.hub.egress.writer import (
     EgressBatch,
     EgressFailure,
@@ -85,19 +103,31 @@ from blizzard.hub.egress.writer import (
     validate_batch,
 )
 from blizzard.hub.events.broker import EventBroker
-from blizzard.hub.runtime import migration_runner
+from blizzard.hub.runtime import Migrations
 from blizzard.hub.secrets import hub_key_provider, secret_cipher
 from blizzard.hub.store import schema
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
+from blizzard.hub.store.internal.chunk_rows import work_ref_conn_of
 from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
 from blizzard.hub.store.internal.config_apply_store import ConfigApplyStore
 from blizzard.hub.store.internal.config_import_store import ConfigImportStore
 from blizzard.hub.store.internal.graph_store import GraphStore
+from blizzard.hub.store.internal.project_link_store import ProjectLinkStore
+from blizzard.hub.store.internal.project_store import ProjectStore
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
+from blizzard.hub.store.internal.scope_store import ScopeStore
 from blizzard.hub.store.internal.secret_store import SecretStore
+from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
+from blizzard.hub.store.scoped import (
+    ScopedConnections,
+    is_project_keyed,
+    is_tenant_owned,
+    statements_of,
+)
 from blizzard.hub.system_artifacts import PackagedSystemArtifacts
+from blizzard.hub.tenancy import HUB_SCOPED_OPTION, StoreScope, TenantId
 from blizzard.hub.work_sources.annotator import IWorkAnnotator, WorkAnnotateError, WorkStatusMarker
 from blizzard.hub.work_sources.closer import IWorkCloser, WorkCloseError, WorkItemGoneError
 from blizzard.hub.work_sources.editor import IWorkEditor
@@ -108,14 +138,265 @@ from blizzard.wire.work_source import WorkSourceDocument
 _GRAPH_T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 
-def hub_store_connections(engine: Engine) -> HubStoreConnections:
+def hub_store_connections(engine: Engine) -> ScopedConnections:
     """The ``hub/store/internal/`` seam every adapter test wires over its
-    own migrated engine — one helper so every adapter's test file constructs it
-    identically."""
+    own migrated engine, confined to the store's only tenant — one helper so every
+    adapter's test file constructs it identically."""
+    return scoped_connections(engine, default_tenant(engine))
+
+
+def scoped_connections(engine: Engine, tenant: TenantId) -> ScopedConnections:
+    """The seam confined to ``tenant`` as the test names it, read from nowhere — for a store with no
+    tenant to read: one built from the bare schema, one behind the tenant revision, one gone."""
+    return hub_level_connections(engine).scoped(StoreScope(tenant))
+
+
+def hub_level_connections(engine: Engine) -> HubStoreConnections:
+    """The unscoped seam, for the adapters over global tables (identity, exports, cross-tenant reads)."""
     return HubStoreConnections(engine, HubStoreErrorFactory(get_logger("test")))
 
 
+_default_tenants: weakref.WeakKeyDictionary[Engine, TenantId] = weakref.WeakKeyDictionary()
+
+
+def add_tenant(engine: Engine, name: str) -> TenantId:
+    """Add a tenant named ``name`` to the store under a freshly minted id, holding its ``default``
+    project, as tenant administration would, and return its id. Once a store holds two tenants, :func:`default_tenant` and :func:`stamp`
+    no longer name one — a test adding one names the tenant on every raw read and write."""
+    tenant = TenantId(Id.mint_at(IdPrefix.TENANT, _GRAPH_T0).value)
+    project = Id.mint_at(IdPrefix.PROJECT, _GRAPH_T0).value
+    with engine.begin() as conn:
+        conn.execute(
+            sa.insert(schema.tenants).values(tenant_id=tenant, name=name, created_at=_GRAPH_T0, created_by="test")
+        )
+        conn.execute(
+            sa.insert(schema.projects).values(
+                project_id=project,
+                tenant_id=tenant,
+                slug="default",
+                name="Default",
+                description="",
+                revision=1,
+                created_at=_GRAPH_T0,
+            )
+        )
+    return tenant
+
+
+def close_tenant(engine: Engine, tenant: TenantId, *, by: str = "test", at: datetime = _GRAPH_T0) -> None:
+    """Close ``tenant`` as a deletion's first step records it — one ``tenant_deletions`` row naming the tenant
+    under its current name, ``by`` as its deleter and ``at`` as when it closed — so its scoped writes are refused
+    from then on. Nothing else a close does in a running hub happens: a test closing a tenant a hub has cached
+    refreshes what it needs, or closes through ``hub_services.tenant_teardown``."""
+    tenants, deletions = schema.tenants, schema.tenant_deletions
+    named = sa.select(
+        tenants.c.tenant_id, tenants.c.name, sa.literal(by), sa.literal(at, type_=deletions.c.closed_at.type)
+    ).where(tenants.c.tenant_id == tenant)
+    with hub_level_connections(engine).write("close_tenant") as conn:
+        closed = conn.execute(sa.insert(deletions).from_select(["tenant_id", "name", "deleted_by", "closed_at"], named))
+    assert closed.rowcount == 1, f"close_tenant needs {tenant} among the store's tenants"
+
+
+def default_tenant(engine: Engine) -> TenantId:
+    """The store's only tenant — the one its first migration carried over — read once per engine.
+
+    Raises when the store holds none or several: a test with a second tenant names the one it means."""
+    cached = _default_tenants.get(engine)
+    if cached is not None:
+        return cached
+    with engine.connect() as conn:
+        ids = list(conn.execute(sa.select(schema.tenants.c.tenant_id)).scalars())
+    if len(ids) != 1:
+        raise AssertionError(f"default_tenant needs a store holding exactly one tenant; this one holds {len(ids)}")
+    tenant = TenantId(ids[0])
+    _default_tenants[engine] = tenant
+    return tenant
+
+
+def stamp(table: sa.Table, /, **values: Any) -> dict[str, Any]:
+    """``values`` for a raw test insert into ``table``, carrying the store's tenant when the table is
+    tenant-owned and the caller named none, and the row's tenant's project when the table is
+    project-keyed and the caller named none — the keys a production write supplies: the scoped insert
+    stamps the tenant, and the writer names the project.
+
+    The tenant is a scalar subquery over ``tenants``, so a raw write needs no engine in hand; it names
+    the store's only tenant, the same one ``default_tenant`` reads, and ``NULL`` when the store holds
+    none or several — never one picked from many: a test with a second tenant names the one it means.
+    The project is :func:`only_project_subquery` of the row's tenant, ``NULL`` unless it holds exactly one."""
+    if is_tenant_owned(table) and "tenant_id" not in values:
+        values["tenant_id"] = only_tenant_subquery()
+    if is_project_keyed(table) and "project_id" not in values:
+        tenant = values.get("tenant_id")
+        values["project_id"] = only_project_subquery(tenant if isinstance(tenant, str) else None)
+    return _with_scope_id(table, values)
+
+
+#: The column each scope-linked table names its scope's slug by in a raw test seed, and whether the
+#: table keeps that slug beside ``scope_id`` as its own label.
+_SCOPE_SLUG_COLUMNS: dict[str, tuple[str, str, bool]] = {
+    "scope_lifecycle_facts": ("slug", "scope_id", False),
+    "routines": ("default_scope_slug", "default_scope_id", False),
+    "routine_scopes": ("scope_slug", "scope_id", False),
+    "work_item_runs": ("scope_slug", "scope_id", False),
+    "findings": ("scope_slug", "scope_id", True),
+    "finding_sets": ("scope_slug", "scope_id", True),
+}
+
+
+def _with_scope_id(table: sa.Table, values: dict[str, Any]) -> dict[str, Any]:
+    """A raw seed's scope surrogate, as the scope adapters write it: a ``scopes`` row naming no
+    ``scope_id`` gets a fresh ``scp_`` id; a row naming its scope by slug gets that slug's
+    ``scope_id`` within the row's tenant."""
+    if table.name == "scopes" and "scope_id" not in values:
+        at = values.get("created_at")
+        values["scope_id"] = Id.mint_at(IdPrefix.SCOPE, at if isinstance(at, datetime) else datetime.now(UTC)).value
+        return values
+    linked = _SCOPE_SLUG_COLUMNS.get(table.name)
+    if linked is None:
+        return values
+    slug_column, id_column, keeps_slug = linked
+    if id_column in values or slug_column not in values:
+        return values
+    slug = values[slug_column] if keeps_slug else values.pop(slug_column)
+    tenant = values["tenant_id"]
+    named = isinstance(tenant, str)
+    project = values.get("project_id")
+    # Raw SQL, which the tenant guard does not walk: the row's tenant may itself be the only-tenant
+    # subquery, which the guard does not read as naming a tenant. The slug is looked up within the
+    # row's project — the one it names, else its tenant's only one.
+    tenant_sql = ":seed_scope_tenant" if named else _ONLY_TENANT_SQL
+    project_sql = ":seed_scope_project" if isinstance(project, str) else _only_project_sql(tenant_sql)
+    lookup = sa.text(
+        f"SELECT scope_id FROM scopes WHERE slug = :seed_scope_slug AND tenant_id = ({tenant_sql})"
+        f" AND project_id = ({project_sql})"
+    )
+    lookup = lookup.bindparams(
+        seed_scope_slug=slug,
+        **({"seed_scope_tenant": tenant} if named else {}),
+        **({"seed_scope_project": project} if isinstance(project, str) else {}),
+    )
+    values[id_column] = lookup.columns(sa.column("scope_id", sa.String)).scalar_subquery()
+    return values
+
+
+_ONLY_TENANT_SQL = "SELECT tenant_id FROM tenants WHERE (SELECT count(*) FROM tenants) = 1"
+
+
+def _only_project_sql(tenant_sql: str) -> str:
+    """The project of the tenant ``tenant_sql`` selects, ``NULL`` unless that tenant holds exactly one."""
+    return f"SELECT max(project_id) FROM projects WHERE tenant_id = ({tenant_sql}) HAVING count(*) = 1"
+
+
+def only_project_subquery(tenant: str | None = None) -> sa.ScalarSelect[Any]:
+    """``tenant``'s project as a scalar subquery — the store's only tenant's when ``tenant`` is ``None`` —
+    ``NULL`` unless that tenant holds exactly one project.
+
+    Raw SQL, which the tenant guard does not walk: the store's only tenant is itself a subquery, which
+    the guard does not read as naming a tenant."""
+    lookup = sa.text(_only_project_sql(":only_project_tenant" if tenant is not None else _ONLY_TENANT_SQL))
+    if tenant is not None:
+        lookup = lookup.bindparams(only_project_tenant=tenant)
+    return lookup.columns(sa.column("project_id", sa.String)).scalar_subquery()
+
+
+def default_project(engine: Engine, tenant: TenantId | None = None) -> str:
+    """The id of ``tenant``'s only project — the store's only tenant's when ``tenant`` is ``None``.
+
+    Raises when the tenant holds none or several: a test with a second project names the one it means."""
+    tenant = tenant if tenant is not None else default_tenant(engine)
+    projects = schema.projects
+    with engine.connect() as conn:
+        ids = list(conn.execute(sa.select(projects.c.project_id).where(projects.c.tenant_id == tenant)).scalars())
+    if len(ids) != 1:
+        raise AssertionError(f"default_project needs a tenant holding exactly one project; {tenant} holds {len(ids)}")
+    return ids[0]
+
+
+_SEEDER = ChangeContext(actor="test", door=Door.API)
+
+
+def _project_authoring(engine: Engine, tenant: TenantId) -> tuple[ProjectAuthoring, ProjectStore]:
+    conns = scoped_connections(engine, tenant)
+    projects = ProjectStore(conns)
+    return ProjectAuthoring(projects=projects, links=ProjectLinkStore(conns), clock=FixedClock(_GRAPH_T0)), projects
+
+
+def seed_project(engine: Engine, slug: str, *, tenant: TenantId | None = None) -> ProjectId:
+    """Create a project named ``slug`` in ``tenant`` — the store's only tenant when ``None`` — through project
+    authoring, its create change row included, and return its id. Once the tenant holds two projects, a write that
+    names none is refused: the test names the project on every write it makes from then on."""
+    authoring, _ = _project_authoring(engine, tenant if tenant is not None else default_tenant(engine))
+    return authoring.create(slug, slug, _SEEDER).project_id
+
+
+def link_project(
+    engine: Engine,
+    *,
+    project: str | None = None,
+    source: str | None = None,
+    repository: str | None = None,
+    tenant: TenantId | None = None,
+) -> None:
+    """Link ``project`` — ``tenant``'s only project when ``None`` — to the work source ``source`` and/or the
+    repository ``repository``, through project authoring: a first link, or a relink of one it unlinked. ``tenant``
+    is the store's only tenant when ``None``. The named records must be stored in that tenant."""
+    tenant = tenant if tenant is not None else default_tenant(engine)
+    authoring, projects = _project_authoring(engine, tenant)
+    record = projects.get(ProjectId(project if project is not None else default_project(engine, tenant)))
+    assert record is not None, f"link_project needs {project} among {tenant}'s projects"
+    conns = scoped_connections(engine, tenant)
+    if source is not None:
+        work_source = WorkSourceRecordStore(conns).get(source)
+        assert work_source is not None, f"link_project needs the work source {source} stored in {tenant}"
+        authoring.link_source(record, work_source, _SEEDER)
+    if repository is not None:
+        stored = RepositoryRecordStore(conns).get(repository)
+        assert stored is not None, f"link_project needs the repository {repository} stored in {tenant}"
+        authoring.link_repository(record, stored, _SEEDER)
+
+
+def seed_scope(conns: ScopedConnections, slug: str, *, at: datetime, project_id: str | None = None) -> str:
+    """Store a scope named ``slug`` in ``project_id`` — ``conns``' tenant's only project when ``None`` — through
+    its adapter unless the project stores one — the parent a run, link or finding naming ``slug`` needs — and
+    return its ``scope_id``."""
+    project = project_id if project_id is not None else _only_project_of(conns)
+    record, change = Scope.new(ScopeSlug.parse(slug), "", OP, project_id=project, at=at)
+    return ScopeStore(conns).ensure(record, change=change).scope_id
+
+
+def _only_project_of(conns: ScopedConnections) -> str:
+    """The id of ``conns``' tenant's only project; raises when it holds none or several."""
+    projects = schema.projects
+    with conns.read("only_project_of") as conn:
+        ids: list[str] = list(conn.execute(conns.select(projects, projects.c.project_id)).scalars())
+    if len(ids) != 1:
+        raise AssertionError(f"the tenant must hold exactly one project; it holds {len(ids)}")
+    return ids[0]
+
+
+def only_tenant_subquery() -> sa.ScalarSelect[Any]:
+    """The store's only tenant as a scalar subquery, ``NULL`` unless ``tenants`` holds exactly one row."""
+    tenants = schema.tenants
+    holds_one = sa.select(sa.func.count()).select_from(tenants).correlate(None).scalar_subquery() == 1
+    return sa.select(tenants.c.tenant_id).where(holds_one).scalar_subquery()
+
+
+def hub_scoped[E: Executable](statement: E) -> E:
+    """``statement`` marked deliberately cross-tenant: a test's raw read or write of the store as a whole,
+    exempt from the tenant statement guard."""
+    return statement.execution_options(**{HUB_SCOPED_OPTION: True})
+
+
+def hub_scoped_engine(engine: Engine) -> Engine:
+    """``engine`` with every statement marked cross-tenant: a migration test's store, seeded and probed at
+    revisions older than the live schema, where no tenant scope applies."""
+    return engine.execution_options(**{HUB_SCOPED_OPTION: True})
+
+
 OP = ChangeContext(actor="op", door=Door.API)
+
+#: The clock a test's hub migration hands the revisions that stamp a time (``migration_clock``).
+MIGRATION_CLOCK = FixedClock(datetime(2026, 7, 12, tzinfo=UTC))
 
 
 def config_authoring(engine: Engine, *, keys: IHubKeyProvider, clock: IClock) -> ConfigAuthoring:
@@ -292,9 +573,6 @@ class FakeWorkSource:
 
     def forge_reference(self, pointer: WorkRef) -> str | None:
         return f"{self.repo}#{pointer.ref}"
-
-    def branch_url(self, repo: str, branch_name: str) -> str | None:
-        return f"http://forge.local/{repo}/tree/{branch_name}"
 
 
 def _conforms_fake_work_source(x: FakeWorkSource) -> IWorkSource:
@@ -658,7 +936,7 @@ SEEDED_CAPABILITIES = (RunnerCapability("claude", default=True),)
 
 
 def seed_runner(
-    target: HubHarness | HubServices,
+    target: HubHarness | TenantServices,
     runner_id: str,
     *,
     name: str | None = None,
@@ -666,12 +944,14 @@ def seed_runner(
     token: str | None = None,
     capabilities: tuple[RunnerCapability, ...] = SEEDED_CAPABILITIES,
     register: bool = True,
+    projects: tuple[str, ...] | None = None,
 ) -> str:
     """Add ``runner_id`` at the hub as ``hub runner add`` does, but under a chosen id and holding
     ``token`` (default :func:`runner_token`), and — with ``register`` — record its first registration
     so it is connected; returns the plaintext token. ``register=False`` leaves it added but never
     connected. A runner the hub already holds is left as is, except that ``register`` connects one
-    that never has."""
+    that never has. It serves ``projects``, each an id or slug, and the tenant's ``default`` project
+    when ``None``, whatever other projects the tenant holds."""
     services = target.services if isinstance(target, HubHarness) else target
     registry = services.registry
     assert isinstance(registry, RunnerRegistryStore), "seeding writes through the hub's own registry store"
@@ -679,13 +959,17 @@ def seed_runner(
     token_hash = TokenHash(plaintext).hex
     present = registry.get_runner(runner_id)
     if present is None:
-        registry.add(RunnerAddition(runner_id, name or runner_id, token_hash, at=services.clock.now(), by="test"))
+        declared = (DEFAULT_PROJECT_SLUG,) if projects is None else projects
+        served = resolve_served(declared, BulkProjectResolver(services.projects))
+        registry.add(
+            RunnerAddition(runner_id, name or runner_id, token_hash, at=services.clock.now(), by="test", served=served)
+        )
     if register and (present is None or present.never_connected()):
         services.fleet.register(added_runner(services, runner_id), workspace_id, capabilities=capabilities)
     return plaintext
 
 
-def added_runner(target: HubHarness | HubServices, runner_id: str) -> RunnerRegistration:
+def added_runner(target: HubHarness | TenantServices, runner_id: str) -> RunnerRegistration:
     """The registration the hub holds for ``runner_id`` — what an edge resolves before handing a
     runner to the fleet service; fails the test when the hub never added it."""
     services = target.services if isinstance(target, HubHarness) else target
@@ -702,18 +986,24 @@ class RunnerFleetClient(TestClient):
     """The hub harness's client: a call under ``/api/fleet/`` that carries no ``Authorization`` header presents
     the bearer token (:func:`runner_token`) of the runner it names, adding that runner, never connected, when the
     hub does not hold it, and registers a never-connected claimant before a claim unless ``register_claimants=False``.
-    A test pinning a tokenless refusal uses a plain ``TestClient``."""
+    A test pinning a tokenless refusal uses a plain ``TestClient``.
+
+    Runner ids are unique across the hub, so a client serving a tenant other than the default one carries a
+    ``runner_prefix``: its default runner is the prefixed ``default_runner_id``, and it refuses to add a runner whose
+    id lacks the prefix rather than collide with another tenant's."""
 
     def __init__(
         self,
         app: FastAPI,
         *,
-        services: HubServices,
+        services: TenantServices,
         default_runner_id: str = "r1",
         register_claimants: bool = True,
+        runner_prefix: str = "",
     ) -> None:
         super().__init__(app)
-        self.default_runner_id = default_runner_id
+        self.default_runner_id = f"{runner_prefix}{default_runner_id}"
+        self._runner_prefix = runner_prefix
         self._services = services
         self._register_claimants = register_claimants
         self._seeding = threading.Lock()
@@ -746,6 +1036,9 @@ class RunnerFleetClient(TestClient):
         known = self._connected if connect else self._present
         if runner_id in known:
             return
+        assert runner_id.startswith(self._runner_prefix), (
+            f"runner ids are unique across the hub: name {runner_id!r} with this tenant's {self._runner_prefix!r} prefix"
+        )
         with self._seeding:
             workspace_id = body.get("workspace_id") if isinstance(body, dict) else None
             seed_runner(self._services, runner_id, workspace_id=str(workspace_id or "w1"), register=connect)
@@ -759,7 +1052,10 @@ class HubHarness:
     """A wired hub app plus the collaborators a test drives and asserts against."""
 
     client: TestClient
-    services: HubServices
+    #: The default tenant's services — the tenant every one-tenant test is served in.
+    services: TenantServices
+    #: The hub-level services — identity, sessions, signing, exports and sweeps.
+    hub_services: HubServices
     work_sources: WorkSourceRegistry
     clock: FixedClock
     engine: Engine
@@ -768,9 +1064,66 @@ class HubHarness:
     #: address — the forwarded-header trust tests need a concrete IP peer.
     app: FastAPI | None = None
 
+    def open_services(self, tenant: TenantId) -> TenantServices:
+        """``tenant``'s services, opened as a request in that tenant would open them."""
+        return self.hub_services.tenants.open_services(StoreScope(tenant))
+
+    def add_tenant(self, name: str) -> TenantHarness:
+        """Add a tenant named ``name`` beside the default one and hand back what a test drives it with: its
+        services, and a client that names it in ``X-Blizzard-Tenant`` on every call and seeds runners as
+        ``<name>-<id>``. The default tenant stays named; the hub's open-tenant set is refreshed, as tenant
+        administration refreshes it."""
+        assert self.app is not None
+        default_tenant(self.engine)
+        tenant = add_tenant(self.engine, name)
+        self.hub_services.tenants.open_tenants.refresh()
+        services = self.open_services(tenant)
+        prefix = f"{name}-"
+        client = RunnerFleetClient(self.app, services=services, runner_prefix=prefix)
+        client.headers[TENANT_HEADER] = tenant
+        return TenantHarness(tenant=tenant, name=name, services=services, client=client, runner_prefix=prefix)
+
     def promote(self, chunk_id: str) -> None:
         """Promote ``chunk_id`` through the real ``POST /api/chunks/{id}/promote`` path."""
         assert self.client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
+
+
+@dataclass(frozen=True)
+class TenantHarness:
+    """A tenant :meth:`HubHarness.add_tenant` added: its id and name, its services, and a client acting in it."""
+
+    tenant: TenantId
+    name: str
+    services: TenantServices
+    #: Names the tenant on every call; a fleet call's runner is seeded in this tenant under :attr:`runner_prefix`.
+    client: RunnerFleetClient
+    runner_prefix: str
+
+    def runner_id(self, local: str) -> str:
+        """The hub-unique id this tenant's runner ``local`` is seeded under."""
+        return f"{self.runner_prefix}{local}"
+
+
+def tenant_services_of(app: FastAPI) -> TenantServices:
+    """The services of a wired ``app``'s only open tenant — the name every test reads a tenant field of an
+    app through; a hub-level field is read off ``app.state.services`` itself."""
+    tenants = app.state.services.tenants
+    tenant = tenants.open_tenants.only()
+    assert tenant is not None, "tenant_services_of needs an app serving exactly one open tenant"
+    return tenants.open_services(StoreScope(tenant))
+
+
+def serve_default_tenant(hub: HubHarness, services: TenantServices) -> None:
+    """Serve every request in the default tenant from ``services`` — a test's stand-in, usually
+    ``hub.services`` with a field replaced by a counting double."""
+    assert hub.app is not None
+    tenants = hub.hub_services.tenants
+    default = default_tenant(hub.engine)
+
+    def open_services(scope: StoreScope) -> TenantServices:
+        return services if scope.tenant == default else tenants.open_services(scope)
+
+    hub.app.state.services = replace(hub.hub_services, tenants=replace(tenants, open_services=open_services))
 
 
 _hub_prototype_lock = threading.Lock()
@@ -792,7 +1145,7 @@ def hub_migration_prototype() -> Path:
             _hub_prototype_tmp = tempfile.TemporaryDirectory(prefix="blizzard-hub-migration-proto-")
             root = Path(_hub_prototype_tmp.name)
             db_url = f"sqlite:///{root / 'hub.db'}"
-            migration_runner(HubConfig(root=root, db_url=db_url)).upgrade("head")
+            Migrations(HubConfig(root=root, db_url=db_url), MIGRATION_CLOCK).runner.upgrade("head")
             checkpoint_sqlite(db_url)
             _hub_prototype_db = root / "hub.db"
         return _hub_prototype_db
@@ -823,9 +1176,12 @@ DEFAULT_FIXTURE_REPOSITORIES = (
 )
 
 
-def seed_repositories(engine: Engine, repositories: Sequence[RepositoryFields], *, tmp_path: Path) -> None:
+def seed_repositories(
+    engine: Engine, repositories: Sequence[RepositoryFields], *, tmp_path: Path, link: bool = True
+) -> None:
     """Write ``repositories`` and the secret they name straight into the store, as an operator's
-    ``blizzard hub repo create`` would — a no-op for none, and for a store an earlier build already seeded."""
+    ``blizzard hub repo create`` would, and link each to the tenant's only project unless ``link`` is false —
+    a no-op for none, and for a store an earlier build already seeded."""
     if not repositories:
         return
     authoring = config_authoring(
@@ -838,12 +1194,41 @@ def seed_repositories(engine: Engine, repositories: Sequence[RepositoryFields], 
         with contextlib.suppress(SecretAlreadyExists):
             authoring.create_secret(SecretName.parse(fields.secret_name), "fixture-token", OP)
         authoring.create_repository(name, fields, OP)
+        if link:
+            link_project(engine, repository=name)
+
+
+def seed_fake_work_sources(engine: Engine, names: Iterable[str], *, tmp_path: Path, link: bool = True) -> None:
+    """Store a configured work source for each of ``names`` — the record an operator's ``blizzard hub source
+    create`` writes, on a locator of its own — and, with ``link``, link it to the tenant's only project, so an
+    ingest from the fake registry's source of that name resolves a project. A no-op for a name already stored."""
+    stores = WorkSourceRecordStore(hub_store_connections(engine))
+    authoring = config_authoring(
+        engine, keys=hub_key_provider({}, data_dir=tmp_path), clock=FixedClock(datetime(2026, 7, 12, tzinfo=UTC))
+    )
+    for name in names:
+        if stores.get(name) is not None:
+            continue
+        with contextlib.suppress(SecretAlreadyExists):
+            authoring.create_secret(SecretName.parse(FIXTURE_FORGE_SECRET), "fixture-token", OP)
+        fields = WorkSourceFields(
+            provider="github",
+            locator=f"fixture/{name}",
+            api_base="http://forge.fixture",
+            web_base=None,
+            annotate=False,
+            secret=FIXTURE_FORGE_SECRET,
+        )
+        authoring.create_work_source(name, fields, OP)
+        if link:
+            link_project(engine, source=name)
 
 
 def build_hub(
     tmp_path: Path,
     *,
     work_sources: dict[str, FakeWorkSource] | None = None,
+    link: bool = True,
     hub_command_runner: IHubCommandRunner | None = None,
     hub_workdir: IHubWorkdir | None = None,
     repositories: Sequence[RepositoryFields] | None = None,
@@ -868,7 +1253,10 @@ def build_hub(
 
     ``hub.client`` is a :class:`RunnerFleetClient`.
     ``work_sources=None`` defaults to one fake source, while ``{}`` is a deliberately **empty** registry;
-    ``hub_command_runner``/``hub_workdir`` left ``None`` wire real adapters."""
+    each fake source is stored as a configured record linked to the tenant's only project, and each seeded
+    repository is linked to it too, while ``link=False`` leaves the sources unstored, serving no project, as a
+    file-configured source is, and the repositories stored but unlinked; ``hub_command_runner``/``hub_workdir``
+    left ``None`` wire real adapters."""
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     config = HubConfig(
         root=tmp_path,
@@ -885,34 +1273,52 @@ def build_hub(
     # copying over it would discard that state, so only a fresh directory takes the copy.
     db_path = tmp_path / "hub.db"
     if db_path.exists():
-        migration_runner(config).upgrade("head")
+        Migrations(config, MIGRATION_CLOCK).runner.upgrade("head")
     else:
         shutil.copyfile(hub_migration_prototype(), db_path)
     engine = create_engine_from_url(db_url)
-    seed_repositories(engine, DEFAULT_FIXTURE_REPOSITORIES if repositories is None else repositories, tmp_path=tmp_path)
+    seed_repositories(
+        engine, DEFAULT_FIXTURE_REPOSITORIES if repositories is None else repositories, tmp_path=tmp_path, link=link
+    )
 
     built_sources: dict[str, IWorkSource] = dict(
         work_sources if work_sources is not None else {"default": FakeWorkSource()}
     )
+    if link:
+        seed_fake_work_sources(engine, built_sources, tmp_path=tmp_path)
     clock = FixedClock(datetime(2026, 7, 13, tzinfo=UTC))
     editors: dict[str, IWorkEditor] = {}
     # The built-in `hub` source is seated as a source, an editor and a closer unconditionally,
     # mirroring `WorkSourceEntry.registry`'s production wiring.
     closers: dict[str, IWorkCloser] = {}
     core = build_hub_core(engine, clock=clock)
-    hub_source = HubWorkSource(core.work_item_store, core.work_item_edits, core.users, core.garden_proposal_resolution)
+    default = StoreScope(default_tenant(engine))
+    default_stores = core.open(default)
+    hub_source = HubWorkSource(
+        default_stores.work_item_store,
+        default_stores.work_item_edits,
+        core.users,
+        default_stores.garden_proposal_resolution,
+    )
     built_sources[RESERVED_HUB_SOURCE_NAME] = hub_source
     editors[RESERVED_HUB_SOURCE_NAME] = hub_source
     closers[RESERVED_HUB_SOURCE_NAME] = hub_source
     work_source_registry = WorkSourceRegistry(built_sources, closers=closers, editors=editors)
-    events = EventBroker()
+
+    def tenant_work_sources(stores: TenantStores, _live: LiveConfig) -> IWorkSourceRegistry:
+        # The default tenant reads the fakes; any other tenant holds only its own built-in source.
+        if stores.scope == default:
+            return work_source_registry
+        source = HubWorkSource(
+            stores.work_item_store, stores.work_item_edits, core.users, stores.garden_proposal_resolution
+        )
+        named = {RESERVED_HUB_SOURCE_NAME: source}
+        return WorkSourceRegistry(dict(named), closers=dict(named), editors=dict(named))
+
     secret_keys = hub_key_provider({}, data_dir=tmp_path)
-    live = build_live_config(core, secret_keys=secret_keys)
-    services = build_services(
+    hub_services = build_services(
         core,
-        events=events,
-        work_sources=work_source_registry,
-        secrets=live.secrets,
+        work_sources=tenant_work_sources,
         hub_command_runner=hub_command_runner,
         hub_workdir=hub_workdir,
         hub_workdir_root=tmp_path / "hub_workdirs",
@@ -933,7 +1339,9 @@ def build_hub(
         egress_path_key=egress_path_key,
         annotation_interval_seconds=config.annotation_interval_seconds,
     )
-    app = create_app(config, services=services)
+    hub_services.tenants.open_tenants.refresh()
+    services = hub_services.tenants.open_services(default)
+    app = create_app(config, services=hub_services)
     client = RunnerFleetClient(app, services=services, register_claimants=auto_register_claimants)
     # Warm FastAPI's per-router route-resolution cache: it lazily caches routes on first
     # use, which is thread-unsafe under the component tier's OS-thread races.
@@ -941,10 +1349,11 @@ def build_hub(
     return HubHarness(
         client=client,
         services=services,
+        hub_services=hub_services,
         work_sources=work_source_registry,
         clock=clock,
         engine=engine,
-        events=events,
+        events=services.events,
         app=app,
     )
 
@@ -986,26 +1395,38 @@ def fixture_repositories(sources: Sequence[WorkSourceDocument], forge_api_url: s
     ]
 
 
-def create_repositories(hub: httpx.Client, repositories: Sequence[dict[str, str]]) -> None:
+def create_repositories(
+    hub: httpx.Client, repositories: Sequence[dict[str, str]], *, project: str | None = "default"
+) -> None:
     """Create repository ``repositories`` — and the secret they name — through a running hub's own
-    API, so a deliver node resolves its chunk's commits against them."""
+    API and link each to ``project`` (a slug; ``None`` links none), so a deliver node of that project's
+    chunks resolves their commits against them."""
     ensure_fixture_secret(hub)
     for repository in repositories:
         created = hub.post("/api/repositories", json=repository)
         assert created.status_code == 201, created.text
+        if project is not None:
+            linked = hub.put(f"/api/projects/{project}/repository-links/{repository['name']}")
+            assert linked.status_code == 200, linked.text
 
 
 def create_work_sources(hub: httpx.Client, sources: Sequence[WorkSourceDocument]) -> None:
-    """Create ``sources``, and the secret they name, through a running hub's own API.
+    """Create ``sources``, and the secret they name, through a running hub's own API, each linked to the
+    hub's only project.
 
     Every upper-tier fixture that stands a real hub up and then ingests seeds its sources
     through this once the hub answers, or its own ingests fail."""
     if not sources:
         return
     ensure_fixture_secret(hub)
+    projects = hub.get("/api/projects")
+    assert projects.status_code == 200, projects.text
+    (project,) = projects.json()["projects"]
     for source in sources:
         created = hub.post("/api/work-sources", json=source.model_dump())
         assert created.status_code == 201, created.text
+        linked = hub.put(f"/api/projects/{project['project_id']}/source-links/{source.name}")
+        assert linked.status_code == 200, linked.text
 
 
 def write_mock_harness_credentials(runner_dir: Path) -> tuple[str, str]:
@@ -1154,12 +1575,16 @@ def pointer_token(pointer: dict) -> str:
     return f"{pointer['source']}:{pointer['ref']}"
 
 
-def ingest(hub: HubHarness, pointers: list[dict], *, promote: bool = True) -> str:
+def ingest(hub: HubHarness, pointers: list[dict], *, promote: bool = True, project: str | None = None) -> str:
     """Ingest ``pointers`` (as ``{source, ref}`` dicts) into one chunk and, by default,
     promote it to ready — each dict converts to its ``{source}:{ref}`` ingest token.
+    ``project`` names the project by id or slug; ``None`` leaves the hub to infer it.
 
     Pass ``promote=False`` to assert the not-ready resting state a bare ingest leaves."""
-    resp = hub.client.post("/api/chunks", json={"tokens": [pointer_token(p) for p in pointers]})
+    body: dict[str, Any] = {"tokens": [pointer_token(p) for p in pointers]}
+    if project is not None:
+        body["project"] = project
+    resp = hub.client.post("/api/chunks", json=body)
     assert resp.status_code == 201, resp.text
     chunk_id = resp.json()["chunk_id"]
     if promote:
@@ -1186,7 +1611,7 @@ def write_chunk_pause_facts(tmp_path: Path, chunk_id: str, *facts: tuple[bool, d
         for paused, set_at in facts:
             conn.execute(
                 sa_insert(schema.chunk_pause_facts).values(
-                    chunk_id=chunk_id, paused=paused, set_at=set_at, set_by="operator"
+                    stamp(schema.chunk_pause_facts, chunk_id=chunk_id, paused=paused, set_at=set_at, set_by="operator")
                 )
             )
 
@@ -1195,18 +1620,21 @@ def seed_user(
     hub: HubHarness, *, username: str, role: Role, email: str | None = None, display_name: str | None = None
 ) -> User:
     """Insert one ``users`` row directly (a raw-write test helper, mirrors
-    ``write_chunk_pause_facts``) and return the domain object.
+    ``write_chunk_pause_facts``) with what ``role`` stands for, and return the domain object:
+    ``guest``, ``contributor`` or ``admin`` a membership of that role in the default tenant,
+    ``superuser`` an ``admin`` membership there and the hub administrator role, ``pending`` neither.
 
-    No login mechanism exists yet, so a test wanting a ``ResolvedIdentity``
-    seeds the row directly rather than through a route."""
+    A test wanting a ``ResolvedIdentity`` seeds the user directly rather than through a
+    sign-in."""
     user = User(
         user_id=Id.mint(IdPrefix.USER, hub.clock).value,
         username=username,
         display_name=display_name or username,
         email=email,
-        role=role,
         created_at=hub.clock.now(),
     )
+    now = hub.clock.now()
+    membership = Role.ADMIN if role is Role.SUPERUSER else role
     with hub.engine.begin() as conn:
         conn.execute(
             sa_insert(schema.users).values(
@@ -1214,18 +1642,91 @@ def seed_user(
                 username=user.username,
                 display_name=user.display_name,
                 email=user.email,
-                role=user.role.value,
                 created_at=user.created_at,
             )
         )
+        if membership in MEMBERSHIP_ROLES:
+            conn.execute(
+                sa_insert(schema.membership_facts).values(
+                    tenant_id=default_tenant(hub.engine),
+                    user_id=user.user_id,
+                    role=membership.value,
+                    set_at=now,
+                    set_by="migration",
+                )
+            )
+        if role is Role.SUPERUSER:
+            conn.execute(
+                sa_insert(schema.hub_admin_facts).values(
+                    user_id=user.user_id, granted=True, set_at=now, set_by="migration"
+                )
+            )
     return user
+
+
+#: When the seeding helpers below record a fact unless a test names its own time: the harness clock's start.
+_SEEDED_AT = datetime(2026, 7, 13, tzinfo=UTC)
+
+#: How long a seeded invitation stays live unless a test names its own lifetime — the hub's default.
+_INVITATION_LIFETIME = timedelta(days=7)
+
+
+def seed_membership(
+    engine: Engine, tenant: TenantId, user_id: str, role: Role, *, set_by: str = "test", at: datetime = _SEEDED_AT
+) -> None:
+    """Record ``user_id`` as a ``role`` member of ``tenant`` — a raw ``membership_facts`` row, as a grant writes."""
+    assert role in MEMBERSHIP_ROLES, f"{role} is not a membership role"
+    with engine.begin() as conn:
+        conn.execute(
+            sa_insert(schema.membership_facts).values(
+                tenant_id=tenant, user_id=user_id, role=role.value, set_at=at, set_by=set_by
+            )
+        )
+
+
+def seed_hub_admin(engine: Engine, user_id: str, *, set_by: str = "test", at: datetime = _SEEDED_AT) -> None:
+    """Grant ``user_id`` the hub administrator role — a raw ``hub_admin_facts`` row, holding no membership."""
+    with engine.begin() as conn:
+        conn.execute(sa_insert(schema.hub_admin_facts).values(user_id=user_id, granted=True, set_at=at, set_by=set_by))
+
+
+def seed_invitation(
+    engine: Engine,
+    tenant: TenantId,
+    email: str,
+    role: Role,
+    *,
+    created_by: str = "test",
+    at: datetime = _SEEDED_AT,
+    lifetime: timedelta = _INVITATION_LIFETIME,
+) -> tuple[str, str]:
+    """Record a live invitation admitting ``email`` into ``tenant`` as ``role``, issued by ``created_by`` at ``at``
+    and expiring ``lifetime`` later, as the hub stores one: the address lowercased, the token only as its hash.
+    Returns the invitation's id and the link's plaintext token."""
+    assert role in MEMBERSHIP_ROLES, f"{role} is not a membership role"
+    invitation_id = Id.mint_at(IdPrefix.INVITATION, at).value
+    token = f"test-invitation-{invitation_id}"
+    with engine.begin() as conn:
+        conn.execute(
+            sa_insert(schema.invitations).values(
+                invitation_id=invitation_id,
+                tenant_id=tenant,
+                email=email.lower(),
+                role=role.value,
+                token_hash=InvitationToken(token).hash,
+                created_by=created_by,
+                created_at=at,
+                expires_at=at + lifetime,
+            )
+        )
+    return invitation_id, token
 
 
 def seed_session(hub: HubHarness, user: User) -> str:
     """Mint a real session for ``user`` via ``AuthService.mint_session`` (#92) and return
     the plaintext session id — a test sets this as the ``bz_session`` cookie or an
     ``Authorization: Bearer`` header."""
-    plaintext, _ = hub.services.auth.mint_session(user)
+    plaintext, _ = hub.hub_services.auth.mint_session(user)
     return plaintext
 
 
@@ -1260,9 +1761,21 @@ def assert_all_timestamps_utc(payload: object) -> None:
 
 def seed_chunk_record(stores: ChunkStores, chunk: Chunk) -> None:
     """Insert ``chunk``'s rows the way ingest does — under its pointers' locks — for a fixture
-    that needs a chunk without going through an ingest's guard."""
+    that needs a chunk without going through an ingest's guard. A chunk built naming no project
+    lands in the tenant's only one."""
     with stores.exclusive.locked_work_refs(chunk.work_refs) as handle:
+        if chunk.project_id is None:
+            chunk = replace(chunk, project_id=_only_project_on(work_ref_conn_of(handle)))
         stores.record.mint_locked(handle, chunk)
+
+
+def _only_project_on(conn: sa.Connection) -> ProjectId:
+    """The id of the only project of the tenant ``conn`` is scoped to; raises when it holds none or several."""
+    projects = schema.projects
+    ids = list(conn.execute(statements_of(conn).select(projects, projects.c.project_id)).scalars())
+    if len(ids) != 1:
+        raise AssertionError(f"a chunk naming no project needs a tenant holding exactly one; it holds {len(ids)}")
+    return ProjectId(ids[0])
 
 
 def make_ready(hub: HubHarness, chunk_id: str) -> None:
@@ -1346,12 +1859,13 @@ def chunk_rows(hub: HubHarness, table: sa.Table, chunk_id: str) -> int:
     """How many rows ``table`` holds for ``chunk_id`` — a refusal's proof that nothing was written."""
     with hub.engine.begin() as conn:
         return conn.execute(
-            sa.select(sa.func.count()).select_from(table).where(table.c.chunk_id == chunk_id)
+            hub_scoped(sa.select(sa.func.count()).select_from(table).where(table.c.chunk_id == chunk_id))
         ).scalar_one()
 
 
 # Migration-test scaffolding: `graphs`/`chunks` carry no revision-pinned shape, so these
-# seeds are shared. A revision's own frozen table-under-test must NOT move here.
+# seeds are shared. A revision's own frozen table-under-test must NOT move here. `tenant_id`
+# and `project_id` are written only when the store the seed runs against has the column.
 
 _GRAPHS = sa.Table(
     "graphs",
@@ -1361,6 +1875,7 @@ _GRAPHS = sa.Table(
     sa.Column("entry_node_id", sa.String, nullable=False),
     sa.Column("definition_yaml", sa.Text, nullable=False),
     sa.Column("created_at", sa.DateTime, nullable=False),
+    sa.Column("tenant_id", sa.String),
 )
 
 _CHUNKS = sa.Table(
@@ -1369,24 +1884,39 @@ _CHUNKS = sa.Table(
     sa.Column("chunk_id", sa.String, primary_key=True),
     sa.Column("graph_id", sa.String, nullable=False),
     sa.Column("minted_at", sa.DateTime, nullable=False),
+    sa.Column("tenant_id", sa.String),
+    sa.Column("project_id", sa.String),
 )
+
+
+def _stamp_as_stored(conn: sa.Connection, table: sa.Table, values: dict[str, Any]) -> dict[str, Any]:
+    """``values`` carrying the store's only tenant when the store's own ``table`` has a ``tenant_id``
+    column, and that tenant's only project when it has a ``project_id`` column — decided by the
+    store's revision, not today's schema, so the seed fits any revision."""
+    stored = {column["name"] for column in sa.inspect(conn).get_columns(table.name)}
+    if "tenant_id" in stored:
+        values["tenant_id"] = only_tenant_subquery()
+    if "project_id" in stored:
+        values["project_id"] = only_project_subquery()
+    return values
 
 
 def migrate_to(tmp_path: Path, revision: str) -> tuple[MigrationRunner, Engine]:
     """A hub store migrated to ``revision``, ready for a test's own revision-pinned seed
     rows. The returned runner is the same handle a test upgrades onward from (e.g. to
-    ``"head"``) once its seed is in place."""
+    ``"head"``) once its seed is in place. The engine is plain, so the tenant statement guard
+    watches every adapter a test wires over it; a seed written at a pinned revision through
+    today's ``schema`` tables, outside any tenant scope, goes through ``hub_scoped_engine``."""
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
-    runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
+    runner = Migrations(HubConfig(root=tmp_path, db_url=db_url), MIGRATION_CLOCK).runner
     runner.upgrade(revision)
     return runner, create_engine_from_url(db_url)
 
 
 def seed_graph(conn: sa.Connection, graph_id: str, *, at: datetime) -> None:
     """Seed one ``graphs`` parent row — the FK a seeded chunk needs, at any revision."""
-    conn.execute(
-        sa.insert(_GRAPHS).values(graph_id=graph_id, name="g", entry_node_id="nd_1", definition_yaml="", created_at=at)
-    )
+    values = {"graph_id": graph_id, "name": "g", "entry_node_id": "nd_1", "definition_yaml": "", "created_at": at}
+    conn.execute(sa.insert(_GRAPHS).values(_stamp_as_stored(conn, _GRAPHS, values)))
 
 
 def mint_graph(engine: Engine, graph_id: str, *, name: str, nodes: dict[str, str], at: datetime) -> None:
@@ -1415,9 +1945,15 @@ def mint_graph(engine: Engine, graph_id: str, *, name: str, nodes: dict[str, str
     GraphStore(hub_store_connections(engine)).mint(graph, definition_yaml="", at=at)
 
 
-def seed_chunk(conn: sa.Connection, chunk_id: str, *, graph_id: str, at: datetime) -> None:
-    """Seed one ``chunks`` parent row — the FK a seeded route/pointer/etc. needs."""
-    conn.execute(sa.insert(_CHUNKS).values(chunk_id=chunk_id, graph_id=graph_id, minted_at=at))
+def seed_chunk(
+    conn: sa.Connection, chunk_id: str, *, graph_id: str, at: datetime, project_id: str | None = None
+) -> None:
+    """Seed one ``chunks`` parent row — the FK a seeded route/pointer/etc. needs — in ``project_id``, the
+    tenant's only project when ``None``."""
+    values: dict[str, Any] = {"chunk_id": chunk_id, "graph_id": graph_id, "minted_at": at}
+    if project_id is not None:
+        values["project_id"] = project_id
+    conn.execute(sa.insert(_CHUNKS).values(_stamp_as_stored(conn, _CHUNKS, values)))
 
 
 def seed_lease(engine: Engine, chunk_id: str, *, epoch: int, runner_id: str, at: datetime) -> None:
@@ -1426,11 +1962,19 @@ def seed_lease(engine: Engine, chunk_id: str, *, epoch: int, runner_id: str, at:
     chunk's fence at ``epoch``. Head-schema only."""
     with engine.begin() as conn:
         conn.execute(
-            sa.insert(schema.lease_facts).values(chunk_id=chunk_id, epoch=epoch, runner_id=runner_id, minted_at=at)
+            sa.insert(schema.lease_facts).values(
+                stamp(schema.lease_facts, chunk_id=chunk_id, epoch=epoch, runner_id=runner_id, minted_at=at)
+            )
         )
         conn.execute(
             sa.insert(schema.epoch_owners).values(
-                chunk_id=chunk_id, epoch=epoch, runner_id=None if runner_id == "hub" else runner_id, recorded_at=at
+                stamp(
+                    schema.epoch_owners,
+                    chunk_id=chunk_id,
+                    epoch=epoch,
+                    runner_id=None if runner_id == "hub" else runner_id,
+                    recorded_at=at,
+                )
             )
         )
 
@@ -1445,17 +1989,27 @@ def seed_work_item(
     author: WorkItemAuthor,
     stated_priority: str | None = None,
     at: datetime,
+    project_id: ProjectId | None = None,
 ) -> HubWorkItem:
-    """Seed one hub-owned work item plus its resting chunk, mirroring production's own
-    two-step mint (``WorkItemEditService.create``) — there is no chunkless
-    filing path to seed around. Callers still seed ``graph_id``'s own row first
+    """Seed one hub-owned work item plus its resting chunk in ``project_id`` — the store's tenant's only
+    project when ``None`` — mirroring production's own two-step mint (``WorkItemEditService.create``):
+    there is no chunkless filing path to seed around. Callers still seed ``graph_id``'s own row first
     (``seed_graph``); this only seeds the item and its chunk."""
     ref = store.allocate_ref(source)
     pointer = WorkRef(source=source, ref=ref)
-    chunk = Chunk(chunk_id=f"ch_{ref}", graph_id=graph_id, work_refs=[pointer], minted_at=at)
+    project = project_id if project_id is not None else _only_project_of_items(store)
+    chunk = Chunk(chunk_id=f"ch_{ref}", graph_id=graph_id, work_refs=[pointer], minted_at=at, project_id=project)
     return store.create_with_chunk(
         pointer=pointer, title=title, body=body, author=author, stated_priority=stated_priority, at=at, chunk=chunk
     )
+
+
+def _only_project_of_items(store: IWriteWorkItemRepository) -> ProjectId:
+    """The only project of the tenant ``store`` writes, read through the adapter's own connections; raises when
+    the tenant holds none or several, or when ``store`` is not the store's adapter."""
+    if not isinstance(store, WorkItemStore):
+        raise TypeError(f"a work item seeded naming no project needs a WorkItemStore; got {type(store).__name__}")
+    return ProjectId(_only_project_of(store._store))
 
 
 @contextmanager
@@ -1507,6 +2061,7 @@ def explain_query_plan(engine: Engine, statement: str, parameters: Any) -> Seque
 
 
 _SCAN_OR_SEARCH = re.compile(r"^(SCAN|SEARCH) (\S+)(.*)$")
+_TENANT_PREFIX_ONLY = re.compile(r"INDEX \S+ \(tenant_id=\?\)$")
 _ALIASED_FROM_ITEM = re.compile(r"\b(?:FROM|JOIN)\s+(\w+)\s+AS\s+(\w+)", re.IGNORECASE)
 
 
@@ -1520,9 +2075,10 @@ def _statement_aliases(statement: str) -> dict[str, str]:
 def _offending_table(detail: str, tables: set[str], aliases: dict[str, str]) -> str | None:
     """``detail`` is a plan row's last column, e.g. ``SCAN t``, ``SEARCH t USING INDEX ix (...)``, or ``SEARCH t USING
     AUTOMATIC COVERING INDEX (...)``; ``t`` may itself be an alias, resolved back to its real table via ``aliases``.
-    Offends when the resolved table names one of ``tables`` and is either a bare scan with no ``USING [COVERING]
-    INDEX`` clause, or any search/scan through sqlite's own automatic index — a real named index is never an
-    offense."""
+    Offends when the resolved table names one of ``tables`` and the plan reads it whole: a bare scan, any search or scan
+    through sqlite's own automatic index, a full walk of a named index (``SCAN t USING [COVERING] INDEX ix``), or a
+    search that seeks only the tenant (``SEARCH t USING INDEX ix (tenant_id=?)``) — a scoped read always carries
+    ``tenant_id = ?``, so a tenant-led index searched by that alone walks every row the tenant holds."""
     match = _SCAN_OR_SEARCH.match(detail)
     if match is None:
         return None
@@ -1530,9 +2086,9 @@ def _offending_table(detail: str, tables: set[str], aliases: dict[str, str]) -> 
     table = aliases.get(name, name)
     if table not in tables:
         return None
-    if "AUTOMATIC" in rest:
+    if "AUTOMATIC" in rest or verb == "SCAN":
         return table
-    if verb == "SCAN" and "USING" not in rest:
+    if _TENANT_PREFIX_ONLY.search(rest):
         return table
     return None
 
@@ -1541,9 +2097,9 @@ def offending_index_scans(
     engine: Engine, statements: Iterable[tuple[str, Any]], tables: Iterable[str]
 ) -> list[tuple[str, sa.Row[Any]]]:
     """Re-runs every distinct captured ``SELECT`` in ``statements`` under ``EXPLAIN QUERY
-    PLAN`` and returns ``(table, plan row)`` for each row that scans or automatic-indexes
-    into one of ``tables`` instead of a real named index — the shared classifier a
-    component-tier gate drives per store against its own table vocabulary."""
+    PLAN`` and returns ``(table, plan row)`` for each row that reads one of ``tables`` whole
+    (:func:`_offending_table` names the plans) — the shared classifier a component-tier gate
+    drives per store against its own table vocabulary."""
     vocabulary = set(tables)
     offenders: list[tuple[str, sa.Row[Any]]] = []
     seen: set[str] = set()
@@ -1604,3 +2160,86 @@ class InMemoryEgressWriter:
 
 def _conforms_in_memory_egress_writer(x: InMemoryEgressWriter) -> IEgressWriter:
     return x
+
+
+def seed_drainable_history(
+    conn: sa.Connection, tenant: TenantId, *, graph_id: str, node_id: str, at: datetime, open_refs: int = 1
+) -> None:
+    """Give ``tenant`` a whole chunk history whose tables a deletion drains apart, every hub invariant holding over it
+    while it is whole. Chunk ``ch_ran`` was claimed by runner ``r1`` (its route, token and lease at an epoch the runner
+    owns), migrated by that runner's landing — which released the route — restarted at a hub-owned epoch, and completed
+    with one work ref whose close was enqueued and retired; chunk ``ch_open`` holds ``open_refs`` work refs and nothing
+    else. Both chunks pin ``graph_id``, the tenant's own, whose ``node_id`` a runner executes, and name the source
+    ``github``, which the tenant's only project linked at ``at``.
+    Partway through a drain the epoch owners, route facts and close intents are gone while the restart, the migration,
+    the completion and some work refs are not. Chunk ids are global: one store holds one such history."""
+    later = at + timedelta(seconds=1)
+    rows: list[tuple[sa.Table, dict[str, Any]]] = [
+        (schema.chunks, {"chunk_id": "ch_ran", "graph_id": graph_id, "minted_at": at, "model": "m"}),
+        (schema.chunks, {"chunk_id": "ch_open", "graph_id": graph_id, "minted_at": at, "model": "m"}),
+        (schema.epoch_owners, {"chunk_id": "ch_ran", "epoch": 1, "runner_id": "r1", "recorded_at": at}),
+        (
+            schema.route_created,
+            {
+                "route_id": "rt_ran",
+                "chunk_id": "ch_ran",
+                "runner_id": "r1",
+                "workspace_id": "w",
+                "created_at": at,
+                "seq": 1,
+            },
+        ),
+        (schema.route_token_minted, {"chunk_id": "ch_ran", "token_hash": "h", "seq": 2, "minted_at": at}),
+        (schema.lease_facts, {"chunk_id": "ch_ran", "epoch": 1, "runner_id": "r1", "minted_at": at}),
+        (
+            schema.chunk_migrations,
+            {
+                "migration_id": "mg_ran",
+                "chunk_id": "ch_ran",
+                "from_node_id": node_id,
+                "from_graph_id": graph_id,
+                "to_graph_id": graph_id,
+                "landed_node_id": node_id,
+                "epoch": 1,
+                "recorded_at": at,
+            },
+        ),
+        (schema.route_released, {"chunk_id": "ch_ran", "released_at": later, "seq": 3}),
+        (schema.epoch_owners, {"chunk_id": "ch_ran", "epoch": 2, "runner_id": None, "recorded_at": later}),
+        (
+            schema.chunk_restarts,
+            {
+                "chunk_id": "ch_ran",
+                "graph_id": graph_id,
+                "to_node_id": node_id,
+                "epoch": 2,
+                "restarted_by": "op",
+                "recorded_at": later,
+            },
+        ),
+        (schema.chunk_completed, {"chunk_id": "ch_ran", "completed_at": later, "completed_by": "op"}),
+        (schema.chunk_work_refs, {"chunk_id": "ch_ran", "source": "github", "ref": "1"}),
+        (
+            schema.close_intents,
+            {"chunk_id": "ch_ran", "source": "github", "ref": "1", "enqueued_at": later, "retired_at": later},
+        ),
+    ]
+    for table, values in rows:
+        conn.execute(hub_scoped(sa.insert(table)).values(stamp(table, tenant_id=tenant, **values)))
+    projects = schema.projects.c
+    project_id = conn.execute(
+        hub_scoped(sa.select(projects.project_id).where(projects.tenant_id == tenant))
+    ).scalar_one()
+    link = {"tenant_id": tenant, "project_id": project_id, "source_name": "github"}
+    conn.execute(hub_scoped(sa.insert(schema.project_source_links)).values(**link, revision=1))
+    conn.execute(
+        hub_scoped(sa.insert(schema.project_source_link_facts)).values(**link, linked=True, set_at=at, set_by="seed")
+    )
+    if open_refs:
+        conn.execute(
+            hub_scoped(sa.insert(schema.chunk_work_refs)),
+            [
+                {"tenant_id": tenant, "chunk_id": "ch_open", "source": "github", "ref": f"o{n}"}
+                for n in range(open_refs)
+            ],
+        )

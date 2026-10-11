@@ -12,11 +12,11 @@ from fastapi import APIRouter, Depends, Header, HTTPException, status
 from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
-from blizzard.hub.api.auth_session import require
-from blizzard.hub.api.deps import get_services
+from blizzard.hub.api.auth_session import require, tenant_bound
+from blizzard.hub.api.deps import Services
 from blizzard.hub.api.door import RequestDoor, change_context
 from blizzard.hub.auth.models import ResolvedIdentity
-from blizzard.hub.composition import HubServices
+from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.config.repositories import (
     ConfiguredRepository,
     RepositoryCoordinateTaken,
@@ -32,7 +32,9 @@ from blizzard.wire.repository import (
     RepositorySummary,
 )
 
-router = APIRouter(prefix="/api", tags=["repositories"], dependencies=[Depends(reject_runner_principal)])
+router = APIRouter(
+    prefix="/api", tags=["repositories"], dependencies=[Depends(reject_runner_principal), Depends(tenant_bound)]
+)
 
 
 def _summary(record: ConfiguredRepository) -> RepositorySummary:
@@ -62,7 +64,7 @@ def _conflict(exc: Exception) -> HTTPException:
     return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
 
 
-def _stored(name: str, services: HubServices) -> ConfiguredRepository:
+def _stored(name: str, services: TenantServices) -> ConfiguredRepository:
     record = services.repository_records.get(name)
     if record is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown repository {name!r}")
@@ -72,9 +74,7 @@ def _stored(name: str, services: HubServices) -> ConfiguredRepository:
 @router.get(
     "/repositories", response_model=RepositoriesListView, dependencies=[Depends(require(Permission.FLEET_VIEW))]
 )
-def list_repositories(
-    services: Annotated[HubServices, Depends(get_services)], include_retired: bool = False
-) -> RepositoriesListView:
+def list_repositories(services: Services, include_retired: bool = False) -> RepositoriesListView:
     """Every stored repository by name, retired ones hidden unless `include_retired`."""
     records = services.repository_records.list_all(include_retired=include_retired)
     return RepositoriesListView(repositories=[_summary(r) for r in records])
@@ -85,7 +85,7 @@ def create_repository(
     request: RepositoryDocument,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
     door: RequestDoor,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
 ) -> RepositorySummary:
     """Store a new repository at revision 1. 422 naming the field for a blank field, a
     non-http(s) `forge_api_url`, or a missing or retired secret; 409 for a taken name or a
@@ -109,7 +109,7 @@ def create_repository(
 @router.get(
     "/repositories/{name}", response_model=RepositorySummary, dependencies=[Depends(require(Permission.FLEET_VIEW))]
 )
-def get_repository(name: str, services: Annotated[HubServices, Depends(get_services)]) -> RepositorySummary:
+def get_repository(name: str, services: Services) -> RepositorySummary:
     """One repository, retired or not. 404 on an unknown name."""
     return _summary(_stored(name, services))
 
@@ -120,7 +120,7 @@ def patch_repository(
     request: RepositoryPatchRequest,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
     door: RequestDoor,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     if_match: Annotated[int | None, Header()] = None,
 ) -> RepositorySummary:
     """Apply only the fields present; an explicit `null` is refused naming the field. A patch
@@ -145,7 +145,7 @@ def retire_repository(
     name: str,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
     door: RequestDoor,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     if_match: Annotated[int | None, Header()] = None,
 ) -> RepositorySummary:
     """Retire a repository — a reversible brake that keeps its coordinate claim. Retiring a
@@ -163,7 +163,7 @@ def enable_repository(
     name: str,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
     door: RequestDoor,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     if_match: Annotated[int | None, Header()] = None,
 ) -> RepositorySummary:
     """Re-enable a retired repository; enabling an active one changes nothing. 404 unknown,

@@ -1,9 +1,10 @@
 """SQLAlchemy adapter for the routine repository seam (package-private).
 
 All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). Name uniqueness is enforced
-by :class:`~blizzard.hub.domain.garden.routines.RoutineAuthoring`; ``uq_routines_name`` backstops a
-concurrent create, its ``IntegrityError`` re-raised as ``RoutineNameTakenError``, never swallowed.
-Every write commits its change row — and a default scope's mint — in the same transaction."""
+by :class:`~blizzard.hub.domain.garden.routines.RoutineAuthoring`; ``uq_routines_project_name`` backstops
+a concurrent create, its ``IntegrityError`` re-raised as ``RoutineNameTakenError``, never swallowed.
+The default and linked scopes are stored by ``scope_id`` and read back as slugs, each resolved within
+the routine's project. Every write commits its change row — and a default scope's mint — in the same transaction."""
 
 from __future__ import annotations
 
@@ -12,7 +13,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import delete, insert, select, update
+from sqlalchemy import Select
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 
@@ -22,11 +23,11 @@ from blizzard.hub.domain.config.changes import ConfigChange
 from blizzard.hub.domain.config.work_sources import ConfigRevisionConflict
 from blizzard.hub.domain.garden.routines import IWriteRoutineRepository, Routine, RoutineNameTakenError
 from blizzard.hub.domain.garden.scopes import ScopeMint
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.config_change_store import append_change
 from blizzard.hub.store.internal.newest_fact import newest_retired_select
-from blizzard.hub.store.internal.scope_store import ensure_scope
-from blizzard.hub.store.schema import routine_lifecycle_facts, routine_scopes, routines
+from blizzard.hub.store.internal.scope_store import ensure_scope, scope_id_of
+from blizzard.hub.store.schema import routine_lifecycle_facts, routine_scopes, routines, scopes
+from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements, statements_of
 
 
 @adapter_model
@@ -48,39 +49,48 @@ MODEL = ModelColumn()
 HARNESSES = ModelColumn()
 
 
-def _columns(routine: Routine) -> dict[str, object]:
+def _columns(stmts: ScopedStatements, routine: Routine) -> dict[str, object]:
     return {
         "graph_name": routine.graph_name,
-        "default_scope_slug": routine.default_scope_slug,
+        "default_scope_id": scope_id_of(stmts, routine.default_scope_slug, routine.project_id),
         "default_model": MODEL.encode(routine.default_model),
         "default_effort": routine.default_effort,
         "default_harnesses": HARNESSES.encode(routine.default_harnesses),
     }
 
 
-def link_scope(conn: Connection, routine_id: str, scope_slug: str) -> None:
-    """Link ``scope_slug`` into ``routine_id``'s set inside the caller's transaction; a
-    no-op when already linked."""
+def link_scope(conn: Connection, routine: Routine, scope_slug: str) -> None:
+    """Link the scope ``scope_slug`` names in ``routine``'s project into its set inside the
+    caller's transaction; a no-op when already linked."""
+    stmts = statements_of(conn)
+    links = stmts.scope_join(routine_scopes, scopes, routine_scopes.c.scope_id == scopes.c.scope_id)
     linked = conn.execute(
-        select(routine_scopes.c.scope_slug).where(
-            routine_scopes.c.routine_id == routine_id, routine_scopes.c.scope_slug == scope_slug
+        stmts.select(links, routine_scopes.c.scope_id).where(
+            routine_scopes.c.routine_id == routine.routine_id,
+            scopes.c.project_id == routine.project_id,
+            scopes.c.slug == scope_slug,
         )
     ).first()
     if linked is None:
-        conn.execute(insert(routine_scopes).values(routine_id=routine_id, scope_slug=scope_slug))
+        conn.execute(
+            stmts.insert(routine_scopes).values(
+                routine_id=routine.routine_id, scope_id=scope_id_of(stmts, scope_slug, routine.project_id)
+            )
+        )
 
 
 def move_revision(conn: Connection, routine: Routine, from_revision: int, **values: object) -> None:
     """Compare-and-set the routine's revision from ``from_revision`` to ``routine.revision``,
     writing ``values`` beside it; :class:`ConfigRevisionConflict` when the stored revision has moved."""
     moved = conn.execute(
-        update(routines)
+        statements_of(conn)
+        .update(routines)
         .where(routines.c.routine_id == routine.routine_id, routines.c.revision == from_revision)
         .values(revision=routine.revision, **values)
     ).rowcount
     if moved != 1:
         current = conn.execute(
-            select(routines.c.revision).where(routines.c.routine_id == routine.routine_id)
+            statements_of(conn).select(routines, routines.c.revision).where(routines.c.routine_id == routine.routine_id)
         ).scalar_one()
         raise ConfigRevisionConflict("routine", routine.name, current=current)
 
@@ -88,22 +98,25 @@ def move_revision(conn: Connection, routine: Routine, from_revision: int, **valu
 def insert_routine(conn: Connection, routine: Routine, change: ConfigChange) -> None:
     """The create body, inside the caller's transaction: the row, its default-scope link, and the change."""
     conn.execute(
-        insert(routines).values(
+        statements_of(conn)
+        .insert(routines)
+        .values(
             routine_id=routine.routine_id,
+            project_id=routine.project_id,
             name=routine.name,
-            **_columns(routine),
+            **_columns(statements_of(conn), routine),
             created_at=routine.created_at,
             revision=routine.revision,
         )
     )
-    link_scope(conn, routine.routine_id, routine.default_scope_slug)
+    link_scope(conn, routine, routine.default_scope_slug)
     append_change(conn, change)
 
 
 def update_routine(conn: Connection, routine: Routine, from_revision: int, change: ConfigChange) -> None:
     """The edit body, inside the caller's transaction: the compare-and-set, the default-scope link, the change."""
-    move_revision(conn, routine, from_revision, **_columns(routine))
-    link_scope(conn, routine.routine_id, routine.default_scope_slug)
+    move_revision(conn, routine, from_revision, **_columns(statements_of(conn), routine))
+    link_scope(conn, routine, routine.default_scope_slug)
     append_change(conn, change)
 
 
@@ -120,30 +133,44 @@ def record_routine_lifecycle(
     """The lifecycle body, inside the caller's transaction: the compare-and-set, the fact, the change."""
     move_revision(conn, routine, from_revision)
     conn.execute(
-        insert(routine_lifecycle_facts).values(routine_id=routine.routine_id, retired=retired, set_at=at, set_by=by)
+        statements_of(conn)
+        .insert(routine_lifecycle_facts)
+        .values(routine_id=routine.routine_id, retired=retired, set_at=at, set_by=by)
     )
     append_change(conn, change)
 
 
 def set_linked_scopes(
-    conn: Connection, routine: Routine, scopes: Sequence[str], *, from_revision: int, change: ConfigChange
+    conn: Connection, routine: Routine, linked: Sequence[str], *, from_revision: int, change: ConfigChange
 ) -> None:
-    """Move ``routine``'s linked set to exactly ``scopes`` with the compare-and-set and the change."""
+    """Move ``routine``'s linked set to exactly the scopes named ``linked`` with the
+    compare-and-set and the change."""
     move_revision(conn, routine, from_revision)
+    stmts = statements_of(conn)
+    kept = stmts.select(scopes, scopes.c.scope_id).where(
+        scopes.c.project_id == routine.project_id, scopes.c.slug.in_(list(linked))
+    )
     conn.execute(
-        delete(routine_scopes).where(
-            routine_scopes.c.routine_id == routine.routine_id, routine_scopes.c.scope_slug.not_in(list(scopes))
+        stmts.delete(routine_scopes).where(
+            routine_scopes.c.routine_id == routine.routine_id, routine_scopes.c.scope_id.not_in(kept)
         )
     )
-    for slug in scopes:
-        link_scope(conn, routine.routine_id, slug)
+    for slug in linked:
+        link_scope(conn, routine, slug)
     append_change(conn, change)
+
+
+def _routine_select(stmts: ScopedStatements) -> Select:  # type: ignore[type-arg]
+    """Every ``routines`` column beside its default scope's slug, labelled
+    ``default_scope_slug`` — the one read :meth:`RoutineStore._of` maps."""
+    with_scope = stmts.scope_join(routines, scopes, routines.c.default_scope_id == scopes.c.scope_id)
+    return stmts.select(with_scope, *routines.c, scopes.c.slug.label("default_scope_slug"))
 
 
 class RoutineStore:
     """Read-write routine adapter over the hub store engine."""
 
-    def __init__(self, store: HubStoreConnections) -> None:
+    def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
     def create(self, routine: Routine, *, change: ConfigChange, scope_mint: ScopeMint | None) -> Routine:
@@ -155,7 +182,7 @@ class RoutineStore:
         except IntegrityError as exc:
             # The post-write re-check: a concurrent create that took the name first
             # loses here, and reads as the same refusal the domain's pre-check raises.
-            if self.get_by_name(routine.name) is not None:
+            if self.get_by_name(routine.project_id, routine.name) is not None:
                 raise RoutineNameTakenError(routine.name) from exc
             raise
         return routine
@@ -183,30 +210,35 @@ class RoutineStore:
     def get(self, routine_id: str) -> Routine | None:
         return self._one(routines.c.routine_id == routine_id, "get")
 
-    def get_by_name(self, name: str) -> Routine | None:
-        return self._one(routines.c.name == name, "get_by_name")
+    def get_by_name(self, project_id: str, name: str) -> Routine | None:
+        return self._one((routines.c.project_id == project_id) & (routines.c.name == name), "get_by_name")
 
-    def get_many_by_name(self, names: Sequence[str]) -> dict[str, Routine]:
+    def get_many_by_name(self, project_id: str, names: Sequence[str]) -> dict[str, Routine]:
         found: dict[str, Routine] = {}
         if not names:
             return found
         with self._store.read("get_many_by_name") as conn:
             for batch in id_batches(names):
-                rows = conn.execute(select(routines).where(routines.c.name.in_(batch))).all()
+                rows = conn.execute(
+                    _routine_select(self._store).where(routines.c.project_id == project_id, routines.c.name.in_(batch))
+                ).all()
                 retired = _retired_ids(conn, [row.routine_id for row in rows])
                 found.update({row.name: self._of(row, retired=row.routine_id in retired) for row in rows})
         return found
 
     def _one(self, where, operation: str) -> Routine | None:  # type: ignore[no-untyped-def]
         with self._store.read(operation) as conn:
-            row = conn.execute(select(routines).where(where)).one_or_none()
+            row = conn.execute(_routine_select(self._store).where(where)).one_or_none()
             if row is None:
                 return None
             return self._of(row, retired=_is_retired(conn, row.routine_id))
 
-    def list_all(self) -> list[Routine]:
+    def list_all(self, project_id: str | None = None) -> list[Routine]:
+        stmt = _routine_select(self._store)
+        if project_id is not None:
+            stmt = stmt.where(routines.c.project_id == project_id)
         with self._store.read("list_all") as conn:
-            rows = conn.execute(select(routines).order_by(routines.c.created_at.desc())).all()
+            rows = conn.execute(stmt.order_by(routines.c.created_at.desc())).all()
             retired = _retired_ids(conn)
         return [self._of(row, retired=row.routine_id in retired) for row in rows]
 
@@ -228,6 +260,7 @@ class RoutineStore:
             graph_name=row.graph_name,
             default_scope_slug=row.default_scope_slug,
             created_at=row.created_at,
+            project_id=row.project_id,
             default_model=MODEL.decode(row.default_model),
             default_effort=row.default_effort,
             default_harnesses=HARNESSES.decode(row.default_harnesses),
@@ -240,7 +273,8 @@ def _is_retired(conn: Connection, routine_id: str) -> bool:
     """Newest ``routine_lifecycle_facts`` row for ``routine_id`` wins; no row reads
     not-retired (a freshly minted routine starts enabled)."""
     row = conn.execute(
-        select(routine_lifecycle_facts.c.retired)
+        statements_of(conn)
+        .select(routine_lifecycle_facts, routine_lifecycle_facts.c.retired)
         .where(routine_lifecycle_facts.c.routine_id == routine_id)
         .order_by(routine_lifecycle_facts.c.id.desc())
         .limit(1)
@@ -253,7 +287,9 @@ def _retired_ids(conn: Connection, routine_ids: Sequence[str] | None = None) -> 
     for batch in id_batches(routine_ids) if routine_ids is not None else [None]:
         found.update(
             conn.execute(
-                newest_retired_select(routine_lifecycle_facts, routine_lifecycle_facts.c.routine_id, batch)
+                newest_retired_select(
+                    statements_of(conn), routine_lifecycle_facts, routine_lifecycle_facts.c.routine_id, batch
+                )
             ).scalars()
         )
     return found

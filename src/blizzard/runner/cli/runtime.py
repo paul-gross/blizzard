@@ -16,14 +16,17 @@ import click
 import httpx
 
 from blizzard.cli.host_directory import HostDirectory
+from blizzard.cli.operator_trace import ITraceHeaders, OperatorTrace
 from blizzard.cli.runtime import build_early_shutdown_server, click_exception_on, run_init, run_migrate
+from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.operator_sessions.internal.session_file import SessionFile
-from blizzard.foundation.roles import collaborator
+from blizzard.foundation.roles import collaborator, dto
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import RevisionMismatchError
 from blizzard.runner.app import HostedApp, build_hosted_app
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
+from blizzard.runner.cli.store import refuse_while_held
 from blizzard.runner.composition import (
     RunnerProcess,
     build_read_stores,
@@ -39,6 +42,7 @@ from blizzard.runner.hub.bootstrap import (
     BootstrapStop,
     BootstrapStopped,
     HeldToken,
+    IRunnerStoreAside,
     RunnerBootstrap,
     TokenNotWritten,
 )
@@ -46,15 +50,25 @@ from blizzard.runner.hub.client import (
     HubClientError,
     IHubRunnerAdmin,
     ITokenIdentityReader,
+    OperatorTenant,
     RunnerAddRefusalReason,
     RunnerAddRefused,
+    TokenIdentity,
 )
 from blizzard.runner.hub.identity import RunnerIdentityHolder
 from blizzard.runner.hub.internal.http_hub import HttpHubClient, HttpHubRunnerAdmin
 from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.runner.listeners import ListenerError, Listeners, Uds
 from blizzard.runner.loop_wiring import LoopWiring, PeriodicDriver
-from blizzard.runner.runtime import ensure_current_revision, init_environment, migrate, migration_runner
+from blizzard.runner.runtime import (
+    Runtime,
+    StoreResetRefused,
+    ensure_current_revision,
+    init_environment,
+    migrate,
+    migration_runner,
+    reset_command,
+)
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.stores import RunnerReadStores
 from blizzard.runner.tracing.sweep import announce_rejected_tracing
@@ -102,17 +116,43 @@ class InitCollaborators:
     is_flag=True,
     help="Add the runner again when its hub does not know its token — only after that hub's data was reset.",
 )
+@click.option(
+    "--tenant",
+    "tenant_id",
+    default=None,
+    metavar="TENANT_ID",
+    help="Add the runner in this tenant, by id; needed only when you may enter several.",
+)
+@click.option(
+    "--project",
+    "projects",
+    multiple=True,
+    metavar="PROJECT",
+    help="A project the runner serves, by id or slug; repeat for several. Default: `default` in a fresh config.",
+)
 @click.pass_context
-def init(ctx: click.Context, directory: str, hub_url: str | None, allow_readd: bool) -> None:
+def init(
+    ctx: click.Context,
+    directory: str,
+    hub_url: str | None,
+    allow_readd: bool,
+    tenant_id: str | None,
+    projects: tuple[str, ...],
+) -> None:
     """Scaffold config + data dir + a migrated store under DIRECTORY, then join the runner to its
     hub. Idempotent.
 
     A runner holding no token is added at the hub — under your `blizzard hub login` session when you
-    hold one — and its token written to DIRECTORY/.env. DIRECTORY defaults to $BZ_RUNNER_DIR, then the cwd."""
+    hold one, in the tenant --tenant names or else the only one you may enter — and its token
+    written to DIRECTORY/.env. A held token whose runner serves another tenant than --tenant names stops: a
+    runner never moves between tenants. A fresh config serves the projects --project names, else
+    `default`; the runner is added serving them, or, with none named, the tenant's only project.
+    DIRECTORY defaults to $BZ_RUNNER_DIR, then the cwd."""
+    named = projects or None
     run_init(
         Path(directory),
         "runner",
-        init_environment=functools.partial(init_environment, hub_url=hub_url),
+        init_environment=functools.partial(init_environment, hub_url=hub_url, projects=named),
         migration_runner=migration_runner,
         config_error=ConfigError,
     )
@@ -120,11 +160,82 @@ def init(ctx: click.Context, directory: str, hub_url: str | None, allow_readd: b
         config = RunnerConfig.load(Path(directory))
     collaborators = ctx.find_object(InitCollaborators) or InitCollaborators(_http_hub_clients)
     with collaborators.join_with(config) as (identity, admin):
-        _join_hub(config, identity, admin, allow_readd=allow_readd)
+        _join_hub(
+            config,
+            identity,
+            admin,
+            _RuntimeStore(config, OperatorTrace.source(ctx)),
+            _Rerun(config.root, tenant_id=tenant_id, allow_readd=allow_readd, projects=named),
+        )
+
+
+@dto
+@dataclass(frozen=True)
+class _Rerun:
+    """How this init was asked to join — the tenant and projects it names and whether a re-add is
+    allowed — and the init command it suggests re-running, which carries the same tenant and projects."""
+
+    root: Path
+    tenant_id: str | None
+    allow_readd: bool
+    projects: tuple[str, ...] | None = None
+
+    def again(self) -> str:
+        """This init's own command, its tenant, projects and flags kept."""
+        return _init_command(self.root, tenant_id=self.tenant_id, allow_readd=self.allow_readd, projects=self.projects)
+
+    def readding(self) -> str:
+        """This init's command with a re-add allowed, its tenant and projects kept."""
+        return _init_command(self.root, tenant_id=self.tenant_id, allow_readd=True, projects=self.projects)
+
+    def naming_a_tenant(self) -> str:
+        """This init's command with a placeholder for the tenant id the operator picks."""
+        return _init_command(self.root, tenant_id="<tenant_id>", allow_readd=self.allow_readd, projects=self.projects)
+
+    def keeping_the_runner(self) -> str:
+        """This init's command naming no tenant and allowing no re-add — the one that keeps the held runner."""
+        return _init_command(self.root, tenant_id=None, allow_readd=False, projects=self.projects)
+
+
+def _init_command(
+    root: Path, *, tenant_id: str | None, allow_readd: bool, projects: tuple[str, ...] | None = None
+) -> str:
+    """``blizzard runner init`` for ``root``, naming ``tenant_id`` when given, each of ``projects``,
+    and passing ``--allow-readd`` when ``allow_readd``."""
+    return " ".join(
+        [f"blizzard runner init {root}"]
+        + ([f"--tenant {tenant_id}"] if tenant_id else [])
+        + [f"--project {project}" for project in projects or ()]
+        + (["--allow-readd"] if allow_readd else [])
+    )
+
+
+class _RuntimeStore:
+    """The runtime's own store, as ``init`` sees it while the daemon is down."""
+
+    def __init__(self, config: RunnerConfig, trace: ITraceHeaders) -> None:
+        self.config = config
+        self.trace = trace
+
+    def stored_runner_id(self) -> str | None:
+        with read_stores(self.config) as stores:
+            stored = stores.identity.runner_identity()
+        return stored.runner_id if stored is not None else None
+
+    def set_aside(self) -> None:
+        refuse_while_held(self.config.root, self.trace, action="set the old runner's store aside")
+        with click_exception_on(ConfigError, StoreResetRefused):
+            aside = Runtime(self.config.root).reset_store(now=SystemClock().now())
+        for path in aside.moved:
+            click.echo(f"set the old runner's store aside as {path}")
 
 
 def _join_hub(
-    config: RunnerConfig, identity: ITokenIdentityReader, admin: IHubRunnerAdmin, *, allow_readd: bool
+    config: RunnerConfig,
+    identity: ITokenIdentityReader,
+    admin: IHubRunnerAdmin,
+    store: IRunnerStoreAside,
+    rerun: _Rerun,
 ) -> None:
     """Keep the runner the held token names, or add one and write its token; any stop exits
     non-zero with nothing added."""
@@ -136,25 +247,45 @@ def _join_hub(
     )
     hub = config.hub_url
     try:
-        joined = RunnerBootstrap(identity, admin, token_file).join(config.name, held=held, allow_readd=allow_readd)
+        joined = RunnerBootstrap(identity, admin, token_file, store).join(
+            config.name, held=held, allow_readd=rerun.allow_readd, tenant_id=rerun.tenant_id, projects=rerun.projects
+        )
     except BootstrapStopped as exc:
         from_env = held is not None and held.from_process_env
-        raise click.ClickException(_stopped(exc, config, token_file, from_env=from_env)) from exc
+        raise click.ClickException(_stopped(exc, config, token_file, rerun, from_env=from_env)) from exc
     except TokenNotWritten as exc:
         raise click.ClickException(
-            f"{exc}; retire it with `blizzard hub runner retire {exc.runner_id} --hub-url {hub}`, then re-run init"
+            f"{exc}; retire it with `blizzard hub runner retire {exc.runner_id} --hub-url {hub}`, then re-run "
+            f"`{rerun.again()}`"
         ) from exc
     except RunnerAddRefused as exc:
-        raise click.ClickException(_add_refused(exc, hub)) from exc
+        raise click.ClickException(_add_refused(exc, hub, rerun)) from exc
     except HubClientError as exc:
         raise click.ClickException(f"cannot join the hub at {hub}, so nothing was added: {exc}") from exc
+    tenant = _in_tenant(joined.tenant_id, joined.tenant_name)
     if joined.added:
         click.echo(
-            f"added runner {joined.runner_name} ({joined.runner_id}) at {hub}; its token is in {token_file.path}"
+            f"added runner {joined.runner_name} ({joined.runner_id}) at {hub}{tenant}; its token is in "
+            f"{token_file.path}"
         )
         return
-    click.echo(f"runner {joined.runner_name} ({joined.runner_id}) keeps its token for {hub}")
+    click.echo(f"runner {joined.runner_name} ({joined.runner_id}){tenant} keeps its token for {hub}")
     _restrict(token_file)
+
+
+def _in_tenant(tenant_id: str | None, tenant_name: str | None) -> str:
+    """`` in tenant <name> (<id>)`` for a known tenant, the id alone when its name is unknown, and
+    nothing when the tenant itself is unknown."""
+    if tenant_id is None:
+        return ""
+    return f" in tenant {tenant_name} ({tenant_id})" if tenant_name else f" in tenant {tenant_id}"
+
+
+def _tenant_listing(tenants: tuple[OperatorTenant, ...]) -> str:
+    """The tenants an operator may enter, one per line, ids beside names."""
+    if not tenants:
+        return "\nthe hub listed no tenant you may enter there"
+    return "\nthe tenants you may enter:" + "".join(f"\n  {t.tenant_id}  {t.name}" for t in tenants)
 
 
 def _restrict(token_file: HubTokenFile) -> None:
@@ -171,7 +302,9 @@ def _restrict(token_file: HubTokenFile) -> None:
         click.echo(f"made {token_file.path} owner-only (0600): it holds this runner's hub token")
 
 
-def _stopped(exc: BootstrapStopped, config: RunnerConfig, token_file: HubTokenFile, *, from_env: bool) -> str:
+def _stopped(
+    exc: BootstrapStopped, config: RunnerConfig, token_file: HubTokenFile, rerun: _Rerun, *, from_env: bool
+) -> str:
     hub, runner_id = config.hub_url, exc.runner_id or "<id>"
     place = (
         f"set {config.token_env} to it, or unset {config.token_env} and put it in {token_file.path} (init "
@@ -183,8 +316,8 @@ def _stopped(exc: BootstrapStopped, config: RunnerConfig, token_file: HubTokenFi
         case BootstrapStop.UNKNOWN_TOKEN:
             return (
                 f"the hub at {hub} does not know this runner's token, so nothing was added and {token_file.path} "
-                f"is unchanged. If that hub's data was deliberately reset, re-run init with --allow-readd to add "
-                f"the runner again; otherwise check that {hub} is this runner's hub"
+                f"is unchanged. If that hub's data was deliberately reset, re-run `{rerun.readding()}` "
+                f"to add the runner again; otherwise check that {hub} is this runner's hub"
             )
         case BootstrapStop.REVOKED_TOKEN:
             return (
@@ -199,25 +332,69 @@ def _stopped(exc: BootstrapStopped, config: RunnerConfig, token_file: HubTokenFi
             )
         case BootstrapStop.TOKEN_NOT_RECEIVED:
             return f"the hub at {hub} received no token from this runner, so nothing was added"
+        case BootstrapStop.STORE_NAMES_A_RUNNER:
+            return (
+                f"this runner holds no token, but its store belongs to runner {runner_id}, so nothing was added: "
+                f"put that runner's token in {token_file.path} as {config.token_env}, or — if it is gone for good — "
+                f"re-run `{rerun.readding()}` to set its store aside and add a new runner, or clear "
+                f"the store with `{reset_command(config.root)}`"
+            )
         case BootstrapStop.TOKEN_OVERRIDDEN:
             return (
                 f"the hub at {hub} does not know the token ${config.token_env} carries, and a replacement in "
                 f"{token_file.path} would go unread while it is set, so nothing was added: unset "
-                f"{config.token_env} and re-run init"
+                f"{config.token_env} and re-run `{rerun.again()}`"
+            )
+        case BootstrapStop.ANOTHER_TENANT:
+            return _another_tenant(exc.held, config, token_file, rerun, from_env=from_env)
+        case BootstrapStop.TENANT_REQUIRED:
+            return (
+                f"you may enter several tenants at {hub}, so nothing was added: name the one to add this runner "
+                f"in by its id with `{rerun.naming_a_tenant()}`{_tenant_listing(exc.tenants)}"
+            )
+        case BootstrapStop.NO_SUCH_TENANT:
+            return (
+                f"the hub at {hub} has no tenant {rerun.tenant_id} you may enter, so nothing was added: name one "
+                f"you may enter by its id with `{rerun.naming_a_tenant()}` — a tenant is named by "
+                f"its id, never its name{_tenant_listing(exc.tenants)}"
             )
 
 
-def _add_refused(exc: RunnerAddRefused, hub: str) -> str:
+def _another_tenant(
+    held: TokenIdentity | None, config: RunnerConfig, token_file: HubTokenFile, rerun: _Rerun, *, from_env: bool
+) -> str:
+    """The stop for a held token whose runner serves another tenant than ``--tenant`` names: both
+    tenants, and the two ways on — keep that runner, or set up a new one in a fresh directory."""
+    assert held is not None, "the another-tenant stop carries the held token's runner"
+    source = f"the token ${config.token_env} carries" if from_env else f"the token in {token_file.path}"
+    serves = _in_tenant(held.tenant_id, held.tenant_name).removeprefix(" in ")
+    return (
+        f"{source} belongs to runner {held.runner_id}, which serves {serves}, but --tenant names tenant "
+        f"{rerun.tenant_id}, so nothing was added: a runner never moves between tenants. Re-run "
+        f"`{rerun.keeping_the_runner()}` to keep this runner, or set up a new runner in "
+        f"tenant {rerun.tenant_id} from a fresh directory with "
+        f"`blizzard runner init <new-directory> --tenant {rerun.tenant_id}`"
+    )
+
+
+def _add_refused(exc: RunnerAddRefused, hub: str, rerun: _Rerun) -> str:
     match exc.reason:
         case RunnerAddRefusalReason.SIGN_IN_REQUIRED:
             return (
                 f"the hub at {hub} requires sign-in to add a runner: run `blizzard hub login --hub-url {hub}` "
-                "as an operator holding runner:add, then re-run init"
+                f"as an operator holding runner:add, then re-run `{rerun.again()}`"
             )
         case RunnerAddRefusalReason.FORBIDDEN:
             return f"your session at {hub} may not add runners — that takes runner:add: {exc.detail}"
         case RunnerAddRefusalReason.UNSUPPORTED:
-            return f"the hub at {hub} predates `hub runner add`; upgrade it, then re-run init"
+            return f"the hub at {hub} predates `hub runner add`; upgrade it, then re-run `{rerun.again()}`"
+        case RunnerAddRefusalReason.TENANT_REQUIRED | RunnerAddRefusalReason.NO_SUCH_TENANT:
+            return f"the hub at {hub} could not settle the tenant to add this runner in: {exc.detail}"
+        case RunnerAddRefusalReason.NO_SUCH_PROJECT:
+            return (
+                f"the hub at {hub} holds no project answering to every --project named, so nothing was added: "
+                f"{exc.detail}"
+            )
 
 
 @click.command("migrate")

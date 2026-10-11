@@ -15,7 +15,8 @@ from blizzard.cli.window import since_option, until_option, utc_query_value
 from blizzard.foundation.roles import dto
 from blizzard.foundation.run_mode import RunMode
 from blizzard.hub.cli.command import FleetCommand
-from blizzard.hub.cli.context import CliContext
+from blizzard.hub.cli.context import CliContext, project_required
+from blizzard.hub.cli.project_option import project_option, project_path, project_query
 from blizzard.hub.cli.views import Listing, ProposalOrigin
 
 _ROUTINE_MODEL_HELP = (
@@ -69,6 +70,7 @@ def routine_group() -> None:
 @click.option("--model", "default_model", multiple=True, help=_ROUTINE_MODEL_HELP)
 @click.option("--effort", "default_effort", default=None, help="The routine's default effort.")
 @click.option("--harnesses", "default_harnesses", multiple=True, help=_ROUTINE_HARNESSES_HELP)
+@project_option(required_by_hub=True)
 def routine_create(
     cli: CliContext,
     name: str,
@@ -77,6 +79,7 @@ def routine_create(
     default_model: tuple[str, ...],
     default_effort: str | None,
     default_harnesses: tuple[str, ...],
+    project: str | None,
 ) -> None:
     """Mint a routine named NAME, running GRAPH_NAME with DEFAULT_SCOPE_SLUG's scope.
 
@@ -84,7 +87,7 @@ def routine_create(
     an enabled graph."""
     resp = cli.send(
         "post",
-        "/api/routines",
+        project_path(project, "/routines"),
         json_body={
             "name": name,
             "graph_name": graph_name,
@@ -104,12 +107,13 @@ def routine_create(
 
 @routine_group.command("list", cls=FleetCommand)
 @click.option("--include-retired", is_flag=True, default=False, help="Include retired routines.")
-def routine_list(cli: CliContext, include_retired: bool) -> None:
+@project_option(required_by_hub=False)
+def routine_list(cli: CliContext, include_retired: bool, project: str | None) -> None:
     """List every routine, newest first — routine_id, name, graph, default scope.
 
     Excludes a retired routine unless --include-retired."""
-    params = {"include_retired": "true"} if include_retired else None
-    rows = cli.get("/api/routines", "GET /routines", params=params).json()
+    params = {"include_retired": "true"} if include_retired else {}
+    rows = cli.get("/api/routines", "GET /routines", params=(params | project_query(project)) or None).json()
     cli.show(rows, RoutineListing(rows))
 
 
@@ -232,11 +236,17 @@ def routine_scope_remove(cli: CliContext, routine_id: str, scope_slug: str) -> N
     )
 
 
-def _resolve_routine_id(cli: CliContext, name: str) -> str:
-    """Resolve NAME to its routine_id, including a retired routine — so a
+def _resolve_routine_id(cli: CliContext, name: str, project: str | None) -> str:
+    """Resolve NAME to its routine_id within ``project``, including a retired routine — so a
     retired routine resolves and reaches the domain's own retired refusal, not an
-    ``unknown routine`` one."""
-    rows = cli.get("/api/routines", "GET /routines", params={"include_retired": "true"}).json()
+    ``unknown routine`` one. With no project named, NAME resolves only in a tenant holding
+    one project: a name is unique within its project alone."""
+    if project is None:
+        projects = cli.get("/api/projects", "GET /projects").json()["projects"]
+        if len(projects) > 1:
+            raise project_required([{k: str(p[k]) for k in ("project_id", "slug", "name")} for p in projects])
+    params = {"include_retired": "true"} | project_query(project)
+    rows = cli.get("/api/routines", "GET /routines", params=params).json()
     matched = next((r for r in rows if r["name"] == name), None)
     if matched is None:
         raise click.ClickException(f"unknown routine {name!r}")
@@ -246,21 +256,23 @@ def _resolve_routine_id(cli: CliContext, name: str) -> str:
 @routine_group.command("retire", cls=FleetCommand)
 @click.argument("name")
 @click.option("--by", "by", default="operator", help="Who is retiring (recorded on the fact).")
-def routine_retire(cli: CliContext, name: str, by: str) -> None:
+@project_option(required_by_hub=True)
+def routine_retire(cli: CliContext, name: str, by: str, project: str | None) -> None:
     """Retire routine NAME — a reversible brake; in-flight runs are untouched."""
-    _set_routine_lifecycle(cli, name, verb="retire", by=by)
+    _set_routine_lifecycle(cli, name, verb="retire", by=by, project=project)
 
 
 @routine_group.command("enable", cls=FleetCommand)
 @click.argument("name")
 @click.option("--by", "by", default="operator", help="Who is re-enabling (recorded on the fact).")
-def routine_enable(cli: CliContext, name: str, by: str) -> None:
+@project_option(required_by_hub=True)
+def routine_enable(cli: CliContext, name: str, by: str, project: str | None) -> None:
     """Re-enable a retired routine NAME."""
-    _set_routine_lifecycle(cli, name, verb="enable", by=by)
+    _set_routine_lifecycle(cli, name, verb="enable", by=by, project=project)
 
 
-def _set_routine_lifecycle(cli: CliContext, name: str, *, verb: str, by: str) -> None:
-    routine_id = _resolve_routine_id(cli, name)
+def _set_routine_lifecycle(cli: CliContext, name: str, *, verb: str, by: str, project: str | None) -> None:
+    routine_id = _resolve_routine_id(cli, name, project)
     resp = cli.post(
         f"/api/routines/{routine_id}/{verb}",
         f"POST /routines/{{id}}/{verb}",
@@ -288,13 +300,16 @@ def _set_routine_lifecycle(cli: CliContext, name: str, *, verb: str, by: str) ->
     help="delta downgrades to full when the routine/scope pair has recorded no baseline.",
 )
 @click.option("--note", default=None, help='A note appended to the run\'s charge as a "This run" section.')
-def routine_run(cli: CliContext, name: str, scope_slug: str | None, mode: str, note: str | None) -> None:
+@project_option(required_by_hub=True)
+def routine_run(
+    cli: CliContext, name: str, scope_slug: str | None, mode: str, note: str | None, project: str | None
+) -> None:
     """Mint and ingest a hub work item from routine NAME, in one act.
 
     The chunk rests not_ready until `blizzard hub chunk promote`. NAME resolves through
     the routine list, including a retired routine — so it reaches the domain's own
     retired refusal."""
-    routine_id = _resolve_routine_id(cli, name)
+    routine_id = _resolve_routine_id(cli, name, project)
     resp = cli.send(
         "post",
         f"/api/routines/{routine_id}/run",
@@ -353,8 +368,15 @@ class TrendDetail:
     help="The recent/older cut, in local time — a created finding's own introduced instant, not this window's.",
 )
 @click.option("--period-days", "period_days", default=7, type=int, help="Each period's width, in days (default 7).")
+@project_option(required_by_hub=True)
 def routine_trend(
-    cli: CliContext, name: str, since: datetime, until: datetime, introduced_boundary: datetime, period_days: int
+    cli: CliContext,
+    name: str,
+    since: datetime,
+    until: datetime,
+    introduced_boundary: datetime,
+    period_days: int,
+    project: str | None,
 ) -> None:
     """NAME's finding inflow-against-outflow over --since/--until: per-period created and
     per-kind exit counts, the outflow/withdrawn roll-ups, and the introduced-age cut
@@ -368,7 +390,8 @@ def routine_trend(
             "until": utc_query_value(until),
             "introduced_boundary": utc_query_value(introduced_boundary),
             "period_days": str(period_days),
-        },
+        }
+        | project_query(project),
     )
     if resp.status_code == httpx.codes.UNPROCESSABLE_ENTITY:
         raise click.ClickException(f"trend rejected: {cli.detail(resp, 'validation failed')}")
@@ -408,11 +431,12 @@ class SweepsDetail:
 @click.argument("name")
 @since_option(required=True)
 @until_option(required=True)
-def routine_sweeps(cli: CliContext, name: str, since: datetime, until: datetime) -> None:
+@project_option(required_by_hub=True)
+def routine_sweeps(cli: CliContext, name: str, since: datetime, until: datetime, project: str | None) -> None:
     """NAME's per-scope last-swept table — its declared scope set, retired scopes
     filtered out unless already swept while linked — and its measurement series over
     --since/--until."""
-    routine_id = _resolve_routine_id(cli, name)
+    routine_id = _resolve_routine_id(cli, name, project)
     resp = cli.send(
         "get",
         f"/api/routines/{routine_id}/sweeps",
@@ -455,13 +479,14 @@ class ProposalCountsDetail:
 @since_option(required=True)
 @until_option(required=True)
 @click.option("--origin", type=click.Choice(["routine-run", "operator"]), default=None, help="Narrow to one origin.")
+@project_option(required_by_hub=False)
 def routine_proposal_counts(
-    cli: CliContext, name: str | None, since: datetime, until: datetime, origin: str | None
+    cli: CliContext, name: str | None, since: datetime, until: datetime, origin: str | None, project: str | None
 ) -> None:
     """NAME's garden-proposal counts over --since/--until, split into open/passed/
     accepted-with-item/accepted-without-item per class, with created as their sum; omit
     NAME to see every routine's rows at once."""
-    params = {"since": utc_query_value(since), "until": utc_query_value(until)}
+    params = {"since": utc_query_value(since), "until": utc_query_value(until)} | project_query(project)
     if name is not None:
         params["routine"] = name
     if origin is not None:

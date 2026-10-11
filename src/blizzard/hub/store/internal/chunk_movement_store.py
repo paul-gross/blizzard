@@ -14,7 +14,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import Connection, select, update
+from sqlalchemy import Connection
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id, IdPrefix
@@ -24,7 +24,6 @@ from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, EpochOwner, FenceRefusal
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import (
     DEFAULT_MODEL,
     conn_of,
@@ -38,19 +37,20 @@ from blizzard.hub.store.internal.chunk_rows import (
     next_route_seq,
     record_epoch_owner,
 )
+from blizzard.hub.store.scoped import ScopedConnections, statements_of
 
 
 class ChunkMovementStore:
     """The chunk's graph movement — transitions, migrations, restarts, requeues."""
 
-    def __init__(self, store: HubStoreConnections, clock: IClock) -> None:
+    def __init__(self, store: ScopedConnections, clock: IClock) -> None:
         self._store = store
         self._clock = clock
 
     def accepted_transition_target(self, chunk_id: str, *, from_node_id: str, epoch: int) -> str | None:
         with self._store.read("accepted_transition_target") as conn:
             row = conn.execute(
-                select(s.transitions.c.to_node_id).where(
+                self._store.select(s.transitions, s.transitions.c.to_node_id).where(
                     (s.transitions.c.chunk_id == chunk_id)
                     & (s.transitions.c.from_node_id == from_node_id)
                     & (s.transitions.c.epoch == epoch)
@@ -157,7 +157,7 @@ class ChunkMovementStore:
         if refusal is not None:
             return refusal
         conn.execute(
-            s.transitions.insert().values(
+            self._store.insert(s.transitions).values(
                 transition_id=transition_id,
                 chunk_id=chunk_id,
                 graph_id=graph_id_of(conn, chunk_id),
@@ -172,7 +172,7 @@ class ChunkMovementStore:
         )
         for row in artifacts:
             conn.execute(
-                s.artifacts.insert().values(
+                self._store.insert(s.artifacts).values(
                     artifact_id=row.artifact_id,
                     chunk_id=row.chunk_id,
                     node_id=row.node_id,
@@ -316,7 +316,7 @@ class ChunkMovementStore:
             migration_id if migration_id is not None else Id.mint(IdPrefix.MIGRATION, self._clock).value
         )
         conn.execute(
-            s.chunk_migrations.insert().values(
+            self._store.insert(s.chunk_migrations).values(
                 migration_id=resolved_migration_id,
                 chunk_id=chunk_id,
                 from_node_id=from_node_id,
@@ -338,14 +338,16 @@ class ChunkMovementStore:
             values["default_model"] = DEFAULT_MODEL.encode([model])
         if clear_intent:
             values["intended_migration"] = None
-        conn.execute(update(s.chunks).where(s.chunks.c.chunk_id == chunk_id).values(**values))
+        conn.execute(self._store.update(s.chunks).where(s.chunks.c.chunk_id == chunk_id).values(**values))
         if release_route:
             conn.execute(
-                s.route_released.insert().values(chunk_id=chunk_id, released_at=at, seq=next_route_seq(conn, chunk_id))
+                self._store.insert(s.route_released).values(
+                    chunk_id=chunk_id, released_at=at, seq=next_route_seq(conn, chunk_id)
+                )
             )
         for row in artifacts:
             conn.execute(
-                s.artifacts.insert().values(
+                self._store.insert(s.artifacts).values(
                     artifact_id=row.artifact_id,
                     chunk_id=row.chunk_id,
                     node_id=row.node_id,
@@ -410,11 +412,13 @@ class ChunkMovementStore:
         epoch = latest_epoch(conn, chunk_id) + 1
         for question_id in answered_question_ids:
             already = conn.execute(
-                select(s.question_answers.c.question_id).where(s.question_answers.c.question_id == question_id)
+                self._store.select(s.question_answers, s.question_answers.c.question_id).where(
+                    s.question_answers.c.question_id == question_id
+                )
             ).first()
             if already is None:
                 conn.execute(
-                    s.question_answers.insert().values(
+                    self._store.insert(s.question_answers).values(
                         question_id=question_id, answer=answer, answered_by=by, answered_at=at
                     )
                 )
@@ -431,7 +435,7 @@ class ChunkMovementStore:
                 at=at,
             )
         result = conn.execute(
-            s.chunk_restarts.insert().values(
+            self._store.insert(s.chunk_restarts).values(
                 chunk_id=chunk_id,
                 graph_id=to_graph_id if to_graph_id is not None else from_graph_id,
                 from_node_id=from_node_id,
@@ -449,7 +453,7 @@ class ChunkMovementStore:
 
     def record_requeue_locked(self, handle: ILockedChunkRead, chunk_id: str, *, at: datetime) -> int:
         conn = conn_of(handle)
-        result = conn.execute(s.requeues.insert().values(chunk_id=chunk_id, requeued_at=at))
+        result = conn.execute(self._store.insert(s.requeues).values(chunk_id=chunk_id, requeued_at=at))
         key = result.inserted_primary_key
         return int(key[0]) if key is not None else 0
 
@@ -471,7 +475,7 @@ class ChunkMovementStore:
         settles which of the two the chunk stands on. No route release — the holding runner keeps
         it and re-enters — and no ``decision_id``, which is the restart fact's alone."""
         conn.execute(
-            s.chunk_migrations.insert().values(
+            self._store.insert(s.chunk_migrations).values(
                 migration_id=Id.mint(IdPrefix.MIGRATION, self._clock).value,
                 chunk_id=chunk_id,
                 from_node_id=from_node_id,
@@ -487,7 +491,7 @@ class ChunkMovementStore:
             )
         )
         conn.execute(
-            update(s.chunks)
+            self._store.update(s.chunks)
             .where(s.chunks.c.chunk_id == chunk_id)
             .values(graph_id=to_graph_id, intended_migration=None)
         )
@@ -496,7 +500,9 @@ class ChunkMovementStore:
     def _migration_exists(conn: Connection, chunk_id: str, *, from_node_id: str | None, epoch: int) -> bool:
         return (
             conn.execute(
-                select(s.chunk_migrations.c.migration_id).where(
+                statements_of(conn)
+                .select(s.chunk_migrations, s.chunk_migrations.c.migration_id)
+                .where(
                     (s.chunk_migrations.c.chunk_id == chunk_id)
                     & (s.chunk_migrations.c.from_node_id == from_node_id)
                     & (s.chunk_migrations.c.epoch == epoch)

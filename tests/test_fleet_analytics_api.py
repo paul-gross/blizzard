@@ -18,7 +18,15 @@ from blizzard.hub.domain.chunk.model import WorkItemAuthor
 from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.store.internal.run_context_store import RunContextStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
-from tests.support import HubHarness, build_hub, hub_store_connections, mint_graph, seed_work_item
+from tests.support import (
+    HubHarness,
+    build_hub,
+    default_project,
+    hub_store_connections,
+    mint_graph,
+    seed_scope,
+    seed_work_item,
+)
 
 pytestmark = pytest.mark.component
 
@@ -61,8 +69,12 @@ def _seed_chunk(hub: HubHarness, *, with_run_context: bool = True) -> str:
     items = WorkItemStore(store_connections)
     item = seed_work_item(items, graph_id=_GRAPH_ID, author=WorkItemAuthor.user("u_1"), at=_NOW)
     if with_run_context:
+        seed_scope(store_connections, _SCOPE, at=_NOW)
         RunContextStore(store_connections).record(
-            item.work_item_id, RunContext(routine_name=_ROUTINE, scope_slug=_SCOPE, mode="dry_run")
+            item.work_item_id,
+            RunContext(
+                project_id=default_project(hub.engine), routine_name=_ROUTINE, scope_slug=_SCOPE, mode="dry_run"
+            ),
         )
     return f"ch_{item.ref}"
 
@@ -144,7 +156,7 @@ def _push_transcript(hub: HubHarness, *, chunk_id: str, node_id: str, segment_id
     }
     resp = hub.client.post("/api/fleet/transcripts", json={"runner_id": "r1", "records": [record]})
     assert resp.status_code == 200, resp.text
-    hub.services.event_derivation.sweep()
+    hub.hub_services.event_derivation.sweep()
 
 
 def _seeded_hub(tmp_path: Path) -> tuple[HubHarness, str]:

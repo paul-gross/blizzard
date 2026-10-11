@@ -19,7 +19,7 @@ from blizzard.hub.domain.garden.findings.model import FACT_KINDS, FindingFact, d
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
-from tests.support import count_queries, count_rows_read, hub_store_connections
+from tests.support import count_queries, count_rows_read, default_project, default_tenant, hub_store_connections, stamp
 
 pytestmark = pytest.mark.component
 
@@ -36,7 +36,11 @@ def _store_and_engine(tmp_path: Path) -> tuple[FindingStore, Engine]:
     engine = create_engine_from_url(db_url)
     with engine.begin() as conn:
         conn.execute(
-            sa.text("INSERT INTO scopes (slug, description, created_at) VALUES ('blizzard', '', :now)"), {"now": _T0}
+            sa.text(
+                "INSERT INTO scopes (scope_id, slug, description, created_at, tenant_id, project_id)"
+                " VALUES ('scp_blizzard', 'blizzard', '', :now, :tenant, :project)"
+            ),
+            {"now": _T0, "tenant": default_tenant(engine), "project": default_project(engine)},
         )
     return FindingStore(hub_store_connections(engine)), engine
 
@@ -46,19 +50,26 @@ def _finding(engine: Engine, finding_id: str, facts: list[tuple[str, int]]) -> N
     with engine.begin() as conn:
         conn.execute(
             insert(s.findings).values(
-                finding_id=finding_id,
-                routine_name="nightly",
-                scope_slug="blizzard",
-                class_="c",
-                locus="l",
-                summary="x",
-                introduced=None,
-                introduced_at=_T0,
-                source="routine",
+                stamp(
+                    s.findings,
+                    finding_id=finding_id,
+                    routine_name="nightly",
+                    scope_slug="blizzard",
+                    class_="c",
+                    locus="l",
+                    summary="x",
+                    introduced=None,
+                    introduced_at=_T0,
+                    source="routine",
+                )
             )
         )
         for kind, seconds in facts:
-            conn.execute(insert(s.finding_facts).values(finding_id=finding_id, kind=kind, recorded_at=_at(seconds)))
+            conn.execute(
+                insert(s.finding_facts).values(
+                    stamp(s.finding_facts, finding_id=finding_id, kind=kind, recorded_at=_at(seconds))
+                )
+            )
 
 
 def _fixtures() -> dict[str, list[tuple[str, int]]]:
@@ -78,12 +89,17 @@ def _fixtures() -> dict[str, list[tuple[str, int]]]:
 
 def test_sql_live_set_equals_derive_liveness(tmp_path: Path) -> None:
     store, engine = _store_and_engine(tmp_path)
+    project = default_project(engine)
     fixtures = _fixtures()
     for finding_id, facts in fixtures.items():
         _finding(engine, finding_id, facts)
 
-    page = store.list_page(routine_name=None, scope_slug=None, include_gone=False, limit=len(fixtures) + 1)
-    everything = store.list_page(routine_name=None, scope_slug=None, include_gone=True, limit=len(fixtures) + 1)
+    page = store.list_page(
+        project_id=project, routine_name=None, scope_slug=None, include_gone=False, limit=len(fixtures) + 1
+    )
+    everything = store.list_page(
+        project_id=project, routine_name=None, scope_slug=None, include_gone=True, limit=len(fixtures) + 1
+    )
 
     assert page.next_cursor is None
     assert len(everything.findings) == len(fixtures)
@@ -115,10 +131,11 @@ def test_page_cost_is_flat_in_exited_finding_count(tmp_path: Path) -> None:
     for gaps in (1, 12):
         (tmp_path / f"g{gaps}").mkdir()
         store, engine = _store_and_engine(tmp_path / f"g{gaps}")
+        project = default_project(engine)
         _seed_interleaved(engine, exited_each_gap=gaps)
 
-        def read(store: FindingStore = store):  # type: ignore[no-untyped-def]
-            return store.list_page(routine_name="nightly", scope_slug="blizzard", limit=2)
+        def read(store: FindingStore = store, project: str = project):  # type: ignore[no-untyped-def]
+            return store.list_page(project_id=project, routine_name="nightly", scope_slug="blizzard", limit=2)
 
         first = read()
         measured.append(

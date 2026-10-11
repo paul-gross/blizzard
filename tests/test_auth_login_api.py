@@ -7,12 +7,17 @@ dance against the stub IdP is ``tests/service/``'s job."""
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
+import sqlalchemy as sa
 
-from blizzard.hub.auth.models import ProviderIdentity
+from blizzard.auth_core import Role
+from blizzard.hub.auth.models import ProviderIdentity, User
 from blizzard.hub.auth.oauth.provider import OAuthExchangeError
-from tests.support import build_hub
+from blizzard.hub.store import schema
+from tests.support import HubHarness, build_hub, hub_scoped, seed_user
 
 pytestmark = pytest.mark.component
 
@@ -46,6 +51,18 @@ def _state_from_redirect(location: str) -> str:
 
 
 # --- providers ------------------------------------------------------------------
+
+
+#: Ada as an authoritative provider reports her, with the verified email :func:`known_ada` seeds her under.
+ADA = ProviderIdentity(
+    subject="1", handle="ada", email="ada@example.com", email_verified=True, emails_authoritative=True
+)
+
+
+def known_ada(hub: HubHarness) -> User:
+    """Ada as a person the hub already knows — a user with no membership holding ``ADA``'s verified email, so her
+    sign-in links to her under the email-merge rule rather than being refused as a stranger's."""
+    return seed_user(hub, username="ada", role=Role.PENDING, email="ada@example.com")
 
 
 def test_providers_lists_every_configured_provider(tmp_path: Path) -> None:
@@ -101,8 +118,9 @@ def test_authorize_404s_under_none_mode(tmp_path: Path) -> None:
 
 def test_full_dance_ends_with_a_session_cookie_and_a_working_me(tmp_path: Path) -> None:
     github = FakeOAuthProvider(name="github")
-    github.codes["code1"] = ProviderIdentity(subject="1", handle="ada", email="ada@example.com", email_verified=True)
+    github.codes["code1"] = ADA
     hub = build_hub(tmp_path, auth_mode="oauth", oauth_providers={"github": github})
+    known_ada(hub)
 
     authorize_resp = hub.client.get("/api/auth/github/authorize", follow_redirects=False)
     state = _state_from_redirect(authorize_resp.headers["location"])
@@ -115,14 +133,15 @@ def test_full_dance_ends_with_a_session_cookie_and_a_working_me(tmp_path: Path) 
     assert me_resp.status_code == 200
     body = me_resp.json()
     assert body["username"] == "ada"
-    assert body["role"] == "pending"
+    assert (body["role"], body["tenants"]) == (None, [])
 
 
 def test_no_provider_token_is_ever_set_as_a_cookie(tmp_path: Path) -> None:
     """Only the session-id cookie is set — no provider access/refresh/id token."""
     github = FakeOAuthProvider(name="github")
-    github.codes["code1"] = ProviderIdentity(subject="1", handle="ada", email=None, email_verified=False)
+    github.codes["code1"] = ADA
     hub = build_hub(tmp_path, auth_mode="oauth", oauth_providers={"github": github})
+    known_ada(hub)
     authorize_resp = hub.client.get("/api/auth/github/authorize", follow_redirects=False)
     state = _state_from_redirect(authorize_resp.headers["location"])
 
@@ -141,14 +160,21 @@ def _login(hub, provider: FakeOAuthProvider, code: str) -> None:  # type: ignore
     assert resp.status_code in (302, 307), resp.text
 
 
+#: Ada as GitHub reports her — a provider authoritative for every address it verifies.
+_GITHUB_ADA = ProviderIdentity(
+    subject="gh-1", handle="ada", email="ada@example.com", email_verified=True, emails_authoritative=True
+)
+
+
 def test_second_provider_login_with_same_verified_email_lands_on_the_same_user(tmp_path: Path) -> None:
     github = FakeOAuthProvider(name="github", type="github")
     oidc = FakeOAuthProvider(name="oidc-co", type="oidc")
-    github.codes["c1"] = ProviderIdentity(subject="gh-1", handle="ada", email="ada@example.com", email_verified=True)
+    github.codes["c1"] = _GITHUB_ADA
     oidc.codes["c2"] = ProviderIdentity(
-        subject="oidc-1", handle="ada.lovelace", email="ada@example.com", email_verified=True
+        subject="oidc-1", handle="ada.lovelace", email="ada@example.com", email_verified=True, emails_authoritative=True
     )
     hub = build_hub(tmp_path, auth_mode="oauth", oauth_providers={"github": github, "oidc-co": oidc})
+    ada = known_ada(hub)
 
     _login(hub, github, "c1")
     first_me = hub.client.get("/api/me").json()
@@ -157,31 +183,46 @@ def test_second_provider_login_with_same_verified_email_lands_on_the_same_user(t
     _login(hub, oidc, "c2")
     second_me = hub.client.get("/api/me").json()
 
-    assert first_me["user_id"] == second_me["user_id"]
+    assert first_me["user_id"] == second_me["user_id"] == ada.user_id
 
 
-def test_unverified_email_never_merges(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("verified", "authoritative"),
+    [(False, True), (True, False)],
+    ids=["unverified-email", "provider-not-authoritative"],
+)
+def test_an_email_its_provider_does_not_vouch_for_never_merges(
+    tmp_path: Path, verified: bool, authoritative: bool
+) -> None:
     github = FakeOAuthProvider(name="github", type="github")
     oidc = FakeOAuthProvider(name="oidc-co", type="oidc")
-    github.codes["c1"] = ProviderIdentity(subject="gh-1", handle="ada", email="ada@example.com", email_verified=True)
-    oidc.codes["c2"] = ProviderIdentity(subject="oidc-1", handle="ada2", email="ada@example.com", email_verified=False)
+    github.codes["c1"] = _GITHUB_ADA
+    oidc.codes["c2"] = ProviderIdentity(
+        subject="oidc-1",
+        handle="ada2",
+        email="ada@example.com",
+        email_verified=verified,
+        emails_authoritative=authoritative,
+    )
     hub = build_hub(tmp_path, auth_mode="oauth", oauth_providers={"github": github, "oidc-co": oidc})
-
+    ada = known_ada(hub)
     _login(hub, github, "c1")
-    first_me = hub.client.get("/api/me").json()
-
     hub.client.cookies.clear()
-    _login(hub, oidc, "c2")
-    second_me = hub.client.get("/api/me").json()
 
-    assert first_me["user_id"] != second_me["user_id"]
+    refused = _callback(hub, oidc, "c2")
+
+    _assert_refused_invite_only(refused)
+    assert [row.provider_name for row in _rows(hub, schema.identities)] == ["github"]
+    assert [row.id for row in _rows(hub, schema.users)] == [ada.user_id]
+    assert len(_rows(hub, schema.sessions)) == 1
 
 
 def test_provider_handle_rename_refreshes_without_reminting(tmp_path: Path) -> None:
     github = FakeOAuthProvider(name="github", type="github")
-    github.codes["c1"] = ProviderIdentity(subject="gh-1", handle="ada", email=None, email_verified=False)
+    github.codes["c1"] = _GITHUB_ADA
     github.codes["c2"] = ProviderIdentity(subject="gh-1", handle="ada-lovelace", email=None, email_verified=False)
     hub = build_hub(tmp_path, auth_mode="oauth", oauth_providers={"github": github})
+    known_ada(hub)
 
     _login(hub, github, "c1")
     first_me = hub.client.get("/api/me").json()
@@ -191,8 +232,62 @@ def test_provider_handle_rename_refreshes_without_reminting(tmp_path: Path) -> N
     second_me = hub.client.get("/api/me").json()
 
     assert first_me["user_id"] == second_me["user_id"]
-    # Username was minted from the original handle and never re-derived on rename.
+    # The username is never re-derived on rename.
     assert first_me["username"] == second_me["username"]
+
+
+# --- invite-only --------------------------------------------------------------------
+
+
+def _callback(hub: HubHarness, provider: FakeOAuthProvider, code: str) -> Any:
+    authorize_resp = hub.client.get(f"/api/auth/{provider.name}/authorize", follow_redirects=False)
+    state = _state_from_redirect(authorize_resp.headers["location"])
+    return hub.client.get(f"/api/auth/{provider.name}/callback?code={code}&state={state}", follow_redirects=False)
+
+
+def _rows(hub: HubHarness, table: sa.Table) -> list[sa.Row[Any]]:
+    with hub.engine.connect() as conn:
+        return list(conn.execute(hub_scoped(sa.select(table))).all())
+
+
+def _assert_refused_invite_only(resp: Any) -> None:
+    assert resp.status_code == 302, resp.text
+    location = urlsplit(resp.headers["location"])
+    assert (location.path, parse_qs(location.query)) == ("/login", {"refusal": ["invite_only"]})
+    assert "bz_session" not in resp.cookies
+
+
+@pytest.mark.parametrize(
+    "stranger",
+    [
+        pytest.param(ADA, id="verified-email"),
+        pytest.param(ProviderIdentity(subject="1", handle="ada", email=None, email_verified=False), id="no-email"),
+    ],
+)
+def test_an_uninvited_first_sign_in_writes_nothing_and_lands_on_the_invite_only_refusal(
+    tmp_path: Path, stranger: ProviderIdentity
+) -> None:
+    github = FakeOAuthProvider(name="github")
+    github.codes["c1"] = stranger
+    hub = build_hub(tmp_path, auth_mode="oauth", oauth_providers={"github": github})
+
+    refused = _callback(hub, github, "c1")
+
+    _assert_refused_invite_only(refused)
+    assert (_rows(hub, schema.users), _rows(hub, schema.identities), _rows(hub, schema.sessions)) == ([], [], [])
+    assert hub.client.get("/api/me").status_code == 401
+
+
+def test_the_configured_superuser_signs_in_without_an_invitation(tmp_path: Path) -> None:
+    github = FakeOAuthProvider(name="github")
+    github.codes["c1"] = ADA
+    hub = build_hub(tmp_path, auth_mode="oauth", oauth_providers={"github": github})
+    hub.hub_services.auth.record_superuser_bootstrap(email="ada@example.com", claimed_user_id=None)
+
+    _login(hub, github, "c1")
+
+    me = hub.client.get("/api/me").json()
+    assert (me["username"], me["hub_admin"]) == ("ada", True)
 
 
 # --- bad state / failed exchange ---------------------------------------------------
@@ -206,7 +301,7 @@ def test_callback_rejects_a_bad_state_and_emits_a_login_failed_fact(tmp_path: Pa
     assert resp.status_code == 400
     assert resp.json()["error"] == "login_failed"
 
-    facts = hub.services.auth_facts.list_recent()
+    facts = hub.hub_services.auth_facts.list_recent()
     assert any(f.kind == "login_failed" for f in facts)
 
 
@@ -233,14 +328,15 @@ def test_callback_refuses_a_state_minted_for_a_different_provider(tmp_path: Path
     assert resp.status_code == 400
     assert resp.json()["error"] == "sso_refused"
 
-    facts = hub.services.auth_facts.list_recent()
+    facts = hub.hub_services.auth_facts.list_recent()
     assert any(f.kind == "sso_refused" for f in facts)
 
 
 def test_callback_state_is_single_use(tmp_path: Path) -> None:
     github = FakeOAuthProvider(name="github")
-    github.codes["c1"] = ProviderIdentity(subject="1", handle="ada", email=None, email_verified=False)
+    github.codes["c1"] = ADA
     hub = build_hub(tmp_path, auth_mode="oauth", oauth_providers={"github": github})
+    known_ada(hub)
     authorize_resp = hub.client.get("/api/auth/github/authorize", follow_redirects=False)
     state = _state_from_redirect(authorize_resp.headers["location"])
 
@@ -257,8 +353,9 @@ def test_callback_state_is_single_use(tmp_path: Path) -> None:
 
 def test_logout_deletes_the_session_row_and_the_cookie_stops_resolving(tmp_path: Path) -> None:
     github = FakeOAuthProvider(name="github")
-    github.codes["c1"] = ProviderIdentity(subject="1", handle="ada", email=None, email_verified=False)
+    github.codes["c1"] = ADA
     hub = build_hub(tmp_path, auth_mode="oauth", oauth_providers={"github": github})
+    known_ada(hub)
     authorize_resp = hub.client.get("/api/auth/github/authorize", follow_redirects=False)
     state = _state_from_redirect(authorize_resp.headers["location"])
     hub.client.get(f"/api/auth/github/callback?code=c1&state={state}", follow_redirects=False)

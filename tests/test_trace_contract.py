@@ -233,8 +233,13 @@ def _runner_judged() -> LeaseTraceFacts:
     return rfx.with_context(facts, session_name=None)
 
 
+def _runner_lease() -> LeaseTraceFacts:
+    facts = rfx.busy_facts()
+    return replace(facts, runner=replace(facts.runner, tenant_id="tn_bravo", tenant_name="bravo"))
+
+
 RUNNER_SCENARIOS = {
-    "runner-lease": rfx.busy_facts,
+    "runner-lease": _runner_lease,
     "runner-judged": _runner_judged,
 }
 
@@ -619,6 +624,8 @@ def test_the_platform_section_is_the_code_constants() -> None:
         hub_platform.RUN_STEP_NAME,
         attr.RUNNER_ID,
         attr.RUNNER_NAME,
+        platform_attr.TENANT,
+        platform_attr.TENANT_NAME,
         runner_platform.TICK_STEP,
         *platform_attr.CLI_ATTRIBUTES,
     }

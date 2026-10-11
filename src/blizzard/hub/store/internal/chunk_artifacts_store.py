@@ -10,7 +10,7 @@ from collections import defaultdict
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import or_, select, tuple_
+from sqlalchemy import or_, tuple_
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import IClock
@@ -21,7 +21,6 @@ from blizzard.hub.domain.chunk.delivery_read import DeliverySources
 from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import (
     enqueue_close_intents,
     fence,
@@ -29,12 +28,13 @@ from blizzard.hub.store.internal.chunk_rows import (
     lock_chunk_row,
     next_artifact_seq,
 )
+from blizzard.hub.store.scoped import ScopedConnections
 
 
 class ChunkArtifactsStore:
     """The chunk's node/step artifacts, including the generic hub command node's own."""
 
-    def __init__(self, store: HubStoreConnections, clock: IClock) -> None:
+    def __init__(self, store: ScopedConnections, clock: IClock) -> None:
         self._store = store
         self._clock = clock
 
@@ -46,7 +46,7 @@ class ChunkArtifactsStore:
         with self._store.read("delivery_sources_for") as conn:
             for batch in id_batches(chunk_ids):
                 for a in conn.execute(
-                    select(s.artifacts)
+                    self._store.select(s.artifacts)
                     .where(
                         s.artifacts.c.chunk_id.in_(batch),
                         s.artifacts.c.kind == ArtifactKind.ASSET.value,
@@ -75,7 +75,7 @@ class ChunkArtifactsStore:
                         )
                     )
                 for row in conn.execute(
-                    select(s.delivery_repo_landed)
+                    self._store.select(s.delivery_repo_landed)
                     .where(s.delivery_repo_landed.c.chunk_id.in_(batch))
                     .order_by(s.delivery_repo_landed.c.id)
                 ):
@@ -98,7 +98,7 @@ class ChunkArtifactsStore:
                     epoch=a.epoch,
                 )
                 for a in conn.execute(
-                    select(s.artifacts)
+                    self._store.select(s.artifacts)
                     .where(s.artifacts.c.chunk_id == chunk_id)
                     .order_by(s.artifacts.c.seq, s.artifacts.c.artifact_id)
                 ).all()
@@ -109,7 +109,7 @@ class ChunkArtifactsStore:
             # `artifact_id` is the always-distinct third term (`bzh:sql-portable`): it
             # settles exact (epoch, produced_at) ties off backend-dependent row order.
             a = conn.execute(
-                select(s.artifacts)
+                self._store.select(s.artifacts)
                 .where((s.artifacts.c.chunk_id == chunk_id) & (s.artifacts.c.name == name))
                 .order_by(
                     s.artifacts.c.epoch.desc(), s.artifacts.c.produced_at.desc(), s.artifacts.c.artifact_id.desc()
@@ -139,18 +139,15 @@ class ChunkArtifactsStore:
                 # The winner is the row no newer row of the same (chunk, name) beats, in
                 # `latest_artifact`'s own order — one statement, so a superseded blob is never read.
                 newer = s.artifacts.alias("newer")
-                beaten = (
-                    select(newer.c.artifact_id)
-                    .where(
-                        newer.c.chunk_id == s.artifacts.c.chunk_id,
-                        newer.c.name == s.artifacts.c.name,
-                        tuple_(newer.c.epoch, newer.c.produced_at, newer.c.artifact_id)
-                        > tuple_(s.artifacts.c.epoch, s.artifacts.c.produced_at, s.artifacts.c.artifact_id),
-                    )
-                    .exists()
+                beaten = self._store.exists(
+                    newer,
+                    newer.c.chunk_id == s.artifacts.c.chunk_id,
+                    newer.c.name == s.artifacts.c.name,
+                    tuple_(newer.c.epoch, newer.c.produced_at, newer.c.artifact_id)
+                    > tuple_(s.artifacts.c.epoch, s.artifacts.c.produced_at, s.artifacts.c.artifact_id),
                 )
                 for a in conn.execute(
-                    select(s.artifacts).where(
+                    self._store.select(s.artifacts).where(
                         (s.artifacts.c.chunk_id == chunk_id) & s.artifacts.c.name.in_(batch), ~beaten
                     )
                 ).all():
@@ -172,7 +169,7 @@ class ChunkArtifactsStore:
         with self._store.read("has_hub_artifact") as conn:
             return (
                 conn.execute(
-                    select(s.artifacts.c.artifact_id).where(
+                    self._store.select(s.artifacts, s.artifacts.c.artifact_id).where(
                         (s.artifacts.c.chunk_id == chunk_id)
                         & (s.artifacts.c.node_id == node_id)
                         & (s.artifacts.c.epoch == epoch)
@@ -202,7 +199,7 @@ class ChunkArtifactsStore:
         with self._store.write("record_hub_artifact") as conn:
             lock_chunk_row(conn, chunk_id)
             already = conn.execute(
-                select(s.artifacts.c.artifact_id).where(
+                self._store.select(s.artifacts, s.artifacts.c.artifact_id).where(
                     (s.artifacts.c.chunk_id == chunk_id)
                     & (s.artifacts.c.node_id == node_id)
                     & (s.artifacts.c.epoch == epoch)
@@ -214,7 +211,7 @@ class ChunkArtifactsStore:
             if fence(conn, chunk_id, epoch=epoch, admission=admission) is not None:
                 return False
             conn.execute(
-                s.artifacts.insert().values(
+                self._store.insert(s.artifacts).values(
                     artifact_id=Id.mint(IdPrefix.ARTIFACT, self._clock).value,
                     chunk_id=chunk_id,
                     node_id=node_id,

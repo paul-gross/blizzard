@@ -96,7 +96,7 @@
                     <p class="pp-finding-head">
                       <a
                         class="pp-finding-ref"
-                        [routerLink]="['/gardening', 'findings', row.findingId]"
+                        [routerLink]="['/gardening', 'findings', row.findingId] | lensLink"
                         [attr.data-testid]="'gardening-proposal-finding-link-' + row.findingId"
                       >{{ compactRef(row.findingId) }}</a>
                       <span class="pp-sep" aria-hidden="true">·</span>

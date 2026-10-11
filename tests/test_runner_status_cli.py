@@ -25,6 +25,8 @@ from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.cli.daemon import RunnerDaemon
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.hub.identity import IdentityState, RunnerIdentity
+from blizzard.runner.hub.served_projects import ServedProject
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.listeners import Listeners, Uds
 from blizzard.runner.subscriptions.credential_renewer import (
@@ -56,9 +58,18 @@ def _init_runner(tmp_path: Path) -> Path:
 
 
 @contextmanager
-def _serve_local_api(root: Path, *, trace_status: bool = True) -> Iterator[tuple[Path, str]]:
+def _serve_local_api(
+    root: Path, *, trace_status: bool = True, refusing: tuple[str, str] | None = None
+) -> Iterator[tuple[Path, str]]:
     config = RunnerConfig.load(root, port=0)
     app = build_hosted_app(config).app
+    if refusing is not None:  # (store runner, token runner): the verdict the loop's check would hold
+        app.state.identity_verdict.record(
+            IdentityState.MISMATCHED,
+            store_runner_id=refusing[0],
+            token_runner_id=refusing[1],
+            checked_at=datetime(2026, 7, 16, 12, 0, tzinfo=UTC),
+        )
     if not trace_status:
         app.state.trace_status = None  # `GET /api/traces/status` then refuses with a 503
     sockets = Listeners.of(config).bound()
@@ -227,6 +238,91 @@ def test_status_renders_empty_sections_on_a_fresh_runner(tmp_path: Path, monkeyp
     assert "subscriptions (1):" in result.output  # the synthesized legacy anthropic declaration
     assert "never sampled" in result.output
     assert "gates: none" in result.output
+    assert "identity: unchecked" in result.output
+    assert "REFUSING" not in result.output
+
+
+@pytest.mark.component
+def test_status_headline_names_no_tenant_before_a_hub_names_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _init_runner(tmp_path)
+    _no_hub(monkeypatch)
+    _store(root).record_runner_identity(RunnerIdentity(runner_id="rn_1", runner_name="r-one", registered_at=_NOW))
+    with _serve_local_api(root):
+        result = CliRunner().invoke(runner_group, ["status", "--dir", str(root)])
+
+    assert result.exit_code == 0, result.output
+    headline = result.output.splitlines()[0]
+    assert headline.startswith("runner r-one (rn_1)  workspace="), headline
+    assert "tenant=" not in result.output
+
+
+@pytest.mark.component
+def test_status_headline_names_the_tenant_beside_the_runner(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = _init_runner(tmp_path)
+    _no_hub(monkeypatch)
+    _store(root).record_runner_identity(
+        RunnerIdentity(
+            runner_id="rn_1", runner_name="r-one", registered_at=_NOW, tenant_id="tn_bravo", tenant_name="bravo"
+        )
+    )
+    with _serve_local_api(root):
+        result = CliRunner().invoke(runner_group, ["status", "--dir", str(root)])
+
+    assert result.exit_code == 0, result.output
+    assert result.output.splitlines()[0].startswith("runner r-one (rn_1)  tenant=bravo (tn_bravo)  workspace=")
+
+
+@pytest.mark.component
+def test_status_names_the_served_projects_unresolved_and_not_yet_answered_with_the_hub_unreachable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _init_runner(tmp_path)
+    config_path = root / "blizzard-runner.toml"
+    config_path.write_text(
+        config_path.read_text().replace(
+            'projects = ["default"]', 'projects = ["blizzard", "old-slug", "blizzard-context"]'
+        )
+    )
+    _no_hub(monkeypatch)
+    store = _store(root)
+    store.record_runner_identity(RunnerIdentity(runner_id="rn_1", runner_name="r-one", registered_at=_NOW))
+    store.record_served_projects(
+        (ServedProject("blizzard", "prj_1", "blizzard", "Blizzard"), ServedProject("old-slug")), at=_NOW
+    )
+    with _serve_local_api(root):
+        result = CliRunner().invoke(runner_group, ["status", "--dir", str(root)])
+
+    assert result.exit_code == 0, result.output
+    assert '  serves: blizzard; unresolved: "old-slug"; not yet answered: "blizzard-context"' in result.output
+
+
+@pytest.mark.component
+def test_status_marks_a_fresh_runners_default_not_yet_answered(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = _init_runner(tmp_path)
+    _no_hub(monkeypatch)
+    with _serve_local_api(root):
+        result = CliRunner().invoke(runner_group, ["status", "--dir", str(root)])
+
+    assert result.exit_code == 0, result.output
+    assert '  serves: not yet answered: "default"' in result.output
+
+
+@pytest.mark.component
+def test_status_names_both_runners_and_the_reset_command_while_refusing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _init_runner(tmp_path)
+    _no_hub(monkeypatch)
+    with _serve_local_api(root, refusing=("rn_store", "rn_other")):
+        result = CliRunner().invoke(runner_group, ["status", "--dir", str(root)])
+
+    assert result.exit_code == 0, result.output
+    refusing = next(line for line in result.output.splitlines() if "REFUSING" in line)
+    assert "token belongs to runner rn_other" in refusing
+    assert "store belongs to runner rn_store" in refusing
+    assert f"blizzard runner store reset {root}" in refusing
 
 
 @pytest.mark.component

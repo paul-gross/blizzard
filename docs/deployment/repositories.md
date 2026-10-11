@@ -61,10 +61,15 @@ A pointer matches a record by repo name, narrowed by the origin's owner and forg
 after the chunk was minted, so retiring a repository never strands work already under way. A chunk with no commits has
 nothing to resolve and lands as a no-op.
 
-Two outcomes refuse the step before it runs, route its failure choice, and record an event
+Only the repositories the chunk's project links are candidates, so a new repository receives nothing until a project
+links it ([projects.md](./projects.md#links)).
+
+Three outcomes refuse the step before it runs, route its failure choice, and record an event
 ([observability.md](./observability.md)):
 
 - `repository-unresolved` — no record stands for a pointer, or its name matches several records.
+- `repository-not-linked` — a pointer resolves to a repository of the tenant that the chunk's project does not link:
+  link it to the project, or decide the chunk's work strayed.
 - `repositories-disagree` — the pointers resolve to records that differ on forge, owner, base branch or secret, so there
   is no single landing target.
 

@@ -2,8 +2,9 @@
 Every published event carries a **monotonic id** and reaches every open connection live,
 with a bounded tail (``history``) a reconnect replays from its ``Last-Event-ID``.
 Publishers run on worker threads, subscribers on the event loop, so :meth:`publish`
-crosses over with ``loop.call_soon_threadsafe``. A daemon's own broker wraps this one
-with its own ``publish_*`` helpers; nothing here knows an event's kind."""
+crosses over with ``loop.call_soon_threadsafe``. A closed broker ends every connection it
+holds. A daemon's own broker wraps this one with its own ``publish_*`` helpers; nothing here
+knows an event's kind."""
 
 from __future__ import annotations
 
@@ -32,13 +33,17 @@ class Event:
 
 
 class Subscriber:
-    """One live SSE connection: its event queue and the loop that drains it."""
+    """One live SSE connection: its event queue, the loop that drains it, the principal it was opened
+    for (``None`` when its daemon names none), and the signal that it has ended — its broker closed, or
+    its owner was ended — set after every event published before the end is queued."""
 
-    __slots__ = ("loop", "queue")
+    __slots__ = ("ended", "loop", "owner", "queue")
 
-    def __init__(self, queue: asyncio.Queue[Event], loop: asyncio.AbstractEventLoop) -> None:
+    def __init__(self, queue: asyncio.Queue[Event], loop: asyncio.AbstractEventLoop, owner: str | None = None) -> None:
         self.queue = queue
         self.loop = loop
+        self.owner = owner
+        self.ended = asyncio.Event()
 
 
 class EventBroker:
@@ -49,6 +54,7 @@ class EventBroker:
         self._subscribers: set[Subscriber] = set()
         self._lock = threading.Lock()
         self._next_id = 0
+        self._closed = False
 
     # --- publish (called from the sync route handlers) ----------------------
 
@@ -72,12 +78,39 @@ class EventBroker:
 
     # --- subscription (called from the async SSE handler) -------------------
 
-    def subscribe(self) -> Subscriber:
-        """Register a live connection, capturing the running loop for the handoff."""
-        sub = Subscriber(asyncio.Queue(), asyncio.get_running_loop())
+    def subscribe(self, owner: str | None = None) -> Subscriber:
+        """Register a live connection opened for ``owner``, capturing the running loop for the handoff. A
+        connection to a closed broker is ended from the start."""
+        sub = Subscriber(asyncio.Queue(), asyncio.get_running_loop(), owner)
         with self._lock:
-            self._subscribers.add(sub)
+            if self._closed:
+                sub.ended.set()
+            else:
+                self._subscribers.add(sub)
         return sub
+
+    def close(self) -> None:
+        """End every open connection — each stream sends what it already holds, then returns — and every
+        later one. Idempotent; the broker's ring stays readable."""
+        with self._lock:
+            self._closed = True
+            subscribers = list(self._subscribers)
+            self._subscribers.clear()
+        for sub in subscribers:
+            # Queued behind every event handed over before the close, so none of them is lost.
+            with contextlib.suppress(RuntimeError):
+                sub.loop.call_soon_threadsafe(sub.ended.set)
+
+    def end_subscriber(self, owner: str) -> None:
+        """End every open connection of ``owner`` as :meth:`close` ends them all — each sends what it already
+        holds, then returns — leaving every other connection and the broker open. Called from a worker
+        thread, once the write that ends ``owner``'s access has committed."""
+        with self._lock:
+            ended = [sub for sub in self._subscribers if sub.owner == owner]
+            self._subscribers.difference_update(ended)
+        for sub in ended:
+            with contextlib.suppress(RuntimeError):
+                sub.loop.call_soon_threadsafe(sub.ended.set)
 
     def unsubscribe(self, sub: Subscriber) -> None:
         """Drop a connection when its stream generator exits (disconnect / shutdown)."""

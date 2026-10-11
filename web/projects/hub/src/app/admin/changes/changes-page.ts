@@ -3,11 +3,13 @@ import { Router, RouterOutlet } from '@angular/router';
 import { asyncState, type KitAsyncStateValue, ViewportService } from 'fleet';
 
 import { injectChildRouteParam } from '../../core/route-state';
+import { injectActorName } from '../actor-names';
 import { changesOfPages } from '../config-history.model';
 import { ConfigMaster } from '../config-master';
 import type { ConfigRowVm } from '../config-record-list';
 import { changeEntries, changeEntryRows } from './changes.model';
 import { injectConfigChangesQuery } from './changes.query';
+import { ProjectLens } from '../../core/project-lens';
 
 /**
  * `/admin/changes` — the change log across every config record, newest first, paged
@@ -23,14 +25,17 @@ import { injectConfigChangesQuery } from './changes.query';
   styleUrl: '../config-page-host.css',
 })
 export class ChangesPage {
+  private readonly lens = inject(ProjectLens);
+
   private readonly router = inject(Router);
   private readonly viewport = inject(ViewportService);
   private readonly changesQuery = injectConfigChangesQuery();
+  private readonly actorName = injectActorName();
 
   protected readonly mobile = computed(() => this.viewport.mode() === 'mobile');
   protected readonly selectedKey = injectChildRouteParam('key');
   protected readonly rows = computed<readonly ConfigRowVm[]>(() =>
-    changeEntryRows(changeEntries(changesOfPages(this.changesQuery.data()?.pages))),
+    changeEntryRows(changeEntries(changesOfPages(this.changesQuery.data()?.pages), this.actorName())),
   );
   protected readonly state = computed<KitAsyncStateValue>(() => asyncState(this.changesQuery, this.rows().length === 0));
   protected readonly hasOlder = computed(() => this.changesQuery.hasNextPage());
@@ -41,10 +46,10 @@ export class ChangesPage {
   }
 
   protected onPick(key: string): void {
-    void this.router.navigate(['/admin', 'changes', key]);
+    void this.router.navigate(this.lens.link(['/admin', 'changes', key]));
   }
 
   protected onBack(): void {
-    void this.router.navigate(['/admin', 'changes']);
+    void this.router.navigate(this.lens.link(['/admin', 'changes']));
   }
 }

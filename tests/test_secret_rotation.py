@@ -28,7 +28,7 @@ from blizzard.hub.secrets import (
 from blizzard.hub.secrets.rotation import rotate_keys
 from blizzard.hub.store import schema
 from blizzard.hub.store.internal.secret_store import SecretStore
-from tests.support import OP, config_authoring, hub_store_connections
+from tests.support import OP, config_authoring, hub_scoped, hub_store_connections
 
 pytestmark = pytest.mark.component
 
@@ -75,7 +75,7 @@ def test_directory_rotation_moves_every_row_and_a_hub_opened_before_still_reveal
     before = hub_key_provider({}, data_dir=world.config.data_dir)  # a running hub's provider
     old_id = before.current().key_id
 
-    result = rotate_keys(world.store, {}, data_dir=world.config.data_dir)
+    result = rotate_keys([world.store], {}, data_dir=world.config.data_dir)
 
     assert result.resealed == 2
     assert result.key_id != old_id
@@ -91,15 +91,15 @@ def test_rotation_keeps_the_revision_and_replacement_stamp(world: _World) -> Non
     world.seed({}, gh="tok-1")
     record = world.store.get("gh")
 
-    rotate_keys(world.store, {}, data_dir=world.config.data_dir)
+    rotate_keys([world.store], {}, data_dir=world.config.data_dir)
 
     assert world.store.get("gh") == record
 
 
 def test_a_second_rotation_deletes_a_generation_no_row_references(world: _World) -> None:
     world.seed({}, gh="tok-1")
-    first = rotate_keys(world.store, {}, data_dir=world.config.data_dir)
-    second = rotate_keys(world.store, {}, data_dir=world.config.data_dir)
+    first = rotate_keys([world.store], {}, data_dir=world.config.data_dir)
+    second = rotate_keys([world.store], {}, data_dir=world.config.data_dir)
 
     files = {p.stem for p in secret_keys_dir(world.config.data_dir).glob("*.key")}
     assert files == {first.key_id, second.key_id}
@@ -111,7 +111,7 @@ def test_env_rotation_reseals_under_the_current_key_using_previous(world: _World
     env = {ENV_SECRET_KEY: _KEY_B, ENV_SECRET_KEY_PREVIOUS: _KEY_A}
     meta_before = world.meta.read_text()
 
-    result = rotate_keys(world.store, env, data_dir=world.config.data_dir)
+    result = rotate_keys([world.store], env, data_dir=world.config.data_dir)
 
     assert result.resealed == 1
     assert world.key_ids() == {result.key_id}
@@ -124,7 +124,7 @@ def test_env_rotation_without_the_previous_key_refuses_naming_the_generation(wor
     old_id = next(iter(world.key_ids()))
 
     with pytest.raises(ConfigError, match=old_id):
-        rotate_keys(world.store, {ENV_SECRET_KEY: _KEY_B}, data_dir=world.config.data_dir)
+        rotate_keys([world.store], {ENV_SECRET_KEY: _KEY_B}, data_dir=world.config.data_dir)
     assert world.key_ids() == {old_id}
 
 
@@ -136,12 +136,12 @@ def test_a_concurrent_replace_rolls_the_whole_rotation_back(world: _World, monke
     def list_then_race():  # type: ignore[no-untyped-def]
         rows = real_list()
         with world.engine.begin() as conn:  # a replace lands after the read, before the commit
-            conn.execute(update(schema.secrets).where(schema.secrets.c.name == "slack").values(revision=2))
+            conn.execute(hub_scoped(update(schema.secrets).where(schema.secrets.c.name == "slack").values(revision=2)))
         return rows
 
     monkeypatch.setattr(world.store, "list_sealed", list_then_race)
     with pytest.raises(SecretRotationConflict):
-        rotate_keys(world.store, {}, data_dir=world.config.data_dir)
+        rotate_keys([world.store], {}, data_dir=world.config.data_dir)
 
     assert world.key_ids() == before
     assert json.loads(world.meta.read_text())["previous"] is None

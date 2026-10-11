@@ -84,6 +84,11 @@ _AUTH_OAUTH_PROVIDER_EXAMPLE_COMMENT = """
 # issuer = "https://accounts.example.com"        # oidc only: the discovery issuer
 # api_base = "https://ghe.example.internal"       # optional: override the provider's
 #                                                  # default host (github type only)
+# emails_authoritative = false       # oidc only: true lets the issuer's verified email
+#                                    # accept an invitation, claim auth.superuser and link
+#                                    # to the account holding it; false signs in only
+#                                    # identities already linked to a user. Set it only for
+#                                    # a directory trusted for every address it vouches for
 """
 
 
@@ -230,7 +235,11 @@ class OAuthProviderConfig:
     """One configured OAuth login provider. ``client_secret_env``
     names the environment variable carrying the secret, never the secret itself.
     ``api_base`` overrides the provider's default host — ``github`` type only, an
-    ``oidc`` provider's ``issuer`` already naming its own."""
+    ``oidc`` provider's ``issuer`` already naming its own. ``emails_authoritative`` lets an
+    ``oidc`` provider's verified email accept an invitation, claim ``auth.superuser`` and link
+    a first sign-in to the user holding that address; without it the provider signs in only
+    identities already linked to a user. A ``github`` provider is always authoritative, so
+    the key is refused on one."""
 
     name: str
     type: str
@@ -239,12 +248,14 @@ class OAuthProviderConfig:
     client_secret_env: str
     issuer: str | None = None
     api_base: str | None = None
+    emails_authoritative: bool = False
 
     @classmethod
     def providers(cls, raw_providers: object) -> tuple[OAuthProviderConfig, ...]:
-        """Structurally validate and project ``[[auth.oauth.provider]]`` entries — required
-        keys only; ``type``/``issuer`` semantic validation belongs to whichever consumer first
-        uses a provider."""
+        """Structurally validate and project ``[[auth.oauth.provider]]`` entries — the required
+        keys, and ``emails_authoritative`` as a boolean no ``github`` entry carries;
+        ``type``/``issuer`` semantic validation belongs to whichever consumer first uses a
+        provider."""
         if not isinstance(raw_providers, list):
             return ()
         providers: list[OAuthProviderConfig] = []
@@ -261,6 +272,17 @@ class OAuthProviderConfig:
             seen_names.add(name)
             issuer_raw = entry.get("issuer")
             api_base_raw = entry.get("api_base")
+            emails_authoritative = entry.get("emails_authoritative", False)
+            if not isinstance(emails_authoritative, bool):
+                raise ConfigError(
+                    f"[[auth.oauth.provider]] {name!r} has emails_authoritative={emails_authoritative!r}, "
+                    "must be a boolean"
+                )
+            if "emails_authoritative" in entry and entry["type"] == "github":
+                raise ConfigError(
+                    f"[[auth.oauth.provider]] {name!r} is type 'github', whose verified emails are always "
+                    "authoritative; emails_authoritative is an oidc key"
+                )
             providers.append(
                 cls(
                     name=name,
@@ -270,6 +292,7 @@ class OAuthProviderConfig:
                     client_secret_env=str(entry["client_secret_env"]),
                     issuer=str(issuer_raw) if issuer_raw else None,
                     api_base=str(api_base_raw) if api_base_raw else None,
+                    emails_authoritative=emails_authoritative,
                 )
             )
         return tuple(providers)
@@ -626,6 +649,8 @@ class HubConfig:
                 lines.append(f'issuer = "{provider.issuer}"\n')
             if provider.api_base is not None:
                 lines.append(f'api_base = "{provider.api_base}"\n')
+            if provider.emails_authoritative:
+                lines.append("emails_authoritative = true\n")
         return "".join(lines)
 
     @classmethod

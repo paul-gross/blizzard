@@ -75,7 +75,8 @@ export class BoardHeader {
    * runner's local panel. */
   readonly connectionLabel = input('Hub');
 
-  /** The brand block's subtitle line. */
+  /** The brand block's subtitle line — the hub board names the tenant it is in here. A long one truncates, its full
+   * text on hover, so it never widens the brand past the room the stat strip gives up. */
   readonly tagline = input('fleet hub · mission control');
 
   /** The all-time fleet counts the lane cells fold from — the hub's usage; ignored

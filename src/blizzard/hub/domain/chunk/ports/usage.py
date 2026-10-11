@@ -6,14 +6,18 @@ from datetime import datetime
 from typing import Protocol
 
 from blizzard.hub.domain.chunk.model import UsageTotal
+from blizzard.hub.domain.projects.model import ProjectId
 
 
 class IReadChunkUsageRepository(Protocol):
     """Read-only chunk-usage access."""
 
-    def usage_total_since(self, since: datetime, *, until: datetime | None = None) -> UsageTotal:
+    def usage_total_since(
+        self, since: datetime, *, until: datetime | None = None, project: ProjectId | None = None
+    ) -> UsageTotal:
         """The usage/cost total across every chunk's facts recorded at or after ``since``
-        — and, when ``until`` is given, strictly before it.
+        — and, when ``until`` is given, strictly before it; ``project`` narrows it to that
+        project's chunks.
         ``since`` is inclusive and ``until`` exclusive, so adjacent windows
         sharing a boundary instant neither double-count nor drop a fact at it. Omitting
         ``until`` is the original open-ended tail. Follows the lower-bound + PARTIAL cost

@@ -23,7 +23,7 @@ from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_closure_store import insert_garden_proposal_closure_row
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
-from tests.support import count_queries, count_rows_read, hub_store_connections
+from tests.support import count_queries, count_rows_read, default_project, default_tenant, hub_store_connections
 
 pytestmark = pytest.mark.component
 
@@ -81,13 +81,18 @@ def _store_and_engine(tmp_path: Path) -> tuple[GardenProposalStore, Engine]:
     engine = create_engine_from_url(db_url)
     with engine.begin() as conn:
         conn.execute(
-            sa.text("INSERT INTO scopes (slug, description, created_at) VALUES ('blizzard', '', :now)"),
-            {"now": _NOW},
+            sa.text(
+                "INSERT INTO scopes (scope_id, slug, description, created_at, tenant_id, project_id)"
+                " VALUES ('scp_blizzard', 'blizzard', '', :now, :tenant, :project)"
+            ),
+            {"now": _NOW, "tenant": default_tenant(engine), "project": default_project(engine)},
         )
     store_connections = hub_store_connections(engine)
     findings = FindingStore(store_connections)
+    project = default_project(engine)
     findings.add(
         "fin_1",
+        project_id=project,
         routine_name="nightly",
         scope_slug="blizzard",
         class_="stale-docstring",
@@ -98,6 +103,7 @@ def _store_and_engine(tmp_path: Path) -> tuple[GardenProposalStore, Engine]:
     )
     findings.add(
         "fin_2",
+        project_id=project,
         routine_name="nightly",
         scope_slug="blizzard",
         class_="stale-docstring",
@@ -118,10 +124,12 @@ def _sized_store(tmp_path: Path, n: int) -> tuple[GardenProposalStore, Engine]:
     """``n`` proposals, each with its own finding — the fixture a query-count-parity
     test seeds at two different sizes."""
     store, engine = _store_and_engine(tmp_path)
+    project = default_project(engine)
     findings = FindingStore(hub_store_connections(engine))
     for i in range(n):
         findings.add(
             f"fin_extra_{i}",
+            project_id=project,
             routine_name="nightly",
             scope_slug="blizzard",
             class_="stale-docstring",
@@ -132,6 +140,7 @@ def _sized_store(tmp_path: Path, n: int) -> tuple[GardenProposalStore, Engine]:
         )
         store.create(
             f"gprop_extra_{i}",
+            project_id=project,
             origin=GardenProposalOrigin.ROUTINE_RUN,
             routine_name="nightly",
             class_="c",
@@ -144,10 +153,12 @@ def _sized_store(tmp_path: Path, n: int) -> tuple[GardenProposalStore, Engine]:
 
 
 def test_create_then_get_round_trips(tmp_path: Path) -> None:
-    store = _store(tmp_path)
+    store, engine = _store_and_engine(tmp_path)
+    project = default_project(engine)
 
     created = store.create(
         "gprop_1",
+        project_id=project,
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="fix-the-source",
@@ -164,9 +175,11 @@ def test_create_then_get_round_trips(tmp_path: Path) -> None:
 
 def test_create_with_no_findings_writes_no_link_rows(tmp_path: Path) -> None:
     store, engine = _store_and_engine(tmp_path)
+    project = default_project(engine)
 
     created = store.create(
         "gprop_1",
+        project_id=project,
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="fix-the-source",
@@ -193,9 +206,11 @@ def test_get_unknown_id_is_none(tmp_path: Path) -> None:
 
 
 def test_list_all_orders_newest_first(tmp_path: Path) -> None:
-    store = _store(tmp_path)
+    store, engine = _store_and_engine(tmp_path)
+    project = default_project(engine)
     store.create(
         "gprop_old",
+        project_id=project,
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="c",
@@ -206,6 +221,7 @@ def test_list_all_orders_newest_first(tmp_path: Path) -> None:
     )
     store.create(
         "gprop_new",
+        project_id=project,
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="c",
@@ -221,9 +237,11 @@ def test_list_all_orders_newest_first(tmp_path: Path) -> None:
 
 
 def test_list_for_routine_orders_newest_first_and_excludes_other_routines(tmp_path: Path) -> None:
-    store = _store(tmp_path)
+    store, engine = _store_and_engine(tmp_path)
+    project = default_project(engine)
     store.create(
         "gprop_old",
+        project_id=project,
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="c",
@@ -234,6 +252,7 @@ def test_list_for_routine_orders_newest_first_and_excludes_other_routines(tmp_pa
     )
     store.create(
         "gprop_new",
+        project_id=project,
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="c",
@@ -244,6 +263,7 @@ def test_list_for_routine_orders_newest_first_and_excludes_other_routines(tmp_pa
     )
     store.create(
         "gprop_other",
+        project_id=project,
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="other-routine",
         class_="c",
@@ -253,15 +273,17 @@ def test_list_for_routine_orders_newest_first_and_excludes_other_routines(tmp_pa
         at=_NOW,
     )
 
-    ids = [p.proposal_id for p in store.list_for_routine("nightly")]
+    ids = [p.proposal_id for p in store.list_for_routine(project, "nightly")]
 
     assert ids == ["gprop_new", "gprop_old"]
 
 
 def test_list_for_routine_is_empty_for_an_unseen_routine(tmp_path: Path) -> None:
-    store = _store(tmp_path)
+    store, engine = _store_and_engine(tmp_path)
+    project = default_project(engine)
     store.create(
         "gprop_1",
+        project_id=project,
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="c",
@@ -271,13 +293,15 @@ def test_list_for_routine_is_empty_for_an_unseen_routine(tmp_path: Path) -> None
         at=_NOW,
     )
 
-    assert store.list_for_routine("ghost-routine") == []
+    assert store.list_for_routine(project, "ghost-routine") == []
 
 
 def test_open_routine_read_does_not_hydrate_closed_history(tmp_path: Path) -> None:
     store, engine = _store_and_engine(tmp_path)
+    project = default_project(engine)
     store.create(
         "gprop_open",
+        project_id=project,
         origin=GardenProposalOrigin.OPERATOR,
         routine_name="nightly",
         created_by="operator",
@@ -289,7 +313,7 @@ def test_open_routine_read_does_not_hydrate_closed_history(tmp_path: Path) -> No
     )
 
     def read_open() -> list[str]:
-        return [p.proposal_id for p in store.list_for_routine("nightly", state=RoutineProposalState.OPEN)]
+        return [p.proposal_id for p in store.list_for_routine(project, "nightly", state=RoutineProposalState.OPEN)]
 
     small_rows = count_rows_read(engine, read_open)
     small_queries = count_queries(engine, read_open)
@@ -297,6 +321,7 @@ def test_open_routine_read_does_not_hydrate_closed_history(tmp_path: Path) -> No
         proposal_id = f"gprop_closed_{i}"
         store.create(
             proposal_id,
+            project_id=project,
             origin=GardenProposalOrigin.ROUTINE_RUN,
             routine_name="nightly",
             class_="c",
@@ -309,14 +334,16 @@ def test_open_routine_read_does_not_hydrate_closed_history(tmp_path: Path) -> No
     assert read_open() == ["gprop_open"]
     assert count_rows_read(engine, read_open) == small_rows
     assert count_queries(engine, read_open) == small_queries
-    assert len(store.list_for_routine("nightly", state=RoutineProposalState.CLOSED)) == 25
-    assert len(store.list_for_routine("nightly")) == 26
+    assert len(store.list_for_routine(project, "nightly", state=RoutineProposalState.CLOSED)) == 25
+    assert len(store.list_for_routine(project, "nightly")) == 26
 
 
 def test_counts_by_class_groups_by_routine_and_class(tmp_path: Path) -> None:
-    store = _store(tmp_path)
+    store, engine = _store_and_engine(tmp_path)
+    project = default_project(engine)
     store.create(
         "gprop_1",
+        project_id=project,
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="fix-the-source",
@@ -327,6 +354,7 @@ def test_counts_by_class_groups_by_routine_and_class(tmp_path: Path) -> None:
     )
     store.create(
         "gprop_2",
+        project_id=project,
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="fix-the-source",
@@ -337,6 +365,7 @@ def test_counts_by_class_groups_by_routine_and_class(tmp_path: Path) -> None:
     )
     store.create(
         "gprop_3",
+        project_id=project,
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="wontfix",
@@ -347,6 +376,7 @@ def test_counts_by_class_groups_by_routine_and_class(tmp_path: Path) -> None:
     )
     store.create(
         "gprop_4",
+        project_id=project,
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="other-routine",
         class_="fix-the-source",
@@ -360,6 +390,7 @@ def test_counts_by_class_groups_by_routine_and_class(tmp_path: Path) -> None:
 
     assert rows == [
         GardenProposalCounts(
+            project_id=project,
             origin=GardenProposalOrigin.ROUTINE_RUN,
             routine_name="nightly",
             class_="fix-the-source",
@@ -369,6 +400,7 @@ def test_counts_by_class_groups_by_routine_and_class(tmp_path: Path) -> None:
             accepted_without_item=0,
         ),
         GardenProposalCounts(
+            project_id=project,
             origin=GardenProposalOrigin.ROUTINE_RUN,
             routine_name="nightly",
             class_="wontfix",
@@ -378,6 +410,7 @@ def test_counts_by_class_groups_by_routine_and_class(tmp_path: Path) -> None:
             accepted_without_item=0,
         ),
         GardenProposalCounts(
+            project_id=project,
             origin=GardenProposalOrigin.ROUTINE_RUN,
             routine_name="other-routine",
             class_="fix-the-source",
@@ -391,11 +424,13 @@ def test_counts_by_class_groups_by_routine_and_class(tmp_path: Path) -> None:
 
 
 def test_counts_by_class_since_is_inclusive_and_until_is_exclusive(tmp_path: Path) -> None:
-    store = _store(tmp_path)
+    store, engine = _store_and_engine(tmp_path)
+    project = default_project(engine)
     since = _NOW
     until = _NOW + timedelta(hours=1)
     store.create(
         "gprop_at_since",
+        project_id=project,
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="c",
@@ -406,6 +441,7 @@ def test_counts_by_class_since_is_inclusive_and_until_is_exclusive(tmp_path: Pat
     )
     store.create(
         "gprop_at_until",
+        project_id=project,
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="c",
@@ -419,6 +455,7 @@ def test_counts_by_class_since_is_inclusive_and_until_is_exclusive(tmp_path: Pat
 
     assert rows == [
         GardenProposalCounts(
+            project_id=project,
             origin=GardenProposalOrigin.ROUTINE_RUN,
             routine_name="nightly",
             class_="c",
@@ -432,8 +469,10 @@ def test_counts_by_class_since_is_inclusive_and_until_is_exclusive(tmp_path: Pat
 
 def test_counts_by_class_splits_minted_and_declined_accepts(tmp_path: Path) -> None:
     store, engine = _store_and_engine(tmp_path)
+    project = default_project(engine)
     store.create(
         "gprop_open",
+        project_id=project,
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="c",
@@ -444,6 +483,7 @@ def test_counts_by_class_splits_minted_and_declined_accepts(tmp_path: Path) -> N
     )
     store.create(
         "gprop_passed",
+        project_id=project,
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="c",
@@ -454,6 +494,7 @@ def test_counts_by_class_splits_minted_and_declined_accepts(tmp_path: Path) -> N
     )
     store.create(
         "gprop_minted",
+        project_id=project,
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="c",
@@ -464,6 +505,7 @@ def test_counts_by_class_splits_minted_and_declined_accepts(tmp_path: Path) -> N
     )
     store.create(
         "gprop_declined",
+        project_id=project,
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="c",
@@ -480,6 +522,7 @@ def test_counts_by_class_splits_minted_and_declined_accepts(tmp_path: Path) -> N
 
     assert rows == [
         GardenProposalCounts(
+            project_id=project,
             origin=GardenProposalOrigin.ROUTINE_RUN,
             routine_name="nightly",
             class_="c",
@@ -501,9 +544,11 @@ def test_counts_by_class_is_empty_for_a_routine_with_no_proposals_in_window(tmp_
 
 
 def test_counts_by_class_routine_name_filter_narrows_to_one_routine(tmp_path: Path) -> None:
-    store = _store(tmp_path)
+    store, engine = _store_and_engine(tmp_path)
+    project = default_project(engine)
     store.create(
         "gprop_1",
+        project_id=project,
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="c",
@@ -514,6 +559,7 @@ def test_counts_by_class_routine_name_filter_narrows_to_one_routine(tmp_path: Pa
     )
     store.create(
         "gprop_2",
+        project_id=project,
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="other-routine",
         class_="c",
@@ -529,6 +575,7 @@ def test_counts_by_class_routine_name_filter_narrows_to_one_routine(tmp_path: Pa
 
     assert rows == [
         GardenProposalCounts(
+            project_id=project,
             origin=GardenProposalOrigin.ROUTINE_RUN,
             routine_name="nightly",
             class_="c",
@@ -557,9 +604,11 @@ def test_counts_by_class_query_count_is_flat_regardless_of_proposal_count(tmp_pa
 def test_two_proposals_with_overlapping_findings_stay_distinguished(tmp_path: Path) -> None:
     """The link table is per-proposal, so two proposals naming an overlapping finding
     never collapse into one row set."""
-    store = _store(tmp_path)
+    store, engine = _store_and_engine(tmp_path)
+    project = default_project(engine)
     store.create(
         "gprop_1",
+        project_id=project,
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="c",
@@ -570,6 +619,7 @@ def test_two_proposals_with_overlapping_findings_stay_distinguished(tmp_path: Pa
     )
     store.create(
         "gprop_2",
+        project_id=project,
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="c",
@@ -591,8 +641,12 @@ def test_list_all_and_list_for_routine_query_count_is_independent_of_proposal_co
 
     small_all_count = count_queries(small_engine, small.list_all)
     large_all_count = count_queries(large_engine, large.list_all)
-    small_routine_count = count_queries(small_engine, lambda: small.list_for_routine("nightly"))
-    large_routine_count = count_queries(large_engine, lambda: large.list_for_routine("nightly"))
+    small_routine_count = count_queries(
+        small_engine, lambda: small.list_for_routine(default_project(small_engine), "nightly")
+    )
+    large_routine_count = count_queries(
+        large_engine, lambda: large.list_for_routine(default_project(large_engine), "nightly")
+    )
 
     assert len(small.list_all()) == 3
     assert len(large.list_all()) == 9
@@ -601,9 +655,11 @@ def test_list_all_and_list_for_routine_query_count_is_independent_of_proposal_co
 
 
 def test_two_edits_from_the_same_stale_view_each_keep_the_field_they_did_not_name(tmp_path: Path) -> None:
-    store = _store(tmp_path)
+    store, engine = _store_and_engine(tmp_path)
+    project = default_project(engine)
     store.create(
         "gprop_1",
+        project_id=project,
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="c",

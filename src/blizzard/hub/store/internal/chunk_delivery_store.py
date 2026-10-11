@@ -12,13 +12,12 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import func, insert, select, update
+from sqlalchemy import func
 
 from blizzard.hub.domain.chunk.model import PendingCloseIntent, WorkItemCloseOutcome, WorkRef
 from blizzard.hub.domain.chunk.ports.delivery import IWriteChunkDeliveryRepository
 from blizzard.hub.domain.work_items.closure import TERMINAL_CLOSE_OUTCOMES
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import (
     enqueue_close_intents,
     ephemeral_ids_select,
@@ -27,12 +26,13 @@ from blizzard.hub.store.internal.chunk_rows import (
     next_route_seq,
     record_hub_lease,
 )
+from blizzard.hub.store.scoped import ScopedConnections
 
 
 class ChunkDeliveryStore:
     """The chunk's landing and closure facts."""
 
-    def __init__(self, store: HubStoreConnections) -> None:
+    def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
     def landed_repos(self, chunk_id: str) -> set[str]:
@@ -40,16 +40,18 @@ class ChunkDeliveryStore:
             return {
                 r.repo
                 for r in conn.execute(
-                    select(s.delivery_repo_landed.c.repo).where(s.delivery_repo_landed.c.chunk_id == chunk_id)
+                    self._store.select(s.delivery_repo_landed, s.delivery_repo_landed.c.repo).where(
+                        s.delivery_repo_landed.c.chunk_id == chunk_id
+                    )
                 ).all()
             }
 
     def count_landed_since(self, repo: str, since: datetime) -> int:
         with self._store.read("count_landed_since") as conn:
             return conn.execute(
-                select(func.count())
-                .select_from(s.delivery_repo_landed)
-                .where(s.delivery_repo_landed.c.repo == repo, s.delivery_repo_landed.c.landed_at > since)
+                self._store.select(s.delivery_repo_landed, func.count()).where(
+                    s.delivery_repo_landed.c.repo == repo, s.delivery_repo_landed.c.landed_at > since
+                )
             ).scalar_one()
 
     def pending_close_intents(self) -> list[PendingCloseIntent]:
@@ -57,7 +59,8 @@ class ChunkDeliveryStore:
         joined, already-aggregated read — never one query per intent. Due-ness is not decided
         here: the drainer applies ``close_intent_is_due`` to the history each row carries."""
         attempts = (
-            select(
+            self._store.select(
+                s.close_intent_attempts,
                 s.close_intent_attempts.c.intent_id,
                 func.count(s.close_intent_attempts.c.id).label("attempt_count"),
                 func.max(s.close_intent_attempts.c.attempted_at).label("last_attempt_at"),
@@ -67,7 +70,10 @@ class ChunkDeliveryStore:
         )
         with self._store.read("pending_close_intents") as conn:
             rows = conn.execute(
-                select(
+                self._store.select(
+                    self._store.scope_join(
+                        s.close_intents, attempts, attempts.c.intent_id == s.close_intents.c.id, isouter=True
+                    ),
                     s.close_intents.c.id,
                     s.close_intents.c.chunk_id,
                     s.close_intents.c.source,
@@ -75,9 +81,8 @@ class ChunkDeliveryStore:
                     attempts.c.attempt_count,
                     attempts.c.last_attempt_at,
                 )
-                .select_from(s.close_intents.outerjoin(attempts, attempts.c.intent_id == s.close_intents.c.id))
                 .where(s.close_intents.c.retired_at.is_(None))
-                .where(s.close_intents.c.chunk_id.not_in(ephemeral_ids_select()))
+                .where(s.close_intents.c.chunk_id.not_in(ephemeral_ids_select(self._store)))
                 .order_by(s.close_intents.c.id)  # An explicit total order (`bzh:sql-portable`)
             ).all()
         return [
@@ -94,21 +99,25 @@ class ChunkDeliveryStore:
     def record_close_attempt_skipped(self, intent_id: int, *, at: datetime) -> None:
         with self._store.write("record_close_attempt_skipped") as conn:
             conn.execute(
-                insert(s.close_intent_attempts).values(intent_id=intent_id, attempted_at=at, outcome="skipped")
+                self._store.insert(s.close_intent_attempts).values(
+                    intent_id=intent_id, attempted_at=at, outcome="skipped"
+                )
             )
 
-    def record_delivery_repo_landed(self, chunk_id: str, *, repo: str, commit_hash: str, at: datetime) -> None:
+    def record_delivery_repo_landed(
+        self, chunk_id: str, *, repo: str, commit_hash: str, repository_name: str | None, at: datetime
+    ) -> None:
         with self._store.write("record_delivery_repo_landed") as conn:
             conn.execute(
-                s.delivery_repo_landed.insert().values(
-                    chunk_id=chunk_id, repo=repo, commit_hash=commit_hash, landed_at=at
+                self._store.insert(s.delivery_repo_landed).values(
+                    chunk_id=chunk_id, repo=repo, commit_hash=commit_hash, repository_name=repository_name, landed_at=at
                 )
             )
             enqueue_close_intents(conn, chunk_id, at=at)
 
     def record_delivery_landed(self, chunk_id: str, *, at: datetime) -> None:
         with self._store.write("record_delivery_landed") as conn:
-            conn.execute(s.delivery_landed.insert().values(chunk_id=chunk_id, landed_at=at))
+            conn.execute(self._store.insert(s.delivery_landed).values(chunk_id=chunk_id, landed_at=at))
             enqueue_close_intents(conn, chunk_id, at=at)
 
     def finalize_delivery(
@@ -130,14 +139,16 @@ class ChunkDeliveryStore:
         with self._store.write("finalize_delivery") as conn:
             lock_chunk_row(conn, chunk_id)
             already = conn.execute(
-                select(s.delivery_landed.c.id).where(s.delivery_landed.c.chunk_id == chunk_id)
+                self._store.select(s.delivery_landed, s.delivery_landed.c.id).where(
+                    s.delivery_landed.c.chunk_id == chunk_id
+                )
             ).first()
             if already is not None:
                 return False
             record_hub_lease(conn, chunk_id, epoch=epoch, runner_id=runner_id, at=at)
-            conn.execute(s.delivery_landed.insert().values(chunk_id=chunk_id, landed_at=at))
+            conn.execute(self._store.insert(s.delivery_landed).values(chunk_id=chunk_id, landed_at=at))
             conn.execute(
-                s.transitions.insert().values(
+                self._store.insert(s.transitions).values(
                     transition_id=transition_id,
                     chunk_id=chunk_id,
                     graph_id=graph_id_of(conn, chunk_id),
@@ -151,7 +162,9 @@ class ChunkDeliveryStore:
                 )
             )
             conn.execute(
-                s.route_released.insert().values(chunk_id=chunk_id, released_at=at, seq=next_route_seq(conn, chunk_id))
+                self._store.insert(s.route_released).values(
+                    chunk_id=chunk_id, released_at=at, seq=next_route_seq(conn, chunk_id)
+                )
             )
             enqueue_close_intents(conn, chunk_id, at=at)
             return True
@@ -170,7 +183,7 @@ class ChunkDeliveryStore:
         See ``blizzard-context/architecture/crash-correctness/hub.md``."""
         with self._store.write("record_work_item_closure") as conn:
             already = conn.execute(
-                select(s.work_item_closures.c.id).where(
+                self._store.select(s.work_item_closures, s.work_item_closures.c.id).where(
                     (s.work_item_closures.c.chunk_id == chunk_id)
                     & (s.work_item_closures.c.source == pointer.source)
                     & (s.work_item_closures.c.ref == pointer.ref)
@@ -180,7 +193,7 @@ class ChunkDeliveryStore:
             wrote = already is None
             if wrote:
                 conn.execute(
-                    s.work_item_closures.insert().values(
+                    self._store.insert(s.work_item_closures).values(
                         chunk_id=chunk_id,
                         source=pointer.source,
                         ref=pointer.ref,
@@ -191,7 +204,7 @@ class ChunkDeliveryStore:
                 )
             if outcome in TERMINAL_CLOSE_OUTCOMES:
                 conn.execute(
-                    update(s.close_intents)
+                    self._store.update(s.close_intents)
                     .where(
                         (s.close_intents.c.chunk_id == chunk_id)
                         & (s.close_intents.c.source == pointer.source)
@@ -202,7 +215,7 @@ class ChunkDeliveryStore:
                 )
             elif outcome is WorkItemCloseOutcome.FAILED:
                 intent_id = conn.execute(
-                    select(s.close_intents.c.id).where(
+                    self._store.select(s.close_intents, s.close_intents.c.id).where(
                         (s.close_intents.c.chunk_id == chunk_id)
                         & (s.close_intents.c.source == pointer.source)
                         & (s.close_intents.c.ref == pointer.ref)
@@ -211,7 +224,9 @@ class ChunkDeliveryStore:
                 ).scalar_one_or_none()
                 if intent_id is not None:  # never enqueued (or already retired) — no backoff to tick
                     conn.execute(
-                        insert(s.close_intent_attempts).values(intent_id=intent_id, attempted_at=at, outcome="failed")
+                        self._store.insert(s.close_intent_attempts).values(
+                            intent_id=intent_id, attempted_at=at, outcome="failed"
+                        )
                     )
             return wrote
 

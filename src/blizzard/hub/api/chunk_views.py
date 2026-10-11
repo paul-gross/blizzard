@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from typing import Final, TypedDict
@@ -13,7 +13,7 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.decisions import to_decision_view
 from blizzard.hub.api.graph_names import GraphNames
 from blizzard.hub.api.questions import question_view
-from blizzard.hub.composition import HubServices
+from blizzard.hub.composition import TenantServices
 from blizzard.hub.delivery.hub_node import PollPolicy
 from blizzard.hub.domain.artifact.model import GitCommitArtifact, StoredArtifact
 from blizzard.hub.domain.chunk.delivery_read import DeliveryRead, DeliverySources
@@ -28,11 +28,13 @@ from blizzard.hub.domain.chunk.model import (
     holds_claim,
     verb_legal_from,
 )
+from blizzard.hub.domain.config.repositories import CommitOrigin, resolve_origin_record
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.domain.operations.complete import is_completion_replay
 from blizzard.hub.domain.operations.edit import is_graph_editable
+from blizzard.hub.domain.projects.model import Project, ProjectId
 from blizzard.hub.domain.runners.route import Route
-from blizzard.hub.work_sources.source import IWorkSource
+from blizzard.hub.forge.web import branch_url as forge_branch_url
 from blizzard.wire.chunk import (
     ArtifactView,
     BlockedView,
@@ -110,6 +112,24 @@ def blocked_view(unmet_prerequisite_chunk_ids: Sequence[str] | None) -> BlockedV
     return BlockedView(prerequisite_chunk_id=marking.prerequisite_chunk_id, unmet_count=marking.unmet_count)
 
 
+class ProjectLabelFields(TypedDict):
+    """The project label fields every chunk-describing view carries."""
+
+    project_id: str | None
+    project_slug: str | None
+    project_name: str | None
+
+
+def project_label_fields(project_id: str | None, project: Project | None) -> ProjectLabelFields:
+    """A chunk's project labels: its ``project_id``, with the current slug and name of ``project``,
+    the record that id resolves to — ``None`` for each label the hub has no record for."""
+    return {
+        "project_id": project_id,
+        "project_slug": project.slug if project is not None else None,
+        "project_name": project.name if project is not None else None,
+    }
+
+
 class DeliveryWireFields(TypedDict):
     open_prs: list[PrView]
     closed_prs: list[PrView]
@@ -126,7 +146,7 @@ class ChunkView:
     A whole-fleet read hands :meth:`of` one :class:`GraphNames` for every chunk, so the
     graphs a fleet shares are resolved once across the list rather than once per row."""
 
-    services: HubServices
+    services: TenantServices
     chunk: Chunk
     facts: ChunkFacts
     names: GraphNames
@@ -143,11 +163,13 @@ class ChunkView:
     delivery: DeliveryRead | None = None
     #: Runner names by id — the caller's own batched read; ``None`` makes each render read the names it shows.
     runner_names: Mapping[str, str] | None = None
+    #: Projects by id — the caller's own batched read; ``None`` makes each render read the chunk's own project.
+    projects: Mapping[ProjectId, Project] | None = None
 
     @classmethod
     def of(
         cls,
-        services: HubServices,
+        services: TenantServices,
         chunk: Chunk,
         names: GraphNames | None = None,
         blocked: BlockedView | None = None,
@@ -171,7 +193,7 @@ class ChunkView:
     @classmethod
     def injected(
         cls,
-        services: HubServices,
+        services: TenantServices,
         chunk: Chunk,
         facts: ChunkFacts,
         route: Route | None,
@@ -180,10 +202,11 @@ class ChunkView:
         blocked: BlockedView | None = None,
         delivery: DeliveryRead | None = None,
         runner_names: Mapping[str, str] | None = None,
+        projects: Mapping[ProjectId, Project] | None = None,
     ) -> ChunkView:
         """The bulk-read counterpart to :meth:`of`: a fan-out list read injects
-        already-fetched facts, route, pointer live-holders and runner names, skipping a
-        per-chunk ``load_facts``/``route_of``/``live_holders``/``names_for`` call.
+        already-fetched facts, route, pointer live-holders, runner names and projects, skipping
+        a per-chunk ``load_facts``/``route_of``/``live_holders``/``names_for``/project read.
         ``route=None`` means "no live route"; :meth:`of` leaves both uninjected."""
         return cls(
             services=services,
@@ -195,7 +218,17 @@ class ChunkView:
             blocked=blocked,
             delivery=delivery,
             runner_names=runner_names,
+            projects=projects,
         )
+
+    def _project_fields(self) -> ProjectLabelFields:
+        """The chunk's project labels: from the injected projects, else one read of its own project."""
+        project_id = self.chunk.project_id
+        if project_id is None:
+            return project_label_fields(None, None)
+        if self.projects is not None:
+            return project_label_fields(project_id, self.projects.get(project_id))
+        return project_label_fields(project_id, self.services.projects.get(project_id))
 
     def _delivery(self) -> DeliveryRead:
         if self.delivery is not None:
@@ -267,6 +300,7 @@ class ChunkView:
             completed_at=iso_utc(completed_at) if completed_at is not None else None,
             blocked=self.blocked,
             **self._delivery_fields(self._delivery()),
+            **self._project_fields(),
         )
 
     def current_node(self) -> tuple[str | None, str | None]:
@@ -354,6 +388,7 @@ class ChunkView:
             usage=self._usage_history(),
             pending=self._pending(),
             bounces=self._bounces(),
+            **self._project_fields(),
         )
 
     @staticmethod
@@ -435,23 +470,36 @@ class ChunkView:
             for b in sorted(self.facts.bounces, key=lambda b: b.recorded_at)
         ]
 
-    def _branch_url_source(self) -> IWorkSource | None:
-        """The binding a chunk's artifact branch links resolve through.
+    def _branch_links(self, rows: list[StoredArtifact]) -> Callable[[StoredArtifact, GitCommitArtifact], str | None]:
+        """Each git-commit artifact's branch link: the forge ``tree`` address on the repository
+        record its repository resolves to by delivery's rules — among the records the chunk's
+        project links, standing at the chunk's mint time. ``None`` for a repository resolving
+        to no one record (unknown, ambiguous, or not linked); a chunk with no project links
+        none. One read of the links and one of the records serve every commit of the view,
+        and none at all when the view carries no commit."""
+        if not any(isinstance(row.artifact, GitCommitArtifact) for row in rows):
+            return lambda _row, _commit: None
+        project_id = self.chunk.project_id
+        linked = (
+            frozenset(link.repository_name for link in self.services.project_links.repositories_of(project_id))
+            if project_id is not None
+            else frozenset[str]()
+        )
+        records = self.services.repository_records.list_all(include_retired=True) if linked else []
+        minted_at = self.chunk.minted_at
 
-        One forge per chunk, *declared*: the chunk's first pointer whose ``source`` names a
-        configured binding lends its ``branch_url``. ``None`` when no pointer's source is
-        configured."""
-        for p in self.chunk.work_refs:
-            source = self.services.work_sources.get(p.source)
-            if source is not None:
-                return source
-        return None
+        def link(row: StoredArtifact, commit: GitCommitArtifact) -> str | None:
+            origin = CommitOrigin.of(commit.forge or None, commit.repo or row.name)
+            record = resolve_origin_record(origin, records, minted_at=minted_at, linked=linked)
+            return forge_branch_url(record.fields, commit.branch_name) if record is not None else None
+
+        return link
 
     def _artifacts(self, rows: list[StoredArtifact]) -> list[ArtifactView]:
         """The chunk's inline artifact store — every entry, with an asset's content and a
         git-commit's pinned reference surfaced; ordered by ``{node}.{name}.{epoch}``
         so a re-run's later-epoch entry follows its predecessors (append-only history)."""
-        web_base = self._branch_url_source()
+        branch_link = self._branch_links(rows)
         views: list[ArtifactView] = []
         for row in sorted(rows, key=lambda r: (r.node_name, r.name, r.epoch)):
             artifact = row.artifact
@@ -467,14 +515,13 @@ class ChunkView:
                 "recorded_at": iso_utc(attached) if attached is not None else None,
             }
             if isinstance(artifact, GitCommitArtifact):
-                branch_url = web_base.branch_url(artifact.repo, artifact.branch_name) if web_base is not None else None
                 views.append(
                     ArtifactView(
                         **common,
                         repo=artifact.repo,
                         branch_name=artifact.branch_name,
                         commit_hash=artifact.commit_hash,
-                        branch_url=branch_url,
+                        branch_url=branch_link(row, artifact),
                     )
                 )
             else:

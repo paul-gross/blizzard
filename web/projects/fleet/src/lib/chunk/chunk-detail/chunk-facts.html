@@ -6,7 +6,7 @@
     <a
       class="graph-link"
       data-testid="graph-value"
-      [routerLink]="[...linkBase, detail().graph_id]"
+      [routerLink]="[...linkBase, detail().graph_id] | lensLink"
       [title]="detail().graph_id"
       >{{ graphLabel() }}</a
     >
@@ -35,7 +35,7 @@
 <ng-template #dependsOnValue>
   @for (n of prerequisites(); track n.chunk_id) {
     <span class="edge">
-      <a class="edge-ref" data-testid="depends-on-neighbor" [routerLink]="[...chunkLinkBase(), n.chunk_id]" [title]="n.chunk_id">{{
+      <a class="edge-ref" data-testid="depends-on-neighbor" [routerLink]="[...chunkLinkBase(), n.chunk_id] | lensLink" [title]="n.chunk_id">{{
         shortId(n.chunk_id)
       }}</a>
       <span class="edge-status">{{ statusLabel(n) }}</span>
@@ -45,7 +45,7 @@
 <ng-template #blocksValue>
   @for (n of dependents(); track n.chunk_id) {
     <span class="edge">
-      <a class="edge-ref" data-testid="blocks-neighbor" [routerLink]="[...chunkLinkBase(), n.chunk_id]" [title]="n.chunk_id">{{
+      <a class="edge-ref" data-testid="blocks-neighbor" [routerLink]="[...chunkLinkBase(), n.chunk_id] | lensLink" [title]="n.chunk_id">{{
         shortId(n.chunk_id)
       }}</a>
       <span class="edge-status">{{ statusLabel(n) }}</span>

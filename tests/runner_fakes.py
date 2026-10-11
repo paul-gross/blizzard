@@ -22,6 +22,7 @@ from sqlalchemy import Engine, MetaData, make_url
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock, IClock, ManualMonotonicClock
 from blizzard.foundation.node_steps import ApplyOutcome, SessionMode
+from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.composition import RunnerProcess, build_runner_process
 from blizzard.runner.config import RunnerConfig
@@ -64,10 +65,15 @@ from blizzard.runner.hub.client import (
     RegistrationReply,
     RouteClaimOutcome,
     SubscriptionDeclaration,
+    TokenIdentity,
+    TokenRefusal,
     TranscriptPush,
     TranscriptPushAck,
 )
-from blizzard.runner.hub.identity import RunnerIdentity, RunnerIdentityHolder
+from blizzard.runner.hub.held_token import HubTokenHolder
+from blizzard.runner.hub.identity import IdentityState, IdentityVerdictHolder, RunnerIdentity, RunnerIdentityHolder
+from blizzard.runner.hub.served_projects import ServedProject
+from blizzard.runner.hub.verified import VerifiedHubClient
 from blizzard.runner.leases.internal.worker_stdout_files import WorkerStdoutFiles
 from blizzard.runner.lifecycle.env_release import EnvironmentRelease
 from blizzard.runner.lifecycle.judgement.check_runner import CheckOutcome, ICheckRunner
@@ -100,6 +106,7 @@ from blizzard.runner.store.internal.lease_trace_facts_store import LeaseTraceFac
 from blizzard.runner.store.internal.outbound_store import OutboundStore
 from blizzard.runner.store.internal.overload_store import OverloadStore
 from blizzard.runner.store.internal.pause_store import PauseStore
+from blizzard.runner.store.internal.projects_answer_store import ServedProjectsStore
 from blizzard.runner.store.internal.requeue_store import RequeueStore
 from blizzard.runner.store.internal.selftest_result_store import SelfTestResultStore
 from blizzard.runner.store.internal.takeover_store import TakeoverStore
@@ -144,6 +151,7 @@ class SqlAlchemyRunnerStore(
     AskStore,
     PauseStore,
     RunnerIdentityStore,
+    ServedProjectsStore,
     TakeoverStore,
     RequeueStore,
     EscalationStore,
@@ -178,6 +186,7 @@ class SqlAlchemyRunnerStore(
         AskStore.__init__(self, store)
         PauseStore.__init__(self, store)
         RunnerIdentityStore.__init__(self, store)
+        ServedProjectsStore.__init__(self, store)
         TakeoverStore.__init__(self, store)
         RequeueStore.__init__(self, store)
         EscalationStore.__init__(self, store)
@@ -279,6 +288,7 @@ def make_stores(store: IWriteRunnerStore) -> RunnerStores:
         asks=store,
         pause=store,
         identity=store,
+        served_projects=store,
         takeover=store,
         requeue=store,
         escalations=store,
@@ -376,6 +386,16 @@ FAKE_RUNNER_TOKEN = "test-runner-token"
 REGISTERED_AT = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 
 
+def matched_verdict() -> IdentityVerdictHolder:
+    """A verdict already matched — the state a hosted runner's check reaches against its own hub."""
+    return IdentityVerdictHolder("blizzard runner store reset /runner", state=IdentityState.MATCHED)
+
+
+def fixed_hub_token(token: str = FAKE_RUNNER_TOKEN) -> HubTokenHolder:
+    """A held token the process environment supplied — never re-read, as a test's context needs."""
+    return HubTokenHolder(token, file=None)
+
+
 def registered_identity(runner_id: str = "r1", runner_name: str = "runner-local") -> RunnerIdentityHolder:
     """A holder answering one successful registration — the identity a status, control or federation
     surface reads for a runner that has registered."""
@@ -397,8 +417,14 @@ class FakeHub:
         self.default_runner_id = default_runner_id
         # The bearer token this client presents, and the tokens the hub holds, each to the runner id it
         # was issued to: a fleet call resolves its caller from the presented token, refusing an unheld one with 401.
-        self.token = FAKE_RUNNER_TOKEN
+        self._token = FAKE_RUNNER_TOKEN
+        self._held: HubTokenHolder | None = None
         self.issued: dict[str, str] = {FAKE_RUNNER_TOKEN: default_runner_id}
+        # The tenant registration and the identity read answer with; ``None`` plays a hub that predates tenants.
+        self.tenant_id: str | None = None
+        self.tenant_name: str | None = None
+        # The served projects every registration answers with; `None` is a hub that predates projects.
+        self.served_projects: tuple[ServedProject, ...] | None = None
         self.queue: list[QueueEntry] = []
         # A per-call scripted sequence: when set, each `peek_queue`
         # call pops its own response instead of reading the static `queue` above.
@@ -443,6 +469,7 @@ class FakeHub:
         # subscriptions per register call
         self.registered_subscriptions: list[tuple[SubscriptionDeclaration, ...]] = []
         self.registered_gates: list[tuple[str, ...]] = []
+        self.registered_projects: list[tuple[str, ...] | None] = []
         self.paused = False  # the hub-side pause brake this fake reports back
         self.down = False
         # chunk ids `get_envelope` 404s for; `chunk_statuses` never raises for
@@ -455,6 +482,23 @@ class FakeHub:
         self.hub_advance_responses: dict[str, HubAdvanceResponse] = {}
         self.rekey_calls: list[str] = []  # chunk ids `rekey_route_token` was called for
         self.rekey_responses: dict[str, str] = {}  # chunk_id -> the plaintext to hand back
+
+    @property
+    def token(self) -> str:
+        """The bearer token this client presents: the runner's held token once :meth:`presents` binds
+        one, as a client authorizing each request from it does, else the scripted one."""
+        if self._held is not None:
+            bearer = self._held.auth_headers().get("Authorization", "")
+            return bearer.removeprefix("Bearer ")
+        return self._token
+
+    @token.setter
+    def token(self, value: str) -> None:
+        self._token = value
+
+    def presents(self, held: HubTokenHolder) -> None:
+        """Present ``held``'s current token on every call from now on."""
+        self._held = held
 
     def peek_queue(self, capabilities: Sequence[HarnessCapability], *, policy: str) -> list[QueueEntry]:
         self.peek_queue_calls += 1
@@ -600,6 +644,7 @@ class FakeHub:
         capabilities: tuple[HarnessCapability, ...] = (),
         subscriptions: tuple[SubscriptionDeclaration, ...] = (),
         gates: tuple[str, ...] = (),
+        projects: tuple[str, ...] | None = None,
     ) -> RegistrationReply:
         if self.down:
             raise HubClientError("fake hub is down")
@@ -611,7 +656,26 @@ class FakeHub:
         self.registered_capabilities.append(capabilities)
         self.registered_subscriptions.append(subscriptions)
         self.registered_gates.append(gates)
-        return RegistrationReply(runner_id=runner_id, runner_name=name, first_registration=len(self.registered) == 1)
+        self.registered_projects.append(projects)
+        return RegistrationReply(
+            runner_id=runner_id,
+            runner_name=name,
+            first_registration=len(self.registered) == 1,
+            tenant_id=self.tenant_id,
+            tenant_name=self.tenant_name,
+            projects=self.served_projects,
+        )
+
+    def identity(self) -> TokenIdentity | TokenRefusal:
+        """``GET /api/fleet/identity`` — the runner the presented token was issued to, or unknown."""
+        if self.down:
+            raise HubClientError("fake hub is down")
+        runner_id = self.issued.get(self.token)
+        if runner_id is None:
+            return TokenRefusal(reason=RunnerTokenRefusalReason.UNKNOWN)
+        return TokenIdentity(
+            runner_id=runner_id, runner_name="runner-local", tenant_id=self.tenant_id, tenant_name=self.tenant_name
+        )
 
     def fetch_runner_paused(self, runner_id: str) -> bool:
         if self.down:
@@ -1336,6 +1400,8 @@ def make_context(
     harness_versions: HarnessVersionCache | None = None,
     worker_scratch: WorkerScratchDirs | None = None,
     registered: bool = True,
+    identity_verdict: IdentityVerdictHolder | None = None,
+    hub_token: HubTokenHolder | None = None,
 ) -> LoopContext:
     """Assemble a :class:`LoopContext` from a real store and injected fakes.
 
@@ -1343,7 +1409,9 @@ def make_context(
     (not through ``tick()``) reads the hub on every ``get()``. ``registered`` seeds the store's identity row and
     the holder with ``hub``'s runner id; ``False`` leaves the runner never registered."""
     resolved_config = config if config is not None else LoopConfig(runner_name="r1", workspace_id="ws1", max_agents=1)
-    _hub: IHubClient = hub
+    # A verdict handed in gates the hub as a hosted runner's is; with none, the runner is matched and ungated.
+    _verdict = identity_verdict if identity_verdict is not None else matched_verdict()
+    _hub: IHubClient = VerifiedHubClient(hub, _verdict) if identity_verdict is not None else hub
     _chunk_views: IChunkViews = chunk_views if chunk_views is not None else ReadThroughChunkViews(hub=_hub)
     _provider: IWorkspaceProvider = provider
     _harnesses = HarnessRegistry(
@@ -1373,6 +1441,9 @@ def make_context(
         clock=_clock,
         hub=_hub,
         identity=_identity,
+        token_identity=hub,
+        identity_verdict=_verdict,
+        hub_token=hub_token if hub_token is not None else fixed_hub_token(),
         chunk_views=_chunk_views,
         provider=_provider,
         process=_probe,

@@ -2,12 +2,13 @@
 
 The planner decides from loaded data alone: the parsed :class:`LegacyKeys`, the values of the variables it
 names, the commit coordinates the hub has delivered to, and the records the store already holds. The store
-wins over the file: a record that already exists, active or retired, is skipped, never overwritten. The
-writer commits the plan and the ``config_import`` fact as one transaction, so a refusal writes nothing."""
+wins over the file: a record that already exists, active or retired, is skipped, never overwritten. Each work source
+and repository the import creates is linked to the project it lands in, which the importing layer decides. The
+writer commits the plan, its links and the ``config_import`` fact as one transaction, so a refusal writes nothing."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
@@ -127,12 +128,14 @@ class SealedSecretWrite:
 @domain_model
 @dataclass(frozen=True)
 class LegacyImport:
-    """Every write of one import, in commit order: secrets, then the records naming them, then the fact."""
+    """Every write of one import, in commit order: secrets, then the records naming them, then their links — each a
+    link record of a kind the writer knows, with its change — then the fact."""
 
     secrets: tuple[SealedSecretWrite, ...]
     work_sources: tuple[tuple[ConfiguredWorkSource, ConfigChange], ...]
     repositories: tuple[tuple[ConfiguredRepository, ConfigChange], ...]
     fact: ConfigImportFact
+    links: tuple[tuple[object, ConfigChange], ...] = ()
 
 
 class ImportStatus(StrEnum):
@@ -155,6 +158,16 @@ class IReadConfigImports(Protocol):
 
     def commit_coordinates(self) -> list[CommitCoordinate]:
         """The distinct ``(forge, repo)`` of every ``git_commit`` artifact; ``repo`` falls back to the artifact name."""
+        ...
+
+
+class IImportLinks(Protocol):
+    """Links the records an import creates to the project they land in."""
+
+    def links(
+        self, work_sources: Sequence[str], repositories: Sequence[str], ctx: ChangeContext, *, at: datetime
+    ) -> tuple[tuple[object, ConfigChange], ...]:
+        """Each link record with its change. :class:`LegacyImportRefused` when no project can be chosen."""
         ...
 
 
@@ -333,8 +346,10 @@ class LegacyStart:
     keys: LegacyKeys
 
     @classmethod
-    def of(cls, imports: IReadConfigImports, keys: LegacyKeys) -> LegacyStart:
-        return cls(recorded=imports.recorded(), keys=keys)
+    def of(cls, imports: Iterable[IReadConfigImports], keys: LegacyKeys) -> LegacyStart:
+        """``imports`` reads through each open tenant. The import is the hub's, recorded once into the one
+        tenant it wrote, so any tenant's reader answers it; a hub with no open tenant has recorded none."""
+        return cls(recorded=any(tenant.recorded() for tenant in imports), keys=keys)
 
     def check(self) -> None:
         """Refuse to start while a legacy key remains, naming the exact remedy — never a value."""

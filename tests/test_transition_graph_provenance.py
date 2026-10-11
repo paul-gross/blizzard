@@ -22,7 +22,7 @@ from blizzard.hub.domain.chunk.model import ChunkFacts, MigrationFact, Transitio
 from blizzard.hub.domain.graph.authoring import Reification
 from blizzard.hub.domain.graph.model import Graph, GraphDoc, GraphSummary
 from blizzard.hub.store import schema as s
-from tests.support import build_hub
+from tests.support import build_hub, stamp
 
 pytestmark = pytest.mark.unit
 
@@ -226,45 +226,69 @@ def test_load_facts_resolves_each_transition_executor_against_its_own_graph(tmp_
         for gid in ("gr_a", "gr_b"):
             conn.execute(
                 insert(s.graphs).values(
-                    graph_id=gid, name=gid, entry_node_id="nd_run", definition_yaml="", created_at=_T0
+                    stamp(s.graphs, graph_id=gid, name=gid, entry_node_id="nd_run", definition_yaml="", created_at=_T0)
                 )
             )
         conn.execute(
             insert(s.graph_nodes).values(
-                node_id="nd_run", graph_id="gr_a", name="build", executor="runner", session="resume", judged_by="worker"
+                stamp(
+                    s.graph_nodes,
+                    node_id="nd_run",
+                    graph_id="gr_a",
+                    name="build",
+                    executor="runner",
+                    session="resume",
+                    judged_by="worker",
+                )
             )
         )
         conn.execute(
             insert(s.graph_nodes).values(
-                node_id="nd_hub", graph_id="gr_b", name="merge", executor="hub", session="resume", judged_by="worker"
+                stamp(
+                    s.graph_nodes,
+                    node_id="nd_hub",
+                    graph_id="gr_b",
+                    name="merge",
+                    executor="hub",
+                    session="resume",
+                    judged_by="worker",
+                )
             )
         )
-        conn.execute(insert(s.chunks).values(chunk_id="ch_1", graph_id="gr_a", minted_at=_T0, model="m"))
+        conn.execute(
+            insert(s.chunks).values(stamp(s.chunks, chunk_id="ch_1", graph_id="gr_a", minted_at=_T0, model="m"))
+        )
         # A history spanning both graphs: the second step targets gr_b's hub node.
         conn.execute(
             insert(s.transitions).values(
-                transition_id="tr_1",
-                chunk_id="ch_1",
-                graph_id="gr_a",
-                from_node_id=None,
-                to_node_id="nd_run",
-                choice_name=None,
-                epoch=1,
-                runner_id="r",
-                recorded_at=datetime(2026, 1, 1, 1, tzinfo=UTC),
+                stamp(
+                    s.transitions,
+                    transition_id="tr_1",
+                    chunk_id="ch_1",
+                    graph_id="gr_a",
+                    from_node_id=None,
+                    to_node_id="nd_run",
+                    choice_name=None,
+                    epoch=1,
+                    runner_id="r",
+                    recorded_at=datetime(2026, 1, 1, 1, tzinfo=UTC),
+                )
             )
         )
         conn.execute(
             insert(s.transitions).values(
-                transition_id="tr_2",
-                chunk_id="ch_1",
-                graph_id="gr_b",
-                from_node_id="nd_run",
-                to_node_id="nd_hub",
-                choice_name="go",
-                epoch=1,
-                runner_id="r",
-                recorded_at=datetime(2026, 1, 1, 2, tzinfo=UTC),
+                stamp(
+                    s.transitions,
+                    transition_id="tr_2",
+                    chunk_id="ch_1",
+                    graph_id="gr_b",
+                    from_node_id="nd_run",
+                    to_node_id="nd_hub",
+                    choice_name="go",
+                    epoch=1,
+                    runner_id="r",
+                    recorded_at=datetime(2026, 1, 1, 2, tzinfo=UTC),
+                )
             )
         )
 

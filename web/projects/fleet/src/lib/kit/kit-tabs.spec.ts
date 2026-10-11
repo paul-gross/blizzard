@@ -38,6 +38,20 @@ describe('KitTabs', () => {
     expect(tabs[1].textContent?.trim()).toBe('Artifacts');
   });
 
+  it('shows a count after a label that carries one, and none otherwise', async () => {
+    const fixture = TestBed.createComponent(TestHost);
+    fixture.componentInstance.options = [
+      { value: 'links', label: 'Linked sources', count: 2 },
+      { value: 'none', label: 'Linked repositories', count: 0 },
+      { value: 'overview', label: 'Overview' },
+    ];
+    await fixture.whenStable();
+    const tabs = (fixture.nativeElement as HTMLElement).querySelectorAll('.tab');
+    expect(tabs[0].querySelector('.cnt')?.textContent).toBe('2');
+    expect(tabs[1].querySelector('.cnt')?.textContent).toBe('0');
+    expect(tabs[2].querySelector('.cnt')).toBeNull();
+  });
+
   it('marks the active option and emits choose with the clicked value', async () => {
     const fixture = TestBed.createComponent(TestHost);
     fixture.componentInstance.active.set('general');

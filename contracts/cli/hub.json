@@ -1,5 +1,128 @@
 {
   "commands": {
+    "admin": {
+      "commands": {
+        "grant": {
+          "help": "Make USER_ID a hub administrator; it grants nothing inside any tenant by itself.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "user_id",
+              "opts": [
+                "user_id"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub admin grant",
+          "short_help": "Make USER_ID a hub administrator; it grants nothing inside any tenant by itself."
+        },
+        "list": {
+          "help": "Every hub administrator: user id, username, email.",
+          "params": [
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub admin list",
+          "short_help": "Every hub administrator: user id, username, email."
+        },
+        "revoke": {
+          "help": "Revoke USER_ID's hub administrator role; the hub's last one keeps theirs.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "user_id",
+              "opts": [
+                "user_id"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub admin revoke",
+          "short_help": "Revoke USER_ID's hub administrator role; the hub's last one keeps theirs."
+        }
+      },
+      "help": "The hub's administrators, who create and delete tenants and grant anyone into one: list, grant, revoke.",
+      "params": [],
+      "path": "hub admin",
+      "short_help": "The hub's administrators, who create and delete tenants and grant anyone into one: list, grant, revoke."
+    },
     "analytics": {
       "commands": {
         "events": {
@@ -162,6 +285,18 @@
               "type": "text"
             },
             {
+              "help": "Show only this project's records, by id or slug. Without it, every project of the tenant is shown.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Resume from a prior page's next_cursor.",
               "hidden": false,
               "kind": "option",
@@ -208,6 +343,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -275,6 +422,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -463,6 +622,18 @@
               "type": "text"
             },
             {
+              "help": "Show only this project's records, by id or slug. Without it, every project of the tenant is shown.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Resume from a prior page's next_cursor (spend-chunks only).",
               "hidden": false,
               "kind": "option",
@@ -509,6 +680,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -585,6 +768,18 @@
               "type": "boolean"
             },
             {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
@@ -650,6 +845,18 @@
               "type": "boolean"
             },
             {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
@@ -690,6 +897,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -746,6 +965,18 @@
               "type": "boolean"
             },
             {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
@@ -799,6 +1030,18 @@
               "type": "boolean"
             },
             {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
@@ -815,7 +1058,7 @@
           "short_help": "Merge MERGE_IDS into CHUNK_ID, the survivor \u2014 a pure client of ``POST /api/chunks/{id}/group``."
         },
         "ingest": {
-          "help": "Ingest work items by token, minting a chunk.\n\nEach POINTER is a source-native token \u2014 ``source:ref``, ``source#ref``, or a pasted\nwork item URL; a batch mints one chunk carrying every pointer. 422 when no\nconfigured work source claims a token; 409 when a pointer is already held.",
+          "help": "Ingest work items by token, minting a chunk.\n\nEach POINTER is a source-native token \u2014 ``source:ref``, ``source#ref``, or a pasted\nwork item URL; a batch mints one chunk carrying every pointer. 422 when no\nconfigured work source claims a token or a pointer's source is not linked to the\nproject; 409 when a pointer is already held.",
           "params": [
             {
               "hidden": false,
@@ -829,6 +1072,18 @@
               "type": "pointer"
             },
             {
+              "help": "The project to mint the chunk in, by id or slug. Without it, the project the pointers' work sources are linked to; needed when they name none or disagree.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
@@ -839,6 +1094,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -860,6 +1127,18 @@
           "help": "The fleet chunk list \u2014 derived status per chunk.",
           "params": [
             {
+              "help": "Show only this project's records, by id or slug. Without it, every project of the tenant is shown.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
@@ -870,6 +1149,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -950,6 +1241,18 @@
               "type": "boolean"
             },
             {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
@@ -1004,6 +1307,18 @@
               "type": "boolean"
             },
             {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
@@ -1046,6 +1361,18 @@
               "type": "boolean"
             },
             {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
@@ -1086,6 +1413,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -1153,6 +1492,18 @@
               "type": "boolean"
             },
             {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
@@ -1193,6 +1544,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -1273,6 +1636,18 @@
               "type": "boolean"
             },
             {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
@@ -1325,6 +1700,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -1417,6 +1804,18 @@
               "type": "boolean"
             },
             {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
@@ -1457,6 +1856,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -1513,6 +1924,18 @@
               "type": "boolean"
             },
             {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
@@ -1553,6 +1976,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -1617,6 +2052,18 @@
               "type": "boolean"
             },
             {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
@@ -1672,6 +2119,18 @@
               "type": "boolean"
             },
             {
+              "help": "Show only this project's records, by id or slug. Without it, every project of the tenant is shown.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
@@ -1682,6 +2141,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -1727,6 +2198,18 @@
               "type": "boolean"
             },
             {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
@@ -1743,7 +2226,7 @@
           "short_help": "Print every active work source, repository and secret name as a document that applies back unchanged."
         },
         "import-legacy": {
-          "help": "Carry this hub's [[work_source]] blocks and BZ_FORGE_* variables into records \u2014 offline, on the hub host.\n\nRuns once, in one transaction, against a migrated store and an existing hub key. A record the store\nalready holds is skipped, never overwritten; any refusal writes nothing. A second run writes nothing.",
+          "help": "Carry this hub's [[work_source]] blocks and BZ_FORGE_* variables into records \u2014 offline, on the hub host.\n\nRuns once, in one transaction, against a migrated store and an existing hub key, writing into the hub's\nonly tenant or the one --tenant names. A record the tenant already holds is skipped, never overwritten;\nany refusal writes nothing. A second run writes nothing.",
           "params": [
             {
               "help": "Hub runtime directory (overrides $BZ_HUB_DIR).",
@@ -1752,6 +2235,18 @@
               "name": "directory",
               "opts": [
                 "--dir"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The tenant to import into, by id; required when the hub holds several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
               ],
               "required": false,
               "secondary_opts": [],
@@ -1783,6 +2278,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -1848,6 +2355,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -2108,6 +2627,18 @@
           "type": "integer range"
         },
         {
+          "help": "Show only this project's records, by id or slug. Without it, every project of the tenant is shown.",
+          "hidden": false,
+          "kind": "option",
+          "name": "project",
+          "opts": [
+            "--project"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": "text"
+        },
+        {
           "help": "Print the raw response body as JSON.",
           "hidden": false,
           "kind": "option",
@@ -2118,6 +2649,18 @@
           "required": false,
           "secondary_opts": [],
           "type": "boolean"
+        },
+        {
+          "help": "The tenant to act in, by id; needed only when you belong to several.",
+          "hidden": false,
+          "kind": "option",
+          "name": "tenant",
+          "opts": [
+            "--tenant"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": "text"
         },
         {
           "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -2174,6 +2717,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -2243,6 +2798,18 @@
               "type": "boolean"
             },
             {
+              "help": "The project the record belongs to, by id or slug. Needed only when the tenant holds several projects; with one, the record goes to it.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
@@ -2253,6 +2820,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -2309,6 +2888,18 @@
               "type": "boolean"
             },
             {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
@@ -2361,6 +2952,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -2417,6 +3020,18 @@
               "type": "boolean"
             },
             {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
@@ -2457,6 +3072,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -2525,6 +3152,18 @@
               "type": "boolean"
             },
             {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
@@ -2577,6 +3216,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -2665,6 +3316,18 @@
               "type": "boolean"
             },
             {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
@@ -2716,6 +3379,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -2797,6 +3472,18 @@
               "type": "text"
             },
             {
+              "help": "The project the record belongs to, by id or slug. Needed only when the tenant holds several projects; with one, the record goes to it.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
@@ -2807,6 +3494,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -2860,6 +3559,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -2940,6 +3651,18 @@
               "type": "boolean"
             },
             {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
@@ -2971,6 +3694,18 @@
               "type": "choice"
             },
             {
+              "help": "Show only this project's records, by id or slug. Without it, every project of the tenant is shown.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
@@ -2981,6 +3716,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -3037,6 +3784,18 @@
               "type": "boolean"
             },
             {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
@@ -3077,6 +3836,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -3127,6 +3898,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -3182,6 +3965,18 @@
               "type": "boolean"
             },
             {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
@@ -3211,6 +4006,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -3255,6 +4062,18 @@
               "type": "boolean"
             },
             {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
@@ -3295,6 +4114,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -3339,6 +4170,18 @@
               "type": "boolean"
             },
             {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
@@ -3355,7 +4198,7 @@
           "short_help": "One graph's full reified definition \u2014 session pools, nodes, and edges."
         },
         "sync": {
-          "help": "Reconcile the hub's packaged graphs into its store, minting only what changed.\n\nIdempotent. The **hub's own** packaged set is what is reconciled, not this CLI's.\nExits non-zero only if a packaged graph failed to load. When to run it:\nhttps://github.com/paul-gross/blizzard/blob/master/docs/deployment/install.md#graph-sync-after-a-deploy",
+          "help": "Reconcile the hub's packaged graphs into every open tenant, minting only what changed, and report per tenant.\n\nIdempotent. The **hub's own** packaged set is what is reconciled, not this CLI's.\nExits non-zero only if a packaged graph failed to load in some tenant. When to run it:\nhttps://github.com/paul-gross/blizzard/blob/master/docs/deployment/install.md#graph-sync-after-a-deploy",
           "params": [
             {
               "help": "Print the raw response body as JSON.",
@@ -3383,7 +4226,7 @@
             }
           ],
           "path": "hub graph sync",
-          "short_help": "Reconcile the hub's packaged graphs into its store, minting only what changed."
+          "short_help": "Reconcile the hub's packaged graphs into every open tenant, minting only what changed, and report per tenant."
         }
       },
       "help": "Operator verbs over minted graphs: list, inspect, mint, retire, re-enable.",
@@ -3487,6 +4330,190 @@
       "path": "hub init",
       "short_help": "Scaffold config + data dir + a migrated store under DIRECTORY."
     },
+    "invite": {
+      "commands": {
+        "create": {
+          "help": "Invite --email into the tenant as --role and print the invitation's link. The link is shown this once \u2014 the hub\nkeeps only its hash, so it cannot be printed again \u2014 and the hub sends no mail: hand it to the person yourself.",
+          "params": [
+            {
+              "help": "The one address that may accept the invitation.",
+              "hidden": false,
+              "kind": "option",
+              "name": "email",
+              "opts": [
+                "--email"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The role it admits as.",
+              "hidden": false,
+              "kind": "option",
+              "name": "role",
+              "opts": [
+                "--role"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "choice"
+            },
+            {
+              "help": "Whole days the invitation stays live.",
+              "hidden": false,
+              "kind": "option",
+              "name": "expires_in",
+              "opts": [
+                "--expires"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "integer range"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub invite create",
+          "short_help": "Invite --email into the tenant as --role and print the invitation's link."
+        },
+        "list": {
+          "help": "Every invitation of the tenant, oldest first: email, role, state (live, accepted by whom, expired, revoked),\nwho issued it \u2014 never its link.",
+          "params": [
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub invite list",
+          "short_help": "Every invitation of the tenant, oldest first: email, role, state (live, accepted by whom, expired, revoked), who issued it \u2014 never its link."
+        },
+        "revoke": {
+          "help": "Revoke INVITATION_ID, live or expired, so its link admits nobody; an accepted one stays accepted.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "invitation_id",
+              "opts": [
+                "invitation_id"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub invite revoke",
+          "short_help": "Revoke INVITATION_ID, live or expired, so its link admits nobody; an accepted one stays accepted."
+        }
+      },
+      "help": "A tenant's invitations: create one and hand its link on, list them, revoke one.",
+      "params": [],
+      "path": "hub invite",
+      "short_help": "A tenant's invitations: create one and hand its link on, list them, revoke one."
+    },
     "item": {
       "commands": {
         "create": {
@@ -3541,6 +4568,18 @@
               "type": "text"
             },
             {
+              "help": "The project the record belongs to, by id or slug. Needed only when the tenant holds several projects; with one, the record goes to it.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
@@ -3551,6 +4590,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -3605,6 +4656,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -3683,6 +4746,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -3768,6 +4843,176 @@
       "path": "hub logout",
       "short_help": "Log out of the hub \u2014 deletes the locally stored session token and revokes it at the hub, so it stops resolving even if it leaked."
     },
+    "member": {
+      "commands": {
+        "grant": {
+          "help": "Give the member USER_ID the role ROLE in the tenant, or change the one they hold. USER_ID is a user id, never a\nusername or an email; one who is not yet a member needs an invitation \u2014 a hub administrator may grant them\ndirectly. Nobody changes their own role, and the tenant's last admin keeps theirs.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "user_id",
+              "opts": [
+                "user_id"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "role",
+              "opts": [
+                "role"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "choice"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub member grant",
+          "short_help": "Give the member USER_ID the role ROLE in the tenant, or change the one they hold."
+        },
+        "list": {
+          "help": "Every member of the tenant: user id, username, role, email, and whether they are also a hub administrator.",
+          "params": [
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub member list",
+          "short_help": "Every member of the tenant: user id, username, role, email, and whether they are also a hub administrator."
+        },
+        "revoke": {
+          "help": "Revoke USER_ID's membership in the tenant. Nobody revokes their own, and the tenant's last admin keeps theirs.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "user_id",
+              "opts": [
+                "user_id"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub member revoke",
+          "short_help": "Revoke USER_ID's membership in the tenant."
+        }
+      },
+      "help": "A tenant's members, named by user id: list, grant, revoke. Bringing in someone new is an invitation.",
+      "params": [],
+      "path": "hub member",
+      "short_help": "A tenant's members, named by user id: list, grant, revoke."
+    },
     "migrate": {
       "help": "Apply pending store migrations, or reverse with --down <rev>.",
       "params": [
@@ -3810,6 +5055,471 @@
       ],
       "path": "hub migrate",
       "short_help": "Apply pending store migrations, or reverse with --down <rev>."
+    },
+    "project": {
+      "commands": {
+        "create": {
+          "help": "Create project SLUG at revision 1, named NAME (default: SLUG). It draws work only from the built-in hub\nsource until a work source or repository is linked to it. Refused when SLUG is another project's current slug.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "slug",
+              "opts": [
+                "slug"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The project's display name (default: SLUG).",
+              "hidden": false,
+              "kind": "option",
+              "name": "name",
+              "opts": [
+                "--name"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "What the project is for.",
+              "hidden": false,
+              "kind": "option",
+              "name": "description",
+              "opts": [
+                "--description"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub project create",
+          "short_help": "Create project SLUG at revision 1, named NAME (default: SLUG)."
+        },
+        "edit": {
+          "help": "Change only the fields given on PROJECT; every other field keeps its value. A slug the project leaves keeps\nnaming it until another project takes it. A change that leaves every field as it is writes nothing and keeps the\nrevision. Refused when the new slug is another project's, or --if-match names a stale revision.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "project",
+              "opts": [
+                "project"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The new slug; the one it leaves keeps naming the project.",
+              "hidden": false,
+              "kind": "option",
+              "name": "slug",
+              "opts": [
+                "--slug"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The new display name.",
+              "hidden": false,
+              "kind": "option",
+              "name": "name",
+              "opts": [
+                "--name"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The new description.",
+              "hidden": false,
+              "kind": "option",
+              "name": "description",
+              "opts": [
+                "--description"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Refuse the change unless it is still at this revision.",
+              "hidden": false,
+              "kind": "option",
+              "name": "if_match",
+              "opts": [
+                "--if-match"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "integer"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub project edit",
+          "short_help": "Change only the fields given on PROJECT; every other field keeps its value."
+        },
+        "link": {
+          "help": "Link PROJECT to one work source (--source) or one repository (--repository): work ingested from that source\ncan belong to PROJECT, and PROJECT's work can land in that repository. A retired record can be linked; a link\nalready standing, and the built-in hub source, change nothing; a link unlinked earlier is linked again.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "project",
+              "opts": [
+                "project"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "A work source, by name.",
+              "hidden": false,
+              "kind": "option",
+              "name": "source",
+              "opts": [
+                "--source"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "A repository, by name.",
+              "hidden": false,
+              "kind": "option",
+              "name": "repository",
+              "opts": [
+                "--repository"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Refuse the change unless it is still at this revision.",
+              "hidden": false,
+              "kind": "option",
+              "name": "if_match",
+              "opts": [
+                "--if-match"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "integer"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub project link",
+          "short_help": "Link PROJECT to one work source (--source) or one repository (--repository): work ingested from that source can belong to PROJECT, and PROJECT's work can land in that repository."
+        },
+        "list": {
+          "help": "List the tenant's projects \u2014 slug, name, id, revision.",
+          "params": [
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub project list",
+          "short_help": "List the tenant's projects \u2014 slug, name, id, revision."
+        },
+        "show": {
+          "help": "Show PROJECT \u2014 named by its id, its slug, or a slug it has left \u2014 with the work sources and repositories\nlinked to it.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "project",
+              "opts": [
+                "project"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub project show",
+          "short_help": "Show PROJECT \u2014 named by its id, its slug, or a slug it has left \u2014 with the work sources and repositories linked to it."
+        },
+        "unlink": {
+          "help": "Unlink PROJECT from one work source (--source) or one repository (--repository): new work from that source\nno longer goes to PROJECT, and PROJECT's work no longer lands in that repository. Unlinking an unlinked link\nchanges nothing; link it again to restore it. Refused for the built-in hub source, which every project draws\nfrom.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "project",
+              "opts": [
+                "project"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "A work source, by name.",
+              "hidden": false,
+              "kind": "option",
+              "name": "source",
+              "opts": [
+                "--source"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "A repository, by name.",
+              "hidden": false,
+              "kind": "option",
+              "name": "repository",
+              "opts": [
+                "--repository"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Refuse the change unless it is still at this revision.",
+              "hidden": false,
+              "kind": "option",
+              "name": "if_match",
+              "opts": [
+                "--if-match"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "integer"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub project unlink",
+          "short_help": "Unlink PROJECT from one work source (--source) or one repository (--repository): new work from that source no longer goes to PROJECT, and PROJECT's work no longer lands in that repository."
+        }
+      },
+      "help": "Operator verbs over the tenant's projects: create, list, show, edit, and link or unlink a work source or a\nrepository.",
+      "params": [],
+      "path": "hub project",
+      "short_help": "Operator verbs over the tenant's projects: create, list, show, edit, and link or unlink a work source or a repository."
     },
     "question": {
       "commands": {
@@ -3863,6 +5573,18 @@
               "type": "boolean"
             },
             {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
@@ -3892,6 +5614,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -3955,6 +5689,18 @@
               "type": "boolean"
             },
             {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
@@ -3997,6 +5743,18 @@
               "type": "boolean"
             },
             {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
@@ -4016,6 +5774,18 @@
           "help": "The hub-ordered ready queue, read-only \u2014 a client of ``GET /api/queue``, drained\nto its whole order.",
           "params": [
             {
+              "help": "Show only this project's records, by id or slug. Without it, every project of the tenant is shown.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
@@ -4026,6 +5796,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -4167,6 +5949,18 @@
               "type": "boolean"
             },
             {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
@@ -4281,6 +6075,18 @@
               "type": "boolean"
             },
             {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
@@ -4335,6 +6141,18 @@
               "type": "boolean"
             },
             {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
@@ -4376,6 +6194,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -4432,6 +6262,18 @@
               "type": "boolean"
             },
             {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
@@ -4472,6 +6314,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -4589,6 +6443,18 @@
               "type": "text"
             },
             {
+              "help": "The project the record belongs to, by id or slug. Needed only when the tenant holds several projects; with one, the record goes to it.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
@@ -4599,6 +6465,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -4715,6 +6593,18 @@
               "type": "boolean"
             },
             {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
@@ -4757,6 +6647,18 @@
               "type": "text"
             },
             {
+              "help": "The project the record belongs to, by id or slug. Needed only when the tenant holds several projects; with one, the record goes to it.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
@@ -4767,6 +6669,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -4800,6 +6714,18 @@
               "type": "boolean"
             },
             {
+              "help": "Show only this project's records, by id or slug. Without it, every project of the tenant is shown.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
@@ -4810,6 +6736,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -4878,6 +6816,18 @@
               "type": "choice"
             },
             {
+              "help": "Show only this project's records, by id or slug. Without it, every project of the tenant is shown.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
@@ -4888,6 +6838,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -4932,6 +6894,18 @@
               "type": "text"
             },
             {
+              "help": "The project the record belongs to, by id or slug. Needed only when the tenant holds several projects; with one, the record goes to it.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
@@ -4942,6 +6916,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -5010,6 +6996,18 @@
               "type": "text"
             },
             {
+              "help": "The project the record belongs to, by id or slug. Needed only when the tenant holds several projects; with one, the record goes to it.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
@@ -5020,6 +7018,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -5077,6 +7087,18 @@
                   "type": "boolean"
                 },
                 {
+                  "help": "The tenant to act in, by id; needed only when you belong to several.",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "tenant",
+                  "opts": [
+                    "--tenant"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "text"
+                },
+                {
                   "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
                   "hidden": false,
                   "kind": "option",
@@ -5130,6 +7152,18 @@
                   "type": "boolean"
                 },
                 {
+                  "help": "The tenant to act in, by id; needed only when you belong to several.",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "tenant",
+                  "opts": [
+                    "--tenant"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "text"
+                },
+                {
                   "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
                   "hidden": false,
                   "kind": "option",
@@ -5176,6 +7210,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -5232,6 +7278,18 @@
               "type": "datetime"
             },
             {
+              "help": "The project the record belongs to, by id or slug. Needed only when the tenant holds several projects; with one, the record goes to it.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
@@ -5242,6 +7300,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -5322,6 +7392,18 @@
               "type": "integer"
             },
             {
+              "help": "The project the record belongs to, by id or slug. Needed only when the tenant holds several projects; with one, the record goes to it.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
@@ -5332,6 +7414,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -5385,6 +7479,18 @@
               "type": "datetime"
             },
             {
+              "help": "Show only this project's records, by id or slug. Without it, every project of the tenant is shown.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
@@ -5395,6 +7501,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -5439,6 +7557,18 @@
               "type": "boolean"
             },
             {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
@@ -5477,6 +7607,18 @@
               "type": "text"
             },
             {
+              "help": "A project the runner serves, by id or slug (repeatable). Without it, the runner serves the tenant's project when the tenant holds one, and none when it holds several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "projects",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
@@ -5487,6 +7629,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -5531,6 +7685,18 @@
               "type": "boolean"
             },
             {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
@@ -5572,6 +7738,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -5628,6 +7806,18 @@
               "type": "boolean"
             },
             {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
@@ -5682,6 +7872,18 @@
               "type": "boolean"
             },
             {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
@@ -5734,6 +7936,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -5802,6 +8016,18 @@
               "type": "boolean"
             },
             {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
@@ -5856,6 +8082,18 @@
               "type": "boolean"
             },
             {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
@@ -5896,6 +8134,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -5948,6 +8198,18 @@
               "type": "text"
             },
             {
+              "help": "The project the record belongs to, by id or slug. Needed only when the tenant holds several projects; with one, the record goes to it.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
@@ -5958,6 +8220,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -6002,6 +8276,18 @@
               "type": "text"
             },
             {
+              "help": "The project the record belongs to, by id or slug. Needed only when the tenant holds several projects; with one, the record goes to it.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
@@ -6012,6 +8298,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -6056,6 +8354,18 @@
               "type": "text"
             },
             {
+              "help": "The project the record belongs to, by id or slug. Needed only when the tenant holds several projects; with one, the record goes to it.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
@@ -6066,6 +8376,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -6087,6 +8409,18 @@
           "help": "List every scope, newest first \u2014 slug, retired, description.",
           "params": [
             {
+              "help": "Show only this project's records, by id or slug. Without it, every project of the tenant is shown.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
@@ -6097,6 +8431,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -6141,6 +8487,18 @@
               "type": "text"
             },
             {
+              "help": "The project the record belongs to, by id or slug. Needed only when the tenant holds several projects; with one, the record goes to it.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
@@ -6151,6 +8509,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -6183,6 +8553,18 @@
               "type": "text"
             },
             {
+              "help": "The project the record belongs to, by id or slug. Needed only when the tenant holds several projects; with one, the record goes to it.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
@@ -6193,6 +8575,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -6245,6 +8639,18 @@
               "type": "boolean"
             },
             {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
@@ -6285,6 +8691,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -6330,6 +8748,18 @@
               "type": "boolean"
             },
             {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
@@ -6372,6 +8802,18 @@
               "type": "boolean"
             },
             {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
@@ -6388,7 +8830,7 @@
           "short_help": "Retire NAME \u2014 a reversible brake; a retired secret cannot be replaced."
         },
         "rotate-key": {
-          "help": "Re-seal every secret under the hub's current key \u2014 offline, on the hub host.\n\nDirectory mode mints and promotes a new generation; env mode re-seals under\n$BZ_HUB_SECRET_KEY, opening older rows through $BZ_HUB_SECRET_KEY_PREVIOUS. A race\nwith a replace changes nothing and exits non-zero \u2014 re-run it.",
+          "help": "Re-seal every open tenant's secrets under the hub's current key \u2014 offline, on the hub host.\n\nDirectory mode mints a new generation and promotes it once every tenant is re-sealed; env mode\nre-seals under $BZ_HUB_SECRET_KEY, opening older rows through $BZ_HUB_SECRET_KEY_PREVIOUS. A race\nwith a replace leaves the old key current and exits non-zero \u2014 re-run it.",
           "params": [
             {
               "help": "Hub runtime directory (overrides $BZ_HUB_DIR).",
@@ -6404,7 +8846,7 @@
             }
           ],
           "path": "hub secret rotate-key",
-          "short_help": "Re-seal every secret under the hub's current key \u2014 offline, on the hub host."
+          "short_help": "Re-seal every open tenant's secrets under the hub's current key \u2014 offline, on the hub host."
         },
         "set": {
           "help": "Replace NAME's value, read from stdin \u2014 never an argument.\n\nRefused for a name that does not exist \u2014 create it with `secret create`. Trailing CR/LF is\nstripped; an empty value is refused.",
@@ -6431,6 +8873,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -6473,6 +8927,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -6597,6 +9063,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -6739,6 +9217,18 @@
               "type": "boolean"
             },
             {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
@@ -6793,6 +9283,18 @@
               "type": "boolean"
             },
             {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
@@ -6834,6 +9336,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -6890,6 +9404,18 @@
               "type": "boolean"
             },
             {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
@@ -6932,6 +9458,18 @@
               "type": "boolean"
             },
             {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
@@ -6957,6 +9495,18 @@
       "help": "The fleet view: every chunk with its derived status, the runners, and open questions.",
       "params": [
         {
+          "help": "Show only this project's chunks, their open questions and its spend, by id or slug; the runners are the whole fleet. Without it, every project of the tenant is shown.",
+          "hidden": false,
+          "kind": "option",
+          "name": "project",
+          "opts": [
+            "--project"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": "text"
+        },
+        {
           "help": "Print the raw response body as JSON.",
           "hidden": false,
           "kind": "option",
@@ -6967,6 +9517,18 @@
           "required": false,
           "secondary_opts": [],
           "type": "boolean"
+        },
+        {
+          "help": "The tenant to act in, by id; needed only when you belong to several.",
+          "hidden": false,
+          "kind": "option",
+          "name": "tenant",
+          "opts": [
+            "--tenant"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": "text"
         },
         {
           "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -6983,6 +9545,206 @@
       ],
       "path": "hub status",
       "short_help": "The fleet view: every chunk with its derived status, the runners, and open questions."
+    },
+    "tenant": {
+      "commands": {
+        "create": {
+          "help": "Create a tenant named NAME \u2014 its packaged graphs minted \u2014 usable the moment this answers. A name is a label: it\nis never refused for being taken, so the printed tenant id is what later verbs name it by.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "name",
+              "opts": [
+                "name"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Grant this user the admin role in it.",
+              "hidden": false,
+              "kind": "option",
+              "name": "admin_user_id",
+              "opts": [
+                "--admin"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub tenant create",
+          "short_help": "Create a tenant named NAME \u2014 its packaged graphs minted \u2014 usable the moment this answers."
+        },
+        "delete": {
+          "help": "Delete TENANT_ID and every row it holds; it cannot be undone. The hub closes the tenant at once, so its people\nand runners lose it, and removes its rows: a small tenant within this call, a large one in the background \u2014 watch\nit with 'tenant list'. Asking again while a deletion is underway changes nothing. The hub's only open tenant is\nrefused.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "tenant_id",
+              "opts": [
+                "tenant_id"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Skip the confirmation prompt.",
+              "hidden": false,
+              "kind": "option",
+              "name": "yes",
+              "opts": [
+                "--yes"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub tenant delete",
+          "short_help": "Delete TENANT_ID and every row it holds; it cannot be undone."
+        },
+        "list": {
+          "help": "Every tenant the hub holds, oldest first: open ones, and those whose deletion is underway with when it began.",
+          "params": [
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub tenant list",
+          "short_help": "Every tenant the hub holds, oldest first: open ones, and those whose deletion is underway with when it began."
+        },
+        "rename": {
+          "help": "Rename the open tenant TENANT_ID to NAME; its id does not change.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "tenant_id",
+              "opts": [
+                "tenant_id"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "name",
+              "opts": [
+                "name"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub tenant rename",
+          "short_help": "Rename the open tenant TENANT_ID to NAME; its id does not change."
+        }
+      },
+      "help": "A hub administrator's verbs over the hub's tenants: create, list, rename, delete.",
+      "params": [],
+      "path": "hub tenant",
+      "short_help": "A hub administrator's verbs over the hub's tenants: create, list, rename, delete."
     },
     "traces": {
       "commands": {

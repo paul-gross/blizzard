@@ -11,7 +11,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
-from sqlalchemy import Engine, insert, select
+from sqlalchemy import Engine, insert
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
@@ -21,7 +21,16 @@ from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.store import schema as s
-from tests.support import chunk_stores, count_queries, migrate_to, seed_chunk, seed_graph, seed_lease
+from tests.support import (
+    chunk_stores,
+    count_queries,
+    hub_store_connections,
+    migrate_to,
+    seed_chunk,
+    seed_graph,
+    seed_lease,
+    stamp,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -231,11 +240,14 @@ def test_list_open_escalations_applies_supersession_fleet_wide(tmp_path: Path) -
     with engine.begin() as conn:
         conn.execute(
             insert(s.escalations).values(
-                chunk_id="ch_e",
-                epoch=1,
-                takeover_command="cd e && resume",
-                wrapped_takeover_command="",
-                recorded_at=_at(20),
+                stamp(
+                    s.escalations,
+                    chunk_id="ch_e",
+                    epoch=1,
+                    takeover_command="cd e && resume",
+                    wrapped_takeover_command="",
+                    recorded_at=_at(20),
+                )
             )
         )
     # ch_f: escalation then the chunk REACHES DONE elsewhere -> superseded (#293). No later
@@ -393,18 +405,21 @@ def test_migration_creates_event_log_on_in_place_upgrade(tmp_path: Path) -> None
     with engine.begin() as conn:
         conn.execute(
             insert(s.event_log).values(
-                severity="info",
-                kind="k",
-                runner_id="r",
-                chunk_id=None,
-                lease_id=None,
-                node_name=None,
-                message="m",
-                detail=None,
-                recorded_at=_T0,
+                stamp(
+                    s.event_log,
+                    severity="info",
+                    kind="k",
+                    runner_id="r",
+                    chunk_id=None,
+                    lease_id=None,
+                    node_name=None,
+                    message="m",
+                    detail=None,
+                    recorded_at=_T0,
+                )
             )
         )
-        rows = conn.execute(select(s.event_log)).all()
+        rows = conn.execute(hub_store_connections(engine).select(s.event_log)).all()
     assert len(rows) == 1
 
 
@@ -421,7 +436,15 @@ def test_newest_escalation_per_chunk_breaks_a_recorded_at_tie_by_id(tmp_path: Pa
         for command in ("first", "second"):
             conn.execute(
                 insert(s.escalations).values(
-                    chunk_id="ch_tie", epoch=1, takeover_command=command, recorded_at=_at(10), cause=None, detail=None
+                    stamp(
+                        s.escalations,
+                        chunk_id="ch_tie",
+                        epoch=1,
+                        takeover_command=command,
+                        recorded_at=_at(10),
+                        cause=None,
+                        detail=None,
+                    )
                 )
             )
 

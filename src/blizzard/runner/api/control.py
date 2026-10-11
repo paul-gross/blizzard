@@ -12,8 +12,16 @@ from pydantic import BaseModel
 
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.api.wiring import RunnerWiring
+from blizzard.runner.hub.identity import IdentityVerdict
 from blizzard.runner.status.view import RunnerStatusService
-from blizzard.wire.runner_status import CapacitiesView, HubConnectivityView, PauseStateView, RunnerStatusView
+from blizzard.wire.runner_status import (
+    CapacitiesView,
+    HubConnectivityView,
+    IdentityVerdictView,
+    PauseStateView,
+    RunnerStatusView,
+    ServedProjectStatusView,
+)
 
 router = APIRouter(prefix="/api", tags=["runner"])
 
@@ -69,6 +77,8 @@ def _runner_status_view(service: RunnerStatusService) -> RunnerStatusView:
     return RunnerStatusView(
         runner_id=summary.runner_id,
         runner_name=summary.runner_name,
+        tenant_id=summary.tenant_id,
+        tenant_name=summary.tenant_name,
         workspace_id=summary.workspace_id,
         pause=PauseStateView(
             local=summary.pause.local,
@@ -87,4 +97,30 @@ def _runner_status_view(service: RunnerStatusService) -> RunnerStatusView:
         ),
         last_tick_at=iso_utc(summary.last_tick_at) if summary.last_tick_at is not None else None,
         gates=list(summary.gates),
+        identity=_identity_view(summary.identity) if summary.identity is not None else None,
+        served_projects=(
+            [
+                ServedProjectStatusView(
+                    entry=p.entry,
+                    project_id=p.project_id,
+                    slug=p.slug,
+                    name=p.name,
+                    resolved=p.resolved(),
+                    answered=p.answered,
+                )
+                for p in summary.served_projects
+            ]
+            if summary.served_projects is not None
+            else None
+        ),
+    )
+
+
+def _identity_view(verdict: IdentityVerdict) -> IdentityVerdictView:
+    return IdentityVerdictView(
+        state=verdict.state.value,
+        store_runner_id=verdict.store_runner_id,
+        token_runner_id=verdict.token_runner_id,
+        checked_at=iso_utc(verdict.checked_at) if verdict.checked_at is not None else None,
+        reset_command=verdict.reset_command,
     )

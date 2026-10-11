@@ -66,6 +66,7 @@ def _dimensions(facts: LeaseTraceFacts) -> dict[str, AttributeValue]:
         attr.RUNNER_NAME: facts.runner.runner_name,
         attr.LEASE_ID: lease.lease_id,
     }
+    _set_present(dims, {attr.TENANT: facts.runner.tenant_id, attr.TENANT_NAME: facts.runner.tenant_name})
     if context.graph_name is not None:
         dims[shared.GRAPH_NAME] = context.graph_name
     if context.work_refs:

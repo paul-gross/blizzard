@@ -12,6 +12,7 @@ import httpx
 from blizzard.foundation.roles import dto
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
+from blizzard.hub.cli.project_option import project_option, project_query
 from blizzard.hub.cli.views import ChunkLine, Cost, Listing
 
 
@@ -101,9 +102,10 @@ def chunk_group() -> None:
 
 
 @chunk_group.command("list", cls=FleetCommand)
-def chunk_list(cli: CliContext) -> None:
+@project_option(required_by_hub=False)
+def chunk_list(cli: CliContext, project: str | None) -> None:
     """The fleet chunk list — derived status per chunk."""
-    rows = cli.get_all("/api/chunks", "GET /chunks", key="chunks")
+    rows = cli.get_all("/api/chunks", "GET /chunks", key="chunks", params=project_query(project))
     cli.show(rows, ChunkListing(rows))
 
 
@@ -135,14 +137,26 @@ class Pointer(click.ParamType):
 
 @chunk_group.command("ingest", cls=FleetCommand)
 @click.argument("pointers", nargs=-1, required=True, type=Pointer())
-def chunk_ingest(cli: CliContext, pointers: tuple[str, ...]) -> None:
+@click.option(
+    "--project",
+    "project",
+    default=None,
+    metavar="PROJECT",
+    help="The project to mint the chunk in, by id or slug. Without it, the project the pointers' work sources are "
+    "linked to; needed when they name none or disagree.",
+)
+def chunk_ingest(cli: CliContext, pointers: tuple[str, ...], project: str | None) -> None:
     """Ingest work items by token, minting a chunk.
 
     Each POINTER is a source-native token — ``source:ref``, ``source#ref``, or a pasted
     work item URL; a batch mints one chunk carrying every pointer. 422 when no
-    configured work source claims a token; 409 when a pointer is already held."""
+    configured work source claims a token or a pointer's source is not linked to the
+    project; 409 when a pointer is already held."""
     tokens = list(pointers)
-    resp = cli.send("post", "/api/chunks", json_body={"tokens": tokens})
+    request: dict[str, object] = {"tokens": tokens}
+    if project is not None:
+        request["project"] = project
+    resp = cli.send("post", "/api/chunks", json_body=request)
     if resp.status_code == httpx.codes.CONFLICT:
         conflict = resp.json()
         raise click.ClickException(

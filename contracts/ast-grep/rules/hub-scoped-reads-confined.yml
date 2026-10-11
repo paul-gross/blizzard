@@ -1,0 +1,28 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ast-grep/ast-grep/main/schemas/rule.json
+
+id: bzh:hub-scoped-reads-confined
+language: Python
+severity: error
+message: >-
+  HubScopedReads is the hub's one cross-tenant read seam, held only by the hub-level modules it serves. Open the
+  tenant's stores through HubCore.open(scope) and read through them instead
+  (blizzard-context:/architecture/system-shape/tenancy.md, bzh:hub-scoped-reads-confined).
+note: >-
+  The seam is reached by name, whichever way the name arrives: the aggregate HubScopedReads, any hub_scoped_* module,
+  helper or HubCore field (an import, an annotation, an attribute through a parent package or a re-exporting module),
+  or a string spelling one for importlib or getattr.
+files:
+  - src/blizzard/**
+ignores:
+  # The composition root builds the seam and hands it to its holders.
+  - src/blizzard/hub/composition.py
+  # The aggregate and its member-group modules, each named hub_scoped_<kind>.
+  - src/blizzard/hub/store/internal/hub_scoped_*.py
+  - src/blizzard/hub/auth/**
+  - src/blizzard/hub/api/auth*.py
+rule:
+  any:
+    - kind: identifier
+      regex: ^(HubScopedReads|(\w+_)?hub_scoped_\w+)$
+    - kind: string
+      regex: (["'.]|\b\w+_)hub_scoped_\w+["']

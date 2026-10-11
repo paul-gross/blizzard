@@ -23,7 +23,14 @@ from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
-from blizzard.runner.hub.identity import ICurrentRunnerIdentity, RunnerIdentityHolder
+from blizzard.runner.hub.identity import (
+    ICurrentIdentityVerdict,
+    ICurrentRunnerIdentity,
+    IdentityState,
+    IdentityVerdictHolder,
+    RunnerIdentity,
+    RunnerIdentityHolder,
+)
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.status.view import RunnerStatusService
 from tests.runner_fakes import FakeHarness, FakeProbe, make_store, make_stores, registered_identity
@@ -42,6 +49,7 @@ def _app_with_status(
     gates: tuple[str, ...] = (),
     runner_dir: str = "",
     identity: ICurrentRunnerIdentity | None = None,
+    identity_verdict: ICurrentIdentityVerdict | None = None,
 ):  # type: ignore[no-untyped-def]
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}", max_agents=max_agents)
@@ -59,6 +67,7 @@ def _app_with_status(
         takeover=store,
         escalations=store,
         identity=identity or registered_identity("rn_status", config.name),
+        identity_verdict=identity_verdict,
         runner_name=config.name,
         workspace_id=config.workspace_id,
         max_agents=config.max_agents,
@@ -110,7 +119,55 @@ def test_summary_defaults_on_an_empty_store(tmp_path: Path) -> None:
     }
     assert body["last_tick_at"] is None
     assert body["gates"] == []
+    assert body["identity"] is None
+    assert (body["tenant_id"], body["tenant_name"]) == (None, None)
     assert_all_timestamps_utc(body)
+
+
+@pytest.mark.component
+def test_summary_carries_the_tenant_beside_the_runners_id_and_name(tmp_path: Path) -> None:
+    identity = RunnerIdentity(
+        runner_id="rn_status", runner_name="r-bravo", registered_at=_NOW, tenant_id="tn_bravo", tenant_name="bravo"
+    )
+    app, _store = _app_with_status(tmp_path, identity=RunnerIdentityHolder(identity))
+    with TestClient(app) as client:
+        body = client.get("/api/runner").json()
+
+    assert (body["runner_id"], body["runner_name"]) == ("rn_status", "r-bravo")
+    assert (body["tenant_id"], body["tenant_name"]) == ("tn_bravo", "bravo")
+
+
+@pytest.mark.component
+def test_summary_reports_the_identity_verdict_naming_both_runners_and_the_reset_command(tmp_path: Path) -> None:
+    verdict = IdentityVerdictHolder("blizzard runner store reset /runner")
+    verdict.record(IdentityState.MISMATCHED, store_runner_id="rn_status", token_runner_id="rn_other", checked_at=_NOW)
+    app, _store = _app_with_status(tmp_path, identity_verdict=verdict)
+    with TestClient(app) as client:
+        body = client.get("/api/runner").json()
+
+    assert body["identity"] == {
+        "state": "mismatched",
+        "store_runner_id": "rn_status",
+        "token_runner_id": "rn_other",
+        "checked_at": "2026-07-16T12:00:00+00:00",
+        "reset_command": "blizzard runner store reset /runner",
+    }
+    assert_all_timestamps_utc(body)
+
+
+@pytest.mark.component
+def test_an_unchecked_verdict_reports_no_ids_and_no_check_yet(tmp_path: Path) -> None:
+    app, _store = _app_with_status(tmp_path, identity_verdict=IdentityVerdictHolder("blizzard runner store reset /r"))
+    with TestClient(app) as client:
+        body = client.get("/api/runner").json()
+
+    assert body["identity"] == {
+        "state": "unchecked",
+        "store_runner_id": None,
+        "token_runner_id": None,
+        "checked_at": None,
+        "reset_command": "blizzard runner store reset /r",
+    }
 
 
 @pytest.mark.component

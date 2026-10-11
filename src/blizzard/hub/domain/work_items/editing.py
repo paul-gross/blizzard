@@ -30,6 +30,7 @@ from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsReposito
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.operations.delete import ChunkHasDependents, ChunkNotDeletable, DeleteService
+from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.work_items.model import (
     Transition,
     WorkItemEdit,
@@ -49,13 +50,15 @@ def prepare_mint(
     source: str,
     *,
     graph: Graph,
+    project_id: ProjectId,
     default_model: list[str] | None = None,
     default_effort: str | None = None,
     default_harnesses: list[str] | None = None,
 ) -> tuple[WorkRef, Chunk, datetime]:
     """The guard sequence every item-minting create path shares: allocate the ref,
-    refuse a live holder, mint the resting chunk. ``default_model``/``default_effort``/
-    ``default_harnesses`` fall back to ``mint_chunk``'s own empty-preference default."""
+    refuse a live holder, mint the resting chunk into ``project_id`` — the project each path
+    names, never one inferred. ``default_model``/``default_effort``/``default_harnesses`` fall
+    back to ``mint_chunk``'s own empty-preference default."""
     ref = items.allocate_ref(source)
     pointer = WorkRef(source=source, ref=ref)
     require_no_live_holder(work_refs, pointer)
@@ -64,6 +67,7 @@ def prepare_mint(
         [pointer],
         graph_id=graph.graph_id,
         at=at,
+        project_id=project_id,
         default_model=default_model,
         default_effort=default_effort,
         default_harnesses=default_harnesses,
@@ -162,13 +166,17 @@ class WorkItemEditService:
         author: WorkItemAuthor,
         stated_priority: WorkItemPriority | None,
         graph: Graph,
+        project_id: ProjectId,
     ) -> CreatedWorkItem:
-        """File the item and mint its resting chunk in one transaction, pinned to ``graph``, holding the
-        pointer this call allocates. An out-of-band ingest of the same ref can pre-empt it, raising
-        :class:`~blizzard.hub.domain.chunk.ingest.IngestConflict` and burning the ref. A blank title or
-        body raises :class:`~blizzard.hub.domain.work_items.model.WorkItemFieldBlank` before allocating."""
+        """File the item and mint its resting chunk of ``project_id`` in one transaction, pinned to
+        ``graph``, holding the pointer this call allocates. An out-of-band ingest of the same ref can
+        pre-empt it, raising :class:`~blizzard.hub.domain.chunk.ingest.IngestConflict` and burning the
+        ref. A blank title or body raises
+        :class:`~blizzard.hub.domain.work_items.model.WorkItemFieldBlank` before allocating."""
         text = WorkItemText.of(title=title, body=body)
-        pointer, chunk, at = prepare_mint(self._items, self._work_refs, self._clock, source, graph=graph)
+        pointer, chunk, at = prepare_mint(
+            self._items, self._work_refs, self._clock, source, graph=graph, project_id=project_id
+        )
         item = self._items.create_with_chunk(
             pointer=pointer,
             title=text.title,
@@ -188,15 +196,17 @@ class WorkItemEditService:
         body: str,
         author: WorkItemAuthor,
         graph: Graph,
+        project_id: ProjectId,
         reason: str | None,
         closed_by: str,
     ) -> CreatedWorkItem | None:
         """A garden-proposal acceptance's mint path: :meth:`create`'s guard sequence into the reserved hub
-        source, writing the item, its chunk, and the closure row on one connection. Raises as
+        source and the proposal's ``project_id``, writing the item, its chunk, and the closure row on one
+        connection. Raises as
         :meth:`create` does; returns ``None`` when already closed."""
         text = WorkItemText.of(title=title, body=body)
         pointer, chunk, at = prepare_mint(
-            self._items, self._work_refs, self._clock, RESERVED_HUB_SOURCE_NAME, graph=graph
+            self._items, self._work_refs, self._clock, RESERVED_HUB_SOURCE_NAME, graph=graph, project_id=project_id
         )
         item = self._items.accept_create(
             proposal_id=proposal_id,

@@ -17,7 +17,7 @@ from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, ConfigCh
 from blizzard.hub.domain.garden.routines import Routine
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.routine_store import RoutineStore
-from tests.support import build_hub, hub_store_connections
+from tests.support import build_hub, default_project, hub_store_connections, stamp
 
 pytestmark = pytest.mark.component
 
@@ -29,7 +29,7 @@ _UNTIL = datetime(2026, 1, 15, tzinfo=UTC)
 
 def _seed_scope(hub, slug: str = "blizzard") -> None:  # type: ignore[no-untyped-def]
     with hub.engine.begin() as conn:
-        conn.execute(insert(s.scopes).values(slug=slug, description="", created_at=_SINCE))
+        conn.execute(insert(s.scopes).values(stamp(s.scopes, slug=slug, description="", created_at=_SINCE)))
 
 
 def _seed_routine(hub, name: str = "nightly", *, default_scope_slug: str = "blizzard") -> None:  # type: ignore[no-untyped-def]
@@ -39,6 +39,7 @@ def _seed_routine(hub, name: str = "nightly", *, default_scope_slug: str = "bliz
         graph_name="g",
         default_scope_slug=default_scope_slug,
         created_at=_SINCE,
+        project_id=default_project(hub.engine),
     )
     change = ConfigChange.of(_CTX, RecordKind.ROUTINE, name, 1, ChangeOp.CREATE, (), routine.created_at)
     RoutineStore(hub_store_connections(hub.engine)).create(routine, change=change, scope_mint=None)
@@ -55,21 +56,28 @@ def _seed_finding(
     with hub.engine.begin() as conn:
         conn.execute(
             insert(s.findings).values(
-                finding_id=finding_id,
-                routine_name=routine_name,
-                scope_slug=scope_slug,
-                class_="stale-docstring",
-                locus="a.py:1",
-                summary="s",
-                introduced=None,
-                introduced_at=introduced_at,
+                stamp(
+                    s.findings,
+                    finding_id=finding_id,
+                    routine_name=routine_name,
+                    scope_slug=scope_slug,
+                    class_="stale-docstring",
+                    locus="a.py:1",
+                    summary="s",
+                    introduced=None,
+                    introduced_at=introduced_at,
+                )
             )
         )
 
 
 def _seed_fact(hub, finding_id: str, *, kind: str, recorded_at: datetime) -> None:  # type: ignore[no-untyped-def]
     with hub.engine.begin() as conn:
-        conn.execute(insert(s.finding_facts).values(finding_id=finding_id, kind=kind, recorded_at=recorded_at))
+        conn.execute(
+            insert(s.finding_facts).values(
+                stamp(s.finding_facts, finding_id=finding_id, kind=kind, recorded_at=recorded_at)
+            )
+        )
 
 
 def _params(**overrides: object) -> dict[str, object]:

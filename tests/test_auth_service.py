@@ -1,36 +1,44 @@
 """``AuthService`` — mint/resolve/slide sessions, mint collision-free usernames (unit
 tier).
 
-Exercised against in-memory fakes of the three repository Protocols; the real
-SQLAlchemy adapters are exercised at component tier (``tests/test_auth_repositories.py``).
+Exercised against in-memory fakes of the repository Protocols and the identity unit of
+work; the real SQLAlchemy adapters are exercised at component tier
+(``tests/test_auth_repositories.py``).
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from blizzard.auth_core import Role, expand
+from blizzard.auth_core import MEMBERSHIP_ROLES, Role, permissions_for
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.auth.facts import AuthFactsService
 from blizzard.hub.auth.hashing import SessionId
+from blizzard.hub.auth.hub_admins import HubAdminFact
+from blizzard.hub.auth.identity_transaction import IdentityWrites
+from blizzard.hub.auth.invitations import IWriteInvitationRepository
+from blizzard.hub.auth.memberships import Membership, MembershipFact
 from blizzard.hub.auth.models import (
     AuthFact,
     AuthStateEntry,
     Identity,
     ProviderIdentity,
-    ResolvedIdentity,
     Session,
     SuperuserBootstrap,
     User,
 )
-from blizzard.hub.auth.service import PROVIDER_LOGIN_STATE_KIND, AuthService, RoleAssignmentRefused
+from blizzard.hub.auth.service import PROVIDER_LOGIN_STATE_KIND, AuthService
+from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.tenancy import StoreScope, TenantId
 
 pytestmark = pytest.mark.unit
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
+_TENANT = TenantId("ten_one")
 
 
 class _FakeUserRepository:
@@ -46,6 +54,10 @@ class _FakeUserRepository:
     def get_by_email(self, email: str) -> User | None:
         return next((u for u in self.by_id.values() if u.email == email), None)
 
+    def list_by_email_any_case(self, email: str) -> list[User]:
+        folded = [u for u in self.by_id.values() if u.email is not None and u.email.lower() == email.lower()]
+        return sorted(folded, key=lambda u: u.created_at)
+
     def username_exists(self, username: str) -> bool:
         return self.get_by_username(username) is not None
 
@@ -57,17 +69,6 @@ class _FakeUserRepository:
 
     def create(self, user: User) -> None:
         self.by_id[user.user_id] = user
-
-    def update_role(self, user_id: str, role: Role) -> None:
-        user = self.by_id[user_id]
-        self.by_id[user_id] = User(
-            user_id=user.user_id,
-            username=user.username,
-            display_name=user.display_name,
-            email=user.email,
-            role=role,
-            created_at=user.created_at,
-        )
 
 
 class _FakeIdentityRepository:
@@ -172,6 +173,98 @@ class _FakeAuthFactsRepository:
         self.rows.append(fact)
 
 
+class _FakeMembershipRepository:
+    def __init__(self) -> None:
+        self.facts: list[MembershipFact] = []
+        self.tenants: list[TenantId] = [_TENANT]
+
+    def _in_force(self) -> dict[tuple[str, str], Role | None]:
+        return {(f.tenant_id, f.user_id): f.role for f in self.facts}
+
+    def role_in(self, tenant: TenantId, user_id: str) -> Role | None:
+        return self._in_force().get((tenant, user_id))
+
+    def memberships_for(self, user_id: str) -> list[Membership]:
+        return [m for m in self._memberships() if m.user_id == user_id]
+
+    def members(self, tenant: TenantId) -> list[Membership]:
+        return [m for m in self._memberships() if m.tenant_id == tenant]
+
+    def admin_count(self, tenant: TenantId) -> int:
+        return sum(1 for m in self.members(tenant) if m.role is Role.ADMIN)
+
+    def only_tenant(self) -> TenantId | None:
+        return self.tenants[0] if len(self.tenants) == 1 else None
+
+    def record(self, fact: MembershipFact) -> None:
+        self.facts.append(fact)
+
+    def _memberships(self) -> list[Membership]:
+        return [Membership(TenantId(t), u, r) for (t, u), r in self._in_force().items() if r is not None]
+
+
+class _FakeHubAdminRepository:
+    def __init__(self) -> None:
+        self.facts: list[HubAdminFact] = []
+
+    def is_hub_admin(self, user_id: str) -> bool:
+        return user_id in self.holders()
+
+    def holders(self) -> list[str]:
+        return sorted(user_id for user_id, granted in {f.user_id: f.granted for f in self.facts}.items() if granted)
+
+    def record(self, fact: HubAdminFact) -> None:
+        self.facts.append(fact)
+
+
+def _joins_no_tenant(scope: StoreScope) -> ScopedConnections:
+    raise AssertionError(
+        f"accepting an invitation is the one tenant-owned write, and no test here does; {scope.tenant}"
+    )
+
+
+def _no_invitations(connections: ScopedConnections) -> IWriteInvitationRepository:
+    raise AssertionError("accepting an invitation is pinned against a real store, never through these fakes")
+
+
+class _FakeTransactions:
+    """Hands out the same fakes as every unit of work's writes — the fakes commit as they go."""
+
+    def __init__(self, writes: IdentityWrites) -> None:
+        self.writes = writes
+
+    @contextmanager
+    def begin(self) -> Iterator[IdentityWrites]:
+        yield self.writes
+
+
+class _Identity:
+    """The membership and hub administrator fakes one service reads, and what seeds them."""
+
+    def __init__(self, users: _FakeUserRepository) -> None:
+        self.users = users
+        self.memberships = _FakeMembershipRepository()
+        self.hub_admins = _FakeHubAdminRepository()
+
+    def seed(self, user_id: str, username: str, role: Role, *, email: str | None = None) -> User:
+        """A user standing for ``role``: ``superuser`` an admin member and hub administrator, ``pending`` neither."""
+        user = User(user_id=user_id, username=username, display_name=username, email=email, created_at=_T0)
+        self.users.create(user)
+        membership = Role.ADMIN if role is Role.SUPERUSER else role
+        if membership in MEMBERSHIP_ROLES:
+            self.memberships.record(MembershipFact(_TENANT, user_id, membership, _T0, "migration"))
+        if role is Role.SUPERUSER:
+            self.hub_admins.record(HubAdminFact(user_id, True, _T0, "migration"))
+        return user
+
+
+_IDENTITIES: dict[int, _Identity] = {}
+
+
+def _identities(service: AuthService) -> _Identity:
+    return _IDENTITIES[id(service)]
+
+
 def _service(
     clock: FixedClock, **kwargs: object
 ) -> tuple[
@@ -187,7 +280,19 @@ def _service(
     sessions = _FakeSessionRepository()
     auth_state = _FakeAuthStateRepository()
     superuser_bootstrap = _FakeSuperuserBootstrapRepository()
-    auth_facts = AuthFactsService(facts=_FakeAuthFactsRepository(), clock=clock)
+    facts = _FakeAuthFactsRepository()
+    auth_facts = AuthFactsService(facts=facts, clock=clock)
+    identity = _Identity(users)
+    writes = IdentityWrites(
+        users=users,
+        identities=identities,
+        sessions=sessions,
+        memberships=identity.memberships,
+        hub_admins=identity.hub_admins,
+        bootstrap=superuser_bootstrap,
+        auth_facts=facts,
+        tenant_connections=_joins_no_tenant,
+    )
     service = AuthService(
         users=users,
         identities=identities,
@@ -196,13 +301,18 @@ def _service(
         clock=clock,
         superuser_bootstrap=superuser_bootstrap,
         auth_facts=auth_facts,
+        memberships=identity.memberships,
+        hub_admins=identity.hub_admins,
+        transactions=_FakeTransactions(writes),
+        invitations=_no_invitations,
         **kwargs,  # type: ignore[arg-type]
     )
+    _IDENTITIES[id(service)] = identity
     return service, users, sessions, identities, superuser_bootstrap, auth_facts
 
 
-def _user(user_id: str = "usr_1", *, role: Role = Role.CONTRIBUTOR) -> User:
-    return User(user_id=user_id, username="ada", display_name="Ada", email=None, role=role, created_at=_T0)
+def _user(user_id: str = "usr_1") -> User:
+    return User(user_id=user_id, username="ada", display_name="Ada", email=None, created_at=_T0)
 
 
 # --- mint_session -------------------------------------------------------------
@@ -233,19 +343,44 @@ def test_mint_session_sets_expiry_from_idle_ttl() -> None:
 
 def test_touch_session_resolves_the_owning_user_and_expands_permissions() -> None:
     clock = FixedClock(_T0)
-    service, users, _, _ident, _, _ = _service(clock)
-    user = _user(role=Role.ADMIN)
-    users.create(user)
+    service, _, _, _ident, _, _ = _service(clock)
+    user = _identities(service).seed("usr_1", "ada", Role.ADMIN)
     _, session = service.mint_session(user)
 
-    identity = service.touch_session(session)
+    identity = service.touch_session(session, tenant=_TENANT)
 
     assert identity is not None
     assert identity.user_id == user.user_id
     assert identity.username == "ada"
-    assert identity.display_name == "Ada"
+    assert identity.tenant == _TENANT
     assert identity.role is Role.ADMIN
-    assert identity.permissions == expand(Role.ADMIN)
+    assert identity.hub_admin is False
+    assert identity.permissions == permissions_for(Role.ADMIN, False)
+
+
+def test_touch_session_resolves_a_hub_administrator_with_the_hub_permissions() -> None:
+    clock = FixedClock(_T0)
+    service, _, _, _ident, _, _ = _service(clock)
+    user = _identities(service).seed("usr_1", "ada", Role.SUPERUSER)
+    _, session = service.mint_session(user)
+
+    identity = service.touch_session(session, tenant=_TENANT)
+
+    assert identity is not None
+    assert (identity.role, identity.hub_admin) == (Role.ADMIN, True)
+    assert identity.permissions == permissions_for(Role.ADMIN, True)
+
+
+def test_touch_session_resolves_no_role_for_a_user_with_no_membership() -> None:
+    clock = FixedClock(_T0)
+    service, _, _, _ident, _, _ = _service(clock)
+    user = _identities(service).seed("usr_1", "ada", Role.PENDING)
+    _, session = service.mint_session(user)
+
+    identity = service.touch_session(session, tenant=_TENANT)
+
+    assert identity is not None
+    assert (identity.role, identity.hub_admin, identity.permissions) == (None, False, frozenset())
 
 
 def test_touch_session_slides_expiry_forward() -> None:
@@ -258,7 +393,7 @@ def test_touch_session_slides_expiry_forward() -> None:
     first_expiry = session.expires_at
 
     clock.advance(timedelta(minutes=30))
-    identity = service.touch_session(session)
+    identity = service.touch_session(session, tenant=_TENANT)
     assert identity is not None
 
     slid = sessions.by_hash[session.id_hash]
@@ -274,7 +409,7 @@ def test_touch_session_skips_the_write_when_the_slide_is_under_touch_granularity
     _, session = service.mint_session(user)
 
     clock.advance(timedelta(minutes=4))  # under the default 5-minute touch_granularity
-    identity = service.touch_session(session)
+    identity = service.touch_session(session, tenant=_TENANT)
 
     assert identity is not None
     assert sessions.touch_calls == []
@@ -288,7 +423,7 @@ def test_touch_session_writes_once_the_slide_reaches_touch_granularity() -> None
     _, session = service.mint_session(user)
 
     clock.advance(timedelta(minutes=5))  # exactly the default touch_granularity
-    identity = service.touch_session(session)
+    identity = service.touch_session(session, tenant=_TENANT)
 
     assert identity is not None
     assert len(sessions.touch_calls) == 1
@@ -306,7 +441,7 @@ def test_touch_session_honors_a_constructor_overridden_touch_granularity() -> No
     _, session = service.mint_session(user)
 
     clock.advance(timedelta(minutes=1))
-    identity = service.touch_session(session)
+    identity = service.touch_session(session, tenant=_TENANT)
 
     assert identity is not None
     assert len(sessions.touch_calls) == 1
@@ -321,7 +456,7 @@ def test_touch_session_returns_none_once_idle_expired() -> None:
     _, session = service.mint_session(user)
 
     clock.advance(timedelta(hours=2))
-    assert service.touch_session(session) is None
+    assert service.touch_session(session, tenant=_TENANT) is None
 
 
 def test_touch_session_returns_none_past_absolute_max_age_even_if_recently_touched() -> None:
@@ -338,15 +473,15 @@ def test_touch_session_returns_none_past_absolute_max_age_even_if_recently_touch
     # Slide twice within the idle window, each time resetting last_seen — but the
     # absolute cap is measured from `created_at`, not `last_seen_at`.
     clock.advance(timedelta(minutes=50))
-    assert service.touch_session(session) is not None
+    assert service.touch_session(session, tenant=_TENANT) is not None
     session = sessions.get_by_hash(session.id_hash)
     assert session is not None
     clock.advance(timedelta(minutes=50))
-    assert service.touch_session(session) is not None
+    assert service.touch_session(session, tenant=_TENANT) is not None
     session = sessions.get_by_hash(session.id_hash)
     assert session is not None
     clock.advance(timedelta(minutes=61))  # now 3h01m past created_at
-    assert service.touch_session(session) is None
+    assert service.touch_session(session, tenant=_TENANT) is None
 
 
 def test_touch_session_keeps_advancing_last_seen_once_the_expiry_slide_saturates() -> None:
@@ -362,14 +497,14 @@ def test_touch_session_keeps_advancing_last_seen_once_the_expiry_slide_saturates
     _, session = service.mint_session(user)
 
     clock.advance(timedelta(hours=1, minutes=30))  # past the 1h saturation threshold
-    assert service.touch_session(session) is not None
+    assert service.touch_session(session, tenant=_TENANT) is not None
     session = sessions.get_by_hash(session.id_hash)
     assert session is not None
     saturated_expiry = session.expires_at
     assert saturated_expiry == _T0 + timedelta(hours=3)
 
     clock.advance(timedelta(minutes=10))  # well past touch_granularity, expiry target unchanged
-    assert service.touch_session(session) is not None
+    assert service.touch_session(session, tenant=_TENANT) is not None
     resolved = sessions.get_by_hash(session.id_hash)
 
     assert resolved is not None
@@ -387,7 +522,7 @@ def test_touch_session_returns_none_when_the_user_no_longer_exists() -> None:
     _, session = service.mint_session(user)
     del users.by_id[user.user_id]
 
-    assert service.touch_session(session) is None
+    assert service.touch_session(session, tenant=_TENANT) is None
 
 
 # --- revoke -----------------------------------------------------------------
@@ -425,10 +560,8 @@ def test_mint_username_appends_a_numeric_suffix_on_collision() -> None:
 def test_mint_username_suffix_climbs_past_multiple_collisions() -> None:
     clock = FixedClock(_T0)
     service, users, _, _ident, _, _ = _service(clock)
-    users.create(User(user_id="usr_1", username="ada", display_name="Ada", email=None, role=Role.GUEST, created_at=_T0))
-    users.create(
-        User(user_id="usr_2", username="ada-2", display_name="Ada", email=None, role=Role.GUEST, created_at=_T0)
-    )
+    users.create(User(user_id="usr_1", username="ada", display_name="Ada", email=None, created_at=_T0))
+    users.create(User(user_id="usr_2", username="ada-2", display_name="Ada", email=None, created_at=_T0))
     assert service.mint_username("ada") == "ada-3"
 
 
@@ -442,48 +575,59 @@ def test_mint_username_falls_back_to_user_for_an_all_symbol_handle() -> None:
 
 
 def _provider_identity(
-    *, subject: str = "gh-1", handle: str = "ada", email: str | None = "ada@example.com", verified: bool = True
+    *,
+    subject: str = "gh-1",
+    handle: str = "ada",
+    email: str | None = "ada@example.com",
+    verified: bool = True,
+    authoritative: bool = True,
 ) -> ProviderIdentity:
-    return ProviderIdentity(subject=subject, handle=handle, email=email, email_verified=verified)
+    return ProviderIdentity(
+        subject=subject, handle=handle, email=email, email_verified=verified, emails_authoritative=authoritative
+    )
 
 
-def test_link_or_mint_mints_a_new_pending_user_for_an_unknown_identity() -> None:
+def _signed_in(service: AuthService, identity: ProviderIdentity, *, provider_name: str = "github") -> User:
+    user = service.link_or_mint(identity, provider_name=provider_name)
+    assert user is not None, f"{identity.handle!r} was refused"
+    return user
+
+
+def _known_ada(service: AuthService, identities: _FakeIdentityRepository, *, linked: bool = True) -> User:
+    """Ada as the hub already knows her: a contributor with a verified email, her GitHub identity linked unless
+    ``linked`` is false."""
+    ada = _identities(service).seed("usr_ada", "ada", Role.CONTRIBUTOR, email="ada@example.com")
+    if linked:
+        identities.link(Identity("github", "gh-1", ada.user_id, "ada", _T0))
+    return ada
+
+
+@pytest.mark.parametrize("verified", [True, False], ids=["verified-email", "unverified-email"])
+def test_link_or_mint_admits_no_one_the_hub_does_not_know_and_writes_nothing(verified: bool) -> None:
     clock = FixedClock(_T0)
-    service, users, _, identities, _, _ = _service(clock)
+    service, users, sessions, identities, _, auth_facts = _service(clock)
 
-    user = service.link_or_mint(_provider_identity(), provider_name="github")
+    refused = service.link_or_mint(_provider_identity(verified=verified), provider_name="github")
 
-    assert user.role == Role.PENDING
-    assert user.username == "ada"
-    assert user.email == "ada@example.com"
-    assert users.get(user.user_id) is user or users.get(user.user_id) == user
-    link = identities.get("github", "gh-1")
-    assert link is not None
-    assert link.user_id == user.user_id
-    assert link.handle == "ada"
-
-
-def test_link_or_mint_never_stores_an_unverified_email_on_a_newly_minted_user() -> None:
-    """An unverified provider-reported email is not proof of ownership, so it is not
-    stored on a newly minted user."""
-    clock = FixedClock(_T0)
-    service, _, _, _, _, _ = _service(clock)
-
-    user = service.link_or_mint(_provider_identity(verified=False), provider_name="github")
-
-    assert user.email is None
+    assert refused is None
+    assert users.by_id == {}
+    assert identities.get("github", "gh-1") is None
+    assert sessions.by_hash == {}
+    assert _identities(service).memberships.facts == []
+    assert auth_facts.list_recent() == []
 
 
 def test_link_or_mint_subject_mapping_wins_on_a_later_login() -> None:
     """An existing ``(provider, subject)`` always resolves its own user — never
     re-mints, never re-merges by email."""
     clock = FixedClock(_T0)
-    service, _, _, _, _, _ = _service(clock)
-    first = service.link_or_mint(_provider_identity(), provider_name="github")
+    service, _, _, identities, _, _ = _service(clock)
+    ada = _known_ada(service, identities)
 
-    second = service.link_or_mint(_provider_identity(email="different@example.com"), provider_name="github")
+    again = _signed_in(service, _provider_identity(email="different@example.com"))
 
-    assert second.user_id == first.user_id
+    assert again == ada
+    assert _identities(service).memberships.role_in(_TENANT, ada.user_id) is Role.CONTRIBUTOR
 
 
 def test_link_or_mint_refreshes_the_handle_on_a_provider_side_rename() -> None:
@@ -491,47 +635,55 @@ def test_link_or_mint_refreshes_the_handle_on_a_provider_side_rename() -> None:
     handle too."""
     clock = FixedClock(_T0)
     service, _, _, identities, _, _ = _service(clock)
-    first = service.link_or_mint(_provider_identity(handle="ada"), provider_name="github")
+    ada = _known_ada(service, identities)
 
-    renamed = service.link_or_mint(_provider_identity(handle="ada-lovelace"), provider_name="github")
+    renamed = _signed_in(service, _provider_identity(handle="ada-lovelace"))
 
-    assert renamed.user_id == first.user_id
+    assert renamed.user_id == ada.user_id
     link = identities.get("github", "gh-1")
     assert link is not None
     assert link.handle == "ada-lovelace"
 
 
-def test_link_or_mint_attaches_a_second_provider_identity_to_the_same_verified_email() -> None:
-    """Second-provider login with the same verified email lands on the same user —
-    one ``users`` row, two ``identities`` rows."""
+@pytest.mark.parametrize("authoritative", [True, False], ids=["authoritative", "not-authoritative"])
+def test_link_or_mint_attaches_a_new_identity_to_the_same_email_only_from_an_authoritative_provider(
+    authoritative: bool,
+) -> None:
+    """A new identity whose verified email is a known person's lands on that user — one ``users`` row, an
+    ``identities`` row per provider — when its provider vouches for the address. From a provider that does not, it is
+    a stranger: refused, linked to no one, nothing written."""
     clock = FixedClock(_T0)
-    service, users, _, identities, _, _ = _service(clock)
-    first = service.link_or_mint(_provider_identity(subject="gh-1", handle="ada"), provider_name="github")
+    service, users, sessions, identities, _, auth_facts = _service(clock)
+    ada = _known_ada(service, identities, linked=False)
+    first = _signed_in(service, _provider_identity(subject="gh-1", handle="ada"))
 
     second = service.link_or_mint(
-        ProviderIdentity(subject="oidc-1", handle="ada.lovelace", email="ada@example.com", email_verified=True),
+        _provider_identity(subject="oidc-1", handle="ada.lovelace", authoritative=authoritative),
         provider_name="oidc-co",
     )
 
-    assert second.user_id == first.user_id
+    assert first == ada
+    assert second == (ada if authoritative else None)
     assert len(users.by_id) == 1
-    assert identities.list_for_user(first.user_id) == sorted(
-        identities.list_for_user(first.user_id), key=lambda i: i.provider_name
-    )
-    assert {i.provider_name for i in identities.list_for_user(first.user_id)} == {"github", "oidc-co"}
+    linked = {"github", "oidc-co"} if authoritative else {"github"}
+    assert {i.provider_name for i in identities.list_for_user(ada.user_id)} == linked
+    assert sessions.by_hash == {}
+    assert _identities(service).hub_admins.facts == []
+    assert auth_facts.list_recent() == []
 
 
 def test_link_or_mint_never_merges_an_unverified_email_even_when_it_matches() -> None:
-    """An unverified email never merges — a second (unverified) identity mints its own
-    user rather than attaching to the existing one sharing that email address."""
+    """An unverified email never merges — a second identity reporting a known person's address unverified is a
+    stranger, admitted nowhere and linked to no one."""
     clock = FixedClock(_T0)
-    service, users, _, _, _, _ = _service(clock)
-    first = service.link_or_mint(_provider_identity(subject="gh-1"), provider_name="github")
+    service, users, _, identities, _, _ = _service(clock)
+    ada = _known_ada(service, identities)
 
-    second = service.link_or_mint(_provider_identity(subject="oidc-1", verified=False), provider_name="oidc-co")
+    refused = service.link_or_mint(_provider_identity(subject="oidc-1", verified=False), provider_name="oidc-co")
 
-    assert second.user_id != first.user_id
-    assert len(users.by_id) == 2
+    assert refused is None
+    assert len(users.by_id) == 1
+    assert [i.provider_name for i in identities.list_for_user(ada.user_id)] == ["github"]
 
 
 # --- state -------------------------------------------------------------
@@ -577,174 +729,7 @@ def test_consume_state_rejects_an_expired_state() -> None:
     assert service.consume_state(state) is None
 
 
-# --- assign_role ---------------------------------------------------------
-
-
-def _identity(user: User) -> ResolvedIdentity:
-    return ResolvedIdentity(
-        user_id=user.user_id,
-        username=user.username,
-        display_name=user.display_name,
-        role=user.role,
-        permissions=expand(user.role),
-    )
-
-
-def test_admin_promotes_a_guest_to_contributor() -> None:
-    clock = FixedClock(_T0)
-    service, users, _, _, _, auth_facts = _service(clock)
-    admin = User(
-        user_id="usr_admin", username="admin", display_name="Admin", email=None, role=Role.ADMIN, created_at=_T0
-    )
-    guest = User(
-        user_id="usr_guest", username="guest", display_name="Guest", email=None, role=Role.GUEST, created_at=_T0
-    )
-    users.create(admin)
-    users.create(guest)
-
-    updated = service.assign_role(actor=_identity(admin), subject=guest, to_role=Role.CONTRIBUTOR)
-
-    assert updated.role is Role.CONTRIBUTOR
-    stored_guest = users.get("usr_guest")
-    assert stored_guest is not None
-    assert stored_guest.role is Role.CONTRIBUTOR
-    facts = auth_facts.list_recent()
-    assert len(facts) == 1
-    assert facts[0].kind == "user_role_changed"
-    assert facts[0].actor == "admin"
-    assert facts[0].subject == "guest"
-    assert facts[0].detail == "guest -> contributor"
-
-
-def test_admin_granting_admin_is_refused() -> None:
-    clock = FixedClock(_T0)
-    service, users, _, _, _, _ = _service(clock)
-    admin = User(
-        user_id="usr_admin", username="admin", display_name="Admin", email=None, role=Role.ADMIN, created_at=_T0
-    )
-    guest = User(
-        user_id="usr_guest", username="guest", display_name="Guest", email=None, role=Role.GUEST, created_at=_T0
-    )
-    users.create(admin)
-    users.create(guest)
-
-    with pytest.raises(RoleAssignmentRefused):
-        service.assign_role(actor=_identity(admin), subject=guest, to_role=Role.ADMIN)
-
-
-def test_superuser_granting_admin_succeeds() -> None:
-    clock = FixedClock(_T0)
-    service, users, _, _, _, _ = _service(clock)
-    superuser = User(
-        user_id="usr_su", username="su", display_name="Su", email=None, role=Role.SUPERUSER, created_at=_T0
-    )
-    guest = User(
-        user_id="usr_guest", username="guest", display_name="Guest", email=None, role=Role.GUEST, created_at=_T0
-    )
-    users.create(superuser)
-    users.create(guest)
-
-    updated = service.assign_role(actor=_identity(superuser), subject=guest, to_role=Role.ADMIN)
-    assert updated.role is Role.ADMIN
-
-
-def test_admin_revoking_admin_is_refused() -> None:
-    clock = FixedClock(_T0)
-    service, users, _, _, _, _ = _service(clock)
-    admin_actor = User(
-        user_id="usr_admin1", username="admin1", display_name="A1", email=None, role=Role.ADMIN, created_at=_T0
-    )
-    other_admin = User(
-        user_id="usr_admin2", username="admin2", display_name="A2", email=None, role=Role.ADMIN, created_at=_T0
-    )
-    users.create(admin_actor)
-    users.create(other_admin)
-
-    with pytest.raises(RoleAssignmentRefused):
-        service.assign_role(actor=_identity(admin_actor), subject=other_admin, to_role=Role.CONTRIBUTOR)
-
-
-def test_self_role_change_is_refused() -> None:
-    clock = FixedClock(_T0)
-    service, users, _, _, _, _ = _service(clock)
-    admin = User(
-        user_id="usr_admin", username="admin", display_name="Admin", email=None, role=Role.ADMIN, created_at=_T0
-    )
-    users.create(admin)
-
-    with pytest.raises(RoleAssignmentRefused):
-        service.assign_role(actor=_identity(admin), subject=admin, to_role=Role.CONTRIBUTOR)
-
-
-def test_superuser_is_not_assignable_through_the_api() -> None:
-    clock = FixedClock(_T0)
-    service, users, _, _, _, _ = _service(clock)
-    superuser = User(
-        user_id="usr_su", username="su", display_name="Su", email=None, role=Role.SUPERUSER, created_at=_T0
-    )
-    guest = User(
-        user_id="usr_guest", username="guest", display_name="Guest", email=None, role=Role.GUEST, created_at=_T0
-    )
-    users.create(superuser)
-    users.create(guest)
-
-    with pytest.raises(RoleAssignmentRefused):
-        service.assign_role(actor=_identity(superuser), subject=guest, to_role=Role.SUPERUSER)
-
-
-def test_moving_a_stored_superuser_subject_is_refused() -> None:
-    """``superuser`` is bootstrap-only in *both* directions — a stored ``superuser``
-    subject cannot be demoted through this API either, even by another ``superuser``."""
-    clock = FixedClock(_T0)
-    service, users, _, _, _, _ = _service(clock)
-    actor = User(user_id="usr_su1", username="su1", display_name="Su1", email=None, role=Role.SUPERUSER, created_at=_T0)
-    subject = User(
-        user_id="usr_su2", username="su2", display_name="Su2", email=None, role=Role.SUPERUSER, created_at=_T0
-    )
-    users.create(actor)
-    users.create(subject)
-
-    with pytest.raises(RoleAssignmentRefused):
-        service.assign_role(actor=_identity(actor), subject=subject, to_role=Role.ADMIN)
-
-
-def test_assign_role_is_a_no_op_when_the_role_is_unchanged() -> None:
-    clock = FixedClock(_T0)
-    service, users, _, _, _, auth_facts = _service(clock)
-    admin = User(
-        user_id="usr_admin", username="admin", display_name="Admin", email=None, role=Role.ADMIN, created_at=_T0
-    )
-    guest = User(
-        user_id="usr_guest", username="guest", display_name="Guest", email=None, role=Role.GUEST, created_at=_T0
-    )
-    users.create(admin)
-    users.create(guest)
-
-    updated = service.assign_role(actor=_identity(admin), subject=guest, to_role=Role.GUEST)
-
-    assert updated.role is Role.GUEST
-    assert auth_facts.list_recent() == []
-
-
 # --- superuser bootstrap --------------------------------------------------
-
-
-def test_bootstrap_apply_role_records_a_system_actor_fact() -> None:
-    clock = FixedClock(_T0)
-    service, users, _, _, _, auth_facts = _service(clock)
-    admin = User(user_id="usr_1", username="ada", display_name="Ada", email=None, role=Role.ADMIN, created_at=_T0)
-    users.create(admin)
-
-    updated = service.bootstrap_apply_role(admin, Role.SUPERUSER)
-
-    assert updated.role is Role.SUPERUSER
-    stored_admin = users.get("usr_1")
-    assert stored_admin is not None
-    assert stored_admin.role is Role.SUPERUSER
-    facts = auth_facts.list_recent()
-    assert len(facts) == 1
-    assert facts[0].actor == "system"
-    assert facts[0].detail == "admin -> superuser"
 
 
 def test_record_and_get_superuser_bootstrap_round_trips() -> None:
@@ -760,37 +745,168 @@ def test_record_and_get_superuser_bootstrap_round_trips() -> None:
     assert bootstrap.updated_at == _T0
 
 
-def test_clear_superuser_bootstrap_deletes_the_row() -> None:
+@pytest.mark.parametrize("claimed_user_id", [None, "usr_alice"], ids=["unclaimed", "claimed"])
+def test_cancelling_the_superuser_bootstrap_removes_only_an_unclaimed_row(claimed_user_id: str | None) -> None:
+    service, _, _, _, superuser_bootstrap, _ = _service(FixedClock(_T0))
+    service.record_superuser_bootstrap(email="alice@example.com", claimed_user_id=claimed_user_id)
+
+    service.cancel_unclaimed_superuser_bootstrap()
+
+    kept = SuperuserBootstrap(email="alice@example.com", claimed_user_id=claimed_user_id, updated_at=_T0)
+    assert superuser_bootstrap.get() == (None if claimed_user_id is None else kept)
+
+
+def _alice() -> ProviderIdentity:
+    return _provider_identity(subject="gh-alice", handle="alice", email="alice@example.com", verified=True)
+
+
+@pytest.mark.parametrize(
+    "signing_in",
+    [
+        pytest.param(_alice(), id="target-is-the-primary-address"),
+        pytest.param(
+            ProviderIdentity(
+                subject="gh-alice",
+                handle="alice",
+                email="alice@work.example",
+                email_verified=True,
+                verified_emails=("alice@work.example", "alice@example.com"),
+                emails_authoritative=True,
+            ),
+            id="target-is-another-verified-address",
+        ),
+    ],
+)
+def test_the_first_claim_makes_a_hub_administrator_and_the_first_tenants_admin(signing_in: ProviderIdentity) -> None:
+    """With one tenant and no admin in it, the claim — by a sign-in whose provider vouches for the target as any of
+    its verified addresses — grants the hub administrator role and an ``admin`` membership, both ``bootstrap``,
+    recording the membership's ``user_role_changed``."""
     clock = FixedClock(_T0)
-    service, _, _, _, _, _ = _service(clock)
+    service, _, _, _, superuser_bootstrap, auth_facts = _service(clock)
     service.record_superuser_bootstrap(email="alice@example.com", claimed_user_id=None)
 
-    service.clear_superuser_bootstrap()
+    user = _signed_in(service, signing_in)
 
-    assert service.get_superuser_bootstrap() is None
-
-
-def test_link_or_mint_claims_an_unclaimed_bootstrap_target_on_first_verified_login() -> None:
-    """Claims an unclaimed bootstrap target on the first verified login for its
-    email."""
-    clock = FixedClock(_T0)
-    service, users, _, _, superuser_bootstrap, auth_facts = _service(clock)
-    service.record_superuser_bootstrap(email="alice@example.com", claimed_user_id=None)
-
-    user = service.link_or_mint(
-        _provider_identity(subject="gh-alice", handle="alice", email="alice@example.com", verified=True),
-        provider_name="github",
-    )
-
-    assert user.role is Role.SUPERUSER
-    stored_user = users.get(user.user_id)
-    assert stored_user is not None
-    assert stored_user.role is Role.SUPERUSER
+    seeded = _identities(service)
+    assert seeded.hub_admins.facts == [HubAdminFact(user.user_id, True, _T0, "bootstrap")]
+    assert seeded.memberships.facts == [MembershipFact(_TENANT, user.user_id, Role.ADMIN, _T0, "bootstrap")]
     bootstrap = superuser_bootstrap.get()
     assert bootstrap is not None
     assert bootstrap.claimed_user_id == user.user_id
-    kinds = [f.kind for f in auth_facts.list_recent()]
-    assert "user_role_changed" in kinds
+    [fact] = auth_facts.list_recent()
+    assert (fact.kind, fact.actor, fact.detail) == ("user_role_changed", "system", f"none -> admin in {_TENANT}")
+
+
+@pytest.mark.parametrize("second_tenant", [False, True], ids=["tenant-has-an-admin", "two-tenants"])
+def test_the_claim_grants_no_membership_once_a_tenant_has_an_admin_or_a_second_exists(second_tenant: bool) -> None:
+    clock = FixedClock(_T0)
+    service, _, _, _, _, _ = _service(clock)
+    seeded = _identities(service)
+    if second_tenant:
+        seeded.memberships.tenants = [_TENANT, TenantId("ten_two")]
+    else:
+        seeded.seed("usr_admin", "admin", Role.ADMIN)
+    before = list(seeded.memberships.facts)
+    service.record_superuser_bootstrap(email="alice@example.com", claimed_user_id=None)
+
+    user = _signed_in(service, _alice())
+
+    assert seeded.hub_admins.holders() == [user.user_id]
+    assert seeded.memberships.facts == before
+
+
+@pytest.mark.parametrize(
+    ("provider_name", "signing_in", "claims"),
+    [
+        pytest.param("github", _alice(), True, id="authoritative-identity-vouching-for-the-address"),
+        pytest.param(
+            "github",
+            ProviderIdentity(
+                subject="gh-alice",
+                handle="alice",
+                email="alice@work.example",
+                email_verified=True,
+                verified_emails=("alice@work.example", "alice@example.com"),
+                emails_authoritative=True,
+            ),
+            True,
+            id="authoritative-identity-vouching-for-it-as-another-verified-address",
+        ),
+        pytest.param(
+            "oidc-co",
+            ProviderIdentity(
+                subject="oidc-alice",
+                handle="alice",
+                email="alice@example.com",
+                email_verified=True,
+                verified_emails=("alice@example.com",),
+            ),
+            False,
+            id="identity-from-a-provider-that-is-not-authoritative",
+        ),
+        pytest.param(
+            "github",
+            _provider_identity(subject="gh-alice", handle="alice", email="alice@home.example"),
+            False,
+            id="only-the-accounts-stored-email-matches",
+        ),
+    ],
+)
+def test_a_returning_user_claims_a_newly_configured_target_only_through_an_identity_vouching_for_it(
+    provider_name: str, signing_in: ProviderIdentity, claims: bool
+) -> None:
+    """A user who already exists claims the target when they sign in through an identity whose provider vouches for
+    the address — as its primary or another verified address — keeping their membership; the address the account
+    holds never claims by itself."""
+    clock = FixedClock(_T0)
+    service, _, _, identities, superuser_bootstrap, _ = _service(clock)
+    seeded = _identities(service)
+    seeded.seed("usr_admin", "admin", Role.ADMIN)
+    alice = seeded.seed("usr_alice", "alice", Role.GUEST, email="alice@example.com")
+    identities.link(Identity("github", "gh-alice", alice.user_id, "alice", _T0))
+    identities.link(Identity("oidc-co", "oidc-alice", alice.user_id, "alice", _T0))
+    service.record_superuser_bootstrap(email="alice@example.com", claimed_user_id=None)
+
+    user = _signed_in(service, signing_in, provider_name=provider_name)
+
+    assert user == alice
+    assert seeded.hub_admins.holders() == ([alice.user_id] if claims else [])
+    assert seeded.memberships.role_in(_TENANT, alice.user_id) is Role.GUEST
+    bootstrap = superuser_bootstrap.get()
+    assert bootstrap is not None
+    assert bootstrap.claimed_user_id == (alice.user_id if claims else None)
+
+
+@pytest.mark.parametrize(
+    ("verified", "authoritative"),
+    [(False, True), (True, False)],
+    ids=["unverified-email", "provider-not-authoritative"],
+)
+def test_the_superuser_target_is_admitted_only_on_an_email_its_provider_vouches_for(
+    verified: bool, authoritative: bool
+) -> None:
+    """The configured ``auth.superuser`` is the one stranger a sign-in admits without an invitation — and only when
+    the provider verified the address and is authoritative for the addresses it reports."""
+    clock = FixedClock(_T0)
+    service, users, sessions, identities, superuser_bootstrap, auth_facts = _service(clock)
+    service.record_superuser_bootstrap(email="alice@example.com", claimed_user_id=None)
+
+    refused = service.link_or_mint(
+        _provider_identity(
+            subject="oidc-alice", email="alice@example.com", verified=verified, authoritative=authoritative
+        ),
+        provider_name="oidc-co",
+    )
+
+    assert refused is None
+    assert users.by_id == {}
+    assert identities.get("oidc-co", "oidc-alice") is None
+    assert sessions.by_hash == {}
+    assert _identities(service).hub_admins.facts == []
+    assert auth_facts.list_recent() == []
+    bootstrap = superuser_bootstrap.get()
+    assert bootstrap is not None
+    assert bootstrap.claimed_user_id is None
 
 
 def test_link_or_mint_does_not_claim_a_bootstrap_target_for_a_different_email() -> None:
@@ -798,9 +914,11 @@ def test_link_or_mint_does_not_claim_a_bootstrap_target_for_a_different_email() 
     service, _, _, _, superuser_bootstrap, _ = _service(clock)
     service.record_superuser_bootstrap(email="alice@example.com", claimed_user_id=None)
 
-    user = service.link_or_mint(_provider_identity(email="bob@example.com"), provider_name="github")
+    refused = service.link_or_mint(_provider_identity(email="bob@example.com"), provider_name="github")
 
-    assert user.role is Role.PENDING
+    assert refused is None
+
+    assert _identities(service).hub_admins.facts == []
     bootstrap = superuser_bootstrap.get()
     assert bootstrap is not None
     assert bootstrap.claimed_user_id is None
@@ -811,11 +929,14 @@ def test_link_or_mint_does_not_reclaim_an_already_claimed_bootstrap_target() -> 
     service, _, _, _, superuser_bootstrap, _ = _service(clock)
     service.record_superuser_bootstrap(email="alice@example.com", claimed_user_id="usr_already")
 
-    user = service.link_or_mint(
+    refused = service.link_or_mint(
         _provider_identity(subject="gh-alice-2", email="alice@example.com"), provider_name="github"
     )
 
-    assert user.role is Role.PENDING
+    assert refused is None
+
+    assert _identities(service).hub_admins.facts == []
+    assert _identities(service).memberships.facts == []
     bootstrap = superuser_bootstrap.get()
     assert bootstrap is not None
     assert bootstrap.claimed_user_id == "usr_already"

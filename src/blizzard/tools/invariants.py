@@ -10,8 +10,9 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Any, ClassVar
 
-from sqlalchemy import Connection, Engine, and_, func, select
+from sqlalchemy import Connection, CursorResult, Engine, Select, Table, and_, func, select
 
 from blizzard.foundation.clock import IClock, SystemClock
 from blizzard.foundation.logging import get_logger
@@ -23,11 +24,14 @@ from blizzard.hub.domain.chunk.model import ChunkFacts, RouteHistory
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
+from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.store import schema as hub
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
 from blizzard.hub.store.internal.chunk_rows import DEFAULT_MODEL
+from blizzard.hub.store.scoped import TENANT_COLUMN, is_tenant_owned
+from blizzard.hub.tenancy import HUB_SCOPED_OPTION, StoreScope, TenantId
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from blizzard.runner.process.probe import IProcessProbe
 from blizzard.runner.store import schema as runner
@@ -62,6 +66,22 @@ class QueryCheck(Check):
     """An invariant answerable by plain queries over one open read connection."""
 
     conn: Connection
+
+
+@dataclass(frozen=True)
+class HubQueryCheck(QueryCheck):
+    """A hub invariant judged over the open tenants' rows. A deletion drains a closed tenant's tables one after
+    another, a fact before the fact or record it pairs with, so partway through what is left of the tenant is no
+    longer a whole history; every read through :meth:`rows` leaves out each tenant a deletion has closed."""
+
+    def rows(self, statement: Select[Any]) -> CursorResult[Any]:
+        """``statement``'s rows of the open tenants only — each tenant-owned table it reads from is confined to the
+        tenants no ``tenant_deletions`` row names."""
+        closed = select(hub.tenant_deletions.c.tenant_id)
+        open_only = [
+            from_.c[TENANT_COLUMN].not_in(closed) for from_ in statement.get_final_froms() if is_tenant_owned(from_)
+        ]
+        return self.conn.execute(statement.where(*open_only) if open_only else statement)
 
 
 @dataclass(frozen=True)
@@ -456,7 +476,7 @@ class ChecksRecordedWhenMarked(QueryCheck):
         ]
 
 
-class OneTransitionPerNodeEpoch(QueryCheck):
+class OneTransitionPerNodeEpoch(HubQueryCheck):
     """At most one accepted transition per (chunk, from_node, epoch): the idempotency
     guarantee. A duplicate is a double-apply."""
 
@@ -464,7 +484,7 @@ class OneTransitionPerNodeEpoch(QueryCheck):
         violations: list[Violation] = []
         key = Counter(
             (row[0], row[1], row[2])
-            for row in self.conn.execute(
+            for row in self.rows(
                 select(hub.transitions.c.chunk_id, hub.transitions.c.from_node_id, hub.transitions.c.epoch)
             )
         )
@@ -479,7 +499,7 @@ class OneTransitionPerNodeEpoch(QueryCheck):
         return violations
 
 
-class EpochConsistentTransitions(QueryCheck):
+class EpochConsistentTransitions(HubQueryCheck):
     """No accepted transition carries an epoch greater than the chunk's latest lease fact;
     a higher one means a zombie landed."""
 
@@ -487,13 +507,13 @@ class EpochConsistentTransitions(QueryCheck):
         violations: list[Violation] = []
         latest_lease = {
             row[0]: row[1]
-            for row in self.conn.execute(
+            for row in self.rows(
                 select(hub.lease_facts.c.chunk_id, func.max(hub.lease_facts.c.epoch)).group_by(
                     hub.lease_facts.c.chunk_id
                 )
             )
         }
-        for chunk_id, max_epoch in self.conn.execute(
+        for chunk_id, max_epoch in self.rows(
             select(hub.transitions.c.chunk_id, func.max(hub.transitions.c.epoch)).group_by(hub.transitions.c.chunk_id)
         ):
             known = latest_lease.get(chunk_id)
@@ -507,7 +527,7 @@ class EpochConsistentTransitions(QueryCheck):
         return violations
 
 
-class EpochsOwned(QueryCheck):
+class EpochsOwned(HubQueryCheck):
     """Every epoch a lease fact or a restart took has an owner row, and that row names the
     epoch's first taker — the rule the owner backfill applied: restarts first, in id order,
     hub-owned, then lease facts in id order, a ``hub`` lease hub-owned. A different first
@@ -516,16 +536,16 @@ class EpochsOwned(QueryCheck):
     def run(self) -> list[Violation]:
         owners = {
             (row.chunk_id, row.epoch): row.runner_id
-            for row in self.conn.execute(
+            for row in self.rows(
                 select(hub.epoch_owners.c.chunk_id, hub.epoch_owners.c.epoch, hub.epoch_owners.c.runner_id)
             )
         }
         leases = hub.lease_facts.c
         restarts = hub.chunk_restarts.c
         first_taker: dict[tuple[str, int], str | None] = {}
-        for chunk_id, epoch in self.conn.execute(select(restarts.chunk_id, restarts.epoch).order_by(restarts.id)):
+        for chunk_id, epoch in self.rows(select(restarts.chunk_id, restarts.epoch).order_by(restarts.id)):
             first_taker.setdefault((chunk_id, epoch), None)
-        for chunk_id, epoch, runner_id in self.conn.execute(
+        for chunk_id, epoch, runner_id in self.rows(
             select(leases.chunk_id, leases.epoch, leases.runner_id).order_by(leases.id)
         ):
             first_taker.setdefault((chunk_id, epoch), None if runner_id == _HUB_LEASE_RUNNER_ID else runner_id)
@@ -544,22 +564,21 @@ class EpochsOwned(QueryCheck):
         return violations
 
 
-class RouteSeqUnique(QueryCheck):
+class RouteSeqUnique(HubQueryCheck):
     """Per-chunk route ``seq`` is unique across ``route_created`` + ``route_released`` +
     ``route_token_minted`` combined."""
 
     def run(self) -> list[Violation]:
         violations: list[Violation] = []
         route_seqs = Counter(
-            (row[0], row[1]) for row in self.conn.execute(select(hub.route_created.c.chunk_id, hub.route_created.c.seq))
+            (row[0], row[1]) for row in self.rows(select(hub.route_created.c.chunk_id, hub.route_created.c.seq))
+        )
+        route_seqs.update(
+            (row[0], row[1]) for row in self.rows(select(hub.route_released.c.chunk_id, hub.route_released.c.seq))
         )
         route_seqs.update(
             (row[0], row[1])
-            for row in self.conn.execute(select(hub.route_released.c.chunk_id, hub.route_released.c.seq))
-        )
-        route_seqs.update(
-            (row[0], row[1])
-            for row in self.conn.execute(select(hub.route_token_minted.c.chunk_id, hub.route_token_minted.c.seq))
+            for row in self.rows(select(hub.route_token_minted.c.chunk_id, hub.route_token_minted.c.seq))
         )
         for (chunk_id, seq), n in route_seqs.items():
             if n > 1:
@@ -569,7 +588,7 @@ class RouteSeqUnique(QueryCheck):
         return violations
 
 
-class OneLiveRoutePerChunk(QueryCheck):
+class OneLiveRoutePerChunk(HubQueryCheck):
     """At most one live route per chunk — walking each chunk's ``route_created``/
     ``route_released`` facts in ``(timestamp, seq)`` order (:class:`RouteHistory`'s own
     tie-break), no ``route_created`` follows another with no ``route_released`` between.
@@ -577,11 +596,11 @@ class OneLiveRoutePerChunk(QueryCheck):
 
     def run(self) -> list[Violation]:
         events: dict[str, list[tuple[datetime, int, str]]] = {}
-        for row in self.conn.execute(
+        for row in self.rows(
             select(hub.route_created.c.chunk_id, hub.route_created.c.created_at, hub.route_created.c.seq)
         ):
             events.setdefault(row.chunk_id, []).append((row.created_at, row.seq, "created"))
-        for row in self.conn.execute(
+        for row in self.rows(
             select(hub.route_released.c.chunk_id, hub.route_released.c.released_at, hub.route_released.c.seq)
         ):
             events.setdefault(row.chunk_id, []).append((row.released_at, row.seq, "released"))
@@ -604,14 +623,14 @@ class OneLiveRoutePerChunk(QueryCheck):
         return violations
 
 
-class PerRepoLandIdempotent(QueryCheck):
+class PerRepoLandIdempotent(HubQueryCheck):
     """A redelivery skips already-landed repos, so a second landed fact is a double land."""
 
     def run(self) -> list[Violation]:
         violations: list[Violation] = []
         repo_lands = Counter(
             (row[0], row[1])
-            for row in self.conn.execute(select(hub.delivery_repo_landed.c.chunk_id, hub.delivery_repo_landed.c.repo))
+            for row in self.rows(select(hub.delivery_repo_landed.c.chunk_id, hub.delivery_repo_landed.c.repo))
         )
         for (chunk_id, repo), n in repo_lands.items():
             if n > 1:
@@ -621,14 +640,14 @@ class PerRepoLandIdempotent(QueryCheck):
         return violations
 
 
-class PerRepoMarkerIdempotent(QueryCheck):
+class PerRepoMarkerIdempotent(HubQueryCheck):
     """At most one ``merged/<repo>`` marker artifact per (chunk, node, epoch, name)."""
 
     def run(self) -> list[Violation]:
         violations: list[Violation] = []
         markers = Counter(
             (row[0], row[1], row[2], row[3])
-            for row in self.conn.execute(
+            for row in self.rows(
                 select(
                     hub.artifacts.c.chunk_id, hub.artifacts.c.node_id, hub.artifacts.c.epoch, hub.artifacts.c.name
                 ).where(hub.artifacts.c.name.like("merged/%"))
@@ -645,12 +664,12 @@ class PerRepoMarkerIdempotent(QueryCheck):
         return violations
 
 
-class NoDoubleDelivery(QueryCheck):
+class NoDoubleDelivery(HubQueryCheck):
     """At most one whole-chunk delivery.landed terminal fact."""
 
     def run(self) -> list[Violation]:
         violations: list[Violation] = []
-        landed = Counter(row[0] for row in self.conn.execute(select(hub.delivery_landed.c.chunk_id)))
+        landed = Counter(row[0] for row in self.rows(select(hub.delivery_landed.c.chunk_id)))
         for chunk_id, n in landed.items():
             if n > 1:
                 violations.append(
@@ -659,7 +678,7 @@ class NoDoubleDelivery(QueryCheck):
         return violations
 
 
-class NoDoubleTerminalClosure(QueryCheck):
+class NoDoubleTerminalClosure(HubQueryCheck):
     """At most one terminal (``closed``/``gone``) ``work_item_closures`` outcome per
     ``(chunk, source, ref)`` — the drain's idempotency guard is a
     ``retired_at`` check, not a store-level constraint, so a bug there would otherwise
@@ -669,7 +688,7 @@ class NoDoubleTerminalClosure(QueryCheck):
         violations: list[Violation] = []
         key = Counter(
             (row.chunk_id, row.source, row.ref)
-            for row in self.conn.execute(
+            for row in self.rows(
                 select(
                     hub.work_item_closures.c.chunk_id, hub.work_item_closures.c.source, hub.work_item_closures.c.ref
                 ).where(hub.work_item_closures.c.outcome.in_(["closed", "gone"]))
@@ -686,7 +705,7 @@ class NoDoubleTerminalClosure(QueryCheck):
         return violations
 
 
-class NoPendingIntentAgainstATerminalRef(QueryCheck):
+class NoPendingIntentAgainstATerminalRef(HubQueryCheck):
     """A pending (``retired_at IS NULL``) ``close_intents`` row whose ``(chunk, source,
     ref)`` already carries a terminal closure outcome is a stuck retirement — the drain
     recorded the outcome but never retired the intent that rode it."""
@@ -695,13 +714,13 @@ class NoPendingIntentAgainstATerminalRef(QueryCheck):
         violations: list[Violation] = []
         terminal = {
             (row.chunk_id, row.source, row.ref)
-            for row in self.conn.execute(
+            for row in self.rows(
                 select(
                     hub.work_item_closures.c.chunk_id, hub.work_item_closures.c.source, hub.work_item_closures.c.ref
                 ).where(hub.work_item_closures.c.outcome.in_(["closed", "gone"]))
             )
         }
-        for row in self.conn.execute(
+        for row in self.rows(
             select(hub.close_intents.c.chunk_id, hub.close_intents.c.source, hub.close_intents.c.ref).where(
                 hub.close_intents.c.retired_at.is_(None)
             )
@@ -717,7 +736,7 @@ class NoPendingIntentAgainstATerminalRef(QueryCheck):
         return violations
 
 
-class NoUnenqueuedClosableRef(QueryCheck):
+class NoUnenqueuedClosableRef(HubQueryCheck):
     """A non-ephemeral chunk that has landed or been hand-completed owes a ``close_intents``
     row for every still-open ``chunk_work_refs`` ref — the nine
     call-site-guarded ``_enqueue_close_intents`` invocations' own derived invariant. A terminal
@@ -725,26 +744,24 @@ class NoUnenqueuedClosableRef(QueryCheck):
 
     def run(self) -> list[Violation]:
         violations: list[Violation] = []
-        ephemeral = {row[0] for row in self.conn.execute(select(hub.chunk_grouped.c.chunk_id))} | {
-            row[0] for row in self.conn.execute(select(hub.chunk_deleted.c.chunk_id))
+        ephemeral = {row[0] for row in self.rows(select(hub.chunk_grouped.c.chunk_id))} | {
+            row[0] for row in self.rows(select(hub.chunk_deleted.c.chunk_id))
         }
         landed = (
-            {row[0] for row in self.conn.execute(select(hub.delivery_landed.c.chunk_id))}
-            | {row[0] for row in self.conn.execute(select(hub.delivery_repo_landed.c.chunk_id))}
+            {row[0] for row in self.rows(select(hub.delivery_landed.c.chunk_id))}
+            | {row[0] for row in self.rows(select(hub.delivery_repo_landed.c.chunk_id))}
             | {
                 row[0]
-                for row in self.conn.execute(
-                    select(hub.artifacts.c.chunk_id).where(hub.artifacts.c.name.like("merged/%"))
-                )
+                for row in self.rows(select(hub.artifacts.c.chunk_id).where(hub.artifacts.c.name.like("merged/%")))
             }
         )
-        completed = {row[0] for row in self.conn.execute(select(hub.chunk_completed.c.chunk_id))}
+        completed = {row[0] for row in self.rows(select(hub.chunk_completed.c.chunk_id))}
         eligible = (landed | completed) - ephemeral
         if not eligible:
             return violations
         terminal = {
             (row.chunk_id, row.source, row.ref)
-            for row in self.conn.execute(
+            for row in self.rows(
                 select(
                     hub.work_item_closures.c.chunk_id, hub.work_item_closures.c.source, hub.work_item_closures.c.ref
                 ).where(hub.work_item_closures.c.outcome.in_(["closed", "gone"]))
@@ -752,11 +769,11 @@ class NoUnenqueuedClosableRef(QueryCheck):
         }
         enqueued = {
             (row.chunk_id, row.source, row.ref)
-            for row in self.conn.execute(
+            for row in self.rows(
                 select(hub.close_intents.c.chunk_id, hub.close_intents.c.source, hub.close_intents.c.ref)
             )
         }
-        for row in self.conn.execute(
+        for row in self.rows(
             select(hub.chunk_work_refs.c.chunk_id, hub.chunk_work_refs.c.source, hub.chunk_work_refs.c.ref).where(
                 hub.chunk_work_refs.c.chunk_id.in_(list(eligible))
             )
@@ -774,20 +791,66 @@ class NoUnenqueuedClosableRef(QueryCheck):
         return violations
 
 
-class OneLiveExecSlot(QueryCheck):
-    """At most one hub_exec_slot row is live (``released_at IS NULL``) at a time (#65;
-    pinned by tests/test_pin_foundation.py)."""
+class OneLiveExecSlot(HubQueryCheck):
+    """At most one hub_exec_slot row per tenant is live (``released_at IS NULL``) at a time
+    (pinned by tests/test_pin_foundation.py). Each tenant holds its own slot, so two
+    tenants' live slots at once are legal."""
 
     def run(self) -> list[Violation]:
-        live_slots = self.conn.execute(
-            select(func.count()).select_from(hub.hub_exec_slot).where(hub.hub_exec_slot.c.released_at.is_(None))
-        ).scalar()
-        if (live_slots or 0) > 1:
-            return [Violation("hub:one-live-exec-slot", f"{live_slots} hub-execution slots are live at once")]
-        return []
+        slot = hub.hub_exec_slot
+        live = func.count()
+        crowded = self.rows(
+            select(slot.c.tenant_id, live)
+            .where(slot.c.released_at.is_(None))
+            .group_by(slot.c.tenant_id)
+            .having(live > 1)
+            .order_by(slot.c.tenant_id)
+        ).all()
+        return [
+            Violation(
+                "hub:one-live-exec-slot", f"tenant {row.tenant_id}: {row[1]} hub-execution slots are live at once"
+            )
+            for row in crowded
+        ]
 
 
-class MigrationsAtomic(QueryCheck):
+class NoRowOfADeletedTenant(QueryCheck):
+    """``hub:no-row-of-a-deleted-tenant`` — a tenant's deletion removes every row it owns before it
+    removes the tenant, and its memberships with it, so no row naming a tenant — of a tenant-owned table, or of a
+    global one recording a tenant's id — names one absent from ``tenants``. It reads every tenant, a closed one
+    included: what a drain leaves behind is exactly what it looks for."""
+
+    def run(self) -> list[Violation]:
+        present = select(hub.tenants.c.tenant_id)
+        violations: list[Violation] = []
+        for table in hub.metadata.sorted_tables:
+            if not _names_a_tenant(table):
+                continue
+            tenant, rows = table.c.tenant_id, func.count()
+            orphaned = self.conn.execute(
+                select(tenant, rows).where(tenant.not_in(present)).group_by(tenant).order_by(tenant)
+            ).all()
+            violations.extend(
+                Violation(
+                    "hub:no-row-of-a-deleted-tenant",
+                    f"{table.name} holds {row[1]} row(s) of tenant {row.tenant_id}, which is not in tenants",
+                )
+                for row in orphaned
+            )
+        return violations
+
+
+#: The tenants' own registry: a closed tenant's deletion row outlives the tenant by design.
+_TENANT_REGISTRY = frozenset({hub.tenants.name, hub.tenant_deletions.name})
+
+
+def _names_a_tenant(table: Table) -> bool:
+    """Whether ``table``'s rows each name a tenant: a tenant-owned table, or a global one carrying a ``tenant_id``
+    outside the tenants' own registry."""
+    return is_tenant_owned(table) or (TENANT_COLUMN in table.c and table.name not in _TENANT_REGISTRY)
+
+
+class MigrationsAtomic(HubQueryCheck):
     """``hub:one-migration-per-node-epoch`` — one row per ``(chunk, from_node, epoch)``;
     ``hub:migration-pin-consistent`` — the chunk carries the newest migration's target pin;
     ``hub:migration-route-released`` — a runner landing released the route (a hub landing
@@ -797,7 +860,7 @@ class MigrationsAtomic(QueryCheck):
         violations: list[Violation] = []
         key = Counter(
             (row[0], row[1], row[2])
-            for row in self.conn.execute(
+            for row in self.rows(
                 select(
                     hub.chunk_migrations.c.chunk_id,
                     hub.chunk_migrations.c.from_node_id,
@@ -815,21 +878,21 @@ class MigrationsAtomic(QueryCheck):
                 )
 
         newest: dict[str, object] = {}
-        for m in self.conn.execute(select(hub.chunk_migrations)):
+        for m in self.rows(select(hub.chunk_migrations)):
             cur = newest.get(m.chunk_id)
             if cur is None or (m.recorded_at, m.epoch) >= (cur.recorded_at, cur.epoch):  # type: ignore[attr-defined]
                 newest[m.chunk_id] = m
-        chunks = {c.chunk_id: c for c in self.conn.execute(select(hub.chunks))}
+        chunks = {c.chunk_id: c for c in self.rows(select(hub.chunks))}
         # A migration's landed node executor. Node ids are globally-unique, so
         # one node_id -> executor map resolves any landing node.
         landed_executor = {
             row.node_id: row.executor
-            for row in self.conn.execute(select(hub.graph_nodes.c.node_id, hub.graph_nodes.c.executor))
+            for row in self.rows(select(hub.graph_nodes.c.node_id, hub.graph_nodes.c.executor))
         }
         # The latest route release per chunk — a runner-landing migration's ``recorded_at``
         # is never above the chunk's newest release.
         latest_release: dict[str, datetime] = {}
-        for r in self.conn.execute(select(hub.route_released.c.chunk_id, hub.route_released.c.released_at)):
+        for r in self.rows(select(hub.route_released.c.chunk_id, hub.route_released.c.released_at)):
             cur = latest_release.get(r.chunk_id)
             if cur is None or r.released_at > cur:
                 latest_release[r.chunk_id] = r.released_at
@@ -954,17 +1017,17 @@ class RunnerInvariants:
 
 
 @dataclass(frozen=True)
-class SegmentChunkResolves(QueryCheck):
+class SegmentChunkResolves(HubQueryCheck):
     """Every ``transcript_segments.chunk_id`` resolves to a ``chunks`` row — the foreign key
     the table declares, which sqlite does not enforce. A breach hides a chunk's transcripts
     from every read that joins through the chunk, so transcript-event derivation declines the
     segment rather than deriving a node-step it cannot place."""
 
     def run(self) -> list[Violation]:
-        minted = {row[0] for row in self.conn.execute(select(hub.chunks.c.chunk_id))}
+        minted = {row[0] for row in self.rows(select(hub.chunks.c.chunk_id))}
         orphans = {
             (row.segment_id, row.chunk_id)
-            for row in self.conn.execute(
+            for row in self.rows(
                 select(hub.transcript_segments.c.segment_id, hub.transcript_segments.c.chunk_id).distinct()
             )
             if row.chunk_id not in minted
@@ -975,14 +1038,14 @@ class SegmentChunkResolves(QueryCheck):
         ]
 
 
-class NoStandingDependencyCycle(QueryCheck):
+class NoStandingDependencyCycle(HubQueryCheck):
     """The standing (unreleased) ``chunk_dependencies`` edges form no cycle — a derived
     cross-fact invariant with no engine constraint behind it, held only by
     ``DependencyService`` under the claim lock."""
 
     def run(self) -> list[Violation]:
         graph: dict[str, list[str]] = {}
-        for row in self.conn.execute(
+        for row in self.rows(
             select(hub.chunk_dependencies.c.dependent_chunk_id, hub.chunk_dependencies.c.prerequisite_chunk_id).where(
                 hub.chunk_dependencies.c.released_at.is_(None)
             )
@@ -1015,7 +1078,7 @@ class NoStandingDependencyCycle(QueryCheck):
         return False
 
 
-class NoDuplicateStandingDependency(QueryCheck):
+class NoDuplicateStandingDependency(HubQueryCheck):
     """At most one standing (unreleased) edge per ordered ``(dependent, prerequisite)``
     pair — a durable invariant held only by domain code under the claim lock, since
     ``chunk_dependencies`` carries no database uniqueness constraint on the pair."""
@@ -1024,7 +1087,7 @@ class NoDuplicateStandingDependency(QueryCheck):
         violations: list[Violation] = []
         pairs = Counter(
             (row.dependent_chunk_id, row.prerequisite_chunk_id)
-            for row in self.conn.execute(
+            for row in self.rows(
                 select(
                     hub.chunk_dependencies.c.dependent_chunk_id, hub.chunk_dependencies.c.prerequisite_chunk_id
                 ).where(hub.chunk_dependencies.c.released_at.is_(None))
@@ -1041,7 +1104,7 @@ class NoDuplicateStandingDependency(QueryCheck):
         return violations
 
 
-class NoStandingDependencyOntoEphemeralChunk(QueryCheck):
+class NoStandingDependencyOntoEphemeralChunk(HubQueryCheck):
     """A standing (unreleased) edge whose dependent or prerequisite is ephemeral (grouped away or deleted) — its FK
     still resolves, so the engine enforces nothing here. Design upholds this by construction now that
     ``DeleteService`` and ``GroupService`` both hold their own row lock over the chunks they touch and share the
@@ -1049,13 +1112,13 @@ class NoStandingDependencyOntoEphemeralChunk(QueryCheck):
     known-live gap."""
 
     def run(self) -> list[Violation]:
-        ephemeral = {row[0] for row in self.conn.execute(select(hub.chunk_grouped.c.chunk_id))} | {
-            row[0] for row in self.conn.execute(select(hub.chunk_deleted.c.chunk_id))
+        ephemeral = {row[0] for row in self.rows(select(hub.chunk_grouped.c.chunk_id))} | {
+            row[0] for row in self.rows(select(hub.chunk_deleted.c.chunk_id))
         }
         if not ephemeral:
             return []
         violations: list[Violation] = []
-        for row in self.conn.execute(
+        for row in self.rows(
             select(hub.chunk_dependencies.c.dependent_chunk_id, hub.chunk_dependencies.c.prerequisite_chunk_id).where(
                 hub.chunk_dependencies.c.released_at.is_(None)
             )
@@ -1072,6 +1135,293 @@ class NoStandingDependencyOntoEphemeralChunk(QueryCheck):
         return violations
 
 
+def _project_label(project_id: str | None) -> str:
+    return f"project {project_id}" if project_id is not None else "no project"
+
+
+def _same_project(one: str | None, other: str | None) -> bool:
+    """Whether both sides name a project and it is the same one; a side that resolves to none never matches."""
+    return one is not None and one == other
+
+
+class ProjectOfItsTenant(HubQueryCheck):
+    """Every row of :attr:`table` names, by its ``project_id``, a project of the row's own tenant. The foreign key
+    says only that the project exists, not whose it is, so only a read can show a row filed under another tenant's
+    project."""
+
+    invariant: ClassVar[str]
+    table: ClassVar[Table]
+    key: ClassVar[str]
+    noun: ClassVar[str]
+
+    def run(self) -> list[Violation]:
+        projects = hub.projects
+        tenant_of = {
+            row.project_id: row.tenant_id for row in self.rows(select(projects.c.project_id, projects.c.tenant_id))
+        }
+        key = self.table.c[self.key]
+        return [
+            Violation(
+                self.invariant,
+                f"{self.noun} {row[0]} of tenant {row.tenant_id} names project {row.project_id}, "
+                "not a project of its tenant",
+            )
+            for row in self.rows(select(key, self.table.c.tenant_id, self.table.c.project_id).order_by(key))
+            if tenant_of.get(row.project_id) != row.tenant_id
+        ]
+
+
+class ChunkProjectInTenant(ProjectOfItsTenant):
+    """``hub:chunk-project-in-tenant`` — every chunk's project is one of the chunk's tenant's."""
+
+    invariant = "hub:chunk-project-in-tenant"
+    table = hub.chunks
+    key = "chunk_id"
+    noun = "chunk"
+
+
+class WorkItemProjectInTenant(ProjectOfItsTenant):
+    """``hub:work-item-project-in-tenant`` — every work item's project is one of the item's tenant's."""
+
+    invariant = "hub:work-item-project-in-tenant"
+    table = hub.work_items
+    key = "work_item_id"
+    noun = "work item"
+
+
+def _scope_projects(check: HubQueryCheck) -> dict[str, str]:
+    scopes = hub.scopes
+    return {row.scope_id: row.project_id for row in check.rows(select(scopes.c.scope_id, scopes.c.project_id))}
+
+
+class RoutineScopeSameProject(HubQueryCheck):
+    """``hub:routine-scope-same-project`` — a routine's default scope, and every scope a ``routine_scopes`` row gives
+    it, belong to the routine's own project: a routine runs only over its project's scopes."""
+
+    def run(self) -> list[Violation]:
+        scope_project = _scope_projects(self)
+        routines, members = hub.routines, hub.routine_scopes
+        routine_project: dict[str, str] = {}
+        violations: list[Violation] = []
+        for row in self.rows(
+            select(routines.c.routine_id, routines.c.project_id, routines.c.default_scope_id).order_by(
+                routines.c.routine_id
+            )
+        ):
+            routine_project[row.routine_id] = row.project_id
+            if not _same_project(scope_project.get(row.default_scope_id), row.project_id):
+                violations.append(
+                    Violation(
+                        "hub:routine-scope-same-project",
+                        f"routine {row.routine_id} of project {row.project_id} defaults to scope "
+                        f"{row.default_scope_id} of {_project_label(scope_project.get(row.default_scope_id))}",
+                    )
+                )
+        for row in self.rows(
+            select(members.c.routine_id, members.c.scope_id).order_by(members.c.routine_id, members.c.scope_id)
+        ):
+            routine_of, scope_of = routine_project.get(row.routine_id), scope_project.get(row.scope_id)
+            if not _same_project(routine_of, scope_of):
+                violations.append(
+                    Violation(
+                        "hub:routine-scope-same-project",
+                        f"routine {row.routine_id} of {_project_label(routine_of)} is scoped to scope "
+                        f"{row.scope_id} of {_project_label(scope_of)}",
+                    )
+                )
+        return violations
+
+
+class FindingScopeInProject(HubQueryCheck):
+    """``hub:finding-scope-in-project`` — every finding and every finding set names a scope of its own project."""
+
+    def run(self) -> list[Violation]:
+        scope_project = _scope_projects(self)
+        violations: list[Violation] = []
+        for noun, table, key in (
+            ("finding", hub.findings, hub.findings.c.finding_id),
+            ("finding set", hub.finding_sets, hub.finding_sets.c.finding_set_id),
+        ):
+            for row in self.rows(select(key, table.c.scope_id, table.c.project_id).order_by(key)):
+                if not _same_project(scope_project.get(row.scope_id), row.project_id):
+                    violations.append(
+                        Violation(
+                            "hub:finding-scope-in-project",
+                            f"{noun} {row[0]} of project {row.project_id} names scope {row.scope_id} of "
+                            f"{_project_label(scope_project.get(row.scope_id))}",
+                        )
+                    )
+        return violations
+
+
+class ReviewFindingProjectIsChunks(HubQueryCheck):
+    """``hub:review-finding-project-is-chunks`` — a review-sourced finding belongs to the project of the chunk whose
+    review raised it. A finding whose raising chunk has no row is not judged here: there is no project to compare."""
+
+    def run(self) -> list[Violation]:
+        chunks, findings = hub.chunks, hub.findings
+        chunk_project = {
+            row.chunk_id: row.project_id for row in self.rows(select(chunks.c.chunk_id, chunks.c.project_id))
+        }
+        violations: list[Violation] = []
+        for row in self.rows(
+            select(findings.c.finding_id, findings.c.raised_by_chunk_id, findings.c.project_id)
+            .where(findings.c.source == "review", findings.c.raised_by_chunk_id.is_not(None))
+            .order_by(findings.c.finding_id)
+        ):
+            raised_in = chunk_project.get(row.raised_by_chunk_id)
+            if raised_in is not None and raised_in != row.project_id:
+                violations.append(
+                    Violation(
+                        "hub:review-finding-project-is-chunks",
+                        f"review finding {row.finding_id} of project {row.project_id} was raised by chunk "
+                        f"{row.raised_by_chunk_id} of project {raised_in}",
+                    )
+                )
+        return violations
+
+
+class ProposalCitesOwnProject(HubQueryCheck):
+    """``hub:proposal-cites-own-project`` — every finding a garden proposal cites belongs to the proposal's own
+    project."""
+
+    def run(self) -> list[Violation]:
+        proposals, findings, cites = hub.garden_proposals, hub.findings, hub.garden_proposal_findings
+        proposal_project = {
+            row.proposal_id: row.project_id
+            for row in self.rows(select(proposals.c.proposal_id, proposals.c.project_id))
+        }
+        finding_project = {
+            row.finding_id: row.project_id for row in self.rows(select(findings.c.finding_id, findings.c.project_id))
+        }
+        violations: list[Violation] = []
+        for row in self.rows(
+            select(cites.c.proposal_id, cites.c.finding_id).order_by(cites.c.proposal_id, cites.c.finding_id)
+        ):
+            cited_by, cited = proposal_project.get(row.proposal_id), finding_project.get(row.finding_id)
+            if not _same_project(cited_by, cited):
+                violations.append(
+                    Violation(
+                        "hub:proposal-cites-own-project",
+                        f"proposal {row.proposal_id} of {_project_label(cited_by)} cites finding {row.finding_id} "
+                        f"of {_project_label(cited)}",
+                    )
+                )
+        return violations
+
+
+class SlugNotCurrentAndFormer(HubQueryCheck):
+    """``hub:slug-not-current-and-former`` — taking a slug removes its former-slug row in the same write, so within a
+    tenant no slug is both some project's current slug and a former one."""
+
+    def run(self) -> list[Violation]:
+        projects, former = hub.projects, hub.project_former_slugs
+        holder = {
+            (row.tenant_id, row.slug): row.project_id
+            for row in self.rows(select(projects.c.tenant_id, projects.c.slug, projects.c.project_id))
+        }
+        return [
+            Violation(
+                "hub:slug-not-current-and-former",
+                f"tenant {row.tenant_id}: slug {row.slug} is project {holder[(row.tenant_id, row.slug)]}'s and "
+                f"project {row.project_id}'s former slug",
+            )
+            for row in self.rows(
+                select(former.c.tenant_id, former.c.slug, former.c.project_id).order_by(
+                    former.c.tenant_id, former.c.slug
+                )
+            )
+            if (row.tenant_id, row.slug) in holder
+        ]
+
+
+def _earliest_links(check: HubQueryCheck, facts: Table, name: str) -> dict[tuple[str, str], datetime]:
+    """Each (project, name) a link fact ever linked, to its earliest linking instant: a link linked by an instant
+    is one with a ``linked`` fact set at or before it, whatever later facts say."""
+    earliest: dict[tuple[str, str], datetime] = {}
+    for row in check.rows(select(facts.c.project_id, facts.c[name], facts.c.set_at).where(facts.c.linked.is_(True))):
+        key = (row.project_id, row[1])
+        if key not in earliest or row.set_at < earliest[key]:
+            earliest[key] = row.set_at
+    return earliest
+
+
+class ChunkSourcesLinked(HubQueryCheck):
+    """``hub:chunk-sources-linked`` — every source a chunk's work refs name is linked to the chunk's project, as the
+    link's facts answer. The originating ref (a chunk's first) was linked when the chunk was minted, since ingest
+    chose the project by that link; a ref folded in later carries no instant of its own, so it is judged only as
+    linked at some time. The built-in hub source is linked to every project without a stored link. A chunk minted
+    before its project was created was minted before any link existed and is not judged."""
+
+    def run(self) -> list[Violation]:
+        projects, chunks, refs = hub.projects, hub.chunks, hub.chunk_work_refs
+        created = {
+            row.project_id: row.created_at for row in self.rows(select(projects.c.project_id, projects.c.created_at))
+        }
+        minted = {
+            row.chunk_id: (row.project_id, row.minted_at)
+            for row in self.rows(select(chunks.c.chunk_id, chunks.c.project_id, chunks.c.minted_at))
+        }
+        linked = _earliest_links(self, hub.project_source_link_facts, "source_name")
+        violations: list[Violation] = []
+        judged: set[str] = set()
+        for row in self.rows(select(refs.c.chunk_id, refs.c.source, refs.c.ref).order_by(refs.c.chunk_id, refs.c.id)):
+            originating = row.chunk_id not in judged
+            judged.add(row.chunk_id)
+            if row.source == RESERVED_HUB_SOURCE_NAME or row.chunk_id not in minted:
+                continue
+            project_id, minted_at = minted[row.chunk_id]
+            if project_id not in created or minted_at < created[project_id]:
+                continue
+            since = linked.get((project_id, row.source))
+            if since is None:
+                violations.append(
+                    Violation(
+                        "hub:chunk-sources-linked",
+                        f"chunk {row.chunk_id} of project {project_id} names {row.source}:{row.ref}, "
+                        "a source its project never linked",
+                    )
+                )
+            elif originating and since > minted_at:
+                violations.append(
+                    Violation(
+                        "hub:chunk-sources-linked",
+                        f"chunk {row.chunk_id} of project {project_id} was minted from {row.source}:{row.ref}, "
+                        "a source its project had not linked by then",
+                    )
+                )
+        return violations
+
+
+class LandedRepositoryLinked(HubQueryCheck):
+    """``hub:landed-repository-linked`` — every per-repository landing that names its repository record names one
+    the chunk's project had linked when the landing was written, as the link's facts answer. A link unlinked while
+    the landing step ran still answers: the step resolved its repositories while linked. A landing naming no
+    repository was written before the name was recorded and is not judged."""
+
+    def run(self) -> list[Violation]:
+        chunks, landed = hub.chunks, hub.delivery_repo_landed
+        project_of = {row.chunk_id: row.project_id for row in self.rows(select(chunks.c.chunk_id, chunks.c.project_id))}
+        linked = _earliest_links(self, hub.project_repository_link_facts, "repository_name")
+        violations: list[Violation] = []
+        for row in self.rows(
+            select(landed.c.id, landed.c.chunk_id, landed.c.repo, landed.c.repository_name, landed.c.landed_at)
+            .where(landed.c.repository_name.is_not(None))
+            .order_by(landed.c.id)
+        ):
+            project_id = project_of.get(row.chunk_id)
+            since = linked.get((project_id, row.repository_name)) if project_id is not None else None
+            if since is None or since > row.landed_at:
+                violations.append(
+                    Violation(
+                        "hub:landed-repository-linked",
+                        f"chunk {row.chunk_id} of {_project_label(project_id)} landed {row.repo} in repository "
+                        f"{row.repository_name}, which its project had not linked by then",
+                    )
+                )
+        return violations
+
+
 @dataclass(frozen=True)
 class HubInvariants:
     """The hub store's durable invariants (transitions, epochs, delivery)."""
@@ -1081,7 +1431,9 @@ class HubInvariants:
 
     def run(self) -> list[Violation]:
         violations: list[Violation] = []
-        with self.engine.connect() as conn:
+        # The query checks audit every open tenant's rows at once; NoRowOfADeletedTenant alone reads a closed one.
+        hub_wide = self.engine.execution_options(**{HUB_SCOPED_OPTION: True})
+        with hub_wide.connect() as conn:
             checks: tuple[QueryCheck, ...] = (
                 OneTransitionPerNodeEpoch(conn),
                 EpochConsistentTransitions(conn),
@@ -1099,20 +1451,47 @@ class HubInvariants:
                 NoStandingDependencyCycle(conn),
                 NoDuplicateStandingDependency(conn),
                 NoStandingDependencyOntoEphemeralChunk(conn),
+                ChunkProjectInTenant(conn),
+                RoutineScopeSameProject(conn),
+                FindingScopeInProject(conn),
+                ReviewFindingProjectIsChunks(conn),
+                ProposalCitesOwnProject(conn),
+                WorkItemProjectInTenant(conn),
+                SlugNotCurrentAndFormer(conn),
+                ChunkSourcesLinked(conn),
+                LandedRepositoryLinked(conn),
             )
             for check in checks:
                 violations.extend(check.run())
-        with self.engine.connect() as conn:
+        with hub_wide.connect() as conn:
             violations.extend(MigrationsAtomic(conn).run())
+            violations.extend(NoRowOfADeletedTenant(conn).run())
+            open_tenants = _open_tenants(conn)
         store_connections = HubStoreConnections(self.engine, HubStoreErrorFactory(get_logger("blizzard.hub.store")))
-        facts_store = ChunkFactsStore(store_connections, self.clock)
-        record_store = ChunkRecordStore(store_connections, self.clock)
-        for facts_check in (
-            DerivationAndDelivery(facts_store, record_store),
-            LiveRouteHasToken(facts_store, record_store),
-        ):
-            violations.extend(facts_check.run())
+        for tenant in open_tenants:
+            # The facts checks load chunks through the tenant's own adapters, one tenant at a time.
+            connections = store_connections.scoped(StoreScope(tenant))
+            facts_store = ChunkFactsStore(connections, self.clock)
+            record_store = ChunkRecordStore(connections, self.clock)
+            for facts_check in (
+                DerivationAndDelivery(facts_store, record_store),
+                LiveRouteHasToken(facts_store, record_store),
+            ):
+                violations.extend(
+                    Violation(found.invariant, f"tenant {tenant}: {found.detail}") for found in facts_check.run()
+                )
         return violations
+
+
+def _open_tenants(conn: Connection) -> list[TenantId]:
+    """Every tenant no deletion has closed, in id order. A closed tenant's rows are being drained, a chunk's
+    facts before its record, so its chunks are no longer whole and are left out of the facts checks, as its rows are
+    out of every :class:`HubQueryCheck`."""
+    closed = select(hub.tenant_deletions.c.tenant_id)
+    tenants = hub.tenants.c.tenant_id
+    return [
+        TenantId(t) for t in conn.execute(select(tenants).where(tenants.not_in(closed)).order_by(tenants)).scalars()
+    ]
 
 
 @collaborator

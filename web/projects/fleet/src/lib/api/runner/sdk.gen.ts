@@ -381,7 +381,8 @@ export const getHistoryApiLeasesLeaseIdHistoryGet = <ThrowOnError extends boolea
  * List Scopes
  *
  * Forward this lease's scope-list read to the hub — the layered pass-through. The
- * lease authorizes the caller; the read itself names no chunk, since a scope is global.
+ * lease authorizes the caller and names its chunk, so the hub answers that chunk's project's
+ * scopes; a hub that predates projects ignores the chunk and answers every scope.
  */
 export const listScopesApiLeasesLeaseIdScopesGet = <ThrowOnError extends boolean = false>(options: Options<ListScopesApiLeasesLeaseIdScopesGetData, ThrowOnError>): RequestResult<ListScopesApiLeasesLeaseIdScopesGetResponses, ListScopesApiLeasesLeaseIdScopesGetErrors, ThrowOnError> => (options.client ?? client).get<ListScopesApiLeasesLeaseIdScopesGetResponses, ListScopesApiLeasesLeaseIdScopesGetErrors, ThrowOnError>({ url: '/api/leases/{lease_id}/scopes', ...options });
 

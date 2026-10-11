@@ -52,6 +52,7 @@ from tests.support import (
     seed_chunk_record,
     seed_graph,
     seed_lease,
+    stamp,
 )
 
 pytestmark = pytest.mark.component
@@ -66,7 +67,15 @@ def _at(seconds: int) -> datetime:
 def _seed_node(conn: sa.Connection, graph_id: str, node_id: str, *, executor: str) -> None:
     conn.execute(
         insert(s.graph_nodes).values(
-            node_id=node_id, graph_id=graph_id, name=node_id, executor=executor, session="resume", judged_by="worker"
+            stamp(
+                s.graph_nodes,
+                node_id=node_id,
+                graph_id=graph_id,
+                name=node_id,
+                executor=executor,
+                session="resume",
+                judged_by="worker",
+            )
         )
     )
 
@@ -225,11 +234,11 @@ def _seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None
     # AC4: grouped-away and deleted chunks are ephemeral — excluded from every read.
     _mint(store, "ch_grouped")
     store.queue.record_promote("ch_grouped", at=_T0)
-    with engine.begin() as conn:
+    with hub_store_connections(engine).write("seed") as conn:
         record_grouped_row_conn(conn, "ch_grouped", grouped_into="ch_ready", at=_T0)
 
     _mint(store, "ch_deleted")
-    with engine.begin() as conn:
+    with hub_store_connections(engine).write("seed") as conn:
         record_deleted_row(conn, "ch_deleted", by="op", at=_T0)
 
     # A kitchen-sink chunk exercising every remaining fact family ``load_facts`` reads,
@@ -266,7 +275,9 @@ def _seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None
     )
     store.escalations.record_bounce("ch_kitchen_sink", epoch=1, cause="conflict", envelope="{}", at=_T0)
     store.hub_exec.record_hub_node_poll("ch_kitchen_sink", node_id="nd_g1_hub", epoch=1, at=_T0)
-    store.delivery.record_delivery_repo_landed("ch_kitchen_sink", repo="r1", commit_hash="c1", at=_T0)
+    store.delivery.record_delivery_repo_landed(
+        "ch_kitchen_sink", repo="r1", commit_hash="c1", repository_name=None, at=_T0
+    )
     store.delivery.record_delivery_landed("ch_kitchen_sink", at=_T0)
     store.decisions.record_decision(
         imposed_by_runner_id=None,

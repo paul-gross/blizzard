@@ -13,6 +13,7 @@ import {
   type KitAsyncStateValue,
   type Tone,
 } from 'fleet';
+import { LensLink } from 'fleet/shell';
 
 /** One "Needs you" row — an open ask (the more specific reason), an open gate,
  * or a chunk whose derived tone is `waiting`/`needs` with neither. */
@@ -88,7 +89,7 @@ export interface Vitals {
 @Component({
   selector: 'app-glance-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitBadge, KitPanel, KitSkeleton, RouterLink],
+  imports: [KitAsyncState, KitBadge, KitPanel, KitSkeleton, RouterLink, LensLink],
   templateUrl: './glance-view.html',
   styleUrl: './glance-view.css',
 })

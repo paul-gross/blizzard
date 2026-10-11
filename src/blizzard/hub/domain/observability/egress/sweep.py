@@ -16,10 +16,9 @@ from datetime import date, datetime, timedelta
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
-from blizzard.foundation.event_log import EventLogKind
+from blizzard.foundation.event_log import HubEventKind
 from blizzard.foundation.lane_retry import OutageLatch
 from blizzard.foundation.logging import get_logger
-from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.observability.analytics.events import DropFact
 from blizzard.hub.domain.observability.analytics.extraction import EXTRACTOR_VERSION
 from blizzard.hub.domain.observability.egress.assembly import (
@@ -31,7 +30,7 @@ from blizzard.hub.domain.observability.egress.assembly import (
 )
 from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.event_rows import FilePathPolicy
-from blizzard.hub.domain.observability.egress.events_window import events_rows, position_of, take
+from blizzard.hub.domain.observability.egress.events_window import derivations_by_marker, events_rows, position_of, take
 from blizzard.hub.domain.observability.egress.repository import (
     EgressCheckpoint,
     IReadEgressEvents,
@@ -42,6 +41,7 @@ from blizzard.hub.domain.observability.egress.schema import (
     INVOCATIONS_SCHEMA,
     STEPS_SCHEMA,
 )
+from blizzard.hub.domain.observability.hub_events import HubEventLogService
 from blizzard.hub.domain.observability.tracing.repository import IReadTraceSteps
 from blizzard.hub.domain.observability.tracing.window import read_window
 from blizzard.hub.egress.writer import (
@@ -67,8 +67,8 @@ _CP_EGRESS_AFTER_COMMIT_BEFORE_CURSOR = crashpoint(
     "the pass's files and manifest are placed; the cursor row that records them is not yet appended",
 )
 
-_FAILED: EventLogKind = "egress-write-failed"
-_RECOVERED: EventLogKind = "egress-write-recovered"
+_FAILED: HubEventKind = "egress-write-failed"
+_RECOVERED: HubEventKind = "egress-write-recovered"
 
 _Rows = list[tuple[date, EgressValues]]
 
@@ -84,7 +84,7 @@ class EgressSweep:
         event_reads: IReadEgressEvents,
         paths: FilePathPolicy | None,
         writer: IEgressWriter,
-        events: EventLogService,
+        events: HubEventLogService,
         clock: IClock,
         config: EgressConfig,
         pass_lock: threading.Lock | None = None,
@@ -197,10 +197,9 @@ class EgressSweep:
         items = take(markers, drops, limit, read_limit=limit)
         if not items:
             return False
-        derivations = {
-            (held.marker.segment_id, held.marker.extractor_version): held
-            for held in self._event_reads.derivations([item for item in items if not isinstance(item, DropFact)])
-        }
+        derivations = derivations_by_marker(
+            self._event_reads.derivations([item for item in items if not isinstance(item, DropFact)])
+        )
         chunk_ids = sorted(
             {held.chunk_id for held in derivations.values()}
             | {item.chunk_id for item in items if isinstance(item, DropFact)}
@@ -268,13 +267,9 @@ class EgressSweep:
         if self._latch.succeeded():
             self._record(_RECOVERED, "fact egress recovered; held rows are being written", None)
 
-    def _record(self, kind: EventLogKind, message: str, detail: dict | None) -> None:  # type: ignore[type-arg]
+    def _record(self, kind: HubEventKind, message: str, detail: dict | None) -> None:  # type: ignore[type-arg]
         self._events.record(
             kind=kind,
-            runner_id=None,
-            chunk_id=None,
-            lease_id=None,
-            node_name=None,
             message=message,
             detail=detail,
             at=self._clock.now(),

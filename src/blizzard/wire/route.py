@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
+from blizzard.foundation.claim_denials import ClaimDenialReason
 from blizzard.wire.envelope import NodeEnvelope
 
 
@@ -66,11 +67,13 @@ class RouteClaimIncompatibleDenial(BaseModel):
     """The 409 body: the claiming runner's stored capabilities can no longer run every
     statically reachable runner-owned lineage from the chunk's current node
     — refused outright, not a race loss. Distinguished by its own
-    ``incompatible_runner_id`` field."""
+    ``incompatible_runner_id`` field. ``reason`` says what the runner lacks: the capabilities, or the chunk's
+    project among those it serves — then ``detail`` names the project."""
 
     chunk_id: str
     incompatible_runner_id: str
     detail: str = "runner capabilities no longer satisfy the chunk's reachable lineage"
+    reason: ClaimDenialReason = ClaimDenialReason.CAPABILITY
 
 
 class RouteClaimPausedDenial(BaseModel):

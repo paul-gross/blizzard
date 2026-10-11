@@ -15,9 +15,49 @@ block is the field-by-field reference.
 A provider's `client_secret_env` names an environment variable, never the secret itself; the secret is a deployment
 credential in the hub's runtime env file.
 
+A sign-in's email counts only when its provider vouches for the address. A `github` provider always does: GitHub reports
+an address as verified only once its owner has proven it. An `oidc` provider does only when its entry sets
+`emails_authoritative = true` (default `false`). Only an address the provider vouches for accepts an invitation or
+claims `[auth].superuser` — any address it reports as verified on the account. Only the account's primary address, when
+vouched for, links a first sign-in to the existing account holding exactly that address — the email merge that lets one
+person sign in through a second provider and land on the same account. A provider that is not authoritative therefore
+signs in only identities already linked to a user. Any other sign-in through it writes nothing and is refused: as
+`invite_only`, or, when it was started from an invitation link, as `invitation_email_mismatch`, and that invitation
+stays live ([Who may sign in](#who-may-sign-in)). Set the key only for a directory you trust for every address it
+reports as verified — one that lets its users claim an address they do not own would let them accept an invitation meant
+for someone else, sign in as another person's account, or claim the superuser. The key is refused on a `github` entry
+and must be a boolean.
+
 `blizzard hub rotate-signing-key` mints a fresh current IdP signing key, demoting the old to previous; runners re-fetch
-JWKS on an unknown `kid`, no restart needed; under oauth the verb is gated on `user:manage` and needs a logged-in
-session.
+JWKS on an unknown `kid`, no restart needed; under oauth the verb takes `hub-admin:grant`, a hub administrator's
+permission, and needs a logged-in session.
+
+## Who may sign in
+
+Sign-in is invite-only. A sign-in is admitted when one of these holds, and refused otherwise, writing nothing:
+
+- **A known identity.** The provider identity is already linked to a person's account.
+- **A known email.** The account's primary address, vouched for by an authoritative provider, belongs to an existing
+  person: the email merge above links the identity to that account.
+- **An invitation.** The sign-in was started from an invitation link, and an address the provider vouches for matches
+  the invited one, ignoring case. The person joins the invitation's tenant with its role
+  ([tenants.md](./tenants.md#invitations) owns issuing one).
+- **The configured superuser.** An address the provider vouches for is the `[auth].superuser` nobody has claimed yet;
+  that person needs no invitation ([Roles](#roles)).
+
+A known person who belongs to no tenant still signs in, and the board shows them only *You don't have access to
+anything here yet. Reach out to your administrator for access.*
+
+A refused sign-in lands on the board's login page as `/login?refusal=<code>`, and the page shows the text for the code:
+
+| Code                        | When                                                                                                                                                 | The page says                                                                                                         |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `invite_only`               | A sign-in by a person the hub does not know, with no invitation                                                                                      | *You don't have access to anything here yet. Reach out to your administrator for access.*                             |
+| `invitation_unusable`       | The invitation is expired, revoked or already used, or its tenant was deleted                                                                        | *This invitation is no longer valid. Reach out to your administrator for a new one.*                                  |
+| `invitation_email_mismatch` | No address the provider vouches for matches the invited one, or the provider is not authoritative for its addresses; the invitation stays live | *This invitation is for a different email address. Sign in with the account that uses it, or reach out to your administrator.* |
+
+An unknown code shows the `invite_only` text. A person already signed in who opens an invitation link goes through the
+same check, with the same codes.
 
 ## CLI sessions
 
@@ -28,21 +68,24 @@ revokes it at the hub, so a leaked token stops resolving.
 
 ## Roles
 
-Roles are a total order: pending < guest < contributor < admin < superuser.
+A person's role is per tenant: a membership of `guest`, `contributor` or `admin` in each tenant they belong to.
+[tenants.md](./tenants.md#members-and-roles) owns the roles, a tenant's members, and invitations. A person who belongs to
+no tenant holds nothing beyond the public self routes (`GET /api/me`, login, logout) — no board read, no writes. guest
+reads the tenant's fleet and mutates nothing; reading a chunk's stored transcript segments takes `transcript:read`, held
+at contributor and above, since a transcript carries everything a worker saw.
 
-A freshly-logged-in identity lands as pending, holding nothing beyond the public self routes (`GET /api/me`, login,
-logout) — no board read, no writes. guest reads the fleet's state and mutates nothing; reading a chunk's stored
-transcript segments takes `transcript:read`, held at contributor and above, since a transcript carries everything a
-worker saw.
+A tenant's admin changes its members' roles with `blizzard hub member grant <user_id> <role>`
+(`PUT /api/members/{user_id}`, gated on `user:manage`), or on the board's Admin → Members page. Nobody changes their own
+role, and the tenant's last admin keeps theirs. Above every tenant, a hub administrator holds the four hub-level
+permissions ([tenants.md](./tenants.md#hub-administrators)).
 
-An admin — promoted via `POST /api/users/{id}/role`, gated on `user:manage` — can move a subject freely among pending,
-guest, and contributor, but only a superuser actor may grant or revoke admin itself.
-
-`[auth].superuser` names one email as the bootstrap identity, ensured at every hub boot: a verified login matching it is
-promoted to superuser; until claimed, the intent sits pre-provisioned, surfaced in the boot log and an `auth_facts`
-entry on every restart. Changing `superuser` to a different email demotes the previous claimant to admin; at most one
-bootstrapped superuser exists, this is the only way into or out of the role, and it is never assignable through the
-admin API.
+`[auth].superuser` names one email as the bootstrap identity, ensured at every hub boot: the first sign-in whose
+provider vouches for that exact address, as the account's primary or another verified address, claims it and becomes a
+hub administrator, whether it signs in a new person or an existing one. An account merely holding the address never
+claims, nor does a sign-in through a provider that is not authoritative. Until claimed, the intent sits pre-provisioned,
+surfaced in the boot log and an `auth_facts` entry on every restart. Changing `superuser` to a different email records a
+new intent, claimed the same way, and the previous claimant stays a hub administrator; unsetting it cancels an intent
+nobody has claimed. Configuration never revokes anyone.
 
 ### Transcript surfaces
 

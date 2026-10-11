@@ -1,7 +1,8 @@
 """SQLAlchemy adapter for the egress export seam (package-private).
 
-Reads usage facts past a cursor position and appends the cursor's fact rows (``bzh:facts-not-status``). Closed
-steps are read through :class:`~blizzard.hub.store.internal.trace_store.TraceStore`, the trace sweep's own reader."""
+Reads the cursor and its latch and appends the cursor's fact rows (``bzh:facts-not-status``). Usage facts past a cursor
+position span every tenant, so they come from the sweep corpus (:class:`IReadUsageCorpus`); closed steps are read
+through :class:`~blizzard.hub.store.internal.trace_store.TraceStore`, the trace sweep's own reader."""
 
 from __future__ import annotations
 
@@ -9,33 +10,38 @@ import json
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import and_, insert, or_, select
+from sqlalchemy import insert, select
 
-from blizzard.foundation.event_log import EventLogKind
-from blizzard.hub.domain.chunk.model import UsageFact
+from blizzard.foundation.event_log import HubEventKind
 from blizzard.hub.domain.observability.egress.config import EGRESS_DATASETS
 from blizzard.hub.domain.observability.egress.repository import (
     EgressCheckpoint,
     EgressWriteFailure,
     EventsPosition,
+    IReadUsageCorpus,
     IWriteEgressCursor,
     UsagePosition,
 )
 from blizzard.hub.domain.observability.egress.rows import AttributedUsage
+from blizzard.hub.domain.observability.hub_events import IReadHubEventLog
 from blizzard.hub.domain.observability.tracing.cursor import CursorKey
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
+from blizzard.hub.tenancy import TenantId
 
-_FAILED: EventLogKind = "egress-write-failed"
-_LATCH_KINDS: tuple[EventLogKind, ...] = (_FAILED, "egress-write-recovered")
+_FAILED: HubEventKind = "egress-write-failed"
+_LATCH_KINDS: tuple[HubEventKind, ...] = (_FAILED, "egress-write-recovered")
 _NO_FILES = json.dumps([])
 
 
 class EgressStore:
-    """The egress export's usage reads and its cursor's appends."""
+    """The egress export's usage reads and its cursor's appends. The cursor is hub-level, and so are the export's
+    failure and recovery events, read from ``hub_events``, the hub's own event log its sweep records them in."""
 
-    def __init__(self, store: HubStoreConnections) -> None:
+    def __init__(self, store: HubStoreConnections, *, hub_events: IReadHubEventLog, usage: IReadUsageCorpus) -> None:
         self._store = store
+        self._hub_events = hub_events
+        self._usage = usage
 
     def newest_cursor(self, dataset: str) -> EgressCheckpoint | None:
         c = s.egress_cursor.c
@@ -63,34 +69,16 @@ class EgressStore:
 
     def newest_egress_failure(self) -> EgressWriteFailure | None:
         """The newest failure event — filtered in the query, so a later recovery never hides it."""
-        c = s.event_log.c
-        stmt = (
-            select(c.kind, c.recorded_at, c.message)
-            .where(c.kind == _FAILED)
-            .order_by(c.recorded_at.desc(), c.id.desc())
-            .limit(1)
-        )
-        with self._store.read("egress_newest_failure") as conn:
-            row = conn.execute(stmt).first()
-        return EgressWriteFailure(row.recorded_at, row.message) if row is not None else None
+        event = self._hub_events.newest((_FAILED,))
+        return EgressWriteFailure(event.at, event.message) if event is not None else None
 
     def usage_after(self, position: UsagePosition, until: datetime, limit: int) -> Sequence[AttributedUsage]:
-        u = s.usage_facts.c
-        past = or_(
-            u.recorded_at > position.recorded_at, and_(u.recorded_at == position.recorded_at, u.id > position.usage_id)
-        )
-        stmt = select(s.usage_facts).where(past, u.recorded_at <= until).order_by(u.recorded_at, u.id).limit(limit)
-        with self._store.read("egress_usage_after") as conn:
-            rows = conn.execute(stmt).all()
-        return [AttributedUsage(r.id, r.chunk_id, r.runner_id, _fact(r)) for r in rows]
+        return self._usage.usage_after(position, until, limit)
 
-    def newest_egress_latch(self) -> EventLogKind | None:
-        """Walks the event log newest-first to the first match — run once per process start, not per pass."""
-        c = s.event_log.c
-        stmt = select(c.kind).where(c.kind.in_(_LATCH_KINDS)).order_by(c.recorded_at.desc(), c.id.desc()).limit(1)
-        with self._store.read("egress_newest_latch") as conn:
-            kind = conn.execute(stmt).scalar_one_or_none()
-        return next((k for k in _LATCH_KINDS if k == kind), None)
+    def newest_egress_latch(self) -> HubEventKind | None:
+        """The newer of the two latch kinds' newest events — run once per process start, not per pass."""
+        event = self._hub_events.newest(_LATCH_KINDS)
+        return next((k for k in _LATCH_KINDS if event is not None and k == event.kind), None)
 
     def append_cursor(self, record: EgressCheckpoint) -> None:
         step = record.step
@@ -105,6 +93,7 @@ class EgressStore:
                     decision_id=step.decision_id if step is not None else None,
                     segment_id=events.segment_id if events is not None else None,
                     extractor_version=events.extractor_version if events is not None else None,
+                    events_tenant_id=events.tenant if events is not None else None,
                     usage_recorded_at=record.usage.recorded_at,
                     usage_id=record.usage.usage_id,
                     row_count=record.row_count,
@@ -116,7 +105,7 @@ class EgressStore:
 
 def _cursor(row) -> EgressCheckpoint:  # type: ignore[no-untyped-def]
     events = (
-        EventsPosition(row.position_at, row.segment_id, row.extractor_version or "")
+        EventsPosition(row.position_at, row.segment_id, row.extractor_version or "", _tenant(row.events_tenant_id))
         if row.segment_id is not None
         else None
     )
@@ -136,23 +125,11 @@ def _cursor(row) -> EgressCheckpoint:  # type: ignore[no-untyped-def]
     )
 
 
-def _fact(u) -> UsageFact:  # type: ignore[no-untyped-def]
-    return UsageFact(
-        node_id=u.node_id,
-        epoch=u.epoch,
-        kind=u.kind,
-        model=u.model,
-        input_tokens=u.input_tokens,
-        output_tokens=u.output_tokens,
-        cache_read_tokens=u.cache_read_tokens,
-        cache_create_tokens=u.cache_create_tokens,
-        cost_usd=u.cost_usd,
-        recorded_at=u.recorded_at,
-        harness_id=u.harness_id,
-        harness_version=u.harness_version,
-        estimated_cost_usd=u.estimated_cost_usd,
-    )
-
-
 def _conforms_egress_store(x: EgressStore) -> IWriteEgressCursor:
     return x
+
+
+def _tenant(value: str | None) -> TenantId | None:
+    """The events position's tenant; a position recorded without one stands past every tenant at its time,
+    segment and version."""
+    return TenantId(value) if value is not None else None

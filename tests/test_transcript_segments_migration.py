@@ -11,12 +11,13 @@ import sqlalchemy as sa
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub import runtime as hub_runtime
+from tests.support import hub_scoped_engine
 
 pytestmark = pytest.mark.component
 
 
 def _table_names(db_url: str) -> set[str]:
-    engine = create_engine_from_url(db_url)
+    engine = hub_scoped_engine(create_engine_from_url(db_url))
     try:
         return set(sa.inspect(engine).get_table_names())
     finally:
@@ -52,7 +53,7 @@ def test_questions_historical_revision_does_not_create_later_harness_provenance(
     runner.downgrade("20260713_1716_hub_graph_node_produces_checks")
 
     runner.upgrade("20260713_1801_hub_questions_and_answers")
-    engine = create_engine_from_url(config.db_url)
+    engine = hub_scoped_engine(create_engine_from_url(config.db_url))
     try:
         columns = {column["name"] for column in sa.inspect(engine).get_columns("questions")}
     finally:
@@ -65,7 +66,7 @@ def test_harness_provenance_backfills_concrete_session_rows_without_versions(tmp
     config = hub_runtime.init_environment(tmp_path)
     runner = hub_runtime.migration_runner(config)
     runner.downgrade("20260907_1000_event_log_runner_id_nullable")
-    engine = create_engine_from_url(config.db_url)
+    engine = hub_scoped_engine(create_engine_from_url(config.db_url))
     now = datetime(2026, 9, 11, tzinfo=UTC)
     try:
         old = sa.MetaData()

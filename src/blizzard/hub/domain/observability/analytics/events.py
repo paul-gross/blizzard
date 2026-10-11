@@ -8,7 +8,7 @@ saw, so the sweep can tell a segment's stored content changed since."""
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 from types import MappingProxyType
@@ -16,6 +16,7 @@ from typing import Protocol
 
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.observability.transcripts import TranscriptTurn
+from blizzard.hub.tenancy import TenantId
 
 #: :attr:`TranscriptEvent.kind` values this build's extractors mint — open to a
 #: future extractor registering a new one; no column or migration gates a new entry.
@@ -73,6 +74,9 @@ class DerivationMarker:
     derived_at: datetime
     event_count: int
     complete: bool
+    #: The tenant the row was read in — carried beside it, not part of its identity: equality, order and
+    #: hashing stay on the fields above. ``None`` where no tenant was read.
+    tenant: TenantId | None = field(default=None, compare=False)
 
 
 @domain_model
@@ -85,6 +89,9 @@ class DropFact:
     epoch: int
     spawn_generation: int
     dropped_at: datetime
+    #: The tenant the row was read in — carried beside it, not part of its identity: equality, order and
+    #: hashing stay on the fields above. ``None`` where no tenant was read.
+    tenant: TenantId | None = field(default=None, compare=False)
 
 
 class MarkerState(StrEnum):

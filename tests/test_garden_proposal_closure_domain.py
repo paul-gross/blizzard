@@ -30,6 +30,8 @@ from blizzard.hub.domain.garden.proposals.model import GardenProposal, GardenPro
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.work_items.editing import WorkItemEditService
 
+_PROJECT = "proj_test"
+
 pytestmark = pytest.mark.unit
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
@@ -37,6 +39,7 @@ _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 def _proposal(proposal_id: str = "gprop_1") -> GardenProposal:
     return GardenProposal(
+        project_id=_PROJECT,
         proposal_id=proposal_id,
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
@@ -50,6 +53,7 @@ def _proposal(proposal_id: str = "gprop_1") -> GardenProposal:
 
 def _finding(finding_id: str, *, class_: str = "c", locus: str = "l", state: str = "live") -> Finding:
     return Finding(
+        project_id=_PROJECT,
         finding_id=finding_id,
         routine_name="nightly",
         scope_slug="blizzard",

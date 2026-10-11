@@ -12,7 +12,7 @@ import math
 # The residual cycle-check lock — recorded debt, blizzard-context:/architecture/system-shape/exclusive-writes.md
 # ast-grep-ignore: bzh:store-exclusive-write
 import threading
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
@@ -88,17 +88,22 @@ def _capability_ineligible(
 def select_matched_entry(
     chunks: Sequence[Chunk],
     *,
+    served: Collection[str],
     graphs: Mapping[str, Graph],
     facts: Mapping[str, ChunkFacts],
     capabilities: Sequence[RunnerCapability],
     blocked: Mapping[str, list[str]],
     policy: QueueMatchPolicy,
 ) -> MatchedEntry | None:
-    """The matched peek's own selection: the first entry in ``chunks``'s order the caller
-    can both work (capability-eligible) and claim (not dependency-blocked). Under
-    :attr:`QueueMatchPolicy.HOLD` only the head is examined; :attr:`PASS_OVER` scans the
-    whole order."""
-    for position, chunk in enumerate(chunks):
+    """The matched peek's own selection: ``chunks``'s order is first narrowed to the
+    projects in ``served`` — the caller's served set — and the first narrowed entry the
+    caller can both work (capability-eligible) and claim (not dependency-blocked) is
+    returned. A chunk of a project outside ``served`` is never examined, so it is never
+    the head :attr:`QueueMatchPolicy.HOLD` stops at; an empty ``served`` selects nothing.
+    Under :attr:`QueueMatchPolicy.HOLD` only the narrowed head is examined;
+    :attr:`PASS_OVER` scans the whole narrowed order."""
+    for entry in entries_of(chunks, served):
+        chunk, position = entry.chunk, entry.position
         graph = graphs.get(chunk.graph_id)
         if graph is None:  # pragma: no cover - a pinned graph always resolves
             unusable = True
@@ -125,6 +130,21 @@ class ChunkNotGroupable(ValueError):
         )
         self.chunk_id = chunk_id
         self.status = status
+
+
+class ChunksInDifferentProjects(ValueError):
+    """A group op named a chunk of another project than the survivor's: a fold never
+    carries work across projects, whose chunks are served and delivered apart."""
+
+    def __init__(self, survivor_id: str, chunk_id: str, survivor_project: str, chunk_project: str) -> None:
+        super().__init__(
+            f"chunk {chunk_id} belongs to project {chunk_project}, but {survivor_id} belongs to "
+            f"{survivor_project} — grouping folds chunks of one project only"
+        )
+        self.survivor_id = survivor_id
+        self.chunk_id = chunk_id
+        self.survivor_project = survivor_project
+        self.chunk_project = chunk_project
 
 
 class FoldWouldCloseCycle(Exception):
@@ -172,6 +192,17 @@ class QueuePage:
 
     entries: list[QueueEntry]
     next_cursor: str | None
+
+
+def entries_of(ordered: Sequence[Chunk], projects: Collection[str] | None = None) -> list[QueueEntry]:
+    """``ordered`` as entries at their whole-order positions, narrowed to the chunks of
+    ``projects`` — every chunk when ``None``. Narrowing selects from the ranked order and
+    never reranks it (``bzh:ranking-is-per-list``): a kept chunk keeps its position."""
+    return [
+        QueueEntry(chunk=chunk, position=position)
+        for position, chunk in enumerate(ordered)
+        if projects is None or chunk.project_id in projects
+    ]
 
 
 #: The verb a list's reorder admits its members by (``bzh:ranking-is-per-list``).
@@ -294,10 +325,13 @@ class QueueRanking:
         """The position one past every candidate's effective position; ``0.0`` for none."""
         return max((self.effective_position(c) for c in candidates), default=-1.0) + 1.0
 
-    def page(self, candidates: Iterable[Chunk], *, cursor: str | None, limit: int) -> QueuePage:
-        """A keyset page of the ordered candidates after ``cursor``, ``limit`` long. Each
-        entry carries its absolute index in the whole order, so a since-repositioned cursor
-        chunk still resumes by key."""
+    def page(
+        self, candidates: Iterable[Chunk], *, cursor: str | None, limit: int, project: str | None = None
+    ) -> QueuePage:
+        """A keyset page of the ordered candidates after ``cursor``, ``limit`` long, narrowed
+        to ``project``'s chunks when one is named. Each entry carries its absolute index in
+        the whole order — narrowing selects from that order and never reranks it — so a
+        since-repositioned cursor chunk still resumes by key."""
         if limit < 1:
             raise ValueError(f"limit must be at least 1, got {limit}")
         keyed = sorted((self.effective_position(c), c.chunk_id, c) for c in candidates)
@@ -305,6 +339,8 @@ class QueueRanking:
         entries: list[QueueEntry] = []
         entry_keys: list[tuple[float, str]] = []
         for index, (effective_position, chunk_id, chunk) in enumerate(keyed):
+            if project is not None and chunk.project_id != project:
+                continue
             if after is not None and (effective_position, chunk_id) <= after:
                 continue
             entries.append(QueueEntry(chunk=chunk, position=index))
@@ -353,12 +389,15 @@ class QueueService:
         statuses: Mapping[str, ChunkStatus],
         cursor: str | None = None,
         limit: int,
+        project: str | None = None,
     ) -> QueuePage:
         """``list_``'s chunks bounded and keyset-paginated (:meth:`QueueRanking.page`) over the
-        already-materialized order, not a second SQL read. ``cursor`` is a prior
-        :attr:`QueuePage.next_cursor`, else raising :class:`~blizzard.hub.domain.kernel.pagination.MalformedCursor`."""
+        already-materialized order, not a second SQL read, narrowed to ``project``'s chunks
+        when one is named — ranked over the whole list first, so narrowing never reranks.
+        ``cursor`` is a prior :attr:`QueuePage.next_cursor`, else raising
+        :class:`~blizzard.hub.domain.kernel.pagination.MalformedCursor`."""
         candidates = self._candidates(list_, statuses=statuses)
-        return self._ranking(candidates).page(candidates, cursor=cursor, limit=limit)
+        return self._ranking(candidates).page(candidates, cursor=cursor, limit=limit, project=project)
 
     def ordered_ready(self, *, statuses: Mapping[str, ChunkStatus]) -> list[Chunk]:
         """Ready chunks in queue order — ascending by effective position."""
@@ -472,6 +511,16 @@ def require_groupable(chunk_id: str, facts: ChunkFacts) -> ChunkStatus:
     return status
 
 
+def require_same_project(survivor: Chunk, targets: Iterable[Chunk]) -> None:
+    """Refuse a fold naming a chunk of another project than ``survivor``'s with
+    :class:`ChunksInDifferentProjects` — the first such target in ``targets``' order."""
+    project = survivor.require_project()
+    for target in targets:
+        target_project = target.require_project()
+        if target_project != project:
+            raise ChunksInDifferentProjects(survivor.chunk_id, target.chunk_id, project, target_project)
+
+
 def merge_targets(survivor_id: str, merge_ids: Sequence[str]) -> list[str]:
     """The chunks a group folds, in first-named order: naming the survivor or one id twice is
     a no-op, not an error."""
@@ -524,7 +573,8 @@ class GroupService:
     def group(self, survivor_id: str, merge_ids: list[str]) -> GroupResult:
         """Fold ``merge_ids`` into ``survivor_id``; the survivor absorbs their pointers
         and each folded chunk's standing dependency edges. Refused before any
-        write when the result would close a cycle (:class:`FoldWouldCloseCycle`)."""
+        write when a merge id belongs to another project (:class:`ChunksInDifferentProjects`)
+        or the result would close a cycle (:class:`FoldWouldCloseCycle`)."""
         with self._cycle_lock, self._exclusive.locked([survivor_id, *merge_ids]) as handle:
             return self._group_locked(handle, survivor_id, merge_ids)
 
@@ -536,6 +586,7 @@ class GroupService:
         facts = handle.facts_for(ids)
         survivor, survivor_status = self._admitted(records, facts, survivor_id)
         targets = [self._admitted(records, facts, merge_id)[0] for merge_id in merge_targets(survivor_id, merge_ids)]
+        require_same_project(survivor, targets)
         folded_ids = [t.chunk_id for t in targets]
         plan = plan_group(handle.standing_edges(), survivor_id, folded_ids)
         now = self._clock.now()

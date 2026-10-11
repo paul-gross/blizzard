@@ -3,7 +3,19 @@
 A held token the hub accepts is kept. A runner is added only when it holds none the hub accepts, and
 only when adding cannot undo an operator's act: a **revoked** or **retired** token stops, and an
 **unknown** one — also what a runner pointed at the wrong hub sees, where adding would overwrite the
-only token it holds for its own — adds it again only when the operator says the hub's data was reset."""
+only token it holds for its own — adds it again only when the operator says the hub's data was reset.
+
+A runner serves the tenant it was added in for life. A held token whose runner belongs to another
+tenant than the one the operator names stops, since keeping it would serve the wrong tenant and
+adding would leave a store to a runner it does not belong to. An add names the operator's tenant
+by id, or, naming none, takes the one the hub resolves for the operator; when the hub leaves a
+choice, or the named tenant is none the operator may enter, joining stops listing the tenants the
+operator may enter.
+
+A runner's store belongs to the runner that wrote it, so a runner added again never inherits the old
+one's: the store is set aside before the add, never after it. A crash between the two leaves the same
+unknown token over a fresh store, which the next init adds over again; the other order could leave a
+token the hub knows over a store naming another runner, which the runner refuses for good."""
 
 from __future__ import annotations
 
@@ -13,7 +25,17 @@ from typing import Protocol
 
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
-from blizzard.runner.hub.client import IHubRunnerAdmin, ITokenIdentityReader, TokenIdentity, TokenRefusal
+from blizzard.runner.hub.client import (
+    HubClientError,
+    IHubRunnerAdmin,
+    IssuedIdentity,
+    ITokenIdentityReader,
+    OperatorTenant,
+    RunnerAddRefusalReason,
+    RunnerAddRefused,
+    TokenIdentity,
+    TokenRefusal,
+)
 
 
 class BootstrapStop(StrEnum):
@@ -29,16 +51,42 @@ class BootstrapStop(StrEnum):
     TOKEN_NOT_RECEIVED = "token_not_received"
     #: A replacement token would go unread: the process environment supplies the held one.
     TOKEN_OVERRIDDEN = "token_overridden"
+    #: No token is held, but the store belongs to runner ``runner_id``, and adding another was not allowed.
+    STORE_NAMES_A_RUNNER = "store_names_a_runner"
+    #: The held token's runner, ``held``, belongs to another tenant than the one named.
+    ANOTHER_TENANT = "another_tenant"
+    #: No tenant was named, and the operator may enter several; ``tenants`` lists them.
+    TENANT_REQUIRED = "tenant_required"
+    #: The named tenant is none the operator may enter; ``tenants`` lists the ones they may.
+    NO_SUCH_TENANT = "no_such_tenant"
+
+
+#: The add refusals that leave the tenant unsettled, and the stop each becomes.
+_TENANT_STOPS = {
+    RunnerAddRefusalReason.TENANT_REQUIRED: BootstrapStop.TENANT_REQUIRED,
+    RunnerAddRefusalReason.NO_SUCH_TENANT: BootstrapStop.NO_SUCH_TENANT,
+}
 
 
 class BootstrapStopped(Exception):
-    """Joining stopped with nothing added; ``stop`` says why, and ``runner_id`` names the runner a
-    revoked token or a retired runner belongs to."""
+    """Joining stopped with nothing added; ``stop`` says why. ``runner_id`` names the runner a
+    revoked token, a retired runner, or a store belongs to; ``held`` is the held token's runner
+    when it belongs to another tenant; ``tenants`` lists the tenants the operator may enter when
+    the tenant is unsettled — empty when the hub would not list them."""
 
-    def __init__(self, stop: BootstrapStop, *, runner_id: str | None = None) -> None:
+    def __init__(
+        self,
+        stop: BootstrapStop,
+        *,
+        runner_id: str | None = None,
+        held: TokenIdentity | None = None,
+        tenants: tuple[OperatorTenant, ...] = (),
+    ) -> None:
         super().__init__(stop.value)
         self.stop = stop
         self.runner_id = runner_id
+        self.held = held
+        self.tenants = tenants
 
 
 class TokenNotWritten(Exception):
@@ -64,17 +112,25 @@ class HeldToken:
 @domain_model
 @dataclass(frozen=True)
 class JoinedRunner:
-    """The runner the joined runtime holds a current token for, and whether joining added it."""
+    """The runner the joined runtime holds a current token for, whether joining added it, and its
+    tenant as far as joining learned it: a kept runner's from the hub, an added one's as named."""
 
     runner_id: str
     runner_name: str
     added: bool
+    tenant_id: str | None = None
+    tenant_name: str | None = None
 
 
-def kept_identity(answer: TokenIdentity | TokenRefusal, *, held: HeldToken, allow_readd: bool) -> TokenIdentity | None:
+def kept_identity(
+    answer: TokenIdentity | TokenRefusal, *, held: HeldToken, allow_readd: bool, tenant_id: str | None = None
+) -> TokenIdentity | None:
     """The runner the hub's ``answer`` about the held token keeps, or ``None`` when a runner is to be
-    added in its place. Raises :class:`BootstrapStopped` when neither is allowed."""
+    added in its place. Raises :class:`BootstrapStopped` when neither is allowed — among them a
+    runner in another tenant than ``tenant_id`` names. A hub that names no tenant settles none."""
     if isinstance(answer, TokenIdentity):
+        if tenant_id is not None and answer.tenant_id is not None and answer.tenant_id != tenant_id:
+            raise BootstrapStopped(BootstrapStop.ANOTHER_TENANT, runner_id=answer.runner_id, held=answer)
         return answer
     if answer.reason is RunnerTokenRefusalReason.UNKNOWN:
         if not allow_readd:
@@ -97,26 +153,84 @@ class ITokenWriter(Protocol):
         ...
 
 
-class RunnerBootstrap:
-    """Joins one runner to its hub: the identity read under the runner's own token, the add under
-    the operator's credential, and the new token written straight after the add."""
+class IRunnerStoreAside(Protocol):
+    """The runner's local store, as joining sees it: whose it is, and moving it aside."""
 
-    def __init__(self, identity: ITokenIdentityReader, admin: IHubRunnerAdmin, tokens: ITokenWriter) -> None:
+    def stored_runner_id(self) -> str | None:
+        """The id of the runner the store's identity row names, or ``None`` when it names none."""
+        ...
+
+    def set_aside(self) -> None:
+        """Move the store aside under a timestamped name and start a fresh one; never deletes."""
+        ...
+
+
+class RunnerBootstrap:
+    """Joins one runner to its hub: the identity read under the runner's own token, the store set
+    aside when a runner is added in place of the one it belonged to, the add under the operator's
+    credential, and the new token written straight after the add."""
+
+    def __init__(
+        self, identity: ITokenIdentityReader, admin: IHubRunnerAdmin, tokens: ITokenWriter, store: IRunnerStoreAside
+    ) -> None:
         self._identity = identity
         self._admin = admin
         self._tokens = tokens
+        self._store = store
 
-    def join(self, name: str, *, held: HeldToken | None, allow_readd: bool) -> JoinedRunner:
-        """Keep the runner ``held`` names, or add one under ``name`` and write its token. An
-        unreachable hub, a server error, or a refused add raises
+    def join(
+        self,
+        name: str,
+        *,
+        held: HeldToken | None,
+        allow_readd: bool,
+        tenant_id: str | None = None,
+        projects: tuple[str, ...] | None = None,
+    ) -> JoinedRunner:
+        """Keep the runner ``held`` names, or add one under ``name`` — in the tenant ``tenant_id``
+        names, else the one the hub resolves for the operator, serving the projects ``projects``
+        names, else the tenant's only one — and write its token. A kept runner keeps the
+        declaration the hub holds for it. An unreachable
+        hub, a server error, or a refused add raises
         :class:`~blizzard.runner.hub.client.HubClientError` with nothing added."""
         if held is not None:
-            kept = kept_identity(self._identity.identity(), held=held, allow_readd=allow_readd)
+            answer = self._identity.identity()
+            kept = kept_identity(answer, held=held, allow_readd=allow_readd, tenant_id=tenant_id)
             if kept is not None:
-                return JoinedRunner(runner_id=kept.runner_id, runner_name=kept.runner_name, added=False)
-        issued = self._admin.add_runner(name)
+                return JoinedRunner(
+                    runner_id=kept.runner_id,
+                    runner_name=kept.runner_name,
+                    added=False,
+                    tenant_id=kept.tenant_id,
+                    tenant_name=kept.tenant_name,
+                )
+            self._store.set_aside()
+        elif (stored := self._store.stored_runner_id()) is not None:
+            if not allow_readd:
+                raise BootstrapStopped(BootstrapStop.STORE_NAMES_A_RUNNER, runner_id=stored)
+            self._store.set_aside()
+        issued = self._add(name, tenant_id, projects)
         try:
             self._tokens.write(issued.token)
         except OSError as exc:
             raise TokenNotWritten(issued.runner_id, exc) from exc
-        return JoinedRunner(runner_id=issued.runner_id, runner_name=issued.runner_name, added=True)
+        return JoinedRunner(runner_id=issued.runner_id, runner_name=issued.runner_name, added=True, tenant_id=tenant_id)
+
+    def _add(self, name: str, tenant_id: str | None, projects: tuple[str, ...] | None) -> IssuedIdentity:
+        """The add under the operator's credential; a refusal that leaves the tenant unsettled stops,
+        listing the tenants the operator may enter."""
+        try:
+            return self._admin.add_runner(name, tenant_id=tenant_id, projects=projects)
+        except RunnerAddRefused as exc:
+            stop = _TENANT_STOPS.get(exc.reason)
+            if stop is None:
+                raise
+            raise BootstrapStopped(stop, tenants=self._enterable()) from exc
+
+    def _enterable(self) -> tuple[OperatorTenant, ...]:
+        """The tenants the operator may enter, or none when the hub will not list them — the stop
+        still stands, it only names no alternatives."""
+        try:
+            return tuple(self._admin.tenants())
+        except HubClientError:
+            return ()

@@ -41,7 +41,7 @@ _IHUBCLIENT_ENDPOINTS: dict[str, tuple[str, str]] = {
 #: One table per runner setup port, rows verbatim from the same reference binding.
 _SETUP_PORT_ENDPOINTS: dict[type, dict[str, tuple[str, str]]] = {
     ITokenIdentityReader: {"identity": ("GET", "/api/fleet/identity")},
-    IHubRunnerAdmin: {"add_runner": ("POST", "/api/runners")},
+    IHubRunnerAdmin: {"add_runner": ("POST", "/api/runners"), "tenants": ("GET", "/api/me")},
 }
 
 _PATH_PARAM = re.compile(r"\{[^{}]+\}")

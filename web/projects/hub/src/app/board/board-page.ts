@@ -17,6 +17,7 @@ import { injectHubChunkCountsQuery } from './chunks/chunk-counts.query';
 import { injectPromoteChunkMutation, type PromoteVars } from './chunks/promote.mutations';
 import { injectRepositionBacklogMutation, injectRepositionQueueMutation, type RepositionVars } from './queue/queue.mutations';
 import { foldRepositions, gatedChunkIds, orderedChunkIds, resolveSelectedChunk, withPendingBoardChanges } from './board-page.model';
+import { UnservedBanner } from './unserved/unserved-banner';
 
 /**
  * The board route — the two-column mission-control surface:
@@ -36,7 +37,7 @@ import { foldRepositions, gatedChunkIds, orderedChunkIds, resolveSelectedChunk, 
 @Component({
   selector: 'app-board-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [BoardShell, ChunkDetail, ActivityPanel, QuestionsPanel, GatesPanel, RunnerPanel],
+  imports: [BoardShell, ChunkDetail, ActivityPanel, QuestionsPanel, GatesPanel, RunnerPanel, UnservedBanner],
   templateUrl: './board-page.html',
   styleUrl: './board-page.css',
 })

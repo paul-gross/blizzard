@@ -64,6 +64,7 @@ from blizzard.hub.egress.writer import (
     PlacedFile,
     rfc3339_utc,
 )
+from blizzard.hub.tenancy import TenantId
 from tests import trace_fixtures as fx
 from tests.egress_recipes import COST_BY_NODE_BY_DAY, SLOWEST_STATION_OF_THE_WEEK, recipe
 from tests.repo_files import repo_root
@@ -84,6 +85,14 @@ _END = "<!-- egress-dictionary:end -->"
 _TOKEN = "gold"
 _FIRST_PASS = datetime(2026, 1, 2, 0, 0, tzinfo=UTC)
 _RUNNER_NAMES = {"r-1": "runner-one", "r-9": "runner-nine"}
+_TENANT, _TENANT_NAME, _RENAMED = TenantId("ten_01GOLDENACME"), "acme", "acme-renamed"
+_EVENTS_TENANT, _EVENTS_TENANT_NAME = TenantId("ten_01GOLDENGLOBEX"), "globex"
+_OTHER_TENANT, _OTHER_TENANT_NAME = TenantId("ten_01GOLDENINITECH"), "initech"
+#: Each tenant's project as ``(project_id, slug, name)``; acme's slug changes between the passes.
+_PROJECT = ("proj_01GOLDENACMEWEB", "web", "Web")
+_RENAMED_SLUG = "storefront"
+_EVENTS_PROJECT = ("proj_01GOLDENGLOBEXDEFAULT", "default", "Default")
+_OTHER_PROJECT = ("proj_01GOLDENINITECHDEFAULT", "default", "Default")
 _SECOND_PASS = datetime(2026, 1, 3, 0, 0, tzinfo=UTC)
 _SETTINGS = EgressWriterSettings(max_rows_per_file=1000, min_free_bytes=0)
 _CODE_SCHEMAS = {"steps": STEPS_SCHEMA, "invocations": INVOCATIONS_SCHEMA, "events": EVENTS_SCHEMA}
@@ -128,6 +137,11 @@ def _views() -> list[tuple[str, str]]:
 # -- the seeded scenario ---------------------------------------------------------------------------------------------
 
 
+def _project_facts(project: tuple[str, str, str]) -> dict[str, str]:
+    project_id, slug, name = project
+    return {"project": project_id, "project_slug": slug, "project_name": name}
+
+
 def _scenario_rows() -> tuple[list[tuple[ExportedStep, CursorKey]], list[ExportedInvocation]]:
     """Every closed step and every usage fact of the shared tracing scenarios, as the first pass exports them, with
     every runner they name registered under a name."""
@@ -135,7 +149,14 @@ def _scenario_rows() -> tuple[list[tuple[ExportedStep, CursorKey]], list[Exporte
     invocations: list[ExportedInvocation] = []
     usage_id = 0
     for name, scenario in fx.scenarios().items():
-        facts = replace(scenario, chunk_id=f"ch_{name}", runner_names=_RUNNER_NAMES)
+        facts = replace(
+            scenario,
+            chunk_id=f"ch_{name}",
+            runner_names=_RUNNER_NAMES,
+            tenant=_TENANT,
+            tenant_name=_TENANT_NAME,
+            **_project_facts(_PROJECT),
+        )
         found = identify_steps(facts)
         for step in found:
             if step.close is None:
@@ -157,13 +178,25 @@ def _rewritten(
     steps: list[tuple[ExportedStep, CursorKey]], invocations: list[ExportedInvocation]
 ) -> tuple[list[tuple[ExportedStep, CursorKey]], list[ExportedInvocation]]:
     """The second pass: one step and one invocation exported again, newer and with changed values, as a late-usage
-    rewrite produces."""
+    rewrite produces — after their tenant was renamed and their project's slug changed, so the newer copies carry the
+    new name and slug."""
     step, key = next((s, k) for s, k in steps if s.invocations > 0)
     again = replace(
-        step, input_tokens=step.input_tokens + 7, invocations=step.invocations + 1, exported_at=_SECOND_PASS
+        step,
+        input_tokens=step.input_tokens + 7,
+        invocations=step.invocations + 1,
+        tenant_name=_RENAMED,
+        project_slug=_RENAMED_SLUG,
+        exported_at=_SECOND_PASS,
     )
     invocation = invocations[0]
-    later = replace(invocation, output_tokens=invocation.output_tokens + 3, exported_at=_SECOND_PASS)
+    later = replace(
+        invocation,
+        output_tokens=invocation.output_tokens + 3,
+        tenant_name=_RENAMED,
+        project_slug=_RENAMED_SLUG,
+        exported_at=_SECOND_PASS,
+    )
     return [(again, key)], [later]
 
 
@@ -236,19 +269,48 @@ _DROPS = {
     "seg-revived": DropFact("seg-revived", _EVENTS_CHUNK, 1, 1, _hour(2, 5)),
 }
 
-_EVENTS_FIRST = [_UPGRADED_FROM, _OLD_ONLY, _EMPTIED_FROM, _DROPPED, _REVIVED_FROM, _TWICE, _KINDS, _SIDECHAIN]
+# Segment ids are runner-minted, so a second tenant's runner may mint the same ones: ``seg-shared`` is derived by both
+# tenants at one time, under one version, at one turn; ``seg-shared-dropped`` is derived by both, later by the second,
+# and dropped by the second alone.
+_SHARED = _derivation("seg-shared", _OLD_VERSION, _hour(1, 9), _read("globex.py", "t1"))
+_OTHER_SHARED = _derivation("seg-shared", _OLD_VERSION, _hour(1, 9), _read("initech.py", "t1"))
+_SHARED_DROPPED = _derivation("seg-shared-dropped", _OLD_VERSION, _hour(1, 10), _read("globex-kept.py", "t1"))
+_OTHER_SHARED_DROPPED = _derivation("seg-shared-dropped", _OLD_VERSION, _hour(1, 11), _read("initech-dropped.py", "t1"))
+_OTHER_DROP = DropFact("seg-shared-dropped", _EVENTS_CHUNK, 1, 1, _hour(2, 9))
+
+_EVENTS_FIRST = [
+    _UPGRADED_FROM,
+    _OLD_ONLY,
+    _EMPTIED_FROM,
+    _DROPPED,
+    _REVIVED_FROM,
+    _TWICE,
+    _KINDS,
+    _SIDECHAIN,
+    _SHARED,
+    _SHARED_DROPPED,
+]
 _EVENTS_SECOND = [_UPGRADED, _EMPTIED, _REVIVED, _TWICE, _REDERIVED_FROM, _REDERIVED]
 _EVENTS_SECOND_DROPS = [_DROPS["seg-dropped"], _DROPS["seg-revived"]]
 
 
-def _events_facts() -> Any:
-    return replace(fx.scenarios()["runner-step"], chunk_id=_EVENTS_CHUNK)
+def _events_facts(tenant: TenantId, tenant_name: str, project: tuple[str, str, str]) -> Any:
+    return replace(
+        fx.scenarios()["runner-step"],
+        chunk_id=_EVENTS_CHUNK,
+        tenant=tenant,
+        tenant_name=tenant_name,
+        **_project_facts(project),
+    )
 
 
 def _events_pass_rows(
-    derivations: list[EventDerivation], drops: list[DropFact], exported_at: datetime
+    derivations: list[EventDerivation],
+    drops: list[DropFact],
+    exported_at: datetime,
+    tenant: tuple[TenantId, str, tuple[str, str, str]] = (_EVENTS_TENANT, _EVENTS_TENANT_NAME, _EVENTS_PROJECT),
 ) -> list[tuple[ExportedEventsEntry, EventsPosition]]:
-    facts = _events_facts()
+    facts = _events_facts(*tenant)
     rows: list[tuple[ExportedEventsEntry, EventsPosition]] = []
     for held in derivations:
         marker = held.marker
@@ -308,10 +370,13 @@ def _export(directory: Path, encoder: Any) -> None:
     _write_pass(writer, _FIRST_PASS, steps, invocations)
     more_steps, more_invocations = _rewritten(steps, invocations)
     _write_pass(writer, _SECOND_PASS, more_steps, more_invocations)
-    _write_events_pass(writer, _FIRST_PASS, _OLD_VERSION, _events_pass_rows(_EVENTS_FIRST, [], _FIRST_PASS))
-    _write_events_pass(
-        writer, _SECOND_PASS, _NEW_VERSION, _events_pass_rows(_EVENTS_SECOND, _EVENTS_SECOND_DROPS, _SECOND_PASS)
-    )
+    other = (_OTHER_TENANT, _OTHER_TENANT_NAME, _OTHER_PROJECT)
+    first = _events_pass_rows(_EVENTS_FIRST, [], _FIRST_PASS)
+    first += _events_pass_rows([_OTHER_SHARED, _OTHER_SHARED_DROPPED], [], _FIRST_PASS, other)
+    _write_events_pass(writer, _FIRST_PASS, _OLD_VERSION, first)
+    second = _events_pass_rows(_EVENTS_SECOND, _EVENTS_SECOND_DROPS, _SECOND_PASS)
+    second += _events_pass_rows([], [_OTHER_DROP], _SECOND_PASS, other)
+    _write_events_pass(writer, _SECOND_PASS, _NEW_VERSION, second)
 
 
 def _normalized_tree(directory: Path) -> dict[str, str]:
@@ -557,6 +622,29 @@ def test_the_golden_holds_a_row_exported_twice() -> None:
         assert any(count > 1 for count in seen.values()), dataset["name"]
 
 
+def test_the_project_columns_widen_each_dataset_in_place_beside_the_tenant_columns() -> None:
+    for name, dataset in _datasets().items():
+        names = [c["name"] for c in dataset["columns"]]
+        after_tenant = names[names.index("tenant_name") + 1 : names.index("tenant_name") + 4]
+        assert after_tenant == ["project_id", "project_slug", "project_name"], name
+        assert dataset["major_version"] == 1, name
+        assert sorted(p.name for p in _SCHEMA_DIR.glob(f"{name}.v*.json")) == [f"{name}.v1.json"]
+
+
+def test_the_golden_follows_a_project_slug_change_only_in_the_later_copy() -> None:
+    for name in ("steps", "invocations"):
+        identity = _datasets()[name]["identity"]
+        copies: dict[tuple[object, ...], list[tuple[str, str]]] = {}
+        for path, text in _golden_tree().items():
+            if path.startswith(f"{name}/"):
+                for row in map(json.loads, text.splitlines()):
+                    key = tuple(row[c] for c in identity)
+                    copies.setdefault(key, []).append((row["exported_at"], row["project_slug"]))
+        twice = [sorted(c) for c in copies.values() if len(c) > 1]
+        first, second = rfc3339_utc(_FIRST_PASS), rfc3339_utc(_SECOND_PASS)
+        assert twice == [[(first, _PROJECT[1]), (second, _RENAMED_SLUG)]], name
+
+
 def test_events_rows_fill_exactly_the_columns_their_record_type_appears_on() -> None:
     on = {c["name"]: set(c["on"]) for c in _datasets()["events"]["columns"]}
     seen: set[str] = set()
@@ -681,16 +769,35 @@ def test_versioning_names_the_egress_contract() -> None:
 # -- the events views over the golden --------------------------------------------------------------------------------
 
 
-def _golden_events_connection() -> duckdb.DuckDBPyConnection:
+def _golden_events_connection(
+    copied_before_the_upgrade: str | None = None, written_before_the_upgrade: str | None = None
+) -> duckdb.DuckDBPyConnection:
+    """DuckDB over the golden ``events`` with the dictionary's views. ``copied_before_the_upgrade`` adds, for the golden
+    rows it selects, a copy exported a day earlier from a file written before the upgrade to tenants: no tenant.
+    ``written_before_the_upgrade`` instead strips the tenant from the golden rows it selects, as though they were only
+    ever exported before the upgrade."""
     files = sorted(str(p) for p in (_GOLDEN_DIR / "events").rglob("*.ndjson"))
     assert files
     connection = duckdb.connect()
     connection.execute("SET TimeZone = 'UTC'")
     listed = ", ".join(f"'{f}'" for f in files)
     connection.execute(
-        f"CREATE VIEW events AS SELECT * FROM read_json_auto([{listed}], format = 'newline_delimited', "
+        f"CREATE VIEW golden AS SELECT * FROM read_json_auto([{listed}], format = 'newline_delimited', "
         "union_by_name = true, sample_size = -1)"
     )
+    copies = (
+        ""
+        if copied_before_the_upgrade is None
+        else " UNION ALL SELECT * REPLACE (NULL AS tenant_id, NULL AS tenant_name, exported_at - INTERVAL 1 DAY AS "
+        f"exported_at) FROM golden WHERE {copied_before_the_upgrade}"
+    )
+    stripped = (
+        "*"
+        if written_before_the_upgrade is None
+        else f"* REPLACE (CASE WHEN {written_before_the_upgrade} THEN NULL ELSE tenant_id END AS tenant_id, "
+        f"CASE WHEN {written_before_the_upgrade} THEN NULL ELSE tenant_name END AS tenant_name)"
+    )
+    connection.execute(f"CREATE VIEW events AS SELECT {stripped} FROM golden{copies}")
     for view in _datasets()["events"]["views"]:
         connection.execute(f"CREATE VIEW {view} AS {_published_views()[view]}")
     return connection
@@ -719,6 +826,9 @@ def test_events_current_counts_each_segment_by_its_newest_derivation_unless_drop
         "seg-sidechain": [("file_read", "deep.py"), ("file_read", "main.py")],
         # re-derived under the same version: the later derivation alone
         "seg-rederived": [("file_read", "second.py")],
+        # one segment id in two tenants: each tenant's newest derivation counts, and one tenant's drop voids only its own
+        "seg-shared": [("file_read", "globex.py"), ("file_read", "initech.py")],
+        "seg-shared-dropped": [("file_read", "globex-kept.py")],
     }
 
 
@@ -752,4 +862,59 @@ def test_events_by_version_holds_the_newest_derivation_of_each_segment_under_eac
         ("seg-rederived", _NEW_VERSION): ["second.py"],
         # an empty new derivation does not void the old version's own newest derivation
         ("seg-emptied", _OLD_VERSION): ["gone.py"],
+        ("seg-shared", _OLD_VERSION): ["globex.py", "initech.py"],
+        ("seg-shared-dropped", _OLD_VERSION): ["globex-kept.py"],
     }
+
+
+@pytest.mark.parametrize("view", ["events_current", "events_by_version"])
+def test_an_events_view_keeps_each_tenants_segments_apart(view: str) -> None:
+    """Two tenants hold ``seg-shared`` and ``seg-shared-dropped``: neither tenant's derivation outdates the other's,
+    one copy of each tenant's event at one turn and occurrence counts, and the second tenant's drop voids only its own
+    events."""
+    got = (
+        _golden_events_connection()
+        .execute(
+            f"SELECT tenant_name, segment_id, subject FROM {view} WHERE segment_id LIKE 'seg-shared%' ORDER BY ALL"
+        )
+        .fetchall()
+    )
+    assert got == [
+        ("globex", "seg-shared", "globex.py"),
+        ("globex", "seg-shared-dropped", "globex-kept.py"),
+        ("initech", "seg-shared", "initech.py"),
+    ]
+
+
+@pytest.mark.parametrize("view", ["events_current", "events_by_version"])
+def test_an_events_view_counts_a_copy_exported_before_the_upgrade_as_its_tenants_row(view: str) -> None:
+    """Every row of a file written before the upgrade belongs to the tenant the upgrade carried the hub's data into: its
+    copies collapse with that tenant's later copies of the same events, and that tenant's newer derivations and drops
+    outdate them, so the view reads exactly as it does without them."""
+    columns = "tenant_id, segment_id, extractor_version, derived_at, kind, subject, exported_at"
+    query = f"SELECT {columns} FROM {view} ORDER BY ALL"
+    first_pass = f"exported_at = TIMESTAMP '{_FIRST_PASS.strftime('%Y-%m-%d %H:%M:%S')}'"
+    copied = _golden_events_connection(f"{first_pass} AND segment_id NOT LIKE 'seg-shared%'")
+    assert copied.execute("SELECT count(*) FROM events WHERE tenant_id IS NULL").fetchone() == (19,)
+    assert copied.execute(query).fetchall() == _golden_events_connection().execute(query).fetchall()
+
+
+@pytest.mark.parametrize("view", ["events_current", "events_by_version"])
+def test_an_events_view_keeps_a_pre_upgrade_segment_with_its_tenant_when_another_tenant_reuses_its_id(
+    view: str,
+) -> None:
+    """The carried-over tenant derived ``seg-shared`` and ``seg-shared-dropped`` only before the upgrade, so it holds no
+    later row of either. Another tenant's runner re-uses both ids, derives the second later and drops it: the
+    pre-upgrade rows still read as the carried-over tenant's, and the other tenant's derivation and drop leave them
+    counting."""
+    stripped = f"tenant_id = '{_EVENTS_TENANT}' AND segment_id LIKE 'seg-shared%'"
+    connection = _golden_events_connection(written_before_the_upgrade=stripped)
+    assert connection.execute("SELECT count(*) FROM events WHERE tenant_id IS NULL").fetchone() == (4,)
+    got = connection.execute(
+        f"SELECT segment_tenant_id, segment_id, subject FROM {view} WHERE segment_id LIKE 'seg-shared%' ORDER BY ALL"
+    ).fetchall()
+    assert got == [
+        (_EVENTS_TENANT, "seg-shared", "globex.py"),
+        (_EVENTS_TENANT, "seg-shared-dropped", "globex-kept.py"),
+        (_OTHER_TENANT, "seg-shared", "initech.py"),
+    ]

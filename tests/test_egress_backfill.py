@@ -18,12 +18,22 @@ from blizzard.hub.domain.observability.egress.backfill import EgressBackfill
 from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.event_rows import FilePathPolicy
 from blizzard.hub.egress.writer import EgressFailure, EgressFailureCause
-from blizzard.hub.store.internal.egress_event_store import EgressEventStore
-from blizzard.hub.store.internal.trace_store import TraceStore
-from tests.support import HubHarness, InMemoryEgressWriter, hub_store_connections
+from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
+from tests.support import HubHarness, InMemoryEgressWriter, default_tenant, hub_level_connections
 from tests.test_egress_events_sweep import _OLD_VERSION, _Events
-from tests.test_egress_sweep import _SETTLED, _closed_step, _cursor_rows, _hub, _kinds, _rows, _store, _sweep
-from tests.trace_hub import label
+from tests.test_egress_sweep import (
+    _SETTLED,
+    _closed_step,
+    _cursor_rows,
+    _home_project,
+    _hub,
+    _kinds,
+    _project_of,
+    _rows,
+    _store,
+    _sweep,
+)
+from tests.trace_hub import seed_open_tenant_chunk, trace_store
 
 pytestmark = pytest.mark.component
 
@@ -41,11 +51,11 @@ def _backfill(hub: HubHarness, since: datetime, until: datetime, **extra: object
 
 
 def _service(hub: HubHarness, config: EgressConfig, writer: InMemoryEgressWriter) -> EgressBackfill:
-    connections = hub_store_connections(hub.engine)
+    corpus = build_hub_scoped_reads(hub_level_connections(hub.engine)).corpus
     return EgressBackfill(
-        steps=TraceStore(connections, graphs=hub.services.graphs, names=hub.services.registry, label=label),
+        steps=trace_store(hub),
         egress=_store(hub),
-        event_reads=EgressEventStore(connections),
+        event_reads=corpus,
         paths=FilePathPolicy("absolute"),
         clock=hub.clock,
         config=config,
@@ -86,6 +96,48 @@ def test_the_backfill_writes_the_live_sweeps_rows_for_the_same_window(tmp_path: 
     assert all(p.backfill for p, _ in written.manifests)
 
 
+def test_the_backfill_writes_each_open_tenants_rows(tmp_path: Path) -> None:
+    hub, graph = _hub(tmp_path, _SETTLED)
+    since = hub.clock.now()
+    chunk_id = _closed_step(hub, graph, 1)
+    seed_open_tenant_chunk(hub, "ten_other", "ch_other", hub.clock.now())
+    until = hub.clock.now() + timedelta(seconds=5)
+    hub.clock.advance(timedelta(seconds=6))
+    written = InMemoryEgressWriter()
+
+    result = _service(hub, _SETTLED, written).backfill(since, until, dataset=None, dry_run=False)
+
+    assert [r["chunk_id"] for r in _rows(written, "steps")] == [chunk_id, "ch_other"]
+    assert [r["chunk_id"] for r in _rows(written, "invocations")] == [chunk_id, "ch_other"]
+    assert [(c.dataset, c.rows) for c in result.datasets] == [("steps", 2), ("invocations", 2), ("events", 1)]
+    home = (default_tenant(hub.engine), hub.hub_services.tenants.open_tenants.name(default_tenant(hub.engine)))
+    other = ("ten_other", "ten_other")
+    tenants = {
+        d: [(r["tenant_id"], r["tenant_name"]) for r in _rows(written, d)] for d in ("steps", "invocations", "events")
+    }
+    assert tenants == {"steps": [home, other], "invocations": [home, other], "events": [other]}
+
+
+def test_a_backfill_rewrites_its_window_naming_each_rows_project_as_known_now(tmp_path: Path) -> None:
+    hub, graph = _hub(tmp_path, _SETTLED)
+    since = hub.clock.now()
+    project_id, _, name = _home_project(hub)
+    _closed_step(hub, graph, 1)
+    seed_open_tenant_chunk(hub, "ten_other", "ch_other", hub.clock.now())
+    until = hub.clock.now() + timedelta(seconds=5)
+    hub.clock.advance(timedelta(seconds=6))
+    moved = hub.client.patch(f"/api/projects/{project_id}", json={"slug": "storefront"})
+    assert moved.status_code == 200, moved.text
+    written = InMemoryEgressWriter()
+
+    _service(hub, _SETTLED, written).backfill(since, until, dataset=None, dry_run=False)
+
+    home, other = (project_id, "storefront", name), ("proj_ten_other", "default", "Default")
+    projects = {d: [_project_of(r) for r in _rows(written, d)] for d in ("steps", "invocations", "events")}
+    assert projects == {"steps": [home, other], "invocations": [home, other], "events": [other]}
+    assert [r["record_type"] for r in _rows(written, "events")] == ["dropped"]
+
+
 def test_the_window_is_half_open(tmp_path: Path) -> None:
     hub, graph = _hub(tmp_path, _SETTLED)
     _sweep(hub, InMemoryEgressWriter()).sweep()
@@ -106,7 +158,7 @@ def test_the_window_is_half_open(tmp_path: Path) -> None:
 def test_a_real_directory_holds_backfill_files_per_date_partition_and_the_cursors_stay(tmp_path: Path) -> None:
     config = _real(tmp_path)
     hub, graph = _hub(tmp_path, config)
-    sweep = hub.services.egress_export
+    sweep = hub.hub_services.egress_export
     assert sweep is not None
     sweep.sweep()
     since = hub.clock.now()
@@ -136,7 +188,7 @@ def test_a_real_directory_holds_backfill_files_per_date_partition_and_the_cursor
 def test_a_dry_run_writes_nothing_and_counts_what_a_wet_run_counts(tmp_path: Path) -> None:
     config = _real(tmp_path, max_rows_per_file=2)
     hub, graph = _hub(tmp_path, config)
-    sweep = hub.services.egress_export
+    sweep = hub.hub_services.egress_export
     assert sweep is not None
     sweep.sweep()
     since = hub.clock.now()
@@ -195,7 +247,7 @@ def test_a_writer_failure_stops_the_backfill_with_502_and_the_counts_so_far(tmp_
     _closed_step(hub, graph, 1)
     failing = InMemoryEgressWriter()
     failing.fail = EgressFailure(EgressFailureCause.LOW_DISK, "low", free_bytes=1, required_bytes=2)
-    object.__setattr__(hub.services, "egress_backfill", _service(hub, _SETTLED, failing))
+    object.__setattr__(hub.hub_services, "egress_backfill", _service(hub, _SETTLED, failing))
     until = hub.clock.now() + timedelta(seconds=1)
     hub.clock.advance(timedelta(seconds=1))
 
@@ -211,7 +263,7 @@ def test_a_writer_failure_stops_the_backfill_with_502_and_the_counts_so_far(tmp_
 def test_the_cli_reports_counts_and_renders_refusals(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     config = _real(tmp_path, backfill_max_window=3600)
     hub, graph = _hub(tmp_path, config)
-    sweep = hub.services.egress_export
+    sweep = hub.hub_services.egress_export
     assert sweep is not None
     sweep.sweep()
     _closed_step(hub, graph, 1)

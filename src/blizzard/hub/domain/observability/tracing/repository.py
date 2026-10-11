@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
-from blizzard.foundation.event_log import EventLogKind
+from blizzard.foundation.event_log import HubEventKind
 from blizzard.foundation.roles import domain_model
+from blizzard.hub.domain.chunk.model import WorkRefLabel
+from blizzard.hub.domain.graph.model import IReadManyGraphs
 from blizzard.hub.domain.observability.tracing.cursor import CursorKey
 from blizzard.hub.domain.observability.tracing.facts import StepFacts
+from blizzard.hub.tenancy import TenantId
 
 
 @domain_model
@@ -47,11 +50,55 @@ class IReadRunnerNames(Protocol):
 
 @domain_model
 @dataclass(frozen=True)
+class ProjectLabel:
+    """A project's slug and name as read."""
+
+    slug: str
+    name: str
+
+
+class IReadProjectLabels(Protocol):
+    """The projects' current slugs and names."""
+
+    def labels_for(self, project_ids: Iterable[str]) -> dict[str, ProjectLabel]:
+        """Each project's label, keyed by its id, in one batched read; an id with no project is absent."""
+        ...
+
+
+@dataclass(frozen=True)
+class StepHydration:
+    """One tenant's reads a chunk's step facts are completed through: the graphs, runner names and
+    projects the facts name, and how the tenant renders a work ref."""
+
+    graphs: IReadManyGraphs
+    names: IReadRunnerNames
+    projects: IReadProjectLabels
+    label: WorkRefLabel
+
+
+@domain_model
+@dataclass(frozen=True)
 class TraceExportFailure:
     """One ``trace-export-failed`` event: when it was recorded and its fixed message."""
 
     at: datetime
     message: str
+
+
+class IReadStepCorpus(Protocol):
+    """The trace and egress sweeps' window of closed steps, read across every open tenant."""
+
+    def closing_candidates(self, since: datetime, until: datetime, limit: int) -> ClosingCandidates:
+        """As :meth:`IReadTraceSteps.closing_candidates`, over every open tenant's closing facts."""
+        ...
+
+    def step_facts_for(
+        self, chunk_ids: Sequence[str], label: Callable[[TenantId], WorkRefLabel]
+    ) -> dict[str, StepFacts]:
+        """Each existing chunk of an open tenant's :class:`StepFacts`, tagged with that tenant and its work
+        refs rendered through ``label`` of that tenant, keyed by chunk id; ``graphs`` and ``runner_names``
+        are left unread."""
+        ...
 
 
 class IReadTraceSteps(Protocol):
@@ -68,7 +115,7 @@ class IReadTraceSteps(Protocol):
         """The newest ``trace_cursor`` row — the cursor's position — or ``None`` before the first pass."""
         ...
 
-    def newest_export_latch(self) -> EventLogKind | None:
+    def newest_export_latch(self) -> HubEventKind | None:
         """The kind of the newest ``trace-export-failed`` or ``trace-export-recovered`` event, or ``None``."""
         ...
 

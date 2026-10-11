@@ -42,10 +42,47 @@ _S, _I, _B, _T, _M, _L = (
 )
 
 # name, type, nullable, meaning — the steps and events rows.md tables, one entry per column in row-field order.
+_TENANT_ID = (
+    "tenant_id",
+    _S,
+    True,
+    "The tenant the row belongs to; null in a file written before the upgrade to tenants, every row of which belongs "
+    "to the tenant the upgrade carried the hub's data into",
+)
+_TENANT_NAME = (
+    "tenant_name",
+    _S,
+    True,
+    "That tenant's name when the row was written, so a later copy follows a rename; null where tenant_id is",
+)
+_PROJECT_ID = (
+    "project_id",
+    _S,
+    True,
+    "The project the row's chunk belongs to; null in a file written before the upgrade to projects, every row of "
+    "which belongs to its tenant's default project",
+)
+_PROJECT_SLUG = (
+    "project_slug",
+    _S,
+    True,
+    "That project's slug when the row was written, so a later copy follows a slug change; null where project_id is",
+)
+_PROJECT_NAME = (
+    "project_name",
+    _S,
+    True,
+    "That project's name when the row was written, so a later copy follows a rename; null where project_id is",
+)
 _STEPS: tuple[tuple[str, ColumnType, bool, str], ...] = (
     ("step_key", _S, False, "The row's identity: chunk_id/epoch, or chunk_id/epoch/gate/decision_id for a gate step"),
     ("trace_id", _S, False, "The step's derived trace id, as 32 hex characters, so a row joins to its trace"),
     ("step_kind", _S, False, "runner, hub or gate"),
+    _TENANT_ID,
+    _TENANT_NAME,
+    _PROJECT_ID,
+    _PROJECT_SLUG,
+    _PROJECT_NAME,
     ("chunk_id", _S, False, "The chunk"),
     ("work_refs", _L, False, "Its work items as source-native tokens; empty when it has none"),
     ("sources", _L, False, "The distinct work sources of those items"),
@@ -97,6 +134,11 @@ _INVOCATIONS: tuple[tuple[str, ColumnType, bool, str], ...] = (
     ("usage_id", _I, False, "The row's identity: the usage_facts id"),
     ("step_key", _S, False, "The runner step it belongs to, by chunk and epoch"),
     ("trace_id", _S, False, "The step's derived trace id, as 32 hex characters"),
+    _TENANT_ID,
+    _TENANT_NAME,
+    _PROJECT_ID,
+    _PROJECT_SLUG,
+    _PROJECT_NAME,
     ("chunk_id", _S, False, "The chunk"),
     ("epoch", _I, False, "The epoch"),
     ("graph_id", _S, False, "The graph its step stood in"),
@@ -139,6 +181,11 @@ _EVENTS: tuple[tuple[str, ColumnType, bool, str], ...] = (
     ("step_key", _S, False, "The runner step the segment came from, by chunk and epoch"),
     ("trace_id", _S, False, "That step's derived trace id, as 32 hex characters"),
     ("step_started_at", _T, False, "When that step started; the row's partition and backfill time"),
+    _TENANT_ID,
+    _TENANT_NAME,
+    _PROJECT_ID,
+    _PROJECT_SLUG,
+    _PROJECT_NAME,
     ("chunk_id", _S, False, "The segment's chunk"),
     ("epoch", _I, False, "The segment's epoch"),
     ("spawn_generation", _I, False, "Which worker spawn on the lease produced the segment"),

@@ -33,13 +33,15 @@ from tests.runner_fakes import (
     FakeProbe,
     FakeProvider,
     FakeWorktreeGit,
+    fixed_hub_token,
     make_session_resolver,
     make_store,
     make_stores,
     make_usage_recorder,
+    matched_verdict,
     registered_identity,
 )
-from tests.support import HubHarness, RunnerFleetClient, build_hub, ingest
+from tests.support import HubHarness, RunnerFleetClient, build_hub, hub_scoped, ingest
 
 pytestmark = pytest.mark.component
 
@@ -124,6 +126,9 @@ class _RealRunner:
             stores=make_stores(self.store),
             clock=hub.clock,
             hub=hub_client,
+            token_identity=hub_client,
+            identity_verdict=matched_verdict(),
+            hub_token=fixed_hub_token(),
             chunk_views=ReadThroughChunkViews(hub_client),
             provider=provider,
             process=FakeProbe(alive={(200, "start-200")}),
@@ -167,8 +172,10 @@ class _RealRunner:
 def _lease_rows(hub: HubHarness, chunk_id: str) -> list[tuple[str, int, str | None]]:
     with hub.engine.connect() as conn:
         rows = conn.execute(
-            select(s.lease_facts.c.runner_id, s.lease_facts.c.epoch, s.lease_facts.c.lease_id).where(
-                s.lease_facts.c.chunk_id == chunk_id
+            hub_scoped(
+                select(s.lease_facts.c.runner_id, s.lease_facts.c.epoch, s.lease_facts.c.lease_id).where(
+                    s.lease_facts.c.chunk_id == chunk_id
+                )
             )
         ).all()
     return [(r.runner_id, r.epoch, r.lease_id) for r in rows]
@@ -211,7 +218,7 @@ def test_a_buffered_mint_across_a_restart_is_refused_with_its_completion(tmp_pat
     with hub.engine.connect() as conn:
         assert (
             conn.execute(
-                select(func.count()).select_from(s.transitions).where(s.transitions.c.chunk_id == chunk_id)
+                hub_scoped(select(func.count()).select_from(s.transitions).where(s.transitions.c.chunk_id == chunk_id))
             ).scalar_one()
             == 0
         )

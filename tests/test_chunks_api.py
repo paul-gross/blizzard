@@ -22,6 +22,7 @@ from tests.support import (
     emitted_events,
     ingest,
     report_lease,
+    stamp,
 )
 
 pytestmark = pytest.mark.component
@@ -114,7 +115,9 @@ def _stop(tmp_path: Path, chunk_id: str, *, at: datetime) -> None:
     route's own behavior is proven in ``tests/test_chunk_stop.py``)."""
     engine = create_engine_from_url(f"sqlite:///{tmp_path / 'hub.db'}")
     with engine.begin() as conn:
-        conn.execute(sa_insert(schema.chunk_stopped).values(chunk_id=chunk_id, stopped_at=at))
+        conn.execute(
+            sa_insert(schema.chunk_stopped).values(stamp(schema.chunk_stopped, chunk_id=chunk_id, stopped_at=at))
+        )
 
 
 def test_pause_returns_200_writes_a_fact_and_the_detail_carries_it(tmp_path: Path) -> None:

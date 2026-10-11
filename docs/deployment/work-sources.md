@@ -71,6 +71,13 @@ built-in `hub` source is listed and cannot be changed.
 `<source>#<ref>`, or a pasted work-item URL. The CLI parses nothing; the hub resolves each token against every
 configured source's own parse.
 
+The chunk is minted in one project. `--project <id|slug>` names it; without it, the hub uses the one project every
+token's source is linked to, and answers `422 project_required`, listing the tenant's projects, when the sources are
+linked to several projects or to different ones. Every token's source must be linked to that project, or the ingest
+answers `422 source_not_linked`, naming the source: a new source serves no project until one links it
+([projects.md](./projects.md#links)). The built-in `hub` source is linked to every project and takes no part in the
+choice; an ingest of hub items alone goes to the project the items were created in, when they agree.
+
 The active source list is also the hub's allowlist of ingestable repos: a token naming a repo no active source covers is
 rejected 422, naming the token and the sources that are configured — adding a repo to the fleet means creating its
 record first, with no separate allowlist to sync. For the github provider, `ref` must be numeric (the issue number); a
@@ -83,9 +90,10 @@ claims it.
 
 ## Hub-owned items
 
-Creating a hub item mints its resting chunk in the same write: POST to the hub source's items pins a fresh `not_ready`
-chunk to the default graph holding the new item's pointer and returns the chunk id alongside the item, so nothing
-separate needs ingesting.
+Creating a hub item mints its resting chunk in the same write, in the project the call names (`blizzard hub item create
+--project <id|slug>`, needed only when the tenant holds several projects): POST to the hub source's items pins a fresh
+`not_ready` chunk to the default graph holding the new item's pointer and returns the chunk id alongside the item, so
+nothing separate needs ingesting.
 
 Item mutation (the four verbs under `/api/work-sources/{source}/items`) is served only by the built-in hub source, whose
 own store is a hub-owned item's system of record; a request against a configured forge source refuses with a 409 naming

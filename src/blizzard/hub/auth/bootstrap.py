@@ -1,19 +1,20 @@
-"""``auth.superuser`` bootstrap — ensure/demote/report at hub boot.
+"""``auth.superuser`` bootstrap — record and report the configured target at hub boot.
 
-Idempotent across restarts. Pointing ``auth.superuser`` at a *different* email demotes
-whichever user the previous target had claimed (the singleton ``superuser_bootstrap``
-row) to ``admin``, so at most one user is ever the bootstrapped superuser. An email
-matching no verified user is an unclaimed intent, surfaced at every boot until claimed."""
+Boot promotes nobody: the configured email is recorded in the singleton
+``superuser_bootstrap`` row as an intent, claimed at the next sign-in whose provider vouches
+for it (:meth:`AuthService.link_or_mint`) by the user it signs in, who becomes a hub
+administrator; an account's stored email alone never claims. A target already
+claimed is never claimed again. Pointing ``auth.superuser`` at a different email records a
+new, unclaimed intent — whoever claimed the old one stays a hub administrator. Unsetting it
+cancels an intent nobody has claimed and leaves a claimed one alone: configuration never
+revokes anyone. An unclaimed intent is surfaced at every boot until claimed."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-from blizzard.auth_core import Role
 from blizzard.foundation.logging import get_logger
-from blizzard.hub.auth.models import SuperuserBootstrap, User
 from blizzard.hub.auth.service import AuthService
-from blizzard.hub.auth.users import IReadUserRepository
 
 _log = get_logger("blizzard.hub.auth")
 
@@ -23,42 +24,19 @@ class Superuser:
     """The configured ``auth.superuser`` intent, reconciled against the hub's own state."""
 
     email: str | None
-    users: IReadUserRepository
     auth: AuthService
 
     def ensure(self) -> None:
-        """Ensure ``email`` holds ``superuser``, demoting a prior different target first —
-        the one entry point ``build_hosted_app`` calls."""
-        current = self.auth.get_superuser_bootstrap()
-
-        if current is not None and current.email != self.email:
-            self._demote(current)
-            current = None
-
+        """Record ``email`` as the claim target when it is new, and report it while unclaimed;
+        with no email configured, cancel an unclaimed target — the one entry point
+        ``build_hosted_app`` calls."""
         if self.email is None:
-            if current is not None:
-                self.auth.clear_superuser_bootstrap()
+            self.auth.cancel_unclaimed_superuser_bootstrap()
             return
-
-        user = self.users.get_by_email(self.email)
-        if user is not None:
-            if user.role is not Role.SUPERUSER:
-                self.auth.bootstrap_apply_role(user, Role.SUPERUSER)
-            self.auth.record_superuser_bootstrap(email=self.email, claimed_user_id=user.user_id)
-            return
-
-        # No verified user holds `email` yet — pre-provision (or keep) the unclaimed
-        # intent and surface it: every boot while unclaimed, not just the first.
-        if current is None or current.claimed_user_id is not None:
+        current = self.auth.get_superuser_bootstrap()
+        if current is None or current.email != self.email:
             self.auth.record_superuser_bootstrap(email=self.email, claimed_user_id=None)
+        elif current.claimed_user_id is not None:
+            return
         _log.warning("superuser bootstrap unclaimed", email=self.email)
         self.auth.report_superuser_bootstrap_unclaimed(email=self.email)
-
-    def _demote(self, previous: SuperuserBootstrap) -> None:
-        """Demote the previous target's claimed user to ``admin`` — only when it is still
-        ``superuser`` (a manual demotion in between is left alone, not re-applied)."""
-        if previous.claimed_user_id is None:
-            return
-        claimed_user: User | None = self.users.get(previous.claimed_user_id)
-        if claimed_user is not None and claimed_user.role is Role.SUPERUSER:
-            self.auth.bootstrap_apply_role(claimed_user, Role.ADMIN)

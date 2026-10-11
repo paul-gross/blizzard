@@ -894,6 +894,39 @@
               }
             ]
           },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "project_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Name"
+          },
+          "project_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Slug"
+          },
           "questions": {
             "default": [],
             "items": {
@@ -1203,6 +1236,39 @@
             },
             "title": "Open Prs",
             "type": "array"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "project_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Name"
+          },
+          "project_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Slug"
           },
           "runner_id": {
             "anyOf": [
@@ -2097,6 +2163,39 @@
             "title": "Observed Count",
             "type": "integer"
           },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "project_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Name"
+          },
+          "project_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Slug"
+          },
           "raised_by_chunk_id": {
             "anyOf": [
               {
@@ -2330,6 +2429,39 @@
           },
           "origin": {
             "$ref": "#/components/schemas/GardenProposalOrigin"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "project_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Name"
+          },
+          "project_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Slug"
           },
           "proposal_id": {
             "title": "Proposal Id",
@@ -2749,6 +2881,66 @@
           "buffer_depth"
         ],
         "title": "HubConnectivityView",
+        "type": "object"
+      },
+      "IdentityVerdictView": {
+        "description": "Whether the runner's token resolves to the runner its store belongs to.\n\n``unchecked`` until the hub first answers the check, ``matched`` while it does, ``mismatched``\nwhile the token names another runner \u2014 the runner then drives no lease until the right token\nreturns or the store is cleared with ``reset_command``.",
+        "properties": {
+          "checked_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checked At"
+          },
+          "reset_command": {
+            "title": "Reset Command",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "unchecked",
+              "matched",
+              "mismatched"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "store_runner_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Store Runner Id"
+          },
+          "token_runner_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token Runner Id"
+          }
+        },
+        "required": [
+          "state",
+          "store_runner_id",
+          "token_runner_id",
+          "checked_at",
+          "reset_command"
+        ],
+        "title": "IdentityVerdictView",
         "type": "object"
       },
       "IntendedMigrationView": {
@@ -3871,6 +4063,16 @@
           "hub": {
             "$ref": "#/components/schemas/HubConnectivityView"
           },
+          "identity": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IdentityVerdictView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "last_tick_at": {
             "anyOf": [
               {
@@ -3906,6 +4108,42 @@
               }
             ],
             "title": "Runner Name"
+          },
+          "served_projects": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ServedProjectStatusView"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Served Projects"
+          },
+          "tenant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Id"
+          },
+          "tenant_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Name"
           },
           "workspace_id": {
             "title": "Workspace Id",
@@ -4166,6 +4404,39 @@
             "title": "Description",
             "type": "string"
           },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "project_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Name"
+          },
+          "project_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Slug"
+          },
           "retired": {
             "default": false,
             "title": "Retired",
@@ -4274,6 +4545,63 @@
           "checks"
         ],
         "title": "SelfTestView",
+        "type": "object"
+      },
+      "ServedProjectStatusView": {
+        "description": "One project the runner serves, as its hub last answered: the ``entry`` as configured \u2014 a project id\nor slug \u2014 and the project it resolved to. ``resolved`` is false for an entry no project answers to, and\n``answered`` false for a configured entry the hub has not answered yet; either way ``project_id``,\n``slug`` and ``name`` are ``None``.",
+        "properties": {
+          "answered": {
+            "default": true,
+            "title": "Answered",
+            "type": "boolean"
+          },
+          "entry": {
+            "title": "Entry",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "resolved": {
+            "title": "Resolved",
+            "type": "boolean"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug"
+          }
+        },
+        "required": [
+          "entry",
+          "resolved"
+        ],
+        "title": "ServedProjectStatusView",
         "type": "object"
       },
       "SessionEndResponse": {
@@ -7474,7 +7802,7 @@
     },
     "/api/leases/{lease_id}/scopes": {
       "get": {
-        "description": "Forward this lease's scope-list read to the hub \u2014 the layered pass-through. The\nlease authorizes the caller; the read itself names no chunk, since a scope is global.",
+        "description": "Forward this lease's scope-list read to the hub \u2014 the layered pass-through. The\nlease authorizes the caller and names its chunk, so the hub answers that chunk's project's\nscopes; a hub that predates projects ignores the chunk and answers every scope.",
         "operationId": "list_scopes_api_leases__lease_id__scopes_get",
         "parameters": [
           {

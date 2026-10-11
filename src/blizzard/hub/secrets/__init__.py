@@ -5,7 +5,7 @@ when set, is the only source; otherwise ``data/auth/secret-keys/`` holds the gen
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -79,13 +79,16 @@ def _conforms_store_secret_reader(x: StoreSecretReader) -> ISecretReader:
 @domain_model
 @dataclass(frozen=True)
 class KeyCoverage:
-    """Every key generation a stored row is sealed under that no provider generation answers."""
+    """Every key generation a stored row is sealed under that no provider generation answers — across
+    every open tenant, since the key is the hub's."""
 
     missing: frozenset[str]
 
     @classmethod
-    def of(cls, catalog: ISecretCatalog, keys: IHubKeyProvider) -> KeyCoverage:
-        return cls(uncovered_key_ids(catalog.key_ids_in_use(), keys.available_ids()))
+    def of(cls, catalogs: Iterable[ISecretCatalog], keys: IHubKeyProvider) -> KeyCoverage:
+        """``catalogs`` holds one catalog per open tenant."""
+        in_use = frozenset(key_id for catalog in catalogs for key_id in catalog.key_ids_in_use())
+        return cls(uncovered_key_ids(in_use, keys.available_ids()))
 
     def check(self) -> None:
         """Refuse to start rather than serve secrets no generation can open."""

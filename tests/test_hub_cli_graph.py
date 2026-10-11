@@ -2,7 +2,7 @@
 the graph lifecycle, mint, and reconciliation endpoints, driven here with ``httpx``
 stubbed. ``mint`` inlines referenced
 prompt files and accepts stdin (``-``); ``sync`` is the deploy verb, reconciling the
-**hub's** packaged set.
+**hub's** packaged set into every open tenant.
 """
 
 from __future__ import annotations
@@ -420,19 +420,33 @@ def test_graph_mint_reads_the_definition_from_stdin(monkeypatch: pytest.MonkeyPa
 
 
 @pytest.mark.unit
-def test_graph_sync_prints_every_outcome_and_exits_zero(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The deploy verb: one line per packaged graph, minted or not."""
-    calls: list[str] = []
+def test_graph_sync_reconciles_every_tenant_and_prints_each_outcome_under_its_tenant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The deploy verb: one hub-level call, then a block per open tenant with one line per packaged graph."""
+    calls: list[tuple[str, dict[str, str]]] = []
 
-    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
-        calls.append(url)
+    def fake_post(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
+        calls.append((url, headers or {}))
         return _FakeResponse(
             200,
             {
                 "ok": True,
-                "entries": [
-                    {"name": "default", "status": "up-to-date", "graph_id": None, "detail": None},
-                    {"name": "bas-dwf", "status": "minted", "graph_id": "gr_new", "detail": "first of its name"},
+                "tenants": [
+                    {
+                        "tenant_id": "ten_a",
+                        "name": "acme",
+                        "ok": True,
+                        "entries": [{"name": "default", "status": "up-to-date", "graph_id": None, "detail": None}],
+                    },
+                    {
+                        "tenant_id": "ten_b",
+                        "name": "bravo",
+                        "ok": True,
+                        "entries": [
+                            {"name": "bas-dwf", "status": "minted", "graph_id": "gr_new", "detail": "first of its name"}
+                        ],
+                    },
                 ],
             },
         )
@@ -441,24 +455,37 @@ def test_graph_sync_prints_every_outcome_and_exits_zero(monkeypatch: pytest.Monk
     result = CliRunner().invoke(hub_group, ["graph", "sync"], env={"BZ_HUB_URL": "http://hub.local:8421"})
 
     assert result.exit_code == 0, result.output
-    assert calls == ["http://hub.local:8421/api/graphs/sync"]
-    assert "default: up-to-date" in result.output
-    assert "bas-dwf: minted gr_new — first of its name" in result.output
+    assert [url for url, _ in calls] == ["http://hub.local:8421/api/admin/graphs/sync"]
+    assert all("X-Blizzard-Tenant" not in headers for _, headers in calls)
+    assert result.output.splitlines() == [
+        "ten_a  acme",
+        "  default: up-to-date",
+        "ten_b  bravo",
+        "  bas-dwf: minted gr_new — first of its name",
+    ]
 
 
 @pytest.mark.unit
-def test_graph_sync_exits_non_zero_when_a_packaged_graph_failed(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A per-graph failure is a non-zero exit — but the graphs that did reconcile are
-    still reported, since the reconciler does not stop at the first bad one."""
+def test_graph_sync_exits_non_zero_when_a_packaged_graph_failed_in_any_tenant(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A per-graph failure is a non-zero exit — but every other graph and tenant that did reconcile is still
+    reported, since the reconciler stops at no bad graph and no bad tenant."""
 
-    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+    def fake_post(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         return _FakeResponse(
             200,
             {
                 "ok": False,
-                "entries": [
-                    {"name": "default", "status": "minted", "graph_id": "gr_a", "detail": "first of its name"},
-                    {"name": "broken", "status": "failed", "graph_id": None, "detail": "entry node not found"},
+                "tenants": [
+                    {
+                        "tenant_id": "ten_a",
+                        "name": "acme",
+                        "ok": False,
+                        "entries": [
+                            {"name": "default", "status": "minted", "graph_id": "gr_a", "detail": "first of its name"},
+                            {"name": "broken", "status": "failed", "graph_id": None, "detail": "entry node not found"},
+                        ],
+                    },
+                    {"tenant_id": "ten_b", "name": "bravo", "ok": True, "entries": []},
                 ],
             },
         )
@@ -469,6 +496,7 @@ def test_graph_sync_exits_non_zero_when_a_packaged_graph_failed(monkeypatch: pyt
     assert result.exit_code != 0
     assert "default: minted gr_a" in result.output
     assert "broken: failed — entry node not found" in result.output
+    assert "ten_b  bravo\n  no packaged graphs to reconcile" in result.output
     assert "failed to reconcile" in result.output
 
 

@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import cast
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import insert, text
 
 from blizzard.hub.domain.chunk.ports.fence import EpochOwner
 from blizzard.hub.domain.observability import transcripts as transcripts_domain
@@ -25,8 +25,9 @@ from blizzard.hub.domain.observability.transcripts import (
     TranscriptSlice,
 )
 from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, RetiredRunnerGuard
+from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
-from tests.support import build_hub, hub_store_connections, seed_chunk, seed_graph
+from tests.support import build_hub, hub_store_connections, seed_chunk, seed_graph, stamp
 
 pytestmark = pytest.mark.component
 
@@ -89,8 +90,9 @@ def test_a_record_shipped_under_another_holders_lease_is_refused_unstored_and_ad
     _seed_chunk(hub)
     with hub.engine.begin() as conn:
         conn.execute(
-            text("INSERT INTO epoch_owners (chunk_id, epoch, runner_id, recorded_at) VALUES ('ch_1', 1, 'r2', :at)"),
-            {"at": _T0},
+            insert(s.epoch_owners).values(
+                stamp(s.epoch_owners, chunk_id="ch_1", epoch=1, runner_id="r2", recorded_at=_T0)
+            )
         )
     store = TranscriptSegmentStore(hub_store_connections(hub.engine))
     service = TranscriptIngestService(retired=_NO_RETIREMENTS, store=store, clock=hub.clock)

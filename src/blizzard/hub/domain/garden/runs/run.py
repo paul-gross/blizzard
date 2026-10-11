@@ -29,6 +29,7 @@ from blizzard.hub.domain.garden.routines import (
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository, Scope, ScopeVerb
 from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
+from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.work_items.editing import prepare_mint
 
 
@@ -231,10 +232,10 @@ class RunService:
             routine_retired=self._routines.is_retired(routine.routine_id),
             graph=self._graphs.get_enabled_by_name(routine.graph_name),
             scope=scope,
-            scope_retired=self._scopes.is_retired(scope.slug),
+            scope_retired=self._scopes.is_retired(scope.project_id, scope.slug),
             linked=self._routine_scopes.list_scopes(routine.routine_id),
             requested_mode=mode,
-            baseline=self._finding_sets.newest_for_routine_scope(routine.name, scope.slug),
+            baseline=self._finding_sets.newest_for_routine_scope(routine.project_id, routine.name, scope.slug),
             note=note,
         )
         pointer, chunk, pointer_at = prepare_mint(
@@ -243,6 +244,7 @@ class RunService:
             self._clock,
             RESERVED_HUB_SOURCE_NAME,
             graph=plan.graph,
+            project_id=ProjectId(routine.project_id),
             default_model=routine.default_model,
             default_effort=routine.default_effort,
             default_harnesses=routine.default_harnesses,
@@ -252,6 +254,7 @@ class RunService:
             title=plan.title,
             body=plan.charge,
             author=author,
+            project_id=routine.project_id,
             routine_name=routine.name,
             scope_slug=scope.slug,
             run_mode=plan.effective_mode.value,

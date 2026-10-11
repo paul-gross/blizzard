@@ -16,18 +16,39 @@ function validationMessage(detail: unknown): string | null {
   return messages.join('; ');
 }
 
+/** A project a refusal names — the `projects` list of a `project_required` body. */
+interface RefusalProject {
+  readonly slug: string;
+  readonly name: string;
+}
+
+/** A coded refusal's `detail` object — `{code, message}`, and for `project_required` the
+ * tenant's projects to choose from — as its message, or `null` when `detail` isn't that
+ * shape. A `project_required` message names each project so the caller can name one. */
+function refusalMessage(detail: unknown): string | null {
+  if (!detail || typeof detail !== 'object' || Array.isArray(detail)) return null;
+  const { code, message, projects } = detail as { code?: unknown; message?: unknown; projects?: unknown };
+  if (typeof message !== 'string' || message === '') return null;
+  if (code !== 'project_required' || !Array.isArray(projects) || projects.length === 0) return message;
+  const named = (projects as RefusalProject[])
+    .filter((project) => project && typeof project.slug === 'string')
+    .map((project) => (project.name && project.name !== project.slug ? `${project.name} (${project.slug})` : project.slug));
+  return named.length > 0 ? `${message} Projects: ${named.join(', ')}.` : message;
+}
+
 /** The hub/runner's `{"detail": "..."}` error body, or anything close enough to read one
  * off of — 404/409 aren't in every generated error union (only 422 is documented in some),
  * so this reads the same shape defensively rather than trusting the response type. A 422's
  * list-shaped `detail` (`HttpValidationError`) reads as its field-named messages. The one
  * owner of that read: every mutation's `onError` across both apps folds its failure through
  * this rather than typing its own copy (`chunk-detail.ts`'s pause/resume/detach/edit, the
- * runner top bar's local pause toggle). `fallback` names the verb that failed, for the case
- * where no body can be read. */
+ * runner top bar's local pause toggle). A coded refusal's object `detail` reads as its
+ * message — a `project_required` one with the projects it asks to choose from. `fallback`
+ * names the verb that failed, for the case where no body can be read. */
 export function errorMessage(error: unknown, fallback: string): string {
   if (error && typeof error === 'object' && 'detail' in error) {
     if (typeof error.detail === 'string') return error.detail;
-    return validationMessage(error.detail) ?? fallback;
+    return validationMessage(error.detail) ?? refusalMessage(error.detail) ?? fallback;
   }
   return fallback;
 }

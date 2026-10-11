@@ -16,6 +16,7 @@ import sqlalchemy as sa
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner
+from tests.support import hub_scoped_engine
 
 pytestmark = pytest.mark.component
 
@@ -100,7 +101,7 @@ def _runner(tmp_path: Path):  # type: ignore[no-untyped-def]
 def test_each_transition_backfills_to_its_chunks_graph_pin(tmp_path: Path) -> None:
     runner, db_url = _runner(tmp_path)
     runner.upgrade(_BEFORE)
-    engine = create_engine_from_url(db_url)
+    engine = hub_scoped_engine(create_engine_from_url(db_url))
     _seed(engine)
 
     runner.upgrade("head")
@@ -113,7 +114,7 @@ def test_each_transition_backfills_to_its_chunks_graph_pin(tmp_path: Path) -> No
 def test_upgrade_is_idempotent_over_an_already_reshaped_store(tmp_path: Path) -> None:
     runner, db_url = _runner(tmp_path)
     runner.upgrade(_BEFORE)
-    engine = create_engine_from_url(db_url)
+    engine = hub_scoped_engine(create_engine_from_url(db_url))
     _seed(engine)
     runner.upgrade("head")
 
@@ -128,7 +129,7 @@ def test_upgrade_is_idempotent_over_an_already_reshaped_store(tmp_path: Path) ->
 def test_down_then_up_re_derives_the_identical_provenance(tmp_path: Path) -> None:
     runner, db_url = _runner(tmp_path)
     runner.upgrade(_BEFORE)
-    engine = create_engine_from_url(db_url)
+    engine = hub_scoped_engine(create_engine_from_url(db_url))
     _seed(engine)
     runner.upgrade("head")
     with engine.connect() as conn:
@@ -144,7 +145,7 @@ def test_down_then_up_re_derives_the_identical_provenance(tmp_path: Path) -> Non
 
 def test_a_fresh_store_reaches_head_with_graph_id_not_null(tmp_path: Path) -> None:
     runner, db_url = _runner(tmp_path)
-    engine = create_engine_from_url(db_url)
+    engine = hub_scoped_engine(create_engine_from_url(db_url))
 
     runner.upgrade("head")
 
@@ -159,7 +160,7 @@ def test_the_walking_skeleton_revision_creates_the_pre_graph_id_shape(tmp_path: 
     importing from head-of-tree ``src/blizzard/hub/store/schema.py`` instead would fire the backfill's
     ``if "graph_id" in columns: return`` guard on a fresh store, leaving it dead."""
     runner, db_url = _runner(tmp_path)
-    engine = create_engine_from_url(db_url)
+    engine = hub_scoped_engine(create_engine_from_url(db_url))
 
     def columns() -> set[str]:
         with engine.connect() as conn:

@@ -56,6 +56,31 @@ def _hub_pause_note(stance: str, runner_id: str | None) -> str:
     return f"note: it {stance} paused at the hub — clear that with `blizzard hub runner resume {runner_id}`"
 
 
+def _served_line(served: list[dict] | None) -> str | None:
+    """The status's ``serves:`` line — each project the hub resolved, by slug, then each entry no project
+    answers to and each configured entry not answered yet, marked so — or ``None`` when nothing names any."""
+    if served is None:
+        return None
+    resolved = [p.get("slug") or p["entry"] for p in served if p["resolved"]]
+    unresolved = [f'"{p["entry"]}"' for p in served if p.get("answered", True) and not p["resolved"]]
+    pending = [f'"{p["entry"]}"' for p in served if not p.get("answered", True)]
+    parts = [", ".join(resolved)] if resolved else ([] if pending else ["nothing"])
+    if unresolved:
+        parts.append(f"unresolved: {', '.join(unresolved)}")
+    if pending:
+        parts.append(f"not yet answered: {', '.join(pending)}")
+    return f"  serves: {'; '.join(parts)}"
+
+
+def _tenant_part(view: dict) -> str:
+    """The tenant clause of the status headline — ``"  tenant=acme (tn_1)"`` — or empty until a hub that
+    names the runner's tenant has answered."""
+    tenant_id = view.get("tenant_id")
+    if tenant_id is None:
+        return ""
+    return f"  tenant={view.get('tenant_name') or tenant_id} ({tenant_id})"
+
+
 @dto
 @dataclass(frozen=True)
 class SessionLabel:
@@ -115,8 +140,18 @@ def status(ctx: click.Context, directory: str, runner_url: str | None) -> None:
         traces_resp = daemon.send("get", "/api/traces/status")
 
     click.echo(
-        f"runner {view['runner_name']} ({view.get('runner_id') or 'not registered'})  workspace={view['workspace_id']}"
+        f"runner {view['runner_name']} ({view.get('runner_id') or 'not registered'}){_tenant_part(view)}"
+        f"  workspace={view['workspace_id']}"
     )
+    identity = view.get("identity")
+    if identity is not None and identity["state"] == "mismatched":
+        click.echo(
+            f"  REFUSING: token belongs to runner {identity['token_runner_id']}, store belongs to runner "
+            f"{identity['store_runner_id']} — restore the right token, or clear the store with "
+            f"{identity['reset_command']}"
+        )
+    elif identity is not None and identity["state"] == "unchecked":
+        click.echo("  identity: unchecked — waiting for the hub to answer which runner the token belongs to")
     pause = view["pause"]
     brakes = [name for name, on in (("local", pause["local"]), ("hub", pause["hub"])) if on]
     brake_state = f"paused [{'+'.join(brakes)}]" if pause["effective"] else "running"
@@ -130,6 +165,9 @@ def status(ctx: click.Context, directory: str, runner_url: str | None) -> None:
     click.echo(f"  hub: {reachability} (last contact {contact}), {hub['buffer_depth']} fact(s) buffered")
     click.echo(f"  last tick: {view['last_tick_at'] or 'never'}")
     click.echo(f"  gates: {', '.join(view['gates']) or 'none'}")
+    served = _served_line(view.get("served_projects"))
+    if served is not None:
+        click.echo(served)
 
     leases = [lease for lease in leases_resp.json().get("items", []) if lease.get("state") != "closed"]
     click.echo(f"\nleases ({len(leases)}):")

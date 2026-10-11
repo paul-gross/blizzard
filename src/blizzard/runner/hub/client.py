@@ -11,9 +11,11 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, Protocol
 
+from blizzard.foundation.claim_denials import ClaimDenialReason
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
 from blizzard.runner.harness.capability_snapshot import HarnessCapability
+from blizzard.runner.hub.served_projects import ServedProject
 from blizzard.runner.node_steps.chunk_state import ChunkState
 from blizzard.runner.node_steps.envelope import Envelope
 from blizzard.runner.node_steps.submissions import ApplyReply, Completion, GateSubmission
@@ -44,14 +46,25 @@ class ChunkEndedError(HubClientError):
         self.detail = detail
 
 
+class IdentityRouteMissing(HubClientError):
+    """The hub answered the identity read 404: it predates ``GET /api/fleet/identity``, so the runner
+    learns which runner its token belongs to from its registration's reply instead."""
+
+
 class RunnerAddRefusalReason(StrEnum):
     """Why the hub refused to add a runner: ``SIGN_IN_REQUIRED``, the hub requires an operator
     session and none was presented, or it was not accepted (401); ``FORBIDDEN``, the operator
-    lacks ``runner:add`` (403); ``UNSUPPORTED``, the hub predates adding runners (404 or 405)."""
+    lacks ``runner:add`` (403); ``UNSUPPORTED``, the hub predates adding runners (404 or 405);
+    ``TENANT_REQUIRED``, the operator may enter several tenants and named none (409);
+    ``NO_SUCH_TENANT``, the named tenant is none the operator may enter (404); ``NO_SUCH_PROJECT``,
+    a named project is none the tenant holds (422)."""
 
     SIGN_IN_REQUIRED = "sign_in_required"
     FORBIDDEN = "forbidden"
     UNSUPPORTED = "unsupported"
+    TENANT_REQUIRED = "tenant_required"
+    NO_SUCH_TENANT = "no_such_tenant"
+    NO_SUCH_PROJECT = "no_such_project"
 
 
 class RunnerAddRefused(HubClientError):
@@ -188,11 +201,14 @@ class DependencyDenial:
 @domain_model
 @dataclass(frozen=True)
 class IncompatibleDenial:
-    """This runner's stored capabilities can no longer run every lineage the chunk can reach."""
+    """The hub will not give this runner the chunk: ``reason`` says what it lacks — the capabilities
+    to run every lineage the chunk can reach, or the chunk's project among those it serves, which
+    ``detail`` then names. Either way the runner moves on; the reason is for its log."""
 
     chunk_id: str
     incompatible_runner_id: str
     detail: str = "runner capabilities no longer satisfy the chunk's reachable lineage"
+    reason: ClaimDenialReason = ClaimDenialReason.CAPABILITY
 
 
 @domain_model
@@ -293,20 +309,28 @@ class TranscriptPushAck:
 @dataclass(frozen=True)
 class RegistrationReply:
     """The hub's reply to a successful registration: the runner's hub-minted id, the name the hub
-    now holds for it, and whether this was its first registration since it was added."""
+    now holds for it, whether this was its first registration since it was added, the tenant the
+    runner serves — ``None`` from a hub that predates tenants — and the projects it serves, one per
+    declared entry as the hub resolved it — ``None`` from a hub that predates projects."""
 
     runner_id: str
     runner_name: str
     first_registration: bool
+    tenant_id: str | None = None
+    tenant_name: str | None = None
+    projects: tuple[ServedProject, ...] | None = None
 
 
 @domain_model
 @dataclass(frozen=True)
 class TokenIdentity:
-    """The runner the hub says a presented bearer token belongs to — its id and current name."""
+    """The runner the hub says a presented bearer token belongs to — its id and current name, and
+    its tenant's id and name (``None`` from a hub that predates tenants)."""
 
     runner_id: str
     runner_name: str
+    tenant_id: str | None = None
+    tenant_name: str | None = None
 
 
 @domain_model
@@ -317,6 +341,15 @@ class TokenRefusal:
 
     reason: RunnerTokenRefusalReason
     runner_id: str | None = None
+
+
+@domain_model
+@dataclass(frozen=True)
+class OperatorTenant:
+    """A tenant the operator may add a runner in — its id, the only way to name it, and its name."""
+
+    tenant_id: str
+    name: str
 
 
 @domain_model
@@ -402,13 +435,16 @@ class IHubClient(IChunkStatusReader, Protocol):
         capabilities: tuple[HarnessCapability, ...] = (),
         subscriptions: tuple[SubscriptionDeclaration, ...] = (),
         gates: tuple[str, ...] = (),
+        projects: tuple[str, ...] | None = None,
     ) -> RegistrationReply:
         """``POST /api/fleet/runners`` — register the runner this client's token names under its
         declared ``name``, and learn its hub-minted id from the reply. Idempotent, and refreshes the
         runner's liveness at the hub. Every optional field, ``subscriptions`` included,
         is unconditionally overwritten each call; ``subscriptions`` is always a list, never omitted.
         ``gates`` is the runner's own configured human-gate node names — reported for display, never
-        read back to enforce. A refused token raises :class:`HubClientError`."""
+        read back to enforce. ``projects`` is the projects the runner serves, by id or slug: sent as
+        given, ``None`` as null — never ``[]`` — so the hub keeps the declaration it holds, where
+        ``()`` declares that the runner serves none. A refused token raises :class:`HubClientError`."""
         ...
 
     def fetch_runner_paused(self, runner_id: str) -> bool:
@@ -435,13 +471,22 @@ class ITokenIdentityReader(Protocol):
 
 
 class IHubRunnerAdmin(Protocol):
-    """The one runner-side call made under an operator's credential rather than a runner token:
-    adding a runner. Its credential is the operator's signed-in session for the hub when one is
-    held, and none otherwise — never a runner token. A hub without sign-in admits no credential;
-    any other answers 401."""
+    """The runner-side calls made under an operator's credential rather than a runner token: adding
+    a runner, and listing the tenants the operator may add one in. Its credential is the operator's
+    signed-in session for the hub when one is held, and none otherwise — never a runner token. A hub
+    without sign-in admits no credential; any other answers 401."""
 
-    def add_runner(self, name: str) -> IssuedIdentity:
-        """``POST /api/runners`` — add a runner under the initial ``name``; the hub mints its id and
-        bearer token together. A refusal raises :class:`RunnerAddRefused`; an unreachable hub or a
-        5xx raises :class:`HubClientError`, and the hub has added nothing the caller can use."""
+    def add_runner(
+        self, name: str, *, tenant_id: str | None = None, projects: tuple[str, ...] | None = None
+    ) -> IssuedIdentity:
+        """``POST /api/runners`` — add a runner under the initial ``name`` in the tenant ``tenant_id``
+        names, or, with none named, the one the hub resolves for the operator, serving the projects
+        ``projects`` names by id or slug — or, with ``None``, the tenant's only project; the hub mints
+        its id and bearer token together. A refusal raises :class:`RunnerAddRefused`; an unreachable
+        hub or a 5xx raises :class:`HubClientError`, and the hub has added nothing the caller can use."""
+        ...
+
+    def tenants(self) -> list[OperatorTenant]:
+        """``GET /api/me`` — every tenant the operator may enter, ordered by id; empty from a hub
+        that predates tenants. Any failure raises :class:`HubClientError`."""
         ...

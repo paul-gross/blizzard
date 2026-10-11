@@ -1,8 +1,8 @@
 """The store-read-index gate — runner and hub halves.
 
 Drives every read method of every runner/hub ``IRead*`` Protocol against a real, migrated-to-head sqlite store and
-fails if any plans a scan or automatic covering index over a table not on ``tests/store_scan_allowlist.py``'s
-allow-lists, coverage enforced by reflection equality against ``tests/store_read_census.py``'s census/exemptions.
+fails if any reads a table whole — a scan, an automatic index, an ordered walk of a named index, or a search on the
+tenant prefix alone — where ``tests/store_scan_allowlist.py``'s allow-lists name no reason for it, coverage enforced by reflection equality against ``tests/store_read_census.py``'s census/exemptions.
 ``tests/test_runner_store_indexes.py``/``tests/test_chunk_fact_table_indexes.py`` keep their own narrower purpose."""
 
 from __future__ import annotations
@@ -22,7 +22,9 @@ import sqlalchemy as sa
 import blizzard.hub as hub_pkg
 import blizzard.runner as runner_pkg
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
+from blizzard.hub.domain.observability.egress.repository import IReadEgressEvents, IReadUsageCorpus
+from blizzard.hub.domain.observability.tracing.repository import IReadStepCorpus
+from blizzard.hub.domain.observability.transcripts import IReadTranscriptSegments
 from blizzard.hub.store import schema as hub_schema
 from blizzard.runner.store import schema as runner_schema
 from tests import support
@@ -42,8 +44,11 @@ from tests.store_scan_allowlist import (
     HUB_ALLOWED_SCANS,
     ROW_THRESHOLD,
     RUNNER_ALLOWED_SCANS,
+    Allowance,
+    IndexWalkAllowance,
     MethodScopedAllowance,
     TableWideAllowance,
+    walks_a_named_index,
 )
 
 pytestmark = pytest.mark.component
@@ -96,10 +101,17 @@ def _offending_scans_by_method(
     return offenders
 
 
-def _covered(
-    allowed: list[TableWideAllowance | MethodScopedAllowance], protocol: type, method: str, table: str
-) -> bool:
+def _covered(allowed: list[Allowance], protocol: type, method: str, table: str, detail: str) -> bool:
     for entry in allowed:
+        if isinstance(entry, IndexWalkAllowance):
+            if (
+                entry.protocol is protocol
+                and entry.method == method
+                and table in entry.tables
+                and walks_a_named_index(detail)
+            ):
+                return True
+            continue
         if isinstance(entry, TableWideAllowance) and entry.table == table:
             return True
         if (
@@ -148,7 +160,7 @@ class _StoreCase:
     world: RunnerWorld | HubWorld
     schema_module: ModuleType
     census: dict[tuple[type, str], Any]
-    allowed_scans: list[TableWideAllowance | MethodScopedAllowance]
+    allowed_scans: list[Allowance]
 
 
 @pytest.fixture(params=["runner", "hub"])
@@ -173,18 +185,28 @@ def test_allow_list_hygiene(store_case: _StoreCase) -> None:
     offenders = _offending_scans_by_method(store_case.world.engine, store_case.world, store_case.census, schema_tables)
     offending_tables = {table for _protocol, _method, table, _row in offenders}
     offending_method_tables = {(protocol, method, table) for protocol, method, table, _row in offenders}
+    walking_method_tables = {
+        (protocol, method, table) for protocol, method, table, row in offenders if walks_a_named_index(row.detail)
+    }
 
     for entry in store_case.allowed_scans:
+        if isinstance(entry, IndexWalkAllowance):
+            for table in entry.tables:
+                assert table in schema_tables, f"{entry} names a table absent from schema.metadata: {table!r}"
+                assert (entry.protocol, entry.method, table) in walking_method_tables, (
+                    f"{entry} is stale — {entry.protocol.__name__}.{entry.method} no longer walks {table!r} "
+                    "through a named index"
+                )
+            continue
         assert entry.row_bound <= ROW_THRESHOLD, f"{entry} declares a row bound above ROW_THRESHOLD={ROW_THRESHOLD}"
         assert entry.table in schema_tables, f"{entry} names a table absent from schema.metadata: {entry.table!r}"
         if isinstance(entry, TableWideAllowance):
             assert entry.table in offending_tables, (
-                f"{entry} is stale — no captured {store_case.label} read scans/auto-indexes {entry.table!r} any more"
+                f"{entry} is stale — no captured {store_case.label} read reads {entry.table!r} whole any more"
             )
         else:
             assert (entry.protocol, entry.method, entry.table) in offending_method_tables, (
-                f"{entry} is stale — {entry.protocol.__name__}.{entry.method} no longer scans/auto-indexes "
-                f"{entry.table!r}"
+                f"{entry} is stale — {entry.protocol.__name__}.{entry.method} no longer reads {entry.table!r}"
             )
 
 
@@ -213,10 +235,10 @@ def test_runner_read_methods_never_scan_an_unallowed_table(runner_world: RunnerW
     uncovered = [
         (protocol.__name__, method, table, str(row))
         for protocol, method, table, row in offenders
-        if not _covered(RUNNER_ALLOWED_SCANS, protocol, method, table)
+        if not _covered(RUNNER_ALLOWED_SCANS, protocol, method, table, row.detail)
     ]
     assert not uncovered, (
-        "an offending scan/automatic-index is not covered by tests/store_scan_allowlist.py's "
+        "an offending whole-table read is not covered by tests/store_scan_allowlist.py's "
         f"RUNNER_ALLOWED_SCANS: {uncovered}"
     )
 
@@ -249,41 +271,100 @@ def test_hub_read_methods_never_scan_an_unallowed_table(hub_world: HubWorld) -> 
     uncovered = [
         (protocol.__name__, method, table, str(row))
         for protocol, method, table, row in offenders
-        if not _covered(HUB_ALLOWED_SCANS, protocol, method, table)
+        if not _covered(HUB_ALLOWED_SCANS, protocol, method, table, row.detail)
     ]
     assert not uncovered, (
-        "an offending scan/automatic-index is not covered by tests/store_scan_allowlist.py's "
+        "an offending whole-table read is not covered by tests/store_scan_allowlist.py's "
         f"HUB_ALLOWED_SCANS: {uncovered}"
     )
 
 
-def test_hub_mutation_dropping_an_index_the_census_exercises_is_caught_by_the_classifier(
-    tmp_path_factory: pytest.TempPathFactory,
+# Hub-wide time-cursor indexes kept beside a tenant-led one because a hub-scoped read pages that table across
+# tenants, each with the census read that pages it. The classifier sees a lost cursor index only when the fallback
+# reads the table whole; a fallback that still seeks another index's range does not, so each read is pinned to its own.
+_HUB_WIDE_CURSOR_INDEXES: dict[str, tuple[str, tuple[type, str]]] = {
+    "ix_transitions_recorded_at_transition_id": ("transitions", (IReadStepCorpus, "closing_candidates")),
+    "ix_decisions_submitted_at_decision_id": ("decisions", (IReadStepCorpus, "closing_candidates")),
+    "ix_chunk_migrations_recorded_at_migration_id": ("chunk_migrations", (IReadStepCorpus, "closing_candidates")),
+    "ix_escalations_recorded_at_id": ("escalations", (IReadStepCorpus, "closing_candidates")),
+    "ix_chunk_restarts_recorded_at_id": ("chunk_restarts", (IReadStepCorpus, "closing_candidates")),
+    "ix_route_released_released_at_id": ("route_released", (IReadStepCorpus, "closing_candidates")),
+    "ix_chunk_stopped_stopped_at_id": ("chunk_stopped", (IReadStepCorpus, "closing_candidates")),
+    "ix_chunk_completed_completed_at_id": ("chunk_completed", (IReadStepCorpus, "closing_candidates")),
+    "ix_epoch_owners_recorded_at_id": ("epoch_owners", (IReadStepCorpus, "closing_candidates")),
+    "ix_usage_facts_recorded_at_id": ("usage_facts", (IReadUsageCorpus, "usage_after")),
+    "ix_transcript_event_drops_egress_order": ("transcript_event_drops", (IReadEgressEvents, "drops_after")),
+    "ix_transcript_event_derivations_egress_order": (
+        "transcript_event_derivations",
+        (IReadEgressEvents, "markers_after"),
+    ),
+    "ix_lease_facts_minted_at": ("lease_facts", (IReadEgressEvents, "epochs_minted_between")),
+}
+
+
+@pytest.mark.parametrize("index_name", sorted(_HUB_WIDE_CURSOR_INDEXES))
+def test_each_hub_wide_cursor_index_serves_the_read_that_pages_across_tenants(
+    hub_world: HubWorld, index_name: str
 ) -> None:
-    """The gate's mutation self-test: drops ``ix_artifacts_chunk_id_node_id_epoch`` on a dedicated migrated hub
-    database and asserts ``support.offending_index_scans`` reports ``artifacts`` for the read it serves —
-    load-bearing proof that weakening ``support._offending_table``'s bare-``SCAN``/``AUTOMATIC`` match fails here."""
+    """Dropping or renaming the index, or the read ceasing to range over it, fails here."""
+    table, (protocol, method) = _HUB_WIDE_CURSOR_INDEXES[index_name]
+    with support.capture_statements(hub_world.engine) as statements:
+        HUB_CENSUS[(protocol, method)](hub_world)
+    details = [
+        row.detail
+        for statement, parameters in statements
+        if statement.lstrip().upper().startswith("SELECT")
+        for row in support.explain_query_plan(hub_world.engine, statement, parameters)
+    ]
+    assert any(detail.startswith(f"SEARCH {table} USING INDEX {index_name} (") for detail in details), (
+        f"{protocol.__name__}.{method} no longer searches {table} through {index_name}; its plan was {details}"
+    )
+
+
+# The gate's mutation self-test, one case per offense the classifier must see: a hub-scoped cursor read falling back
+# to a bare scan (transitions) or to an ordered walk of another named index (decisions), and a scoped per-chunk read
+# falling back to a search on the tenant prefix alone (transcript_segments).
+_MUTATIONS: dict[str, tuple[str, tuple[type, str]]] = {
+    "ix_transitions_recorded_at_transition_id": ("transitions", (IReadStepCorpus, "closing_candidates")),
+    "ix_decisions_submitted_at_decision_id": ("decisions", (IReadStepCorpus, "closing_candidates")),
+    "ix_transcript_segments_tenant_chunk_id": ("transcript_segments", (IReadTranscriptSegments, "segments_for_chunk")),
+}
+
+
+@pytest.mark.parametrize("index_name", sorted(_MUTATIONS))
+def test_hub_mutation_dropping_an_index_the_census_exercises_is_caught_by_the_classifier(
+    tmp_path_factory: pytest.TempPathFactory, index_name: str
+) -> None:
+    """Drops ``index_name`` on a dedicated migrated hub database and asserts ``support.offending_index_scans``
+    reports its table for the read it serves — load-bearing proof that weakening any branch of
+    ``support._offending_table`` (bare scan, named-index walk, tenant-prefix-only search) fails here."""
+    table, (protocol, method) = _MUTATIONS[index_name]
     root = tmp_path_factory.mktemp("hub-store-gate-mutation")
     world = build_hub_world(root)
     try:
-        index_name = "ix_artifacts_chunk_id_node_id_epoch"
-
         with world.engine.begin() as conn:
-            indexes_before = {row[1] for row in conn.exec_driver_sql("PRAGMA index_list(artifacts)").all()}
-        assert index_name in indexes_before, f"{index_name} no longer exists on artifacts — pick another real hub index"
-
-        recipe = HUB_CENSUS[(IReadChunkArtifactsRepository, "load_artifacts")]
-        with world.engine.begin() as conn:
-            conn.exec_driver_sql(f"DROP INDEX {index_name}")
+            indexes_before = {row[1] for row in conn.exec_driver_sql(f"PRAGMA index_list({table})").all()}
+        assert index_name in indexes_before, f"{index_name} no longer exists on {table} — pick another real hub index"
 
         tables = set(hub_schema.metadata.tables.keys())
+        recipe = HUB_CENSUS[(protocol, method)]
+        with support.capture_statements(world.engine) as statements:
+            recipe(world)
+        assert table not in {t for t, _row in support.offending_index_scans(world.engine, statements, tables)}, (
+            f"{protocol.__name__}.{method} already reads {table} whole with {index_name} in place"
+        )
+
+        with world.engine.begin() as conn:
+            conn.exec_driver_sql(f"DROP INDEX {index_name}")
+        # Every other pooled connection still holds the pre-drop schema and its cached prepared statements, and sqlite
+        # plans an ``EXPLAIN QUERY PLAN`` from those without re-reading the schema — so the pool starts over.
+        world.engine.dispose()
         with support.capture_statements(world.engine) as statements:
             recipe(world)
         offenders = support.offending_index_scans(world.engine, statements, tables)
-        offending_tables = {table for table, _row in offenders}
-        assert "artifacts" in offending_tables, (
-            f"dropping {index_name} did not surface artifacts as an offending scan — "
-            f"load_artifacts's own recipe no longer exercises that index; offenders were {offenders}"
+        assert table in {t for t, _row in offenders}, (
+            f"dropping {index_name} did not surface {table} as an offending read — "
+            f"{protocol.__name__}.{method}'s recipe no longer exercises that index; offenders were {offenders}"
         )
     finally:
         world.hub.client.close()

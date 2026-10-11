@@ -10,7 +10,6 @@ from __future__ import annotations
 import base64
 from datetime import datetime
 
-from sqlalchemy import insert, select, update
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 
@@ -29,11 +28,11 @@ from blizzard.hub.domain.config.secrets import (
     SecretRotationConflict,
     require_unreferenced,
 )
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.config_change_store import append_change
 from blizzard.hub.store.internal.newest_fact import newest_retired_select
 from blizzard.hub.store.internal.secret_referrers import active_referrers
 from blizzard.hub.store.schema import secret_lifecycle_facts, secrets
+from blizzard.hub.store.scoped import ScopedConnections, statements_of
 
 _METADATA = (
     secrets.c.name,
@@ -47,10 +46,11 @@ _METADATA = (
 def secret_unavailable(conn: Connection, name: str) -> bool | None:
     """Why a configured record may not reference ``name``: ``False`` when no such secret
     exists, ``True`` when it is retired, ``None`` when it is usable."""
-    if conn.execute(select(secrets.c.name).where(secrets.c.name == name)).first() is None:
+    if conn.execute(statements_of(conn).select(secrets, secrets.c.name).where(secrets.c.name == name)).first() is None:
         return False
     newest = conn.execute(
-        select(secret_lifecycle_facts.c.retired)
+        statements_of(conn)
+        .select(secret_lifecycle_facts, secret_lifecycle_facts.c.retired)
         .where(secret_lifecycle_facts.c.name == name)
         .order_by(secret_lifecycle_facts.c.id.desc())
         .limit(1)
@@ -63,7 +63,9 @@ def insert_secret(
 ) -> None:
     """The create body at revision 1, inside the caller's transaction; a taken name raises :class:`IntegrityError`."""
     conn.execute(
-        insert(secrets).values(
+        statements_of(conn)
+        .insert(secrets)
+        .values(
             name=name,
             **_sealed_columns(sealed),
             revision=1,
@@ -78,7 +80,7 @@ def insert_secret(
 class SecretStore:
     """Read-write secret adapter over the hub store."""
 
-    def __init__(self, store: HubStoreConnections) -> None:
+    def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
     def create(self, name: str, *, sealed: SealedValue, at: datetime, by: str, change: ConfigChange) -> SecretMetadata:
@@ -94,11 +96,11 @@ class SecretStore:
     ) -> SecretMetadata:
         with self._store.write("replace") as conn:
             moved = conn.execute(
-                update(secrets)
+                self._store.update(secrets)
                 .where(secrets.c.name == name, secrets.c.revision == from_revision)
                 .values(**_sealed_columns(sealed), revision=from_revision + 1, replaced_at=at, replaced_by=by)
             ).rowcount
-            row = conn.execute(select(*_METADATA).where(secrets.c.name == name)).one()
+            row = conn.execute(self._store.select(secrets, *_METADATA).where(secrets.c.name == name)).one()
             if moved == 1:
                 append_change(conn, change)
         if moved != 1:
@@ -107,7 +109,7 @@ class SecretStore:
 
     def get(self, name: str) -> SecretMetadata | None:
         with self._store.read("get") as conn:
-            row = conn.execute(select(*_METADATA).where(secrets.c.name == name)).one_or_none()
+            row = conn.execute(self._store.select(secrets, *_METADATA).where(secrets.c.name == name)).one_or_none()
         return self._of(row) if row is not None else None
 
     def get_many(self, names: list[str]) -> dict[str, SecretMetadata]:
@@ -116,19 +118,19 @@ class SecretStore:
         found: dict[str, SecretMetadata] = {}
         with self._store.read("get_many") as conn:
             for batch in id_batches(names):
-                rows = conn.execute(select(*_METADATA).where(secrets.c.name.in_(batch))).all()
+                rows = conn.execute(self._store.select(secrets, *_METADATA).where(secrets.c.name.in_(batch))).all()
                 found.update({row.name: self._of(row) for row in rows})
         return found
 
     def list_all(self) -> list[SecretMetadata]:
         with self._store.read("list_all") as conn:
-            rows = conn.execute(select(*_METADATA).order_by(secrets.c.name)).all()
+            rows = conn.execute(self._store.select(secrets, *_METADATA).order_by(secrets.c.name)).all()
         return [self._of(row) for row in rows]
 
     def is_retired(self, name: str) -> bool:
         with self._store.read("is_retired") as conn:
             row = conn.execute(
-                select(secret_lifecycle_facts.c.retired)
+                self._store.select(secret_lifecycle_facts, secret_lifecycle_facts.c.retired)
                 .where(secret_lifecycle_facts.c.name == name)
                 .order_by(secret_lifecycle_facts.c.id.desc())
                 .limit(1)
@@ -138,18 +140,20 @@ class SecretStore:
     def retired_names(self) -> set[str]:
         with self._store.read("retired_names") as conn:
             return set(
-                conn.execute(newest_retired_select(secret_lifecycle_facts, secret_lifecycle_facts.c.name)).scalars()
+                conn.execute(
+                    newest_retired_select(self._store, secret_lifecycle_facts, secret_lifecycle_facts.c.name)
+                ).scalars()
             )
 
     def key_ids_in_use(self) -> set[str]:
         with self._store.read("key_ids_in_use") as conn:
-            return set(conn.execute(select(secrets.c.key_id).distinct()).scalars())
+            return set(conn.execute(self._store.select(secrets, secrets.c.key_id).distinct()).scalars())
 
     def get_sealed(self, name: str) -> SealedSecret | None:
         with self._store.read("get_sealed") as conn:
             row = conn.execute(
-                select(
-                    secrets.c.name, secrets.c.revision, secrets.c.key_id, secrets.c.ciphertext, secrets.c.nonce
+                self._store.select(
+                    secrets, secrets.c.name, secrets.c.revision, secrets.c.key_id, secrets.c.ciphertext, secrets.c.nonce
                 ).where(secrets.c.name == name)
             ).one_or_none()
         return self._sealed_of(row) if row is not None else None
@@ -169,8 +173,8 @@ class SecretStore:
     def list_sealed(self) -> list[SealedSecret]:
         with self._store.read("list_sealed") as conn:
             rows = conn.execute(
-                select(
-                    secrets.c.name, secrets.c.revision, secrets.c.key_id, secrets.c.ciphertext, secrets.c.nonce
+                self._store.select(
+                    secrets, secrets.c.name, secrets.c.revision, secrets.c.key_id, secrets.c.ciphertext, secrets.c.nonce
                 ).order_by(secrets.c.name)
             ).all()
         return [self._sealed_of(row) for row in rows]
@@ -179,7 +183,7 @@ class SecretStore:
         with self._store.write("reseal", expect=(SecretRotationConflict,)) as conn:
             for change in changes:
                 moved = conn.execute(
-                    update(secrets)
+                    self._store.update(secrets)
                     .where(
                         secrets.c.name == change.name,
                         secrets.c.revision == change.revision,
@@ -194,7 +198,9 @@ class SecretStore:
         with self._store.write("record_lifecycle") as conn:
             if retired:
                 require_unreferenced(name, active_referrers(conn, [name])[name])
-            conn.execute(insert(secret_lifecycle_facts).values(name=name, retired=retired, set_at=at, set_by=by))
+            conn.execute(
+                self._store.insert(secret_lifecycle_facts).values(name=name, retired=retired, set_at=at, set_by=by)
+            )
             append_change(conn, change)
 
     @staticmethod

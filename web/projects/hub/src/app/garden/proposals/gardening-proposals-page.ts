@@ -20,6 +20,7 @@ import {
 } from './gardening-proposals-page.model';
 
 import { injectChildRouteParam, injectQueryFilters } from '../../core/route-state';
+import { ProjectLens } from '../../core/project-lens';
 
 /**
  * The `/gardening/proposals` sub-tab
@@ -56,6 +57,8 @@ import { injectChildRouteParam, injectQueryFilters } from '../../core/route-stat
   },
 })
 export class GardeningProposalsPage {
+  private readonly lens = inject(ProjectLens);
+
   private readonly router = inject(Router);
   private readonly viewport = inject(ViewportService);
   private readonly url = injectQueryFilters();
@@ -151,11 +154,11 @@ export class GardeningProposalsPage {
   );
 
   protected select(proposalId: string): void {
-    void this.router.navigate(['/gardening', 'proposals', proposalId], { queryParamsHandling: 'preserve' });
+    void this.router.navigate(this.lens.link(['/gardening', 'proposals', proposalId]), { queryParamsHandling: 'preserve' });
   }
 
   protected onBack(): void {
-    void this.router.navigate(['/gardening', 'proposals'], { queryParamsHandling: 'preserve' });
+    void this.router.navigate(this.lens.link(['/gardening', 'proposals']), { queryParamsHandling: 'preserve' });
   }
 
   constructor() {
@@ -187,7 +190,7 @@ export class GardeningProposalsPage {
     if (routed !== null && rows.some((p) => p.proposal_id === routed)) return;
     if (this.mobile()) {
       if (routed === null) return;
-      void this.router.navigate(['/gardening', 'proposals'], {
+      void this.router.navigate(this.lens.link(['/gardening', 'proposals']), {
         replaceUrl: true,
         queryParamsHandling: 'preserve',
       });
@@ -196,7 +199,7 @@ export class GardeningProposalsPage {
     const first = rows[0]?.proposal_id ?? null;
     if (routed === null && first === null) return;
     void this.router.navigate(
-      first === null ? ['/gardening', 'proposals'] : ['/gardening', 'proposals', first],
+      this.lens.link(first === null ? ['/gardening', 'proposals'] : ['/gardening', 'proposals', first]),
       { replaceUrl: true, queryParamsHandling: 'preserve' },
     );
   }

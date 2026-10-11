@@ -27,6 +27,7 @@ from blizzard.runner.config import RunnerConfig
 from tests.e2e.test_acceptance_loop import _await_http, _free_port, _terminate
 from tests.runner_join import RUNNER_BIN, adopt_runner, runner_spawn_env
 from tests.service.support import add_runner, poll_until, require_stub_idp, service_gate, stub_idp
+from tests.service.test_auth_login_service import invite
 from tests.support import daemon_log_sink
 
 pytestmark = [pytest.mark.service, service_gate]
@@ -174,6 +175,7 @@ def test_the_wire_leg_ends_in_an_unlocked_runner_route(tmp_path: Path) -> None:
             client_id="cid",
             client_secret_env=_SECRET_ENV,
             issuer=f"http://127.0.0.1:{idp_port}",
+            emails_authoritative=True,
         )
         with _oauth_hub(tmp_path / "hub", hub_port, providers=(provider,), superuser="svc-user@example.com") as hub:
             hub.get("/api/auth/oidc-svc/authorize", follow_redirects=True)
@@ -210,6 +212,7 @@ def test_key_rotation_is_picked_up_by_a_live_runner_with_no_restart(tmp_path: Pa
             client_id="cid",
             client_secret_env=_SECRET_ENV,
             issuer=f"http://127.0.0.1:{idp_port}",
+            emails_authoritative=True,
         )
         with _oauth_hub(tmp_path / "hub", hub_port, providers=(provider,), superuser="svc-admin@example.com") as hub:
             hub.get("/api/auth/oidc-svc/authorize", follow_redirects=True)
@@ -254,6 +257,7 @@ def test_a_two_provider_bounce_resumes_through_the_login_chooser(tmp_path: Path)
             client_id="cid",
             client_secret_env=_SECRET_ENV,
             issuer=f"http://127.0.0.1:{idp_a_port}",
+            emails_authoritative=True,
         )
         provider_b = OAuthProviderConfig(
             name="oidc-b",
@@ -262,6 +266,7 @@ def test_a_two_provider_bounce_resumes_through_the_login_chooser(tmp_path: Path)
             client_id="cid",
             client_secret_env=_SECRET_ENV,
             issuer=f"http://127.0.0.1:{idp_b_port}",
+            emails_authoritative=True,
         )
         with (
             _oauth_hub(tmp_path / "hub", hub_port, providers=(provider_a, provider_b), superuser="user-a@example.com"),
@@ -273,6 +278,12 @@ def test_a_two_provider_bounce_resumes_through_the_login_chooser(tmp_path: Path)
             assert login_resp.status_code in (302, 307)
             authorize_url = login_resp.headers["location"]
             bounce_state = login_resp.cookies[runner.names.bounce_state]
+
+            # User B joined through an invitation earlier; the bounce signs in a person the hub knows.
+            with httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=15.0) as joining:
+                token = invite(tmp_path / "hub", "user-b@example.com")
+                joining.get(f"/api/auth/oidc-b/authorize?invite={token}", follow_redirects=True)
+                assert "bz_session" in joining.cookies
 
             # 2. A fresh browser hits authorize. Two providers means no single dance to
             #    auto-run, so it is handed to the /login chooser as return_to.

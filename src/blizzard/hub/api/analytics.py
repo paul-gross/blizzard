@@ -20,9 +20,9 @@ from blizzard.auth_core import Permission
 from blizzard.foundation.roles import dto
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
-from blizzard.hub.api.auth_session import require
-from blizzard.hub.api.deps import get_services
-from blizzard.hub.composition import HubServices
+from blizzard.hub.api.auth_session import require, tenant_bound
+from blizzard.hub.api.deps import Services
+from blizzard.hub.api.project_params import QueryProject
 from blizzard.hub.domain.kernel.pagination import MalformedCursor
 from blizzard.hub.domain.observability.analytics.derivation import ReDeriveScope, ReDeriveScopeRefused
 from blizzard.hub.domain.observability.analytics.extraction import read_version
@@ -42,6 +42,7 @@ from blizzard.hub.domain.observability.analytics.queries import (
     QueriedEvent,
     fold_counts_by_name,
 )
+from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.wire.analytics import (
     AnalyticsChunkSpendResponse,
     AnalyticsChunkSpendView,
@@ -59,14 +60,16 @@ from blizzard.wire.analytics import (
     ReDeriveResponse,
 )
 
-router = APIRouter(prefix="/api/analytics", tags=["analytics"], dependencies=[Depends(reject_runner_principal)])
+router = APIRouter(
+    prefix="/api/analytics", tags=["analytics"], dependencies=[Depends(reject_runner_principal), Depends(tenant_bound)]
+)
 
 #: Default internal page size for the NDJSON stream — never the whole result set at once.
 _STREAM_BATCH_SIZE = 500
 
 
 @router.post("/re-derive", response_model=ReDeriveResponse, dependencies=[Depends(require(Permission.ANALYTICS_ADMIN))])
-def re_derive(request: ReDeriveRequest, services: Annotated[HubServices, Depends(get_services)]) -> ReDeriveResponse:
+def re_derive(request: ReDeriveRequest, services: Services) -> ReDeriveResponse:
     """A segment scope forces that one visible segment regardless of its candidacy; a chunk
     or all scope derives up to ``limit`` of that scope's current candidates and reports how
     many remain, so the caller drives to convergence with repeated calls."""
@@ -95,6 +98,7 @@ class NormalizedScope:
     source: str | None
     since: datetime | None
     until: datetime | None
+    project: ProjectId | None = None
 
 
 @dto
@@ -109,6 +113,8 @@ class ScopeFilters:
     source: str | None
     since: datetime | None
     until: datetime | None
+    # The project lens: a read names one project or, with ``None``, covers the whole tenant.
+    project: ProjectId | None = None
 
     @classmethod
     def of(
@@ -117,8 +123,9 @@ class ScopeFilters:
         source: Annotated[str | None, Query()] = None,
         since: Annotated[datetime | None, Query()] = None,
         until: Annotated[datetime | None, Query()] = None,
+        project: QueryProject = None,
     ) -> ScopeFilters:
-        return cls(graph_id, source, since, until)
+        return cls(graph_id, source, since, until, project)
 
     def normalized(self) -> NormalizedScope:
         return NormalizedScope(
@@ -126,6 +133,7 @@ class ScopeFilters:
             source=self.source,
             since=as_utc(self.since) if self.since is not None else None,
             until=as_utc(self.until) if self.until is not None else None,
+            project=self.project,
         )
 
 
@@ -136,7 +144,7 @@ def operational_criteria(scope: ScopeFilters) -> OperationalCriteria:
     Shared with the fleet router's own analytics reads, not this
     module's alone."""
     n = scope.normalized()
-    return OperationalCriteria(graph_id=n.graph_id, source=n.source, since=n.since, until=n.until)
+    return OperationalCriteria(graph_id=n.graph_id, source=n.source, project=n.project, since=n.since, until=n.until)
 
 
 @dto
@@ -164,9 +172,15 @@ class EventScopeFilters:
         harness_version: Annotated[str | None, Query()] = None,
         model: Annotated[str | None, Query()] = None,
         effort: Annotated[str | None, Query()] = None,
+        project: QueryProject = None,
     ) -> EventScopeFilters:
         return cls(
-            ScopeFilters(graph_id, source, since, until), extractor_version, harness_id, harness_version, model, effort
+            ScopeFilters(graph_id, source, since, until, project),
+            extractor_version,
+            harness_id,
+            harness_version,
+            model,
+            effort,
         )
 
     @property
@@ -181,6 +195,7 @@ class EventScopeFilters:
             extractor_version=read_version(self.extractor_version),
             graph_id=normalized.graph_id,
             source=normalized.source,
+            project=normalized.project,
             since=normalized.since,
             until=normalized.until,
             harness_id=self.harness_id,
@@ -282,7 +297,7 @@ def counts_response(rows: list[KeyedCount]) -> AnalyticsCountsResponse:
     "/events", response_model=AnalyticsEventsResponse, dependencies=[Depends(require(Permission.TRANSCRIPT_READ))]
 )
 def list_events(
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     filters: Annotated[EventFilters, Depends(EventFilters.of)],
     cursor: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=1000)] = 200,
@@ -306,7 +321,7 @@ def list_events(
     responses={200: {"content": {"application/x-ndjson": {"schema": {"type": "string"}}}}},
 )
 def stream_events(
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     filters: Annotated[EventFilters, Depends(EventFilters.of)],
 ) -> StreamingResponse:
     """Every event matching the same filters as the paginated events endpoint, streamed
@@ -322,7 +337,7 @@ def stream_events(
     "/counts/files", response_model=AnalyticsCountsResponse, dependencies=[Depends(require(Permission.TRANSCRIPT_READ))]
 )
 def counts_by_file(
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     scope: Annotated[EventScopeFilters, Depends(EventScopeFilters.of)],
     tool: Annotated[str | None, Query()] = None,
     subject_prefix: Annotated[str | None, Query()] = None,
@@ -340,7 +355,7 @@ def counts_by_file(
     dependencies=[Depends(require(Permission.TRANSCRIPT_READ))],
 )
 def counts_by_skill(
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     scope: Annotated[EventScopeFilters, Depends(EventScopeFilters.of)],
     node_id: Annotated[str | None, Query()] = None,
 ) -> AnalyticsCountsResponse:
@@ -357,7 +372,7 @@ def counts_by_skill(
     dependencies=[Depends(require(Permission.TRANSCRIPT_READ))],
 )
 def counts_by_agent_type(
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     filters: Annotated[EventFilters, Depends(EventFilters.of)],
 ) -> AnalyticsCountsResponse:
     """Occurrence counts by the enclosing sidechain's agent type, across every kind
@@ -371,7 +386,7 @@ def counts_by_agent_type(
     "/counts/nodes", response_model=AnalyticsCountsResponse, dependencies=[Depends(require(Permission.TRANSCRIPT_READ))]
 )
 def counts_by_node(
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     scope: Annotated[EventScopeFilters, Depends(EventScopeFilters.of)],
     kind: Annotated[str | None, Query()] = None,
     tool: Annotated[str | None, Query()] = None,
@@ -406,7 +421,7 @@ def _durations_response(stats: list[DurationStats]) -> AnalyticsDurationsRespons
     dependencies=[Depends(require(Permission.TRANSCRIPT_READ))],
 )
 def durations_by_node(
-    services: Annotated[HubServices, Depends(get_services)], scope: Annotated[ScopeFilters, Depends(ScopeFilters.of)]
+    services: Services, scope: Annotated[ScopeFilters, Depends(ScopeFilters.of)]
 ) -> AnalyticsDurationsResponse:
     """Completed-step duration rollups grouped by node — see
     ``AnalyticsDurationView`` for the wall-clock semantics."""
@@ -419,7 +434,7 @@ def durations_by_node(
     dependencies=[Depends(require(Permission.TRANSCRIPT_READ))],
 )
 def durations_by_graph(
-    services: Annotated[HubServices, Depends(get_services)], scope: Annotated[ScopeFilters, Depends(ScopeFilters.of)]
+    services: Services, scope: Annotated[ScopeFilters, Depends(ScopeFilters.of)]
 ) -> AnalyticsDurationsResponse:
     """The same rollup grouped by the graph the step happened in — the transition's
     own ``graph_id``, never the chunk's current pin."""
@@ -462,7 +477,7 @@ def named_spend(stats: list[SpendStats], by_name: bool) -> list[SpendStats]:
     "/spend/nodes", response_model=AnalyticsSpendResponse, dependencies=[Depends(require(Permission.TRANSCRIPT_READ))]
 )
 def spend_by_node(
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     scope: Annotated[ScopeFilters, Depends(ScopeFilters.of)],
     by_name: Annotated[bool, Query()] = False,
 ) -> AnalyticsSpendResponse:
@@ -478,7 +493,7 @@ def spend_by_node(
     "/spend/graphs", response_model=AnalyticsSpendResponse, dependencies=[Depends(require(Permission.TRANSCRIPT_READ))]
 )
 def spend_by_graph(
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     scope: Annotated[ScopeFilters, Depends(ScopeFilters.of)],
     by_name: Annotated[bool, Query()] = False,
 ) -> AnalyticsSpendResponse:
@@ -528,7 +543,7 @@ def chunk_spend_ndjson_lines(
     dependencies=[Depends(require(Permission.TRANSCRIPT_READ))],
 )
 def spend_by_chunk(
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     scope: Annotated[ScopeFilters, Depends(ScopeFilters.of)],
     cursor: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=1000)] = 200,
@@ -552,7 +567,7 @@ def spend_by_chunk(
     responses={200: {"content": {"application/x-ndjson": {"schema": {"type": "string"}}}}},
 )
 def stream_chunk_spend(
-    services: Annotated[HubServices, Depends(get_services)], scope: Annotated[ScopeFilters, Depends(ScopeFilters.of)]
+    services: Services, scope: Annotated[ScopeFilters, Depends(ScopeFilters.of)]
 ) -> StreamingResponse:
     """Every chunk's spend rollup matching the same filters as the paginated route,
     streamed one JSON object per line in the same order."""
@@ -577,7 +592,7 @@ def _outcomes_response(stats: list[OutcomeStats]) -> AnalyticsOutcomesResponse:
     dependencies=[Depends(require(Permission.TRANSCRIPT_READ))],
 )
 def outcomes_by_node(
-    services: Annotated[HubServices, Depends(get_services)], scope: Annotated[ScopeFilters, Depends(ScopeFilters.of)]
+    services: Services, scope: Annotated[ScopeFilters, Depends(ScopeFilters.of)]
 ) -> AnalyticsOutcomesResponse:
     """Judged-choice distribution and attempt-failure counts grouped by node —
     a judged failure edge and a retry-consuming attempt failure reported separately,

@@ -107,6 +107,56 @@ def test_oauth_provider_api_base_defaults_to_none(tmp_path: Path) -> None:
     assert config.auth.oauth_providers[0].api_base is None
 
 
+_OIDC_ENTRY = (
+    "[[auth.oauth.provider]]\n"
+    'name = "oidc-co"\n'
+    'type = "oidc"\n'
+    'display_name = "Example SSO"\n'
+    'client_id = "cid"\n'
+    'client_secret_env = "BZ_OAUTH_OIDC_SECRET"\n'
+    'issuer = "https://issuer.example.com"\n'
+)
+
+
+def test_oauth_provider_emails_authoritative_defaults_to_false(tmp_path: Path) -> None:
+    root = tmp_path / "hub"
+    _write(root, _OIDC_ENTRY)
+    config = HubConfig.load(root)
+    assert config.auth.oauth_providers[0].emails_authoritative is False
+
+
+def test_an_oidc_provider_may_be_configured_authoritative_for_its_emails(tmp_path: Path) -> None:
+    root = tmp_path / "hub"
+    _write(root, _OIDC_ENTRY + "emails_authoritative = true\n")
+    config = HubConfig.load(root)
+    assert config.auth.oauth_providers[0].emails_authoritative is True
+
+
+@pytest.mark.parametrize("value", ['"true"', "1"])
+def test_oauth_provider_emails_authoritative_must_be_a_boolean(tmp_path: Path, value: str) -> None:
+    root = tmp_path / "hub"
+    _write(root, _OIDC_ENTRY + f"emails_authoritative = {value}\n")
+    with pytest.raises(ConfigError, match=r"'oidc-co' has emails_authoritative=.*must be a boolean"):
+        HubConfig.load(root)
+
+
+@pytest.mark.parametrize("value", ["true", "false"])
+def test_a_github_provider_refuses_emails_authoritative(tmp_path: Path, value: str) -> None:
+    root = tmp_path / "hub"
+    _write(
+        root,
+        "[[auth.oauth.provider]]\n"
+        'name = "github"\n'
+        'type = "github"\n'
+        'display_name = "GitHub"\n'
+        'client_id = "abc123"\n'
+        'client_secret_env = "BZ_OAUTH_GITHUB_SECRET"\n'
+        f"emails_authoritative = {value}\n",
+    )
+    with pytest.raises(ConfigError, match=r"'github' is type 'github'.*emails_authoritative is an oidc key"):
+        HubConfig.load(root)
+
+
 def test_duplicate_oauth_provider_name_rejected(tmp_path: Path) -> None:
     root = tmp_path / "hub"
     entry = (
@@ -145,6 +195,7 @@ def test_to_toml_round_trips_through_load(tmp_path: Path) -> None:
                     client_id="cid",
                     client_secret_env="BZ_OAUTH_OIDC_SECRET",
                     issuer="https://issuer.example.com",
+                    emails_authoritative=True,
                 ),
             ),
         ),

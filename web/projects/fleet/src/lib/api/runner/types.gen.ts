@@ -585,6 +585,18 @@ export type ChunkDetail = {
     pause?: PauseView | null;
     pending?: PendingView | null;
     /**
+     * Project Id
+     */
+    project_id?: string | null;
+    /**
+     * Project Name
+     */
+    project_name?: string | null;
+    /**
+     * Project Slug
+     */
+    project_slug?: string | null;
+    /**
      * Questions
      */
     questions?: Array<QuestionView>;
@@ -768,6 +780,18 @@ export type ChunkSummary = {
      * Open Prs
      */
     open_prs?: Array<PrView>;
+    /**
+     * Project Id
+     */
+    project_id?: string | null;
+    /**
+     * Project Name
+     */
+    project_name?: string | null;
+    /**
+     * Project Slug
+     */
+    project_slug?: string | null;
     /**
      * Runner Id
      */
@@ -1341,6 +1365,18 @@ export type FindingView = {
      */
     observed_count: number;
     /**
+     * Project Id
+     */
+    project_id?: string | null;
+    /**
+     * Project Name
+     */
+    project_name?: string | null;
+    /**
+     * Project Slug
+     */
+    project_slug?: string | null;
+    /**
      * Raised By Chunk Id
      */
     raised_by_chunk_id?: string | null;
@@ -1496,6 +1532,18 @@ export type GardenProposalView = {
      */
     findings: Array<string>;
     origin: GardenProposalOrigin;
+    /**
+     * Project Id
+     */
+    project_id?: string | null;
+    /**
+     * Project Name
+     */
+    project_name?: string | null;
+    /**
+     * Project Slug
+     */
+    project_slug?: string | null;
     /**
      * Proposal Id
      */
@@ -1770,6 +1818,38 @@ export type HubConnectivityView = {
      * Reachable
      */
     reachable: boolean;
+};
+
+/**
+ * IdentityVerdictView
+ *
+ * Whether the runner's token resolves to the runner its store belongs to.
+ *
+ * ``unchecked`` until the hub first answers the check, ``matched`` while it does, ``mismatched``
+ * while the token names another runner — the runner then drives no lease until the right token
+ * returns or the store is cleared with ``reset_command``.
+ */
+export type IdentityVerdictView = {
+    /**
+     * Checked At
+     */
+    checked_at: string | null;
+    /**
+     * Reset Command
+     */
+    reset_command: string;
+    /**
+     * State
+     */
+    state: 'unchecked' | 'matched' | 'mismatched';
+    /**
+     * Store Runner Id
+     */
+    store_runner_id: string | null;
+    /**
+     * Token Runner Id
+     */
+    token_runner_id: string | null;
 };
 
 /**
@@ -2549,6 +2629,7 @@ export type RunnerStatusView = {
      */
     gates?: Array<string>;
     hub: HubConnectivityView;
+    identity?: IdentityVerdictView | null;
     /**
      * Last Tick At
      */
@@ -2562,6 +2643,18 @@ export type RunnerStatusView = {
      * Runner Name
      */
     runner_name?: string | null;
+    /**
+     * Served Projects
+     */
+    served_projects?: Array<ServedProjectStatusView> | null;
+    /**
+     * Tenant Id
+     */
+    tenant_id?: string | null;
+    /**
+     * Tenant Name
+     */
+    tenant_name?: string | null;
     /**
      * Workspace Id
      */
@@ -2715,6 +2808,18 @@ export type ScopeView = {
      */
     description: string;
     /**
+     * Project Id
+     */
+    project_id?: string | null;
+    /**
+     * Project Name
+     */
+    project_name?: string | null;
+    /**
+     * Project Slug
+     */
+    project_slug?: string | null;
+    /**
      * Retired
      */
     retired?: boolean;
@@ -2786,6 +2891,41 @@ export type SelfTestView = {
      * Status
      */
     status: string;
+};
+
+/**
+ * ServedProjectStatusView
+ *
+ * One project the runner serves, as its hub last answered: the ``entry`` as configured — a project id
+ * or slug — and the project it resolved to. ``resolved`` is false for an entry no project answers to, and
+ * ``answered`` false for a configured entry the hub has not answered yet; either way ``project_id``,
+ * ``slug`` and ``name`` are ``None``.
+ */
+export type ServedProjectStatusView = {
+    /**
+     * Answered
+     */
+    answered?: boolean;
+    /**
+     * Entry
+     */
+    entry: string;
+    /**
+     * Name
+     */
+    name?: string | null;
+    /**
+     * Project Id
+     */
+    project_id?: string | null;
+    /**
+     * Resolved
+     */
+    resolved: boolean;
+    /**
+     * Slug
+     */
+    slug?: string | null;
 };
 
 /**

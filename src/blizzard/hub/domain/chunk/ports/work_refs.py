@@ -4,7 +4,7 @@ holds, and merge-group survivorship over them."""
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
@@ -13,6 +13,7 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.model import WorkRef, holds_work_refs
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
+from blizzard.hub.tenancy import TenantId
 
 
 def resolve_live_holder(chunk_ids: Iterable[str], statuses: Mapping[str, ChunkStatus]) -> str | None:
@@ -53,6 +54,44 @@ class WorkRefsSignature:
     marks: tuple[tuple[str, int, int | None], ...]
 
 
+@domain_model
+@dataclass(frozen=True)
+class TenantWorkRef:
+    """One work-ref row of the hub-wide corpus: the pointer, the chunk holding it, and the tenant
+    both belong to."""
+
+    tenant: TenantId
+    chunk_id: str
+    ref: WorkRef
+
+
+def live_work_ref_statuses(
+    rows: Iterable[TenantWorkRef], statuses: Mapping[TenantId, Mapping[str, ChunkStatus]]
+) -> dict[WorkRef, ChunkStatus]:
+    """Every pointer in ``rows`` whose chunk still holds its work refs, with that chunk's status,
+    each chunk's status read from its own tenant's ``statuses``; a row whose tenant or chunk carries
+    no status — the chunk minted after the statuses were read, or terminal — is excluded."""
+    result: dict[WorkRef, ChunkStatus] = {}
+    for row in rows:
+        status = statuses.get(row.tenant, {}).get(row.chunk_id)
+        if status is not None and holds_work_refs(status):
+            result[row.ref] = status
+    return result
+
+
+class IReadWorkRefsCorpus(Protocol):
+    """The forge-status sweep's corpus, read across every open tenant."""
+
+    def live_work_refs(self) -> Sequence[TenantWorkRef]:
+        """Every open tenant's work-ref rows whose chunk is neither grouped away nor deleted."""
+        ...
+
+    def live_work_refs_signature(self) -> WorkRefsSignature:
+        """A one-statement, hub-wide fingerprint of what :meth:`live_work_refs` and the status
+        derivation read — the change probe that lets the sweep skip the unbounded read."""
+        ...
+
+
 class IReadChunkWorkRefsRepository(Protocol):
     """Read-only chunk-work-refs access."""
 
@@ -67,8 +106,8 @@ class IReadChunkWorkRefsRepository(Protocol):
         ...
 
     def live_work_refs(self) -> dict[WorkRef, ChunkStatus]:
-        """Every work ref held by a live (non-terminal) chunk, with that chunk's
-        derived status — the inverse of :meth:`find_live_holder`."""
+        """Every work ref held by one of the tenant's live (non-terminal) chunks, with that
+        chunk's derived status — the inverse of :meth:`find_live_holder`."""
         ...
 
     def live_work_refs_signature(self) -> WorkRefsSignature:

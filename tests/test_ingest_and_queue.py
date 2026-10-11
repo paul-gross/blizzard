@@ -7,14 +7,18 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.hub.domain.chunk.model import WorkRef
+from blizzard.hub.domain.chunk.model import WorkRef, mint_chunk
+from blizzard.hub.domain.projects.model import ProjectId
 from tests.support import (
     FakeWorkSource,
     build_hub,
+    chunk_stores,
+    default_project,
     ingest,
     make_ready,
     pointer_token,
     report_lease,
+    seed_chunk_record,
     write_chunk_pause_facts,
 )
 
@@ -108,7 +112,11 @@ def test_list_row_is_board_legible(tmp_path: Path) -> None:
         hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
     )
     unconfigured = WorkRef(source="retired", ref="9")
-    unconfigured_id = hub.services.ingest.ingest([unconfigured], graph=graph)
+    unconfigured_chunk = mint_chunk(
+        [unconfigured], graph_id=graph.graph_id, at=hub.clock.now(), project_id=ProjectId(default_project(hub.engine))
+    )
+    seed_chunk_record(chunk_stores(hub.engine, hub.clock), unconfigured_chunk)
+    unconfigured_id = unconfigured_chunk.chunk_id
 
     rows = {r["chunk_id"]: r for r in hub.client.get("/api/chunks").json()["chunks"]}
     assert rows[chunk_id]["current_node_name"] == "triage"  # the entry node, pre-first-transition

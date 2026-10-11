@@ -1,5 +1,5 @@
 """``RunService`` against a real store (component tier) — ``build_hub``'s
-own full wiring, exercised through ``HubServices.routine_run`` directly (no HTTP route
+own full wiring, exercised through ``TenantServices.routine_run`` directly (no HTTP route
 yet; adds one). Covers full, delta with a baseline, delta downgraded, an
 override against a related scope, the routine's defaults reaching the chunk, the graph
 pin, and the promote — the acceptance list the plan owes."""
@@ -22,7 +22,7 @@ from blizzard.hub.domain.garden.scopes import Scope, ScopeSlug
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingSetStore
-from tests.support import HubHarness, build_hub, hub_store_connections
+from tests.support import HubHarness, build_hub, default_project, hub_scoped, hub_store_connections, stamp
 
 pytestmark = pytest.mark.component
 
@@ -55,19 +55,20 @@ def _routine(
         default_model=model,
         default_effort=effort,
         default_harnesses=harnesses,
+        project_id=default_project(hub.engine),
     )
     return routine, graph
 
 
 def _default_scope(hub: HubHarness, routine: Routine) -> Scope:
-    scope = hub.services.scopes.get(routine.default_scope_slug)
+    scope = hub.services.scopes.get(routine.project_id, routine.default_scope_slug)
     assert scope is not None
     return scope
 
 
 def _work_item_count(hub: HubHarness) -> int:
     with hub.engine.connect() as conn:
-        return conn.execute(sa.select(sa.func.count()).select_from(s.work_items)).scalar_one()
+        return conn.execute(hub_scoped(sa.select(sa.func.count()).select_from(s.work_items))).scalar_one()
 
 
 def test_full_mode_mints_and_ingests_leaving_the_chunk_not_ready(tmp_path: Path) -> None:
@@ -172,7 +173,7 @@ def test_the_routines_harnesses_default_reaches_the_minted_chunk(tmp_path: Path)
 def test_a_scope_override_outside_the_routines_related_set_is_refused_never_minted(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     routine, _graph = _routine(hub)
-    unrelated = hub.services.scope_registry.ensure(ScopeSlug.parse("unrelated"), _CTX)
+    unrelated = hub.services.scope_registry.ensure(routine.project_id, ScopeSlug.parse("unrelated"), _CTX)
 
     with pytest.raises(ScopeNotRelatedError):
         hub.services.routine_run.run(
@@ -187,7 +188,7 @@ def test_a_scope_override_outside_the_routines_related_set_is_refused_never_mint
 def test_a_scope_override_naming_a_related_scope_runs_against_it(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     routine, _graph = _routine(hub)
-    related = hub.services.scope_registry.ensure(ScopeSlug.parse("related"), _CTX)
+    related = hub.services.scope_registry.ensure(routine.project_id, ScopeSlug.parse("related"), _CTX)
     hub.services.routine_scope_membership.link(routine, related, _CTX)
 
     result = hub.services.routine_run.run(
@@ -258,7 +259,7 @@ def test_a_note_lands_in_the_charge_as_a_this_run_section(tmp_path: Path) -> Non
 def test_a_retired_scope_is_refused_rather_than_defaulted(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     routine, _graph = _routine(hub)
-    scope = hub.services.scopes.get("blizzard")
+    scope = hub.services.scopes.get(routine.project_id, "blizzard")
     assert scope is not None
     hub.services.scope_lifecycle.retire(scope, _CTX, by="operator")
 
@@ -320,23 +321,27 @@ def _seed_baseline(hub: HubHarness, *, graph_id: str, routine_name: str, scope_s
     (``GardenDeliveryStore.deliver``), which this test has no delivery plan to drive."""
     now = datetime(2026, 7, 1, tzinfo=UTC)
     with hub.engine.begin() as conn:
-        conn.execute(s.chunks.insert().values(chunk_id="ch_prior", graph_id=graph_id, minted_at=now))
+        conn.execute(s.chunks.insert().values(stamp(s.chunks, chunk_id="ch_prior", graph_id=graph_id, minted_at=now)))
         conn.execute(
             s.artifacts.insert().values(
-                artifact_id="art_prior",
-                chunk_id="ch_prior",
-                node_id="nd_1",
-                node_name="survey",
-                epoch=1,
-                name="findings",
-                kind="asset",
-                data="[]",
-                produced_at=now,
-                seq=1,
+                stamp(
+                    s.artifacts,
+                    artifact_id="art_prior",
+                    chunk_id="ch_prior",
+                    node_id="nd_1",
+                    node_name="survey",
+                    epoch=1,
+                    name="findings",
+                    kind="asset",
+                    data="[]",
+                    produced_at=now,
+                    seq=1,
+                )
             )
         )
     FindingSetStore(hub_store_connections(hub.engine)).create(
         "fins_prior",
+        project_id=default_project(hub.engine),
         artifact_id="art_prior",
         chunk_id="ch_prior",
         scope_slug=scope_slug,

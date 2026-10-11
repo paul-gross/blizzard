@@ -1,5 +1,16 @@
 {
   "components": {
+    "parameters": {
+      "TenantHeader": {
+        "description": "The id of the tenant the request acts in. A caller with one membership may omit it; a runner or marker token acts in its own tenant, and a header naming another is refused 400.",
+        "in": "header",
+        "name": "X-Blizzard-Tenant",
+        "required": false,
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
     "schemas": {
       "ActivityChunkChangeCause": {
         "enum": [
@@ -310,6 +321,28 @@
           "introduced"
         ],
         "title": "AddedFindingView",
+        "type": "object"
+      },
+      "AdminGraphSyncResponse": {
+        "description": "``POST /api/admin/graphs/sync``'s report \u2014 one reconciliation per open tenant. ``ok`` is false iff any tenant's\nis.",
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "tenants": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/TenantGraphSync"
+            },
+            "title": "Tenants",
+            "type": "array"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "title": "AdminGraphSyncResponse",
         "type": "object"
       },
       "AnalyticsChunkSpendResponse": {
@@ -1082,6 +1115,39 @@
             "title": "Position",
             "type": "integer"
           },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "project_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Name"
+          },
+          "project_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Slug"
+          },
           "work_refs": {
             "default": [],
             "items": {
@@ -1369,6 +1435,18 @@
             ],
             "default": null,
             "title": "Prev Status"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Project Id"
           },
           "runner_id": {
             "anyOf": [
@@ -1892,6 +1970,39 @@
               }
             ]
           },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "project_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Name"
+          },
+          "project_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Slug"
+          },
           "questions": {
             "default": [],
             "items": {
@@ -2059,6 +2170,17 @@
       "ChunkIngestRequest": {
         "description": "Ingest by source-native token \u2014 specific items always, batch fine. Each token is resolved against\nthe configured work sources' own grammar: ``{name}:{ref}``, ``{name}#{ref}``, or the item's own URL.\nTokens only; no pre-resolved ``{source, ref}`` shape travels alongside them.",
         "properties": {
+          "project": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project"
+          },
           "tokens": {
             "items": {
               "type": "string"
@@ -2079,6 +2201,39 @@
           "chunk_id": {
             "title": "Chunk Id",
             "type": "string"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "project_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Name"
+          },
+          "project_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Slug"
           }
         },
         "required": [
@@ -2255,6 +2410,39 @@
                 "type": "null"
               }
             ]
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "project_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Name"
+          },
+          "project_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Slug"
           }
         },
         "required": [
@@ -2366,6 +2554,39 @@
                 "type": "null"
               }
             ]
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "project_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Name"
+          },
+          "project_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Slug"
           },
           "restart_epochs": {
             "default": [],
@@ -2531,6 +2752,39 @@
             },
             "title": "Open Prs",
             "type": "array"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "project_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Name"
+          },
+          "project_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Slug"
           },
           "runner_id": {
             "anyOf": [
@@ -2973,6 +3227,17 @@
             "title": "Op",
             "type": "string"
           },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
           "record_key": {
             "title": "Record Key",
             "type": "string"
@@ -3034,8 +3299,16 @@
       },
       "ConfigDocument": {
         "additionalProperties": false,
-        "description": "A declarative configuration document. Each entry is the kind's own document model, so a field an\nentry omits is left as stored; scopes reconcile before routines, so a routine may name a scope the\nsame document declares; ``secrets`` lists secret names that must already be active.\n``GET /api/config/export`` writes every field of every entry.",
+        "description": "A declarative configuration document. Each entry is the kind's own document model, so a field an\nentry omits is left as stored; projects reconcile before scopes and routines, and scopes before\nroutines, so an entry may name a project or a scope the same document declares; ``secrets`` lists\nsecret names that must already be active. ``GET /api/config/export`` writes every field of every\nentry, ``projects`` first, and names every project by its slug.",
         "properties": {
+          "projects": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ProjectDocument"
+            },
+            "title": "Projects",
+            "type": "array"
+          },
           "repositories": {
             "default": [],
             "items": {
@@ -3047,7 +3320,7 @@
           "routines": {
             "default": [],
             "items": {
-              "$ref": "#/components/schemas/RoutineDocument"
+              "$ref": "#/components/schemas/RoutineEntry"
             },
             "title": "Routines",
             "type": "array"
@@ -3055,7 +3328,7 @@
           "scopes": {
             "default": [],
             "items": {
-              "$ref": "#/components/schemas/ScopeDocument"
+              "$ref": "#/components/schemas/ScopeEntry"
             },
             "title": "Scopes",
             "type": "array"
@@ -3129,6 +3402,18 @@
             ],
             "default": null,
             "title": "Key"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Project Id"
           }
         },
         "required": [
@@ -3208,6 +3493,18 @@
             ],
             "default": null,
             "title": "Key"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Project Id"
           }
         },
         "required": [
@@ -4015,6 +4312,18 @@
             "title": "Kind",
             "type": "string"
           },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Project Id"
+          },
           "runner_id": {
             "anyOf": [
               {
@@ -4432,6 +4741,39 @@
             "title": "Observed Count",
             "type": "integer"
           },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "project_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Name"
+          },
+          "project_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Slug"
+          },
           "raised_by_chunk_id": {
             "anyOf": [
               {
@@ -4801,6 +5143,39 @@
             "title": "Observed Count",
             "type": "integer"
           },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "project_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Name"
+          },
+          "project_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Slug"
+          },
           "raised_by_chunk_id": {
             "anyOf": [
               {
@@ -5122,6 +5497,39 @@
           "origin": {
             "$ref": "#/components/schemas/GardenProposalOrigin"
           },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "project_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Name"
+          },
+          "project_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Slug"
+          },
           "proposal_id": {
             "title": "Proposal Id",
             "type": "string"
@@ -5264,6 +5672,39 @@
           "passed": {
             "title": "Passed",
             "type": "integer"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "project_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Name"
+          },
+          "project_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Slug"
           },
           "routine_name": {
             "anyOf": [
@@ -5519,6 +5960,39 @@
           },
           "origin": {
             "$ref": "#/components/schemas/GardenProposalOrigin"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "project_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Name"
+          },
+          "project_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Slug"
           },
           "proposal_id": {
             "title": "Proposal Id",
@@ -6212,6 +6686,42 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "HubAdminView": {
+        "description": "One hub administrator.",
+        "properties": {
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "username",
+          "display_name",
+          "email"
+        ],
+        "title": "HubAdminView",
+        "type": "object"
+      },
       "HubAdvanceResponse": {
         "description": "The result of one on-demand hub-advance. A generic hub command node runs ``run:`` to\ncompletion, one call at a time, behind the fleet-wide serialization slot: ``ran=False`` means the\nslot was held by a different chunk and this call deferred without touching anything \u2014 not an\nerror.",
         "properties": {
@@ -6277,6 +6787,52 @@
         "title": "HubEventType",
         "type": "string"
       },
+      "HubEventView": {
+        "description": "One row of the hub's own event log.",
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "recorded_at": {
+            "title": "Recorded At",
+            "type": "string"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "severity",
+          "kind",
+          "recorded_at",
+          "message"
+        ],
+        "title": "HubEventView",
+        "type": "object"
+      },
       "HubMarkerRequest": {
         "description": "The mid-run marker callback's body.",
         "properties": {
@@ -6340,12 +6896,16 @@
           "seg",
           "wi",
           "rtn",
+          "scp",
           "fin",
           "fins",
           "gprop",
           "dep",
           "apl",
-          "rn"
+          "rn",
+          "ten",
+          "inv",
+          "proj"
         ],
         "title": "IdPrefix",
         "type": "string"
@@ -6413,6 +6973,131 @@
           "graph_id"
         ],
         "title": "IntendedMigrationView",
+        "type": "object"
+      },
+      "InvitationCreateRequest": {
+        "description": "Invite ``email`` into the request's tenant as ``role``, for ``expires_in`` whole days.",
+        "properties": {
+          "email": {
+            "pattern": "^[^@\\s]+@[^@\\s]+$",
+            "title": "Email",
+            "type": "string"
+          },
+          "expires_in": {
+            "default": 7,
+            "maximum": 30.0,
+            "minimum": 1.0,
+            "title": "Expires In",
+            "type": "integer"
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          }
+        },
+        "required": [
+          "email",
+          "role"
+        ],
+        "title": "InvitationCreateRequest",
+        "type": "object"
+      },
+      "InvitationCreateResponse": {
+        "description": "The issued invitation and its link's token. ``token`` is visible only here, once \u2014 only its sha256 is kept;\nthe link handed to the invited person ends ``/invite/<token>``.",
+        "properties": {
+          "invitation": {
+            "$ref": "#/components/schemas/InvitationView"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "invitation",
+          "token"
+        ],
+        "title": "InvitationCreateResponse",
+        "type": "object"
+      },
+      "InvitationListResponse": {
+        "description": "Every invitation of the request's tenant, oldest first.",
+        "properties": {
+          "invitations": {
+            "items": {
+              "$ref": "#/components/schemas/InvitationView"
+            },
+            "title": "Invitations",
+            "type": "array"
+          }
+        },
+        "required": [
+          "invitations"
+        ],
+        "title": "InvitationListResponse",
+        "type": "object"
+      },
+      "InvitationState": {
+        "description": "What became of an invitation: ``live`` until it is accepted, revoked, or expires, whichever comes first.",
+        "enum": [
+          "live",
+          "accepted",
+          "expired",
+          "revoked"
+        ],
+        "title": "InvitationState",
+        "type": "string"
+      },
+      "InvitationView": {
+        "description": "One invitation as its tenant's admins see it \u2014 never its token.",
+        "properties": {
+          "accepted_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accepted By"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "expires_at": {
+            "title": "Expires At",
+            "type": "string"
+          },
+          "invitation_id": {
+            "title": "Invitation Id",
+            "type": "string"
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          },
+          "state": {
+            "$ref": "#/components/schemas/InvitationState"
+          }
+        },
+        "required": [
+          "invitation_id",
+          "email",
+          "role",
+          "created_by",
+          "created_at",
+          "expires_at",
+          "state"
+        ],
+        "title": "InvitationView",
         "type": "object"
       },
       "JudgedBy": {
@@ -6492,7 +7177,7 @@
         "type": "object"
       },
       "MeResponse": {
-        "description": "The resolved identity's wire view.",
+        "description": "The resolved identity's wire view. ``role`` and ``permissions`` are those of the tenant\nthe request resolves \u2014 the one ``X-Blizzard-Tenant`` names among ``tenants``, else the\ncaller's only membership. With no such tenant ``role`` is null and ``permissions`` holds\nonly the hub-level permissions of a hub administrator.",
         "properties": {
           "assignable_roles": {
             "default": [],
@@ -6506,6 +7191,11 @@
             "title": "Display Name",
             "type": "string"
           },
+          "hub_admin": {
+            "default": false,
+            "title": "Hub Admin",
+            "type": "boolean"
+          },
           "permissions": {
             "items": {
               "$ref": "#/components/schemas/Permission"
@@ -6514,7 +7204,22 @@
             "type": "array"
           },
           "role": {
-            "$ref": "#/components/schemas/Role"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Role"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tenants": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/MeTenant"
+            },
+            "title": "Tenants",
+            "type": "array"
           },
           "user_id": {
             "title": "User Id",
@@ -6533,6 +7238,37 @@
           "permissions"
         ],
         "title": "MeResponse",
+        "type": "object"
+      },
+      "MeTenant": {
+        "description": "One tenant the caller holds a membership in: its id (the value an\n``X-Blizzard-Tenant`` header names), its name, the membership's role, and every\npermission the caller holds there.",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "permissions": {
+            "items": {
+              "$ref": "#/components/schemas/Permission"
+            },
+            "title": "Permissions",
+            "type": "array"
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "name",
+          "role",
+          "permissions"
+        ],
+        "title": "MeTenant",
         "type": "object"
       },
       "MeasurementReadingView": {
@@ -6556,6 +7292,90 @@
           "measurement"
         ],
         "title": "MeasurementReadingView",
+        "type": "object"
+      },
+      "MemberRoleRequest": {
+        "description": "``PUT /api/members/{user_id}`` body \u2014 the membership role to grant: ``guest``, ``contributor`` or ``admin``.",
+        "properties": {
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          }
+        },
+        "required": [
+          "role"
+        ],
+        "title": "MemberRoleRequest",
+        "type": "object"
+      },
+      "MemberView": {
+        "description": "One member of the request's tenant.",
+        "properties": {
+          "assignable_roles": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/Role"
+            },
+            "title": "Assignable Roles",
+            "type": "array"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "hub_admin": {
+            "title": "Hub Admin",
+            "type": "boolean"
+          },
+          "identities": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/UserIdentityView"
+            },
+            "title": "Identities",
+            "type": "array"
+          },
+          "revocable": {
+            "default": false,
+            "title": "Revocable",
+            "type": "boolean"
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "username",
+          "display_name",
+          "email",
+          "role",
+          "hub_admin",
+          "created_at"
+        ],
+        "title": "MemberView",
         "type": "object"
       },
       "MigrationMode": {
@@ -7093,7 +7913,11 @@
           "user:manage",
           "transcript:read",
           "analytics:admin",
-          "config:edit"
+          "config:edit",
+          "tenant:admin",
+          "membership:grant-any",
+          "hub-admin:grant",
+          "export:admin"
         ],
         "title": "Permission",
         "type": "string"
@@ -7140,6 +7964,173 @@
         "title": "ProducesEntry",
         "type": "object"
       },
+      "ProjectCreateRequest": {
+        "additionalProperties": false,
+        "description": "A new project: a ``slug`` of 1-64 lowercase letters, digits and single inner hyphens, unique among the tenant's\ncurrent slugs, and a display ``name``.",
+        "properties": {
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug",
+          "name"
+        ],
+        "title": "ProjectCreateRequest",
+        "type": "object"
+      },
+      "ProjectDocument": {
+        "additionalProperties": false,
+        "description": "A project as a document entry, named by its slug. A ``name`` or ``description`` the entry omits is left as\nstored; a project the document creates needs a ``name``. A ``sources`` or ``repositories`` list the entry states\nis the project's whole set of links of that kind \u2014 a name it leaves out is unlinked; a list it omits is left\nas stored. A slug a project left is refused: name that project by its current slug.",
+        "properties": {
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "repositories": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Repositories",
+            "type": "array"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "sources": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Sources",
+            "type": "array"
+          }
+        },
+        "required": [
+          "slug"
+        ],
+        "title": "ProjectDocument",
+        "type": "object"
+      },
+      "ProjectPatchRequest": {
+        "additionalProperties": false,
+        "description": "A sparse edit: an absent field is unchanged, a present one is set, and an explicit ``null`` is refused on every\nfield. A slug the project leaves keeps resolving to it until another project takes it.",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug"
+          }
+        },
+        "title": "ProjectPatchRequest",
+        "type": "object"
+      },
+      "ProjectView": {
+        "description": "One project \u2014 the ``GET /api/projects`` listing row and every project verb's view.",
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id",
+          "slug",
+          "name",
+          "description",
+          "revision",
+          "created_at"
+        ],
+        "title": "ProjectView",
+        "type": "object"
+      },
+      "ProjectsListView": {
+        "description": "Every project of the tenant, by slug \u2014 ``GET /api/projects``.",
+        "properties": {
+          "projects": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ProjectView"
+            },
+            "title": "Projects",
+            "type": "array"
+          }
+        },
+        "title": "ProjectsListView",
+        "type": "object"
+      },
       "ProviderSummary": {
         "description": "One configured provider, as ``GET /api/auth/providers`` lists it.",
         "properties": {
@@ -7182,6 +8173,18 @@
             ],
             "default": null,
             "title": "Key"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Project Id"
           },
           "question_id": {
             "title": "Question Id",
@@ -7304,6 +8307,18 @@
             ],
             "default": null,
             "title": "Key"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Project Id"
           },
           "question_id": {
             "title": "Question Id",
@@ -7518,6 +8533,39 @@
           "position": {
             "title": "Position",
             "type": "integer"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "project_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Name"
+          },
+          "project_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Slug"
           },
           "work_refs": {
             "default": [],
@@ -7742,12 +8790,16 @@
         "type": "object"
       },
       "RecordKind": {
+        "description": "The kind of configured record a change row names. A project's ``record_key`` is its id, never its slug; a\nproject link's is the linked source's or repository's name. Linking, unlinking and re-linking are ``create``,\n``retire`` and ``enable``.",
         "enum": [
           "work_source",
           "secret",
           "repository",
           "scope",
-          "routine"
+          "routine",
+          "project",
+          "project_source_link",
+          "project_repository_link"
         ],
         "title": "RecordKind",
         "type": "string"
@@ -7824,6 +8876,50 @@
           "secret_name"
         ],
         "title": "RepositoryDocument",
+        "type": "object"
+      },
+      "RepositoryLinkView": {
+        "description": "A project's link to a repository, named ``name``. ``linked`` is false once the link is retired (unlinked).",
+        "properties": {
+          "linked": {
+            "title": "Linked",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "project_id",
+          "name",
+          "linked",
+          "revision"
+        ],
+        "title": "RepositoryLinkView",
+        "type": "object"
+      },
+      "RepositoryLinksView": {
+        "description": "A project's standing repository links by repository name \u2014 ``GET /api/projects/{project}/repository-links``.",
+        "properties": {
+          "repository_links": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/RepositoryLinkView"
+            },
+            "title": "Repository Links",
+            "type": "array"
+          }
+        },
+        "title": "RepositoryLinksView",
         "type": "object"
       },
       "RepositoryPatchRequest": {
@@ -8095,7 +9191,7 @@
         "type": "string"
       },
       "RoleAssignmentRequest": {
-        "description": "``POST /api/users/{id}/role`` body \u2014 the target role, by its wire value.",
+        "description": "``POST /api/users/{id}/role`` body \u2014 the target role, by its wire value; ``pending`` revokes.",
         "properties": {
           "role": {
             "title": "Role",
@@ -8379,66 +9475,6 @@
         "title": "RoutineCreateRequest",
         "type": "object"
       },
-      "RoutineDocument": {
-        "additionalProperties": false,
-        "description": "A routine as a document entry, keyed by its immutable ``name`` \u2014 the model whose JSON Schema\n``GET /api/config/schema/routines`` serves. ``scopes`` is the linked scope set, the default scope\nalways among it; an entry that omits it leaves the stored set. Every scope an entry names must be\nstored or declared in the same document, and ``graph_name`` must name an enabled graph.",
-        "properties": {
-          "default_effort": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Default Effort"
-          },
-          "default_harnesses": {
-            "default": [],
-            "items": {
-              "type": "string"
-            },
-            "title": "Default Harnesses",
-            "type": "array"
-          },
-          "default_model": {
-            "default": [],
-            "items": {
-              "type": "string"
-            },
-            "title": "Default Model",
-            "type": "array"
-          },
-          "default_scope_slug": {
-            "title": "Default Scope Slug",
-            "type": "string"
-          },
-          "graph_name": {
-            "title": "Graph Name",
-            "type": "string"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "scopes": {
-            "default": [],
-            "items": {
-              "type": "string"
-            },
-            "title": "Scopes",
-            "type": "array"
-          }
-        },
-        "required": [
-          "name",
-          "graph_name",
-          "default_scope_slug"
-        ],
-        "title": "RoutineDocument",
-        "type": "object"
-      },
       "RoutineEditRequest": {
         "additionalProperties": false,
         "description": "A sparse edit: an absent field is unchanged, a present one is set. A present\n``name`` must equal the routine's current one; an explicit ``null`` clears\n``default_effort`` and is refused on every other field.",
@@ -8517,6 +9553,77 @@
           }
         },
         "title": "RoutineEditRequest",
+        "type": "object"
+      },
+      "RoutineEntry": {
+        "additionalProperties": false,
+        "description": "A routine entry of a document: the routine, in ``project`` \u2014 an id or a slug; named as a scope entry's is.\nIts default and linked scopes are scopes of that project.",
+        "properties": {
+          "default_effort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Effort"
+          },
+          "default_harnesses": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Default Harnesses",
+            "type": "array"
+          },
+          "default_model": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Default Model",
+            "type": "array"
+          },
+          "default_scope_slug": {
+            "title": "Default Scope Slug",
+            "type": "string"
+          },
+          "graph_name": {
+            "title": "Graph Name",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "project": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project"
+          },
+          "scopes": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Scopes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "graph_name",
+          "default_scope_slug"
+        ],
+        "title": "RoutineEntry",
         "type": "object"
       },
       "RoutineLifecycleRequest": {
@@ -8704,6 +9811,39 @@
             "title": "Name",
             "type": "string"
           },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "project_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Name"
+          },
+          "project_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Slug"
+          },
           "retired": {
             "default": false,
             "title": "Retired",
@@ -8756,6 +9896,39 @@
           },
           "outcome": {
             "$ref": "#/components/schemas/ChunkStatus"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "project_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Name"
+          },
+          "project_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Slug"
           },
           "routine_name": {
             "title": "Routine Name",
@@ -8857,6 +10030,39 @@
           "outcome": {
             "$ref": "#/components/schemas/ChunkStatus"
           },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "project_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Name"
+          },
+          "project_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Slug"
+          },
           "routine_name": {
             "title": "Routine Name",
             "type": "string"
@@ -8886,6 +10092,20 @@
             "minLength": 1,
             "title": "Name",
             "type": "string"
+          },
+          "projects": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Projects"
           }
         },
         "required": [
@@ -9204,7 +10424,7 @@
         "type": "object"
       },
       "RunnerIdentityView": {
-        "description": "Who the presented runner bearer token belongs to \u2014 its hub-minted id and current name.\nAnswering records nothing: no registration, no liveness.",
+        "description": "Who the presented runner bearer token belongs to \u2014 its hub-minted id and current name, and\nthe tenant it was added in. Answering records nothing: no registration, no liveness.",
         "properties": {
           "runner_id": {
             "title": "Runner Id",
@@ -9213,6 +10433,28 @@
           "runner_name": {
             "title": "Runner Name",
             "type": "string"
+          },
+          "tenant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Id"
+          },
+          "tenant_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Name"
           }
         },
         "required": [
@@ -9287,6 +10529,20 @@
             ],
             "title": "Name"
           },
+          "projects": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Projects"
+          },
           "redirect_uris": {
             "default": [],
             "items": {
@@ -9332,11 +10588,25 @@
         "type": "object"
       },
       "RunnerRegistrationResponse": {
-        "description": "The registered runner's hub-minted id and current name, and whether this call was its\nfirst registration since it was added.",
+        "description": "The registered runner's hub-minted id and current name, whether this call was its first\nregistration since it was added, and the tenant it serves. Registration doubles as the\nheartbeat, so a renamed tenant reaches the runner on its next tick.",
         "properties": {
           "first_registration": {
             "title": "First Registration",
             "type": "boolean"
+          },
+          "projects": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ServedProjectView"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Projects"
           },
           "runner_id": {
             "title": "Runner Id",
@@ -9352,6 +10622,28 @@
               }
             ],
             "title": "Runner Name"
+          },
+          "tenant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Id"
+          },
+          "tenant_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Name"
           }
         },
         "required": [
@@ -9469,6 +10761,14 @@
           "online": {
             "title": "Online",
             "type": "boolean"
+          },
+          "projects": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ServedProjectView"
+            },
+            "title": "Projects",
+            "type": "array"
           },
           "registered_at": {
             "anyOf": [
@@ -9702,6 +11002,14 @@
             "title": "Online",
             "type": "boolean"
           },
+          "projects": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ServedProjectView"
+            },
+            "title": "Projects",
+            "type": "array"
+          },
           "registered_at": {
             "title": "Registered At",
             "type": "string"
@@ -9802,26 +11110,6 @@
         "title": "ScopeCreateRequest",
         "type": "object"
       },
-      "ScopeDocument": {
-        "additionalProperties": false,
-        "description": "A scope as a document entry \u2014 the model whose JSON Schema ``GET /api/config/schema/scopes``\nserves. A ``description`` the entry omits is left as stored, and is empty on a create.",
-        "properties": {
-          "description": {
-            "default": "",
-            "title": "Description",
-            "type": "string"
-          },
-          "slug": {
-            "title": "Slug",
-            "type": "string"
-          }
-        },
-        "required": [
-          "slug"
-        ],
-        "title": "ScopeDocument",
-        "type": "object"
-      },
       "ScopeEditRequest": {
         "additionalProperties": false,
         "description": "A sparse edit: an absent field is unchanged, a present one is set; ``null`` is\nrefused. The slug is immutable, so a body carrying it is refused.",
@@ -9839,6 +11127,37 @@
           }
         },
         "title": "ScopeEditRequest",
+        "type": "object"
+      },
+      "ScopeEntry": {
+        "additionalProperties": false,
+        "description": "A scope entry of a document: the scope, in ``project`` \u2014 an id or a slug. With no ``project``, the\ntenant's only project, counted as the document leaves the tenant; with several, the entry is refused\n``project_required``.",
+        "properties": {
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "project": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug"
+        ],
+        "title": "ScopeEntry",
         "type": "object"
       },
       "ScopeLifecycleRequest": {
@@ -9908,6 +11227,39 @@
           "description": {
             "title": "Description",
             "type": "string"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "project_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Name"
+          },
+          "project_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Slug"
           },
           "retired": {
             "default": false,
@@ -10020,6 +11372,53 @@
           "created_at"
         ],
         "title": "SecretView",
+        "type": "object"
+      },
+      "ServedProjectView": {
+        "description": "One entry of the projects a runner serves: the ``entry`` as declared \u2014 a project id or slug \u2014 and the project\nit resolves to in the runner's tenant. ``project_id``, ``slug`` and ``name`` are ``None`` for an entry that\nresolves to no project, which serves nothing until a project answers to it.",
+        "properties": {
+          "entry": {
+            "title": "Entry",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug"
+          }
+        },
+        "required": [
+          "entry"
+        ],
+        "title": "ServedProjectView",
         "type": "object"
       },
       "SessionMode": {
@@ -10143,6 +11542,61 @@
           "turns"
         ],
         "title": "SidechainSegmentView",
+        "type": "object"
+      },
+      "SourceLinkView": {
+        "description": "A project's link to a work source, named ``name``. ``linked`` is false once the link is retired (unlinked).\nThe built-in ``hub`` source is linked to every project: it has no stored link, so no ``revision``, and cannot be\nunlinked.",
+        "properties": {
+          "built_in": {
+            "default": false,
+            "title": "Built In",
+            "type": "boolean"
+          },
+          "linked": {
+            "title": "Linked",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          }
+        },
+        "required": [
+          "project_id",
+          "name",
+          "linked"
+        ],
+        "title": "SourceLinkView",
+        "type": "object"
+      },
+      "SourceLinksView": {
+        "description": "A project's standing source links by source name, the built-in ``hub`` source among them \u2014\n``GET /api/projects/{project}/source-links``.",
+        "properties": {
+          "source_links": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SourceLinkView"
+            },
+            "title": "Source Links",
+            "type": "array"
+          }
+        },
+        "title": "SourceLinksView",
         "type": "object"
       },
       "SubmittedArtifact": {
@@ -10309,6 +11763,166 @@
           "content"
         ],
         "title": "SystemArtifactView",
+        "type": "object"
+      },
+      "TenantCreateRequest": {
+        "description": "``POST /api/admin/tenants``: the new tenant's name \u2014 a label, never refused for being taken \u2014 and, optionally,\nthe user to make its first admin.",
+        "properties": {
+          "admin_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Admin User Id"
+          },
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$",
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "TenantCreateRequest",
+        "type": "object"
+      },
+      "TenantDeletionResponse": {
+        "description": "``DELETE /api/admin/tenants/{tenant_id}``: ``deleted`` with the rows its deletion removed (``200``), or\n``deleting`` while the ``tenant_teardown`` sweep carries it on (``202``).",
+        "properties": {
+          "rows_removed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rows Removed"
+          },
+          "state": {
+            "enum": [
+              "deleted",
+              "deleting"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "state"
+        ],
+        "title": "TenantDeletionResponse",
+        "type": "object"
+      },
+      "TenantGraphSync": {
+        "description": "One tenant's packaged-graph reconciliation: ``ok`` is false iff any of its entries failed.",
+        "properties": {
+          "entries": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/GraphSyncEntry"
+            },
+            "title": "Entries",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "name",
+          "ok"
+        ],
+        "title": "TenantGraphSync",
+        "type": "object"
+      },
+      "TenantRenameRequest": {
+        "description": "``PATCH /api/admin/tenants/{tenant_id}``: the tenant's new name.",
+        "properties": {
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$",
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "TenantRenameRequest",
+        "type": "object"
+      },
+      "TenantView": {
+        "description": "One tenant: its id, its name, when and by whom it was created, whether it is ``open`` or ``deleting``, and \u2014\nwhile it is ``deleting`` \u2014 when its deletion began.",
+        "properties": {
+          "closed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed At"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "open",
+              "deleting"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "name",
+          "created_at",
+          "created_by",
+          "state"
+        ],
+        "title": "TenantView",
         "type": "object"
       },
       "ToolCallSegmentView": {
@@ -11358,7 +12972,7 @@
         "type": "object"
       },
       "UserView": {
-        "description": "One ``users`` row \u2014 the listing/assignment response shape.",
+        "description": "One member as the deprecated ``/api/users`` routes render them \u2014 ``role`` is ``superuser`` for a hub\nadministrator, else the membership's role, ``pending`` once revoked.",
         "properties": {
           "assignable_roles": {
             "default": [],
@@ -12314,7 +13928,7 @@
   "paths": {
     "/api/activity": {
       "get": {
-        "description": "The activity backfill \u2014 the three already-bounded per-source activity reads merged,\nsorted newest-first, and capped.\n\n``since`` defaults to 24h before the server's current time. A tz-naive ``since`` is coerced to\nUTC so it never raises against the store's aware timestamps.",
+        "description": "The activity backfill \u2014 the three already-bounded per-source activity reads merged,\nsorted newest-first, and capped. ``project`` narrows each source as ``GET /api/events`` does: chunk facts\nto the project's chunks, a runner's pause facts to the runners serving it.\n\n``since`` defaults to 24h before the server's current time. A tz-naive ``since`` is coerced to\nUTC so it never raises against the store's aware timestamps.",
         "operationId": "list_activity_api_activity_get",
         "parameters": [
           {
@@ -12345,6 +13959,22 @@
               "title": "Limit",
               "type": "integer"
             }
+          },
+          {
+            "in": "query",
+            "name": "project",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project"
+            }
           }
         ],
         "responses": {
@@ -12372,6 +14002,378 @@
         "summary": "List Activity",
         "tags": [
           "meta"
+        ]
+      }
+    },
+    "/api/admin/events": {
+      "get": {
+        "description": "The newest ``limit`` rows of the hub's own event log, newest first.",
+        "operationId": "hub_events_api_admin_events_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/HubEventView"
+                  },
+                  "title": "Response Hub Events Api Admin Events Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Hub Events",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/admin/graphs/sync": {
+      "post": {
+        "description": "Reconcile the packaged graph set into every open tenant, each through its own stores, and answer per tenant.\nAlways ``200``: a graph that fails is a ``failed`` row, and each ``ok`` carries its verdict.",
+        "operationId": "sync_every_tenant_api_admin_graphs_sync_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminGraphSyncResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Sync Every Tenant",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/admin/hub-admins": {
+      "get": {
+        "description": "Every hub administrator.",
+        "operationId": "list_hub_admins_api_admin_hub_admins_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/HubAdminView"
+                  },
+                  "title": "Response List Hub Admins Api Admin Hub Admins Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Hub Admins",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/admin/hub-admins/{user_id}": {
+      "delete": {
+        "description": "Revoke ``user_id``'s hub administrator role; revoking one who holds none writes nothing, and revoking the last\none answers ``409``.",
+        "operationId": "revoke_hub_admin_api_admin_hub_admins__user_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke Hub Admin",
+        "tags": [
+          "admin"
+        ]
+      },
+      "put": {
+        "description": "Make ``user_id`` a hub administrator; granting a holder writes nothing.",
+        "operationId": "grant_hub_admin_api_admin_hub_admins__user_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HubAdminView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Grant Hub Admin",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/admin/tenants": {
+      "get": {
+        "description": "Every tenant the hub holds, open or with its deletion underway, by id \u2014 creation order to the millisecond.",
+        "operationId": "list_tenants_api_admin_tenants_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TenantView"
+                  },
+                  "title": "Response List Tenants Api Admin Tenants Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Tenants",
+        "tags": [
+          "admin"
+        ]
+      },
+      "post": {
+        "description": "Create a tenant in one transaction, its packaged graphs minted, its default project created through the\nrequest's door and, when named, its first admin granted; it is usable the moment this answers. ``404`` when\n``admin_user_id`` names no user, ``422`` when the name is not a tenant name's shape \u2014 nothing is created.",
+        "operationId": "create_tenant_api_admin_tenants_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TenantCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Tenant",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/admin/tenants/{tenant_id}": {
+      "delete": {
+        "description": "Close a tenant and drain it inline under a row budget: ``200`` with the rows removed when the drain finishes\ninside it, else ``202`` while the ``tenant_teardown`` sweep carries on. A tenant whose deletion is underway answers\n``202`` and is left as it is; one already deleted answers ``410``; the hub's only open tenant is refused ``409``.",
+        "operationId": "delete_tenant_api_admin_tenants__tenant_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenant_id",
+            "required": true,
+            "schema": {
+              "title": "Tenant Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantDeletionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantDeletionResponse"
+                }
+              }
+            },
+            "description": "The deletion is underway."
+          },
+          "404": {
+            "description": "No tenant has the id."
+          },
+          "409": {
+            "description": "The tenant is the hub's only open tenant."
+          },
+          "410": {
+            "description": "The tenant was deleted."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Tenant",
+        "tags": [
+          "admin"
+        ]
+      },
+      "patch": {
+        "description": "Rename an open tenant; ``404`` when no open tenant has the id, ``422`` when the name is not a tenant name's\nshape.",
+        "operationId": "rename_tenant_api_admin_tenants__tenant_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenant_id",
+            "required": true,
+            "schema": {
+              "title": "Tenant Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TenantRenameRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rename Tenant",
+        "tags": [
+          "admin"
         ]
       }
     },
@@ -12588,6 +14590,22 @@
                 }
               ],
               "title": "Effort"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project"
             }
           }
         ],
@@ -12816,6 +14834,22 @@
                 }
               ],
               "title": "Effort"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project"
             }
           }
         ],
@@ -13055,6 +15089,22 @@
               ],
               "title": "Effort"
             }
+          },
+          {
+            "in": "query",
+            "name": "project",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project"
+            }
           }
         ],
         "responses": {
@@ -13251,6 +15301,22 @@
               ],
               "title": "Effort"
             }
+          },
+          {
+            "in": "query",
+            "name": "project",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project"
+            }
           }
         ],
         "responses": {
@@ -13351,6 +15417,22 @@
               ],
               "title": "Until"
             }
+          },
+          {
+            "in": "query",
+            "name": "project",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project"
+            }
           }
         ],
         "responses": {
@@ -13450,6 +15532,22 @@
                 }
               ],
               "title": "Until"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project"
             }
           }
         ],
@@ -13723,6 +15821,22 @@
               ],
               "title": "Effort"
             }
+          },
+          {
+            "in": "query",
+            "name": "project",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project"
+            }
           }
         ],
         "responses": {
@@ -13967,6 +16081,22 @@
               ],
               "title": "Effort"
             }
+          },
+          {
+            "in": "query",
+            "name": "project",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project"
+            }
           }
         ],
         "responses": {
@@ -14066,6 +16196,22 @@
                 }
               ],
               "title": "Until"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project"
             }
           }
         ],
@@ -14237,6 +16383,22 @@
               ],
               "title": "Until"
             }
+          },
+          {
+            "in": "query",
+            "name": "project",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project"
+            }
           }
         ],
         "responses": {
@@ -14336,6 +16498,22 @@
                 }
               ],
               "title": "Until"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project"
             }
           }
         ],
@@ -14447,6 +16625,22 @@
               ],
               "title": "Until"
             }
+          },
+          {
+            "in": "query",
+            "name": "project",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project"
+            }
           }
         ],
         "responses": {
@@ -14556,6 +16750,22 @@
                 }
               ],
               "title": "Until"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project"
             }
           }
         ],
@@ -14793,7 +17003,7 @@
     },
     "/api/auth/rotate-signing-key": {
       "post": {
-        "description": "Mint a fresh current signing key, demoting the old current to previous.\nHuman-plane, gated on ``user:manage`` and closed to a runner bearer token.",
+        "description": "Mint a fresh current signing key, demoting the old current to previous.\nHuman-plane, gated on the hub-level ``hub-admin:grant`` and closed to a runner bearer token.",
         "operationId": "rotate_signing_key_api_auth_rotate_signing_key_post",
         "responses": {
           "204": {
@@ -14833,6 +17043,22 @@
                 }
               ],
               "title": "Return To"
+            }
+          },
+          {
+            "in": "query",
+            "name": "invite",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Invite"
             }
           }
         ],
@@ -14936,7 +17162,7 @@
     },
     "/api/backlog": {
       "get": {
-        "description": "The hub-ordered ``not_ready`` list, read-only and keyset-paginated\n\u2014 an operator triage surface, requiring ``queue:reorder`` not ``fleet:view``.",
+        "description": "The hub-ordered ``not_ready`` list, read-only and keyset-paginated\n\u2014 an operator triage surface, requiring ``queue:reorder`` not ``fleet:view``.\n``?project=`` narrows it to that project's chunks at their whole-list positions, never\nreranked; without it, the whole tenant's.",
         "operationId": "get_backlog_api_backlog_get",
         "parameters": [
           {
@@ -14965,6 +17191,22 @@
               "minimum": 1,
               "title": "Limit",
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project"
             }
           }
         ],
@@ -15080,8 +17322,26 @@
     },
     "/api/chunk-counts": {
       "get": {
-        "description": "The all-time fleet count per derived status \u2014 over exactly the chunks\n``GET /api/chunks`` pages over, with no window applied.",
+        "description": "The all-time fleet count per derived status \u2014 over exactly the chunks\n``GET /api/chunks`` pages over, with no window applied; ``?project=`` counts that\nproject's chunks alone.",
         "operationId": "chunk_counts_api_chunk_counts_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -15092,6 +17352,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Chunk Counts",
@@ -15102,7 +17372,7 @@
     },
     "/api/chunks": {
       "get": {
-        "description": "The fleet chunk list \u2014 derived status per chunk, bounded and keyset-paginated.\n\nOnly the page's own rows render, but live-holder and blocked-marking derivation still\nsee the whole fleet \u2014 a pointer this page renders can be held live by a\nchunk outside it, same for a dependent's prerequisite.",
+        "description": "The fleet chunk list \u2014 derived status per chunk, bounded and keyset-paginated;\n``?project=`` narrows the rows to that project's chunks, in the same order.\n\nOnly the page's own rows render, but live-holder and blocked-marking derivation still\nsee the whole fleet \u2014 a pointer this page renders can be held live by a\nchunk outside it, same for a dependent's prerequisite.",
         "operationId": "list_chunks_api_chunks_get",
         "parameters": [
           {
@@ -15142,6 +17412,22 @@
               "title": "Board Window",
               "type": "boolean"
             }
+          },
+          {
+            "in": "query",
+            "name": "project",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project"
+            }
           }
         ],
         "responses": {
@@ -15172,7 +17458,7 @@
         ]
       },
       "post": {
-        "description": "Ingest by source-native token; 422 on a token no configured source\nclaims; 409 on a pointer held by a live chunk; 503 if every graph named after the\npackaged default has been retired (the operator's brake, not a code\nbug: re-enable one or mint a new one).",
+        "description": "Ingest by source-native token into the project named, or the one the tokens' sources\nagree on; 422 on a project the tenant does not hold, a token no configured source\nclaims, a project the tokens leave open (``project_required``) and a source the\nproject is not linked to (``source_not_linked``); 409 on a pointer held by a live chunk;\n503 if every graph named after the packaged default has been retired (the operator's\nbrake, not a code bug: re-enable one or mint a new one).",
         "operationId": "ingest_chunk_api_chunks_post",
         "requestBody": {
           "content": {
@@ -15632,7 +17918,7 @@
     },
     "/api/chunks/{chunk_id}/group": {
       "post": {
-        "description": "Merge unacquired chunks into ``chunk_id``. Accepts ``not_ready`` and ``ready``\nparticipants alike; 409 names the first chunk a runner holds, or one\nalready finished. The survivor also absorbs each folded chunk's standing dependency\nedges; 409 refuses a fold that would close a cycle.",
+        "description": "Merge unacquired chunks into ``chunk_id``. Accepts ``not_ready`` and ``ready``\nparticipants alike; 409 names the first chunk a runner holds, or one\nalready finished, or one of another project than the survivor's. The survivor also\nabsorbs each folded chunk's standing dependency edges; 409 refuses a fold that would\nclose a cycle.",
         "operationId": "group_chunks_api_chunks__chunk_id__group_post",
         "parameters": [
           {
@@ -16356,7 +18642,7 @@
     },
     "/api/config/changes": {
       "get": {
-        "description": "The change log newest-first, keyset-paged on `id`: pass the page's `next_before` as\n`before` for the next. Optionally narrowed to one `record_kind` and `record_key`.",
+        "description": "The change log newest-first, keyset-paged on `id`: pass the page's `next_before` as\n`before` for the next. Optionally narrowed to one `record_kind` and `record_key`, and to the\nchanges concerning one `project` (its id or slug; 422 when the tenant holds no such project).",
         "operationId": "list_changes_api_config_changes_get",
         "parameters": [
           {
@@ -16419,6 +18705,22 @@
               ],
               "title": "Record Key"
             }
+          },
+          {
+            "in": "query",
+            "name": "project",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project"
+            }
           }
         ],
         "responses": {
@@ -16451,7 +18753,7 @@
     },
     "/api/config/export": {
       "get": {
-        "description": "Every active, non-built-in work source and repository, and every active scope and routine (its linked\nscope set included), with every field, and every active secret name, as a document that applies back as a\nno-op. Retired records are left out, since applying one would enable it.",
+        "description": "Every project with its standing links, every active, non-built-in work source and repository, and every\nactive scope and routine (its linked scope set included) named in its project by slug, with every field, and\nevery active secret name, as a document that applies back as a no-op. Retired records are left out, since\napplying one would enable it.",
         "operationId": "export_config_api_config_export_get",
         "responses": {
           "200": {
@@ -16709,7 +19011,7 @@
     },
     "/api/events": {
       "get": {
-        "description": "The ``event_log`` unified with open escalations, newest first, bounded.\n\nThe ``severity`` / ``runner_id`` / ``chunk_id`` / ``since`` filters apply to both halves, the event\nlog and the open escalations alike. A tz-naive\n``since`` is coerced to UTC so the escalations' aware ``recorded_at`` comparison never raises against it.",
+        "description": "The ``event_log`` unified with open escalations, newest first, bounded.\n\nThe ``severity`` / ``runner_id`` / ``chunk_id`` / ``since`` / ``project`` filters apply to both halves, the\nevent log and the open escalations alike. Under ``project``, a row naming a chunk is kept when the chunk is the\nproject's, a row naming only a runner when that runner serves it, and a row naming neither always. A tz-naive\n``since`` is coerced to UTC so the escalations' aware ``recorded_at`` comparison never raises against it.",
         "operationId": "list_events_api_events_get",
         "parameters": [
           {
@@ -16788,6 +19090,22 @@
               "title": "Limit",
               "type": "integer"
             }
+          },
+          {
+            "in": "query",
+            "name": "project",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project"
+            }
           }
         ],
         "responses": {
@@ -16820,7 +19138,7 @@
     },
     "/api/findings": {
       "get": {
-        "description": "The findings bucket, widened to every routine and every scope,\nbounded and keyset-paginated \u2014 live only, unless `include_gone`,\nwhich also surfaces every exited finding, not just a merely `gone` one.\n`routine` and `scope` are both optional, independently:\n\n- both named \u2014 one routine's findings under one scope\n- `routine` named, `scope` absent \u2014 one routine's findings across every scope it holds\n- `routine` absent, `scope` named \u2014 every routine's findings under one scope\n- both absent \u2014 every finding across every routine and every scope\n\n`source` further narrows to `\"routine\"` or `\"review\"`; absent reads\nboth. All share `list_page`'s own total `finding_id` order.",
+        "description": "The findings bucket, widened to every routine and every scope,\nbounded and keyset-paginated \u2014 live only, unless `include_gone`,\nwhich also surfaces every exited finding, not just a merely `gone` one.\n`routine` and `scope` are both optional, independently:\n\n- both named \u2014 one routine's findings under one scope\n- `routine` named, `scope` absent \u2014 one routine's findings across every scope it holds\n- `routine` absent, `scope` named \u2014 every routine's findings under one scope\n- both absent \u2014 every finding across every routine and every scope\n\n`source` further narrows to `\"routine\"` or `\"review\"`; absent reads\nboth. All share `list_page`'s own total `finding_id` order. `?project=` narrows to that project. A named\n`routine` or `scope` with no `?project=` is read in the call's project (the tenant's only one, else `422\nproject_required`); naming none of the three reads the whole tenant.",
         "operationId": "list_findings_api_findings_get",
         "parameters": [
           {
@@ -16907,6 +19225,22 @@
               "minimum": 1,
               "title": "Limit",
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project"
             }
           }
         ],
@@ -18515,7 +20849,7 @@
     },
     "/api/fleet/identity": {
       "get": {
-        "description": "The id and name of the runner the presented bearer token names, or a 401 saying why the hub\nrefuses it: ``missing``, ``unknown``, ``revoked`` or ``retired``, the last two naming the runner\nthe token was issued to. Registers nothing and records no liveness.",
+        "description": "The id and name of the runner the presented bearer token names, and the tenant it was added\nin, or a 401 saying why the hub refuses it: ``missing``, ``unknown``, ``revoked`` or\n``retired``, the last two naming the runner the token was issued to. Registers nothing and\nrecords no liveness.",
         "operationId": "get_runner_identity_api_fleet_identity_get",
         "responses": {
           "200": {
@@ -18590,8 +20924,26 @@
     },
     "/api/fleet/queue/peek": {
       "get": {
-        "description": "The runner's FILL read \u2014 the whole ready-queue order: a filling runner needs every\nready chunk in one read. Kept as-is for a previous-minor caller;\n``POST /queue/peek`` below is the matched counterpart.",
+        "description": "The runner's FILL read \u2014 the whole ready-queue order: a filling runner needs every\nready chunk in one read. Kept as-is for a previous-minor caller;\n``POST /queue/peek`` below is the matched counterpart. ``?project=`` narrows it to that\nproject's chunks at their whole-queue positions, never reranked.",
         "operationId": "peek_queue_api_fleet_queue_peek_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -18602,6 +20954,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Peek Queue",
@@ -18610,7 +20972,7 @@
         ]
       },
       "post": {
-        "description": "The matched fleet peek \u2014 at most one ready entry the calling principal can both\nwork (its declared capabilities admit the entry) and claim (not dependency-blocked),\nwith the request's match policy applied to both.",
+        "description": "The matched fleet peek \u2014 at most one ready entry of a project the calling principal\nserves that it can both work (its declared capabilities admit the entry) and claim (not\ndependency-blocked), with the request's match policy applied to both. The served set is\nthe principal's stored declaration; a runner serving nothing is offered nothing.",
         "operationId": "peek_matched_queue_api_fleet_queue_peek_post",
         "requestBody": {
           "content": {
@@ -18652,7 +21014,7 @@
     },
     "/api/fleet/routes": {
       "post": {
-        "description": "Claim a chunk; 403 if the runner is unregistered, paused, or retired at the hub, 409 if already claimed,\nalready terminal ({done, stopped}), not ready, standing on an unmet prerequisite,\nor incompatible with the runner's stored capabilities, else the first node envelope.",
+        "description": "Claim a chunk; 403 if the runner is unregistered, paused, or retired at the hub, 409 if already claimed,\nalready terminal ({done, stopped}), not ready, standing on an unmet prerequisite, of a project\nthe runner does not serve, or incompatible with the runner's stored capabilities, else the first\nnode envelope.",
         "operationId": "claim_route_api_fleet_routes_post",
         "requestBody": {
           "content": {
@@ -18694,7 +21056,7 @@
     },
     "/api/fleet/runners": {
       "post": {
-        "description": "Register the calling runner \u2014 the one its bearer token names \u2014 with its workspace binding\nand the name it declares; idempotent.\n\nThe hub never rejects a registration over its roster \u2014 it doubles as the heartbeat every tick.\nA body ``runner_id`` from an older runner is ignored. A retired runner is refused 403.",
+        "description": "Register the calling runner \u2014 the one its bearer token names \u2014 with its workspace binding\nand the name it declares; idempotent.\n\nThe hub never rejects a registration over its roster \u2014 it doubles as the heartbeat every tick,\nso the tenant it answers, named as the hub holds it now, carries a rename on the next tick. A\nbody ``runner_id`` from an older runner is ignored. A retired runner is refused 403.",
         "operationId": "register_runner_api_fleet_runners_post",
         "requestBody": {
           "content": {
@@ -18815,8 +21177,26 @@
     },
     "/api/fleet/scopes": {
       "get": {
-        "description": "Every scope, newest first, each marked retired or not \u2014 the\ndeployment's scope vocabulary.",
+        "description": "Every scope, newest first, each marked retired or not \u2014 the\ndeployment's scope vocabulary; with `chunk_id`, only the scopes of that chunk's project, the vocabulary a\nworker on that chunk may name. 404 on an unknown chunk.",
         "operationId": "get_scopes_api_fleet_scopes_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "chunk_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Chunk Id"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -18831,6 +21211,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Get Scopes",
@@ -18974,7 +21364,7 @@
     },
     "/api/garden-proposals": {
       "get": {
-        "description": "Every garden proposal, newest first, bounded and keyset-paginated.\n`origin` narrows to `routine-run` or `operator` proposals.",
+        "description": "Every garden proposal, newest first, bounded and keyset-paginated \u2014 of the project `?project=` names, else\nof every project. `origin` narrows to `routine-run` or `operator` proposals.",
         "operationId": "list_garden_proposals_api_garden_proposals_get",
         "parameters": [
           {
@@ -19020,6 +21410,22 @@
               ],
               "title": "Origin"
             }
+          },
+          {
+            "in": "query",
+            "name": "project",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project"
+            }
           }
         ],
         "responses": {
@@ -19050,7 +21456,8 @@
         ]
       },
       "post": {
-        "description": "Mint an operator-authored proposal, naming `routine` when the\ncaller names one, else none. 422 for a blank title/class/body, an unknown routine,\nor an unknown, exited, or duplicate finding id \u2014 the whole call is refused, nothing\nis linked.",
+        "deprecated": true,
+        "description": "Mint an operator-authored proposal in the call's project (the tenant's only one, else `422\nproject_required`), naming `routine` when the caller names one, else none. 422 for a blank title/class/body,\nan unknown routine, or an unknown, exited, or duplicate finding id, or one of another project \u2014 the whole\ncall is refused, nothing is linked. Deprecated: `POST /api/projects/{project}/garden-proposals`.",
         "operationId": "create_garden_proposal_api_garden_proposals_post",
         "requestBody": {
           "content": {
@@ -19239,7 +21646,7 @@
     },
     "/api/garden-proposals/{proposal_id}/attach": {
       "post": {
-        "description": "Link the given finding ids to `{proposal_id}` \u2014 works on either origin\nwhile open. 404 unknown proposal, 409 already closed, 422 no finding id, an unknown,\nexited, or duplicate finding id, or one already linked to this proposal \u2014 the whole\ncall is refused, nothing is linked.",
+        "description": "Link the given finding ids to `{proposal_id}` \u2014 works on either origin\nwhile open. 404 unknown proposal, 409 already closed, 422 no finding id, an unknown,\nexited, or duplicate finding id, one of another project than the proposal's, or one\nalready linked to this proposal \u2014 the whole call is refused, nothing is linked.",
         "operationId": "attach_garden_proposal_findings_api_garden_proposals__proposal_id__attach_post",
         "parameters": [
           {
@@ -19464,7 +21871,8 @@
     },
     "/api/graphs/sync": {
       "post": {
-        "description": "Reconcile the packaged graph set against the store, minting only what changed.\n\nIdempotent, so it is safe to run unconditionally. Registered above\n``/graphs/{graph_id}`` so ``sync`` is not matched as a graph id. Always ``200``: a\ngraph that fails to load is a ``failed`` report row, and ``ok`` carries the verdict.",
+        "deprecated": true,
+        "description": "Reconcile the packaged graph set against the request's tenant, minting only what changed \u2014 superseded by\n``POST /api/admin/graphs/sync``, which reconciles every open tenant.\n\nIdempotent, so it is safe to run unconditionally. Registered above\n``/graphs/{graph_id}`` so ``sync`` is not matched as a graph id. Always ``200``: a\ngraph that fails to load is a ``failed`` report row, and ``ok`` carries the verdict.",
         "operationId": "sync_graphs_api_graphs_sync_post",
         "responses": {
           "200": {
@@ -19743,9 +22151,114 @@
         ]
       }
     },
+    "/api/invitations": {
+      "get": {
+        "description": "Every invitation of the tenant with its state \u2014 never a link.",
+        "operationId": "list_invitations_api_invitations_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvitationListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Invitations",
+        "tags": [
+          "invitations"
+        ]
+      },
+      "post": {
+        "description": "Invite ``email`` into the tenant as ``role``. The link's token is returned this once; only its hash is kept.",
+        "operationId": "create_invitation_api_invitations_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InvitationCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvitationCreateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Invitation",
+        "tags": [
+          "invitations"
+        ]
+      }
+    },
+    "/api/invitations/{invitation_id}/revocations": {
+      "post": {
+        "description": "Revoke a live or expired invitation: 404 for one the tenant does not hold, 409 for one already accepted or\nrevoked.",
+        "operationId": "revoke_invitation_api_invitations__invitation_id__revocations_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "invitation_id",
+            "required": true,
+            "schema": {
+              "title": "Invitation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvitationView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke Invitation",
+        "tags": [
+          "invitations"
+        ]
+      }
+    },
     "/api/me": {
       "get": {
-        "description": "Under ``auth.mode = \"none\"`` the implicit operator/superuser; under ``oauth``\nwith a resolving session, the session's identity; under ``oauth`` with none, 401.",
+        "description": "Under ``auth.mode = \"none\"`` the implicit operator, a member of every open tenant; under\n``oauth`` with a resolving session, the session's person; under ``oauth`` with none, 401.\nA header naming a tenant the caller cannot enter resolves no tenant \u2014 never a 404 here.",
         "operationId": "me_api_me_get",
         "responses": {
           "200": {
@@ -19762,6 +22275,1771 @@
         "summary": "Me",
         "tags": [
           "auth"
+        ]
+      }
+    },
+    "/api/members": {
+      "get": {
+        "description": "Every member of the request's tenant, with the changes the actor may make to each.",
+        "operationId": "list_members_api_members_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MemberView"
+                  },
+                  "title": "Response List Members Api Members Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Members",
+        "tags": [
+          "members"
+        ]
+      }
+    },
+    "/api/members/{user_id}": {
+      "delete": {
+        "description": "Revoke ``user_id``'s membership in the request's tenant. Refused as a grant is: a user that is no member\n(``404``, unless the actor holds ``membership:grant-any``, for whom it writes nothing), your own (``403``), and the\ntenant's last admin (``409``).",
+        "operationId": "revoke_membership_api_members__user_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke Membership",
+        "tags": [
+          "members"
+        ]
+      },
+      "put": {
+        "description": "Grant ``user_id`` ``role`` in the request's tenant, or change the role they hold there. A role equal to the one\nin force writes nothing. Refused: a role that is no membership role (``422``), a user that does not exist or \u2014\nwithout ``membership:grant-any`` \u2014 is no member (``404``, alike), your own role (``403``), and demoting the\ntenant's last admin (``409``).",
+        "operationId": "grant_membership_api_members__user_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemberRoleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Grant Membership",
+        "tags": [
+          "members"
+        ]
+      }
+    },
+    "/api/projects": {
+      "get": {
+        "description": "Every project of the tenant, by slug.",
+        "operationId": "list_projects_api_projects_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectsListView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Projects",
+        "tags": [
+          "projects"
+        ]
+      },
+      "post": {
+        "description": "Store a new project at revision 1, serving no source or repository but the built-in ``hub`` source until it is\nlinked. 422 naming the field for a malformed slug or a blank or padded name; 409 when the slug is another\nproject's current slug.",
+        "operationId": "create_project_api_projects_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Project",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/api/projects/{project}": {
+      "get": {
+        "description": "One project, named by its id, its slug, or a slug it left. 404 when it names none.",
+        "operationId": "get_project_api_projects__project__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project",
+            "required": true,
+            "schema": {
+              "title": "Project",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Project",
+        "tags": [
+          "projects"
+        ]
+      },
+      "patch": {
+        "description": "Apply only the fields present; an explicit `null` is refused naming the field. A patch that changes nothing\nwrites nothing. A slug the project leaves keeps naming it until another project takes it. 404 unknown; 409 for a\nstale `If-Match` (naming the current revision) or a slug another project holds; 422 naming the field.",
+        "operationId": "patch_project_api_projects__project__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project",
+            "required": true,
+            "schema": {
+              "title": "Project",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "if-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectPatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Patch Project",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/api/projects/{project}/findings": {
+      "get": {
+        "description": "The project's findings bucket, bounded and keyset-paginated, narrowed as `GET /api/findings` narrows by\n`routine`, `scope`, `source` and `include_gone`; 404 on an unknown project.",
+        "operationId": "list_project_findings_api_projects__project__findings_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project",
+            "required": true,
+            "schema": {
+              "title": "Project",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "routine",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Routine"
+            }
+          },
+          {
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Scope"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_gone",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Gone",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindingsPageView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Project Findings",
+        "tags": [
+          "findings"
+        ]
+      }
+    },
+    "/api/projects/{project}/garden-proposals": {
+      "get": {
+        "description": "The project's garden proposals, newest first, bounded and keyset-paginated; `origin` narrows to one\norigin. 404 on an unknown project.",
+        "operationId": "list_project_garden_proposals_api_projects__project__garden_proposals_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project",
+            "required": true,
+            "schema": {
+              "title": "Project",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "origin",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/GardenProposalOrigin"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Origin"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GardenProposalsPageView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Project Garden Proposals",
+        "tags": [
+          "garden-proposals"
+        ]
+      },
+      "post": {
+        "description": "Mint an operator-authored proposal in the project, naming `routine` \u2014 one of the project's \u2014 when the\ncaller names one, else none. 422 for a blank title/class/body, an unknown routine, or an unknown, exited, or\nduplicate finding id, or one of another project \u2014 the whole call is refused, nothing is linked. 404 on an\nunknown project.",
+        "operationId": "create_project_garden_proposal_api_projects__project__garden_proposals_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project",
+            "required": true,
+            "schema": {
+              "title": "Project",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GardenProposalCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GardenProposalView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Project Garden Proposal",
+        "tags": [
+          "garden-proposals"
+        ]
+      }
+    },
+    "/api/projects/{project}/repository-links": {
+      "get": {
+        "description": "The project's standing repository links by repository name. 404 when the project is unknown.",
+        "operationId": "list_repository_links_api_projects__project__repository_links_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project",
+            "required": true,
+            "schema": {
+              "title": "Project",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryLinksView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Repository Links",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/api/projects/{project}/repository-links/{repository}": {
+      "put": {
+        "description": "Link the project to a stored repository, retired or not \u2014 a first link, or a relink of one it unlinked; a\nstanding link is left as it is. 404 for an unknown project or repository; 409 for a stale `If-Match` on a stored\nlink.",
+        "operationId": "link_repository_api_projects__project__repository_links__repository__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "repository",
+            "required": true,
+            "schema": {
+              "title": "Repository",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "project",
+            "required": true,
+            "schema": {
+              "title": "Project",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "if-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryLinkView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Link Repository",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/api/projects/{project}/repository-links/{repository}/retire": {
+      "post": {
+        "description": "Unlink the project from a repository by retiring the link; unlinking an unlinked link changes nothing. 404 for\nan unknown project or a repository it never linked; 409 for a stale `If-Match`.",
+        "operationId": "unlink_repository_api_projects__project__repository_links__repository__retire_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "repository",
+            "required": true,
+            "schema": {
+              "title": "Repository",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "project",
+            "required": true,
+            "schema": {
+              "title": "Project",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "if-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryLinkView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Unlink Repository",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/api/projects/{project}/routines": {
+      "get": {
+        "description": "Every routine of the project, newest first \u2014 a retired routine excluded by default, included and marked\nwhen ``include_retired``; 404 on an unknown project.",
+        "operationId": "list_project_routines_api_projects__project__routines_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project",
+            "required": true,
+            "schema": {
+              "title": "Project",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_retired",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Retired",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RoutineView"
+                  },
+                  "title": "Response List Project Routines Api Projects  Project  Routines Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Project Routines",
+        "tags": [
+          "routines"
+        ]
+      },
+      "post": {
+        "description": "Mint a routine in the project, its default scope resolved or minted there; 422 on a duplicate name in the\nproject, a malformed default scope slug, or a graph name with no enabled mint; 404 on an unknown project.",
+        "operationId": "create_project_routine_api_projects__project__routines_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project",
+            "required": true,
+            "schema": {
+              "title": "Project",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoutineCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoutineView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Project Routine",
+        "tags": [
+          "routines"
+        ]
+      }
+    },
+    "/api/projects/{project}/runs": {
+      "get": {
+        "description": "The project's routine runs minted in `[since, until)`, newest first, as `GET /api/runs` reads them; 404 on\nan unknown project, 422 on a malformed instant or an inverted span.",
+        "operationId": "list_project_runs_api_projects__project__runs_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project",
+            "required": true,
+            "schema": {
+              "title": "Project",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RunRowView"
+                  },
+                  "title": "Response List Project Runs Api Projects  Project  Runs Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Project Runs",
+        "tags": [
+          "garden-runs"
+        ]
+      }
+    },
+    "/api/projects/{project}/runs/{chunk_id}": {
+      "get": {
+        "description": "One of the project's runs in full detail, as `GET /api/runs/{chunk_id}` reads it; 404 on an unknown project\nand when `chunk_id` names no routine run of the project.",
+        "operationId": "project_run_delta_api_projects__project__runs__chunk_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "project",
+            "required": true,
+            "schema": {
+              "title": "Project",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunDeltaView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Project Run Delta",
+        "tags": [
+          "garden-runs"
+        ]
+      }
+    },
+    "/api/projects/{project}/scopes": {
+      "get": {
+        "description": "Every scope of the project, newest first, each marked retired or not; 404 on an unknown project.",
+        "operationId": "list_project_scopes_api_projects__project__scopes_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project",
+            "required": true,
+            "schema": {
+              "title": "Project",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ScopeView"
+                  },
+                  "title": "Response List Project Scopes Api Projects  Project  Scopes Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Project Scopes",
+        "tags": [
+          "scopes"
+        ]
+      },
+      "post": {
+        "description": "Mint a scope in the project, or no-op onto its existing one of the same slug; 422 on a malformed slug,\nnaming the rejected value; 404 on an unknown project.",
+        "operationId": "create_project_scope_api_projects__project__scopes_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project",
+            "required": true,
+            "schema": {
+              "title": "Project",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScopeCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScopeView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Project Scope",
+        "tags": [
+          "scopes"
+        ]
+      }
+    },
+    "/api/projects/{project}/scopes/{slug}": {
+      "get": {
+        "description": "One scope of the project; 404 on an unknown project or slug.",
+        "operationId": "get_project_scope_api_projects__project__scopes__slug__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "project",
+            "required": true,
+            "schema": {
+              "title": "Project",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScopeView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Project Scope",
+        "tags": [
+          "scopes"
+        ]
+      },
+      "patch": {
+        "description": "Apply only the fields present to the project's scope `slug`; an edit that changes nothing writes nothing.\n422 on a malformed slug or a `null` field, 404 on an unknown project or slug, 409 on a stale `If-Match`.",
+        "operationId": "edit_project_scope_api_projects__project__scopes__slug__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "project",
+            "required": true,
+            "schema": {
+              "title": "Project",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "if-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScopeEditRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScopeView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Edit Project Scope",
+        "tags": [
+          "scopes"
+        ]
+      }
+    },
+    "/api/projects/{project}/scopes/{slug}/enable": {
+      "post": {
+        "description": "Re-enable the project's retired scope `slug`; enabling an enabled one writes nothing. 404 on an unknown\nproject or slug, 409 on a stale `If-Match`.",
+        "operationId": "enable_project_scope_api_projects__project__scopes__slug__enable_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "project",
+            "required": true,
+            "schema": {
+              "title": "Project",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "if-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScopeLifecycleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScopeView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Enable Project Scope",
+        "tags": [
+          "scopes"
+        ]
+      }
+    },
+    "/api/projects/{project}/scopes/{slug}/retire": {
+      "post": {
+        "description": "Retire the project's scope `slug`; retiring a retired scope writes nothing. 404 on an unknown project or\nslug, 409 on a stale `If-Match`.",
+        "operationId": "retire_project_scope_api_projects__project__scopes__slug__retire_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "project",
+            "required": true,
+            "schema": {
+              "title": "Project",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "if-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScopeLifecycleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScopeView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retire Project Scope",
+        "tags": [
+          "scopes"
+        ]
+      }
+    },
+    "/api/projects/{project}/scopes/{slug}/routines": {
+      "get": {
+        "description": "Every routine id linked to the project's scope `slug`; 404 on an unknown project or slug.",
+        "operationId": "list_project_scope_routines_api_projects__project__scopes__slug__routines_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "project",
+            "required": true,
+            "schema": {
+              "title": "Project",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "title": "Response List Project Scope Routines Api Projects  Project  Scopes  Slug  Routines Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Project Scope Routines",
+        "tags": [
+          "scopes"
+        ]
+      }
+    },
+    "/api/projects/{project}/source-links": {
+      "get": {
+        "description": "The project's standing source links by source name, the built-in ``hub`` source among them. 404 when the\nproject is unknown.",
+        "operationId": "list_source_links_api_projects__project__source_links_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project",
+            "required": true,
+            "schema": {
+              "title": "Project",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceLinksView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Source Links",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/api/projects/{project}/source-links/{source}": {
+      "put": {
+        "description": "Link the project to a stored work source, retired or not \u2014 a first link, or a relink of one it unlinked; a\nstanding link, and the built-in ``hub`` source, are left as they are. 404 for an unknown project or source; 409\nfor a stale `If-Match` on a stored link.",
+        "operationId": "link_source_api_projects__project__source_links__source__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source",
+            "required": true,
+            "schema": {
+              "title": "Source",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "project",
+            "required": true,
+            "schema": {
+              "title": "Project",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "if-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceLinkView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Link Source",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/api/projects/{project}/source-links/{source}/retire": {
+      "post": {
+        "description": "Unlink the project from a work source by retiring the link; unlinking an unlinked link changes nothing. 422 for\nthe built-in ``hub`` source; 404 for an unknown project or a source it never linked; 409 for a stale\n`If-Match`.",
+        "operationId": "unlink_source_api_projects__project__source_links__source__retire_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source",
+            "required": true,
+            "schema": {
+              "title": "Source",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "project",
+            "required": true,
+            "schema": {
+              "title": "Project",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "if-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceLinkView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Unlink Source",
+        "tags": [
+          "projects"
         ]
       }
     },
@@ -19890,7 +24168,7 @@
     },
     "/api/queue": {
       "get": {
-        "description": "The hub-ordered ready queue, read-only and keyset-paginated\n\u2014 honours reorder/replace + grouping.",
+        "description": "The hub-ordered ready queue, read-only and keyset-paginated\n\u2014 honours reorder/replace + grouping. ``?project=`` narrows it to that project's\nchunks at their whole-queue positions, never reranked; without it, the whole tenant's.",
         "operationId": "get_queue_api_queue_get",
         "parameters": [
           {
@@ -19919,6 +24197,22 @@
               "minimum": 1,
               "title": "Limit",
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project"
             }
           }
         ],
@@ -20433,7 +24727,7 @@
     },
     "/api/routines": {
       "get": {
-        "description": "Every routine, newest first \u2014 a retired routine excluded by default, included and\nmarked when ``include_retired``.",
+        "description": "Every routine, newest first \u2014 of the project `?project=` names, else of every project; a retired routine\nexcluded by default, included and marked when ``include_retired``.",
         "operationId": "list_routines_api_routines_get",
         "parameters": [
           {
@@ -20444,6 +24738,22 @@
               "default": false,
               "title": "Include Retired",
               "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project"
             }
           }
         ],
@@ -20479,7 +24789,8 @@
         ]
       },
       "post": {
-        "description": "Mint a routine; 422 on a duplicate name, a malformed default scope slug, or a\ngraph name with no enabled mint.",
+        "deprecated": true,
+        "description": "Mint a routine in the call's project, its default scope resolved or minted there; 422 on a duplicate name\nin the project, a malformed default scope slug, or a graph name with no enabled mint. Deprecated: `POST\n/api/projects/{project}/routines`.",
         "operationId": "create_routine_api_routines_post",
         "parameters": [
           {
@@ -20539,7 +24850,7 @@
     },
     "/api/routines/proposal-counts": {
       "get": {
-        "description": "Garden-proposal counts per origin, routine, and class over\n`[since, until)`, split into open/passed/accepted-with-item/accepted-without-item \u2014\n`created` is their sum. `routine` narrows to one routine's rows of\nboth origins when given; 404 on an unknown one. `origin` narrows to one origin. 422\non a malformed instant or `until <= since`.",
+        "description": "Garden-proposal counts per origin, routine, and class over\n`[since, until)`, split into open/passed/accepted-with-item/accepted-without-item \u2014\n`created` is their sum. `routine` narrows to one routine's rows of\nboth origins when given, looked up in the project `?project=` names, else in the call's project (the tenant's\nonly one, else `422 project_required`); 404 on an unknown one. `?project=` alone narrows to that project's\nrows; with neither, every project's rows are counted, one row per project. `origin` narrows to one origin.\n422 on a malformed instant or `until <= since`.",
         "operationId": "routine_proposal_counts_api_routines_proposal_counts_get",
         "parameters": [
           {
@@ -20591,6 +24902,22 @@
               ],
               "title": "Origin"
             }
+          },
+          {
+            "in": "query",
+            "name": "project",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project"
+            }
           }
         ],
         "responses": {
@@ -20623,7 +24950,7 @@
     },
     "/api/routines/trend": {
       "get": {
-        "description": "`routine`'s finding inflow-against-outflow over `[since, until)`: per\n`period_days`-wide period, findings created and per-kind exit counts, the outflow/\nwithdrawn roll-ups, and the age cut against `introduced_boundary`. 404 on an\nunknown routine name; 422 on a malformed instant, a non-positive `period_days`, a\nnon-positive span, or a span/`period_days` pair bucketing past the period cap.",
+        "description": "`routine`'s finding inflow-against-outflow over `[since, until)`: per\n`period_days`-wide period, findings created and per-kind exit counts, the outflow/\nwithdrawn roll-ups, and the age cut against `introduced_boundary`. `routine` is read in the project\n`?project=` names, else in the call's project (the tenant's only one, else `422 project_required`). 404 on an\nunknown routine name in that project; 422 on a malformed instant, a non-positive `period_days`, a\nnon-positive span, or a span/`period_days` pair bucketing past the period cap.",
         "operationId": "routine_trend_api_routines_trend_get",
         "parameters": [
           {
@@ -20670,6 +24997,22 @@
               "default": 7,
               "title": "Period Days",
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project"
             }
           }
         ],
@@ -21401,7 +25744,7 @@
         ]
       },
       "post": {
-        "description": "Add a runner under the initial ``name`` \u2014 the hub mints its id and bearer token together,\nand the plaintext token is returned once. The runner is never connected until it first\nregisters with that token. Names are not unique: adding a held name adds another runner.",
+        "description": "Add a runner under the initial ``name`` \u2014 the hub mints its id and bearer token together,\nand the plaintext token is returned once. The runner is never connected until it first\nregisters with that token. Names are not unique: adding a held name adds another runner.\n``projects`` is what it serves until a registration declares otherwise; an entry that names no\nproject of the tenant is refused 422, and nothing is added.",
         "operationId": "add_runner_api_runners_post",
         "requestBody": {
           "content": {
@@ -21794,7 +26137,7 @@
     },
     "/api/runs": {
       "get": {
-        "description": "Every routine run minted in `[since, until)`, newest first \u2014 `since`/`until`\ndefault to the last 24 hours ending now. Each row carries its routine, scope, mode,\nits derived outcome, and, where it delivered, every finding-set row it published.\n422 on a malformed instant or an inverted span.",
+        "description": "Every routine run minted in `[since, until)`, newest first \u2014 of the project `?project=` names, else of\nevery project; `since`/`until` default to the last 24 hours ending now. Each row carries its routine, scope,\nmode, its derived outcome, and, where it delivered, every finding-set row it published.\n422 on a malformed instant or an inverted span.",
         "operationId": "list_runs_api_runs_get",
         "parameters": [
           {
@@ -21827,6 +26170,22 @@
                 }
               ],
               "title": "Until"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project"
             }
           }
         ],
@@ -21907,8 +26266,26 @@
     },
     "/api/scopes": {
       "get": {
-        "description": "Every scope, newest first, each marked retired or not.",
+        "description": "Every scope, newest first, each marked retired or not \u2014 of the project `?project=` names, else of every\nproject.",
         "operationId": "list_scopes_api_scopes_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -21923,6 +26300,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "List Scopes",
@@ -21931,7 +26318,8 @@
         ]
       },
       "post": {
-        "description": "Mint a scope, or no-op onto the existing one of the same slug; 422 on a\nmalformed slug, naming the rejected value.",
+        "deprecated": true,
+        "description": "Mint a scope in the call's project, or no-op onto the project's existing one of the same slug; 422 on a\nmalformed slug, naming the rejected value. Deprecated: `POST /api/projects/{project}/scopes`.",
         "operationId": "create_scope_api_scopes_post",
         "parameters": [
           {
@@ -21991,7 +26379,8 @@
     },
     "/api/scopes/{slug}": {
       "get": {
-        "description": "One scope; 404 on an unknown slug.",
+        "deprecated": true,
+        "description": "One scope of the call's project; 404 on an unknown slug. Deprecated: `GET\n/api/projects/{project}/scopes/{slug}`.",
         "operationId": "get_scope_api_scopes__slug__get",
         "parameters": [
           {
@@ -22032,7 +26421,8 @@
         ]
       },
       "patch": {
-        "description": "Apply only the fields present; an edit that changes nothing writes nothing. 422 on a\nmalformed slug naming the rejected value or on a `null` field, 404 on a well-formed but\nunknown slug, 409 on a stale `If-Match` naming the current revision.",
+        "deprecated": true,
+        "description": "Apply only the fields present; an edit that changes nothing writes nothing. 422 on a\nmalformed slug naming the rejected value or on a `null` field, 404 on a well-formed but\nunknown slug, 409 on a stale `If-Match` naming the current revision. Deprecated: `PATCH\n/api/projects/{project}/scopes/{slug}`.",
         "operationId": "edit_scope_api_scopes__slug__patch",
         "parameters": [
           {
@@ -22117,7 +26507,8 @@
     },
     "/api/scopes/{slug}/enable": {
       "post": {
-        "description": "Re-enable a retired scope; enabling an enabled one writes nothing. 404 on an unknown\nslug, 409 on a stale `If-Match`.",
+        "deprecated": true,
+        "description": "Re-enable a retired scope; enabling an enabled one writes nothing. 404 on an unknown\nslug, 409 on a stale `If-Match`. Deprecated: `POST /api/projects/{project}/scopes/{slug}/enable`.",
         "operationId": "enable_scope_api_scopes__slug__enable_post",
         "parameters": [
           {
@@ -22202,7 +26593,8 @@
     },
     "/api/scopes/{slug}/retire": {
       "post": {
-        "description": "Retire a scope \u2014 a reversible brake; retiring a retired scope writes nothing. 404 on\nan unknown slug, 409 on a stale `If-Match`.",
+        "deprecated": true,
+        "description": "Retire a scope \u2014 a reversible brake; retiring a retired scope writes nothing. 404 on\nan unknown slug, 409 on a stale `If-Match`. Deprecated: `POST /api/projects/{project}/scopes/{slug}/retire`.",
         "operationId": "retire_scope_api_scopes__slug__retire_post",
         "parameters": [
           {
@@ -22287,7 +26679,8 @@
     },
     "/api/scopes/{slug}/routines": {
       "get": {
-        "description": "Every routine id linked to `slug` \u2014 the reverse direction of\n`GET /api/routines/{routine_id}/scopes`. 404 on an unknown slug.",
+        "deprecated": true,
+        "description": "Every routine id linked to `slug` in the call's project \u2014 the reverse direction of\n`GET /api/routines/{routine_id}/scopes`. 404 on an unknown slug. Deprecated: `GET\n/api/projects/{project}/scopes/{slug}/routines`.",
         "operationId": "list_scope_routines_api_scopes__slug__routines_get",
         "parameters": [
           {
@@ -22686,7 +27079,7 @@
     },
     "/api/spend": {
       "get": {
-        "description": "The fleet's total usage/cost since ``since`` (an ISO-8601 instant) \u2014 summed\nover every usage fact recorded at or after it, across every chunk. An optional\n``until`` bounds the window's other edge, exclusive.",
+        "description": "The fleet's total usage/cost since ``since`` (an ISO-8601 instant) \u2014 summed\nover every usage fact recorded at or after it, across every chunk, or ``?project=``'s\nchunks alone. An optional ``until`` bounds the window's other edge, exclusive.",
         "operationId": "fleet_spend_api_spend_get",
         "parameters": [
           {
@@ -22712,6 +27105,22 @@
                 }
               ],
               "title": "Until"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project"
             }
           }
         ],
@@ -22819,7 +27228,8 @@
     },
     "/api/users": {
       "get": {
-        "description": "Every hub-local account \u2014 the admin page's own table.",
+        "deprecated": true,
+        "description": "Every member of the request's tenant, in this listing's former shape; ``GET /api/members`` supersedes it.",
         "operationId": "list_users_api_users_get",
         "responses": {
           "200": {
@@ -22845,7 +27255,8 @@
     },
     "/api/users/{user_id}/role": {
       "post": {
-        "description": "Assign ``user_id`` a new role. Three refusals, each a 403: changing your own role;\nany change touching ``superuser``, which is bootstrap-only; and granting or revoking\n``admin`` as anyone but a ``superuser``. A no-op change is accepted and records\nnothing. A real one records a ``user_role_changed`` fact and takes effect on the\nsubject's next request, with no re-login.",
+        "deprecated": true,
+        "description": "Give ``user_id`` ``role`` in the request's tenant \u2014 ``pending`` revokes the membership \u2014 under the members\nroutes' rules and answers. ``superuser`` names the hub administrator role, which no membership change grants\n(``403``); an unknown role string answers ``400``.",
         "operationId": "assign_role_api_users__user_id__role_post",
         "parameters": [
           {
@@ -23254,7 +27665,7 @@
         ]
       },
       "post": {
-        "description": "Allocate a fresh item at SOURCE, open, authored by the caller, and mint its\nresting ``not_ready`` chunk in the same transaction. 404/409 from the source's editor gate,\n422 for a blank title or body, 409 if an out-of-band ingest already holds the\nallocated ref's pointer, 503 if every graph named after the packaged default has\nbeen retired (the operator's brake, mirroring ``POST /chunks``).",
+        "description": "Allocate a fresh item at SOURCE, open, authored by the caller, and mint its\nresting ``not_ready`` chunk in the same transaction, both in the project ``?project=`` names\n\u2014 the tenant's only one when it names none. 404/409 from the source's editor gate,\n422 for a blank title or body, an unknown project, or no project named in a tenant\nholding several (``project_required``), 409 if an out-of-band ingest already holds the\nallocated ref's pointer, 503 if every graph named after the packaged default has\nbeen retired (the operator's brake, mirroring ``POST /chunks``).",
         "operationId": "create_work_item_api_work_sources__source__items_post",
         "parameters": [
           {
@@ -23264,6 +27675,22 @@
             "schema": {
               "title": "Source",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project"
             }
           }
         ],

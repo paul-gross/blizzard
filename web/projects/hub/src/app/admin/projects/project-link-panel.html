@@ -1,0 +1,45 @@
+<section class="panel" [attr.data-testid]="testid()">
+  <header class="hdr">
+    <h3 class="section">{{ heading() }} <span class="count">{{ rows().length }}</span></h3>
+    @if (canEdit()) {
+      <fleet-kit-button variant="primary" [testid]="testid() + '-link'" (click)="link.emit()">
+        {{ linkLabel() }}
+      </fleet-kit-button>
+    }
+  </header>
+  <p class="explainer">{{ explainer() }}</p>
+  @if (error(); as failure) {
+    <p class="error" role="alert" [attr.data-testid]="testid() + '-error'">{{ failure }}</p>
+  }
+  @if (rows().length > 0) {
+    <ul class="rows" [attr.data-testid]="testid() + '-rows'">
+      @for (row of rows(); track row.name) {
+        <li class="row" [attr.data-testid]="testid() + '-row-' + row.name">
+          <span class="name">{{ row.name }}</span>
+          <span class="detail">{{ row.detail }}</span>
+          <span class="right">
+            @if (row.builtIn) {
+              <fleet-kit-badge tone="idle" variant="soft">built-in</fleet-kit-badge>
+            } @else {
+              @if (row.revision !== null) {
+                <span class="rev">r{{ row.revision }}</span>
+              }
+              @if (canEdit()) {
+                <fleet-kit-button
+                  variant="danger"
+                  [disabled]="pendingName() === row.name"
+                  [testid]="testid() + '-unlink-' + row.name"
+                  (click)="unlink.emit(row)"
+                >
+                  Unlink
+                </fleet-kit-button>
+              }
+            }
+          </span>
+        </li>
+      }
+    </ul>
+  } @else {
+    <p class="empty" [attr.data-testid]="testid() + '-empty'">{{ emptyText() }}</p>
+  }
+</section>

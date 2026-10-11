@@ -20,6 +20,7 @@ from blizzard.runner.harness.selftest_result import (
 from blizzard.runner.harness.workspace_prompts import IReadWorkspacePromptRepository, IWriteWorkspacePromptRepository
 from blizzard.runner.hub.identity import IReadRunnerIdentityRepository, IWriteRunnerIdentityRepository
 from blizzard.runner.hub.outbound_buffer import IReadOutboundRepository, IWriteOutboundRepository
+from blizzard.runner.hub.served_projects import IReadServedProjectsRepository, IWriteServedProjectsRepository
 from blizzard.runner.leases.asks import IReadAskRepository, IWriteAskRepository
 from blizzard.runner.leases.elicitation import IReadElicitationRepository, IWriteElicitationRepository
 from blizzard.runner.leases.escalations import IReadEscalationRepository, IWriteEscalationRepository
@@ -67,6 +68,7 @@ class IReadRunnerStore(
     IReadAskRepository,
     IReadPauseRepository,
     IReadRunnerIdentityRepository,
+    IReadServedProjectsRepository,
     IReadTakeoverRepository,
     IReadRequeueRepository,
     IReadEscalationRepository,
@@ -98,6 +100,7 @@ class IWriteRunnerStore(
     IWriteAskRepository,
     IWritePauseRepository,
     IWriteRunnerIdentityRepository,
+    IWriteServedProjectsRepository,
     IWriteTakeoverRepository,
     IWriteRequeueRepository,
     IWriteEscalationRepository,
@@ -133,6 +136,7 @@ class RunnerStores:
     asks: IWriteAskRepository
     pause: IWritePauseRepository
     identity: IWriteRunnerIdentityRepository
+    served_projects: IWriteServedProjectsRepository
     takeover: IWriteTakeoverRepository
     requeue: IWriteRequeueRepository
     escalations: IWriteEscalationRepository
@@ -165,6 +169,7 @@ class RunnerReadStores:
     asks: IReadAskRepository
     pause: IReadPauseRepository
     identity: IReadRunnerIdentityRepository
+    served_projects: IReadServedProjectsRepository
     takeover: IReadTakeoverRepository
     requeue: IReadRequeueRepository
     escalations: IReadEscalationRepository
@@ -196,6 +201,7 @@ class RunnerReadStores:
             asks=stores.asks,
             pause=stores.pause,
             identity=stores.identity,
+            served_projects=stores.served_projects,
             takeover=stores.takeover,
             requeue=stores.requeue,
             escalations=stores.escalations,

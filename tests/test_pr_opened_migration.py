@@ -16,6 +16,7 @@ from sqlalchemy.exc import IntegrityError
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner
+from tests.support import hub_scoped_engine
 
 pytestmark = pytest.mark.component
 
@@ -119,7 +120,7 @@ def test_upgrade_deduplicates_existing_duplicate_rows(tmp_path: Path) -> None:
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     runner.upgrade(_BEFORE)
-    engine = create_engine_from_url(db_url)
+    engine = hub_scoped_engine(create_engine_from_url(db_url))
     _seed(engine)
 
     runner.upgrade(_AFTER)
@@ -138,7 +139,7 @@ def test_upgrade_enforces_the_constraint_going_forward(tmp_path: Path) -> None:
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     runner.upgrade(_BEFORE)
-    engine = create_engine_from_url(db_url)
+    engine = hub_scoped_engine(create_engine_from_url(db_url))
     _seed(engine)
     runner.upgrade(_AFTER)
 
@@ -159,7 +160,7 @@ def test_downgrade_then_upgrade_round_trips_the_deduplicated_rows(tmp_path: Path
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     runner.upgrade(_BEFORE)
-    engine = create_engine_from_url(db_url)
+    engine = hub_scoped_engine(create_engine_from_url(db_url))
     _seed(engine)
     runner.upgrade(_AFTER)
 

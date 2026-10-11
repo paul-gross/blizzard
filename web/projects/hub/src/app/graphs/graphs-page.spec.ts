@@ -4,7 +4,7 @@ import { By } from '@angular/platform-browser';
 import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { hubClient } from 'fleet';
-import { BehaviorSubject } from 'rxjs';
+import { BehaviorSubject, NEVER } from 'rxjs';
 import { vi } from 'vitest';
 
 import { GraphsPage } from './graphs-page';
@@ -52,7 +52,9 @@ describe('GraphsPage', () => {
         provideZonelessChangeDetection(),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
         { provide: ActivatedRoute, useValue: { paramMap: paramMap$ } },
-        { provide: Router, useValue: { navigate } },
+        // The page navigates through the project lens, which reads the router's URL; on All it
+        // passes every link through unchanged.
+        { provide: Router, useValue: { navigate, url: '/graphs', events: NEVER } },
       ],
     }).compileComponents();
     const fixture = TestBed.createComponent(GraphsPage);

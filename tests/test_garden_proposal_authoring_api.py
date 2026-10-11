@@ -19,7 +19,7 @@ from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_closure_store import insert_garden_proposal_closure_row
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
 from blizzard.hub.store.internal.routine_store import RoutineStore
-from tests.support import HubHarness, build_hub, hub_store_connections
+from tests.support import HubHarness, build_hub, default_project, hub_store_connections, stamp
 
 pytestmark = pytest.mark.component
 
@@ -30,7 +30,7 @@ _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 
 def _seed_scope(hub: HubHarness, slug: str = "blizzard") -> None:
     with hub.engine.begin() as conn:
-        conn.execute(insert(s.scopes).values(slug=slug, description="", created_at=_NOW))
+        conn.execute(insert(s.scopes).values(stamp(s.scopes, slug=slug, description="", created_at=_NOW)))
 
 
 def _seed_routine(hub: HubHarness, name: str = "nightly", *, default_scope_slug: str = "blizzard") -> None:
@@ -40,6 +40,7 @@ def _seed_routine(hub: HubHarness, name: str = "nightly", *, default_scope_slug:
         graph_name="g",
         default_scope_slug=default_scope_slug,
         created_at=_NOW,
+        project_id=default_project(hub.engine),
     )
     change = ConfigChange.of(_CTX, RecordKind.ROUTINE, name, 1, ChangeOp.CREATE, (), routine.created_at)
     RoutineStore(hub_store_connections(hub.engine)).create(routine, change=change, scope_mint=None)
@@ -55,6 +56,7 @@ def _seed_finding(
 ) -> None:
     FindingStore(hub_store_connections(hub.engine)).add(
         finding_id,
+        project_id=default_project(hub.engine),
         routine_name=routine_name,
         scope_slug=scope_slug,
         class_="stale-docstring",
@@ -72,6 +74,7 @@ def _seed_proposal(
 ) -> None:
     GardenProposalStore(hub_store_connections(hub.engine)).create(
         proposal_id,
+        project_id=default_project(hub.engine),
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="fix-the-source",
@@ -81,7 +84,7 @@ def _seed_proposal(
         at=_NOW,
     )
     if closed:
-        with hub.engine.begin() as conn:
+        with hub_store_connections(hub.engine).write("seed_pass") as conn:
             insert_garden_proposal_closure_row(
                 conn,
                 proposal_id=proposal_id,

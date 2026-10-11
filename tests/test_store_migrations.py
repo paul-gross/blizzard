@@ -23,7 +23,7 @@ from blizzard.runner import runtime as runner_runtime
 from blizzard.runner.store import MIGRATIONS_DIR as RUNNER_MIGRATIONS_DIR
 from blizzard.runner.store import schema as runner_schema
 from tests.conftest import Daemon
-from tests.support import migrate_to, seed_chunk, seed_graph
+from tests.support import MIGRATION_CLOCK, migrate_to, seed_chunk, seed_graph
 
 pytestmark = pytest.mark.unit
 
@@ -246,6 +246,16 @@ def test_egress_cursor_table_and_usage_index_survive_migration_roundtrip(tmp_pat
     assert _shape() == (True, True)
 
 
+# The egress indexes under the name each carries at head; between their own revision and the tenant keys they carry
+# the name that revision gave them.
+_DROPS_EGRESS_ORDER = "ix_transcript_event_drops_egress_order"
+_DERIVATIONS_EGRESS_ORDER = {
+    "ix_transcript_event_derivations_derived_at_segment_id_extractor_version",
+    "ix_transcript_event_derivations_egress_order",
+}
+_DROPS_BY_CHUNK = {"ix_transcript_event_drops_chunk_id_epoch", "ix_transcript_event_drops_tenant_chunk_id_epoch"}
+
+
 def test_transcript_event_drops_table_survives_migration_roundtrip(tmp_path: Path) -> None:
     """Hub-only — downgrades to the revision's own parent, so the dropped table is asserted
     rather than inferred from a revision marker."""
@@ -259,7 +269,8 @@ def test_transcript_event_drops_table_survives_migration_roundtrip(tmp_path: Pat
             if "transcript_event_drops" not in inspector.get_table_names():
                 return False, False
             indexes = {i["name"] for i in inspector.get_indexes("transcript_event_drops")}
-            return True, "ix_transcript_event_drops_dropped_at_segment_id" in indexes
+            # The egress twin as the revision that last built it names it.
+            return True, bool(indexes & {"ix_transcript_event_drops_dropped_at_segment_id", _DROPS_EGRESS_ORDER})
         finally:
             engine.dispose()
 
@@ -287,10 +298,9 @@ def test_egress_events_indexes_and_cursor_columns_survive_migration_roundtrip(tm
 
             columns = {c["name"] for c in inspector.get_columns("egress_cursor")}
             return (
-                "ix_transcript_event_derivations_derived_at_segment_id_extractor_version"
-                in indexes("transcript_event_derivations"),
+                bool(indexes("transcript_event_derivations") & _DERIVATIONS_EGRESS_ORDER),
                 "ix_lease_facts_minted_at" in indexes("lease_facts"),
-                "ix_transcript_event_drops_chunk_id_epoch" in indexes("transcript_event_drops"),
+                bool(indexes("transcript_event_drops") & _DROPS_BY_CHUNK),
                 columns & {"segment_id", "extractor_version"},
             )
         finally:
@@ -584,6 +594,7 @@ def test_runner_lease_closure_escalation_cause_survives_migration_roundtrip(tmp_
 
 
 _ROUTINE_SCOPES_JOIN_PARENT = "20260905_1100_hub_runner_external_usage_slug"
+_ROUTINE_SCOPES_JOIN = "20260906_1130_routine_scopes_join"
 
 
 def test_routine_scopes_table_survives_migration_roundtrip(tmp_path: Path) -> None:
@@ -614,7 +625,7 @@ def test_routine_scopes_seeds_from_findings_finding_sets_and_routine_defaults(tm
     pair ``findings``/``finding_sets`` carried plus each routine's default; an empty or
     unmatched ``routine_name`` is skipped, and a duplicate pair inserted only once."""
     url = f"sqlite:///{tmp_path / 'hub.db'}"
-    runner = MigrationRunner(script_location=HUB_MIGRATIONS_DIR, url=url)
+    runner = MigrationRunner(script_location=HUB_MIGRATIONS_DIR, url=url, clock=MIGRATION_CLOCK)
     runner.upgrade(_ROUTINE_SCOPES_JOIN_PARENT)
 
     engine = create_engine_from_url(url)
@@ -665,7 +676,7 @@ def test_routine_scopes_seeds_from_findings_finding_sets_and_routine_defaults(tm
     finally:
         engine.dispose()
 
-    runner.upgrade("head")
+    runner.upgrade(_ROUTINE_SCOPES_JOIN)
 
     engine = create_engine_from_url(url)
     try:
@@ -1008,7 +1019,7 @@ def test_event_log_runner_id_becomes_nullable_and_downgrade_restores_the_hub_sen
     stated reason): the pre-reshape shape is ``NOT NULL``, exactly what the frozen
     creating revision now declares."""
     url = f"sqlite:///{tmp_path / 'store.db'}"
-    runner = MigrationRunner(script_location=HUB_MIGRATIONS_DIR, url=url)
+    runner = MigrationRunner(script_location=HUB_MIGRATIONS_DIR, url=url, clock=MIGRATION_CLOCK)
 
     def _nullable() -> bool:
         engine = create_engine_from_url(url)
@@ -1151,7 +1162,7 @@ def test_transcript_segments_content_digest_backfills_and_carries_markers_forwar
     no decompression; a marker matching the retired whole-segment formula carries forward,
     one that doesn't stays stale for the next pass to correctly re-derive."""
     url = f"sqlite:///{tmp_path / 'store.db'}"
-    runner = MigrationRunner(script_location=HUB_MIGRATIONS_DIR, url=url)
+    runner = MigrationRunner(script_location=HUB_MIGRATIONS_DIR, url=url, clock=MIGRATION_CLOCK)
     runner.upgrade("20260907_1000_event_log_runner_id_nullable")
 
     rows = [(0, False, b"AAAA"), (1, False, b"BBBB")]
@@ -1249,7 +1260,7 @@ def test_transcript_segments_content_digest_resumes_after_an_interrupted_first_p
     retried `upgrade()` must finish the backfill and the NOT NULL close, not short-circuit
     on column presence alone the way a bare `_has_column` guard would."""
     url = f"sqlite:///{tmp_path / 'store.db'}"
-    runner = MigrationRunner(script_location=HUB_MIGRATIONS_DIR, url=url)
+    runner = MigrationRunner(script_location=HUB_MIGRATIONS_DIR, url=url, clock=MIGRATION_CLOCK)
     runner.upgrade("20260907_1000_event_log_runner_id_nullable")
 
     rows = [(0, False, b"AAAA"), (1, False, b"BBBB")]
@@ -1324,10 +1335,42 @@ _SCHEMA_METADATA = {"hub": hub_schema.metadata, "runner": runner_schema.metadata
 _SERVER_DEFAULT_EXEMPTIONS: dict[str, set[str]] = {"chunks": {"model"}}
 
 
-def _schema_snapshot(engine: sa.engine.Engine, *, exemptions: dict[str, set[str]]) -> dict[str, object]:
+# Constraint names a hub migration gave that src/blizzard/hub/store/schema.py leaves unnamed, keyed by (table,
+# migrated name); each value is the revision that rebuilds the table and settles the name.
+_CONSTRAINT_NAME_EXEMPTIONS: dict[tuple[str, str], str] = {}
+_NAME_EXEMPTIONS = {"hub": _CONSTRAINT_NAME_EXEMPTIONS, "runner": {}}
+
+
+def _compared_name(table_name: str, name: str | None, name_exemptions: dict[tuple[str, str], str]) -> str | None:
+    """A constraint's name as the snapshot compares it — ``None`` for an unnamed or an exempted one."""
+    return None if name is None or (table_name, name) in name_exemptions else name
+
+
+def _constraint_names(engine: sa.engine.Engine) -> set[tuple[str, str]]:
+    """Every named primary key, foreign key, unique constraint and index, as (table, name)."""
+    inspector = sa.inspect(engine)
+    names: set[tuple[str, str]] = set()
+    for table_name in inspector.get_table_names():
+        reflected = [
+            inspector.get_pk_constraint(table_name).get("name"),
+            *(fk.get("name") for fk in inspector.get_foreign_keys(table_name)),
+            *(uq.get("name") for uq in inspector.get_unique_constraints(table_name)),
+            *(idx.get("name") for idx in inspector.get_indexes(table_name)),
+        ]
+        names.update((table_name, name) for name in reflected if name is not None)
+    return names
+
+
+def _schema_snapshot(
+    engine: sa.engine.Engine,
+    *,
+    exemptions: dict[str, set[str]],
+    name_exemptions: dict[tuple[str, str], str],
+) -> dict[str, object]:
     """A comparable schema fingerprint: table set, and per table its column set (name,
-    type, nullability, server default), primary key, foreign keys, and indexes — column
-    *order* excluded, since ``add_column`` always appends and a migration can't undo that."""
+    type, nullability, server default), primary key, foreign keys, unique constraints and
+    indexes — each constraint with its name, ``None`` where it is unnamed. Column *order*
+    is excluded, since ``add_column`` always appends and a migration can't undo that."""
     inspector = sa.inspect(engine)
     snapshot: dict[str, object] = {}
     for table_name in inspector.get_table_names():
@@ -1338,13 +1381,28 @@ def _schema_snapshot(engine: sa.engine.Engine, *, exemptions: dict[str, set[str]
             (c["name"], str(c["type"]), c["nullable"], None if c["name"] in exempt else c["default"])
             for c in inspector.get_columns(table_name)
         )
-        pk = frozenset(inspector.get_pk_constraint(table_name)["constrained_columns"])
+        pk_constraint = inspector.get_pk_constraint(table_name)
+        pk = (
+            _compared_name(table_name, pk_constraint.get("name"), name_exemptions),
+            frozenset(pk_constraint["constrained_columns"]),
+        )
         foreign_keys = frozenset(
-            (tuple(sorted(fk["constrained_columns"])), fk["referred_table"], tuple(sorted(fk["referred_columns"])))
+            (
+                _compared_name(table_name, fk.get("name"), name_exemptions),
+                tuple(sorted(fk["constrained_columns"])),
+                fk["referred_table"],
+                tuple(sorted(fk["referred_columns"])),
+            )
             for fk in inspector.get_foreign_keys(table_name)
         )
-        indexes = frozenset((tuple(idx["column_names"]), idx["unique"]) for idx in inspector.get_indexes(table_name))
-        snapshot[table_name] = (columns, pk, foreign_keys, indexes)
+        uniques = frozenset(
+            (_compared_name(table_name, uq.get("name"), name_exemptions), tuple(uq["column_names"]))
+            for uq in inspector.get_unique_constraints(table_name)
+        )
+        indexes = frozenset(
+            (idx["name"], tuple(idx["column_names"]), idx["unique"]) for idx in inspector.get_indexes(table_name)
+        )
+        snapshot[table_name] = (columns, pk, foreign_keys, uniques, indexes)
     return snapshot
 
 
@@ -1357,12 +1415,42 @@ def test_migrated_store_matches_declared_schema(daemon: Daemon, tmp_path: Path) 
     declared = create_engine_from_url(f"sqlite:///{tmp_path / f'{daemon.name}-declared.db'}")
     try:
         _SCHEMA_METADATA[daemon.name].create_all(declared)
-        assert _schema_snapshot(migrated, exemptions=_SERVER_DEFAULT_EXEMPTIONS) == _schema_snapshot(
-            declared, exemptions=_SERVER_DEFAULT_EXEMPTIONS
-        )
+        name_exemptions = _NAME_EXEMPTIONS[daemon.name]
+        assert _schema_snapshot(
+            migrated, exemptions=_SERVER_DEFAULT_EXEMPTIONS, name_exemptions=name_exemptions
+        ) == _schema_snapshot(declared, exemptions=_SERVER_DEFAULT_EXEMPTIONS, name_exemptions=name_exemptions)
+        assert set(name_exemptions) <= _constraint_names(migrated), "a name exemption matches no constraint"
     finally:
         migrated.dispose()
         declared.dispose()
+
+
+@pytest.mark.parametrize(
+    ("left", "right"),
+    [
+        (sa.UniqueConstraint("a", "b"), sa.UniqueConstraint("b", "a")),
+        (sa.UniqueConstraint("a", "b"), sa.UniqueConstraint("a", "b", name="uq_pair_a_b")),
+        (sa.UniqueConstraint("a", "b", name="uq_pair_a_b"), sa.UniqueConstraint("a", "b", name="uq_pair_ab")),
+        (sa.PrimaryKeyConstraint("a", "b"), sa.PrimaryKeyConstraint("a", "b", name="pk_pair")),
+    ],
+    ids=["unique-columns", "unique-unnamed-vs-named", "unique-renamed", "pk-unnamed-vs-named"],
+)
+def test_schema_snapshot_tells_constraint_shapes_and_names_apart(
+    tmp_path: Path, left: sa.Constraint, right: sa.Constraint
+) -> None:
+    """SQLite reflects a unique constraint through ``get_unique_constraints`` only, never
+    ``get_indexes``; the snapshot reads both, and every constraint's name."""
+    snapshots = []
+    for side, constraint in (("left", left), ("right", right)):
+        metadata = sa.MetaData()
+        sa.Table("pair", metadata, sa.Column("a", sa.Text, nullable=False), sa.Column("b", sa.Text), constraint)
+        engine = create_engine_from_url(f"sqlite:///{tmp_path / f'{side}.db'}")
+        try:
+            metadata.create_all(engine)
+            snapshots.append(_schema_snapshot(engine, exemptions={}, name_exemptions={}))
+        finally:
+            engine.dispose()
+    assert snapshots[0] != snapshots[1]
 
 
 _MIGRATIONS_DIRS = {"hub": HUB_MIGRATIONS_DIR, "runner": RUNNER_MIGRATIONS_DIR}
@@ -1406,6 +1494,19 @@ _HISTORICAL_RESHAPES: list[tuple[str, str, str, tuple[str, ...]] | tuple[str, st
     ("hub", "20260930_1000_artifact_seq", "lease_facts", ("lease_id",)),
     ("hub", "20261003_1300_hub_transcript_segment_spawn_cwd", "escalations", ("cause", "detail")),
     ("hub", "20261006_0900_config_import_facts", "runner_registrations", ("name", "added_at", "added_by")),
+    ("hub", "20261008_1700_tenant_identity_move", "auth_state", ("invitation_token_hash",)),
+    ("hub", "20261008_1710_auth_state_invitation", "tenant_deletions", ("closed_at",)),
+    ("hub", "20261008_1720_tenant_deletion_closed_at", "chunks", ("project_id",)),
+    ("hub", "20261008_1720_tenant_deletion_closed_at", "scopes", ("project_id",)),
+    ("hub", "20261008_1720_tenant_deletion_closed_at", "routines", ("project_id",)),
+    ("hub", "20261008_1720_tenant_deletion_closed_at", "findings", ("project_id",)),
+    ("hub", "20261008_1720_tenant_deletion_closed_at", "finding_sets", ("project_id",)),
+    ("hub", "20261008_1720_tenant_deletion_closed_at", "garden_proposals", ("project_id",)),
+    ("hub", "20261008_1720_tenant_deletion_closed_at", "work_item_runs", ("project_id",)),
+    ("hub", "20261008_1720_tenant_deletion_closed_at", "work_items", ("project_id",)),
+    ("hub", "20261008_1720_tenant_deletion_closed_at", "config_changes", ("project_id",)),
+    ("hub", "20261008_1810_project_read_indexes", "runner_registrations", ("projects",)),
+    ("hub", "20261008_1810_project_read_indexes", "delivery_repo_landed", ("repository_name",)),
     # runner tree — instance 6
     (
         "runner",
@@ -1455,7 +1556,7 @@ def test_frozen_table_lacks_a_later_revisions_columns(
     correct freeze from one that wrongly absorbed a later reshape, so a store migrated to the
     reshaping revision's parent must show the pre-reshape shape and head the post-reshape one."""
     url = f"sqlite:///{tmp_path / 'store.db'}"
-    runner = MigrationRunner(script_location=_MIGRATIONS_DIRS[tree], url=url)
+    runner = MigrationRunner(script_location=_MIGRATIONS_DIRS[tree], url=url, clock=MIGRATION_CLOCK)
 
     def _columns() -> set[str]:
         engine = create_engine_from_url(url)

@@ -122,6 +122,9 @@ def _mutations(ids: dict[str, str]) -> list[tuple[str, str, dict[str, object]]]:
         ("POST", "/api/runners/runner-a/token-revocations", {"by": "x"}),  # RUNNER_RETIRE
         ("POST", "/api/graphs", {"definition_yaml": _GRAPH_YAML}),  # GRAPH_EDIT
         ("GET", "/api/users", {}),  # USER_MANAGE
+        ("POST", "/api/invitations", {"email": "new@example.com", "role": "guest"}),  # USER_MANAGE
+        ("GET", "/api/invitations", {}),  # USER_MANAGE
+        ("POST", "/api/invitations/inv_missing/revocations", {}),  # USER_MANAGE
         ("POST", "/api/analytics/re-derive", {"limit": 1}),  # ANALYTICS_ADMIN
         (
             "POST",
@@ -138,7 +141,19 @@ def _mutations(ids: dict[str, str]) -> list[tuple[str, str, dict[str, object]]]:
             "/api/traces/replay",
             {"since": "2026-07-13T00:00:00+00:00", "until": "2026-07-13T01:00:00+00:00"},
         ),  # ANALYTICS_ADMIN
+        ("DELETE", "/api/admin/tenants/ten_matrix_missing", {}),  # TENANT_ADMIN
     ]
+
+
+def _hub_level(path: str) -> bool:
+    """A hub-level export or administration route, gated on a hub permission no membership role holds."""
+    return path.startswith(("/api/traces/", "/api/egress/", "/api/admin/"))
+
+
+def _pending_refusal(path: str) -> int:
+    """A person with no membership cannot enter the tenant a tenant route serves (404); a hub-level
+    route serves no tenant and refuses the missing hub permission (403)."""
+    return 403 if _hub_level(path) else 404
 
 
 def test_guest_reads_every_fleet_view_route_and_is_refused_every_mutation(tmp_path: Path) -> None:
@@ -149,7 +164,8 @@ def test_guest_reads_every_fleet_view_route_and_is_refused_every_mutation(tmp_pa
 
     for method, path in _reads(ids):
         resp = hub.client.request(method, path, headers=_cookie(token))
-        assert resp.status_code == 200, f"{method} {path} -> {resp.status_code}: {resp.text}"
+        expected = 403 if _hub_level(path) else 200
+        assert resp.status_code == expected, f"{method} {path} -> {resp.status_code}: {resp.text}"
 
     for method, path, body in _mutations(ids):
         kwargs = {"headers": _cookie(token)} if method == "GET" else {"json": body, "headers": _cookie(token)}
@@ -165,14 +181,14 @@ def test_pending_is_refused_every_route_but_me(tmp_path: Path) -> None:
 
     me = hub.client.get("/api/me", headers=_cookie(token))
     assert me.status_code == 200, me.text
-    assert me.json()["role"] == "pending"
+    assert (me.json()["role"], me.json()["tenants"]) == (None, [])
     assert me.json()["permissions"] == []
 
     for method, path in _reads(ids):
         resp = hub.client.request(method, path, headers=_cookie(token))
-        assert resp.status_code == 403, f"{method} {path} -> {resp.status_code}: {resp.text}"
+        assert resp.status_code == _pending_refusal(path), f"{method} {path} -> {resp.status_code}: {resp.text}"
 
     for method, path, body in _mutations(ids):
         kwargs = {"headers": _cookie(token)} if method == "GET" else {"json": body, "headers": _cookie(token)}
         resp = hub.client.request(method, path, **kwargs)
-        assert resp.status_code == 403, f"{method} {path} -> {resp.status_code}: {resp.text}"
+        assert resp.status_code == _pending_refusal(path), f"{method} {path} -> {resp.status_code}: {resp.text}"

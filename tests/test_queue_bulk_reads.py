@@ -18,10 +18,17 @@ from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.model import ChunkFacts
 from blizzard.hub.domain.chunk.ports.queue import IWriteChunkQueueRepository
 from blizzard.hub.domain.operations.queue import QueueService
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
-from tests.support import build_hub, capture_statements, count_queries, hub_store_connections, ingest
+from blizzard.hub.store.scoped import ScopedConnections
+from tests.support import (
+    build_hub,
+    capture_statements,
+    count_queries,
+    hub_store_connections,
+    ingest,
+    serve_default_tenant,
+)
 
 pytestmark = pytest.mark.component
 
@@ -100,7 +107,7 @@ class _CountingFactsStore(ChunkFactsStore):
     """Counts the bulk and per-chunk facts seams, so a test can pin which shape a peek
     actually reaches."""
 
-    def __init__(self, store: HubStoreConnections, clock: IClock) -> None:
+    def __init__(self, store: ScopedConnections, clock: IClock) -> None:
         super().__init__(store, clock)
         self.load_all_facts_calls = 0
         self.load_live_statuses_calls = 0
@@ -129,11 +136,14 @@ def _wire_counting_facts(hub) -> _CountingFactsStore:  # type: ignore[no-untyped
     record = ChunkRecordStore(hub_store_connections(hub.engine), hub.clock)
     assert hub.app is not None
     # The peek reads through the queue service's own store handle, not `services.chunks`.
-    hub.app.state.services = replace(
-        hub.services,
-        chunks=replace(hub.services.chunks, facts=counting, record=record),
-        queue=QueueService(
-            queue=cast(IWriteChunkQueueRepository, hub.services.chunks.queue), record=record, clock=hub.clock
+    serve_default_tenant(
+        hub,
+        replace(
+            hub.services,
+            chunks=replace(hub.services.chunks, facts=counting, record=record),
+            queue=QueueService(
+                queue=cast(IWriteChunkQueueRepository, hub.services.chunks.queue), record=record, clock=hub.clock
+            ),
         ),
     )
     return counting

@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import { KitAsyncState, type KitAsyncStateValue, KitBadge, KitSelectRow } from 'fleet';
+import { FleetWhen, KitAsyncState, type KitAsyncStateValue, KitBadge, KitSelectRow } from 'fleet';
 
 import { lifecycleTone } from '../../core/lifecycle-tone';
 
@@ -10,6 +10,8 @@ export interface ScopeRowVm {
   readonly slug: string;
   readonly description: string;
   readonly retired: boolean;
+  /** When a run last swept the scope, `null` when no run in the list's window did. */
+  readonly lastSwept: string | null;
 }
 
 /** Emitted when the operator sets a scope's description in place — `FleetScopePanel`'s
@@ -20,15 +22,15 @@ export interface ScopeDescriptionEditEvent {
 }
 
 /**
- * The gardening scope list — a selection list only: every scope's slug, retired ones
- * marked as such, on `fleet-kit-select-row`. Presentational, no query injection.
+ * The gardening scope list — a selection list only: every scope's slug, its description and when a run last swept it,
+ * retired ones marked as such, on `fleet-kit-select-row`. Presentational, no query injection.
  * Description editing and the retire/re-enable controls live in `FleetScopePanel`
  * now; this component only picks.
  */
 @Component({
   selector: 'app-scope-list',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitBadge, KitSelectRow],
+  imports: [FleetWhen, KitAsyncState, KitBadge, KitSelectRow],
   templateUrl: './scope-list.html',
   styleUrl: './scope-list.css',
 })

@@ -8,24 +8,25 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import select
 from sqlalchemy.orm import aliased
 
 from blizzard.hub.domain.garden.findings.trend import TREND_FACT_KINDS, IReadGardenTrendRepository, TrendFact
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.schema import finding_facts, findings
+from blizzard.hub.store.scoped import ScopedConnections
 
 
 class GardenTrendStore:
     """Read-only garden-trend adapter over the hub store engine."""
 
-    def __init__(self, store: HubStoreConnections) -> None:
+    def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
-    def facts_for_trend(self, routine_name: str, *, since: datetime, until: datetime) -> list[TrendFact]:
+    def facts_for_trend(
+        self, project_id: str, routine_name: str, *, since: datetime, until: datetime
+    ) -> list[TrendFact]:
         earlier = aliased(finding_facts)
         prior_kind = (
-            select(earlier.c.kind)
+            self._store.select(earlier, earlier.c.kind)
             .where(earlier.c.finding_id == finding_facts.c.finding_id, earlier.c.id < finding_facts.c.id)
             .order_by(earlier.c.id.desc())
             .limit(1)
@@ -33,14 +34,16 @@ class GardenTrendStore:
         )
         with self._store.read("facts_for_trend") as conn:
             rows = conn.execute(
-                select(
+                self._store.select(
+                    self._store.scope_join(
+                        finding_facts, findings, finding_facts.c.finding_id == findings.c.finding_id
+                    ),
                     finding_facts.c.kind,
                     finding_facts.c.recorded_at,
                     findings.c.introduced_at,
                     prior_kind.label("prior_kind"),
-                )
-                .select_from(finding_facts.join(findings, finding_facts.c.finding_id == findings.c.finding_id))
-                .where(
+                ).where(
+                    findings.c.project_id == project_id,
                     findings.c.routine_name == routine_name,
                     finding_facts.c.kind.in_(TREND_FACT_KINDS),
                     finding_facts.c.recorded_at >= since,

@@ -6,6 +6,7 @@ import { formatCost, formatTokens, STEP_COST_PARTIAL_TITLE } from '../../core/co
 import { injectNowSignal } from '../../core/now-signal';
 import { KitAsyncState } from '../../kit/kit-async-state';
 import { deriveActiveRow, deriveHistoryRows, deriveMultiGraph, type HistoryRow, rowChoice, rowMark, usageForStep as sumStepUsage } from './chunk-timeline-rows';
+import { LensLink } from '../../core/lens-link';
 
 /**
  * The node history tab's own Selection list — the interactive,
@@ -32,7 +33,7 @@ import { deriveActiveRow, deriveHistoryRows, deriveMultiGraph, type HistoryRow, 
 @Component({
   selector: 'fleet-chunk-detail-timeline-selection',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, RouterLink],
+  imports: [KitAsyncState, RouterLink, LensLink],
   templateUrl: './chunk-timeline-selection.html',
   styleUrl: './chunk-timeline-selection.css',
 })

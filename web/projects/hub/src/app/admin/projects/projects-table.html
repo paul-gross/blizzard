@@ -1,0 +1,50 @@
+<fleet-kit-async-state
+  [state]="state()"
+  placement="inline"
+  loadingText="Loading projects…"
+  errorText="Failed to load projects."
+  emptyText="No projects."
+  emptyTestid="projects-table-empty"
+  errorTestid="projects-table-error"
+>
+  <ul class="rows" data-testid="projects-table">
+    @for (row of rows(); track row.key) {
+      <li>
+        <fleet-kit-select-row
+          [selected]="row.key === selectedKey()"
+          [testid]="'projects-table-row-' + row.key"
+          (picked)="pick.emit(row.key)"
+        >
+          <span class="top">
+            <span class="title">{{ row.name }}</span>
+            <span class="right">
+              @if (row.needs; as needs) {
+                <fleet-kit-badge
+                  tone="waiting"
+                  variant="soft"
+                  [attr.data-testid]="'projects-table-needs-' + row.key"
+                  >{{ needs }}</fleet-kit-badge
+                >
+              } @else if (row.wired) {
+                <span
+                  class="wired"
+                  role="img"
+                  aria-label="wired"
+                  [attr.data-testid]="'projects-table-wired-' + row.key"
+                ></span>
+              }
+              <span class="rev">r<b>{{ row.revision }}</b></span>
+            </span>
+          </span>
+          @if (row.figures.length > 0) {
+            <span class="sub" [attr.data-testid]="'projects-table-figures-' + row.key">
+              @for (figure of row.figures; track figure) {
+                <span>{{ figure }}</span>
+              }
+            </span>
+          }
+        </fleet-kit-select-row>
+      </li>
+    }
+  </ul>
+</fleet-kit-async-state>

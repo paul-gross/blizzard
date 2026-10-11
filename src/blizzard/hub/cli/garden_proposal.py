@@ -14,6 +14,7 @@ from blizzard.foundation.roles import dto
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.inputs import read_body_file
+from blizzard.hub.cli.project_option import project_option, project_path, project_query
 from blizzard.hub.cli.views import Listing, ProposalOrigin
 
 
@@ -63,9 +64,10 @@ def garden_proposal_group() -> None:
 
 @garden_proposal_group.command("list", cls=FleetCommand)
 @click.option("--origin", type=click.Choice(["routine-run", "operator"]), default=None, help="Narrow to one origin.")
-def garden_proposal_list(cli: CliContext, origin: str | None) -> None:
+@project_option(required_by_hub=False)
+def garden_proposal_list(cli: CliContext, origin: str | None, project: str | None) -> None:
     """List every garden proposal, newest first."""
-    params = {"origin": origin} if origin is not None else None
+    params = ({"origin": origin} if origin is not None else {}) | project_query(project)
     rows = cli.get_all("/api/garden-proposals", "GET /garden-proposals", key="proposals", params=params)
     cli.show(rows, GardenProposalListing(rows))
 
@@ -153,8 +155,15 @@ def garden_proposal_accept(
 @click.option("--body-file", "body_file", required=True, help="Path to the proposal's body, or '-' for stdin.")
 @click.option("--routine", default=None, help="An existing routine to name (optional).")
 @click.option("--finding", "findings", multiple=True, help="A finding id to link (repeatable).")
+@project_option(required_by_hub=True)
 def garden_proposal_create(
-    cli: CliContext, title: str, class_: str, body_file: str, routine: str | None, findings: tuple[str, ...]
+    cli: CliContext,
+    title: str,
+    class_: str,
+    body_file: str,
+    routine: str | None,
+    findings: tuple[str, ...],
+    project: str | None,
 ) -> None:
     """Author a fresh operator garden proposal, naming zero or more findings.
 
@@ -164,7 +173,7 @@ def garden_proposal_create(
     json_body: dict[str, object] = {"title": title, "class": class_, "body": body, "findings": list(findings)}
     if routine is not None:
         json_body["routine"] = routine
-    resp = cli.post("/api/garden-proposals", "POST /garden-proposals", json_body=json_body)
+    resp = cli.post(project_path(project, "/garden-proposals"), "POST /garden-proposals", json_body=json_body)
     body_json = resp.json()
     cli.show(body_json, GardenProposalDetail(body_json))
 

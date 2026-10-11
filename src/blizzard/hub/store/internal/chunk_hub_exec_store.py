@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id, IdPrefix
@@ -21,7 +21,6 @@ from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.hub_exec import IWriteChunkHubExecRepository
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import (
     enqueue_close_intents,
     fence,
@@ -32,12 +31,13 @@ from blizzard.hub.store.internal.chunk_rows import (
     next_route_seq,
     record_hub_lease,
 )
+from blizzard.hub.store.scoped import ScopedConnections
 
 
 class ChunkHubExecStore:
     """The generic hub command node's own execution-slot and step-transition facts (#65)."""
 
-    def __init__(self, store: HubStoreConnections, clock: IClock) -> None:
+    def __init__(self, store: ScopedConnections, clock: IClock) -> None:
         self._store = store
         self._clock = clock
 
@@ -45,31 +45,35 @@ class ChunkHubExecStore:
         with self._store.read("count_live_hub_exec_slots") as conn:
             return int(
                 conn.execute(
-                    select(func.count()).select_from(s.hub_exec_slot).where(s.hub_exec_slot.c.released_at.is_(None))
+                    self._store.select(s.hub_exec_slot, func.count()).where(s.hub_exec_slot.c.released_at.is_(None))
                 ).scalar()
                 or 0
             )
 
     def acquire_hub_exec_slot(self, chunk_id: str, *, node_id: str, at: datetime, stale_after: timedelta) -> str | None:
-        """Acquire the fleet-wide hub-execution slot, **atomically** (crash-derivable
+        """Acquire this tenant's hub-execution slot, **atomically** (crash-derivable
         fact, ``bzh:facts-not-status`` — never an in-process lock, so the invariant
-        checker can assert at most one live slot and a ``kill -9`` mid-run leaves a
-        stale, reclaimable row rather than a wedged fleet)."""
+        checker can assert at most one live slot per tenant and a ``kill -9`` mid-run
+        leaves a stale, reclaimable row rather than a wedged tenant). The scoped write
+        opens on the tenant row's lock (``bzh:store-exclusive-write``), so two acquires
+        in one tenant serialize before the read-then-insert below, while another
+        tenant's acquire never waits on this one's slot."""
         with self._store.write("acquire_hub_exec_slot") as conn:
-            # Force sqlite's single-writer lock BEFORE the read-then-insert below,
-            # closing the race a bare SELECT leaves open (see ``next_route_seq``).
-            conn.execute(update(s.hub_exec_slot).values(node_id=s.hub_exec_slot.c.node_id))
-            live_rows = conn.execute(select(s.hub_exec_slot).where(s.hub_exec_slot.c.released_at.is_(None))).all()
+            live_rows = conn.execute(
+                self._store.select(s.hub_exec_slot).where(s.hub_exec_slot.c.released_at.is_(None))
+            ).all()
             for row in live_rows:
                 if at - row.acquired_at < stale_after:
                     return None  # held, by this chunk's own run or another's — defer
                 # Stale — a prior holder's run never released it (a kill -9); reclaim.
                 conn.execute(
-                    update(s.hub_exec_slot).where(s.hub_exec_slot.c.slot_id == row.slot_id).values(released_at=at)
+                    self._store.update(s.hub_exec_slot)
+                    .where(s.hub_exec_slot.c.slot_id == row.slot_id)
+                    .values(released_at=at)
                 )
             slot_id = Id.mint(IdPrefix.HUB_EXEC_SLOT, self._clock).value
             conn.execute(
-                s.hub_exec_slot.insert().values(
+                self._store.insert(s.hub_exec_slot).values(
                     slot_id=slot_id, holder_chunk_id=chunk_id, node_id=node_id, acquired_at=at, released_at=None
                 )
             )
@@ -78,15 +82,19 @@ class ChunkHubExecStore:
     def release_hub_exec_slot(self, slot_id: str, *, at: datetime) -> None:
         with self._store.write("release_hub_exec_slot") as conn:
             conn.execute(
-                update(s.hub_exec_slot)
+                self._store.update(s.hub_exec_slot)
                 .where((s.hub_exec_slot.c.slot_id == slot_id) & (s.hub_exec_slot.c.released_at.is_(None)))
                 .values(released_at=at)
             )
 
     def release_live_hub_exec_slots(self, *, at: datetime) -> int:
+        """Release every live slot in this store's tenant — the boot step's release of slots a crash
+        orphaned."""
         with self._store.write("release_live_hub_exec_slots") as conn:
             return conn.execute(
-                update(s.hub_exec_slot).where(s.hub_exec_slot.c.released_at.is_(None)).values(released_at=at)
+                self._store.update(s.hub_exec_slot)
+                .where(s.hub_exec_slot.c.released_at.is_(None))
+                .values(released_at=at)
             ).rowcount
 
     def record_hub_step_transition(
@@ -112,7 +120,7 @@ class ChunkHubExecStore:
         with self._store.write("record_hub_step_transition") as conn:
             lock_chunk_row(conn, chunk_id)
             already = conn.execute(
-                select(s.transitions.c.transition_id).where(
+                self._store.select(s.transitions, s.transitions.c.transition_id).where(
                     (s.transitions.c.chunk_id == chunk_id)
                     & (s.transitions.c.from_node_id == from_node_id)
                     & (s.transitions.c.epoch == epoch)
@@ -124,7 +132,7 @@ class ChunkHubExecStore:
                 return False
             record_hub_lease(conn, chunk_id, epoch=epoch, runner_id=runner_id, at=at)
             conn.execute(
-                s.transitions.insert().values(
+                self._store.insert(s.transitions).values(
                     transition_id=transition_id,
                     chunk_id=chunk_id,
                     graph_id=graph_id_of(conn, chunk_id),
@@ -139,7 +147,7 @@ class ChunkHubExecStore:
             )
             for row in artifacts:
                 conn.execute(
-                    s.artifacts.insert().values(
+                    self._store.insert(s.artifacts).values(
                         artifact_id=row.artifact_id,
                         chunk_id=row.chunk_id,
                         node_id=row.node_id,
@@ -156,7 +164,7 @@ class ChunkHubExecStore:
                 )
             if release_route:
                 conn.execute(
-                    s.route_released.insert().values(
+                    self._store.insert(s.route_released).values(
                         chunk_id=chunk_id, released_at=at, seq=next_route_seq(conn, chunk_id)
                     )
                 )
@@ -168,7 +176,11 @@ class ChunkHubExecStore:
         """Append one pending-poll-attempt fact (#66) — never a transition, no
         idempotency guard (an at-least-once poll attempt is harmless recorded twice)."""
         with self._store.write("record_hub_node_poll") as conn:
-            conn.execute(s.hub_node_poll.insert().values(chunk_id=chunk_id, node_id=node_id, epoch=epoch, polled_at=at))
+            conn.execute(
+                self._store.insert(s.hub_node_poll).values(
+                    chunk_id=chunk_id, node_id=node_id, epoch=epoch, polled_at=at
+                )
+            )
 
 
 def _conforms_hub_exec(x: ChunkHubExecStore) -> IWriteChunkHubExecRepository:

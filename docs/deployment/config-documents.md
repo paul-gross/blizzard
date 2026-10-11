@@ -28,14 +28,21 @@ repositories:
     repo: blizzard
     base_branch: master
     secret_name: gh-token
+projects:
+  - slug: blizzard
+    name: Blizzard
+    sources: [blizzard]
+    repositories: [blizzard]
 scopes:
   - slug: blizzard
+    project: blizzard
     description: The blizzard repository
 routines:
   - name: architecture-drift
     graph_name: garden-routine
     default_scope_slug: blizzard
     default_model: [claude-opus]
+    project: blizzard
     scopes: [blizzard]
 ```
 
@@ -51,6 +58,12 @@ names, as its `default_scope_slug` or in `scopes`, must be stored already or dec
 section, and its `graph_name` must name an enabled graph when the entry creates the routine or moves it to another graph;
 otherwise the entry is refused. An apply never creates a scope
 the document does not declare.
+
+A project entry is keyed by its `slug`; one the document creates needs a `name`. A `sources` or `repositories` list the
+entry states is the project's whole set of links of that kind, so a name it leaves out is unlinked; a list it leaves out
+keeps the stored links ([projects.md](./projects.md#links)). A slug a project has left is refused `422`, naming that
+project: name it by its current slug. A scope or routine entry names its project with `project`, an id or a slug; an
+entry without one belongs to the tenant's only project, and is refused `project_required` when the tenant holds several.
 
 The file's extension picks the format: `.yaml` and `.yml` read as YAML, `.json` as JSON. Over HTTP the `Content-Type`
 does: `POST /api/config/apply` takes `application/yaml` or `application/json`, and any other type is refused with 415.

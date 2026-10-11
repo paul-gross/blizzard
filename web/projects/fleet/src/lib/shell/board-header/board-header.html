@@ -1,7 +1,9 @@
 <header class="mc-header" data-testid="board-header">
   <div class="brand">
     <fleet-brand-mark [size]="30" />
-    <div class="brand-text">blizzard<small>{{ tagline() }}</small></div>
+    <div class="brand-text">
+      blizzard<small [attr.title]="tagline()" data-testid="board-header-tagline">{{ tagline() }}</small>
+    </div>
   </div>
   <div class="stats" data-testid="board-header-stats">
     @for (cell of cells(); track cell.key) {

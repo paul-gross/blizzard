@@ -46,6 +46,26 @@ describe('FleetScopePanel', () => {
     expect(panel?.textContent).toContain('the blizzard monorepo');
   });
 
+  it('names the project beside the slug, and calls out another project holding the same slug', async () => {
+    const fixture = await mount({});
+    fixture.componentRef.setInput('project', 'winter');
+    fixture.componentRef.setInput('sameSlugIn', ['blizzard']);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="gardening-scope-panel-project"]')?.textContent).toContain('winter');
+    const callout = el.querySelector('[data-testid="gardening-scope-panel-same-slug"]')?.textContent ?? '';
+    expect(callout).toContain('blizzard also has a scope called');
+    expect(callout).toContain('a different record');
+  });
+
+  it('shows no project chip or same-slug callout without them', async () => {
+    const el = (await mount({})).nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="gardening-scope-panel-project"]')).toBeNull();
+    expect(el.querySelector('[data-testid="gardening-scope-panel-same-slug"]')).toBeNull();
+  });
+
   it('marks a retired scope distinctly', async () => {
     const fixture = await mount({ vm: { ...VM, retired: true, renderedRetired: true } });
     const el = fixture.nativeElement as HTMLElement;

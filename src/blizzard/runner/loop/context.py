@@ -29,8 +29,9 @@ from blizzard.runner.harness.registry import IHarnessRegistry, UnavailableHarnes
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource
 from blizzard.runner.hub.chunk_status_cache import IChunkViews
-from blizzard.runner.hub.client import IHubClient
-from blizzard.runner.hub.identity import RunnerIdentityHolder
+from blizzard.runner.hub.client import IHubClient, ITokenIdentityReader
+from blizzard.runner.hub.held_token import HubTokenHolder
+from blizzard.runner.hub.identity import IdentityVerdictHolder, RunnerIdentityHolder
 from blizzard.runner.leases.worker_stdout import IWorkerStdoutFiles
 from blizzard.runner.lifecycle.env_release import EnvironmentRelease
 from blizzard.runner.lifecycle.judgement.check_runner import ICheckRunner
@@ -83,6 +84,9 @@ class LoopConfig:
     #: Node NAMES this runner imposes a human gate on — matched across all graphs and read
     #: at context build, so a config edit needs a restart, not just a new tick.
     gates: tuple[str, ...] = ()
+    #: The projects this runner serves, by id or slug, declared at every registration; ``None`` declares
+    #: none, so the hub keeps the declaration it holds. Read at context build, like :attr:`gates`.
+    projects: tuple[str, ...] | None = None
     #: The directory the per-lease harness-stdout files live in; empty means
     #: no redirect. A worker's envelope survives the process there for later read-back.
     worker_stdout_dir: str = ""
@@ -162,6 +166,12 @@ class LoopContext:
     hub: IHubClient
     #: Who this runner is at its hub; it holds ``None`` until the first successful registration.
     identity: RunnerIdentityHolder
+    #: The ungated identity read the tick's identity check asks — the one hub call ``hub`` does not gate.
+    token_identity: ITokenIdentityReader
+    #: Whether the token is verified to resolve to the store's runner; ``hub`` forwards only while it is.
+    identity_verdict: IdentityVerdictHolder
+    #: The token ``hub`` and ``token_identity`` present; the identity check re-reads it while refusing.
+    hub_token: HubTokenHolder
     #: This tick's (or, standalone, this step's own) chunk-status read seam —
     #: see :mod:`blizzard.runner.hub.chunk_status_cache`.
     chunk_views: IChunkViews
@@ -248,6 +258,7 @@ if TYPE_CHECKING:
     from blizzard.runner.lifecycle.dormant import DormantContext
     from blizzard.runner.lifecycle.drain import DrainContext
     from blizzard.runner.lifecycle.held_chunk import HeldChunkContext
+    from blizzard.runner.lifecycle.identity_check import IdentityCheckContext
     from blizzard.runner.lifecycle.judgement.git_commits import GitCommitsContext
     from blizzard.runner.lifecycle.judgement.judgement import JudgementContext
     from blizzard.runner.lifecycle.registration import RegistrationContext
@@ -301,4 +312,7 @@ if TYPE_CHECKING:
         return ctx
 
     def _conforms_to_registration(ctx: LoopContext) -> RegistrationContext:
+        return ctx
+
+    def _conforms_to_identity_check(ctx: LoopContext) -> IdentityCheckContext:
         return ctx

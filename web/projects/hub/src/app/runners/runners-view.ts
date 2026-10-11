@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { KitAsyncState, KitBadge, KitButton, KitChip, KitPanel, KitSlotBar, RunnerConnection, STATUS_TONE, type ChunkStatus, type KitAsyncStateValue, type Tone } from 'fleet';
+import { ServedProjectGroup } from './served-project-group';
 import { SubscriptionPaceGroup } from './subscription-pace-group';
 import { localPauseHint, runnerSeenLabel, runnerToggleHint, type RunnerRow } from './runner-rows';
 
@@ -13,7 +14,7 @@ import { localPauseHint, runnerSeenLabel, runnerToggleHint, type RunnerRow } fro
 @Component({
   selector: 'app-runners-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitBadge, KitButton, KitChip, KitPanel, KitSlotBar, SubscriptionPaceGroup],
+  imports: [KitAsyncState, KitBadge, KitButton, KitChip, KitPanel, KitSlotBar, ServedProjectGroup, SubscriptionPaceGroup],
   templateUrl: './runners-view.html',
   styleUrl: './runners-view.css',
 })

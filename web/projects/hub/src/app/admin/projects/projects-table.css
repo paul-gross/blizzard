@@ -1,0 +1,61 @@
+:host {
+  display: block;
+  font-family: var(--mono);
+  font-size: var(--fs-base);
+  color: var(--text);
+  min-width: 0;
+}
+.rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
+}
+.title {
+  flex: 1 1 8ch;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  max-width: 100%;
+  margin-left: auto;
+}
+.rev {
+  color: var(--label);
+  font-size: var(--fs-label);
+}
+.rev b {
+  color: var(--text);
+  font-weight: normal;
+}
+.wired {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+}
+.sub {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-top: 2px;
+  color: var(--label);
+  font-size: var(--fs-sm);
+  min-width: 0;
+}
+.sub span {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}

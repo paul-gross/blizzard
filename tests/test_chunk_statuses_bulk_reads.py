@@ -18,11 +18,11 @@ from blizzard.foundation.store import batching as batching_module
 from blizzard.hub.domain.chunk.model import ChunkFacts, GateDecision
 from blizzard.hub.domain.chunk.ports.decisions import LiveDecisionStatus
 from blizzard.hub.domain.runners.route import Route
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_decisions_store import ChunkDecisionsStore
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_route_store import ChunkRouteStore
-from tests.support import build_hub, count_queries, hub_store_connections, ingest, report_lease
+from blizzard.hub.store.scoped import ScopedConnections
+from tests.support import build_hub, count_queries, hub_store_connections, ingest, report_lease, serve_default_tenant
 
 pytestmark = pytest.mark.component
 
@@ -145,7 +145,7 @@ def test_chunk_statuses_query_count_is_independent_of_batch_size(tmp_path: Path)
 class _CountingFactsStore(ChunkFactsStore):
     """Counts calls to the bulk-by-id-set and per-chunk facts reads."""
 
-    def __init__(self, store: HubStoreConnections, clock: IClock) -> None:
+    def __init__(self, store: ScopedConnections, clock: IClock) -> None:
         super().__init__(store, clock)
         self.status_facts_for_calls = 0
         self.load_facts_calls = 0
@@ -162,7 +162,7 @@ class _CountingFactsStore(ChunkFactsStore):
 class _CountingRouteStore(ChunkRouteStore):
     """Counts calls to the bulk-by-id-set and per-chunk route reads."""
 
-    def __init__(self, store: HubStoreConnections, clock: IClock) -> None:
+    def __init__(self, store: ScopedConnections, clock: IClock) -> None:
         super().__init__(store, clock)
         self.routes_for_calls = 0
         self.route_of_calls = 0
@@ -179,7 +179,7 @@ class _CountingRouteStore(ChunkRouteStore):
 class _CountingDecisionsStore(ChunkDecisionsStore):
     """Counts calls to the bulk-by-id-set and per-chunk live-decision reads."""
 
-    def __init__(self, store: HubStoreConnections, clock: IClock) -> None:
+    def __init__(self, store: ScopedConnections, clock: IClock) -> None:
         super().__init__(store, clock)
         self.live_decisions_for_calls = 0
         self.decision_for_chunk_calls = 0
@@ -201,9 +201,14 @@ def test_chunk_statuses_calls_bulk_reads_and_never_the_per_chunk_ones(tmp_path: 
     counting_route = _CountingRouteStore(hub_store_connections(hub.engine), hub.clock)
     counting_decisions = _CountingDecisionsStore(hub_store_connections(hub.engine), hub.clock)
     assert hub.app is not None
-    hub.app.state.services = replace(
-        hub.services,
-        chunks=replace(hub.services.chunks, facts=counting_facts, route=counting_route, decisions=counting_decisions),
+    serve_default_tenant(
+        hub,
+        replace(
+            hub.services,
+            chunks=replace(
+                hub.services.chunks, facts=counting_facts, route=counting_route, decisions=counting_decisions
+            ),
+        ),
     )
 
     resp = hub.client.get("/api/fleet/chunk-statuses", params={"chunk_id": chunk_ids})

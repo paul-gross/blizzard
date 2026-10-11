@@ -11,18 +11,19 @@ from datetime import datetime
 
 from blizzard.auth_core import Permission, Role
 from blizzard.foundation.roles import domain_model
+from blizzard.hub.tenancy import TenantId
 
 
 @domain_model
 @dataclass(frozen=True)
 class User:
-    """A hub-local account row."""
+    """A hub-local account row. What the user may do lives in their memberships and the hub
+    administrator facts, never on the account."""
 
     user_id: str
     username: str
     display_name: str
     email: str | None
-    role: Role
     created_at: datetime
 
 
@@ -61,8 +62,20 @@ class ProviderIdentity:
 
     subject: str
     handle: str
+    #: The account's primary address — the one a new user's row keeps and the email-merge rule
+    #: matches on, each only when verified and ``emails_authoritative``.
     email: str | None
     email_verified: bool
+    #: Every address the provider reports as verified on the account, the primary among them —
+    #: the addresses an invitation admits and the ``auth.superuser`` claim compares, each only
+    #: when ``emails_authoritative``.
+    verified_emails: tuple[str, ...] = ()
+    #: Whether the provider vouches for every address it reports as verified — only then may
+    #: one of them admit the account through an email invitation, link it to the user holding
+    #: that address, or claim ``auth.superuser``. A provider that cannot say (a client's own
+    #: directory, say) reports ``False``, and signs in only identities already linked to a
+    #: user. ``github`` always reports ``True``.
+    emails_authoritative: bool = False
 
 
 @domain_model
@@ -82,6 +95,9 @@ class AuthStateEntry:
     expires_at: datetime
     #: The user this row mints a session for — ``kind="cli_login"`` rows only.
     user_id: str | None = None
+    #: The sha256 hex of the invitation token a provider sign-in was started with — ``provider_login`` rows started
+    #: through an invitation link only.
+    invitation_token_hash: str | None = None
 
 
 @domain_model
@@ -116,11 +132,23 @@ class SuperuserBootstrap:
 class ResolvedIdentity:
     """The request principal a human-plane edge resolves to — ``src/blizzard/hub/api/auth_session.py``'s
     ``resolve_identity``/``require()`` return this, never a bare ``User``. It carries the
-    expanded permission set (computed once, by :func:`blizzard.auth_core.expand`) and
-    ``display_name`` so no call site re-expands the role or re-reads the user row."""
+    expanded permission set (computed once, by :func:`blizzard.auth_core.permissions_for`) and
+    ``display_name`` so no call site re-expands the role or re-reads the user row. ``role`` is the
+    membership's role in ``tenant`` (``None`` without one); ``tenant`` is ``None`` only on hub-level
+    routes."""
 
     user_id: str
     username: str
     display_name: str
-    role: Role
+    tenant: TenantId | None
+    role: Role | None
     permissions: frozenset[Permission]
+    hub_admin: bool
+
+
+def wire_role(role: Role | None, *, hub_admin: bool) -> Role:
+    """The single role a client is shown for a principal: ``superuser`` for a hub administrator,
+    else the membership's role, else ``pending`` for no membership at all."""
+    if hub_admin:
+        return Role.SUPERUSER
+    return role if role is not None else Role.PENDING

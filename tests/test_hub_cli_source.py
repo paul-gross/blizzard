@@ -41,6 +41,8 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClie
 
 
 def _cli(group: str, args: list[str], *, stdin: str | None = None):  # type: ignore[no-untyped-def]
+    """Run one ``hub`` verb. Its ``output`` interleaves stdout with stderr, where the hosted app's sweeps log
+    while the verb runs, so a ``--json`` payload is parsed from ``stdout`` alone."""
     return CliRunner().invoke(hub_group, [group, *args], input=stdin, env={"BZ_HUB_URL": _HUB})
 
 
@@ -60,12 +62,12 @@ def test_create_list_and_show_with_and_without_json(client: TestClient) -> None:
     listed = _source(["list"])
     assert "hub  built-in" in listed.output
     assert "demo  r1  enabled  github  acme/demo" in listed.output
-    rows = json.loads(_source(["list", "--json"]).output)
+    rows = json.loads(_source(["list", "--json"]).stdout)
     assert {r["name"] for r in rows} == {"hub", "demo"}
     shown = _source(["show", "demo"])
     assert "revision 1" in shown.output
     assert "secret gh-demo" in shown.output
-    assert json.loads(_source(["show", "demo", "--json"]).output)["revision"] == 1
+    assert json.loads(_source(["show", "demo", "--json"]).stdout)["revision"] == 1
     assert _source(["show", "nope"]).exit_code != 0
 
 
@@ -74,7 +76,7 @@ def test_edit_sets_clears_and_refuses_a_stale_if_match(client: TestClient) -> No
 
     assert "revision 2" in _source(["edit", "demo", "--api-base", "https://ghe.example/api/v3"]).output
     assert "revision 3" in _source(["edit", "demo", "--clear", "api-base"]).output
-    assert json.loads(_source(["show", "demo", "--json"]).output)["api_base"] is None
+    assert json.loads(_source(["show", "demo", "--json"]).stdout)["api_base"] is None
     stale = _source(["edit", "demo", "--if-match", "1", "--no-annotate"])
     assert stale.exit_code != 0
     assert "revision 3" in stale.output
@@ -93,7 +95,7 @@ def test_retire_and_enable_and_the_secret_reference_guard(client: TestClient) ->
     assert refused.exit_code != 0
     assert "work_source demo" in refused.output
     assert "work_source demo" in _cli("secret", ["show", "gh-demo"]).output
-    assert json.loads(_cli("secret", ["show", "gh-demo", "--json"]).output)["references"] == [
+    assert json.loads(_cli("secret", ["show", "gh-demo", "--json"]).stdout)["references"] == [
         {"kind": "work_source", "key": "demo"}
     ]
 
@@ -118,7 +120,7 @@ def test_config_changes_carry_the_cli_door_and_no_secret_value(client: TestClien
     assert "cli  secret gh-demo  r1  create" in lines[2]
     assert _SENTINEL not in text.output
 
-    raw = json.loads(_cli("config", ["changes", "--json", "--kind", "secret", "--all"]).output)
+    raw = json.loads(_cli("config", ["changes", "--json", "--kind", "secret", "--all"]).stdout)
     assert [(c["door"], c["record_key"]) for c in raw["changes"]] == [("cli", "gh-demo")]
     assert _SENTINEL not in json.dumps(raw)
     assert "no configuration changes" in _cli("config", ["changes", "--key", "absent"]).output
@@ -140,17 +142,12 @@ def _config(args: list[str]):  # type: ignore[no-untyped-def]
     return _cli("config", args)
 
 
-def _json_line(output: str) -> dict:  # type: ignore[type-arg]
-    """The verb's JSON payload — the hosted app's log lines share the stream."""
-    return json.loads(next(line for line in output.splitlines() if line.startswith('{"changes"')))
-
-
 def _lines(output: str, op: str) -> list[str]:
     return [line for line in output.splitlines() if line.startswith(op + " ")]
 
 
 def _changes_count() -> int:
-    return len(_json_line(_config(["changes", "--all", "--json"]).output)["changes"])
+    return len(json.loads(_config(["changes", "--all", "--json"]).stdout)["changes"])
 
 
 def test_yaml_yml_and_json_files_apply(client: TestClient, tmp_path: Path) -> None:
@@ -194,7 +191,7 @@ def test_a_dry_run_prints_the_outcome_and_writes_nothing(client: TestClient, tmp
     assert _changes_count() == before
     real = _config(["apply", str(path)])
     assert _lines(real.output, "create") == _lines(dry.output, "create")
-    rows = _json_line(_config(["changes", "--json"]).output)["changes"][:2]
+    rows = json.loads(_config(["changes", "--json"]).stdout)["changes"][:2]
     assert {r["door"] for r in rows} == {"apply"}
     assert len({r["apply_id"] for r in rows}) == 1
 
@@ -212,8 +209,10 @@ def test_an_exported_document_applies_back_as_all_unchanged(client: TestClient, 
         out.write_text(exported.output)
         replay = _config(["apply", str(out)])
         assert replay.exit_code == 0, replay.output
-        assert len(_lines(replay.output, "unchanged")) == 2 and not _lines(replay.output, "create")
-    assert json.loads(_config(["export", "--format", "json"]).output)["version"] == 1
+        unchanged = _lines(replay.output, "unchanged")
+        assert len(unchanged) == 3 and not _lines(replay.output, "create")
+        assert any(line.split()[1:] == ["project", "default"] for line in unchanged)
+    assert json.loads(_config(["export", "--format", "json"]).stdout)["version"] == 1
     assert _changes_count() == before
 
 

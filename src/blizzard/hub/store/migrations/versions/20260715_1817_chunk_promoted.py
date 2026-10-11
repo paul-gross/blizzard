@@ -14,7 +14,6 @@ from alembic import op
 from sqlalchemy import insert, select
 
 from blizzard.foundation.store.utc import UtcDateTime
-from blizzard.hub.store.schema import chunk_promoted
 
 revision: str = "20260715_1817_hub_chunk_promoted"
 down_revision: str | None = "20260714_0819_hub_delivery_pr_facts"
@@ -30,6 +29,17 @@ chunks = sa.Table(
     sa.Column("chunk_id", sa.String, primary_key=True),
     sa.Column("minted_at", UtcDateTime, nullable=False),
 )
+
+# Frozen (``bzh:frozen-revisions``): ``chunk_promoted`` is a local literal of the hub store's declared shape.
+chunk_promoted = sa.Table(
+    "chunk_promoted",
+    _frozen_metadata,
+    sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
+    sa.Column("chunk_id", sa.String, sa.ForeignKey("chunks.chunk_id"), nullable=False),
+    sa.Column("promoted_at", UtcDateTime, nullable=False),
+)
+sa.Index("ix_chunk_promoted_chunk_id", chunk_promoted.c.chunk_id)
+sa.Index("ix_chunk_promoted_promoted_at_id", chunk_promoted.c.promoted_at, chunk_promoted.c.id)
 
 
 def upgrade() -> None:

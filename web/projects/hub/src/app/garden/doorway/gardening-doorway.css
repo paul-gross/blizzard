@@ -1,0 +1,134 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  padding: 8px;
+}
+.doorway {
+  flex: 1;
+  min-height: 0;
+}
+/* The breadcrumb — `Gardening › All projects`, and what the doorway asks of the operator. */
+.crumbs {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  margin: -8px -8px 8px;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--bezel);
+  font-size: var(--fs-sm);
+}
+.crumb.current {
+  color: var(--snow);
+}
+.sep {
+  color: var(--label-dim);
+}
+.crumb-hint {
+  margin-left: 4px;
+  color: var(--label);
+  font-size: var(--fs-xs);
+}
+.panel-hint {
+  color: var(--label);
+  font-size: var(--fs-xs);
+}
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 4px 12px 12px;
+  list-style: none;
+}
+.card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid var(--bezel);
+  background: var(--overlay-20);
+}
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--line);
+  background: var(--overlay-25);
+}
+.name {
+  color: var(--snow);
+  font-size: var(--fs-md);
+  overflow-wrap: anywhere;
+}
+.waiting {
+  flex: none;
+  color: var(--amber-hi);
+  font-size: var(--fs-xs);
+}
+.facts {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-sm);
+}
+.facts li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+}
+.fact-label {
+  flex: none;
+  color: var(--label);
+  font-size: var(--fs-xs);
+}
+.fact {
+  min-width: 0;
+  color: var(--snow);
+  overflow-wrap: anywhere;
+}
+.fact-right {
+  flex: none;
+  margin-left: auto;
+  color: var(--label);
+  font-size: var(--fs-xs);
+}
+.fact-right.sweeping {
+  color: var(--cyan);
+}
+.unplanted,
+.unserved {
+  margin: 0;
+  padding: 8px 10px;
+  font-size: var(--fs-sm);
+}
+.unplanted {
+  color: var(--label);
+}
+.unserved {
+  color: var(--amber-hi);
+  border-top: 1px solid var(--line);
+}
+.card-foot {
+  padding: 6px 10px;
+}
+/* The way in, drawn as the kit's primary button: it is the card's one action. */
+.open {
+  display: inline-block;
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  background: var(--overlay-30);
+  color: var(--cyan);
+  text-decoration: none;
+  font-size: var(--fs-sm);
+}
+.open:hover,
+.open:focus-visible {
+  border-color: var(--cyan);
+}

@@ -34,12 +34,15 @@ class FindingBucket:
 
 class FindingBucketReader:
     """Reads a run's :class:`FindingBucket`: its routine's own findings across every
-    scope, plus review-sourced findings on the run's own scope."""
+    scope, plus review-sourced findings on the run's own scope — all within the run's project, so a
+    same-slug scope of another project never joins."""
 
     def __init__(self, findings: IReadFindingRepository) -> None:
         self._findings = findings
 
     def for_run(self, run: RunContext) -> FindingBucket:
-        rows = self._findings.list_for_routine(run.routine_name, include_gone=True)
-        rows += self._findings.list_by_source(scope_slug=run.scope_slug, source="review", include_gone=True)
+        rows = self._findings.list_for_routine(run.project_id, run.routine_name, include_gone=True)
+        rows += self._findings.list_by_source(
+            run.project_id, scope_slug=run.scope_slug, source="review", include_gone=True
+        )
         return FindingBucket.of(rows, own_scope=run.scope_slug)

@@ -12,6 +12,7 @@ import click
 from blizzard.foundation.roles import dto
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
+from blizzard.hub.cli.project_option import project_option, project_query
 from blizzard.hub.cli.views import Listing
 
 
@@ -71,7 +72,10 @@ def finding_group() -> None:
 @click.option(
     "--include-gone", is_flag=True, default=False, help="Also show every exited finding, not just a live one."
 )
-def finding_list(cli: CliContext, routine: str | None, scope: str, source: str | None, include_gone: bool) -> None:
+@project_option(required_by_hub=True)
+def finding_list(
+    cli: CliContext, routine: str | None, scope: str, source: str | None, include_gone: bool, project: str | None
+) -> None:
     """List findings under SCOPE — live only, unless --include-gone, which also
     surfaces every exited finding, not just a merely `gone` one. --routine is required
     unless --source review, since a review-sourced finding carries no routine."""
@@ -82,7 +86,7 @@ def finding_list(cli: CliContext, routine: str | None, scope: str, source: str |
         params["routine"] = routine
     if source is not None:
         params["source"] = source
-    rows = cli.get_all("/api/findings", "GET /findings", key="findings", params=params)
+    rows = cli.get_all("/api/findings", "GET /findings", key="findings", params=params | project_query(project))
     cli.show(rows, FindingListing(rows))
 
 

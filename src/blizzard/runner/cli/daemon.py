@@ -107,3 +107,22 @@ class RunnerDaemon:
         resp = getattr(self.client, method)(path, **kwargs)
         resp.raise_for_status()
         return resp
+
+
+def daemon_holding(root: Path, trace: ITraceHeaders) -> str | None:
+    """What is holding ``root``'s socket, or ``None`` when nothing is — the single-writer guard's
+    probe for a verb that writes or moves the store. Fail-closed: a socket that does not answer
+    its health probe cleanly is still held."""
+    sock = RunnerConfig.socket_path_for(root)
+    if not sock.exists():
+        return None
+    try:
+        with uds_client(sock, trace) as client:
+            response = client.get("/api/health")
+    except httpx.ConnectError:
+        return None  # a socket file an ungraceful exit left behind — nothing is listening on the corpse
+    except httpx.HTTPError as exc:
+        return f"something holds {sock} but did not answer its health probe ({exc})"
+    if response.status_code != 200:
+        return f"something holds {sock} and answered its health probe {response.status_code}"
+    return f"a runner daemon is serving at {sock}"

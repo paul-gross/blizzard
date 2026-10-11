@@ -57,13 +57,24 @@ def runner_group() -> None:
 
 @runner_group.command("add", cls=FleetCommand)
 @click.argument("name")
-def runner_add(cli: CliContext, name: str) -> None:
+@click.option(
+    "--project",
+    "projects",
+    multiple=True,
+    metavar="PROJECT",
+    help="A project the runner serves, by id or slug (repeatable). Without it, the runner serves the tenant's "
+    "project when the tenant holds one, and none when it holds several.",
+)
+def runner_add(cli: CliContext, name: str, projects: tuple[str, ...]) -> None:
     """Add a runner under NAME; prints its hub-minted id and bearer token exactly once.
 
     The runner stays never connected until it first registers with that token; from then on its
     own configured name replaces NAME. Names need not be unique. `blizzard runner init` adds a
     runner and installs its token in one step."""
-    resp = cli.send("post", "/api/runners", json_body={"name": name})
+    request: dict[str, object] = {"name": name}
+    if projects:
+        request["projects"] = list(projects)
+    resp = cli.send("post", "/api/runners", json_body=request)
     if resp.status_code in _PREDATES_ADD:
         raise click.ClickException(f"this hub ({cli.hub_url}) predates `hub runner add`")
     cli.check(resp, "POST /runners", on_status={422: "a runner's name must not be blank"})

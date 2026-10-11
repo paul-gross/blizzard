@@ -10,7 +10,7 @@ from collections import defaultdict
 from collections.abc import Iterable, Sequence
 from datetime import datetime
 
-from sqlalchemy import Connection, select
+from sqlalchemy import Connection
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id
@@ -21,7 +21,6 @@ from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochOwner, FenceRef
 from blizzard.hub.domain.chunk.ports.route import IWriteChunkRouteRepository
 from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import (
     conn_of,
     latest_epoch,
@@ -31,6 +30,7 @@ from blizzard.hub.store.internal.chunk_rows import (
     record_epoch_owner,
     route_of_conn,
 )
+from blizzard.hub.store.scoped import ScopedConnections
 
 _ROUTE_PREFIX = "route"
 
@@ -38,7 +38,7 @@ _ROUTE_PREFIX = "route"
 class ChunkRouteStore:
     """The chunk's claim/route lifecycle — created, released, re-keyed."""
 
-    def __init__(self, store: HubStoreConnections, clock: IClock) -> None:
+    def __init__(self, store: ScopedConnections, clock: IClock) -> None:
         self._store = store
         self._clock = clock
 
@@ -76,7 +76,9 @@ class ChunkRouteStore:
             chunk_ids = [
                 row.chunk_id
                 for row in conn.execute(
-                    select(s.route_created.c.chunk_id).where(s.route_created.c.runner_id == runner_id).distinct()
+                    self._store.select(s.route_created, s.route_created.c.chunk_id)
+                    .where(s.route_created.c.runner_id == runner_id)
+                    .distinct()
                 ).all()
             ]
             if not chunk_ids:
@@ -99,14 +101,14 @@ class ChunkRouteStore:
         """Row construction and grouping for one batch (or the whole fleet, when
         ``chunk_ids`` is ``None``) — shared by both of :meth:`_routes`'s branches."""
 
-        def scoped(query, column):  # type: ignore[no-untyped-def]
+        def in_batch(query, column):  # type: ignore[no-untyped-def]
             return query if chunk_ids is None else query.where(column.in_(chunk_ids))
 
         newest_created: dict[str, RouteCreatedFact] = {}
         route_id_of: dict[str, str] = {}
         runner_of: dict[str, str] = {}
         workspace_of: dict[str, str] = {}
-        for r in conn.execute(scoped(select(s.route_created), s.route_created.c.chunk_id)).all():
+        for r in conn.execute(in_batch(self._store.select(s.route_created), s.route_created.c.chunk_id)).all():
             existing = newest_created.get(r.chunk_id)
             if existing is None or (r.created_at, r.seq) > (existing.created_at, existing.seq):
                 newest_created[r.chunk_id] = RouteCreatedFact(created_at=r.created_at, seq=r.seq)
@@ -116,8 +118,13 @@ class ChunkRouteStore:
 
         newest_released: dict[str, RouteReleasedFact] = {}
         for r in conn.execute(
-            scoped(
-                select(s.route_released.c.chunk_id, s.route_released.c.released_at, s.route_released.c.seq),
+            in_batch(
+                self._store.select(
+                    s.route_released,
+                    s.route_released.c.chunk_id,
+                    s.route_released.c.released_at,
+                    s.route_released.c.seq,
+                ),
                 s.route_released.c.chunk_id,
             )
         ).all():
@@ -137,9 +144,9 @@ class ChunkRouteStore:
         route_ids = {route_id_of[chunk_id] for chunk_id in live_chunk_ids}
         env_ids: dict[str, list[str]] = defaultdict(list)
         for e in conn.execute(
-            select(s.route_environments.c.route_id, s.route_environments.c.environment_id).where(
-                s.route_environments.c.route_id.in_(route_ids)
-            )
+            self._store.select(
+                s.route_environments, s.route_environments.c.route_id, s.route_environments.c.environment_id
+            ).where(s.route_environments.c.route_id.in_(route_ids))
         ).all():
             env_ids[e.route_id].append(e.environment_id)
 
@@ -158,7 +165,9 @@ class ChunkRouteStore:
     def runner_high_water(self, runner_id: str) -> int:
         with self._store.read("runner_high_water") as conn:
             row = conn.execute(
-                select(s.runner_high_water.c.seq).where(s.runner_high_water.c.runner_id == runner_id)
+                self._store.select(s.runner_high_water, s.runner_high_water.c.seq).where(
+                    s.runner_high_water.c.runner_id == runner_id
+                )
             ).one_or_none()
             return int(row.seq) if row is not None else 0
 
@@ -173,7 +182,7 @@ class ChunkRouteStore:
     def _record_route_conn(self, conn, route: Route, *, token_hash: str, at: datetime) -> str:  # type: ignore[no-untyped-def]
         route_id = Id.mint(_ROUTE_PREFIX, self._clock).value
         conn.execute(
-            s.route_created.insert().values(
+            self._store.insert(s.route_created).values(
                 route_id=route_id,
                 chunk_id=route.chunk_id,
                 runner_id=route.runner_id,
@@ -183,9 +192,9 @@ class ChunkRouteStore:
             )
         )
         for env_id in route.environment_ids:
-            conn.execute(s.route_environments.insert().values(route_id=route_id, environment_id=env_id))
+            conn.execute(self._store.insert(s.route_environments).values(route_id=route_id, environment_id=env_id))
         conn.execute(
-            s.route_token_minted.insert().values(
+            self._store.insert(s.route_token_minted).values(
                 chunk_id=route.chunk_id,
                 token_hash=token_hash,
                 seq=next_route_seq(conn, route.chunk_id),
@@ -201,7 +210,9 @@ class ChunkRouteStore:
 
     def _record_route_released_conn(self, conn: Connection, chunk_id: str, *, at: datetime) -> int:
         result = conn.execute(
-            s.route_released.insert().values(chunk_id=chunk_id, released_at=at, seq=next_route_seq(conn, chunk_id))
+            self._store.insert(s.route_released).values(
+                chunk_id=chunk_id, released_at=at, seq=next_route_seq(conn, chunk_id)
+            )
         )
         key = result.inserted_primary_key
         return int(key[0]) if key is not None else 0
@@ -213,7 +224,7 @@ class ChunkRouteStore:
         create/release/re-key on this chunk."""
         with self._store.write("record_route_token") as conn:
             conn.execute(
-                s.route_token_minted.insert().values(
+                self._store.insert(s.route_token_minted).values(
                     chunk_id=chunk_id,
                     token_hash=token_hash,
                     seq=next_route_seq(conn, chunk_id),
@@ -233,7 +244,7 @@ class ChunkRouteStore:
             if admission.takes_ownership():
                 record_epoch_owner(conn, chunk_id, epoch, EpochOwner.runner(claimant.runner_id), at=at)
             conn.execute(
-                s.lease_facts.insert().values(
+                self._store.insert(s.lease_facts).values(
                     chunk_id=chunk_id,
                     epoch=epoch,
                     runner_id=claimant.runner_id,
@@ -246,13 +257,17 @@ class ChunkRouteStore:
     def set_runner_high_water(self, runner_id: str, *, seq: int, at: datetime) -> None:
         with self._store.write("set_runner_high_water") as conn:
             existing = conn.execute(
-                select(s.runner_high_water.c.runner_id).where(s.runner_high_water.c.runner_id == runner_id)
+                self._store.select(s.runner_high_water, s.runner_high_water.c.runner_id).where(
+                    s.runner_high_water.c.runner_id == runner_id
+                )
             ).one_or_none()
             if existing is None:
-                conn.execute(s.runner_high_water.insert().values(runner_id=runner_id, seq=seq, updated_at=at))
+                conn.execute(
+                    self._store.insert(s.runner_high_water).values(runner_id=runner_id, seq=seq, updated_at=at)
+                )
             else:
                 conn.execute(
-                    s.runner_high_water.update()
+                    self._store.update(s.runner_high_water)
                     .where(s.runner_high_water.c.runner_id == runner_id)
                     .values(seq=seq, updated_at=at)
                 )

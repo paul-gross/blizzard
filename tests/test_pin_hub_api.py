@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import signal
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -19,14 +20,19 @@ from fastapi.testclient import TestClient
 
 from blizzard.auth_core import Permission
 from blizzard.cli.runtime import _EarlyShutdownServer
+from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.hub.api.auth_session import require
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.config import HubConfig
 from blizzard.hub.store import MIGRATIONS_DIR
+from tests.support import hub_scoped_engine
 
 pytestmark = pytest.mark.unit
+
+# What a revision that stamps a time reads (``migration_clock``).
+_MIGRATION_CLOCK = FixedClock(datetime(2026, 7, 12, tzinfo=UTC))
 
 _WALKING_SKELETON = "20260713_1218_hub_walking_skeleton"
 _DELIVERY_PR_FACTS = "20260714_0819_hub_delivery_pr_facts"
@@ -40,13 +46,13 @@ _CHUNK_DEFAULTS = "20260728_1410_hub_chunk_defaults"
 def _store(tmp_path: Path, revision: str) -> tuple[MigrationRunner, str]:
     """A scratch hub store migrated from ``base`` up to exactly ``revision``."""
     url = f"sqlite:///{tmp_path}/hub.db"
-    runner = MigrationRunner(script_location=MIGRATIONS_DIR, url=url)
+    runner = MigrationRunner(script_location=MIGRATIONS_DIR, url=url, clock=_MIGRATION_CLOCK)
     runner.upgrade(revision)
     return runner, url
 
 
 def _columns(url: str, table: str) -> set[str]:
-    engine = create_engine_from_url(url)
+    engine = hub_scoped_engine(create_engine_from_url(url))
     try:
         return {c["name"] for c in sa.inspect(engine).get_columns(table)}
     finally:
@@ -54,7 +60,7 @@ def _columns(url: str, table: str) -> set[str]:
 
 
 def _unique_constraint_names(url: str, table: str) -> set[str]:
-    engine = create_engine_from_url(url)
+    engine = hub_scoped_engine(create_engine_from_url(url))
     try:
         return {c["name"] or "" for c in sa.inspect(engine).get_unique_constraints(table)}
     finally:
@@ -94,7 +100,7 @@ def test_delivery_pr_opened_gains_its_uniqueness_only_at_the_revision_that_adds_
     _runner, url = _store(tmp_path, _DELIVERY_PR_FACTS)
     assert _unique_constraint_names(url, "delivery_pr_opened") == set()
 
-    MigrationRunner(script_location=MIGRATIONS_DIR, url=url).upgrade(_PR_OPENED_IDEMPOTENT)
+    MigrationRunner(script_location=MIGRATIONS_DIR, url=url, clock=_MIGRATION_CLOCK).upgrade(_PR_OPENED_IDEMPOTENT)
     assert "uq_delivery_pr_opened_chunk_repo" in _unique_constraint_names(url, "delivery_pr_opened")
 
 
@@ -106,7 +112,7 @@ def test_pr_opened_upgrade_keeps_only_the_earliest_duplicate(tmp_path: Path) -> 
     constraint add: every row but the earliest (lowest ``id``) per (chunk_id, repo) is
     deleted, and a distinct (chunk_id, repo) pair is untouched."""
     _runner, url = _store(tmp_path, _PM_POINTER_SOURCE_REF)
-    engine = create_engine_from_url(url)
+    engine = hub_scoped_engine(create_engine_from_url(url))
     insert = sa.text(
         "INSERT INTO delivery_pr_opened (id, chunk_id, repo, pr_number, pr_url, commit_hash, opened_at)"
         " VALUES (:id, :chunk_id, :repo, :n, 'http://pr', 'abc', '2026-01-01 00:00:00')"
@@ -119,9 +125,9 @@ def test_pr_opened_upgrade_keeps_only_the_earliest_duplicate(tmp_path: Path) -> 
     finally:
         engine.dispose()
 
-    MigrationRunner(script_location=MIGRATIONS_DIR, url=url).upgrade(_PR_OPENED_IDEMPOTENT)
+    MigrationRunner(script_location=MIGRATIONS_DIR, url=url, clock=_MIGRATION_CLOCK).upgrade(_PR_OPENED_IDEMPOTENT)
 
-    engine = create_engine_from_url(url)
+    engine = hub_scoped_engine(create_engine_from_url(url))
     try:
         with engine.connect() as conn:
             surviving = sorted(r.id for r in conn.execute(sa.text("SELECT id FROM delivery_pr_opened")).all())
@@ -135,7 +141,7 @@ def test_pm_pointer_reshape_backfills_and_survives_a_down_then_up_cycle(tmp_path
     revision's own table shape, and ``downgrade()``'s canonicalized reconstruction (the
     constant placeholder owner) re-upgrades to the identical ``(source, ref)``."""
     _runner, url = _store(tmp_path, _RUNNER_LOCAL_PAUSE)
-    engine = create_engine_from_url(url)
+    engine = hub_scoped_engine(create_engine_from_url(url))
     try:
         with engine.begin() as conn:
             conn.execute(
@@ -148,7 +154,7 @@ def test_pm_pointer_reshape_backfills_and_survives_a_down_then_up_cycle(tmp_path
         engine.dispose()
 
     def _pointer(column: str) -> tuple[str, str]:
-        eng = create_engine_from_url(url)
+        eng = hub_scoped_engine(create_engine_from_url(url))
         try:
             with eng.connect() as conn:
                 row = conn.execute(sa.text(f"SELECT {column} FROM chunk_pm_pointers WHERE id = 1")).one()
@@ -156,7 +162,7 @@ def test_pm_pointer_reshape_backfills_and_survives_a_down_then_up_cycle(tmp_path
             eng.dispose()
         return (row[0], row[1])
 
-    runner = MigrationRunner(script_location=MIGRATIONS_DIR, url=url)
+    runner = MigrationRunner(script_location=MIGRATIONS_DIR, url=url, clock=_MIGRATION_CLOCK)
     runner.upgrade(_PM_POINTER_SOURCE_REF)
     assert _pointer("source, ref") == ("blizzard", "26")
 
@@ -171,7 +177,7 @@ def test_chunk_defaults_retains_model_and_backfills_no_default_model(tmp_path: P
     """``chunks.model`` is kept (it is the only record of what a pre-#144 chunk ran) and
     ``default_model`` is left NULL rather than filled in from it."""
     _runner, url = _store(tmp_path, _GRAPH_SESSIONS)
-    engine = create_engine_from_url(url)
+    engine = hub_scoped_engine(create_engine_from_url(url))
     try:
         with engine.begin() as conn:
             conn.execute(
@@ -183,9 +189,9 @@ def test_chunk_defaults_retains_model_and_backfills_no_default_model(tmp_path: P
     finally:
         engine.dispose()
 
-    MigrationRunner(script_location=MIGRATIONS_DIR, url=url).upgrade(_CHUNK_DEFAULTS)
+    MigrationRunner(script_location=MIGRATIONS_DIR, url=url, clock=_MIGRATION_CLOCK).upgrade(_CHUNK_DEFAULTS)
 
-    engine = create_engine_from_url(url)
+    engine = hub_scoped_engine(create_engine_from_url(url))
     try:
         with engine.connect() as conn:
             row = conn.execute(sa.text("SELECT model, default_model FROM chunks WHERE chunk_id = 'ch_old'")).one()
@@ -198,10 +204,9 @@ def test_chunk_defaults_retains_model_and_backfills_no_default_model(tmp_path: P
 # The human-plane auth seam under the default ``auth.mode = "none"``
 
 
-def test_require_grants_the_implicit_operator_with_no_store_wired() -> None:
-    """Under the default ``auth.mode = "none"`` a ``require()``-gated route serves on the
-    store-free app: the gate short-circuits to :data:`IMPLICIT_OPERATOR` without reaching
-    for ``Depends(get_services)``, which would 503 with no store wired."""
+def test_require_reports_the_store_unwired_with_no_store_wired() -> None:
+    """A ``require()``-gated route serves a tenant, and a store-free app has none to resolve: under
+    the default ``auth.mode = "none"`` the gate answers 503, never the implicit operator unscoped."""
     app = FastAPI()
     app.state.config = HubConfig(root=Path("."), db_url="sqlite://")  # `auth.mode` defaults to "none"
     app.state.services = None  # store-free, exactly as the export/unit app is built
@@ -213,8 +218,7 @@ def test_require_grants_the_implicit_operator_with_no_store_wired() -> None:
     with TestClient(app) as client:
         resp = client.get("/_pin_probe")
 
-    assert resp.status_code == 200, resp.text
-    assert resp.json() == {"username": "operator"}
+    assert resp.status_code == 503, resp.text
 
 
 # `hub host`'s early-shutdown server

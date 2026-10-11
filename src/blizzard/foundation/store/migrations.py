@@ -2,31 +2,40 @@
 
 Schema change is Alembic, applied manually through the CLI, never at daemon startup
 (``bzh:manual-migrations``). The runner drives *one* migration tree, pointed at a ``script_location``
-and a store ``url``; the guard refuses to run on a revision mismatch, naming the migrate command."""
+and a store ``url``; the guard refuses to run on a revision mismatch, naming the migrate command.
+A revision that stamps a time reads it from the clock the runner was given (``migration_clock``),
+never the wall clock (``bzh:injected-clock``)."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
 
-from alembic import command
+from alembic import command, op
 from alembic.config import Config
 from alembic.runtime.migration import MigrationContext
 from alembic.script import ScriptDirectory
 from sqlalchemy import Column, MetaData, String, Table
 from sqlalchemy.exc import OperationalError
 
-from blizzard.foundation.roles import collaborator
+from blizzard.foundation.clock import IClock
 from blizzard.foundation.store.engine import create_engine_from_url
 
 # Alembic's default `version_num String(32)` truncates `YYYYMMDD_HHMM_slug` ids on postgres (#191).
 # Pinned by tests/test_pin_foundation.py::test_the_version_table_admits_this_projects_revision_ids.
 _VERSION_TABLE_COLUMN_LENGTH = 255
 
+# The Alembic ``Config.attributes`` key a runner's clock rides under, for ``migration_clock`` to read.
+MIGRATION_CLOCK_ATTRIBUTE = "blizzard.migration_clock"
+
 
 class MigrationConnectionError(RuntimeError):
     """Raised when a migration cannot reach the store — the domain-level fault a daemon's
     runtime should catch, not sqlalchemy's own driver-specific ``OperationalError``."""
+
+
+class MigrationClockMissingError(RuntimeError):
+    """Raised when a revision that stamps a time runs without a clock to read it from."""
 
 
 class RevisionMismatchError(RuntimeError):
@@ -45,18 +54,22 @@ class RevisionMismatchError(RuntimeError):
         )
 
 
-@collaborator
 @dataclass(frozen=True)
 class MigrationRunner:
-    """Drives one Alembic tree against one store URL."""
+    """Drives one Alembic tree against one store URL. ``clock`` is what a revision that stamps a
+    time reads (``migration_clock``); inspecting a store, or a tree no revision of which stamps a
+    time, needs none."""
 
     script_location: Path
     url: str
+    clock: IClock | None = None
 
     def _config(self) -> Config:
         cfg = Config()
         cfg.set_main_option("script_location", str(self.script_location))
         cfg.set_main_option("sqlalchemy.url", self.url)
+        if self.clock is not None:
+            cfg.attributes[MIGRATION_CLOCK_ATTRIBUTE] = self.clock
         return cfg
 
     def _ensure_wide_version_table(self) -> None:
@@ -104,3 +117,18 @@ class MigrationRunner:
         expected = self.script_head()
         if current != expected:
             raise RevisionMismatchError(store=store, current=current, expected=expected, remedy=remedy)
+
+
+def migration_clock() -> IClock:
+    """The clock the running migration was given — what a revision that stamps a time reads.
+
+    Called from inside a revision's ``upgrade``/``downgrade``; raises
+    :class:`MigrationClockMissingError` when the migration was run without one."""
+    config = op.get_context().config
+    clock: IClock | None = None if config is None else config.attributes.get(MIGRATION_CLOCK_ATTRIBUTE)
+    if clock is None:
+        raise MigrationClockMissingError(
+            "this revision stamps a time, but the migration was run without a clock: "
+            "migrate through MigrationRunner with a clock"
+        )
+    return clock

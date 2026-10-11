@@ -12,6 +12,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.foundation.claim_denials import ClaimDenialReason
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.roles import domain_model
@@ -97,15 +98,29 @@ class ClaimDeniedDependency(Exception):
 
 
 class ClaimDeniedIncompatible(Exception):
-    """The claiming runner's stored capabilities can no longer run every statically
-    reachable runner-owned lineage from the chunk's current node — refused outright,
-    mirroring :class:`ClaimDeniedDependency`'s shape. A registration
-    reporting no capabilities is refused here too."""
+    """The claiming runner cannot take the chunk, for ``reason`` — refused outright, mirroring
+    :class:`ClaimDeniedDependency`'s shape. ``capability``: its stored capabilities can no longer run
+    every statically reachable runner-owned lineage from the chunk's current node, a registration
+    reporting no capabilities included. ``project``: its served declaration does not serve the
+    chunk's project, ``project_id``, which only a ``project`` refusal carries."""
 
-    def __init__(self, *, chunk_id: str, runner_id: str) -> None:
-        super().__init__(f"runner {runner_id}'s capabilities no longer satisfy chunk {chunk_id}")
+    def __init__(
+        self,
+        *,
+        chunk_id: str,
+        runner_id: str,
+        reason: ClaimDenialReason = ClaimDenialReason.CAPABILITY,
+        project_id: str | None = None,
+    ) -> None:
+        if reason is ClaimDenialReason.PROJECT:
+            message = f"runner {runner_id} does not serve project {project_id} of chunk {chunk_id}"
+        else:
+            message = f"runner {runner_id}'s capabilities no longer satisfy chunk {chunk_id}"
+        super().__init__(message)
         self.chunk_id = chunk_id
         self.runner_id = runner_id
+        self.reason = reason
+        self.project_id = project_id
 
 
 class ClaimDeniedNotReady(Exception):
@@ -140,6 +155,18 @@ def refuse_paused_runner(registration: RunnerRegistration | None, *, runner_id: 
     return registration
 
 
+def refuse_unserved_project(registration: RunnerRegistration, *, chunk_id: str, project_id: str) -> None:
+    """Refuse a claim on chunk ``chunk_id`` of project ``project_id`` by a runner whose served declaration does not
+    serve it (:class:`ClaimDeniedIncompatible`, reason ``project``) — an empty declaration serves nothing."""
+    if not registration.serves(project_id):
+        raise ClaimDeniedIncompatible(
+            chunk_id=chunk_id,
+            runner_id=registration.runner_id,
+            reason=ClaimDenialReason.PROJECT,
+            project_id=project_id,
+        )
+
+
 def refuse_rekey(route: Route, facts: ChunkFacts) -> None:
     """Refuse rotating ``route``'s token once its chunk has ended (:class:`RekeyDeniedTerminal`):
     a route left on a stopped or done chunk confers no tenure, so no token is minted for it."""
@@ -168,8 +195,9 @@ def first_unmet_prerequisite(
 class ClaimAdmission:
     """Whether a runner may claim a chunk, judged on what the claim lock read. Refusals run in a fixed order,
     each its own error: unregistered (never connected included), retired, ended, held route, not ``ready``,
-    unmet prerequisite, then incapable runner (a registration reporting no capabilities is incapable of
-    everything). The runner-paused brake is judged before the lock (:func:`refuse_paused_runner`)."""
+    unmet prerequisite, a project the runner does not serve, then incapable runner (a registration reporting no
+    capabilities is incapable of everything). The runner-paused brake is judged before the lock
+    (:func:`refuse_paused_runner`)."""
 
     chunk: Chunk
     graph: Graph
@@ -198,6 +226,7 @@ class ClaimAdmission:
             raise ClaimDeniedNotReady(chunk_id=chunk_id, status=status)
         if unmet_prerequisite is not None:
             raise ClaimDeniedDependency(chunk_id=chunk_id, prerequisite_chunk_id=unmet_prerequisite)
+        refuse_unserved_project(registration, chunk_id=chunk_id, project_id=self.chunk.require_project())
         node = facts.current_node(self.graph)
         if node is None:  # pragma: no cover - a pinned graph always resolves its own node
             raise ClaimConflict(held_by_runner_id=runner_id)

@@ -20,9 +20,12 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from jwt.algorithms import RSAAlgorithm
 
+from blizzard.auth_core import Role
+from blizzard.hub.auth.invitations import Invitation
 from blizzard.hub.auth.oauth.internal.github_provider import GithubProvider
 from blizzard.hub.auth.oauth.internal.oidc_provider import OidcProvider
 from blizzard.hub.auth.oauth.provider import OAuthExchangeError
+from blizzard.hub.tenancy import TenantId
 
 pytestmark = pytest.mark.unit
 
@@ -76,7 +79,7 @@ def _oidc_transport(id_token_claims: dict[str, object] | None, *, token_status: 
     return httpx.Client(transport=httpx.MockTransport(handler))
 
 
-def _oidc_provider(client: httpx.Client) -> OidcProvider:
+def _oidc_provider(client: httpx.Client, *, emails_authoritative: bool = False) -> OidcProvider:
     return OidcProvider(
         name="oidc-co",
         display_name="Example SSO",
@@ -84,6 +87,7 @@ def _oidc_provider(client: httpx.Client) -> OidcProvider:
         client_id=_CLIENT_ID,
         client_secret="s3cret",
         http_client=client,
+        emails_authoritative=emails_authoritative,
     )
 
 
@@ -110,6 +114,72 @@ def test_oidc_exchange_respects_unverified_email() -> None:
     provider = _oidc_provider(_oidc_transport({"sub": "u1", "email": "ada@example.com", "email_verified": False}))
     identity = provider.exchange(code="abc", redirect_uri="https://hub.test/callback")
     assert identity.email_verified is False
+    assert identity.verified_emails == ()
+
+
+@pytest.mark.parametrize("claim", ["false", "False", "no", "", 1, "1"])
+def test_oidc_exchange_counts_only_a_true_claim_as_verified(claim: object) -> None:
+    provider = _oidc_provider(_oidc_transport({"sub": "u1", "email": "ada@example.com", "email_verified": claim}))
+    identity = provider.exchange(code="abc", redirect_uri="https://hub.test/callback")
+    assert identity.email_verified is False
+    assert identity.verified_emails == ()
+
+
+def test_oidc_exchange_treats_an_absent_claim_as_unverified() -> None:
+    provider = _oidc_provider(_oidc_transport({"sub": "u1", "email": "ada@example.com"}))
+    identity = provider.exchange(code="abc", redirect_uri="https://hub.test/callback")
+    assert identity.email_verified is False
+    assert identity.verified_emails == ()
+
+
+@pytest.mark.parametrize("claim", [True, "true", "TRUE", "True"])
+def test_oidc_exchange_accepts_a_true_claim_as_boolean_or_string(claim: object) -> None:
+    provider = _oidc_provider(_oidc_transport({"sub": "u1", "email": "ada@example.com", "email_verified": claim}))
+    identity = provider.exchange(code="abc", redirect_uri="https://hub.test/callback")
+    assert identity.email_verified is True
+    assert identity.verified_emails == ("ada@example.com",)
+
+
+def _invitation_for(email: str) -> Invitation:
+    issued = datetime(2026, 1, 1, tzinfo=UTC)
+    return Invitation(
+        invitation_id="inv_oidc",
+        tenant=TenantId("ten_oidc"),
+        email=email,
+        role=Role.CONTRIBUTOR,
+        token_hash="0" * 64,
+        created_by="usr_admin",
+        created_at=issued,
+        expires_at=issued + timedelta(days=7),
+    )
+
+
+@pytest.mark.parametrize(("claim", "admitted"), [("false", False), ("true", True), (True, True)])
+def test_an_authoritative_oidc_identity_accepts_an_invitation_only_with_a_verified_email(
+    claim: object, admitted: bool
+) -> None:
+    claims = {"sub": "u1", "email": "ceo@corp.com", "email_verified": claim}
+    provider = _oidc_provider(_oidc_transport(claims), emails_authoritative=True)
+    identity = provider.exchange(code="abc", redirect_uri="https://hub.test/callback")
+    assert _invitation_for("ceo@corp.com").admits(identity) is admitted
+
+
+def test_oidc_reports_its_verified_email_as_unauthoritative_unless_configured() -> None:
+    claims = {"sub": "u1", "email": "ada@example.com", "email_verified": True}
+    provider = _oidc_provider(_oidc_transport(claims))
+    identity = provider.exchange(code="abc", redirect_uri="https://hub.test/callback")
+    assert provider.emails_authoritative is False
+    assert identity.verified_emails == ("ada@example.com",)
+    assert identity.emails_authoritative is False
+
+
+def test_oidc_configured_authoritative_vouches_for_its_verified_email() -> None:
+    claims = {"sub": "u1", "email": "ada@example.com", "email_verified": True}
+    provider = _oidc_provider(_oidc_transport(claims), emails_authoritative=True)
+    identity = provider.exchange(code="abc", redirect_uri="https://hub.test/callback")
+    assert provider.emails_authoritative is True
+    assert identity.verified_emails == ("ada@example.com",)
+    assert identity.emails_authoritative is True
 
 
 def test_oidc_exchange_falls_back_to_subject_when_no_handle_claim() -> None:
@@ -274,6 +344,24 @@ def test_github_exchange_picks_the_primary_email_among_several() -> None:
     assert identity.email == "primary@example.com"
 
 
+def test_github_exchange_reports_every_verified_email_as_authoritative() -> None:
+    provider = _github_provider(
+        _github_transport(
+            user={"id": 42, "login": "octocat"},
+            emails=[
+                {"email": "secondary@example.com", "primary": False, "verified": True},
+                {"email": "unproven@example.com", "primary": False, "verified": False},
+                {"email": "primary@example.com", "primary": True, "verified": True},
+            ],
+        )
+    )
+    identity = provider.exchange(code="abc", redirect_uri="https://hub.test/callback")
+    assert provider.emails_authoritative is True
+    assert identity.verified_emails == ("secondary@example.com", "primary@example.com")
+    assert identity.emails_authoritative is True
+    assert identity.email == "primary@example.com"
+
+
 def test_github_exchange_respects_an_unverified_primary_email() -> None:
     provider = _github_provider(
         _github_transport(
@@ -283,6 +371,7 @@ def test_github_exchange_respects_an_unverified_primary_email() -> None:
     )
     identity = provider.exchange(code="abc", redirect_uri="https://hub.test/callback")
     assert identity.email_verified is False
+    assert identity.verified_emails == ()
 
 
 def test_github_exchange_raises_on_a_rejected_code() -> None:

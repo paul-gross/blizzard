@@ -9,11 +9,11 @@ import json
 import zlib
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
+from functools import partial
 from pathlib import Path
 from typing import Any
 
 import pytest
-from sqlalchemy import delete, select, update
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
@@ -24,6 +24,7 @@ from blizzard.hub.domain.observability.analytics.derivation import (
     EventDerivationReconciler,
     EventDerivationService,
     GraphPins,
+    TenantEventDerivation,
 )
 from blizzard.hub.domain.observability.analytics.events import KIND_FILE_READ
 from blizzard.hub.domain.observability.analytics.extraction import EXTRACTOR_VERSION
@@ -32,9 +33,17 @@ from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
+from blizzard.hub.store.internal.hub_scoped_corpus import SweepCorpusReads
+from blizzard.hub.store.internal.hub_scoped_reads import hub_scoped_read
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
-from tests.support import chunk_stores, count_queries, hub_store_connections, seed_chunk_record
+from tests.support import (
+    chunk_stores,
+    count_queries,
+    hub_level_connections,
+    hub_store_connections,
+    seed_chunk_record,
+)
 
 pytestmark = pytest.mark.component
 
@@ -95,6 +104,7 @@ class _Fixture:
         self.segments = TranscriptSegmentStore(hub_store_connections(self.engine))
         self.events = TranscriptEventStore(hub_store_connections(self.engine))
         self.clock = FixedClock(_NOW)
+        self.corpus = SweepCorpusReads(partial(hub_scoped_read, hub_level_connections(self.engine)))
         seed_chunk_record(self.chunks, Chunk(chunk_id="ch_1", graph_id="gr_mint", work_refs=[], minted_at=_NOW))
         self.chunks.movement.record_transition(
             transition_id="tr_1",
@@ -111,7 +121,17 @@ class _Fixture:
         self.service = EventDerivationService(
             events=self.events, facts=self.chunks.facts, record=self.chunks.record, clock=self.clock
         )
-        self.reconciler = EventDerivationReconciler(service=self.service, events=self.events, clock=self.clock)
+        self.reconciler = self.reconciler_over(self.service)
+
+    def reconciler_over(self, service: EventDerivationService) -> EventDerivationReconciler:
+        """A fresh hub pass, as a restart builds, deriving the fixture's one tenant through ``service``."""
+        tenant = TenantEventDerivation(service=service, events=self.events, clock=self.clock)
+        return EventDerivationReconciler(
+            corpus=self.corpus,
+            tenant=lambda _tenant: tenant,
+            clock=self.clock,
+            extractor_version=service.extractor_version,
+        )
 
     def mint_chunk(self, chunk_id: str, *, node_id: str = "nd_build") -> None:
         seed_chunk_record(self.chunks, Chunk(chunk_id=chunk_id, graph_id="gr_mint", work_refs=[], minted_at=_NOW))
@@ -132,11 +152,11 @@ class _Fixture:
         """The breach ``hub:segment-chunk-resolves`` names, injected directly: sqlite
         enforces no foreign key, so a segment can outlive the chunk row it declares."""
         with self.engine.begin() as conn:
-            conn.execute(delete(s.chunks).where(s.chunks.c.chunk_id == chunk_id))
+            conn.execute(hub_store_connections(self.engine).delete(s.chunks).where(s.chunks.c.chunk_id == chunk_id))
 
     def stored_events(self) -> list[Any]:
         with self.engine.connect() as conn:
-            return list(conn.execute(select(s.transcript_events)).all())
+            return list(conn.execute(hub_store_connections(self.engine).select(s.transcript_events)).all())
 
 
 @pytest.fixture
@@ -252,7 +272,7 @@ def test_sweep_resolves_graph_pins_with_one_load_facts_for_and_one_graph_id_of_m
     service = EventDerivationService(
         events=fixture.events, facts=counting_facts, record=counting_record, clock=fixture.clock
     )
-    reconciler = EventDerivationReconciler(service=service, events=fixture.events, clock=fixture.clock)
+    reconciler = fixture.reconciler_over(service)
 
     reconciler.sweep()
 
@@ -304,11 +324,11 @@ def test_a_version_bump_re_derives_history_leaving_the_prior_version_intact(fixt
         clock=fixture.clock,
         extractor_version=_NEXT_EXTRACTOR_VERSION,
     )
-    bumped_reconciler = EventDerivationReconciler(service=bumped_service, events=fixture.events, clock=fixture.clock)
+    bumped_reconciler = fixture.reconciler_over(bumped_service)
     bumped_reconciler.sweep()
 
     with fixture.engine.connect() as conn:
-        rows = conn.execute(select(s.transcript_events)).all()
+        rows = conn.execute(hub_store_connections(fixture.engine).select(s.transcript_events)).all()
     versions = {row.extractor_version for row in rows}
     assert versions == {EXTRACTOR_VERSION, _NEXT_EXTRACTOR_VERSION}
     assert fixture.events.derivation_marker("sg_1", EXTRACTOR_VERSION) == marker_v1
@@ -335,10 +355,11 @@ def test_the_bump_leaves_a_prior_versions_un_backfilled_rows_untouched(fixture: 
         clock=fixture.clock,
         extractor_version=_PRIOR_EXTRACTOR_VERSION,
     )
-    EventDerivationReconciler(service=prior_service, events=fixture.events, clock=fixture.clock).sweep()
+    fixture.reconciler_over(prior_service).sweep()
     with fixture.engine.begin() as conn:
         conn.execute(
-            update(s.transcript_events)
+            hub_store_connections(fixture.engine)
+            .update(s.transcript_events)
             .where(s.transcript_events.c.extractor_version == _PRIOR_EXTRACTOR_VERSION)
             .values(harness_id=None, harness_version=None, model=None, effort=None)
         )
@@ -374,7 +395,11 @@ def test_a_superseded_segments_rows_are_dropped(fixture: _Fixture) -> None:
 
     assert fixture.events.derivation_marker("sg_old", EXTRACTOR_VERSION) is None
     with fixture.engine.connect() as conn:
-        rows = conn.execute(select(s.transcript_events).where(s.transcript_events.c.segment_id == "sg_old")).all()
+        rows = conn.execute(
+            hub_store_connections(fixture.engine)
+            .select(s.transcript_events)
+            .where(s.transcript_events.c.segment_id == "sg_old")
+        ).all()
     assert rows == []
 
 
@@ -461,7 +486,7 @@ def test_a_dropped_segment_leaves_one_drop_fact_stamped_by_the_clock_with_no_egr
     fixture.reconciler.sweep()
 
     with fixture.engine.connect() as conn:
-        rows = conn.execute(select(s.transcript_event_drops)).all()
+        rows = conn.execute(hub_store_connections(fixture.engine).select(s.transcript_event_drops)).all()
     assert [(r.segment_id, r.chunk_id, r.epoch, r.spawn_generation, r.dropped_at) for r in rows] == [
         ("sg_1", "ch_1", 1, 1, later)
     ]
@@ -507,7 +532,7 @@ def test_one_underivable_segment_does_not_cost_the_rest_of_the_tick(fixture: _Fi
         clock=fixture.clock,
     )
 
-    EventDerivationReconciler(service=poisoned, events=fixture.events, clock=fixture.clock).sweep()
+    fixture.reconciler_over(poisoned).sweep()
 
     assert [row.segment_id for row in fixture.stored_events()] == ["sg_2"]
 
@@ -530,7 +555,7 @@ def test_a_pin_resolution_fault_skips_the_whole_pass_without_raising(fixture: _F
         clock=fixture.clock,
     )
 
-    EventDerivationReconciler(service=poisoned, events=fixture.events, clock=fixture.clock).sweep()
+    fixture.reconciler_over(poisoned).sweep()
 
     assert fixture.stored_events() == []
 
@@ -646,7 +671,7 @@ def test_an_extractor_version_bump_decodes_each_segment_at_most_once(
         clock=fixture.clock,
         extractor_version=f"{EXTRACTOR_VERSION}-next",
     )
-    EventDerivationReconciler(service=bumped_service, events=fixture.events, clock=fixture.clock).sweep()
+    fixture.reconciler_over(bumped_service).sweep()
 
     assert decompress_calls == 1
 
@@ -689,7 +714,7 @@ def test_a_fresh_reconcilers_first_sweep_always_runs_full(fixture: _Fixture) -> 
     ``EXTRACTOR_VERSION`` bump, which changes derivation markers, not this signature)."""
     fixture.segments.insert_accepted(_segment_record(), byte_count=10, codec="zlib", at=_NOW)
 
-    fresh_reconciler = EventDerivationReconciler(service=fixture.service, events=fixture.events, clock=fixture.clock)
+    fresh_reconciler = fixture.reconciler_over(fixture.service)
     fresh_reconciler.sweep()
 
     assert fixture.events.derivation_marker("sg_1", EXTRACTOR_VERSION) is not None
@@ -704,14 +729,14 @@ def test_the_forced_floor_runs_a_full_pass_after_ten_minutes_despite_an_unchange
     fixture.reconciler.sweep()  # the first-ever pass — records the signature and the floor instant
 
     calls = 0
-    real_candidacy = fixture.service.candidacy
+    real_candidacy = fixture.corpus.candidacy
 
-    def _counting(*args: object, **kwargs: object) -> Any:
+    def _counting(extractor_version: str) -> Any:
         nonlocal calls
         calls += 1
-        return real_candidacy(*args, **kwargs)
+        return real_candidacy(extractor_version)
 
-    monkeypatch.setattr(fixture.service, "candidacy", _counting)
+    monkeypatch.setattr(fixture.corpus, "candidacy", _counting)
 
     fixture.reconciler.sweep()  # unchanged signature, floor not yet due — skipped
     assert calls == 0

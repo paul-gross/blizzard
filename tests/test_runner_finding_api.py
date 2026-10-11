@@ -28,6 +28,9 @@ _CHUNK = "ch_1"
 
 _FINDING = {
     "finding_id": "fin_1",
+    "project_id": None,
+    "project_slug": None,
+    "project_name": None,
     "routine_name": "nightly",
     "scope_slug": "blizzard",
     "class": "stale-docstring",

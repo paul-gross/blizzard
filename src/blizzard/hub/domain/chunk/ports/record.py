@@ -12,6 +12,7 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.model import Chunk, IntendedMigration
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead, ILockedWorkRefRead
+from blizzard.hub.domain.projects.model import ProjectId
 
 
 @domain_model
@@ -53,11 +54,20 @@ class IReadChunkRecordRepository(Protocol):
 
     def list_all(self) -> list[Chunk]: ...
 
-    def list_page(self, *, cursor: str | None = None, limit: int, done_since: datetime | None = None) -> ChunkPage:
+    def list_page(
+        self,
+        *,
+        cursor: str | None = None,
+        limit: int,
+        done_since: datetime | None = None,
+        project: ProjectId | None = None,
+    ) -> ChunkPage:
         """``list_all``'s bounded sibling: newest-minted first, ``chunk_id`` breaking a
         same-instant tie. ``cursor`` is a prior
         :attr:`ChunkPage.next_cursor`; any other raises :class:`~blizzard.hub.domain.kernel.pagination.MalformedCursor`.
-        ``done_since`` drops chunks settled ``done`` before it — sound, not exact: a tie stays in."""
+        ``done_since`` drops chunks settled ``done`` before it — sound, not exact: a tie stays in.
+        ``project`` narrows the walk to that project's chunks, in the same order; a cursor from a
+        walk under one ``project`` continues only that walk."""
         ...
 
 

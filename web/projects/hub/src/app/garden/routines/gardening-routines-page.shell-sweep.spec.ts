@@ -223,9 +223,11 @@ describe('gardening routines page layout shell sweep (web:shell-sweep, blizzard#
         '1280px: left and right do not sit side by side',
       ).toBeLessThanOrEqual(right!.getBoundingClientRect().left);
 
+      // Desktop opens the first routine; a phone's bare route is the list screen, so each width starts there.
       for (const width of [740, 700, 390, 320]) {
         await page.viewport(width, 800);
         viewport.setOverride('mobile');
+        await router.navigateByUrl('/gardening/routines');
         await settle(fixture);
 
         left = root.querySelector<HTMLElement>('.gr-left');

@@ -30,6 +30,7 @@ _INSTRUMENTED_MODULES = (
     "blizzard.hub.domain.work_items.closure",
     "blizzard.hub.domain.observability.tracing.sweep",
     "blizzard.hub.domain.observability.egress.sweep",
+    "blizzard.hub.domain.tenancy.teardown",
 )
 
 

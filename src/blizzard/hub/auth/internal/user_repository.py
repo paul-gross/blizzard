@@ -8,10 +8,9 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from sqlalchemy import insert, select
+from sqlalchemy import func, insert, select
 from sqlalchemy.exc import IntegrityError
 
-from blizzard.auth_core import Role
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.auth.errors import RepoErrorFactory
 from blizzard.hub.auth.models import User
@@ -43,6 +42,15 @@ class UserRepository:
         with self._store.read("get_by_email") as conn:
             row = conn.execute(select(s.users).where(s.users.c.email == email)).one_or_none()
             return self._user(row) if row is not None else None
+
+    def list_by_email_any_case(self, email: str) -> list[User]:
+        with self._store.read("list_by_email_any_case") as conn:
+            rows = conn.execute(
+                select(s.users)
+                .where(func.lower(s.users.c.email) == email.lower())
+                .order_by(s.users.c.created_at, s.users.c.id)
+            ).all()
+            return [self._user(row) for row in rows]
 
     def username_exists(self, username: str) -> bool:
         with self._store.read("username_exists") as conn:
@@ -77,7 +85,6 @@ class UserRepository:
                         username=user.username,
                         display_name=user.display_name,
                         email=user.email,
-                        role=user.role.value,
                         created_at=user.created_at,
                     )
                 )
@@ -85,10 +92,6 @@ class UserRepository:
             raise self._errors.from_integrity_error(
                 exc, f"failed to create user {user.username!r}", operation="create"
             ) from exc
-
-    def update_role(self, user_id: str, role: Role) -> None:
-        with self._store.write("update_role") as conn:
-            conn.execute(s.users.update().where(s.users.c.id == user_id).values(role=role.value))
 
     # --- helpers ------------------------------------------------------------
 
@@ -99,7 +102,6 @@ class UserRepository:
             username=row.username,
             display_name=row.display_name,
             email=row.email,
-            role=Role(row.role),
             created_at=row.created_at,
         )
 

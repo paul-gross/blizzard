@@ -1,6 +1,5 @@
 """The fleet-registry store (``RunnerRegistryStore``) at its own seam — adding a runner, its first and
-later registrations, the heartbeat, the batched name read, the revoked-hash lookup, and the listing
-order."""
+later registrations, the heartbeat, the batched name read, and the listing order."""
 
 from __future__ import annotations
 
@@ -12,11 +11,12 @@ import sqlalchemy as sa
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
-from blizzard.hub.domain.runners.registration import RunnerAddition, RunnerRegistration, TokenRotation
+from blizzard.hub.domain.runners.registration import RunnerAddition, RunnerRegistration, ServedEntry
 from blizzard.hub.runtime import migration_runner
+from blizzard.hub.store import schema
 from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
-from tests.support import count_queries, hub_store_connections
+from tests.support import count_queries, default_tenant, hub_store_connections
 
 pytestmark = pytest.mark.component
 
@@ -52,9 +52,6 @@ def test_an_added_runner_holds_its_name_and_token_and_is_never_connected(tmp_pat
     assert (added.name, added.added_at, added.added_by, added.token_hash) == ("r-claude", _T0, "admin", "hash-rn_1")
     assert (added.workspace_id, added.registered_at, added.last_seen_at) == (None, None, None)
     assert added.never_connected()
-    # Its token already resolves — that is how its first registration authenticates.
-    resolved = store.registration_for_token_hash("hash-rn_1")
-    assert resolved is not None and resolved.runner_id == "rn_1"
 
 
 def test_adding_an_id_twice_is_refused(tmp_path: Path) -> None:
@@ -127,19 +124,6 @@ def test_names_for_answers_every_known_id_in_one_query(tmp_path: Path) -> None:
     assert count_queries(engine, lambda: store.names_for([])) == 0
 
 
-def test_a_revoked_hash_names_the_runner_it_was_issued_to(tmp_path: Path) -> None:
-    store = _store(tmp_path)
-    _add(store, "rn_rotated")
-    _add(store, "rn_revoked")
-    store.rotate_token(TokenRotation("rn_rotated", "hash-current", at=_T0, by="admin"))
-    store.revoke_token("rn_revoked", at=_T0, by="admin")  # as retiring a runner does
-
-    assert store.revoked_token_runner_id("hash-rn_rotated") == "rn_rotated"
-    assert store.revoked_token_runner_id("hash-rn_revoked") == "rn_revoked"
-    assert store.revoked_token_runner_id("hash-current") is None
-    assert store.revoked_token_runner_id("hash-never-issued") is None
-
-
 def test_runners_list_oldest_added_first_with_the_id_breaking_a_tie(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _add(store, "rn_b")
@@ -148,3 +132,43 @@ def test_runners_list_oldest_added_first_with_the_id_breaking_a_tie(tmp_path: Pa
     store.record_registration("rn_c", workspace_id="w1", env_capacity=None, at=_LATER)
 
     assert [r.runner_id for r in store.list_runners()] == ["rn_c", "rn_a", "rn_b"]
+
+
+_SERVED = (ServedEntry("alpha", "proj_a"), ServedEntry("later", None))
+
+
+def test_a_runner_is_added_holding_its_served_declaration_entry_by_entry(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    store.add(RunnerAddition("rn_1", "r-claude", "hash-rn_1", at=_T0, by="admin", served=_SERVED))
+
+    assert _get(store, "rn_1").served == _SERVED
+    assert _get(store, "rn_1").serves("proj_a")
+
+
+def test_a_registration_naming_no_declaration_leaves_the_stored_one_and_a_named_one_replaces_it(
+    tmp_path: Path,
+) -> None:
+    store = _store(tmp_path)
+    store.add(RunnerAddition("rn_1", "r-claude", "hash-rn_1", at=_T0, by="admin", served=_SERVED))
+
+    store.record_registration("rn_1", workspace_id="w1", env_capacity=1, at=_T0)
+    assert _get(store, "rn_1").served == _SERVED
+    store.record_registration("rn_1", workspace_id="w1", env_capacity=1, projects=(), at=_LATER)
+    assert _get(store, "rn_1").served == ()
+    replaced = (ServedEntry("proj_b", "proj_b"),)
+    store.record_registration("rn_1", workspace_id="w1", env_capacity=1, projects=replaced, at=_LATER)
+    assert _get(store, "rn_1").served == replaced
+    assert [r.served for r in store.list_runners()] == [replaced]
+
+
+def test_a_runner_row_holding_no_declaration_serves_nothing(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    store = RunnerRegistryStore(hub_store_connections(engine))
+    store.add(RunnerAddition("rn_1", "r-claude", "hash-rn_1", at=_T0, by="admin", served=_SERVED))
+    with engine.begin() as conn:
+        registrations = schema.runner_registrations
+        conn.execute(
+            sa.update(registrations).where(registrations.c.tenant_id == default_tenant(engine)).values(projects=None)
+        )
+
+    assert _get(store, "rn_1").served == ()

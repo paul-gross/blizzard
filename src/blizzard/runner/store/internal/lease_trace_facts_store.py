@@ -291,10 +291,18 @@ def _closed_leases(conn: Connection, ids: Sequence[str]) -> list[Row[Any]]:
 
 
 def _registered_runner(conn: Connection) -> RunnerFact | None:
-    """The newest ``runner_identity`` row's id and name, or ``None`` when there is none."""
+    """The newest ``runner_identity`` row's id, name and tenant, or ``None`` when there is none."""
     c = runner_identity.c
-    row = conn.execute(select(c.runner_id, c.runner_name).order_by(c.id.desc()).limit(1)).first()
-    return None if row is None else RunnerFact(runner_id=str(row.runner_id), runner_name=str(row.runner_name))
+    stmt = select(c.runner_id, c.runner_name, c.tenant_id, c.tenant_name).order_by(c.id.desc()).limit(1)
+    row = conn.execute(stmt).first()
+    if row is None:
+        return None
+    return RunnerFact(
+        runner_id=str(row.runner_id),
+        runner_name=str(row.runner_name),
+        tenant_id=row.tenant_id,
+        tenant_name=row.tenant_name,
+    )
 
 
 def _facts(conn: Connection, ids: Sequence[str], runner: RunnerFact) -> dict[str, LeaseTraceFacts]:

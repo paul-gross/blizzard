@@ -8,19 +8,26 @@ under any dialect (static proof, no live postgres), and sqlite never duplicates.
 from __future__ import annotations
 
 import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from sqlalchemy import insert
+from sqlalchemy import Connection, create_engine, insert
 from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.sql.dml import Update
+from structlog import get_logger
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.errors import HubStoreErrorFactory
 from blizzard.hub.store.internal.chunk_rows import next_artifact_seq
+from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.tenancy import StoreScope, TenantId
+from tests.support import hub_store_connections, stamp
 
 pytestmark = pytest.mark.unit
 
@@ -31,8 +38,9 @@ class _CapturingConn:
     """A fake ``Connection`` recording each statement instead of running it, so the
     allocator's statements compile against a dialect this process never connects to."""
 
-    def __init__(self) -> None:
+    def __init__(self, scoped: Connection) -> None:
         self.statements: list[object] = []
+        self.get_execution_options = scoped.get_execution_options
 
     def execute(self, stmt: object):  # type: ignore[no-untyped-def]
         self.statements.append(stmt)
@@ -44,10 +52,22 @@ class _FakeResult:
         return None
 
 
-def test_next_artifact_seq_locks_the_chunk_row_before_reading_the_max() -> None:
-    conn = _CapturingConn()
+@contextmanager
+def _scoped_connection() -> Iterator[Connection]:
+    """A connection a scoped read yields over an empty in-memory store — what the allocator's
+    statements recover their scope from; nothing runs on it."""
+    connections = ScopedConnections(
+        create_engine("sqlite://"), HubStoreErrorFactory(get_logger("test")), StoreScope(TenantId("ten_test"))
+    )
+    with connections.read("capture") as conn:
+        yield conn
 
-    assert next_artifact_seq(conn, "ch_1") == 1  # type: ignore[arg-type]
+
+def test_next_artifact_seq_locks_the_chunk_row_before_reading_the_max() -> None:
+    with _scoped_connection() as scoped:
+        conn = _CapturingConn(scoped)
+
+        assert next_artifact_seq(conn, "ch_1") == 1  # type: ignore[arg-type]
 
     assert len(conn.statements) == 2  # the lock, then the max read
     lock_stmt = conn.statements[0]
@@ -69,20 +89,23 @@ def test_concurrent_artifact_seq_allocation_on_sqlite_never_duplicates(tmp_path:
     def allocate(artifact_id: str) -> None:
         try:
             barrier.wait(timeout=5)
-            with engine.begin() as conn:
+            with hub_store_connections(engine).write("seed") as conn:
                 seq = next_artifact_seq(conn, "ch_1")
                 conn.execute(
                     insert(s.artifacts).values(
-                        artifact_id=artifact_id,
-                        chunk_id="ch_1",
-                        node_id="nd_1",
-                        node_name="deliver",
-                        epoch=1,
-                        name=artifact_id,
-                        kind="asset",
-                        data="",
-                        produced_at=_NOW,
-                        seq=seq,
+                        stamp(
+                            s.artifacts,
+                            artifact_id=artifact_id,
+                            chunk_id="ch_1",
+                            node_id="nd_1",
+                            node_name="deliver",
+                            epoch=1,
+                            name=artifact_id,
+                            kind="asset",
+                            data="",
+                            produced_at=_NOW,
+                            seq=seq,
+                        )
                     )
                 )
             with lock:

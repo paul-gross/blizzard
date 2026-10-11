@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 import sqlalchemy as sa
@@ -22,8 +23,9 @@ from blizzard.hub.domain.garden.review.materialize import (
 )
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.internal.review_findings_store import ReviewFindingsStore
-from blizzard.hub.store.schema import artifacts, finding_facts, findings, scopes
-from tests.support import hub_store_connections, seed_chunk, seed_graph
+from blizzard.hub.store.schema import artifacts, chunks, config_changes, finding_facts, findings, scopes
+from blizzard.hub.store.scoped import ScopedStatements
+from tests.support import hub_scoped, hub_store_connections, seed_chunk, seed_graph, stamp
 
 pytestmark = pytest.mark.component
 
@@ -35,7 +37,7 @@ def _store_and_engine(tmp_path: Path) -> tuple[ReviewFindingsStore, Engine]:
     migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
     engine = create_engine_from_url(db_url)
     with engine.begin() as conn:
-        conn.execute(sa.insert(scopes).values(slug="blizzard", description="", created_at=_NOW))
+        conn.execute(sa.insert(scopes).values(stamp(scopes, slug="blizzard", description="", created_at=_NOW)))
         seed_graph(conn, "gr_1", at=_NOW)
         seed_chunk(conn, "ch_1", graph_id="gr_1", at=_NOW)
     store_connections = hub_store_connections(engine)
@@ -71,7 +73,7 @@ def test_deliver_writes_every_row(tmp_path: Path) -> None:
 
     assert outcome is ReviewFindingsOutcome.RECORDED
     with engine.connect() as conn:
-        finding_rows = conn.execute(sa.select(findings)).all()
+        finding_rows = conn.execute(hub_scoped(sa.select(findings))).all()
         assert len(finding_rows) == 1
         row = finding_rows[0]
         assert row.finding_id == "fin_1"
@@ -84,14 +86,16 @@ def test_deliver_writes_every_row(tmp_path: Path) -> None:
         assert row.severity == "should-fix"
         assert row.raised_by_chunk_id == "ch_1"
 
-        fact_rows = conn.execute(sa.select(finding_facts)).all()
+        fact_rows = conn.execute(hub_scoped(sa.select(finding_facts))).all()
         assert len(fact_rows) == 1
         assert fact_rows[0].finding_id == "fin_1"
         assert fact_rows[0].kind == "add"
         assert fact_rows[0].finding_set_id is None
         assert fact_rows[0].ref == "F1"
 
-        marker_rows = conn.execute(sa.select(artifacts).where(artifacts.c.name == "review-findings-delivered")).all()
+        marker_rows = conn.execute(
+            hub_scoped(sa.select(artifacts).where(artifacts.c.name == "review-findings-delivered"))
+        ).all()
         assert len(marker_rows) == 1
         assert marker_rows[0].chunk_id == "ch_1"
         assert marker_rows[0].node_id == "nd_1"
@@ -125,8 +129,17 @@ def test_deliver_mints_an_unseen_scope_in_the_same_transaction(tmp_path: Path) -
 
     assert outcome is ReviewFindingsOutcome.RECORDED
     with engine.connect() as conn:
-        scope_row = conn.execute(sa.select(scopes).where(scopes.c.slug == "brand-new")).one()
+        scope_row = conn.execute(hub_scoped(sa.select(scopes).where(scopes.c.slug == "brand-new"))).one()
         assert "ch_1" in scope_row.description
+        chunk_project = conn.execute(
+            hub_scoped(sa.select(chunks.c.project_id).where(chunks.c.chunk_id == "ch_1"))
+        ).scalar_one()
+        minted = sa.select(config_changes.c.op, config_changes.c.project_id).where(
+            config_changes.c.record_kind == "scope", config_changes.c.record_key == "brand-new"
+        )
+        change = conn.execute(hub_scoped(minted)).one()
+    assert scope_row.project_id == chunk_project
+    assert (change.op, change.project_id) == ("create", chunk_project)
 
 
 def test_deliver_does_not_re_mint_an_existing_scope(tmp_path: Path) -> None:
@@ -135,7 +148,7 @@ def test_deliver_does_not_re_mint_an_existing_scope(tmp_path: Path) -> None:
     store.deliver(_plan(), admission=EpochAdmission.AT_OR_ABOVE)
 
     with engine.connect() as conn:
-        scope_row = conn.execute(sa.select(scopes).where(scopes.c.slug == "blizzard")).one()
+        scope_row = conn.execute(hub_scoped(sa.select(scopes).where(scopes.c.slug == "blizzard"))).one()
         assert scope_row.description == ""  # the pre-seeded description survives untouched
 
 
@@ -147,9 +160,11 @@ def test_deliver_on_an_empty_plan_still_writes_a_marker_and_nothing_else(tmp_pat
 
     assert outcome is ReviewFindingsOutcome.RECORDED
     with engine.connect() as conn:
-        assert conn.execute(sa.select(sa.func.count()).select_from(findings)).scalar_one() == 0
-        assert conn.execute(sa.select(sa.func.count()).select_from(finding_facts)).scalar_one() == 0
-        marker_rows = conn.execute(sa.select(artifacts).where(artifacts.c.name == "review-findings-delivered")).all()
+        assert conn.execute(hub_scoped(sa.select(sa.func.count()).select_from(findings))).scalar_one() == 0
+        assert conn.execute(hub_scoped(sa.select(sa.func.count()).select_from(finding_facts))).scalar_one() == 0
+        marker_rows = conn.execute(
+            hub_scoped(sa.select(artifacts).where(artifacts.c.name == "review-findings-delivered"))
+        ).all()
         assert len(marker_rows) == 1
 
 
@@ -163,9 +178,9 @@ def test_deliver_replay_mints_nothing_new(tmp_path: Path) -> None:
 
     assert second is ReviewFindingsOutcome.ALREADY_RECORDED
     with engine.connect() as conn:
-        assert conn.execute(sa.select(sa.func.count()).select_from(findings)).scalar_one() == 1
-        assert conn.execute(sa.select(sa.func.count()).select_from(finding_facts)).scalar_one() == 1
-        assert conn.execute(sa.select(sa.func.count()).select_from(artifacts)).scalar_one() == 1
+        assert conn.execute(hub_scoped(sa.select(sa.func.count()).select_from(findings))).scalar_one() == 1
+        assert conn.execute(hub_scoped(sa.select(sa.func.count()).select_from(finding_facts))).scalar_one() == 1
+        assert conn.execute(hub_scoped(sa.select(sa.func.count()).select_from(artifacts))).scalar_one() == 1
 
 
 def test_deliver_survives_a_racing_mint_of_the_same_unseen_scope(
@@ -176,17 +191,26 @@ def test_deliver_survives_a_racing_mint_of_the_same_unseen_scope(
     racing writer already committed it, so the insert collides for real."""
     store, engine = _store_and_engine(tmp_path)
     with engine.begin() as conn:
-        conn.execute(sa.insert(scopes).values(slug="brand-new", description="winner", created_at=_NOW))
+        conn.execute(sa.insert(scopes).values(stamp(scopes, slug="brand-new", description="winner", created_at=_NOW)))
 
     import blizzard.hub.store.internal.review_findings_store as module
 
-    real_select = module.select
+    real_statements_of = module.statements_of
 
-    def spoofed_select(*columns):  # type: ignore[no-untyped-def]
-        stmt = real_select(*columns)
-        return stmt.where(sa.literal(False)) if columns == (scopes.c.slug,) else stmt
+    class _BlindToScopes:
+        """The connection's own builders, except a read of ``scopes`` finds nothing."""
 
-    monkeypatch.setattr(module, "select", spoofed_select)
+        def __init__(self, stmts: ScopedStatements) -> None:
+            self._stmts = stmts
+
+        def __getattr__(self, name: str) -> Any:
+            return getattr(self._stmts, name)
+
+        def select(self, from_, *cols):  # type: ignore[no-untyped-def]
+            stmt = self._stmts.select(from_, *cols)
+            return stmt.where(sa.literal(False)) if from_ is scopes else stmt
+
+    monkeypatch.setattr(module, "statements_of", lambda conn: _BlindToScopes(real_statements_of(conn)))
 
     plan = ReviewFindingsPlan(
         chunk_id="ch_1",
@@ -213,10 +237,12 @@ def test_deliver_survives_a_racing_mint_of_the_same_unseen_scope(
 
     assert outcome is ReviewFindingsOutcome.RECORDED
     with engine.connect() as conn:
-        scope_row = conn.execute(sa.select(scopes).where(scopes.c.slug == "brand-new")).one()
+        scope_row = conn.execute(hub_scoped(sa.select(scopes).where(scopes.c.slug == "brand-new"))).one()
         assert scope_row.description == "winner"
-        assert conn.execute(sa.select(sa.func.count()).select_from(findings)).scalar_one() == 1
-        marker_rows = conn.execute(sa.select(artifacts).where(artifacts.c.name == "review-findings-delivered")).all()
+        assert conn.execute(hub_scoped(sa.select(sa.func.count()).select_from(findings))).scalar_one() == 1
+        marker_rows = conn.execute(
+            hub_scoped(sa.select(artifacts).where(artifacts.c.name == "review-findings-delivered"))
+        ).all()
         assert len(marker_rows) == 1
 
 
@@ -232,6 +258,8 @@ def test_deliver_from_a_fresh_node_and_epoch_is_still_already_recorded(tmp_path:
 
     assert outcome is ReviewFindingsOutcome.ALREADY_RECORDED
     with engine.connect() as conn:
-        assert conn.execute(sa.select(sa.func.count()).select_from(findings)).scalar_one() == 1
-        marker_rows = conn.execute(sa.select(artifacts).where(artifacts.c.name == "review-findings-delivered")).all()
+        assert conn.execute(hub_scoped(sa.select(sa.func.count()).select_from(findings))).scalar_one() == 1
+        marker_rows = conn.execute(
+            hub_scoped(sa.select(artifacts).where(artifacts.c.name == "review-findings-delivered"))
+        ).all()
         assert len(marker_rows) == 1  # no fresh marker written on an already-delivered chunk

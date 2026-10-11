@@ -28,6 +28,8 @@ from blizzard.hub.domain.garden.runs.history import (
 from blizzard.hub.domain.garden.runs.sweeps import SweepFact, SweepWindow, sweep_coverage
 from blizzard.hub.domain.garden.runs.window import InvalidWindowError
 
+_PROJECT = "proj_test"
+
 pytestmark = pytest.mark.unit
 
 _NOW = datetime(2026, 3, 1, 12, tzinfo=UTC)
@@ -139,6 +141,7 @@ def test_coverage_drops_retired_scopes_and_facts_for_unlinked_ones() -> None:
 
 def _finding_set(finding_set_id: str, revisions: dict[str, str]) -> FindingSet:
     return FindingSet(
+        project_id=_PROJECT,
         finding_set_id=finding_set_id,
         artifact_id="art_1",
         chunk_id="ch_1",

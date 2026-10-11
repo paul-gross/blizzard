@@ -83,7 +83,8 @@ Carry a file-configured hub across with the hub stopped, on the hub host, with i
 1. Run `blizzard hub migrate --dir <hub-dir>`.
 2. Run `blizzard hub config import-legacy --dir <hub-dir>`. It creates a secret per credential, a work source record per
    block, and a repository record per repo the hub has delivered commits to, in one transaction, and lists what it
-   created. A record the store already holds is skipped, never overwritten; a second run writes nothing.
+   created. It writes into the hub's only tenant; a hub holding several refuses unless `--tenant <tenant_id>` names
+   one. A record the tenant already holds is skipped, never overwritten; a second run writes nothing.
 3. Delete the `[[work_source]]` blocks and unset the variables.
 4. Start the hub.
 
@@ -102,6 +103,10 @@ Run `blizzard hub graph sync` after every deploy, once the hub is back up: the h
 from its store and never re-reads packaged YAML, so a deploy shipping a changed graph and stopping at the restart leaves
 every new chunk on the previous definition, with nothing in errors, logs, or status saying so.
 
+`graph sync` covers every tenant in one call: the hub reconciles its packaged graphs into each open tenant, each through
+that tenant's own store, and reports per tenant. It is a hub administrator's verb and takes no `--tenant`. A tenant
+created later needs no sync of its own — creation mints the packaged graphs into it.
+
 `graph sync` compares each packaged graph's fully inlined definition against the newest mint of its name and mints only
 what differs, so it is safe to run unconditionally — an unchanged wheel mints nothing and churns no lineage. A mint
 folds every file a graph references into the stored definition, so an edit confined to a referenced file that never
@@ -109,7 +114,8 @@ touches `graph.yaml` is a real graph change a `graph.yaml` diff misses; `blizzar
 which keys carry file references — diff all of them before calling a deploy complete.
 
 A packaged graph that fails to load or validate reports failed and exits `graph sync` non-zero without stopping the
-others from reconciling. Confirm a sync with `blizzard hub graph list` — the newest mint per name should read effective.
+others — or the other tenants — from reconciling. Confirm a sync with `blizzard hub graph list --tenant <tenant_id>` —
+the newest mint per name should read effective.
 
 Minting is additive: the new definition becomes effective for future resolution while every in-flight chunk stays pinned
 to the definition it started under; moving one deliberately is `hub chunk migrate`, owned by

@@ -83,3 +83,7 @@ registration, or by `runner-local` if it never registered, so roll a runner back
 upgraded hub. A rolled-back runner whose older config names a different id reads its local pause facts as never set. An
 older hub also refuses to export into the widened egress `_schema/` documents until they are moved aside
 ([`docs/deployment/egress.md`](./deployment/egress.md#upgrading-to-hub-minted-runner-ids)).
+
+A rollback past the tenants migrations is refused while the hub holds more than one tenant, or while a tenant's
+deletion is underway, and the refusal names them: only a hub that holds `default` alone rolls back past them
+([`docs/upgrade.md`](./upgrade.md#tenants-boundary)).

@@ -55,6 +55,13 @@
           <!-- The full id: names are not unique, so two runners sharing one stay apart. -->
           <div class="rid" data-testid="mobile-fleet-runner-id">{{ row.runner_id }}</div>
           <div class="ws" data-testid="mobile-fleet-runner-workspace">{{ row.workspace_id ?? '—' }}</div>
+          <!-- The projects this runner serves; an empty declaration and an entry naming no project are marked. -->
+          <app-served-project-group
+            [attr.data-runner-served]="row.runner_id"
+            [served]="row.served"
+            [unassigned]="row.unassigned"
+            [unresolved]="row.unresolved"
+          />
 
           <!-- Current work: the chunks this runner currently holds a route on. -->
           @if (row.claims.length > 0) {

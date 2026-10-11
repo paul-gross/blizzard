@@ -89,3 +89,43 @@ def test_provider_registry_is_empty_for_no_providers() -> None:
     registry = ProviderEntry.registry((), http_client=_client())
     assert registry.list() == []
     assert registry.get("anything") is None
+
+
+@pytest.mark.parametrize("authoritative", [True, False])
+def test_an_oidc_provider_carries_its_configured_email_authority(
+    monkeypatch: pytest.MonkeyPatch, authoritative: bool
+) -> None:
+    monkeypatch.setenv("BZ_SECRET", "s")
+    providers = (
+        OAuthProviderConfig(
+            name="oidc-co",
+            type="oidc",
+            display_name="SSO",
+            client_id="c",
+            client_secret_env="BZ_SECRET",
+            issuer="https://issuer.example.com",
+            emails_authoritative=authoritative,
+        ),
+    )
+    oidc = ProviderEntry.registry(providers, http_client=_client()).get("oidc-co")
+
+    assert isinstance(oidc, OidcProvider)
+    assert oidc.emails_authoritative is authoritative
+
+
+def test_an_oidc_provider_is_not_authoritative_for_its_emails_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("BZ_SECRET", "s")
+    providers = (
+        OAuthProviderConfig(
+            name="oidc-co",
+            type="oidc",
+            display_name="SSO",
+            client_id="c",
+            client_secret_env="BZ_SECRET",
+            issuer="https://issuer.example.com",
+        ),
+    )
+    oidc = ProviderEntry.registry(providers, http_client=_client()).get("oidc-co")
+
+    assert isinstance(oidc, OidcProvider)
+    assert oidc.emails_authoritative is False

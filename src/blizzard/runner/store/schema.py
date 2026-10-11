@@ -17,6 +17,7 @@ from sqlalchemy import (
     String,
     Table,
     Text,
+    UniqueConstraint,
     false,
 )
 
@@ -322,7 +323,8 @@ hub_control = Table(
 )
 
 # --- Runner identity (who this runner is at its hub) -------------------------
-# A singleton row: the id and name of the latest successful registration. Nothing keys on it.
+# A singleton row: the id and name of the latest successful registration, and the tenant the hub
+# answered with. Display only — nothing keys or filters on it, and no other table carries a tenant.
 
 runner_identity = Table(
     "runner_identity",
@@ -331,6 +333,29 @@ runner_identity = Table(
     Column("runner_id", String, nullable=False),  # hub-minted rn_<ulid>
     Column("runner_name", String, nullable=False),  # the name the hub recorded at that registration
     Column("registered_at", UtcDateTime, nullable=False),  # injected-clock stamp of the registration
+    Column("tenant_id", String, nullable=True),  # the runner's tenant; NULL until a hub that names it answers
+    Column("tenant_name", String, nullable=True),  # that tenant's name as the hub last answered it
+    # When a hub last answered the served-projects declaration; NULL until one has, which tells "no answer
+    # yet" apart from an answer serving nothing (no ``hub_served_projects`` rows either way).
+    Column("projects_answered_at", UtcDateTime, nullable=True),
+)
+
+# --- Served projects (the hub's latest answer to the runner's declaration) ----
+# Replaced whole at each answer, one row per declared entry in declared order. Display only: the hub
+# narrows the queue and rechecks claims against its own copy. ``project_id``/``slug``/``name`` are NULL
+# for an entry no project answers to.
+
+hub_served_projects = Table(
+    "hub_served_projects",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("position", Integer, nullable=False),
+    Column("entry", String, nullable=False),
+    Column("project_id", String, nullable=True),
+    Column("slug", String, nullable=True),
+    Column("name", String, nullable=True),
+    Column("answered_at", UtcDateTime, nullable=False),
+    UniqueConstraint("position", name="uq_hub_served_projects_position"),
 )
 
 # --- Local pause facts (the runner's own brake) -------------------

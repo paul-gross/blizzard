@@ -1,4 +1,4 @@
-import { type DestroyRef, type EffectRef, type EnvironmentInjector, type Signal, effect, untracked } from '@angular/core';
+import { type DestroyRef, type EffectRef, type EnvironmentInjector, type Signal, computed, effect, signal, untracked } from '@angular/core';
 import { QueryClient } from '@tanstack/angular-query-experimental';
 import type { Subscription } from 'rxjs';
 
@@ -13,7 +13,9 @@ export interface LiveInvalidationSpineOptions<TPayload extends object, TType ext
   queryClient: QueryClient;
   injector: EnvironmentInjector;
   destroyRef: DestroyRef;
-  streamUrl: string;
+  /** The stream's URL, or a function read each time the stream opens — so a {@link LiveInvalidationSpine.restart}
+   * can reopen it on another URL. */
+  streamUrl: string | (() => string);
   eventTypes: readonly TType[];
   registry: Record<TType, (data: TPayload) => readonly (readonly unknown[])[]>;
   coalesceWindowMs: number;
@@ -27,7 +29,9 @@ export interface LiveInvalidationSpineOptions<TPayload extends object, TType ext
  * pass, plus reconnect-then-re-GET gap recovery.
  */
 export class LiveInvalidationSpine<TPayload extends object, TType extends string> {
-  private handle: SseHandle<TPayload> | null = null;
+  /** The open stream, held in a signal so {@link status} and {@link authFailed} follow it across a
+   * {@link restart}. */
+  private readonly current = signal<SseHandle<TPayload> | null>(null);
   private sub: Subscription | null = null;
   private reopenRef: EffectRef | null = null;
   private authRef: EffectRef | null = null;
@@ -45,15 +49,20 @@ export class LiveInvalidationSpine<TPayload extends object, TType extends string
 
   constructor(private readonly opts: LiveInvalidationSpineOptions<TPayload, TType>) {}
 
-  /** Connection lifecycle for a header status dot, or `idle` before {@link start}. */
+  private readonly statusSignal: Signal<SseStatus> = computed(() => this.current()?.status() ?? 'idle');
+  private readonly authFailedSignal: Signal<boolean> = computed(() => this.current()?.authFailed() ?? false);
+
+  /** Connection lifecycle for a header status dot, or `idle` before {@link start}. One signal for the spine's whole
+   * life: after a {@link restart} it reads the fresh stream. */
   get status(): Signal<SseStatus> {
-    return this.handle?.status ?? IDLE_STATUS;
+    return this.statusSignal;
   }
 
   /** `true` once the stream closed on a `401` — a session that expired mid-stream.
-   * `false` before {@link start} and for the whole life of a stream that never sees one. */
+   * `false` before {@link start} and for the whole life of a stream that never sees one. One signal for the spine's
+   * whole life, like {@link status}. */
   get authFailed(): Signal<boolean> {
-    return this.handle?.authFailed ?? FALSE_STATUS;
+    return this.authFailedSignal;
   }
 
   /**
@@ -61,7 +70,7 @@ export class LiveInvalidationSpine<TPayload extends object, TType extends string
    * is a no-op. Auto-closes on the caller's {@link DestroyRef} (the app teardown).
    */
   start(): void {
-    if (this.handle) return;
+    if (untracked(this.current)) return;
     this.open();
   }
 
@@ -79,8 +88,9 @@ export class LiveInvalidationSpine<TPayload extends object, TType extends string
 
   private open(): void {
     const { sse, queryClient, injector, destroyRef, streamUrl, eventTypes, onFrame, onAuthFailed } = this.opts;
-    const handle = sse.connect<TPayload>(streamUrl, { events: [...eventTypes] });
-    this.handle = handle;
+    const url = typeof streamUrl === 'string' ? streamUrl : streamUrl();
+    const handle = sse.connect<TPayload>(url, { events: [...eventTypes] });
+    this.current.set(handle);
 
     this.sub = handle.events.subscribe(({ type, data }) => {
       onFrame?.(type as TType, data);
@@ -134,12 +144,12 @@ export class LiveInvalidationSpine<TPayload extends object, TType extends string
     this.sub?.unsubscribe();
     this.reopenRef?.destroy();
     this.authRef?.destroy();
-    this.handle?.close();
+    untracked(this.current)?.close();
     if (this.flushTimer !== null) {
       clearTimeout(this.flushTimer);
       this.flushTimer = null;
     }
-    this.handle = null;
+    this.current.set(null);
     this.sub = null;
     this.reopenRef = null;
     this.authRef = null;
@@ -170,15 +180,3 @@ export class LiveInvalidationSpine<TPayload extends object, TType extends string
     }
   }
 }
-
-/** A frozen `idle` status used before the stream is opened. */
-const IDLE_STATUS: Signal<SseStatus> = (() => {
-  const s = () => 'idle' as const;
-  return s as Signal<SseStatus>;
-})();
-
-/** A frozen `false` used for {@link LiveInvalidationSpine.authFailed} before the stream is opened. */
-const FALSE_STATUS: Signal<boolean> = (() => {
-  const s = () => false;
-  return s as Signal<boolean>;
-})();

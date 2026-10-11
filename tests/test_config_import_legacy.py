@@ -22,12 +22,22 @@ from blizzard.hub.store.schema import (
     artifacts,
     config_changes,
     config_import_facts,
+    project_repository_links,
+    project_source_links,
     repositories,
     secret_lifecycle_facts,
     secrets,
     work_sources,
 )
-from tests.support import seed_chunk, seed_graph
+from tests.support import (
+    default_project,
+    hub_scoped,
+    hub_store_connections,
+    seed_chunk,
+    seed_graph,
+    seed_project,
+    stamp,
+)
 
 pytestmark = pytest.mark.component
 
@@ -59,7 +69,15 @@ _COMMITS = (
     (None, "gadget"),
     ("git@github.com:acme/widget.git", "widget"),
 )
-_TABLES = (secrets, work_sources, repositories, config_changes, config_import_facts)
+_TABLES = (
+    secrets,
+    work_sources,
+    repositories,
+    config_changes,
+    config_import_facts,
+    project_source_links,
+    project_repository_links,
+)
 
 
 @pytest.fixture
@@ -75,18 +93,21 @@ def hub(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> HubConfig:
             for index, (forge, repo) in enumerate(_COMMITS):
                 conn.execute(
                     sa.insert(artifacts).values(
-                        artifact_id=f"art_{index}",
-                        chunk_id="ch_1",
-                        node_id="nd_1",
-                        node_name="build",
-                        epoch=1,
-                        name=repo,
-                        kind="git_commit",
-                        data="main:abc",
-                        repo=repo,
-                        forge=forge,
-                        produced_at=_AT,
-                        seq=index,
+                        stamp(
+                            artifacts,
+                            artifact_id=f"art_{index}",
+                            chunk_id="ch_1",
+                            node_id="nd_1",
+                            node_name="build",
+                            epoch=1,
+                            name=repo,
+                            kind="git_commit",
+                            data="main:abc",
+                            repo=repo,
+                            forge=forge,
+                            produced_at=_AT,
+                            seq=index,
+                        )
                     )
                 )
     finally:
@@ -94,11 +115,22 @@ def hub(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> HubConfig:
     return config
 
 
+def _past_the_default_project(query: sa.Select[tuple[object, ...]]) -> sa.Select[tuple[object, ...]]:
+    """``query``, leaving out the store's default project's ``create`` row, which the migration wrote."""
+    if query.get_final_froms() == [config_changes]:
+        return query.where(config_changes.c.record_kind != "project")
+    return query
+
+
 def _rows(config: HubConfig) -> dict[str, list[dict[str, object]]]:
     engine = create_engine_from_url(config.db_url)
     try:
+        store = hub_store_connections(engine)
         with engine.connect() as conn:
-            return {t.name: [dict(r._mapping) for r in conn.execute(sa.select(t)).all()] for t in _TABLES}
+            return {
+                t.name: [dict(r._mapping) for r in conn.execute(_past_the_default_project(store.select(t)))]
+                for t in _TABLES
+            }
     finally:
         engine.dispose()
 
@@ -122,8 +154,23 @@ def test_the_import_writes_the_expected_records_change_rows_and_one_fact(hub: Hu
         ("gadget", "https://api.github.com", "paul-gross", "gadget", "master", "bz-forge-token"),
     }
     changes = rows["config_changes"]
-    assert len(changes) == 6
+    assert len(changes) == 10
     assert {(r["actor"], r["door"], r["op"]) for r in changes} == {("migration", "migration", "create")}
+    links = sorted((str(r["record_kind"]), str(r["record_key"])) for r in changes if r["project_id"] is not None)
+    assert links == [
+        ("project_repository_link", "gadget"),
+        ("project_repository_link", "widget"),
+        ("project_source_link", "blizzard"),
+        ("project_source_link", "infra"),
+    ]
+    engine = create_engine_from_url(hub.db_url)
+    try:
+        project = default_project(engine)
+    finally:
+        engine.dispose()
+    assert {r["project_id"] for r in changes if r["project_id"] is not None} == {project}
+    assert sorted(str(r["source_name"]) for r in rows["project_source_links"]) == ["blizzard", "infra"]
+    assert sorted(str(r["repository_name"]) for r in rows["project_repository_links"]) == ["gadget", "widget"]
     (fact,) = rows["config_import_facts"]
     assert fact["actor"] == "migration"
     read = json.loads(str(fact["read"]))
@@ -160,7 +207,7 @@ def test_a_record_the_store_already_holds_is_skipped_and_still_referenced(hub: H
     engine = create_engine_from_url(hub.db_url)
     try:
         with engine.begin() as conn:
-            conn.execute(sa.delete(config_import_facts))
+            conn.execute(hub_scoped(sa.delete(config_import_facts)))
     finally:
         engine.dispose()
     before = _rows(hub)
@@ -196,6 +243,21 @@ def test_a_refusal_names_the_variable_and_leaves_the_store_untouched(
     assert _rows(hub) == before
 
 
+def test_a_tenant_holding_several_projects_is_refused_naming_them(hub: HubConfig) -> None:
+    """The import names no project: it links what it creates to the tenant's only one, or writes nothing."""
+    engine = create_engine_from_url(hub.db_url)
+    try:
+        seed_project(engine, "web")
+    finally:
+        engine.dispose()
+    before = _rows(hub)
+
+    with pytest.raises(LegacyImportRefused, match="default, web"):
+        import_legacy_config(hub, _ENVIRON)
+
+    assert _rows(hub) == before
+
+
 def test_a_refused_write_rolls_back_every_earlier_write(hub: HubConfig) -> None:
     """A source naming a secret that exists only as retired passes the plan but is refused in the
     transaction — after the secrets were inserted, which roll back with it."""
@@ -204,18 +266,23 @@ def test_a_refused_write_rolls_back_every_earlier_write(hub: HubConfig) -> None:
         with engine.begin() as conn:
             conn.execute(
                 sa.insert(secrets).values(
-                    name="bz-shared-token",
-                    ciphertext="x",
-                    nonce="x",
-                    key_id="k",
-                    revision=1,
-                    replaced_at=_AT,
-                    replaced_by="op",
-                    created_at=_AT,
+                    stamp(
+                        secrets,
+                        name="bz-shared-token",
+                        ciphertext="x",
+                        nonce="x",
+                        key_id="k",
+                        revision=1,
+                        replaced_at=_AT,
+                        replaced_by="op",
+                        created_at=_AT,
+                    )
                 )
             )
             conn.execute(
-                sa.insert(secret_lifecycle_facts).values(name="bz-shared-token", retired=True, set_at=_AT, set_by="op")
+                sa.insert(secret_lifecycle_facts).values(
+                    stamp(secret_lifecycle_facts, name="bz-shared-token", retired=True, set_at=_AT, set_by="op")
+                )
             )
     finally:
         engine.dispose()

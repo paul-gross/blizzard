@@ -17,9 +17,9 @@ from blizzard.auth_core import Role
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.hub_event_types import HubEventType
 from blizzard.hub.domain.chunk.model import ChunkFacts, WorkRef
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
+from blizzard.hub.store.scoped import ScopedConnections
 from tests.support import (
     FakeWorkSource,
     build_hub,
@@ -29,13 +29,14 @@ from tests.support import (
     make_ready,
     seed_session,
     seed_user,
+    serve_default_tenant,
 )
 
 pytestmark = pytest.mark.component
 
 
 class _CountingFactsStore(ChunkFactsStore):
-    def __init__(self, store: HubStoreConnections, clock: IClock) -> None:
+    def __init__(self, store: ScopedConnections, clock: IClock) -> None:
         super().__init__(store, clock)
         self.load_facts_calls = 0
 
@@ -48,7 +49,7 @@ class _CountingWorkRefsStore(ChunkWorkRefsStore):
     """Counts calls to the pointer-liveness reads (mirrors
     ``tests/test_list_chunks_bulk_reads.py``'s own counting store)."""
 
-    def __init__(self, store: HubStoreConnections, clock: IClock, *, facts: ChunkFactsStore) -> None:
+    def __init__(self, store: ScopedConnections, clock: IClock, *, facts: ChunkFactsStore) -> None:
         super().__init__(store, clock, facts=facts)
         self.find_live_holder_calls = 0
         self.live_holders_calls = 0
@@ -91,7 +92,7 @@ def test_a_hub_owned_pointer_ingests_and_renders_its_title_and_body(tmp_path: Pa
 def test_sources_listing_renders_capability_booleans(tmp_path: Path) -> None:
     """The listing is the built-in ``hub`` plus stored records; a file-configured source is
     not listed (its rows arrive by import), though its items stay served."""
-    hub = build_hub(tmp_path, work_sources={"forge": FakeWorkSource(name="forge")})
+    hub = build_hub(tmp_path, work_sources={"forge": FakeWorkSource(name="forge")}, link=False)
     hub.client.post("/api/secrets", json={"name": "gh", "value": "v"})
     hub.client.post(
         "/api/work-sources",
@@ -163,8 +164,9 @@ def test_list_work_items_resolves_liveness_with_one_bulk_call_regardless_of_item
     counting_facts = _CountingFactsStore(hub_store_connections(hub.engine), hub.clock)
     counting_work_refs = _CountingWorkRefsStore(hub_store_connections(hub.engine), hub.clock, facts=counting_facts)
     assert hub.app is not None
-    hub.app.state.services = replace(
-        hub.services, chunks=replace(hub.services.chunks, facts=counting_facts, work_refs=counting_work_refs)
+    serve_default_tenant(
+        hub,
+        replace(hub.services, chunks=replace(hub.services.chunks, facts=counting_facts, work_refs=counting_work_refs)),
     )
 
     listed = hub.client.get("/api/work-sources/hub/items").json()["items"]

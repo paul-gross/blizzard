@@ -144,7 +144,8 @@ class IWriteGardenDeliveryRepository(Protocol):
     """Materialize one :class:`DeliveryPlan`, atomically and idempotently, keyed on the
     ``(chunk_id, node_id, epoch)`` marker the plan carries. The findings in ``plan.expect`` are
     re-checked under their row locks before any fact lands; one that moved yields
-    ``DeliveryOutcome.GUARD_LOST`` with nothing written."""
+    ``DeliveryOutcome.GUARD_LOST`` with nothing written. A proposal citing a finding stored in a
+    project other than ``plan.run``'s raises ``GardenDeliveryRejected`` naming it, with nothing written."""
 
     def deliver(self, plan: DeliveryPlan, *, admission: EpochAdmission) -> DeliveryOutcome: ...
 

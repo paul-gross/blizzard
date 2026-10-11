@@ -43,6 +43,7 @@ from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository
 
 pytestmark = pytest.mark.unit
 
+_PROJECT = "proj_test"
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 _GRAPH = Graph(graph_id="gr_1", name="default", entry_node_id="nd_1", nodes=[], edges=[], created_at=_T0)
 _ROUTINE = Routine(
@@ -53,8 +54,11 @@ _ROUTINE = Routine(
     created_at=_T0,
     default_model=["opus"],
     default_effort="high",
+    project_id=_PROJECT,
 )
-_DEFAULT_SCOPE = Scope(slug="blizzard", description="the hub itself", created_at=_T0)
+_DEFAULT_SCOPE = Scope(
+    scope_id="scp_blizzard", slug="blizzard", description="the hub itself", created_at=_T0, project_id=_PROJECT
+)
 
 
 @dataclass
@@ -84,13 +88,14 @@ class _FakeScopes:
     scopes: dict[str, Scope] = field(default_factory=lambda: {"blizzard": _DEFAULT_SCOPE})
     retired: set[str] = field(default_factory=set)
 
-    def get(self, slug: str) -> Scope | None:
-        return self.scopes.get(slug)
+    def get(self, project_id: str, slug: str) -> Scope | None:
+        scope = self.scopes.get(slug)
+        return scope if scope is not None and scope.project_id == project_id else None
 
-    def list_all(self) -> list[Scope]:
-        return list(self.scopes.values())
+    def list_all(self, project_id: str | None = None) -> list[Scope]:
+        return [s for s in self.scopes.values() if project_id is None or s.project_id == project_id]
 
-    def is_retired(self, slug: str) -> bool:
+    def is_retired(self, project_id: str, slug: str) -> bool:
         return slug in self.retired
 
     def __getattr__(self, name: str) -> Any:
@@ -115,8 +120,9 @@ class _FakeRoutineScopes:
 class _FakeFindingSets:
     newest: dict[tuple[str, str], FindingSet] = field(default_factory=dict)
 
-    def newest_for_routine_scope(self, routine_name: str, scope_slug: str) -> FindingSet | None:
-        return self.newest.get((routine_name, scope_slug))
+    def newest_for_routine_scope(self, project_id: str, routine_name: str, scope_slug: str) -> FindingSet | None:
+        found = self.newest.get((routine_name, scope_slug))
+        return found if found is not None and found.project_id == project_id else None
 
     def __getattr__(self, name: str) -> Any:
         raise NotImplementedError(f"should not touch {name!r}")
@@ -269,7 +275,7 @@ def test_run_retired_default_scope_is_refused() -> None:
 
 
 def test_run_retired_override_scope_is_refused() -> None:
-    cold = Scope(slug="cold", description="", created_at=_T0)
+    cold = Scope(scope_id="scp_cold", slug="cold", description="", created_at=_T0, project_id=_PROJECT)
     scopes = _FakeScopes(scopes={"blizzard": _DEFAULT_SCOPE, "cold": cold}, retired={"cold"})
     service, *_ = _service(scopes=scopes, routine_scopes=_FakeRoutineScopes(related=["blizzard", "cold"]))
 
@@ -278,7 +284,7 @@ def test_run_retired_override_scope_is_refused() -> None:
 
 
 def test_run_refuses_an_override_outside_the_routines_related_set() -> None:
-    unrelated = Scope(slug="unrelated", description="", created_at=_T0)
+    unrelated = Scope(scope_id="scp_unrelated", slug="unrelated", description="", created_at=_T0, project_id=_PROJECT)
     scopes = _FakeScopes(scopes={"blizzard": _DEFAULT_SCOPE, "unrelated": unrelated})
     service, *_ = _service(scopes=scopes)  # routine_scopes defaults to just ["blizzard"]
 
@@ -290,7 +296,7 @@ def test_run_refuses_a_related_check_before_the_retire_check() -> None:
     """An unrelated, also-retired scope is refused for being unrelated
     — the retire brake never runs against a scope the routine has no set
     membership for at all."""
-    unrelated = Scope(slug="unrelated", description="", created_at=_T0)
+    unrelated = Scope(scope_id="scp_unrelated", slug="unrelated", description="", created_at=_T0, project_id=_PROJECT)
     scopes = _FakeScopes(scopes={"blizzard": _DEFAULT_SCOPE, "unrelated": unrelated}, retired={"unrelated"})
     service, *_ = _service(scopes=scopes)
 
@@ -310,6 +316,7 @@ def test_run_delta_with_no_baseline_downgrades_to_full() -> None:
 
 def test_run_delta_with_a_recorded_baseline_stays_delta() -> None:
     baseline = FindingSet(
+        project_id=_PROJECT,
         finding_set_id="fins_1",
         artifact_id="art_1",
         chunk_id="ch_prior",
@@ -345,6 +352,14 @@ def test_run_threads_the_routines_model_and_effort_defaults_onto_the_chunk() -> 
     chunk = items.calls[0]["chunk"]
     assert chunk.default_model == ["opus"]
     assert chunk.default_effort == "high"
+
+
+def test_run_mints_the_chunk_into_the_routines_own_project() -> None:
+    service, items, *_ = _service()
+
+    service.run(_ROUTINE, scope=_DEFAULT_SCOPE, mode=RunMode.DELTA, note="first", author=_AUTHOR)
+
+    assert items.calls[0]["chunk"].project_id == _PROJECT == items.calls[0]["project_id"]
 
 
 def test_run_raises_ingest_conflict_when_the_freshly_allocated_ref_races_a_live_holder() -> None:
@@ -397,6 +412,7 @@ def test_compose_charge_names_the_downgrade() -> None:
 
 def test_compose_charge_names_the_baseline_revisions() -> None:
     baseline = FindingSet(
+        project_id=_PROJECT,
         finding_set_id="fins_1",
         artifact_id="art_1",
         chunk_id="ch_prior",

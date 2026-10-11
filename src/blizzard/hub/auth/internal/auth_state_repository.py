@@ -45,6 +45,7 @@ class AuthStateRepository:
                         created_at=entry.created_at,
                         expires_at=entry.expires_at,
                         user_id=entry.user_id,
+                        invitation_token_hash=entry.invitation_token_hash,
                     )
                 )
         except IntegrityError as exc:
@@ -74,6 +75,7 @@ class AuthStateRepository:
             created_at=row.created_at,
             expires_at=row.expires_at,
             user_id=row.user_id,
+            invitation_token_hash=row.invitation_token_hash,
         )
 
 

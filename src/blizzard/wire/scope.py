@@ -50,3 +50,7 @@ class ScopeView(BaseModel):
     created_at: str
     retired: bool = False
     revision: int | None = None
+    #: The project this belongs to — its id, current slug and display name; ``None`` where the hub reports none.
+    project_id: str | None = None
+    project_slug: str | None = None
+    project_name: str | None = None

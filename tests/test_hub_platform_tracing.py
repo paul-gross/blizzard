@@ -23,6 +23,7 @@ from blizzard.auth_core import Role
 from blizzard.cli.collaborators import CliCollaborators
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.operator_sessions.internal.session_file import SessionFile
+from blizzard.foundation.platform_tracing.attributes import TENANT, TENANT_NAME
 from blizzard.foundation.platform_tracing.handle import IPlatformTracing, build_platform_tracing
 from blizzard.foundation.span_clock import Clock
 from blizzard.foundation.trace_export.config import TracingConfig
@@ -35,7 +36,7 @@ from blizzard.hub.domain.observability.tracing.attributes import (
     PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
     resource_attributes,
 )
-from tests.support import RunnerFleetClient, seed_runner, seed_user
+from tests.support import RunnerFleetClient, hub_scoped, seed_runner, seed_user, tenant_services_of
 
 pytestmark = pytest.mark.component
 
@@ -104,6 +105,35 @@ def test_a_sweep_pass_opens_its_own_root(tmp_path: Path) -> None:
     assert all(s.parent is None for s in roots)
 
 
+def test_sweep_spans_carry_no_tenant_and_a_tenant_routes_request_span_carries_its_own(tmp_path: Path) -> None:
+    exporter = InMemorySpanExporter()
+    config = _config(tmp_path)
+    handle = _handle(config, exporter)
+    app = hub_app.build_hosted_app(config, platform_tracing=handle)
+    app.state.shutdown = asyncio.Event()
+    sweeps = list(hub_app.Sweep.all(app))
+    with TestClient(app) as client:
+        assert client.get("/api/chunks").status_code == 200
+
+    async def one_pass_each() -> None:
+        tasks = [asyncio.create_task(sweep.run()) for sweep in sweeps]
+        await asyncio.sleep(0.5)
+        app.state.shutdown.set()
+        await asyncio.gather(*tasks)
+
+    asyncio.run(one_pass_each())
+    spans = _spans(handle, exporter)
+    (server,) = [s for s in spans if s.name == "GET /api/chunks"]
+    assert server.attributes is not None
+    assert server.attributes[TENANT] == app.state.services.tenants.open_tenants.only()
+    sweep_traces = {s.context.trace_id for s in spans if s.name.startswith("sweep ")}
+    assert {s.name for s in spans if s.parent is None and s.context.trace_id in sweep_traces} == {
+        f"sweep {sweep.name}" for sweep in sweeps
+    }
+    in_sweeps = [s for s in spans if s.context.trace_id in sweep_traces]
+    assert not [s.name for s in in_sweeps if {TENANT, TENANT_NAME} & set(s.attributes or {})]
+
+
 def test_a_runner_bearer_stamps_caller_runner_id_and_name_and_a_forged_caller_header_changes_nothing(
     tmp_path: Path,
 ) -> None:
@@ -169,7 +199,7 @@ _TRACEPARENT = {"traceparent": f"00-{_PLANTED_TRACE:032x}-{_PLANTED_SPAN:016x}-0
 def _registered_runner_token(config: HubConfig, runner_id: str, *, name: str | None = None) -> str:
     """Add and register ``runner_id`` through an untraced app over the same store, so the seeding
     leaves no spans behind."""
-    return seed_runner(hub_app.build_hosted_app(config).state.services, runner_id, name=name, workspace_id="ws-a")
+    return seed_runner(tenant_services_of(hub_app.build_hosted_app(config)), runner_id, name=name, workspace_id="ws-a")
 
 
 def _server_span(spans: list, prefix: str):  # type: ignore[no-untyped-def,type-arg]
@@ -205,15 +235,15 @@ def test_a_traced_runner_request_resolves_its_token_once(tmp_path: Path) -> None
     handle = _handle(config, exporter)
     with TestClient(hub_app.build_hosted_app(config, platform_tracing=handle)) as client:
         token = _registered_runner_token(config, "runner-a")
-        registry = client.app.state.services.registry  # type: ignore[attr-defined]
+        credentials = client.app.state.services.hub_scoped_reads.credentials  # type: ignore[attr-defined]
         resolutions: list[str] = []
-        original = registry.registration_for_token_hash
+        original = credentials.runner_for_token_hash
 
         def counting(token_hash: str):  # type: ignore[no-untyped-def]
             resolutions.append(token_hash)
             return original(token_hash)
 
-        registry.registration_for_token_hash = counting
+        credentials.runner_for_token_hash = counting
         response = client.get("/api/fleet/queue/peek", headers={"Authorization": f"Bearer {token}", **_TRACEPARENT})
     assert response.status_code == 200
     assert len(resolutions) == 1
@@ -300,7 +330,7 @@ def test_hub_run_steps_parent_on_the_derived_hub_exec_span_and_the_driving_reque
     config = _config(tmp_path)
     handle = _handle(config, exporter)
     app = hub_app.build_hosted_app(config, platform_tracing=handle)
-    with RunnerFleetClient(app, services=app.state.services) as client:
+    with RunnerFleetClient(app, services=tenant_services_of(app)) as client:
         assert client.post("/api/graphs", json={"definition_yaml": _POLLING_GRAPH_YAML}).status_code == 201
         chunk_id = client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"}).json()["chunk_id"]
         assert client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
@@ -340,9 +370,11 @@ def test_hub_run_steps_parent_on_the_derived_hub_exec_span_and_the_driving_reque
         assert advanced.json()["outcome_choice"] == "success", advanced.text
     with app.state.engine.connect() as conn:
         slots = conn.execute(
-            select(s.hub_exec_slot.c.slot_id)
-            .where(s.hub_exec_slot.c.holder_chunk_id == chunk_id)
-            .order_by(s.hub_exec_slot.c.acquired_at)
+            hub_scoped(
+                select(s.hub_exec_slot.c.slot_id)
+                .where(s.hub_exec_slot.c.holder_chunk_id == chunk_id)
+                .order_by(s.hub_exec_slot.c.acquired_at)
+            )
         ).all()
     spans = _spans(handle, exporter)
     assert len(slots) == 2
@@ -423,7 +455,9 @@ def test_a_traced_session_request_resolves_its_session_once(tmp_path: Path, monk
         calls: list[str] = []
         lookup, touch = services.sessions.get_by_hash, services.auth.touch_session
         monkeypatch.setattr(services.sessions, "get_by_hash", lambda h: calls.append("get_by_hash") or lookup(h))
-        monkeypatch.setattr(services.auth, "touch_session", lambda s: calls.append("touch_session") or touch(s))
+        monkeypatch.setattr(
+            services.auth, "touch_session", lambda s, **kw: calls.append("touch_session") or touch(s, **kw)
+        )
         response = client.get(
             "/api/chunks",
             headers={"Authorization": f"Bearer {session}", "traceparent": f"00-{'a' * 32}-{'b' * 16}-01"},

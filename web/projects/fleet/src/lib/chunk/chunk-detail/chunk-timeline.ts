@@ -16,6 +16,7 @@ import {
   rowMark,
   usageForStep as sumStepUsage,
 } from './chunk-timeline-rows';
+import { LensLink } from '../../core/lens-link';
 
 /** The chunk's node-history timeline — one row per judged node,
  * oldest-first: the node, the verdict that closed it in an aligned column
@@ -51,7 +52,7 @@ import {
 @Component({
   selector: 'fleet-chunk-detail-timeline',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitBadge, RouterLink],
+  imports: [KitAsyncState, KitBadge, RouterLink, LensLink],
   templateUrl: './chunk-timeline.html',
   styleUrl: './chunk-timeline.css',
 })

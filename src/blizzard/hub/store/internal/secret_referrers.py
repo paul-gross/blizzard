@@ -6,11 +6,10 @@ kind; retired derives from each kind's newest lifecycle fact (``bzh:facts-not-st
 
 from __future__ import annotations
 
-from sqlalchemy import Table, select
+from sqlalchemy import Table
 from sqlalchemy.engine import Connection
 
 from blizzard.hub.domain.config.changes import ISecretReferences, RecordKind, RecordRef
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.newest_fact import newest_retired_select
 from blizzard.hub.store.schema import (
     repositories,
@@ -18,6 +17,7 @@ from blizzard.hub.store.schema import (
     work_source_lifecycle_facts,
     work_sources,
 )
+from blizzard.hub.store.scoped import ScopedConnections, statements_of
 
 #: Each referring kind: its record table and its lifecycle-fact table.
 _REFERRING: tuple[tuple[RecordKind, Table, Table], ...] = (
@@ -31,11 +31,13 @@ def active_referrers(conn: Connection, secret_names: list[str]) -> dict[str, lis
     found: dict[str, list[RecordRef]] = {name: [] for name in secret_names}
     if not secret_names:
         return found
+    stmts = statements_of(conn)
     for kind, table, facts in _REFERRING:
         rows = conn.execute(
-            select(table.c.secret_name, table.c.name)
+            stmts.select(table, table.c.secret_name, table.c.name)
             .where(
-                table.c.secret_name.in_(secret_names), table.c.name.not_in(newest_retired_select(facts, facts.c.name))
+                table.c.secret_name.in_(secret_names),
+                table.c.name.not_in(newest_retired_select(stmts, facts, facts.c.name)),
             )
             .order_by(table.c.name)
         ).all()
@@ -47,7 +49,7 @@ def active_referrers(conn: Connection, secret_names: list[str]) -> dict[str, lis
 class SecretReferrersStore:
     """The secret view's referrers adapter over the hub store."""
 
-    def __init__(self, store: HubStoreConnections) -> None:
+    def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
     def referrers_of(self, names: list[str]) -> dict[str, list[RecordRef]]:

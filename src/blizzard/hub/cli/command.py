@@ -32,6 +32,15 @@ class HubCommand(click.Command):
             ["--json", "as_json"], is_flag=True, default=False, help="Print the raw response body as JSON."
         )
 
+    @property
+    def tenant_option(self) -> click.Option:
+        return click.Option(
+            ["--tenant", "tenant"],
+            default=None,
+            metavar="TENANT_ID",
+            help="The tenant to act in, by id; needed only when you belong to several.",
+        )
+
     def connected(self, params: list[click.Parameter]) -> list[click.Parameter]:
         """This verb's own parameters, with the connection options where the verb renders them."""
         raise NotImplementedError
@@ -47,7 +56,21 @@ class HubCommand(click.Command):
 
 
 class FleetCommand(HubCommand):
-    """A verb that renders a hub response body, so ``--json`` prints it raw."""
+    """A verb acting inside one tenant that renders a hub response body, so ``--json`` prints it raw;
+    ``--tenant`` names the tenant, else the hub acts in the caller's only membership."""
+
+    def connected(self, params: list[click.Parameter]) -> list[click.Parameter]:
+        return [*params, self.json_option, self.tenant_option, self.hub_url_option]
+
+    def context(self, params: dict[str, Any], session_reader: IReadSessionStore, trace: ITraceHeaders) -> CliContext:
+        return CliContext.of(
+            params.pop("hub_url"), session_reader, trace, params.pop("as_json"), tenant=params.pop("tenant")
+        )
+
+
+class AdminCommand(HubCommand):
+    """A hub-level verb — the hub as a whole, no tenant's data — that renders a hub response body, so
+    ``--json`` prints it raw and there is no ``--tenant`` to name."""
 
     def connected(self, params: list[click.Parameter]) -> list[click.Parameter]:
         return [*params, self.json_option, self.hub_url_option]

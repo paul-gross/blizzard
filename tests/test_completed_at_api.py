@@ -15,7 +15,7 @@ from sqlalchemy import insert as sa_insert
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.store import schema
-from tests.support import assert_all_timestamps_utc, build_hub, ingest, report_lease
+from tests.support import assert_all_timestamps_utc, build_hub, ingest, report_lease, stamp
 
 pytestmark = pytest.mark.component
 
@@ -121,7 +121,9 @@ def test_completed_at_is_the_stop_instant_for_stopped(tmp_path: Path) -> None:
     at = datetime(2026, 1, 1, tzinfo=UTC)
     engine = create_engine_from_url(f"sqlite:///{tmp_path / 'hub.db'}")
     with engine.begin() as conn:
-        conn.execute(sa_insert(schema.chunk_stopped).values(chunk_id=chunk_id, stopped_at=at))
+        conn.execute(
+            sa_insert(schema.chunk_stopped).values(stamp(schema.chunk_stopped, chunk_id=chunk_id, stopped_at=at))
+        )
 
     summary = _summary(hub, chunk_id)
     assert summary["status"] == "stopped"

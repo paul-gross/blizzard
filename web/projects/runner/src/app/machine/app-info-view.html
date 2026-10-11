@@ -8,6 +8,26 @@
     <span>not registered</span>
   }
 </ng-template>
+<!-- Whether the token resolves to the runner the store belongs to; a refusing runner names both ids
+     and the command that clears its store. -->
+<ng-template #verdictValue>
+  @if (view().identity; as verdict) {
+    @switch (verdict.state) {
+      @case ('mismatched') {
+        <span class="link down">REFUSING</span> token belongs to
+        <span class="rid" data-testid="verdict-token">{{ verdict.token_runner_id }}</span>, store to
+        <span class="rid" data-testid="verdict-store">{{ verdict.store_runner_id }}</span> — clear with
+        <span class="path" data-testid="verdict-reset">{{ verdict.reset_command }}</span>
+      }
+      @case ('matched') {
+        <span class="link up">VERIFIED</span>
+      }
+      @default {
+        <span>unchecked</span>
+      }
+    }
+  }
+</ng-template>
 <ng-template #endpointValue>
   <span class="path" data-testid="hub-endpoint">{{ view().hub.endpoint }}</span>
 </ng-template>
@@ -20,7 +40,7 @@
   <span [class.paused]="view().pause.effective">{{ view().pause.effective ? 'PAUSED' : 'FILLING' }}</span>
   <small class="tick">· tick {{ lastTickLabel() }}</small>
 </ng-template>
-<fleet-kit-fact-list class="li-facts" [rows]="factRows(identityValue, endpointValue, linkValue, loopValue)" />
+<fleet-kit-fact-list class="li-facts" [rows]="factRows(identityValue, verdictValue, endpointValue, linkValue, loopValue)" />
 <div class="fleet-strip" [class.stale]="fleetStale()" data-testid="fleet-strip">
   <div class="fs-head">
     <span class="fs-lbl">Fleet</span>

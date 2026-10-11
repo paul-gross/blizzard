@@ -13,6 +13,7 @@ from blizzard.hub.domain.config.repositories import (
     RepositoryFields,
     RepositoryOutcome,
     resolve_chunk_repositories,
+    resolve_origin_record,
     resolve_repository,
 )
 
@@ -46,7 +47,11 @@ def _row(
 
 
 def _resolve(origins: list[CommitOrigin], rows: list[ConfiguredRepository]):  # type: ignore[no-untyped-def]
-    return resolve_chunk_repositories(origins, rows, minted_at=_MINTED)
+    return resolve_chunk_repositories(origins, rows, minted_at=_MINTED, linked=None)
+
+
+def _in_project(origins: list[CommitOrigin], rows: list[ConfiguredRepository], *linked: str):  # type: ignore[no-untyped-def]
+    return resolve_chunk_repositories(origins, rows, minted_at=_MINTED, linked=frozenset(linked), project="widgets")
 
 
 def test_an_exact_origin_resolves_by_host_owner_and_name() -> None:
@@ -138,10 +143,108 @@ def test_records_that_agree_resolve_to_one_target_qualifying_each_commit() -> No
 
     assert result.outcome is RepositoryOutcome.RESOLVED
     assert result.qualified == ("acme/widget", "acme/gadget")
+    assert result.names == ("widget", "gadget")
 
 
 def test_a_point_in_time_lookup_never_matches_a_retired_record() -> None:
     rows = [_row("widget", retired_at=_MINTED + timedelta(days=1))]
 
-    assert resolve_repository(CommitOrigin.of(None, "widget"), rows) is None
-    assert resolve_repository(CommitOrigin.of(None, "widget"), [_row("widget")]) is not None
+    assert resolve_repository(CommitOrigin.of(None, "widget"), rows, linked=None) is None
+    assert resolve_repository(CommitOrigin.of(None, "widget"), [_row("widget")], linked=None) is not None
+
+
+def test_a_point_in_time_lookup_matches_only_what_the_project_links() -> None:
+    rows = [_row("a-widget", repo="widget"), _row("b-widget", owner="other", repo="widget")]
+    origin = CommitOrigin.of(None, "widget")
+
+    assert resolve_repository(origin, rows, linked=None) is None
+    assert resolve_repository(origin, rows, linked=frozenset({"gadget"})) is None
+    found = resolve_repository(origin, rows, linked=frozenset({"b-widget"}))
+    assert found is not None and found.name == "b-widget"
+
+
+def test_narrowing_to_the_project_resolves_a_name_ambiguous_across_the_tenant() -> None:
+    rows = [_row("a-widget", repo="widget"), _row("b-widget", owner="other", repo="widget")]
+
+    result = _in_project([CommitOrigin.of(None, "widget")], rows, "b-widget")
+
+    assert result.outcome is RepositoryOutcome.RESOLVED
+    assert result.qualified == ("other/widget",)
+    assert result.names == ("b-widget",)
+
+
+def test_a_pointer_whose_one_tenant_record_the_project_does_not_link_is_not_linked() -> None:
+    rows = [_row("the-widget", repo="widget"), _row("gadget")]
+
+    result = _in_project([CommitOrigin.of(None, "widget")], rows, "gadget")
+
+    assert result.outcome is RepositoryOutcome.NOT_LINKED
+    assert result.target is None and result.names == ()
+    assert "the-widget" in result.detail and "widgets" in result.detail
+
+
+def test_a_pointer_no_tenant_record_matches_stays_unresolved_under_a_project() -> None:
+    result = _in_project([CommitOrigin.of(None, "gizmo")], [_row("widget")], "widget")
+
+    assert result.outcome is RepositoryOutcome.UNRESOLVED
+    assert "gizmo" in result.detail
+
+
+def test_a_name_ambiguous_across_the_tenant_and_linked_nowhere_is_unresolved() -> None:
+    rows = [_row("a-widget", repo="widget"), _row("b-widget", owner="other", repo="widget"), _row("gadget")]
+
+    result = _in_project([CommitOrigin.of(None, "widget")], rows, "gadget")
+
+    assert result.outcome is RepositoryOutcome.UNRESOLVED
+    assert "a-widget" in result.detail and "b-widget" in result.detail and "widgets" in result.detail
+
+
+def test_a_name_ambiguous_among_the_projects_own_links_is_unresolved() -> None:
+    rows = [_row("a-widget", repo="widget"), _row("b-widget", owner="other", repo="widget")]
+
+    result = _in_project([CommitOrigin.of(None, "widget")], rows, "a-widget", "b-widget")
+
+    assert result.outcome is RepositoryOutcome.UNRESOLVED
+    assert "a-widget" in result.detail and "b-widget" in result.detail
+
+
+def test_a_linked_record_retired_before_the_chunk_was_minted_is_unresolved_not_unlinked() -> None:
+    row = _row("widget", retired_at=_MINTED - timedelta(seconds=1))
+
+    assert _in_project([CommitOrigin.of(None, "widget")], [row], "widget").outcome is RepositoryOutcome.UNRESOLVED
+    assert _in_project([CommitOrigin.of(None, "widget")], [row]).outcome is RepositoryOutcome.UNRESOLVED
+
+
+def test_an_unlinked_pointer_refuses_before_the_records_are_compared() -> None:
+    rows = [_row("widget"), _row("gadget", owner="other")]
+    origins = [CommitOrigin.of(None, "widget"), CommitOrigin.of(None, "gadget")]
+
+    result = _in_project(origins, rows, "widget")
+
+    assert result.outcome is RepositoryOutcome.NOT_LINKED
+    assert "gadget" in result.detail
+
+
+def test_with_no_project_narrowing_a_pointer_is_never_refused_as_not_linked() -> None:
+    result = _resolve([CommitOrigin.of(None, "widget")], [_row("the-widget", repo="widget")])
+
+    assert result.outcome is RepositoryOutcome.RESOLVED
+    assert result.names == ("the-widget",)
+
+
+def test_an_origin_record_is_the_one_the_chunks_project_links_and_that_stands_for_it() -> None:
+    rows = [
+        _row("a-widget", repo="widget"),
+        _row("b-widget", owner="other", repo="widget", retired_at=_MINTED + timedelta(days=1)),
+        _row("old-gadget", repo="gadget", retired_at=_MINTED - timedelta(days=1)),
+    ]
+
+    def record(name: str, *linked: str) -> str | None:
+        found = resolve_origin_record(CommitOrigin.of(None, name), rows, minted_at=_MINTED, linked=frozenset(linked))
+        return None if found is None else found.name
+
+    assert record("widget", "b-widget") == "b-widget"
+    assert record("widget", "a-widget", "b-widget") is None
+    assert record("widget") is None
+    assert record("gadget", "old-gadget") is None
+    assert resolve_origin_record(CommitOrigin.of(None, "widget"), rows, minted_at=_MINTED, linked=None) is None

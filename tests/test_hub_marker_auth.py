@@ -19,6 +19,7 @@ from tests.support import (
     FakeHubCommandRunner,
     HubHarness,
     build_hub,
+    default_tenant,
     pointer_token,
     report_lease,
     seed_session,
@@ -73,7 +74,9 @@ def test_unauthenticated_post_is_refused_and_records_nothing(tmp_path: Path) -> 
 def test_valid_marker_token_is_granted_and_durably_recorded(tmp_path: Path) -> None:
     hub = build_hub(tmp_path, auth_mode="oauth")
     chunk_id = _seed_chunk(hub)
-    token = hub.services.marker_authority.issue(chunk_id, node_id=_NODE_ID, epoch=_EPOCH)
+    token = hub.hub_services.marker_authority.issue(
+        chunk_id, node_id=_NODE_ID, epoch=_EPOCH, tenant=default_tenant(hub.engine)
+    )
 
     resp = _post_marker(hub, _marker_url(chunk_id), headers={"X-Blizzard-Marker-Token": token})
 
@@ -85,7 +88,9 @@ def test_valid_marker_token_is_granted_and_durably_recorded(tmp_path: Path) -> N
 def test_token_minted_for_a_different_node_is_refused_and_records_nothing(tmp_path: Path) -> None:
     hub = build_hub(tmp_path, auth_mode="oauth")
     chunk_id = _seed_chunk(hub)
-    token = hub.services.marker_authority.issue(chunk_id, node_id=_NODE_ID, epoch=_EPOCH)
+    token = hub.hub_services.marker_authority.issue(
+        chunk_id, node_id=_NODE_ID, epoch=_EPOCH, tenant=default_tenant(hub.engine)
+    )
 
     resp = _post_marker(hub, _marker_url(chunk_id, node_id="nd_other"), headers={"X-Blizzard-Marker-Token": token})
 
@@ -96,7 +101,9 @@ def test_token_minted_for_a_different_node_is_refused_and_records_nothing(tmp_pa
 def test_token_minted_for_a_different_epoch_is_refused_and_records_nothing(tmp_path: Path) -> None:
     hub = build_hub(tmp_path, auth_mode="oauth")
     chunk_id = _seed_chunk(hub)
-    token = hub.services.marker_authority.issue(chunk_id, node_id=_NODE_ID, epoch=_EPOCH)
+    token = hub.hub_services.marker_authority.issue(
+        chunk_id, node_id=_NODE_ID, epoch=_EPOCH, tenant=default_tenant(hub.engine)
+    )
 
     resp = _post_marker(hub, _marker_url(chunk_id, epoch=_EPOCH + 1), headers={"X-Blizzard-Marker-Token": token})
 
@@ -107,8 +114,10 @@ def test_token_minted_for_a_different_epoch_is_refused_and_records_nothing(tmp_p
 def test_revoked_token_is_refused_and_records_nothing(tmp_path: Path) -> None:
     hub = build_hub(tmp_path, auth_mode="oauth")
     chunk_id = _seed_chunk(hub)
-    token = hub.services.marker_authority.issue(chunk_id, node_id=_NODE_ID, epoch=_EPOCH)
-    hub.services.marker_authority.revoke(chunk_id, node_id=_NODE_ID, epoch=_EPOCH)
+    token = hub.hub_services.marker_authority.issue(
+        chunk_id, node_id=_NODE_ID, epoch=_EPOCH, tenant=default_tenant(hub.engine)
+    )
+    hub.hub_services.marker_authority.revoke(chunk_id, node_id=_NODE_ID, epoch=_EPOCH)
 
     resp = _post_marker(hub, _marker_url(chunk_id), headers={"X-Blizzard-Marker-Token": token})
 
@@ -160,7 +169,9 @@ def test_the_land_scripts_own_recorder_records_durably_against_an_oauth_hub(tmp_
     hub with authentication genuinely on."""
     hub = build_hub(tmp_path, auth_mode="oauth")
     chunk_id = _seed_chunk(hub)
-    token = hub.services.marker_authority.issue(chunk_id, node_id=_NODE_ID, epoch=_EPOCH)
+    token = hub.hub_services.marker_authority.issue(
+        chunk_id, node_id=_NODE_ID, epoch=_EPOCH, tenant=default_tenant(hub.engine)
+    )
     markers = MarkerWriter(callback_url=_marker_url(chunk_id), token=token, request=_hub_request(hub))
 
     markers.record("acme-widget", "sha:abc123")

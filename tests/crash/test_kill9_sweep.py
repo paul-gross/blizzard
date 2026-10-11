@@ -20,13 +20,17 @@ from pathlib import Path
 
 import httpx
 import pytest
-from sqlalchemy import Engine, select
+from sqlalchemy import Engine, Row, insert, select
 
+from blizzard.foundation.node_steps import Executor
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.tokens import TokenHash
 from blizzard.hub.app import CLOSE_DRAIN_INTERVAL_SECONDS
 from blizzard.hub.config import HubConfig
+from blizzard.hub.domain.tenancy.teardown import DRAIN_BATCH_ROWS
 from blizzard.hub.store import schema as hub_schema
+from blizzard.hub.store.scoped import is_tenant_owned
+from blizzard.hub.tenancy import TenantId
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.internal.winter_cli import SubprocessWinterCli
 from blizzard.runner.harness.identity import OPENCODE_HARNESS_ID
@@ -68,7 +72,7 @@ from tests.crash.support import (
 from tests.crash_points import discover_crash_points
 from tests.otlp_sink import OtlpSink, otlp_sink
 from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
-from tests.support import create_repositories, fixture_repository, free_port
+from tests.support import create_repositories, fixture_repository, free_port, hub_scoped, seed_drainable_history
 
 pytestmark = pytest.mark.crash_sweep
 
@@ -93,6 +97,7 @@ _DEDICATED_PREFIXES = (
     "trace.",
     "leasetrace.",
     "egress.",
+    "teardown.",
 )
 _RESUME_POINTS = [p for p in _ALL_POINTS if p.startswith("resume.")]
 _ABANDON_POINTS = [p for p in _ALL_POINTS if p.startswith("abandon.")]
@@ -133,6 +138,9 @@ _TRACE_POINTS = [p for p in _ALL_POINTS if p.startswith("trace.")]
 _LEASE_TRACE_POINTS = [p for p in _ALL_POINTS if p.startswith("leasetrace.")]
 # `egress.*` fires in the HUB's egress sweep; swept by `test_kill9_at_egress_crash_point`.
 _EGRESS_POINTS = [p for p in _ALL_POINTS if p.startswith("egress.")]
+# `teardown.*` fires inside the HUB's tenant deletion — after its close, between drain batches, and after its drain.
+# Swept by `test_kill9_at_teardown_crash_point`.
+_TEARDOWN_POINTS = [p for p in _ALL_POINTS if p.startswith("teardown.")]
 _GENERIC_POINTS = [p for p in _ALL_POINTS if not p.startswith(_DEDICATED_PREFIXES)]
 
 # A representative CI subset, one point per family, run as a bounded-runtime gate under
@@ -216,6 +224,9 @@ _LEASE_TRACE_CI_SUBSET = ("leasetrace.after-export.before-cursor",)
 # The egress CI subset: the later window; the full sweep runs both.
 _EGRESS_CI_SUBSET = ("egress.after-commit.before-cursor",)
 
+# The teardown CI subset: the mid-drain window, where a committed batch must be neither redone nor counted twice.
+_TEARDOWN_CI_SUBSET = ("teardown.after-batch.before-next",)
+
 
 def _select(points: list[str], ci_subset: tuple[str, ...]) -> list[str]:
     """The points to parametrize: all of ``points``, or its CI subset under the CI profile."""
@@ -246,6 +257,7 @@ _USAGE_LIMIT_SWEEP = _select(_USAGE_LIMIT_POINTS, _USAGE_LIMIT_CI_SUBSET)
 _TRACE_SWEEP = _select(_TRACE_POINTS, _TRACE_CI_SUBSET)
 _LEASE_TRACE_SWEEP = _select(_LEASE_TRACE_POINTS, _LEASE_TRACE_CI_SUBSET)
 _EGRESS_SWEEP = _select(_EGRESS_POINTS, _EGRESS_CI_SUBSET)
+_TEARDOWN_SWEEP = _select(_TEARDOWN_POINTS, _TEARDOWN_CI_SUBSET)
 
 
 def test_ci_subset_covers_every_family(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -272,6 +284,7 @@ def test_ci_subset_covers_every_family(monkeypatch: pytest.MonkeyPatch) -> None:
         | set(_select(_TRACE_POINTS, _TRACE_CI_SUBSET))
         | set(_select(_LEASE_TRACE_POINTS, _LEASE_TRACE_CI_SUBSET))
         | set(_select(_EGRESS_POINTS, _EGRESS_CI_SUBSET))
+        | set(_select(_TEARDOWN_POINTS, _TEARDOWN_CI_SUBSET))
     )
     uncovered = {family for family in families if not any(p.startswith(f"{family}.") for p in ci_selected)}
     assert not uncovered, f"registry families with zero CI-subset coverage: {sorted(uncovered)}"
@@ -474,7 +487,9 @@ def test_kill9_at_migrate_crash_point(crash_env: CrashEnv, tmp_path: Path, point
         hub_engine = create_engine_from_url(HubConfig.load(hub_dir).db_url)
         with hub_engine.connect() as conn:
             migrations = conn.execute(
-                select(hub_schema.chunk_migrations).where(hub_schema.chunk_migrations.c.chunk_id == chunk_id)
+                hub_scoped(
+                    select(hub_schema.chunk_migrations).where(hub_schema.chunk_migrations.c.chunk_id == chunk_id)
+                )
             ).all()
         assert len(migrations) == 1, "the migration fact was not durably recorded before the crash"
 
@@ -566,10 +581,14 @@ def test_kill9_at_migrate_crash_point_for_an_intended_migration(
         hub_engine = create_engine_from_url(HubConfig.load(hub_dir).db_url)
         with hub_engine.connect() as conn:
             migrations = conn.execute(
-                select(hub_schema.chunk_migrations).where(hub_schema.chunk_migrations.c.chunk_id == chunk_id)
+                hub_scoped(
+                    select(hub_schema.chunk_migrations).where(hub_schema.chunk_migrations.c.chunk_id == chunk_id)
+                )
             ).all()
             intent = conn.execute(
-                select(hub_schema.chunks.c.intended_migration).where(hub_schema.chunks.c.chunk_id == chunk_id)
+                hub_scoped(
+                    select(hub_schema.chunks.c.intended_migration).where(hub_schema.chunks.c.chunk_id == chunk_id)
+                )
             ).scalar_one()
         assert len(migrations) == 1, "the migration fact was not durably recorded before the crash"
         assert intent is None, "the intent was not durably cleared alongside the migration fact"
@@ -652,7 +671,9 @@ def test_kill9_at_migrate_crash_point_landing_on_a_hub_node(crash_env: CrashEnv,
         hub_engine = create_engine_from_url(HubConfig.load(hub_dir).db_url)
         with hub_engine.connect() as conn:
             migrations = conn.execute(
-                select(hub_schema.chunk_migrations).where(hub_schema.chunk_migrations.c.chunk_id == chunk_id)
+                hub_scoped(
+                    select(hub_schema.chunk_migrations).where(hub_schema.chunk_migrations.c.chunk_id == chunk_id)
+                )
             ).all()
         assert len(migrations) == 1, "the migration fact was not durably recorded before the crash"
 
@@ -2388,7 +2409,9 @@ def _live_exec_slots(hub_dir: Path) -> int:
     try:
         with engine.connect() as conn:
             rows = conn.execute(
-                select(hub_schema.hub_exec_slot.c.slot_id).where(hub_schema.hub_exec_slot.c.released_at.is_(None))
+                hub_scoped(
+                    select(hub_schema.hub_exec_slot.c.slot_id).where(hub_schema.hub_exec_slot.c.released_at.is_(None))
+                )
             ).all()
         return len(rows)
     finally:
@@ -3210,11 +3233,13 @@ def test_kill9_at_close_crash_point(crash_env: CrashEnv, tmp_path: Path, point: 
         hub_engine = create_engine_from_url(HubConfig.load(hub_dir).db_url)
         with hub_engine.connect() as conn:
             outcomes = conn.execute(
-                select(hub_schema.work_item_closures.c.outcome).where(
-                    (hub_schema.work_item_closures.c.chunk_id == chunk_id)
-                    & (hub_schema.work_item_closures.c.source == "hub")
-                    & (hub_schema.work_item_closures.c.ref == ref)
-                    & (hub_schema.work_item_closures.c.outcome.in_(["closed", "gone"]))
+                hub_scoped(
+                    select(hub_schema.work_item_closures.c.outcome).where(
+                        (hub_schema.work_item_closures.c.chunk_id == chunk_id)
+                        & (hub_schema.work_item_closures.c.source == "hub")
+                        & (hub_schema.work_item_closures.c.ref == ref)
+                        & (hub_schema.work_item_closures.c.outcome.in_(["closed", "gone"]))
+                    )
                 )
             ).all()
         assert len(outcomes) == 1, f"ref {ref} carries {len(outcomes)} terminal closure outcomes, not exactly one"
@@ -3252,8 +3277,10 @@ def _trace_cursor_rows(hub_dir: Path) -> list[tuple[int, int]]:
     try:
         with engine.connect() as conn:
             rows = conn.execute(
-                select(hub_schema.trace_cursor.c.id, hub_schema.trace_cursor.c.span_count).order_by(
-                    hub_schema.trace_cursor.c.id
+                hub_scoped(
+                    select(hub_schema.trace_cursor.c.id, hub_schema.trace_cursor.c.span_count).order_by(
+                        hub_schema.trace_cursor.c.id
+                    )
                 )
             ).all()
     finally:
@@ -3376,11 +3403,13 @@ def _egress_cursor_rows(hub_dir: Path) -> list[tuple[str, int, list[str]]]:
     try:
         with engine.connect() as conn:
             rows = conn.execute(
-                select(
-                    hub_schema.egress_cursor.c.dataset,
-                    hub_schema.egress_cursor.c.row_count,
-                    hub_schema.egress_cursor.c.files,
-                ).order_by(hub_schema.egress_cursor.c.id)
+                hub_scoped(
+                    select(
+                        hub_schema.egress_cursor.c.dataset,
+                        hub_schema.egress_cursor.c.row_count,
+                        hub_schema.egress_cursor.c.files,
+                    ).order_by(hub_schema.egress_cursor.c.id)
+                )
             ).all()
     finally:
         engine.dispose()
@@ -3583,3 +3612,178 @@ def test_kill9_at_lease_trace_crash_point(crash_env: CrashEnv, tmp_path: Path, p
         assert sum(advancing) == len(sink.spans()) - len(told_once), (
             "cursor rows do not cover each post-restart span exactly once"
         )
+
+
+# --- Tenant deletion — the hub drains a closed tenant in batches and the sweep finishes what a kill cut short ---
+
+#: Work refs the doomed tenant holds beyond its packaged graphs and its chunk history: past one drain batch, so the
+#: drain commits a batch and has a next one to begin, and that batch ends among the work refs — the restart and the
+#: migration drained after them outlive the epoch owner and the route release drained before them.
+_DOOMED_FILLER_ROWS = DRAIN_BATCH_ROWS + 500
+_TEARDOWN_HISTORY_AT = datetime(2026, 7, 20, 12, 0, 0, tzinfo=UTC)
+_BYSTANDER_FILLER_ROWS = 50
+
+#: The rows each point's kill leaves the deletion fact counting, given the rows the drain removes in all.
+_REMOVED_AT_KILL = {
+    "teardown.after-close.before-drain": lambda total: 0,
+    "teardown.after-batch.before-next": lambda total: DRAIN_BATCH_ROWS,
+    "teardown.after-drain.before-complete": lambda total: total,
+}
+
+#: The tables a deletion removes the tenant from: its own rows as it drains, then the tenant itself and its
+#: memberships as it completes — the deletion counts every one.
+_TEARDOWN_TABLES = [t for t in hub_schema.metadata.sorted_tables if is_tenant_owned(t)] + [
+    hub_schema.tenants,
+    hub_schema.membership_facts,
+]
+
+
+def _fill_keyed_locks(hub_dir: Path, tenant: str, count: int) -> None:
+    """Give ``tenant`` ``count`` lock rows of its own — rows of a table no other row depends on."""
+    engine = create_engine_from_url(HubConfig.load(hub_dir).db_url)
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                hub_scoped(insert(hub_schema.keyed_locks)),
+                [{"tenant_id": tenant, "namespace": "crash-teardown", "key": f"k{n}"} for n in range(count)],
+            )
+    finally:
+        engine.dispose()
+
+
+def _seed_doomed_history(hub_dir: Path, tenant: str) -> None:
+    """Give ``tenant`` a chunk history, pinned to one of its packaged graphs, that its drain takes apart table by table."""
+    engine = create_engine_from_url(HubConfig.load(hub_dir).db_url)
+    try:
+        with engine.begin() as conn:
+            nodes = hub_schema.graph_nodes.c
+            graph_id, node_id = conn.execute(
+                hub_scoped(
+                    select(nodes.graph_id, nodes.node_id)
+                    .where(nodes.tenant_id == tenant, nodes.executor == Executor.RUNNER.value)
+                    .order_by(nodes.node_id)
+                    .limit(1)
+                )
+            ).one()
+            seed_drainable_history(
+                conn,
+                TenantId(tenant),
+                graph_id=graph_id,
+                node_id=node_id,
+                at=_TEARDOWN_HISTORY_AT,
+                open_refs=_DOOMED_FILLER_ROWS,
+            )
+    finally:
+        engine.dispose()
+
+
+def _tenant_rows(hub_dir: Path, tenant: str) -> dict[str, set[tuple[object, ...]]]:
+    """Every row naming ``tenant``, by table — only tables holding any."""
+    engine = create_engine_from_url(HubConfig.load(hub_dir).db_url)
+    try:
+        with engine.connect() as conn:
+            rows = {
+                t.name: {tuple(row) for row in conn.execute(hub_scoped(select(t).where(t.c.tenant_id == tenant)))}
+                for t in _TEARDOWN_TABLES
+            }
+    finally:
+        engine.dispose()
+    return {name: held for name, held in rows.items() if held}
+
+
+def _drained_rows(rows: dict[str, set[tuple[object, ...]]]) -> int:
+    """The rows a drain removes — every one but the tenant's own row and its memberships, which completion removes."""
+    return sum(len(held) for name, held in rows.items() if name not in {"tenants", "membership_facts"})
+
+
+def _deletion_fact(hub_dir: Path, tenant: str) -> Row[tuple[object, ...]] | None:
+    engine = create_engine_from_url(HubConfig.load(hub_dir).db_url)
+    try:
+        with engine.connect() as conn:
+            table = hub_schema.tenant_deletions
+            return conn.execute(hub_scoped(select(table).where(table.c.tenant_id == tenant))).one_or_none()
+    finally:
+        engine.dispose()
+
+
+def _wait_deleted(hub_dir: Path, tenant: str, *, timeout: float) -> Row[tuple[object, ...]] | None:
+    """Poll ``tenant``'s deletion fact until its deletion completes; the last fact read."""
+    deadline = time.monotonic() + timeout
+    fact = _deletion_fact(hub_dir, tenant)
+    while time.monotonic() < deadline and (fact is None or fact.deleted_at is None):
+        time.sleep(0.5)
+        fact = _deletion_fact(hub_dir, tenant)
+    return fact
+
+
+def _assert_hub_invariants(hub_dir: Path, *, when: str) -> None:
+    violations = Invariants(hub_db_url=HubConfig.load(hub_dir).db_url).run()
+    assert not violations, f"invariant violations {when}:\n" + "\n".join(str(v) for v in violations)
+
+
+@pytest.mark.parametrize("point", _TEARDOWN_SWEEP)
+def test_kill9_at_teardown_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
+    """A ``kill -9`` inside a tenant's deletion — after its close, between two drain batches, or after its drain — is
+    finished by the restarted hub's ``tenant_teardown`` sweep: nothing of the tenant is left, its deletion counts
+    every row it removed exactly once, and the other tenant keeps every row it had."""
+    hub_dir, hub_port = tmp_path / "hub", free_port()
+    hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None, work_sources=())
+    try:
+        await_http(hub, "/api/health", proc=hub_proc)
+        created = hub.post("/api/admin/tenants", json={"name": "doomed"})
+        assert created.status_code == 201, created.text
+        doomed = created.json()["tenant_id"]
+        listed = hub.get("/api/admin/tenants")
+        assert listed.status_code == 200, listed.text
+        [bystander] = [t["tenant_id"] for t in listed.json() if t["tenant_id"] != doomed]
+        terminate(hub_proc)
+
+        _seed_doomed_history(hub_dir, doomed)
+        _fill_keyed_locks(hub_dir, bystander, _BYSTANDER_FILLER_ROWS)
+        doomed_before, bystander_before = _tenant_rows(hub_dir, doomed), _tenant_rows(hub_dir, bystander)
+        total = _drained_rows(doomed_before)
+        assert total > DRAIN_BATCH_ROWS, "the doomed tenant fits one drain batch; no batch would have a next one"
+
+        # Restart armed: the delete request's own inline drain reaches the point and the hub dies mid-request.
+        hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=point)
+        await_http(hub, "/api/health", proc=hub_proc)
+        with contextlib.suppress(httpx.HTTPError):
+            hub.delete(f"/api/admin/tenants/{doomed}")
+        code = wait_death(hub_proc, timeout=60.0)
+        assert code == -9, f"armed hub at {point} exited {code}, not SIGKILL (-9); point never reached?"
+
+        killed = _deletion_fact(hub_dir, doomed)
+        assert killed is not None and killed.deleted_at is None, f"{point}: the deletion is not underway: {killed}"
+        assert killed.rows_removed == _REMOVED_AT_KILL[point](total), (
+            f"{point}: the deletion counts {killed.rows_removed} rows removed"
+        )
+        assert _drained_rows(_tenant_rows(hub_dir, doomed)) == total - killed.rows_removed, (
+            f"{point}: the rows left and the rows counted removed disagree — a batch and its count split"
+        )
+        if point == "teardown.after-batch.before-next":
+            left = _tenant_rows(hub_dir, doomed)
+            assert "epoch_owners" not in left and {"chunk_restarts", "chunk_migrations"} <= left.keys(), (
+                f"the kill's batch boundary leaves no half-drained history: {sorted(left)}"
+            )
+        _assert_hub_invariants(hub_dir, when=f"immediately after kill at {point}")
+
+        # Restart unarmed: the sweep's first pass finds the deletion underway and finishes it.
+        hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
+        await_http(hub, "/api/health", proc=hub_proc)
+        deleted = _wait_deleted(hub_dir, doomed, timeout=60.0)
+        assert deleted is not None and deleted.deleted_at is not None, f"deletion not completed after kill at {point}"
+        held = sum(len(rows) for rows in doomed_before.values())
+        assert deleted.rows_removed == held, (
+            f"{point}: the deletion counts {deleted.rows_removed} rows removed, not the {held} the tenant held"
+        )
+        assert _tenant_rows(hub_dir, doomed) == {}, f"rows of the deleted tenant survive the kill at {point}"
+        bystander_after = _tenant_rows(hub_dir, bystander)
+        lost = {name: held - bystander_after.get(name, set()) for name, held in bystander_before.items()}
+        assert not any(lost.values()), f"the other tenant lost rows across the kill at {point}: {lost}"
+        assert hub.delete(f"/api/admin/tenants/{doomed}").status_code == 410
+        assert [t["tenant_id"] for t in hub.get("/api/admin/tenants").json()] == [bystander]
+        _assert_hub_invariants(hub_dir, when=f"after the deletion completed past {point}")
+    finally:
+        hub.close()
+        terminate(hub_proc)

@@ -1,0 +1,32 @@
+<app-lens-note surface="Members" />
+<fleet-kit-async-state
+  [state]="triadState()"
+  loadingText="Loading members…"
+  loadingTestid="members-page-loading"
+  errorText="Failed to load members."
+  errorTestid="members-page-error"
+>
+  @if (changeError(); as message) {
+    <p class="change-error" role="alert" data-testid="members-page-change-error">{{ message }}</p>
+  }
+  <app-members-table
+    [members]="membersQuery.data() ?? []"
+    [label]="label()"
+    [currentUserId]="currentUserId()"
+    [pendingUserIds]="pendingUserIds()"
+    (changeRole)="onChangeRole($event)"
+    (revoke)="onRevoke($event)"
+  />
+</fleet-kit-async-state>
+@if (revokeConfirm(); as confirm) {
+  <fleet-kit-confirm-dialog
+    [open]="true"
+    [heading]="confirm.heading"
+    [message]="confirm.message"
+    [confirmLabel]="confirm.confirmLabel"
+    [variant]="confirm.variant"
+    testid="members-page-revoke-confirm"
+    (confirmed)="onRevokeConfirmed()"
+    (cancelled)="onRevokeCancelled()"
+  />
+}

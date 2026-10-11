@@ -217,6 +217,17 @@ describe('BoardHeader', () => {
     expect(el.querySelector('.brand-text')?.textContent).toContain('runner · machine panel');
   });
 
+  it('carries the whole tagline on hover, so a long one the brand truncates stays readable', async () => {
+    const name = 'A tenant whose name runs well past the room the brand block keeps for it';
+    const fixture = TestBed.createComponent(BoardHeader);
+    fixture.componentRef.setInput('tagline', name);
+    await fixture.whenStable();
+    const tagline = (fixture.nativeElement as HTMLElement).querySelector('[data-testid="board-header-tagline"]');
+
+    expect(tagline?.textContent?.trim()).toBe(name);
+    expect(tagline?.getAttribute('title')).toBe(name);
+  });
+
   it('shows no spend-yesterday cell before its own read resolves, independent of today (issue #183)', async () => {
     const fixture = TestBed.createComponent(BoardHeader);
     fixture.componentRef.setInput('counts', tally([]));

@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_artifacts_store import ChunkArtifactsStore
 from blizzard.hub.store.internal.chunk_decisions_store import ChunkDecisionsStore
 from blizzard.hub.store.internal.chunk_delivery_store import ChunkDeliveryStore
@@ -26,9 +25,10 @@ from blizzard.hub.store.internal.chunk_route_store import ChunkRouteStore
 from blizzard.hub.store.internal.chunk_usage_store import ChunkUsageStore
 from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
+from blizzard.hub.store.scoped import ScopedConnections
 
 
-def build_chunk_stores(store: HubStoreConnections, clock: IClock, *, registry: RunnerRegistryStore) -> ChunkStores:
+def build_chunk_stores(store: ScopedConnections, clock: IClock, *, registry: RunnerRegistryStore) -> ChunkStores:
     """All chunk-seam adapters over one connection seam and clock. ``facts`` is built
     first since ``record``/``work_refs``/``escalations``/``exclusive`` each hold it as
     their own read collaborator; ``exclusive`` holds the caller's shared ``registry``."""

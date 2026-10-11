@@ -1,16 +1,28 @@
-import { ChangeDetectionStrategy, Component, Injector, afterRenderEffect, computed, effect, inject } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  Injector,
+  afterRenderEffect,
+  computed,
+  effect,
+  inject,
+  untracked,
+} from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import { filter, map } from 'rxjs';
-import { AppShell, BoardHeader, FleetLiveUpdates, ViewportService, injectNowSignal } from 'fleet/shell';
-import { PendingLobby } from '../core/auth/pending-lobby';
+import { AppShell, BoardHeader, FleetLiveUpdates, KitButton, ViewportService, injectNowSignal } from 'fleet/shell';
+import { ProjectLens } from '../core/project-lens';
+import { NoAccess } from '../core/auth/no-access';
+import { TenantContext } from '../core/auth/tenant-context';
+import { TenantPicker } from '../core/auth/tenant-picker';
 import { hasPermission, injectMeQuery } from '../core/auth/me.query';
 import { injectAuthProvidersQuery } from '../core/auth/providers.query';
 import { injectHubChunkCountsQuery } from '../board/chunks/chunk-counts.query';
 import { injectHubFleetSpendQuery } from '../board/fleet-spend/fleet-spend.query';
 import { injectHubHealthQuery } from '../board/health/health.query';
 import { injectLogoutMutation } from '../core/auth/logout.mutations';
-import { redirectToLogin } from '../core/auth/auth-redirect';
+import { isPublicUrl, redirectToLogin } from '../core/auth/auth-redirect';
 
 import { readDemoConfig } from '../demo/demo-config';
 import { startOfLocalDayIso, startOfPreviousLocalDayIso } from '../core/local-day';
@@ -18,7 +30,14 @@ import { AppNav } from './nav/app-nav';
 import { AppNavMenu } from './nav/app-nav-menu';
 import { MobileTabBar } from './nav/mobile-tab-bar';
 import { MobileTitlebar } from './nav/mobile-titlebar';
-import { authState, connectionLabel, logoutErrorText } from './app.model';
+import {
+  type AuthState,
+  authState,
+  connectionLabel,
+  logoutErrorText,
+  selectedTenantName,
+  tenancyOf,
+} from './app.model';
 
 /**
  * The hub app shell — the titlebar, the top nav (or their mobile shell
@@ -43,38 +62,57 @@ import { authState, connectionLabel, logoutErrorText } from './app.model';
  *   routed page, so navigating between tabs never restarts the stream or drops the
  *   query cache.
  *
- * Session-aware UI: {@link authState} gates what renders at the very
+ * The public pages — sign-in with its refusals, and an invitation's landing
+ * ({@link isPublicUrl}) — render as a bare `<router-outlet>` whatever the session,
+ * once the router has actually landed on one (`onPublicRoute`): they carry their
+ * own full-page chrome, and a person already signed in opens an invitation too.
+ *
+ * Everywhere else, {@link authState} gates what renders at the very
  * top, above the mobile/desktop fork — `/api/me` (`injectMeQuery`) is the one read
- * that decides it:
+ * that decides it, and the tenant is settled here, once, from its memberships
+ * ({@link TenantContext}), before any view renders:
  *
  * - **`unauthenticated`** (no/expired session) redirects to `/login` (an effect
- *   below, plus the 401 interceptor on the same underlying response) and renders a
- *   bare `<router-outlet>` — but only once the router has actually landed there
- *   (`onLoginRoute`); router navigation is async, so a session dropping mid-route
- *   withholds the outlet for that one tick rather than let it re-activate the
- *   previous, now-ungated route. `/login` carries its own full-page chrome, so the
- *   header/nav/tab-bar are withheld here regardless;
- * - **`lobby`** (a resolved identity with an **empty** permission set — `pending`,
- *   before an admin grants a role) renders {@link PendingLobby} instead of the
- *   board — "signed in, awaiting access", never a board silently 403ing every read;
- * - **`ready`** (at least one permission) renders the shell.
+ *   below, plus the 401 interceptor on the same underlying response) and renders
+ *   nothing until the router lands there; router navigation is async, so a session
+ *   dropping mid-route withholds the outlet for that one tick rather than let it
+ *   re-activate the previous, now-ungated route;
+ * - **`no-access`** (a resolved identity holding no membership) renders only
+ *   {@link NoAccess} — no header, no nav, no view;
+ * - **`choose`** (several memberships, none of them this tab's tenant or the
+ *   browser's last choice) renders only {@link TenantPicker}; the chosen tenant is
+ *   entered and the shell follows;
+ * - **`ready`** (a tenant selected — the only membership, or the remembered one)
+ *   renders the shell. Inside it a tenant is always selected: every call names it,
+ *   and `injectMeQuery` hands every permission check that membership's role and
+ *   permissions. The header carries the tenant's name.
  *
- * The SSE spine only starts once `ready` (a `pending`/unauthenticated stream would
- * just 401/403 immediately; `guest` is `ready` and reads the
- * stream like any other board reader), and its {@link FleetLiveUpdates.authFailed}
+ * The SSE spine, and the header's own tenant-scoped reads, only start once the
+ * board has entered the selected tenant (a call before it would name no tenant,
+ * or the wrong one), and the SSE spine's {@link FleetLiveUpdates.authFailed}
  * channel — a session that expired mid-stream — routes back to `/login` the same way
  * the interceptor does, within the one reconnect cycle that surfaces it.
  */
 @Component({
   selector: 'app-root',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [AppShell, BoardHeader, AppNav, AppNavMenu, MobileTitlebar, MobileTabBar, RouterOutlet, PendingLobby],
+  imports: [
+    AppShell,
+    BoardHeader,
+    AppNav,
+    AppNavMenu,
+    KitButton,
+    MobileTitlebar,
+    MobileTabBar,
+    RouterOutlet,
+    NoAccess,
+    TenantPicker,
+  ],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
 export class App {
   private readonly health = injectHubHealthQuery();
-  private readonly countsQuery = injectHubChunkCountsQuery();
   private readonly live = inject(FleetLiveUpdates);
   private readonly viewport = inject(ViewportService);
   private readonly router = inject(Router);
@@ -82,6 +120,8 @@ export class App {
   private readonly logoutMutation = injectLogoutMutation();
   private readonly providersQuery = injectAuthProvidersQuery();
   private readonly injector = inject(Injector);
+  private readonly tenant = inject(TenantContext);
+  private readonly lens = inject(ProjectLens);
 
   /**
    * Demo mode's config, latched **here** and now — at app construction, off the
@@ -93,6 +133,30 @@ export class App {
    */
   private readonly demoConfig = readDemoConfig(globalThis.location?.search ?? '');
 
+  /** The app-root-level shell fork (`../docs/designs/mobile/README.md`'s
+   * "adaptive shells over shared guts") — picked once here, mirroring the
+   * `board` route's own guard-based fork in `app.routes.ts`. */
+  protected readonly mobile = computed(() => this.viewport.mode() === 'mobile');
+
+  /** The resolved identity, or `null` while pending/unauthenticated. */
+  protected readonly me = computed(() => this.meQuery.data() ?? null);
+
+  /** The tenant settled from the identity's memberships, `null` without an identity. */
+  protected readonly tenancy = computed(() => tenancyOf(this.me(), this.tenant.resolver()));
+
+  /** The top-level session gate — see the class docstring. */
+  protected readonly authState = computed<AuthState>(() => authState(this.meQuery.isPending(), this.tenancy()));
+
+  /** Whether the board has entered the tenant it settled on — every call names it from here. The header's
+   * tenant-scoped reads below wait on it: before it, a read would name no tenant or a stale one. */
+  protected readonly ready = computed(() => {
+    const tenancy = this.tenancy();
+    return tenancy?.kind === 'selected' && this.tenant.current() === tenancy.tenant.tenant_id;
+  });
+
+  /** The fleet's chunk counts for the header, in the selected tenant. */
+  private readonly countsQuery = injectHubChunkCountsQuery(() => this.ready());
+
   /** The minute tick the spend windows are cut from — reading it inside the query
    * options makes the key reactive, yet it changes only when the local day does, so a
    * tick within the day leaves the key equal and refetches nothing. */
@@ -100,7 +164,11 @@ export class App {
 
   /** The fleet's spend-today read — `since` is local start-of-day off {@link now},
    * so the window rolls forward at local midnight without a reload. */
-  protected readonly spendToday = injectHubFleetSpendQuery(() => startOfLocalDayIso(this.now()));
+  protected readonly spendToday = injectHubFleetSpendQuery(
+    () => startOfLocalDayIso(this.now()),
+    undefined,
+    () => this.ready(),
+  );
 
   /** The fleet's spend-yesterday read — `[startOfPreviousLocalDayIso(now),
    * startOfLocalDayIso(now))`, both derived from the one local-day boundary helper so
@@ -111,25 +179,19 @@ export class App {
   protected readonly spendYesterday = injectHubFleetSpendQuery(
     () => startOfPreviousLocalDayIso(this.now()),
     () => startOfLocalDayIso(this.now()),
+    () => this.ready(),
   );
 
-  /** The app-root-level shell fork (`../docs/designs/mobile/README.md`'s
-   * "adaptive shells over shared guts") — picked once here, mirroring the
-   * `board` route's own guard-based fork in `app.routes.ts`. */
-  protected readonly mobile = computed(() => this.viewport.mode() === 'mobile');
+  /** The identity's memberships — what the tenant picker offers. */
+  protected readonly memberships = computed(() => this.me()?.tenants ?? []);
 
-  /** The resolved identity, or `null` while pending/unauthenticated. */
-  protected readonly me = computed(() => this.meQuery.data() ?? null);
+  /** The selected tenant's name, for the header; empty outside `ready`. */
+  protected readonly tenantName = computed(() => selectedTenantName(this.tenancy()));
 
-  /** The top-level session gate — see the class docstring. */
-  protected readonly authState = computed<'loading' | 'unauthenticated' | 'lobby' | 'ready'>(() =>
-    authState(this.meQuery.isPending(), this.me()),
-  );
-
-  /** The router's current URL as a signal — read only to decide whether the
-   * `unauthenticated` branch's `<router-outlet>` is safe to render yet (see the
-   * template). Router navigation is async, so a session dropping mid-route does not
-   * make `/login` current the same tick `authState` flips. */
+  /** The router's current URL as a signal — read only to decide whether a public
+   * page's bare `<router-outlet>` is safe to render yet (see the template). Router
+   * navigation is async, so a session dropping mid-route does not make `/login`
+   * current the same tick `authState` flips. */
   private readonly routerUrl = toSignal(
     this.router.events.pipe(
       filter((event) => event instanceof NavigationEnd),
@@ -138,21 +200,38 @@ export class App {
     { initialValue: this.router.url },
   );
 
-  protected readonly onLoginRoute = computed(() => this.routerUrl().startsWith('/login'));
+  /** Whether the router has landed on a public page — see the class docstring. */
+  protected readonly onPublicRoute = computed(() => isPublicUrl(this.routerUrl()));
 
   /** Whether a login mechanism is even configured — `GET /api/auth/providers`
    * answers `[]` outright under `auth.mode = "none"` (the hub's own answer, never
    * re-derived here; `/api/me`'s shape carries no `mode` field to read instead). */
   private readonly authEnabled = computed(() => (this.providersQuery.data()?.length ?? 0) > 0);
 
-  /** Gates the `Admin` nav entry — `user:manage`, held by `admin`/`superuser` (never
-   * `contributor`). Also requires {@link authEnabled}: under `auth.mode = "none"`
+  /** Gates the `Admin` nav entry — `user:manage` in the selected tenant, held by an
+   * `admin` member (never `contributor`). Also requires {@link authEnabled}: under `auth.mode = "none"`
    * the implicit operator carries every permission including this one, but there
    * are no real users for an admin page to administer — the nav stays hidden
    * exactly as it always has. */
   protected readonly canManageUsers = computed(() => hasPermission(this.me(), 'user:manage') && this.authEnabled());
 
   constructor() {
+    // Enter the tenant the memberships settle on — the only one, or the one this tab
+    // or browser remembered — so every call names it and the choice is remembered.
+    effect(() => {
+      const tenancy = this.tenancy();
+      if (tenancy?.kind === 'selected') untracked(() => this.tenant.enter(tenancy.tenant.tenant_id));
+      // Settled on none — no membership, or a choice to make — so whatever this tab or browser remembered is no
+      // membership any more: forget it rather than keep naming it.
+      else if (tenancy !== null) untracked(() => this.tenant.forgetSelection());
+    });
+
+    // A project lens is resolved only in the tenant the board has entered: the lens guard waits for this.
+    effect(() => {
+      const ready = this.ready();
+      untracked(() => this.lens.settle(ready));
+    });
+
     // Open the SSE stream and wire it to the query cache once authenticated with at
     // least one permission — `start()` is idempotent, so a flip back to `ready`
     // (e.g. after a role change, #94) resumes it. `afterRenderEffect` (not a plain
@@ -160,7 +239,7 @@ export class App {
     // `FleetLiveUpdates.start()` is itself safe to call from a reactive context — it
     // wraps its own internal `effect()` call in `untracked` (fleet-live.ts).
     afterRenderEffect(() => {
-      if (this.authState() === 'ready') this.live.start();
+      if (this.ready()) this.live.start();
     });
 
     // Demo mode (`?demo=true`) — the unattended kiosk tour, gated on the same
@@ -173,7 +252,7 @@ export class App {
     // import is only reached when `?demo` actually asked, and `start()` is
     // idempotent, so this effect re-running on an auth settle is a no-op.
     afterRenderEffect(() => {
-      if (this.authState() !== 'ready' || !this.demoConfig.enabled) return;
+      if (!this.ready() || !this.demoConfig.enabled) return;
       void import('../demo/demo-director').then(({ DemoDirector }) =>
         this.injector.get(DemoDirector).start(this.demoConfig),
       );
@@ -183,7 +262,7 @@ export class App {
     // 401 interceptor also fires on the same underlying `/api/me` 401, but this is
     // the primary, always-correct trigger regardless of which read surfaced it.
     effect(() => {
-      if (this.authState() === 'unauthenticated' && !this.onLoginRoute()) redirectToLogin(this.router);
+      if (this.authState() === 'unauthenticated' && !this.onPublicRoute()) redirectToLogin(this.router);
     });
 
     // The SSE spine's explicit auth-failure channel — a session that
@@ -200,8 +279,20 @@ export class App {
   /** The failed logout's message, `null` while none; rendered outside any menu, which closes on trigger. */
   protected readonly logoutError = computed(() => logoutErrorText(this.logoutMutation.error()));
 
+  /** Enters the tenant the picker chose; the shell renders in it. */
+  protected onChooseTenant(tenant: string): void {
+    this.tenant.enter(tenant);
+  }
+
   protected onLogout(): void {
     this.logoutMutation.mutate();
+  }
+
+  /** The project lens's notice — a link that named no project of the tenant, opened on All. */
+  protected readonly lensNotice = this.lens.notice;
+
+  protected dismissLensNotice(): void {
+    this.lens.dismissNotice();
   }
 
   /** Header status: the live stream's connection state, falling back to the health read. */

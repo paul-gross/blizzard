@@ -7,13 +7,14 @@
   [hasSelection]="chunkId() !== null"
   (back)="onBack()"
 >
-  <fleet-kit-panel kit-master-detail-list class="gr-list" label="Runs">
+  <fleet-kit-panel kit-master-detail-list class="gr-list" [label]="'Runs · ' + projectName()">
     <app-run-list
       [rows]="runs.listRows()"
       [selectedChunkId]="chunkId()"
       [state]="runs.listState()"
       (runPick)="selectRun($event)"
     />
+    <p class="list-foot" data-testid="gardening-runs-foot">each run sweeps {{ projectName() }}'s repositories only</p>
   </fleet-kit-panel>
   <fleet-kit-panel kit-master-detail-detail class="gr-detail" label="Run">
     <router-outlet />

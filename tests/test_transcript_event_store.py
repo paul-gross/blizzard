@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from sqlalchemy import select
 from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.sql import ClauseElement, visitors
@@ -27,9 +26,13 @@ from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal import transcript_event_store as store_module
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
+from blizzard.hub.store.scoped import ScopedStatements
+from blizzard.hub.tenancy import StoreScope, TenantId
 from tests.support import hub_store_connections, seed_chunk, seed_graph
 
 pytestmark = pytest.mark.unit
+
+_STMTS = ScopedStatements(StoreScope(TenantId("ten_transcripts")))
 
 _NOW = datetime(2026, 8, 12, tzinfo=UTC)
 _EXTRACTOR_VERSION = "blizzard-analytics/1"
@@ -116,28 +119,26 @@ def _migrated_engine(tmp_path: Path, *, chunk_ids: tuple[str, ...] = ("ch_1", "c
 def _executed_statements() -> dict[str, ClauseElement]:
     m = store_module
     return {
-        "_visible_segment_ids_stmt": m._visible_segment_ids_stmt(),
-        "_derived_segment_ids_stmt": m._derived_segment_ids_stmt(),
-        "_segment_records_stmt": m._segment_records_stmt("sg_1"),
-        "_marker_stmt": m._marker_stmt("sg_1", _EXTRACTOR_VERSION),
-        "_delete_events_stmt": m._delete_events_stmt("sg_1", _EXTRACTOR_VERSION),
-        "_delete_marker_stmt": m._delete_marker_stmt("sg_1", _EXTRACTOR_VERSION),
-        "_insert_events_stmt": m._insert_events_stmt("sg_1", _EXTRACTOR_VERSION, [_event()], _PROVENANCE),
+        "_visible_segment_ids_stmt": m._visible_segment_ids_stmt(_STMTS),
+        "_derived_segment_ids_stmt": m._derived_segment_ids_stmt(_STMTS),
+        "_segment_records_stmt": m._segment_records_stmt(_STMTS, "sg_1"),
+        "_marker_stmt": m._marker_stmt(_STMTS, "sg_1", _EXTRACTOR_VERSION),
+        "_delete_events_stmt": m._delete_events_stmt(_STMTS, "sg_1", _EXTRACTOR_VERSION),
+        "_delete_marker_stmt": m._delete_marker_stmt(_STMTS, "sg_1", _EXTRACTOR_VERSION),
+        "_insert_events_stmt": m._insert_events_stmt(_STMTS),
         "_upsert_marker_stmt": m._upsert_marker_stmt(
-            "sg_1", _EXTRACTOR_VERSION, content_fingerprint="fp", event_count=1, complete=True, at=_NOW
+            _STMTS, "sg_1", _EXTRACTOR_VERSION, content_fingerprint="fp", event_count=1, complete=True, at=_NOW
         ),
-        "_delete_all_events_for_segments_stmt": m._delete_all_events_for_segments_stmt(frozenset({"sg_1"})),
-        "_delete_all_markers_for_segments_stmt": m._delete_all_markers_for_segments_stmt(frozenset({"sg_1"})),
-        "_candidacy_digests_stmt": m._candidacy_digests_stmt(),
-        "_current_markers_stmt": m._current_markers_stmt(_EXTRACTOR_VERSION),
-        "_derivation_signature_stmt": m._derivation_signature_stmt(),
-        "_markers_stmt": m._markers_stmt(_EXTRACTOR_VERSION),
-        "_segment_records_for_ids_stmt": m._segment_records_for_ids_stmt(["sg_1"]),
-        "_segment_contexts_stmt": m._segment_contexts_stmt(["sg_1"]),
-        "_drop_identities_stmt": m._drop_identities_stmt(["sg_1"]),
-        "_insert_drops_stmt": m._insert_drops_stmt(
-            [{"segment_id": "sg_1", "chunk_id": "ch_1", "epoch": 1, "spawn_generation": 1, "dropped_at": _NOW}]
-        ),
+        "_delete_all_events_for_segments_stmt": m._delete_all_events_for_segments_stmt(_STMTS, frozenset({"sg_1"})),
+        "_delete_all_markers_for_segments_stmt": m._delete_all_markers_for_segments_stmt(_STMTS, frozenset({"sg_1"})),
+        "_candidacy_digests_stmt": m._candidacy_digests_stmt(_STMTS),
+        "_current_markers_stmt": m._current_markers_stmt(_STMTS, _EXTRACTOR_VERSION),
+        "_derivation_signature_stmt": m._derivation_signature_stmt(_STMTS),
+        "_markers_stmt": m._markers_stmt(_STMTS, _EXTRACTOR_VERSION),
+        "_segment_records_for_ids_stmt": m._segment_records_for_ids_stmt(_STMTS, ["sg_1"]),
+        "_segment_contexts_stmt": m._segment_contexts_stmt(_STMTS, ["sg_1"]),
+        "_drop_identities_stmt": m._drop_identities_stmt(_STMTS, ["sg_1"]),
+        "_insert_drops_stmt": m._insert_drops_stmt(_STMTS),
     }
 
 
@@ -506,7 +507,7 @@ def test_replace_segment_events_writes_events_and_marker(tmp_path: Path) -> None
     )
 
     with engine.connect() as conn:
-        rows = conn.execute(select(s.transcript_events)).all()
+        rows = conn.execute(hub_store_connections(engine).select(s.transcript_events)).all()
     assert len(rows) == 1
     assert rows[0].kind == "file_read"
 
@@ -536,7 +537,7 @@ def test_replace_segment_events_converges_under_a_repeated_call(tmp_path: Path) 
         )
 
     with engine.connect() as conn:
-        rows = conn.execute(select(s.transcript_events)).all()
+        rows = conn.execute(hub_store_connections(engine).select(s.transcript_events)).all()
     assert len(rows) == 1
 
 
@@ -564,7 +565,7 @@ def test_replace_segment_events_leaves_other_extractor_versions_untouched(tmp_pa
     )
 
     with engine.connect() as conn:
-        rows = conn.execute(select(s.transcript_events)).all()
+        rows = conn.execute(hub_store_connections(engine).select(s.transcript_events)).all()
     assert {row.extractor_version for row in rows} == {"blizzard-analytics/1", "blizzard-analytics/2"}
     assert len(rows) == 2
 
@@ -583,16 +584,18 @@ def test_replace_segment_events_with_no_events_still_writes_a_marker(tmp_path: P
     assert marker is not None
     assert marker.event_count == 0
     with engine.connect() as conn:
-        rows = conn.execute(select(s.transcript_events)).all()
+        rows = conn.execute(hub_store_connections(engine).select(s.transcript_events)).all()
     assert rows == []
 
 
 def test_the_natural_key_is_enforced_by_the_schema(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
+    insert = store_module._insert_events_stmt(hub_store_connections(engine))
+    rows = store_module._event_rows("sg_1", _EXTRACTOR_VERSION, [_event()], _PROVENANCE)
     with engine.begin() as conn:
-        conn.execute(store_module._insert_events_stmt("sg_1", _EXTRACTOR_VERSION, [_event()], _PROVENANCE))
+        conn.execute(insert, rows)
         with pytest.raises(IntegrityError):
-            conn.execute(store_module._insert_events_stmt("sg_1", _EXTRACTOR_VERSION, [_event()], _PROVENANCE))
+            conn.execute(insert, rows)
 
 
 def test_drop_segments_removes_events_and_markers_at_every_extractor_version(tmp_path: Path) -> None:
@@ -620,8 +623,8 @@ def test_drop_segments_removes_events_and_markers_at_every_extractor_version(tmp
     store.drop_segments(frozenset({"sg_1"}), at=_NOW)
 
     with engine.connect() as conn:
-        assert conn.execute(select(s.transcript_events)).all() == []
-        assert conn.execute(select(s.transcript_event_derivations)).all() == []
+        assert conn.execute(hub_store_connections(engine).select(s.transcript_events)).all() == []
+        assert conn.execute(hub_store_connections(engine).select(s.transcript_event_derivations)).all() == []
     assert store.derived_segment_ids() == frozenset()
 
 
@@ -639,7 +642,11 @@ def _derive(store: TranscriptEventStore, segment_id: str) -> None:
 
 def _drop_rows(engine) -> list[Any]:  # type: ignore[no-untyped-def]
     with engine.connect() as conn:
-        return list(conn.execute(select(s.transcript_event_drops).order_by(s.transcript_event_drops.c.id)).all())
+        return list(
+            conn.execute(
+                hub_store_connections(engine).select(s.transcript_event_drops).order_by(s.transcript_event_drops.c.id)
+            ).all()
+        )
 
 
 def test_drop_segments_writes_one_drop_fact_per_segment_from_its_first_record(tmp_path: Path) -> None:
@@ -704,7 +711,7 @@ def test_a_failure_after_the_deletes_leaves_events_markers_and_no_drop_fact(
     )
     _derive(store, "sg_1")
 
-    def _boom(rows: list[dict[str, Any]]) -> Any:
+    def _boom(stmts: ScopedStatements) -> Any:
         raise RuntimeError("injected")
 
     monkeypatch.setattr(store_module, "_insert_drops_stmt", _boom)
@@ -713,7 +720,7 @@ def test_a_failure_after_the_deletes_leaves_events_markers_and_no_drop_fact(
 
     assert store.derived_segment_ids() == frozenset({"sg_1"})
     with engine.connect() as conn:
-        assert len(conn.execute(select(s.transcript_events)).all()) == 1
+        assert len(conn.execute(hub_store_connections(engine).select(s.transcript_events)).all()) == 1
     assert _drop_rows(engine) == []
 
 
@@ -771,8 +778,8 @@ def test_drop_segments_batches_a_stale_set_larger_than_one_batch(
     store.drop_segments(frozenset(segment_ids), at=_NOW)
 
     with engine.connect() as conn:
-        assert conn.execute(select(s.transcript_events)).all() == []
-        assert conn.execute(select(s.transcript_event_derivations)).all() == []
+        assert conn.execute(hub_store_connections(engine).select(s.transcript_events)).all() == []
+        assert conn.execute(hub_store_connections(engine).select(s.transcript_event_derivations)).all() == []
     assert store.derived_segment_ids() == frozenset()
 
 

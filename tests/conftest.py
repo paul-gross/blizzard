@@ -22,6 +22,7 @@ from blizzard.foundation.operator_sessions.internal import session_file
 from blizzard.hub import app as hub_app
 from blizzard.hub import runtime as hub_runtime
 from blizzard.hub.domain.config.legacy_keys import LEGACY_FORGE_VARIABLES
+from blizzard.hub.store.tenant_guard import GUARD_ENVIRONMENT_VARIABLE, install_tenant_guard
 from blizzard.runner import app as runner_app
 from blizzard.runner import runtime as runner_runtime
 from blizzard.runner.config import DEFAULT_TOKEN_ENV, ENV_HUB_URL
@@ -152,7 +153,10 @@ def pytest_configure() -> None:
     """Unsign every git commit the suite spawns: parallel workers overload a host's gpg-agent.
 
     Also drop the legacy forge variables a feature-env shell carries: every hub the suite
-    spawns inherits this environ, and a hub refuses to start while one is set."""
+    spawns inherits this environ, and a hub refuses to start while one is set.
+
+    Switch the tenant statement guard on for every engine the suite opens: in process here, and in every hub
+    subprocess, which inherits the variable and installs the guard as it opens its engine."""
     for name in LEGACY_FORGE_VARIABLES:
         os.environ.pop(name, None)
     os.environ.update(
@@ -164,6 +168,8 @@ def pytest_configure() -> None:
             "GIT_CONFIG_VALUE_1": "false",
         }
     )
+    os.environ[GUARD_ENVIRONMENT_VARIABLE] = "1"
+    install_tenant_guard()
 
 
 @pytest.fixture(autouse=True)

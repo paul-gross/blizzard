@@ -29,6 +29,8 @@ from blizzard.hub.domain.garden.findings.model import (
     supersede_facts,
 )
 
+_PROJECT = "proj_test"
+
 pytestmark = pytest.mark.unit
 
 _AT = datetime(2026, 1, 1, tzinfo=UTC)
@@ -37,6 +39,7 @@ _PERSON_EXITS = sorted(EXIT_KINDS - {"superseded"})
 
 def _finding(finding_id: str = "fin_1", *, state: str = "live", actor: str | None = None) -> Finding:
     return Finding(
+        project_id=_PROJECT,
         finding_id=finding_id,
         routine_name="nightly",
         scope_slug="runner",

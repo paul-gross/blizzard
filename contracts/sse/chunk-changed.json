@@ -12,7 +12,8 @@
     "runner_id": "runner-a",
     "cause": "node-completed",
     "graph_id": "adv-dwf",
-    "key": "transitions:tr_01J"
+    "key": "transitions:tr_01J",
+    "project_id": "proj_1"
   },
   "deleted": {
     "chunk_id": "ch_1",

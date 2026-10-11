@@ -4,6 +4,7 @@ names each side independently holds — the one join rests on."""
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -16,46 +17,65 @@ from blizzard.hub.domain.garden.routines import Routine
 from blizzard.hub.domain.garden.runs.baselines import RepoLandings, RoutineBaselineService
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingSetStore
-from tests.support import chunk_stores, hub_store_connections, migrate_to, seed_chunk, seed_graph
+from tests.support import (
+    chunk_stores,
+    default_project,
+    hub_store_connections,
+    migrate_to,
+    seed_chunk,
+    seed_graph,
+    stamp,
+)
 
 pytestmark = pytest.mark.component
 
+_PROJECT = "proj_test"
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 _ROUTINE = Routine(
-    routine_id="rtn_1", name="gardening", graph_name="default", default_scope_slug="blizzard", created_at=_NOW
+    routine_id="rtn_1",
+    name="gardening",
+    graph_name="default",
+    default_scope_slug="blizzard",
+    created_at=_NOW,
+    project_id=_PROJECT,
 )
 
 
 def _seed_artifact(conn, artifact_id: str, *, chunk_id: str) -> None:  # type: ignore[no-untyped-def]
     conn.execute(
         insert(s.artifacts).values(
-            artifact_id=artifact_id,
-            chunk_id=chunk_id,
-            node_id="nd_1",
-            node_name="survey",
-            epoch=1,
-            name="findings-blizzard",
-            kind="asset",
-            data="[]",
-            produced_at=_NOW,
-            seq=1,
+            stamp(
+                s.artifacts,
+                artifact_id=artifact_id,
+                chunk_id=chunk_id,
+                node_id="nd_1",
+                node_name="survey",
+                epoch=1,
+                name="findings-blizzard",
+                kind="asset",
+                data="[]",
+                produced_at=_NOW,
+                seq=1,
+            )
         )
     )
 
 
 def test_landed_since_joins_the_finding_sets_repo_names_against_delivery(tmp_path: Path) -> None:
     _, engine = migrate_to(tmp_path, "head")
+    project = default_project(engine)
     with engine.begin() as conn:
         seed_graph(conn, "gr_1", at=_NOW)
         seed_chunk(conn, "ch_1", graph_id="gr_1", at=_NOW)
         seed_chunk(conn, "ch_2", graph_id="gr_1", at=_NOW)
-        conn.execute(insert(s.scopes).values(slug="blizzard", description="", created_at=_NOW))
+        conn.execute(insert(s.scopes).values(stamp(s.scopes, slug="blizzard", description="", created_at=_NOW)))
         _seed_artifact(conn, "art_1", chunk_id="ch_1")
 
     baseline_at = _NOW
     finding_set_id = Id.mint_at("fins", baseline_at).value
     FindingSetStore(hub_store_connections(engine)).create(
         finding_set_id,
+        project_id=project,
         artifact_id="art_1",
         chunk_id="ch_1",
         scope_slug="blizzard",
@@ -65,14 +85,14 @@ def test_landed_since_joins_the_finding_sets_repo_names_against_delivery(tmp_pat
     )
     delivery = chunk_stores(engine, FixedClock(instant=_NOW)).delivery
     delivery.record_delivery_repo_landed(
-        "ch_2", repo="blizzard", commit_hash="e4f5", at=baseline_at + timedelta(hours=1)
+        "ch_2", repo="blizzard", commit_hash="e4f5", repository_name=None, at=baseline_at + timedelta(hours=1)
     )
     delivery.record_delivery_repo_landed(
-        "ch_2", repo="other-repo", commit_hash="9988", at=baseline_at + timedelta(hours=1)
+        "ch_2", repo="other-repo", commit_hash="9988", repository_name=None, at=baseline_at + timedelta(hours=1)
     )
 
     service = RoutineBaselineService(finding_sets=FindingSetStore(hub_store_connections(engine)), delivery=delivery)
-    baselines = service.baselines_for(_ROUTINE)
+    baselines = service.baselines_for(replace(_ROUTINE, project_id=project))
 
     assert len(baselines) == 1
     baseline = baselines[0]

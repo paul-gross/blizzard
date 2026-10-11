@@ -47,6 +47,15 @@ class GardenProposalFindingExitedError(ValueError):
         self.finding_id = finding_id
 
 
+class GardenProposalFindingOtherProjectError(ValueError):
+    """`create`/`attach` named a finding of a project other than the proposal's — the whole
+    call is refused, nothing links."""
+
+    def __init__(self, finding_id: str) -> None:
+        super().__init__(f"finding {finding_id!r} belongs to another project than the proposal")
+        self.finding_id = finding_id
+
+
 class GardenProposalFindingAlreadyLinkedError(ValueError):
     """`attach` named a finding already linked to *this* proposal —
     re-linking a finding already linked to *another* proposal, open or closed, is
@@ -201,6 +210,14 @@ def citable_finding_ids(findings: Sequence[Finding], *, require_unexited: bool) 
     return finding_ids
 
 
+def require_own_project(findings: Sequence[Finding], project_id: str) -> None:
+    """Refuse, naming the first, a finding of a project other than `project_id`
+    (:class:`GardenProposalFindingOtherProjectError`) — a proposal cites only its own project's findings."""
+    for finding in findings:
+        if finding.project_id != project_id:
+            raise GardenProposalFindingOtherProjectError(finding.finding_id)
+
+
 @domain_model
 @dataclass(frozen=True)
 class GardenProposal:
@@ -213,12 +230,14 @@ class GardenProposal:
     created_at: datetime
     created_by: str | None = None  # set only for `GardenProposalOrigin.OPERATOR`
     findings: list[str] = field(default_factory=list)  # the finding ids this proposal answers
+    project_id: str = field(kw_only=True)  # a routine-run's routine's project, or the operator's call's
 
     @classmethod
     def operator(
         cls,
         proposal_id: str,
         *,
+        project_id: str,
         created_by: str,
         routine_name: str | None,
         class_: str,
@@ -228,12 +247,13 @@ class GardenProposal:
         at: datetime,
     ) -> GardenProposal:
         """An operator-authored proposal, its text stored stripped. Refuses a blank title,
-        then class, then body, then a repeated or exited finding — the whole proposal,
-        nothing linked."""
+        then class, then body, then a repeated or exited finding, then one of another
+        project than `project_id` — the whole proposal, nothing linked."""
         title = require_text(title, "title")
         class_ = require_text(class_, "class")
         body = require_text(body, "body")
         finding_ids = citable_finding_ids(findings, require_unexited=True)
+        require_own_project(findings, project_id)
         return cls(
             proposal_id=proposal_id,
             origin=GardenProposalOrigin.OPERATOR,
@@ -244,6 +264,7 @@ class GardenProposal:
             created_at=at,
             created_by=created_by,
             findings=finding_ids,
+            project_id=project_id,
         )
 
     def require_legal(self, verb: GardenProposalVerb, closure: GardenProposalClosure | None) -> None:
@@ -263,12 +284,14 @@ class GardenProposal:
 
     def attachable(self, findings: Sequence[Finding], *, closure: GardenProposalClosure | None) -> list[str]:
         """The ids to link. Refuses a closed proposal first, then an empty list, then per
-        finding a repeat or an exited one, then one already linked to this proposal —
-        linked to another proposal, open or closed, is allowed."""
+        finding a repeat or an exited one, then one of another project than this proposal's,
+        then one already linked to this proposal — linked to another proposal, open or
+        closed, is allowed."""
         self.require_legal(GardenProposalVerb.ATTACH, closure)
         if not findings:
             raise GardenProposalNoFindingsError(self.proposal_id)
         finding_ids = citable_finding_ids(findings, require_unexited=True)
+        require_own_project(findings, self.project_id)
         for finding_id in finding_ids:
             if finding_id in self.findings:
                 raise GardenProposalFindingAlreadyLinkedError(self.proposal_id, finding_id)
@@ -308,11 +331,12 @@ def pair_with_closures(
 @domain_model
 @dataclass(frozen=True)
 class GardenProposalCounts:
-    """One origin/routine/class triple's garden-proposal counts over a window:
+    """One project's origin/routine/class triple's garden-proposal counts over a window:
     `open`, `passed`, `accepted_with_item`,
     `accepted_without_item` — each a closure-state bucket. `created` is always their
     sum, derived rather than stored, so it can never disagree with the four it sums."""
 
+    project_id: str
     origin: GardenProposalOrigin
     routine_name: str | None
     class_: str
@@ -344,17 +368,22 @@ class IReadGardenProposalRepository(Protocol):
     def list_all(self) -> list[GardenProposal]: ...
 
     def list_page(
-        self, *, cursor: str | None = None, limit: int, origin: GardenProposalOrigin | None = None
+        self,
+        *,
+        cursor: str | None = None,
+        limit: int,
+        origin: GardenProposalOrigin | None = None,
+        project_id: str | None = None,
     ) -> GardenProposalPage:
         """`list_all`'s bounded sibling, ordered ``(created_at desc, proposal_id desc)``.
         ``cursor`` is a prior :attr:`GardenProposalPage.next_cursor`;
         any other raises :class:`~blizzard.hub.domain.kernel.pagination.MalformedCursor`.
-        ``origin`` narrows to one origin when given, applied in SQL inside the keyset
-        window."""
+        ``origin`` narrows to one origin and ``project_id`` to one project when given, each applied in SQL inside
+        the keyset window."""
         ...
 
     def list_for_routine(
-        self, routine_name: str, *, state: RoutineProposalState = RoutineProposalState.ALL
+        self, project_id: str, routine_name: str, *, state: RoutineProposalState = RoutineProposalState.ALL
     ) -> list[GardenProposal]:
         """Every proposal `routine_name` has raised, newest first — `list_all`'s
         routine-narrowed sibling (mirrors `IReadFindingRepository.list_for_routine`). A
@@ -370,13 +399,14 @@ class IReadGardenProposalRepository(Protocol):
         since: datetime,
         until: datetime,
         routine_name: str | None = None,
+        project_id: str | None = None,
         origin: GardenProposalOrigin | None = None,
     ) -> list[GardenProposalCounts]:
-        """Garden-proposal counts grouped by `(origin, routine_name,
+        """Garden-proposal counts grouped by `(project_id, origin, routine_name,
         class_)`, over `[since, until)` on `created_at` — current closure state, not
-        closure time. `routine_name` narrows to one routine's rows of
+        closure time. `project_id` narrows to one project's rows. `routine_name` narrows to one routine's rows of
         both origins when given, else every routine; `origin` narrows to one origin,
-        applied in SQL. Rows ordered `(origin, routine_name, class_)`."""
+        applied in SQL. Rows ordered `(origin, routine_name, class_, project_id)`."""
         ...
 
 
@@ -388,6 +418,7 @@ class IWriteGardenProposalRepository(IReadGardenProposalRepository, Protocol):
         proposal_id: str,
         *,
         origin: GardenProposalOrigin,
+        project_id: str,
         routine_name: str | None,
         created_by: str | None = None,
         class_: str,
@@ -397,7 +428,8 @@ class IWriteGardenProposalRepository(IReadGardenProposalRepository, Protocol):
         at: datetime,
     ) -> GardenProposal:
         """Insert the proposal row and its `garden_proposal_findings` link rows, in one
-        transaction. `findings` may be empty."""
+        transaction. Raises :class:`GardenProposalFindingOtherProjectError`, writing nothing,
+        when a finding belongs to a project other than `project_id`. `findings` may be empty."""
         ...
 
     def edit(self, proposal_id: str, edit: GardenProposalEdit) -> GardenProposal | None:
@@ -411,8 +443,9 @@ class IWriteGardenProposalRepository(IReadGardenProposalRepository, Protocol):
     def attach(self, proposal_id: str, finding_ids: Sequence[str]) -> GardenProposal | None:
         """Link `finding_ids` to `proposal_id`; `None` when already closed, the same
         row-locked check `edit` uses. Raises :class:`GardenProposalFindingAlreadyLinkedError`
-        when a finding is already linked, re-read under that same lock. `finding_ids` may
-        be empty."""
+        when a finding is already linked, re-read under that same lock, and
+        :class:`GardenProposalFindingOtherProjectError` when one belongs to a project other than
+        the proposal's. `finding_ids` may be empty."""
         ...
 
     def detach(self, proposal_id: str, finding_ids: Sequence[str]) -> GardenProposal | None:
@@ -467,6 +500,7 @@ class GardenProposalAuthoring:
     def create_operator(
         self,
         *,
+        project_id: str,
         created_by: str,
         routine: Routine | None,
         class_: str,
@@ -475,11 +509,12 @@ class GardenProposalAuthoring:
         findings: Sequence[Finding],
     ) -> GardenProposal:
         """Mint an operator-authored proposal (:meth:`GardenProposal.operator`), naming
-        `routine.name` when the caller resolved one, else none — `routine`'s own
+        `routine.name` when the caller resolved one, else none, in `project_id` — `routine`'s own
         existence is the caller's own resolution, not checked here."""
         at = self._clock.now()
         draft = GardenProposal.operator(
             Id.mint_at(IdPrefix.GARDEN_PROPOSAL, at).value,
+            project_id=project_id,
             created_by=created_by,
             routine_name=routine.name if routine is not None else None,
             class_=class_,
@@ -491,6 +526,7 @@ class GardenProposalAuthoring:
         return self._proposals.create(
             draft.proposal_id,
             origin=draft.origin,
+            project_id=draft.project_id,
             routine_name=draft.routine_name,
             created_by=draft.created_by,
             class_=draft.class_,
@@ -543,9 +579,9 @@ class RoutineGardenProposalReader:
         self._closures = closures
 
     def list_for_routine(
-        self, routine_name: str, state: RoutineProposalState = RoutineProposalState.OPEN
+        self, project_id: str, routine_name: str, state: RoutineProposalState = RoutineProposalState.OPEN
     ) -> list[tuple[GardenProposal, GardenProposalClosure | None]]:
-        proposals = self._proposals.list_for_routine(routine_name, state=state)
+        proposals = self._proposals.list_for_routine(project_id, routine_name, state=state)
         if state is RoutineProposalState.OPEN:
             return pair_with_closures(proposals, {}, state)
         return pair_with_closures(proposals, self._closures.get_many([p.proposal_id for p in proposals]), state)

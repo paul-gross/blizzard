@@ -9,16 +9,35 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+import sqlalchemy as sa
 from alembic import op
 
-from blizzard.hub.store.schema import close_intent_attempts
+from blizzard.foundation.store.utc import UtcDateTime
 
 revision: str = "20260913_1200_close_intent_attempts"
 down_revision: str | None = "20260913_1000_transcript_segments_content_digest"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-_TABLES = (close_intent_attempts,)
+# Frozen (``bzh:frozen-revisions``): ``close_intent_attempts`` is a local literal of the hub store's declared
+# shape. ``close_intents`` is an FK-resolution stub: never created, never dropped.
+_frozen_metadata = sa.MetaData()
+sa.Table(
+    "close_intents",
+    _frozen_metadata,
+    sa.Column("id", sa.Integer, primary_key=True),
+)
+_close_intent_attempts = sa.Table(
+    "close_intent_attempts",
+    _frozen_metadata,
+    sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
+    sa.Column("intent_id", sa.Integer, sa.ForeignKey("close_intents.id"), nullable=False),
+    sa.Column("attempted_at", UtcDateTime, nullable=False),
+    sa.Column("outcome", sa.String, nullable=False),
+)
+sa.Index("ix_close_intent_attempts_intent_id", _close_intent_attempts.c.intent_id)
+
+_TABLES = (_close_intent_attempts,)
 
 
 def upgrade() -> None:

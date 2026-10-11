@@ -1,14 +1,14 @@
 """The runner tick's slim batch status read — one bulk-by-id-set call to
-each of the facts/route/decisions seams."""
+each of the facts/route/decisions seams, and to the chunks' projects."""
 
 from __future__ import annotations
 
-from blizzard.hub.api.chunk_views import pause_view, usage_total_view
-from blizzard.hub.composition import HubServices
+from blizzard.hub.api.chunk_views import pause_view, project_label_fields, usage_total_view
+from blizzard.hub.composition import TenantServices
 from blizzard.wire.chunk import ChunkDecisionStatusView, ChunkStatusView
 
 
-def chunk_statuses(chunk_ids: list[str], services: HubServices) -> list[ChunkStatusView]:
+def chunk_statuses(chunk_ids: list[str], services: TenantServices) -> list[ChunkStatusView]:
     """One :class:`ChunkStatusView` per requested id, de-duplicated preserving order. An
     id unknown to (or ephemeral in) the store is silently omitted, never a 404 — a lazy
     tick read routinely races a chunk's own deletion/grouping."""
@@ -18,6 +18,8 @@ def chunk_statuses(chunk_ids: list[str], services: HubServices) -> list[ChunkSta
     facts_by_id = services.chunks.facts.status_facts_for(ids)
     routes_by_id = services.chunks.route.routes_for(ids)
     decisions_by_id = services.chunks.decisions.live_decisions_for(ids)
+    project_by_id = {chunk_id: chunk.project_id for chunk_id, chunk in services.chunks.record.get_many(ids).items()}
+    projects = services.projects.get_many(sorted({p for p in project_by_id.values() if p is not None}))
 
     views: list[ChunkStatusView] = []
     for chunk_id in ids:
@@ -26,6 +28,8 @@ def chunk_statuses(chunk_ids: list[str], services: HubServices) -> list[ChunkSta
             continue
         route = routes_by_id.get(chunk_id)
         decision = decisions_by_id.get(chunk_id)
+        project_id = project_by_id.get(chunk_id)
+        project = projects.get(project_id) if project_id is not None else None
         views.append(
             ChunkStatusView(
                 chunk_id=chunk_id,
@@ -45,6 +49,7 @@ def chunk_statuses(chunk_ids: list[str], services: HubServices) -> list[ChunkSta
                 )
                 if decision is not None
                 else None,
+                **project_label_fields(project_id, project),
             )
         )
     return views

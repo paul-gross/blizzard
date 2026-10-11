@@ -72,4 +72,19 @@ describe('LoginButtons', () => {
 
     expect(clicked).toEqual(['github']);
   });
+
+  it('carries an invitation token on each authorize link beside return_to', async () => {
+    const fixture = TestBed.createComponent(LoginButtons);
+    fixture.componentRef.setInput('providers', PROVIDERS);
+    fixture.componentRef.setInput('invite', 'tok_a/b+c');
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="login-provider-github"]')?.getAttribute('href')).toBe(
+      '/api/auth/github/authorize?return_to=%2F&invite=tok_a%2Fb%2Bc',
+    );
+    expect(el.querySelector('[data-testid="login-provider-oidc-co"]')?.getAttribute('href')).toBe(
+      '/api/auth/oidc-co/authorize?return_to=%2F&invite=tok_a%2Fb%2Bc',
+    );
+  });
 });

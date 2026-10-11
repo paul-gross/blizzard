@@ -45,6 +45,7 @@ def test_tables_and_columns_exist_after_upgrading_an_existing_store(tmp_path: Pa
         "created_at",
         "expires_at",
         "user_id",  # added by a later revision
+        "invitation_token_hash",  # added by a later revision
     }
 
     facts_columns = {c["name"] for c in inspector.get_columns("auth_facts")}

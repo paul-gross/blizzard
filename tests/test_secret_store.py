@@ -9,7 +9,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
-from sqlalchemy import Engine, select, update
+from sqlalchemy import Engine
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store import batching as batching_module
@@ -52,11 +52,13 @@ class _World:
 
     def raw(self, name: str):  # type: ignore[no-untyped-def]
         with self.engine.connect() as conn:
-            return conn.execute(select(secrets).where(secrets.c.name == name)).one()
+            return conn.execute(hub_store_connections(self.engine).select(secrets).where(secrets.c.name == name)).one()
 
     def overwrite(self, name: str, **values: object) -> None:
         with self.engine.begin() as conn:
-            conn.execute(update(secrets).where(secrets.c.name == name).values(**values))
+            conn.execute(
+                hub_store_connections(self.engine).update(secrets).where(secrets.c.name == name).values(**values)
+            )
 
 
 @pytest.fixture

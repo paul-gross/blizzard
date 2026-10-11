@@ -13,6 +13,9 @@ from blizzard.foundation import cli_spans
 from blizzard.foundation.trace_spans import Attributes
 
 CALLER = "blizzard.caller"
+#: The id of the tenant a request acts in, and that tenant's name.
+TENANT = "blizzard.tenant"
+TENANT_NAME = "blizzard.tenant_name"
 
 #: The attributes a CLI span may carry, each with its declared value type (``string``, ``int`` or ``double``).
 CLI_ATTRIBUTES: Mapping[str, str] = {
@@ -39,3 +42,7 @@ def annotate(attributes: Attributes) -> None:
 
 def annotate_caller(caller: Caller) -> None:
     annotate({CALLER: caller})
+
+
+def annotate_tenant(tenant: str, name: str) -> None:
+    annotate({TENANT: tenant, TENANT_NAME: name})

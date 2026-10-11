@@ -7,11 +7,11 @@ from datetime import timedelta
 from pathlib import Path
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import func
 
 from blizzard.hub.domain.observability.analytics.derivation import FORCED_FULL_PASS_FLOOR, ReDeriveScope
 from blizzard.hub.store import schema as s
-from tests.support import build_hub
+from tests.support import build_hub, hub_store_connections
 from tests.test_analytics_events_api import _ingest_chunk, _record, _tool_turn
 
 pytestmark = pytest.mark.component
@@ -63,7 +63,7 @@ def _push(hub, chunk_id: str, *, segment_id: str, supersedes: str | None = None,
 
 def _count(hub, table) -> int:  # type: ignore[no-untyped-def]
     with hub.engine.connect() as conn:
-        return int(conn.execute(select(func.count()).select_from(table)).scalar_one())
+        return int(conn.execute(hub_store_connections(hub.engine).select(table, func.count())).scalar_one())
 
 
 def _force(hub, segment_id: str) -> dict:  # type: ignore[no-untyped-def]
@@ -112,14 +112,14 @@ def test_the_route_reports_a_not_visible_segment(tmp_path: Path) -> None:
 
 def test_a_sweep_after_a_refused_force_appends_no_drop_fact(tmp_path: Path) -> None:
     hub, chunk_id = _hub_with_one_segment(tmp_path)
-    hub.services.event_derivation.sweep()
+    hub.hub_services.event_derivation.sweep()
     _push(hub, chunk_id, segment_id="sg_2", supersedes="sg_1")
-    hub.services.event_derivation.sweep()
+    hub.hub_services.event_derivation.sweep()
     assert _count(hub, s.transcript_event_drops) == 1
 
     assert _force(hub, "sg_1")["not_visible"] is True
     hub.clock.advance(FORCED_FULL_PASS_FLOOR + timedelta(seconds=1))
-    hub.services.event_derivation.sweep()
+    hub.hub_services.event_derivation.sweep()
 
     assert _count(hub, s.transcript_event_drops) == 1
 

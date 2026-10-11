@@ -12,6 +12,7 @@ from blizzard.foundation.migration_source import MigrationSource
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.model import UsageFact
 from blizzard.hub.domain.graph.model import Graph
+from blizzard.hub.tenancy import TenantId
 
 
 @domain_model
@@ -240,3 +241,16 @@ class StepFacts:
     work_sources: tuple[str, ...] = ()
     #: Each named runner's registered name, keyed by runner id; one the hub holds no registration for is absent.
     runner_names: dict[str, str] = field(default_factory=dict)
+    #: The tenant the row was read in — carried beside it, not part of its identity: equality, order and
+    #: hashing stay on the fields above. ``None`` where no tenant was read.
+    tenant: TenantId | None = field(default=None, compare=False)
+    #: The tenant's name when the row was read — carried beside it like ``tenant``, outside its identity.
+    #: ``None`` where no tenant, or no name for it, was read.
+    tenant_name: str | None = field(default=None, compare=False)
+    #: The project the chunk belongs to, read from the chunk row — carried beside it like ``tenant``, outside its
+    #: identity. ``None`` where no project was read.
+    project: str | None = field(default=None, compare=False)
+    #: That project's slug and name when the row was read — carried like ``tenant_name``. ``None`` where no project,
+    #: or no project record for it, was read.
+    project_slug: str | None = field(default=None, compare=False)
+    project_name: str | None = field(default=None, compare=False)

@@ -3,6 +3,11 @@
 Column codecs, question queries and composite-write helpers live here so adapters
 do not re-derive another seam's reads or writes. Domain callers never import this
 module.
+
+Every statement a helper builds goes through the scope: a helper handed a ``Connection``
+recovers the builders with :func:`statements_of` (so the connection must come from a scoped
+``read``/``write`` or a locked handle over one), and one that builds a reusable statement takes
+the caller's :class:`ScopedStatements`.
 """
 
 from __future__ import annotations
@@ -13,7 +18,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol, cast
 
-from sqlalchemy import Connection, Select, func, insert, literal, select, update
+from sqlalchemy import Connection, Select, func, literal, select
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.chunk_migration import MigrationMode
@@ -34,6 +39,7 @@ from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.domain.work_items.closure import TERMINAL_CLOSE_OUTCOMES
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_terminal_predicates import chunk_is_terminal
+from blizzard.hub.store.scoped import ScopedStatements, statements_of
 
 
 @adapter_model
@@ -78,27 +84,42 @@ class QuestionQuery:
     Both joins are **outer**. Deliveries pre-aggregate to the **earliest** instant per
     question, since ``answer_deliveries`` is append-only with no per-question uniqueness."""
 
-    @property
-    def select(self):  # ast-grep-ignore: bzh:property-delegates  # type: ignore[no-untyped-def]
+    def select(self, stmts: ScopedStatements) -> Select:  # type: ignore[type-arg]
+        """The question read within ``stmts``' scope. A question is keyed ``(tenant_id,
+        question_id)`` — its id is runner-minted — so each outer join matches on both in its
+        ``ON`` (an answer row keeps its outer join outer), and the grouped deliveries are scoped
+        before they aggregate per that key."""
         earliest_delivery = (
-            select(
+            stmts.select(
+                s.answer_deliveries,
+                s.answer_deliveries.c.tenant_id.label("tenant_id"),
                 s.answer_deliveries.c.question_id.label("question_id"),
                 func.min(s.answer_deliveries.c.delivered_at).label("delivered_at"),
             )
-            .group_by(s.answer_deliveries.c.question_id)
+            .group_by(s.answer_deliveries.c.tenant_id, s.answer_deliveries.c.question_id)
             .subquery()
         )
-        return (
-            select(
-                s.questions,
-                s.question_answers.c.answer,
-                s.question_answers.c.answered_by,
-                s.question_answers.c.answered_at,
-                earliest_delivery.c.delivered_at,
-            )
-            .select_from(s.questions)
-            .outerjoin(s.question_answers, s.question_answers.c.question_id == s.questions.c.question_id)
-            .outerjoin(earliest_delivery, earliest_delivery.c.question_id == s.questions.c.question_id)
+        answered = stmts.scope_join(
+            s.questions,
+            s.question_answers,
+            (s.question_answers.c.tenant_id == s.questions.c.tenant_id)
+            & (s.question_answers.c.question_id == s.questions.c.question_id),
+            isouter=True,
+        )
+        delivered = stmts.scope_join(
+            answered,
+            earliest_delivery,
+            (earliest_delivery.c.tenant_id == s.questions.c.tenant_id)
+            & (earliest_delivery.c.question_id == s.questions.c.question_id),
+            isouter=True,
+        )
+        return stmts.select(
+            delivered,
+            s.questions,
+            s.question_answers.c.answer,
+            s.question_answers.c.answered_by,
+            s.question_answers.c.answered_at,
+            earliest_delivery.c.delivered_at,
         )
 
     def of(self, q) -> NodeQuestion:  # type: ignore[no-untyped-def]
@@ -143,9 +164,10 @@ def is_landing_marker(name: str, data: str) -> bool:
 def insert_chunk_rows(conn: Connection, chunk: Chunk) -> None:
     """Insert one chunk's ``chunks`` row and its ``chunk_work_refs`` rows on a
     caller-supplied ``conn`` — the caller owns the transaction boundary, so a composite
-    write can fold this into its own transaction."""
+    write can fold this into its own transaction. The row names the chunk's project."""
+    stmts = statements_of(conn)
     conn.execute(
-        insert(s.chunks).values(
+        stmts.insert(s.chunks).values(
             chunk_id=chunk.chunk_id,
             graph_id=chunk.graph_id,
             minted_at=chunk.minted_at,
@@ -154,10 +176,15 @@ def insert_chunk_rows(conn: Connection, chunk: Chunk) -> None:
             default_model=DEFAULT_MODEL.encode(chunk.default_model),
             default_effort=chunk.default_effort,
             default_harnesses=DEFAULT_HARNESSES.encode(chunk.default_harnesses),
+            # The project the chunk was minted into. A record built by hand carrying none names
+            # none, and the scoped insert decides what an unnamed project means.
+            **({"project_id": chunk.project_id} if chunk.project_id is not None else {}),
         )
     )
     for pointer in chunk.work_refs:
-        conn.execute(insert(s.chunk_work_refs).values(chunk_id=chunk.chunk_id, source=pointer.source, ref=pointer.ref))
+        conn.execute(
+            stmts.insert(s.chunk_work_refs).values(chunk_id=chunk.chunk_id, source=pointer.source, ref=pointer.ref)
+        )
 
 
 def insert_promote_rows(conn: Connection, chunk_id: str, *, position: float, at: datetime) -> int | None:
@@ -165,8 +192,9 @@ def insert_promote_rows(conn: Connection, chunk_id: str, *, position: float, at:
     caller-supplied ``conn`` — mirrors :func:`insert_chunk_rows`'s shared-connection
     shape. No idempotency check; the caller owns it. Returns the freshly-inserted
     ``chunk_promoted.id``."""
-    result = conn.execute(insert(s.chunk_promoted).values(chunk_id=chunk_id, promoted_at=at))
-    conn.execute(insert(s.queue_positions).values(chunk_id=chunk_id, position=position, set_at=at))
+    stmts = statements_of(conn)
+    result = conn.execute(stmts.insert(s.chunk_promoted).values(chunk_id=chunk_id, promoted_at=at))
+    conn.execute(stmts.insert(s.queue_positions).values(chunk_id=chunk_id, position=position, set_at=at))
     key = result.inserted_primary_key
     return int(key[0]) if key is not None else None
 
@@ -176,7 +204,9 @@ def record_deleted_row(conn: Connection, chunk_id: str, *, by: str, at: datetime
     mirrors :func:`insert_chunk_rows`'s shared-connection shape, so the withdrawal
     half of a composite delete write can fold this into its own transaction. Returns
     the freshly-inserted ``chunk_deleted.id``."""
-    result = conn.execute(insert(s.chunk_deleted).values(chunk_id=chunk_id, deleted_at=at, deleted_by=by))
+    result = conn.execute(
+        statements_of(conn).insert(s.chunk_deleted).values(chunk_id=chunk_id, deleted_at=at, deleted_by=by)
+    )
     key = result.inserted_primary_key
     return int(key[0]) if key is not None else 0
 
@@ -186,7 +216,9 @@ def record_grouped_row_conn(conn: Connection, chunk_id: str, *, grouped_into: st
     mirrors :func:`record_deleted_row`'s shared-connection shape, so the fold's own
     composite write can fold every target's row into one transaction. Returns the
     freshly-inserted ``chunk_grouped.id``."""
-    result = conn.execute(insert(s.chunk_grouped).values(chunk_id=chunk_id, grouped_into=grouped_into, grouped_at=at))
+    result = conn.execute(
+        statements_of(conn).insert(s.chunk_grouped).values(chunk_id=chunk_id, grouped_into=grouped_into, grouped_at=at)
+    )
     key = result.inserted_primary_key
     return int(key[0]) if key is not None else 0
 
@@ -196,11 +228,12 @@ _EPHEMERAL_TABLES = (s.chunk_grouped, s.chunk_deleted)
 declared; the subquery helper and the id-set helpers below all derive from it."""
 
 
-def ephemeral_ids_select() -> Select:  # type: ignore[type-arg]
+def ephemeral_ids_select(stmts: ScopedStatements) -> Select:  # type: ignore[type-arg]
     """The ephemeral set as a ``chunk_id`` subquery for a ``NOT IN`` — the union of
-    grouped-away and deleted chunks, for a read that filters in SQL rather than fetching
-    :func:`ephemeral_ids`; widened here so every consumer inherits the exclusion."""
-    first, *rest = (select(t.c.chunk_id) for t in _EPHEMERAL_TABLES)
+    grouped-away and deleted chunks within ``stmts``' scope, each arm scoped on its own, for a
+    read that filters in SQL rather than fetching :func:`ephemeral_ids`; widened here so every
+    consumer inherits the exclusion."""
+    first, *rest = (stmts.select(t, t.c.chunk_id) for t in _EPHEMERAL_TABLES)
     return first.union(*rest)  # type: ignore[return-value]
 
 
@@ -208,7 +241,10 @@ def ephemeral_ids(conn) -> set[str]:  # type: ignore[no-untyped-def]
     """Every chunk id gone from every read — the union of grouped-away
     and deleted chunks; widened here so every consumer across every seam inherits the
     exclusion."""
-    return {r.chunk_id for table in _EPHEMERAL_TABLES for r in conn.execute(select(table.c.chunk_id)).all()}
+    stmts = statements_of(conn)
+    return {
+        r.chunk_id for table in _EPHEMERAL_TABLES for r in conn.execute(stmts.select(table, table.c.chunk_id)).all()
+    }
 
 
 def is_ephemeral_id(conn, chunk_id: str) -> bool:  # type: ignore[no-untyped-def]
@@ -227,10 +263,11 @@ def ephemeral_ids_in(conn, batch: Sequence[str]) -> set[str]:  # type: ignore[no
     if len(batch) == 1:
         (chunk_id,) = batch
         return {chunk_id} if is_ephemeral_id(conn, chunk_id) else set()
+    stmts = statements_of(conn)
     return {
         r.chunk_id
         for table in _EPHEMERAL_TABLES
-        for r in conn.execute(select(table.c.chunk_id).where(table.c.chunk_id.in_(batch))).all()
+        for r in conn.execute(stmts.select(table, table.c.chunk_id).where(table.c.chunk_id.in_(batch))).all()
     }
 
 
@@ -238,12 +275,13 @@ def graph_id_of_batch(conn, batch: Sequence[str] | None) -> dict[str, str]:  # t
     """A selection's chunk id -> graph id pins, ephemeral ids excluded. ``None`` (the
     whole live fleet) keeps :func:`ephemeral_ids`'s own single unfiltered scan; a bounded
     batch delegates to :func:`ephemeral_ids_in`."""
+    stmts = statements_of(conn)
     if batch is None:
         ephemeral = ephemeral_ids(conn)
-        rows = conn.execute(select(s.chunks.c.chunk_id, s.chunks.c.graph_id)).all()
+        rows = conn.execute(stmts.select(s.chunks, s.chunks.c.chunk_id, s.chunks.c.graph_id)).all()
     else:
         rows = conn.execute(
-            select(s.chunks.c.chunk_id, s.chunks.c.graph_id).where(s.chunks.c.chunk_id.in_(batch))
+            stmts.select(s.chunks, s.chunks.c.chunk_id, s.chunks.c.graph_id).where(s.chunks.c.chunk_id.in_(batch))
         ).all()
         ephemeral = ephemeral_ids_in(conn, batch)
     return {r.chunk_id: r.graph_id for r in rows if r.chunk_id not in ephemeral}
@@ -255,8 +293,9 @@ def route_of_conn(conn: Connection, chunk_id: str) -> Route | None:
     :attr:`~blizzard.hub.domain.chunk.model.RouteHistory.newest` owns same-instant ties."""
     # (created_at, seq) desc — must stay in lockstep with the key
     # `RouteHistory.newest` orders by; that property, not this query, owns it.
+    stmts = statements_of(conn)
     created = conn.execute(
-        select(s.route_created)
+        stmts.select(s.route_created)
         .where(s.route_created.c.chunk_id == chunk_id)
         .order_by(s.route_created.c.created_at.desc(), s.route_created.c.seq.desc())
     ).first()
@@ -264,7 +303,7 @@ def route_of_conn(conn: Connection, chunk_id: str) -> Route | None:
         return None
     # (released_at, seq) desc — see the order_by above; same owner.
     released = conn.execute(
-        select(s.route_released.c.released_at, s.route_released.c.seq)
+        stmts.select(s.route_released, s.route_released.c.released_at, s.route_released.c.seq)
         .where(s.route_released.c.chunk_id == chunk_id)
         .order_by(s.route_released.c.released_at.desc(), s.route_released.c.seq.desc())
     ).first()
@@ -275,7 +314,9 @@ def route_of_conn(conn: Connection, chunk_id: str) -> Route | None:
     env_ids = [
         e.environment_id
         for e in conn.execute(
-            select(s.route_environments.c.environment_id).where(s.route_environments.c.route_id == created.route_id)
+            stmts.select(s.route_environments, s.route_environments.c.environment_id).where(
+                s.route_environments.c.route_id == created.route_id
+            )
         ).all()
     ]
     return Route(
@@ -289,36 +330,38 @@ def route_of_conn(conn: Connection, chunk_id: str) -> Route | None:
 
 
 def lock_chunk_row(conn: Connection, chunk_id: str) -> None:
-    """Take the chunk row's write lock, as the transaction's FIRST statement — a no-op
-    ``UPDATE`` on a row the caller already knows exists (``bzh:sql-portable``,
-    ``bzh:store-exclusive-write``; ``tests/test_route_seq_concurrency.py``). Takes
-    SQLite's single writer lock before any later read; on Postgres, queues a concurrent
-    locker of the same row. Every guard read a decision rests on must follow this call."""
-    conn.execute(s.chunks.update().where(s.chunks.c.chunk_id == chunk_id).values(chunk_id=chunk_id))
+    """Take the chunk row's write lock, as the first statement after the scoped write's own
+    tenant-row lock — a no-op ``UPDATE`` on a row the caller already knows exists
+    (``bzh:sql-portable``, ``bzh:store-exclusive-write``; ``tests/test_route_seq_concurrency.py``).
+    On SQLite the tenant-row lock already took the single writer lock, so no later read races a
+    writer; on Postgres, this queues a concurrent locker of the same row. Every guard read a
+    decision rests on must follow this call."""
+    conn.execute(statements_of(conn).update(s.chunks).where(s.chunks.c.chunk_id == chunk_id).values(chunk_id=chunk_id))
 
 
 def lock_keys(conn: Connection, namespace: str, keys: Sequence[str]) -> None:
-    """Take the write lock of each ``(namespace, key)`` row of ``keyed_locks``, in sorted key
-    order, as the transaction's FIRST statements — for a decision whose race has no existing
-    row to lock (``bzh:store-exclusive-write``). A no-op ``UPDATE`` on an absent row locks
-    nothing, so each row is first inserted if unseen: in its own savepoint, so a concurrent
-    insert of the same key loses with an ``IntegrityError`` that rolls back only that insert
-    (the shape of ``review_findings_store._mint_scope_if_unseen``). The ``UPDATE`` then locks
-    a row that exists: SQLite's single writer lock on the first statement; on Postgres, a
-    concurrent locker of the same key queues behind this transaction's commit. Rows are
-    never deleted."""
+    """Take the write lock of each ``(tenant_id, namespace, key)`` row of ``keyed_locks``, in
+    sorted key order, as the first statements after the scoped write's own tenant-row lock — for
+    a decision whose race has no existing row to lock (``bzh:store-exclusive-write``). The
+    scoped insert stamps the write's tenant into the key, so two tenants locking one graph name
+    or work ref each hold their own row, serialized only within the tenant. A no-op
+    ``UPDATE`` on an absent row locks nothing, so each row is first inserted if unseen: in its
+    own savepoint, so a concurrent insert of the same key loses with an ``IntegrityError`` that
+    rolls back only that insert (the shape of ``review_findings_store._mint_scope_if_unseen``).
+    The ``UPDATE`` then locks a row that exists: on SQLite the tenant-row lock already holds the
+    single writer lock; on Postgres, a concurrent locker of the same key queues behind this
+    transaction's commit. Rows are never deleted."""
+    stmts = statements_of(conn)
     lock = s.keyed_locks
     for key in sorted(set(keys)):
-        if (
-            conn.execute(select(lock.c.key).where((lock.c.namespace == namespace) & (lock.c.key == key))).first()
-            is None
-        ):
+        named = (lock.c.namespace == namespace) & (lock.c.key == key)
+        if conn.execute(stmts.select(lock, lock.c.key).where(named)).first() is None:
             try:
                 with conn.begin_nested():
-                    conn.execute(insert(lock).values(namespace=namespace, key=key))
+                    conn.execute(stmts.insert(lock).values(namespace=namespace, key=key))
             except IntegrityError:
                 pass
-        conn.execute(update(lock).where((lock.c.namespace == namespace) & (lock.c.key == key)).values(key=key))
+        conn.execute(stmts.update(lock).where(named).values(key=key))
 
 
 class _LockedConnection(Protocol):
@@ -348,15 +391,11 @@ def next_route_seq(conn: Connection, chunk_id: str) -> int:
     when timestamps tie. Read-then-insert, so concurrent callers are serialized by
     :func:`lock_chunk_row` (``bzh:sql-portable``; ``tests/test_route_seq_concurrency.py``)."""
     lock_chunk_row(conn, chunk_id)
-    created_max = conn.execute(
-        select(func.max(s.route_created.c.seq)).where(s.route_created.c.chunk_id == chunk_id)
-    ).scalar()
-    released_max = conn.execute(
-        select(func.max(s.route_released.c.seq)).where(s.route_released.c.chunk_id == chunk_id)
-    ).scalar()
-    token_max = conn.execute(
-        select(func.max(s.route_token_minted.c.seq)).where(s.route_token_minted.c.chunk_id == chunk_id)
-    ).scalar()
+    stmts = statements_of(conn)
+    created_max, released_max, token_max = (
+        conn.execute(stmts.select(table, func.max(table.c.seq)).where(table.c.chunk_id == chunk_id)).scalar()
+        for table in (s.route_created, s.route_released, s.route_token_minted)
+    )
     return max(created_max or 0, released_max or 0, token_max or 0) + 1
 
 
@@ -366,7 +405,9 @@ def next_artifact_seq(conn: Connection, chunk_id: str) -> int:
     concurrent callers are serialized by :func:`lock_chunk_row` (``bzh:sql-portable``;
     ``tests/test_artifact_seq_concurrency.py``). Call it in the inserting transaction."""
     lock_chunk_row(conn, chunk_id)
-    current = conn.execute(select(func.max(s.artifacts.c.seq)).where(s.artifacts.c.chunk_id == chunk_id)).scalar()
+    current = conn.execute(
+        statements_of(conn).select(s.artifacts, func.max(s.artifacts.c.seq)).where(s.artifacts.c.chunk_id == chunk_id)
+    ).scalar()
     return (current or 0) + 1
 
 
@@ -375,7 +416,9 @@ def graph_id_of(conn: Connection, chunk_id: str) -> str:
     with. Read inside the writing transaction so a transition always
     carries the graph it actually moved within, even as a later migration re-pins
     ``chunks.graph_id`` in a subsequent write."""
-    return conn.execute(select(s.chunks.c.graph_id).where(s.chunks.c.chunk_id == chunk_id)).scalar_one()
+    return conn.execute(
+        statements_of(conn).select(s.chunks, s.chunks.c.graph_id).where(s.chunks.c.chunk_id == chunk_id)
+    ).scalar_one()
 
 
 def latest_epoch(conn: Connection, chunk_id: str) -> int:
@@ -383,24 +426,20 @@ def latest_epoch(conn: Connection, chunk_id: str) -> int:
 
     A claim's reservation raises the fence; reading here prevents an overtaken
     read-then-write decision (``bzh:epoch-fencing``)."""
-    lease_max = conn.execute(
-        select(func.max(s.lease_facts.c.epoch)).where(s.lease_facts.c.chunk_id == chunk_id)
-    ).scalar()
-    restart_max = conn.execute(
-        select(func.max(s.chunk_restarts.c.epoch)).where(s.chunk_restarts.c.chunk_id == chunk_id)
-    ).scalar()
-    owner_max = conn.execute(
-        select(func.max(s.epoch_owners.c.epoch)).where(s.epoch_owners.c.chunk_id == chunk_id)
-    ).scalar()
+    stmts = statements_of(conn)
+    lease_max, restart_max, owner_max = (
+        conn.execute(stmts.select(table, func.max(table.c.epoch)).where(table.c.chunk_id == chunk_id)).scalar()
+        for table in (s.lease_facts, s.chunk_restarts, s.epoch_owners)
+    )
     return max(lease_max or 0, restart_max or 0, owner_max or 0)
 
 
 def epoch_owner(conn: Connection, chunk_id: str, epoch: int) -> EpochOwner | None:
     """The owner recorded for one epoch of the chunk, or ``None`` while it is unowned."""
     row = conn.execute(
-        select(s.epoch_owners.c.runner_id).where(
-            (s.epoch_owners.c.chunk_id == chunk_id) & (s.epoch_owners.c.epoch == epoch)
-        )
+        statements_of(conn)
+        .select(s.epoch_owners, s.epoch_owners.c.runner_id)
+        .where((s.epoch_owners.c.chunk_id == chunk_id) & (s.epoch_owners.c.epoch == epoch))
     ).first()
     if row is None:
         return None
@@ -410,7 +449,8 @@ def epoch_owner(conn: Connection, chunk_id: str, epoch: int) -> EpochOwner | Non
 def owning_lease_id(conn: Connection, chunk_id: str, epoch: int) -> str | None:
     """The lease that owns an epoch — the earliest admitted mint at it that named one."""
     return conn.execute(
-        select(s.lease_facts.c.lease_id)
+        statements_of(conn)
+        .select(s.lease_facts, s.lease_facts.c.lease_id)
         .where(
             (s.lease_facts.c.chunk_id == chunk_id)
             & (s.lease_facts.c.epoch == epoch)
@@ -428,18 +468,25 @@ def record_epoch_owner(conn: Connection, chunk_id: str, epoch: int, owner: Epoch
     if epoch_owner(conn, chunk_id, epoch) is not None:
         return
     conn.execute(
-        s.epoch_owners.insert().values(chunk_id=chunk_id, epoch=epoch, runner_id=owner.runner_id, recorded_at=at)
+        statements_of(conn)
+        .insert(s.epoch_owners)
+        .values(chunk_id=chunk_id, epoch=epoch, runner_id=owner.runner_id, recorded_at=at)
     )
 
 
 def record_hub_lease(conn: Connection, chunk_id: str, *, epoch: int, runner_id: str, at: datetime) -> None:
     """A hub mint: its ``lease_facts`` row and the epoch's hub ownership, together."""
-    conn.execute(s.lease_facts.insert().values(chunk_id=chunk_id, epoch=epoch, runner_id=runner_id, minted_at=at))
+    conn.execute(
+        statements_of(conn)
+        .insert(s.lease_facts)
+        .values(chunk_id=chunk_id, epoch=epoch, runner_id=runner_id, minted_at=at)
+    )
     record_epoch_owner(conn, chunk_id, epoch, EpochOwner.hub(), at=at)
 
 
 def row_exists(conn, table, chunk_id: str) -> bool:  # type: ignore[no-untyped-def]
-    return conn.execute(select(table.c.chunk_id).where(table.c.chunk_id == chunk_id).limit(1)).first() is not None
+    stmt = statements_of(conn).select(table, table.c.chunk_id).where(table.c.chunk_id == chunk_id).limit(1)
+    return conn.execute(stmt).first() is not None
 
 
 def fence(
@@ -484,7 +531,7 @@ def mint_admission(conn: Connection, chunk_id: str, *, epoch: int, runner_id: st
 def _is_terminal(conn: Connection, chunk_id: str) -> bool:
     """Whether the chunk is stopped or done, read on the caller's connection so this sits inside the same
     transaction as the write it fences."""
-    return bool(conn.execute(select(chunk_is_terminal(literal(chunk_id)))).scalar())
+    return bool(conn.execute(select(chunk_is_terminal(statements_of(conn), literal(chunk_id)))).scalar())
 
 
 def enqueue_close_intents(conn: Connection, chunk_id: str, *, at: datetime) -> None:
@@ -494,15 +541,18 @@ def enqueue_close_intents(conn: Connection, chunk_id: str, *, at: datetime) -> N
     ``(chunk_id, source, ref)`` key prevents replay duplicates."""
     if is_ephemeral_id(conn, chunk_id):
         return
+    stmts = statements_of(conn)
     refs = conn.execute(
-        select(s.chunk_work_refs.c.source, s.chunk_work_refs.c.ref).where(s.chunk_work_refs.c.chunk_id == chunk_id)
+        stmts.select(s.chunk_work_refs, s.chunk_work_refs.c.source, s.chunk_work_refs.c.ref).where(
+            s.chunk_work_refs.c.chunk_id == chunk_id
+        )
     ).all()
     if not refs:
         return
     terminal = {
         (r.source, r.ref)
         for r in conn.execute(
-            select(s.work_item_closures.c.source, s.work_item_closures.c.ref).where(
+            stmts.select(s.work_item_closures, s.work_item_closures.c.source, s.work_item_closures.c.ref).where(
                 (s.work_item_closures.c.chunk_id == chunk_id)
                 & s.work_item_closures.c.outcome.in_(sorted(outcome.value for outcome in TERMINAL_CLOSE_OUTCOMES))
             )
@@ -511,14 +561,16 @@ def enqueue_close_intents(conn: Connection, chunk_id: str, *, at: datetime) -> N
     already = {
         (r.source, r.ref)
         for r in conn.execute(
-            select(s.close_intents.c.source, s.close_intents.c.ref).where(s.close_intents.c.chunk_id == chunk_id)
+            stmts.select(s.close_intents, s.close_intents.c.source, s.close_intents.c.ref).where(
+                s.close_intents.c.chunk_id == chunk_id
+            )
         ).all()
     }
     for row in refs:
         if (row.source, row.ref) in terminal or (row.source, row.ref) in already:
             continue
         conn.execute(
-            insert(s.close_intents).values(
+            stmts.insert(s.close_intents).values(
                 chunk_id=chunk_id, source=row.source, ref=row.ref, enqueued_at=at, retired_at=None
             )
         )
@@ -527,7 +579,12 @@ def enqueue_close_intents(conn: Connection, chunk_id: str, *, at: datetime) -> N
 def chunk_row(conn, row) -> Chunk:  # type: ignore[no-untyped-def]
     pointers = [
         WorkRef(source=p.source, ref=p.ref)
-        for p in conn.execute(select(s.chunk_work_refs).where(s.chunk_work_refs.c.chunk_id == row.chunk_id)).all()
+        for p in conn.execute(
+            statements_of(conn)
+            .select(s.chunk_work_refs)
+            .where(s.chunk_work_refs.c.chunk_id == row.chunk_id)
+            .order_by(s.chunk_work_refs.c.id)
+        ).all()
     ]
     return Chunk(
         chunk_id=row.chunk_id,
@@ -538,4 +595,5 @@ def chunk_row(conn, row) -> Chunk:  # type: ignore[no-untyped-def]
         default_effort=row.default_effort,
         default_harnesses=DEFAULT_HARNESSES.decode(row.default_harnesses),
         intended_migration=INTENDED_MIGRATION.decode(row.intended_migration),
+        project_id=row.project_id,
     )

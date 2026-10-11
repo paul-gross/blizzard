@@ -9,7 +9,6 @@ from __future__ import annotations
 import json
 from datetime import datetime
 
-from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.clock import IClock
@@ -17,39 +16,47 @@ from blizzard.hub.domain.chunk.model import AnswerOutcome, NodeQuestion
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
 from blizzard.hub.domain.chunk.ports.questions import IWriteChunkQuestionsRepository
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import QUESTIONS, fence, lock_chunk_row
 from blizzard.hub.store.internal.chunk_terminal_predicates import chunk_is_terminal
+from blizzard.hub.store.scoped import ScopedConnections
 
 
 class ChunkQuestionsStore:
     """The chunk's asked/answered/delivered question facts."""
 
-    def __init__(self, store: HubStoreConnections, clock: IClock) -> None:
+    def __init__(self, store: ScopedConnections, clock: IClock) -> None:
         self._store = store
         self._clock = clock
 
     def get_question(self, question_id: str) -> NodeQuestion | None:
         with self._store.read("get_question") as conn:
-            row = conn.execute(QUESTIONS.select.where(s.questions.c.question_id == question_id)).one_or_none()
+            row = conn.execute(
+                QUESTIONS.select(self._store).where(s.questions.c.question_id == question_id)
+            ).one_or_none()
             return QUESTIONS.of(row) if row is not None else None
 
     def list_open_questions(self) -> list[NodeQuestion]:
         """The unanswered questions whose chunk has not ended — the SQL mirror of
-        :meth:`NodeQuestion.require_answerable`, pinned by ``tests/test_open_questions_closure.py``."""
+        :meth:`NodeQuestion.require_answerable`, pinned by ``tests/test_open_questions_closure.py``.
+        Question ids are runner-minted, so the answered set is read within the scope too: another
+        tenant's answer under the same id never hides this tenant's question."""
         with self._store.read("list_open_questions") as conn:
             rows = conn.execute(
-                QUESTIONS.select.where(
-                    s.questions.c.question_id.not_in(select(s.question_answers.c.question_id))
-                    & ~chunk_is_terminal(s.questions.c.chunk_id)
-                ).order_by(s.questions.c.asked_at)
+                QUESTIONS.select(self._store)
+                .where(
+                    s.questions.c.question_id.not_in(
+                        self._store.select(s.question_answers, s.question_answers.c.question_id)
+                    )
+                    & ~chunk_is_terminal(self._store, s.questions.c.chunk_id)
+                )
+                .order_by(s.questions.c.asked_at)
             ).all()
             return [QUESTIONS.of(row) for row in rows]
 
     def load_questions(self, chunk_id: str) -> list[NodeQuestion]:
         with self._store.read("load_questions") as conn:
             rows = conn.execute(
-                QUESTIONS.select.where(s.questions.c.chunk_id == chunk_id).order_by(s.questions.c.asked_at)
+                QUESTIONS.select(self._store).where(s.questions.c.chunk_id == chunk_id).order_by(s.questions.c.asked_at)
             ).all()
             return [QUESTIONS.of(row) for row in rows]
 
@@ -73,7 +80,9 @@ class ChunkQuestionsStore:
         with self._store.write("record_question") as conn:
             lock_chunk_row(conn, chunk_id)
             exists = conn.execute(
-                select(s.questions.c.question_id).where(s.questions.c.question_id == question_id)
+                self._store.select(s.questions, s.questions.c.question_id).where(
+                    s.questions.c.question_id == question_id
+                )
             ).first()
             if exists is not None:
                 return None
@@ -81,7 +90,7 @@ class ChunkQuestionsStore:
             if refusal is not None:
                 return refusal
             conn.execute(
-                s.questions.insert().values(
+                self._store.insert(s.questions).values(
                     question_id=question_id,
                     chunk_id=chunk_id,
                     node_id=node_id,
@@ -97,12 +106,12 @@ class ChunkQuestionsStore:
             return None
 
     def answer_question(self, question_id: str, *, answer: str, answered_by: str, at: datetime) -> AnswerOutcome:
-        # First-write-wins CAS: the answer row's PK is the question id, so a racing
-        # second insert raises IntegrityError and the loser reads back the winner.
+        # First-write-wins CAS: the answer row's PK is (tenant_id, question_id), so a racing
+        # second insert in the same tenant raises IntegrityError and the loser reads back the winner.
         try:
             with self._store.write("answer_question", expect=(IntegrityError,)) as conn:
                 conn.execute(
-                    s.question_answers.insert().values(
+                    self._store.insert(s.question_answers).values(
                         question_id=question_id, answer=answer, answered_by=answered_by, answered_at=at
                     )
                 )
@@ -112,7 +121,7 @@ class ChunkQuestionsStore:
         except IntegrityError:
             with self._store.read("answer_question_conflict_lookup") as conn:
                 winner = conn.execute(
-                    select(s.question_answers).where(s.question_answers.c.question_id == question_id)
+                    self._store.select(s.question_answers).where(s.question_answers.c.question_id == question_id)
                 ).one()
             return AnswerOutcome(
                 won=False,
@@ -125,7 +134,9 @@ class ChunkQuestionsStore:
     def record_answer_delivered(self, *, question_id: str, chunk_id: str, at: datetime) -> None:
         with self._store.write("record_answer_delivered") as conn:
             conn.execute(
-                s.answer_deliveries.insert().values(question_id=question_id, chunk_id=chunk_id, delivered_at=at)
+                self._store.insert(s.answer_deliveries).values(
+                    question_id=question_id, chunk_id=chunk_id, delivered_at=at
+                )
             )
 
 

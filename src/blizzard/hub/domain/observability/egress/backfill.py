@@ -25,7 +25,7 @@ from blizzard.hub.domain.observability.egress.assembly import (
 )
 from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.event_rows import FilePathPolicy, missing_key_reason
-from blizzard.hub.domain.observability.egress.events_window import events_rows, position_of
+from blizzard.hub.domain.observability.egress.events_window import derivations_by_marker, events_rows, position_of
 from blizzard.hub.domain.observability.egress.lifecycle import ExportVerb, export_allows
 from blizzard.hub.domain.observability.egress.repository import EpochKey, IReadEgress, IReadEgressEvents, UsagePosition
 from blizzard.hub.domain.observability.egress.schema import EVENTS_SCHEMA, INVOCATIONS_SCHEMA, STEPS_SCHEMA
@@ -235,10 +235,7 @@ class EgressBackfill:
                 return None
             markers = self._event_reads.epoch_markers(epochs, extractor_version=self._extractor_version)
             drops = self._event_reads.epoch_drops(epochs)
-            derivations = {
-                (held.marker.segment_id, held.marker.extractor_version): held
-                for held in self._event_reads.derivations(markers)
-            }
+            derivations = derivations_by_marker(self._event_reads.derivations(markers))
             facts = self._steps.step_facts_for(sorted({epoch.chunk_id for epoch in epochs}))
             items = sorted([*markers, *drops], key=position_of)
             rows = [

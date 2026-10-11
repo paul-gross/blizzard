@@ -1,8 +1,14 @@
 import type { Routes } from '@angular/router';
 import { matchesMobileViewport } from 'fleet/shell';
+import { enterInvitedTenant } from '../core/auth/invite-accepted';
+import { PROJECT_SEGMENT_PARAM, projectLensGuard } from './project-lens.guard';
 
 /**
- * The hub app's top-level route table. `''` redirects to `/board` (today's default
+ * The board's views, mounted twice by {@link routes}: at the root, the lens on All, and under `p/:projectSlug`, the
+ * lens on one project — so every view and every deep link is reachable with and without a lens. Every path here is
+ * relative to its mount, so a redirect (`''` → `board`, desktop `fleet` → `board`) stays under the lens it was hit in.
+ *
+ * The view table. `''` redirects to `/board` (today's default
  * surface). `/graphs` and `/graphs/:graphId` both render `GraphsPage` — the list
  * stays mounted and the optional `graphId` param drives the detail, so selecting a
  * version is a deep-linkable, refresh-safe master/detail rather than a full
@@ -19,7 +25,7 @@ import { matchesMobileViewport } from 'fleet/shell';
  * (wired in `app.config.ts`) re-navigates in place whenever the effective mode
  * flips, so the guard re-evaluates and the shell swaps without a URL change.
  */
-export const routes: Routes = [
+export const VIEW_ROUTES: Routes = [
   { path: '', redirectTo: 'board', pathMatch: 'full' },
   {
     path: 'board',
@@ -52,154 +58,26 @@ export const routes: Routes = [
     loadComponent: () => import('../runners/runners-page').then((m) => m.RunnersPage),
   },
   { path: 'fleet', redirectTo: 'board' },
-  // The gardening tab — a top-level peer of board/graphs/events, not a
-  // panel inside any of them. Five deep-linkable children, one per noun the garden
-  // machinery itself has: scopes, routines, runs, findings, proposals — every one of
-  // them unrelated to its neighbors, so every one of them gets its own tab and its
-  // own list.
-  //
-  // All five have one shape: the tab's list *is* the route, and its detail pane is a
-  // child route under it — a bare child that selects nothing, and a `:param` child
-  // naming the selection, both mounting the same detail component. Angular reuses a
-  // route's component only across the same route config, so two flat routes onto one
-  // component would tear the whole tab down on every row click. Nested, only the
-  // right-hand child is swapped; the list, its filters, and its scroll position all
-  // survive. Filter state itself rides the query string (`route-state.ts`), which
-  // makes a filtered view shareable by URL as well as durable.
-  {
-    path: 'gardening',
-    loadComponent: () => import('../garden/gardening-page').then((m) => m.GardeningPage),
-    children: [
-      { path: '', redirectTo: 'runs', pathMatch: 'full' },
-      // A scope has no id of its own — its slug *is* the id.
-      {
-        path: 'scopes',
-        loadComponent: () => import('../garden/scopes/gardening-scopes-page').then((m) => m.GardeningScopesPage),
-        children: [
-          {
-            path: '',
-            loadComponent: () => import('../garden/scopes/gardening-scope-detail').then((m) => m.GardeningScopeDetail),
-          },
-          {
-            path: ':scopeSlug',
-            loadComponent: () => import('../garden/scopes/gardening-scope-detail').then((m) => m.GardeningScopeDetail),
-          },
-        ],
-      },
-      // Routines are keyed by `name` (unique per routine), not id.
-      {
-        path: 'routines',
-        loadComponent: () => import('../garden/routines/gardening-routines-page').then((m) => m.GardeningRoutinesPage),
-        children: [
-          {
-            path: '',
-            loadComponent: () => import('../garden/routines/gardening-routine-detail').then((m) => m.GardeningRoutineDetail),
-          },
-          {
-            path: ':routineName',
-            loadComponent: () => import('../garden/routines/gardening-routine-detail').then((m) => m.GardeningRoutineDetail),
-          },
-        ],
-      },
-      {
-        path: 'runs',
-        loadComponent: () => import('../garden/runs/gardening-runs-page').then((m) => m.GardeningRunsPage),
-        children: [
-          {
-            path: '',
-            loadComponent: () => import('../garden/runs/gardening-run-detail').then((m) => m.GardeningRunDetail),
-          },
-          {
-            path: ':chunkId',
-            loadComponent: () => import('../garden/runs/gardening-run-detail').then((m) => m.GardeningRunDetail),
-          },
-        ],
-      },
-      // The tab the nesting above earns its keep on: this list holds four filters,
-      // which the flat pair silently reset on every row click.
-      {
-        path: 'findings',
-        loadComponent: () => import('../garden/findings/gardening-findings-page').then((m) => m.GardeningFindingsPage),
-        children: [
-          {
-            path: '',
-            loadComponent: () => import('../garden/findings/gardening-finding-detail').then((m) => m.GardeningFindingDetail),
-          },
-          {
-            path: ':findingId',
-            loadComponent: () => import('../garden/findings/gardening-finding-detail').then((m) => m.GardeningFindingDetail),
-          },
-        ],
-      },
-      // A proposal is keyed by its own id (`gprop_…`, rendered compactly as `GP-…`).
-      // The one place this tab diverges from its four siblings on desktop: on a
-      // docket with anything in it the list route sends the bare path to the first
-      // row of the filtered set. Mobile leaves the bare path on the list so it can
-      // serve as the drill-down's first screen.
-      {
-        path: 'proposals',
-        loadComponent: () => import('../garden/proposals/gardening-proposals-page').then((m) => m.GardeningProposalsPage),
-        children: [
-          {
-            path: '',
-            loadComponent: () =>
-              import('../garden/proposals/gardening-proposal-detail').then((m) => m.GardeningProposalDetail),
-          },
-          {
-            path: ':proposalId',
-            loadComponent: () =>
-              import('../garden/proposals/gardening-proposal-detail').then((m) => m.GardeningProposalDetail),
-          },
-        ],
-      },
-    ],
-  },
+  // The gardening tab and the admin surface — each subtree is its folder's own route file.
+  { path: 'gardening', loadChildren: () => import('../garden/gardening.routes').then((m) => m.GARDENING_ROUTES) },
+  { path: 'admin', loadChildren: () => import('../admin/admin.routes').then((m) => m.ADMIN_ROUTES) },
+];
+
+/**
+ * The hub app's top-level route table: the views at the root (All), the views again under the project lens's segment,
+ * whose guard settles the segment on the project's current slug, and the public pages, which carry no lens.
+ */
+export const routes: Routes = [
+  { path: `p/:${PROJECT_SEGMENT_PARAM}`, canActivate: [projectLensGuard], children: VIEW_ROUTES },
   // The login surface — public, reached directly or via the 401
   // interceptor. Rendered outside the app shell (`App`'s own `authState` branch),
   // so it carries no header/nav chrome of its own.
   { path: 'login', loadComponent: () => import('../login/login-page').then((m) => m.LoginPage) },
-  // The admin surface — the route the permission-gated nav entry points at. Users,
-  // the user listing, is the default child; beside it sit the configured nouns, each
-  // a list route whose detail is a child, the gardening tabs' own nesting, so a pick
-  // swaps only the detail and the list's filter survives in the query string.
-  {
-    path: 'admin',
-    loadComponent: () => import('../admin/admin-shell').then((m) => m.AdminShell),
-    children: [
-      { path: '', redirectTo: 'users', pathMatch: 'full' },
-      { path: 'users', loadComponent: () => import('../admin/admin-page').then((m) => m.AdminPage) },
-      {
-        path: 'work-sources',
-        loadComponent: () => import('../admin/work-sources/work-sources-page').then((m) => m.WorkSourcesPage),
-        children: [
-          { path: '', loadComponent: () => import('../admin/work-sources/work-source-detail').then((m) => m.WorkSourceDetail) },
-          { path: ':key', loadComponent: () => import('../admin/work-sources/work-source-detail').then((m) => m.WorkSourceDetail) },
-        ],
-      },
-      {
-        path: 'repositories',
-        loadComponent: () => import('../admin/repositories/repositories-page').then((m) => m.RepositoriesPage),
-        children: [
-          { path: '', loadComponent: () => import('../admin/repositories/repository-detail').then((m) => m.RepositoryDetail) },
-          { path: ':key', loadComponent: () => import('../admin/repositories/repository-detail').then((m) => m.RepositoryDetail) },
-        ],
-      },
-      {
-        path: 'secrets',
-        loadComponent: () => import('../admin/secrets/secrets-page').then((m) => m.SecretsPage),
-        children: [
-          { path: '', loadComponent: () => import('../admin/secrets/secret-detail').then((m) => m.SecretDetail) },
-          { path: ':key', loadComponent: () => import('../admin/secrets/secret-detail').then((m) => m.SecretDetail) },
-        ],
-      },
-      {
-        path: 'changes',
-        loadComponent: () => import('../admin/changes/changes-page').then((m) => m.ChangesPage),
-        children: [
-          { path: '', loadComponent: () => import('../admin/changes/change-detail').then((m) => m.ChangeDetail) },
-          { path: ':key', loadComponent: () => import('../admin/changes/change-detail').then((m) => m.ChangeDetail) },
-        ],
-      },
-    ],
-  },
+  // An invitation's landing — public like `/login`, and rendered outside the shell
+  // whatever the session. The hub lands an accepted invitation on `invite/accepted`,
+  // which enters the invited tenant and replaces itself with the board's root; it
+  // is listed first, so it is never read as a token.
+  { path: 'invite/accepted', canActivate: [enterInvitedTenant], children: [] },
+  { path: 'invite/:token', loadComponent: () => import('../login/invite-page').then((m) => m.InvitePage) },
+  ...VIEW_ROUTES,
 ];

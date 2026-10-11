@@ -1,11 +1,12 @@
-import { Component, afterRenderEffect, provideZonelessChangeDetection } from '@angular/core';
+import { Component, afterRenderEffect, provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
+import { HUB_PROJECT_FILTER } from '../core/project-filter';
 import { hubChunkTranscriptSegmentKey, hubChunkTranscriptsKey, hubDecisionsKey } from '../core/query-keys';
 import { EVENT_SOURCE_FACTORY, type EventSourceFactory, type FleetEventSource } from './sse.service';
-import { FleetLiveUpdates, INVALIDATION_COALESCE_WINDOW_MS } from './fleet-live';
+import { FleetLiveUpdates, HUB_EVENT_STREAM_URL, INVALIDATION_COALESCE_WINDOW_MS, hubEventStreamUrl } from './fleet-live';
 
 /** EventSource stand-in with named-listener support — jsdom ships none. */
 class FakeEventSource {
@@ -440,6 +441,82 @@ describe('FleetLiveUpdates', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  describe('under a project filter', () => {
+    const filter = signal<string | null>(null);
+
+    beforeEach(() => {
+      filter.set(null);
+      TestBed.overrideProvider(HUB_PROJECT_FILTER, { useValue: filter.asReadonly() });
+    });
+
+    it('names the project on the stream URL, and reads the whole tenant without one', () => {
+      expect(hubEventStreamUrl(null)).toBe(HUB_EVENT_STREAM_URL);
+      expect(hubEventStreamUrl('a b')).toBe(`${HUB_EVENT_STREAM_URL}?project=a%20b`);
+    });
+
+    it('opens the stream narrowed to the project the filter holds', () => {
+      filter.set('alpha');
+      TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
+
+      expect(FakeEventSource.instances.map((source) => source.url)).toEqual([hubEventStreamUrl('alpha')]);
+    });
+
+    it('reopens one stream on the new project when the filter changes, emptying the feed for its replay', () => {
+      const live = TestBed.inject(FleetLiveUpdates);
+      TestBed.runInInjectionContext(() => live.start());
+      const first = FakeEventSource.instances[0];
+      first.open();
+      first.emitNamed('runner-changed', JSON.stringify({ runner_id: 'r1', runner_name: 'one', kind: 'added' }));
+      TestBed.flushEffects();
+      expect(live.log()).toHaveLength(1);
+      expect(live.status()).toBe('open');
+
+      filter.set('alpha');
+      TestBed.flushEffects();
+
+      expect(FakeEventSource.instances.map((source) => source.url)).toEqual([
+        HUB_EVENT_STREAM_URL,
+        hubEventStreamUrl('alpha'),
+      ]);
+      expect(first.readyState).toBe(2);
+      expect(live.log()).toEqual([]);
+
+      // The status signal callers hold follows the fresh stream.
+      FakeEventSource.instances[1].open();
+      TestBed.flushEffects();
+      expect(live.status()).toBe('open');
+
+      filter.set(null);
+      TestBed.flushEffects();
+      expect(FakeEventSource.instances.map((source) => source.url)).toEqual([
+        HUB_EVENT_STREAM_URL,
+        hubEventStreamUrl('alpha'),
+        HUB_EVENT_STREAM_URL,
+      ]);
+    });
+
+    it('keeps start() idempotent: a second call opens no second stream, before or after a reopen', () => {
+      const live = TestBed.inject(FleetLiveUpdates);
+      TestBed.runInInjectionContext(() => live.start());
+      TestBed.runInInjectionContext(() => live.start());
+      expect(FakeEventSource.instances).toHaveLength(1);
+
+      filter.set('alpha');
+      TestBed.flushEffects();
+      TestBed.runInInjectionContext(() => live.start());
+      expect(FakeEventSource.instances).toHaveLength(2);
+    });
+
+    it('never reopens while the filter holds its value', () => {
+      filter.set('alpha');
+      TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
+      filter.set('alpha');
+      TestBed.flushEffects();
+
+      expect(FakeEventSource.instances).toHaveLength(1);
+    });
   });
 
   describe('started from within a reactive context (the app root wiring)', () => {

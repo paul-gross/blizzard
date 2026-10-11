@@ -5,6 +5,8 @@ strings with an explicit UTC offset (``bzh:utc-instants``)."""
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel
 
 from blizzard.foundation.credential_renewal import RenewalFailureReason, RenewalResult
@@ -43,6 +45,34 @@ class HubConnectivityView(BaseModel):
     buffer_depth: int
 
 
+class IdentityVerdictView(BaseModel):
+    """Whether the runner's token resolves to the runner its store belongs to.
+
+    ``unchecked`` until the hub first answers the check, ``matched`` while it does, ``mismatched``
+    while the token names another runner — the runner then drives no lease until the right token
+    returns or the store is cleared with ``reset_command``."""
+
+    state: Literal["unchecked", "matched", "mismatched"]
+    store_runner_id: str | None
+    token_runner_id: str | None
+    checked_at: str | None
+    reset_command: str
+
+
+class ServedProjectStatusView(BaseModel):
+    """One project the runner serves, as its hub last answered: the ``entry`` as configured — a project id
+    or slug — and the project it resolved to. ``resolved`` is false for an entry no project answers to, and
+    ``answered`` false for a configured entry the hub has not answered yet; either way ``project_id``,
+    ``slug`` and ``name`` are ``None``."""
+
+    entry: str
+    project_id: str | None = None
+    slug: str | None = None
+    name: str | None = None
+    resolved: bool
+    answered: bool = True
+
+
 class RunnerStatusView(BaseModel):
     """``GET /api/runner`` — identity, pause states, capacities, hub connectivity, last tick."""
 
@@ -50,6 +80,10 @@ class RunnerStatusView(BaseModel):
     runner_id: str | None
     #: The runner's name — its latest registered one, or its configured one before it first registers.
     runner_name: str | None = None
+    #: The id of the tenant the runner serves, as its hub last answered; ``None`` until a hub that names it answers.
+    tenant_id: str | None = None
+    #: That tenant's name, as of the same answer.
+    tenant_name: str | None = None
     workspace_id: str
     pause: PauseStateView
     capacities: CapacitiesView
@@ -57,6 +91,11 @@ class RunnerStatusView(BaseModel):
     last_tick_at: str | None
     #: The node names this runner's own loaded configuration holds for a human decision.
     gates: list[str] = []
+    #: The identity verdict; ``None`` from a runner with no loop checking it.
+    identity: IdentityVerdictView | None = None
+    #: The projects the runner serves, read from its store with no hub call; ``None`` when neither its
+    #: configuration nor its hub has named any.
+    served_projects: list[ServedProjectStatusView] | None = None
 
 
 class EnvironmentView(BaseModel):

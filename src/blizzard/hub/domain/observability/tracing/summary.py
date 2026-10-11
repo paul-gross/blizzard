@@ -23,6 +23,7 @@ from blizzard.hub.domain.observability.tracing.facts import (
     TracedTransition,
 )
 from blizzard.hub.domain.observability.tracing.steps import NodeStep, PrecededBy, StepKind, StepOutcome, identify_steps
+from blizzard.hub.tenancy import TenantId
 
 _HUMAN = "human"
 
@@ -62,6 +63,13 @@ class StepSummary:
 
     step_key: StepKey
     kind: StepKind
+    #: The chunk's tenant and its name as the facts were read; ``None`` where the facts carry none.
+    tenant: TenantId | None
+    tenant_name: str | None
+    #: The chunk's project, its slug and its name as the facts were read; ``None`` where the facts carry none.
+    project: str | None
+    project_slug: str | None
+    project_name: str | None
     chunk_id: str
     work_refs: tuple[str, ...]
     work_sources: tuple[str, ...]
@@ -288,6 +296,11 @@ def summarize_step(facts: StepFacts, step: NodeStep, steps: tuple[NodeStep, ...]
     return StepSummary(
         step_key=step.key,
         kind=step.kind,
+        tenant=facts.tenant,
+        tenant_name=facts.tenant_name,
+        project=facts.project,
+        project_slug=facts.project_slug,
+        project_name=facts.project_name,
         chunk_id=facts.chunk_id,
         work_refs=facts.work_refs,
         work_sources=facts.work_sources,

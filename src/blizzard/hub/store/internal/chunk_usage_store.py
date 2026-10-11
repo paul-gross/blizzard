@@ -9,36 +9,44 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Select, select
+from sqlalchemy import Select
 
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.model import UsageTotal
 from blizzard.hub.domain.chunk.ports.usage import IWriteChunkUsageRepository
+from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.errors import HubStoreConnections
+from blizzard.hub.store.internal.project_reach import chunks_of_project
 from blizzard.hub.store.internal.usage_aggregate import usage_aggregate_columns
+from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements
 
 
-def _usage_total_stmt(since: datetime, until: datetime | None) -> Select[Any]:
-    """The fold ``usage_total_since`` executes — one row of aggregates,
+def _usage_total_stmt(
+    stmts: ScopedStatements, since: datetime, until: datetime | None, project: ProjectId | None = None
+) -> Select[Any]:
+    """The fold ``usage_total_since`` executes within ``stmts``' scope — one row of aggregates,
     modeled on ``src/blizzard/hub/store/internal/analytics_operational_store.py``'s ``_spend_group_stmt``."""
     u = s.usage_facts
-    stmt = select(*usage_aggregate_columns()).where(u.c.recorded_at >= since)
+    stmt = stmts.select(u, *usage_aggregate_columns()).where(u.c.recorded_at >= since)
     if until is not None:
         stmt = stmt.where(u.c.recorded_at < until)
+    if project is not None:
+        stmt = stmt.where(u.c.chunk_id.in_(chunks_of_project(stmts, project)))
     return stmt
 
 
 class ChunkUsageStore:
     """The chunk's token/cost usage facts."""
 
-    def __init__(self, store: HubStoreConnections, clock: IClock) -> None:
+    def __init__(self, store: ScopedConnections, clock: IClock) -> None:
         self._store = store
         self._clock = clock
 
-    def usage_total_since(self, since: datetime, *, until: datetime | None = None) -> UsageTotal:
+    def usage_total_since(
+        self, since: datetime, *, until: datetime | None = None, project: ProjectId | None = None
+    ) -> UsageTotal:
         with self._store.read("usage_total_since") as conn:
-            row = conn.execute(_usage_total_stmt(since, until)).one()
+            row = conn.execute(_usage_total_stmt(self._store, since, until, project=project)).one()
             return UsageTotal.of_grouped_sums(
                 input_tokens=row.input_tokens,
                 output_tokens=row.output_tokens,
@@ -75,7 +83,7 @@ class ChunkUsageStore:
         # high-water mark already guarantees at most one call per landed fact.
         with self._store.write("record_usage") as conn:
             conn.execute(
-                s.usage_facts.insert().values(
+                self._store.insert(s.usage_facts).values(
                     chunk_id=chunk_id,
                     node_id=node_id,
                     epoch=epoch,

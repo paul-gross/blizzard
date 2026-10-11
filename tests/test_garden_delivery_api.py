@@ -25,7 +25,17 @@ from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.internal.run_context_store import RunContextStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
-from tests.support import HubHarness, build_hub, capture_statements, hub_store_connections, seed_lease, seed_work_item
+from tests.support import (
+    HubHarness,
+    build_hub,
+    capture_statements,
+    default_project,
+    hub_scoped,
+    hub_store_connections,
+    seed_lease,
+    seed_work_item,
+    stamp,
+)
 
 pytestmark = pytest.mark.component
 
@@ -38,7 +48,7 @@ _SCOPE = "blizzard"
 
 def _seed_scope(hub: HubHarness, slug: str) -> None:
     with hub.engine.begin() as conn:
-        conn.execute(insert(s.scopes).values(slug=slug, description="", created_at=_NOW))
+        conn.execute(insert(s.scopes).values(stamp(s.scopes, slug=slug, description="", created_at=_NOW)))
 
 
 def _deliver_node(node_id: str = _NODE_ID, *, graph_id: str = "gr_delivery") -> Node:
@@ -70,7 +80,10 @@ def _seed_chunk(hub: HubHarness, *, with_run_context: bool = True) -> str:
     item = seed_work_item(items, graph_id="gr_delivery", author=WorkItemAuthor.user("u_1"), at=_NOW)
     if with_run_context:
         RunContextStore(store_connections).record(
-            item.work_item_id, RunContext(routine_name=_ROUTINE, scope_slug=_SCOPE, mode="dry_run")
+            item.work_item_id,
+            RunContext(
+                project_id=default_project(hub.engine), routine_name=_ROUTINE, scope_slug=_SCOPE, mode="dry_run"
+            ),
         )
     return f"ch_{item.ref}"
 
@@ -85,6 +98,7 @@ def _seed_finding(
 ) -> None:
     FindingStore(hub_store_connections(hub.engine)).add(
         finding_id,
+        project_id=default_project(hub.engine),
         routine_name=routine_name,
         scope_slug=scope_slug,
         class_="stale-docstring",
@@ -99,18 +113,23 @@ def _seed_review_finding(hub: HubHarness, finding_id: str, *, scope_slug: str = 
     with hub.engine.begin() as conn:
         conn.execute(
             insert(s.findings).values(
-                finding_id=finding_id,
-                routine_name=None,
-                scope_slug=scope_slug,
-                class_="correctness",
-                locus="a.py:1",
-                summary="s",
-                source="review",
-                severity="should-fix",
-                raised_by_chunk_id="ch_review_1",
+                stamp(
+                    s.findings,
+                    finding_id=finding_id,
+                    routine_name=None,
+                    scope_slug=scope_slug,
+                    class_="correctness",
+                    locus="a.py:1",
+                    summary="s",
+                    source="review",
+                    severity="should-fix",
+                    raised_by_chunk_id="ch_review_1",
+                )
             )
         )
-        conn.execute(insert(s.finding_facts).values(finding_id=finding_id, kind="add", recorded_at=_NOW))
+        conn.execute(
+            insert(s.finding_facts).values(stamp(s.finding_facts, finding_id=finding_id, kind="add", recorded_at=_NOW))
+        )
 
 
 def _record_artifact(hub: HubHarness, chunk_id: str, *, name: str, content: str, epoch: int = _EPOCH) -> None:
@@ -151,7 +170,7 @@ def _post(hub: HubHarness, chunk_id: str, *, delta=(), proposals=(), node_id: st
 
 def _finding_count(hub: HubHarness) -> int:
     with hub.engine.begin() as conn:
-        return conn.execute(select(s.findings)).all().__len__()
+        return conn.execute(hub_scoped(select(s.findings))).all().__len__()
 
 
 # --- recorded --------------------------------------------------------------
@@ -215,7 +234,7 @@ def test_a_mixed_delta_with_proposals_is_recorded(tmp_path: Path) -> None:
     assert resp.json()["outcome"] == "recorded"
     assert _finding_count(hub) == 2  # the pre-seeded one plus the freshly-added one
     with hub.engine.begin() as conn:
-        assert conn.execute(select(s.garden_proposals)).all()
+        assert conn.execute(hub_scoped(select(s.garden_proposals))).all()
 
 
 def test_a_docket_citing_its_own_runs_add_ref_materializes_with_the_minted_id(tmp_path: Path) -> None:
@@ -233,8 +252,8 @@ def test_a_docket_citing_its_own_runs_add_ref_materializes_with_the_minted_id(tm
     assert resp.status_code == 200, resp.text
     assert resp.json()["outcome"] == "recorded"
     with hub.engine.begin() as conn:
-        minted_finding_id = conn.execute(select(s.findings.c.finding_id)).scalar_one()
-        link_finding_ids = [row.finding_id for row in conn.execute(select(s.garden_proposal_findings))]
+        minted_finding_id = conn.execute(hub_scoped(select(s.findings.c.finding_id))).scalar_one()
+        link_finding_ids = [row.finding_id for row in conn.execute(hub_scoped(select(s.garden_proposal_findings)))]
     assert link_finding_ids == [minted_finding_id]
     assert link_finding_ids != ["new-1"]
 
@@ -253,7 +272,7 @@ def test_a_docket_citing_a_prior_runs_live_id_still_works_unchanged(tmp_path: Pa
     assert resp.status_code == 200, resp.text
     assert resp.json()["outcome"] == "recorded"
     with hub.engine.begin() as conn:
-        link_finding_ids = [row.finding_id for row in conn.execute(select(s.garden_proposal_findings))]
+        link_finding_ids = [row.finding_id for row in conn.execute(hub_scoped(select(s.garden_proposal_findings)))]
     assert link_finding_ids == [finding_id]
 
 
@@ -269,9 +288,9 @@ def test_a_proposal_citing_no_findings_is_recorded_with_no_links(tmp_path: Path)
     assert resp.status_code == 200, resp.text
     assert resp.json()["outcome"] == "recorded"
     with hub.engine.begin() as conn:
-        proposals = conn.execute(select(s.garden_proposals)).all()
+        proposals = conn.execute(hub_scoped(select(s.garden_proposals))).all()
         assert len(proposals) == 1
-        assert conn.execute(select(s.garden_proposal_findings)).all() == []
+        assert conn.execute(hub_scoped(select(s.garden_proposal_findings))).all() == []
 
 
 def test_an_empty_docket_is_recorded(tmp_path: Path) -> None:
@@ -286,7 +305,7 @@ def test_an_empty_docket_is_recorded(tmp_path: Path) -> None:
     assert resp.status_code == 200, resp.text
     assert resp.json() == {"outcome": "recorded", "detail": ""}
     with hub.engine.begin() as conn:
-        assert conn.execute(select(s.garden_proposals)).all() == []
+        assert conn.execute(hub_scoped(select(s.garden_proposals))).all() == []
 
 
 def test_an_observed_op_admits_a_review_sourced_finding_on_the_runs_own_scope(tmp_path: Path) -> None:
@@ -320,7 +339,7 @@ def test_a_docket_can_cite_a_review_sourced_finding_on_the_runs_own_scope(tmp_pa
     assert resp.status_code == 200, resp.text
     assert resp.json()["outcome"] == "recorded"
     with hub.engine.begin() as conn:
-        links = conn.execute(select(s.garden_proposal_findings)).all()
+        links = conn.execute(hub_scoped(select(s.garden_proposal_findings))).all()
     assert [link.finding_id for link in links] == [finding_id]
 
 
@@ -405,6 +424,7 @@ def test_a_repeated_delta_artifact_name_still_records_cleanly(tmp_path: Path) ->
 
 def test_an_observed_op_revives_a_previously_gone_finding(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
+    project = default_project(hub.engine)
     _seed_scope(hub, _SCOPE)
     chunk_id = _seed_chunk(hub)
     finding_id = Id.mint(IdPrefix.FINDING, hub.clock).value
@@ -413,7 +433,7 @@ def test_an_observed_op_revives_a_previously_gone_finding(tmp_path: Path) -> Non
     before = hub.clock.now() - timedelta(days=1)
     _seed_finding(hub, finding_id, at=before)
     FindingStore(hub_store_connections(hub.engine)).record_fact(finding_id, kind="gone", at=before, note="fixed")
-    assert [f.finding_id for f in hub.services.findings.list_for_routine(_ROUTINE)] == []
+    assert [f.finding_id for f in hub.services.findings.list_for_routine(project, _ROUTINE)] == []
     _record_artifact(hub, chunk_id, name="delta", content=_delta(findings=[_observed_op(finding_id)]))
 
     resp = _post(hub, chunk_id, delta=["delta"])
@@ -422,7 +442,7 @@ def test_an_observed_op_revives_a_previously_gone_finding(tmp_path: Path) -> Non
     assert resp.json() == {"outcome": "recorded", "detail": ""}
     # "Gone is reversible" is a liveness claim, not just a route outcome: the delivered
     # `observed` fact must actually restore the finding to the live set.
-    assert [f.finding_id for f in hub.services.findings.list_for_routine(_ROUTINE)] == [finding_id]
+    assert [f.finding_id for f in hub.services.findings.list_for_routine(project, _ROUTINE)] == [finding_id]
 
 
 def test_an_unknown_finding_id_is_invalid(tmp_path: Path) -> None:
@@ -496,7 +516,7 @@ def test_a_proposals_artifact_naming_one_ref_twice_is_invalid(tmp_path: Path) ->
     assert body["outcome"] == "invalid"
     assert "docket" in body["detail"] and "p1" in body["detail"]
     with hub.engine.begin() as conn:
-        assert conn.execute(select(s.garden_proposals)).all() == []
+        assert conn.execute(hub_scoped(select(s.garden_proposals))).all() == []
 
 
 def test_a_docket_citing_the_same_finding_twice_is_invalid(tmp_path: Path) -> None:
@@ -517,7 +537,7 @@ def test_a_docket_citing_the_same_finding_twice_is_invalid(tmp_path: Path) -> No
     assert body["outcome"] == "invalid"
     assert finding_id in body["detail"]
     with hub.engine.begin() as conn:
-        assert conn.execute(select(s.garden_proposals)).all() == []
+        assert conn.execute(hub_scoped(select(s.garden_proposals))).all() == []
 
 
 def test_a_docket_citing_a_ref_absent_from_the_delta_is_invalid_naming_it(tmp_path: Path) -> None:
@@ -535,7 +555,7 @@ def test_a_docket_citing_a_ref_absent_from_the_delta_is_invalid_naming_it(tmp_pa
     assert "ghost-ref" in body["detail"]
     assert _finding_count(hub) == 0
     with hub.engine.begin() as conn:
-        assert conn.execute(select(s.garden_proposals)).all() == []
+        assert conn.execute(hub_scoped(select(s.garden_proposals))).all() == []
 
 
 def test_an_add_ops_ref_shaped_like_a_finding_id_is_invalid(tmp_path: Path) -> None:
@@ -637,8 +657,8 @@ def test_a_later_delivery_adding_a_second_delta_still_lands_the_new_ones_finding
     assert second.status_code == 200, second.text
     assert second.json()["outcome"] == "recorded"
     with hub.engine.begin() as conn:
-        assert sorted(r.locus for r in conn.execute(select(s.findings))) == ["a.py:1", "b.py:2"]
-        set_rows = conn.execute(select(s.finding_sets)).all()
+        assert sorted(r.locus for r in conn.execute(hub_scoped(select(s.findings)))) == ["a.py:1", "b.py:2"]
+        set_rows = conn.execute(hub_scoped(select(s.finding_sets))).all()
         assert len(set_rows) == 2  # one per delivered artifact, `a`'s recorded once
 
 
@@ -656,14 +676,14 @@ def test_a_later_delivery_re_carrying_the_same_proposals_mints_no_duplicate(tmp_
     first = _post(hub, chunk_id, delta=["delta"], proposals=["docket"])
     assert first.status_code == 200 and first.json()["outcome"] == "recorded"
     with hub.engine.begin() as conn:
-        assert conn.execute(select(s.garden_proposals)).all().__len__() == 1
+        assert conn.execute(hub_scoped(select(s.garden_proposals))).all().__len__() == 1
 
     second = _post(hub, chunk_id, delta=["delta"], proposals=["docket"], epoch=_EPOCH + 1)
 
     assert second.status_code == 200, second.text
     assert second.json()["outcome"] == "recorded"
     with hub.engine.begin() as conn:
-        assert conn.execute(select(s.garden_proposals)).all().__len__() == 1  # not minted twice
+        assert conn.execute(hub_scoped(select(s.garden_proposals))).all().__len__() == 1  # not minted twice
 
 
 def test_a_republished_dockets_ref_citation_still_resolves_after_its_delta_is_dropped(tmp_path: Path) -> None:
@@ -680,7 +700,7 @@ def test_a_republished_dockets_ref_citation_still_resolves_after_its_delta_is_dr
     assert first.status_code == 200 and first.json()["outcome"] == "recorded"
     assert _finding_count(hub) == 1
     with hub.engine.begin() as conn:
-        minted_finding_id = conn.execute(select(s.findings.c.finding_id)).scalar_one()
+        minted_finding_id = conn.execute(hub_scoped(select(s.findings.c.finding_id))).scalar_one()
 
     # Republish only the docket, at a fresh epoch — a new artifact, same `ref`.
     _record_artifact(hub, chunk_id, name="docket", content=_proposals(findings=["F1"]), epoch=_EPOCH + 1)
@@ -690,9 +710,9 @@ def test_a_republished_dockets_ref_citation_still_resolves_after_its_delta_is_dr
     assert second.json()["outcome"] == "recorded"
     assert _finding_count(hub) == 1  # the delta is unchanged — nothing new minted
     with hub.engine.begin() as conn:
-        proposals = conn.execute(select(s.garden_proposals)).all()
+        proposals = conn.execute(hub_scoped(select(s.garden_proposals))).all()
         assert len(proposals) == 2  # a genuinely new proposal artifact each visit
-        links = conn.execute(select(s.garden_proposal_findings)).all()
+        links = conn.execute(hub_scoped(select(s.garden_proposal_findings))).all()
         assert [link.finding_id for link in links] == [minted_finding_id, minted_finding_id]
 
 
@@ -735,7 +755,7 @@ def _run_script(
 def _artifact_content(hub: HubHarness, chunk_id: str, name: str) -> str | None:
     with hub.engine.begin() as conn:
         row = conn.execute(
-            select(s.artifacts).where((s.artifacts.c.chunk_id == chunk_id) & (s.artifacts.c.name == name))
+            hub_scoped(select(s.artifacts).where((s.artifacts.c.chunk_id == chunk_id) & (s.artifacts.c.name == name)))
         ).first()
     return None if row is None else row.data
 
@@ -757,7 +777,7 @@ def test_the_script_delivers_through_the_route_and_prints_recorded(
     assert capsys.readouterr().out.strip() == "recorded"
     assert _finding_count(hub) == 2  # the pre-seeded one plus the freshly-added one
     with hub.engine.begin() as conn:
-        assert conn.execute(select(s.garden_proposals)).all()
+        assert conn.execute(hub_scoped(select(s.garden_proposals))).all()
 
 
 def test_the_scripts_failure_marker_is_durable_on_an_invalid_delivery(
@@ -815,6 +835,7 @@ def test_every_finding_the_worker_read_shows_is_a_citable_proposal_finding(tmp_p
     neighbour = Id.mint(IdPrefix.FINDING, hub.clock).value
     review = Id.mint(IdPrefix.FINDING, hub.clock).value
     _seed_finding(hub, own)
+    _seed_scope(hub, "other-scope")
     _seed_finding(hub, neighbour, scope_slug="other-scope")
     _seed_review_finding(hub, review)
 
@@ -847,7 +868,10 @@ def test_a_delivery_for_a_stopped_chunk_is_a_409_and_lands_nothing(tmp_path: Pat
     assert resp.status_code == 409, resp.text
     assert _finding_count(hub) == 0
     with hub.engine.begin() as conn:
-        assert conn.execute(select(s.artifacts).where(s.artifacts.c.name == "garden-delivered")).first() is None
+        assert (
+            conn.execute(hub_scoped(select(s.artifacts).where(s.artifacts.c.name == "garden-delivered"))).first()
+            is None
+        )
 
 
 def test_a_delivery_a_restart_superseded_is_a_409_and_lands_nothing(tmp_path: Path) -> None:

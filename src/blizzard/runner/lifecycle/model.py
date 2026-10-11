@@ -227,12 +227,15 @@ def claim_verdict(outcome: RouteClaimOutcome) -> ClaimVerdict:
 
 def claim_denial_fields(outcome: RouteClaimOutcome) -> dict[str, str]:
     """What the hub said when it refused a claim, as log fields — the 403 runner refusal's ``detail``
-    (paused, retired, or unregistered at the hub) and the status-carrying 409's ``status`` and ``detail``
-    (an ended chunk, or one not ready yet); nothing for any other outcome."""
+    (paused, retired, or unregistered at the hub), the status-carrying 409's ``status`` and ``detail``
+    (an ended chunk, or one not ready yet), and the incompatible 409's ``reason`` and ``detail`` (the
+    capabilities, or the chunk's project, which the detail names); nothing for any other outcome."""
     if outcome.denied_paused is not None:
         return {"detail": outcome.denied_paused.detail}
     if outcome.denied_terminal is not None:
         return {"status": outcome.denied_terminal.status, "detail": outcome.denied_terminal.detail}
+    if outcome.denied_incompatible is not None:
+        return {"reason": outcome.denied_incompatible.reason, "detail": outcome.denied_incompatible.detail}
     return {}
 
 

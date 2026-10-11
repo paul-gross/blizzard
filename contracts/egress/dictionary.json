@@ -35,6 +35,36 @@
           }
         },
         {
+          "name": "tenant_id",
+          "type": "string",
+          "nullable": true,
+          "meaning": "The tenant the row belongs to; null in a file written before the upgrade to tenants, every row of which belongs to the tenant the upgrade carried the hub's data into"
+        },
+        {
+          "name": "tenant_name",
+          "type": "string",
+          "nullable": true,
+          "meaning": "That tenant's name when the row was written, so a later copy follows a rename; null where tenant_id is"
+        },
+        {
+          "name": "project_id",
+          "type": "string",
+          "nullable": true,
+          "meaning": "The project the row's chunk belongs to; null in a file written before the upgrade to projects, every row of which belongs to its tenant's default project"
+        },
+        {
+          "name": "project_slug",
+          "type": "string",
+          "nullable": true,
+          "meaning": "That project's slug when the row was written, so a later copy follows a slug change; null where project_id is"
+        },
+        {
+          "name": "project_name",
+          "type": "string",
+          "nullable": true,
+          "meaning": "That project's name when the row was written, so a later copy follows a rename; null where project_id is"
+        },
+        {
           "name": "chunk_id",
           "type": "string",
           "nullable": false,
@@ -336,6 +366,36 @@
           "type": "string",
           "nullable": false,
           "meaning": "The step's derived trace id, as 32 hex characters"
+        },
+        {
+          "name": "tenant_id",
+          "type": "string",
+          "nullable": true,
+          "meaning": "The tenant the row belongs to; null in a file written before the upgrade to tenants, every row of which belongs to the tenant the upgrade carried the hub's data into"
+        },
+        {
+          "name": "tenant_name",
+          "type": "string",
+          "nullable": true,
+          "meaning": "That tenant's name when the row was written, so a later copy follows a rename; null where tenant_id is"
+        },
+        {
+          "name": "project_id",
+          "type": "string",
+          "nullable": true,
+          "meaning": "The project the row's chunk belongs to; null in a file written before the upgrade to projects, every row of which belongs to its tenant's default project"
+        },
+        {
+          "name": "project_slug",
+          "type": "string",
+          "nullable": true,
+          "meaning": "That project's slug when the row was written, so a later copy follows a slug change; null where project_id is"
+        },
+        {
+          "name": "project_name",
+          "type": "string",
+          "nullable": true,
+          "meaning": "That project's name when the row was written, so a later copy follows a rename; null where project_id is"
         },
         {
           "name": "chunk_id",
@@ -679,6 +739,61 @@
           "type": "timestamp",
           "nullable": false,
           "meaning": "When that step started; the row's partition and backfill time",
+          "on": [
+            "derivation",
+            "event",
+            "dropped"
+          ]
+        },
+        {
+          "name": "tenant_id",
+          "type": "string",
+          "nullable": true,
+          "meaning": "The tenant the row belongs to; null in a file written before the upgrade to tenants, every row of which belongs to the tenant the upgrade carried the hub's data into",
+          "on": [
+            "derivation",
+            "event",
+            "dropped"
+          ]
+        },
+        {
+          "name": "tenant_name",
+          "type": "string",
+          "nullable": true,
+          "meaning": "That tenant's name when the row was written, so a later copy follows a rename; null where tenant_id is",
+          "on": [
+            "derivation",
+            "event",
+            "dropped"
+          ]
+        },
+        {
+          "name": "project_id",
+          "type": "string",
+          "nullable": true,
+          "meaning": "The project the row's chunk belongs to; null in a file written before the upgrade to projects, every row of which belongs to its tenant's default project",
+          "on": [
+            "derivation",
+            "event",
+            "dropped"
+          ]
+        },
+        {
+          "name": "project_slug",
+          "type": "string",
+          "nullable": true,
+          "meaning": "That project's slug when the row was written, so a later copy follows a slug change; null where project_id is",
+          "on": [
+            "derivation",
+            "event",
+            "dropped"
+          ]
+        },
+        {
+          "name": "project_name",
+          "type": "string",
+          "nullable": true,
+          "meaning": "That project's name when the row was written, so a later copy follows a rename; null where project_id is",
           "on": [
             "derivation",
             "event",

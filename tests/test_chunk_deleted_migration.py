@@ -19,7 +19,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
-from tests.support import chunk_stores
+from tests.support import chunk_stores, hub_scoped_engine, stamp
 
 pytestmark = pytest.mark.component
 
@@ -33,7 +33,7 @@ def test_upgrade_creates_chunk_deleted_and_leaves_preexisting_chunks_claimable(t
 
     # Migrate to the revision before chunk_deleted, then mint and promote a chunk the old way.
     runner.upgrade(_BEFORE)
-    engine = create_engine_from_url(db_url)
+    engine = hub_scoped_engine(create_engine_from_url(db_url))
     with engine.begin() as conn:
         conn.execute(
             insert(s.graphs).values(graph_id="gr_1", name="g", entry_node_id="nd_1", definition_yaml="", created_at=_T0)
@@ -53,5 +53,9 @@ def test_upgrade_creates_chunk_deleted_and_leaves_preexisting_chunks_claimable(t
 
     # The fresh table is honored immediately: a row in it makes the chunk ephemeral.
     with engine.begin() as conn:
-        conn.execute(insert(s.chunk_deleted).values(chunk_id="ch_legacy", deleted_at=_T0, deleted_by="operator"))
+        conn.execute(
+            insert(s.chunk_deleted).values(
+                stamp(s.chunk_deleted, chunk_id="ch_legacy", deleted_at=_T0, deleted_by="operator")
+            )
+        )
     assert store.record.get("ch_legacy") is None

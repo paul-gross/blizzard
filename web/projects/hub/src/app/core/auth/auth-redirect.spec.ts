@@ -1,13 +1,16 @@
 import type { Router } from '@angular/router';
 
-import { consumeReturnUrl, redirectToLogin, safeAuthorizeReturnTo } from './auth-redirect';
+import { consumeReturnUrl, isPublicUrl, redirectToLogin, safeAuthorizeReturnTo } from './auth-redirect';
 
-function fakeRouter(url: string): { router: Router; navigated: string[] } {
+/** A router on `url`, or navigating to `inFlight` when one is given. */
+function fakeRouter(url: string, inFlight?: string): { router: Router; navigated: string[] } {
   const navigated: string[] = [];
   const router = {
     get url() {
       return url;
     },
+    currentNavigation: () => (inFlight === undefined ? null : { extractedUrl: inFlight }),
+    serializeUrl: (tree: unknown) => String(tree),
     navigateByUrl: (target: string) => {
       navigated.push(target);
       return Promise.resolve(true);
@@ -27,13 +30,43 @@ describe('redirectToLogin / consumeReturnUrl', () => {
     expect(consumeReturnUrl()).toBe('/graphs/gr_1');
   });
 
-  it('does not clobber a stashed return url when already on /login', () => {
+  it('stays on /login, keeping its query and the stashed return url', () => {
     sessionStorage.setItem('fleet.auth.return-to', '/board');
-    const { router, navigated } = fakeRouter('/login');
+    const { router, navigated } = fakeRouter('/login?refusal=invite_only');
     redirectToLogin(router);
 
-    expect(navigated).toEqual(['/login']);
+    expect(navigated).toEqual([]);
     expect(consumeReturnUrl()).toBe('/board');
+  });
+
+  it('leaves an invitation landing alone, so it is read signed out', () => {
+    const { router, navigated } = fakeRouter('/invite/tok_1');
+    redirectToLogin(router);
+
+    expect(navigated).toEqual([]);
+    expect(sessionStorage.getItem('fleet.auth.return-to')).toBeNull();
+  });
+
+  it('judges the page a navigation is heading to, as at boot before the first navigation ends', () => {
+    const toInvite = fakeRouter('/', '/invite/tok_1');
+    redirectToLogin(toInvite.router);
+    expect(toInvite.navigated).toEqual([]);
+
+    const toGraphs = fakeRouter('/', '/graphs/gr_1');
+    redirectToLogin(toGraphs.router);
+    expect(toGraphs.navigated).toEqual(['/login']);
+    expect(consumeReturnUrl()).toBe('/graphs/gr_1');
+  });
+
+  it('counts sign-in and invitation pages as public, and nothing else', () => {
+    expect(isPublicUrl('/login')).toBe(true);
+    expect(isPublicUrl('/login?refusal=invitation_unusable')).toBe(true);
+    expect(isPublicUrl('/invite/tok_1')).toBe(true);
+    expect(isPublicUrl('/invite/accepted?tenant=ten_1')).toBe(true);
+    expect(isPublicUrl('/')).toBe(false);
+    expect(isPublicUrl('/loginx')).toBe(false);
+    expect(isPublicUrl('/invites')).toBe(false);
+    expect(isPublicUrl('/board?next=/login')).toBe(false);
   });
 
   it('falls back to / when nothing was ever stashed', () => {

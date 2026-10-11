@@ -21,7 +21,8 @@ from blizzard.hub.domain.observability.tracing.facts import StepFacts, TracedTra
 from blizzard.hub.domain.observability.tracing.replay import ReplayUnavailable, ReplayWindowRefused, TraceReplay
 from blizzard.hub.domain.observability.tracing.repository import ClosingCandidates, IReadTraceSteps
 from blizzard.hub.store import schema
-from tests.support import HubHarness, InMemoryTraceExporter
+from tests.hub_event_rows import hub_event_rows
+from tests.support import HubHarness, InMemoryTraceExporter, hub_scoped
 from tests.test_trace_export_sweep import _closed_pair, _sweep
 from tests.trace_fixtures import make_facts, runner_epoch
 from tests.trace_hub import trace_hub
@@ -152,12 +153,14 @@ def _window(hub: HubHarness, **extra: object) -> dict[str, object]:
 
 def _cursor_rows(hub: HubHarness) -> list[tuple]:  # type: ignore[type-arg]
     with hub.engine.connect() as conn:
-        return [tuple(r) for r in conn.execute(sa.select(schema.trace_cursor).order_by(schema.trace_cursor.c.id))]
+        return [
+            tuple(r)
+            for r in conn.execute(hub_scoped(sa.select(schema.trace_cursor).order_by(schema.trace_cursor.c.id)))
+        ]
 
 
 def _event_count(hub: HubHarness) -> int:
-    with hub.engine.connect() as conn:
-        return conn.execute(sa.select(sa.func.count()).select_from(schema.event_log)).scalar_one()
+    return len(hub_event_rows(hub.engine))
 
 
 def _told_live(hub: HubHarness) -> None:

@@ -100,11 +100,6 @@ class IWorkSource(Protocol):
         """The forge's own cross-link for ``pointer`` (``owner/repo#12``), or ``None`` off-forge."""
         ...
 
-    def branch_url(self, repo: str, branch_name: str) -> str | None:
-        """The forge's browser ``tree`` address for ``branch_name`` on ``repo``, or
-        ``None`` when this source has no web origin to link through."""
-        ...
-
 
 class IWorkSourceRegistry(Protocol):
     """The hub's configured work sources, looked up by their declared ``name``."""

@@ -1,0 +1,35 @@
+<div class="served" data-testid="runner-served">
+  <span class="served-label">Serves:</span>
+  <ul class="served-list">
+    @if (unassigned()) {
+      <li>
+        <fleet-kit-badge
+          data-testid="runner-unassigned"
+          variant="soft"
+          tone="waiting"
+          title="This runner declares no project, so it is offered no work."
+          >UNASSIGNED</fleet-kit-badge
+        >
+      </li>
+    }
+    @for (name of served(); track $index) {
+      <li>
+        <fleet-kit-badge data-testid="runner-served-project" variant="soft" tone="idle" [attr.data-project]="name">
+          {{ name }}
+        </fleet-kit-badge>
+      </li>
+    }
+    @for (entry of unresolved(); track $index) {
+      <li>
+        <fleet-kit-badge
+          data-testid="runner-unresolved"
+          variant="soft"
+          tone="needs"
+          [attr.data-entry]="entry"
+          [title]="'No project of this tenant is named ' + entry + '.'"
+          >UNRESOLVED {{ entry }}</fleet-kit-badge
+        >
+      </li>
+    }
+  </ul>
+</div>

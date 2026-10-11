@@ -27,12 +27,23 @@ from blizzard.foundation.tokens import TokenHash
 from blizzard.hub.auth.auth_state import IReadAuthStateRepository
 from blizzard.hub.auth.errors import RepoErrorFactory
 from blizzard.hub.auth.facts import IReadAuthFactsRepository
+from blizzard.hub.auth.hub_admins import HubAdminFact, IReadHubAdminRepository
 from blizzard.hub.auth.identities import IReadIdentityRepository
 from blizzard.hub.auth.internal.auth_facts_repository import AuthFactsRepository
 from blizzard.hub.auth.internal.auth_state_repository import AuthStateRepository
+from blizzard.hub.auth.internal.hub_admin_repository import HubAdminRepository
 from blizzard.hub.auth.internal.identity_repository import IdentityRepository
+from blizzard.hub.auth.internal.membership_repository import MembershipRepository
 from blizzard.hub.auth.internal.superuser_bootstrap_repository import SuperuserBootstrapRepository
 from blizzard.hub.auth.internal.user_repository import UserRepository
+from blizzard.hub.auth.invitations import (
+    Invitation,
+    InvitationOutcome,
+    InvitationOutcomeKind,
+    InvitationToken,
+    IReadInvitationRepository,
+)
+from blizzard.hub.auth.memberships import IReadMembershipRepository, MembershipFact
 from blizzard.hub.auth.models import AuthStateEntry, Identity, SuperuserBootstrap, User
 from blizzard.hub.auth.sessions import IReadSessionRepository
 from blizzard.hub.auth.superuser_bootstrap import IReadSuperuserBootstrapRepository
@@ -43,7 +54,7 @@ from blizzard.hub.domain.chunk.ports.decisions import IReadChunkDecisionsReposit
 from blizzard.hub.domain.chunk.ports.delivery import IReadChunkDeliveryRepository
 from blizzard.hub.domain.chunk.ports.dependencies import IReadChunkDependenciesRepository
 from blizzard.hub.domain.chunk.ports.escalations import IReadChunkEscalationsRepository
-from blizzard.hub.domain.chunk.ports.events import IReadChunkEventsRepository
+from blizzard.hub.domain.chunk.ports.events import FeedLens, IReadChunkEventsRepository
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission
 from blizzard.hub.domain.chunk.ports.hub_exec import IReadChunkHubExecRepository
@@ -55,7 +66,7 @@ from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository
 from blizzard.hub.domain.chunk.ports.stores import ChunkReadStores, ChunkStores
 from blizzard.hub.domain.chunk.ports.usage import IReadChunkUsageRepository
-from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository
+from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository, IReadWorkRefsCorpus
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.carry_over import IReadConfigImports
 from blizzard.hub.domain.config.changes import ChangeContext, Door, IReadConfigChanges, RecordKind
@@ -74,6 +85,7 @@ from blizzard.hub.domain.garden.runs.history import IReadGardenRunRepository
 from blizzard.hub.domain.garden.runs.sweeps import IReadGardenSweepsRepository
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository, ScopeSlug
 from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository, IReadManyGraphs
+from blizzard.hub.domain.observability.analytics.derivation import IReadDerivationCorpus
 from blizzard.hub.domain.observability.analytics.events import IReadTranscriptEvents
 from blizzard.hub.domain.observability.analytics.extraction import EXTRACTOR_VERSION
 from blizzard.hub.domain.observability.analytics.operational import IReadOperationalAnalytics, OperationalCriteria
@@ -84,26 +96,34 @@ from blizzard.hub.domain.observability.egress.repository import (
     EventsPosition,
     IReadEgress,
     IReadEgressEvents,
+    IReadUsageCorpus,
     UsagePosition,
 )
 from blizzard.hub.domain.observability.forge_status import IReadAnnotatedSources
+from blizzard.hub.domain.observability.hub_events import HubEventLogService, IReadHubEventLog
 from blizzard.hub.domain.observability.tracing.cursor import CursorKey
 from blizzard.hub.domain.observability.tracing.repository import (
+    IReadProjectLabels,
     IReadRunnerNames,
+    IReadStepCorpus,
     IReadTraceStatus,
     IReadTraceSteps,
+    StepHydration,
     TraceCheckpoint,
 )
 from blizzard.hub.domain.observability.transcripts import IReadTranscriptSegments
+from blizzard.hub.domain.projects.links import IReadProjectLinks
+from blizzard.hub.domain.projects.model import IReadProjectRepository, ProjectEdit, ProjectId, ProjectSlug
 from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
 from blizzard.hub.domain.runners.route import Route
+from blizzard.hub.domain.tenancy.administration import IReadTenantDirectory
+from blizzard.hub.domain.tenancy.teardown import IReadTenantTeardowns
+from blizzard.hub.domain.work_items.closure import IReadCloseIntentCorpus
 from blizzard.hub.secrets import hub_key_provider, secret_cipher
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import MARKER_PREFIX
 from blizzard.hub.store.internal.config_apply_store import ConfigApplyStore
 from blizzard.hub.store.internal.config_import_store import ConfigImportStore
 from blizzard.hub.store.internal.config_revisions_store import ConfigRevisionsStore
-from blizzard.hub.store.internal.egress_event_store import EgressEventStore
 from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.finding_store import FindingSetStore, FindingStore
 from blizzard.hub.store.internal.forge_annotation_store import ForgeAnnotationStore
@@ -111,12 +131,19 @@ from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStor
 from blizzard.hub.store.internal.garden_run_store import GardenRunStore
 from blizzard.hub.store.internal.garden_sweeps_store import GardenSweepsStore
 from blizzard.hub.store.internal.garden_trend_store import GardenTrendStore
+from blizzard.hub.store.internal.hub_event_log_store import HubEventLogStore
+from blizzard.hub.store.internal.hub_scoped_credentials import CredentialReads
+from blizzard.hub.store.internal.hub_scoped_invitations import InvitationReads
+from blizzard.hub.store.internal.invitation_store import InvitationStore
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
 from blizzard.hub.store.internal.secret_store import SecretStore
-from blizzard.hub.store.internal.trace_store import TraceStore
+from blizzard.hub.store.internal.tenant_teardown_store import TenantTeardownStore
+from blizzard.hub.store.internal.trace_store import ProjectLabels, TraceStore
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
+from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.tenancy import TenantId
 from blizzard.runner.auth.tokens import IReadTokenRepository
 from blizzard.runner.composition import build_stores
 from blizzard.runner.environments.repository import IReadEnvironmentRepository
@@ -128,6 +155,7 @@ from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.harness.workspace_prompts import IReadWorkspacePromptRepository
 from blizzard.runner.hub.identity import IReadRunnerIdentityRepository, RunnerIdentity
 from blizzard.runner.hub.outbound_buffer import IReadOutboundRepository
+from blizzard.runner.hub.served_projects import IReadServedProjectsRepository, ServedProject
 from blizzard.runner.leases.asks import IReadAskRepository
 from blizzard.runner.leases.elicitation import IReadElicitationRepository
 from blizzard.runner.leases.escalations import IReadEscalationRepository
@@ -158,6 +186,9 @@ from tests.support import (
     added_runner,
     build_hub,
     chunk_stores,
+    default_project,
+    default_tenant,
+    hub_level_connections,
     hub_store_connections,
     seed_chunk_record,
     seed_runner,
@@ -564,6 +595,7 @@ def build_runner_world(engine: Engine) -> RunnerWorld:
         paused=False, at=_t(82), by="operator", report_kind="runner.locally_resumed", report_payload="{}"
     )
     stores.identity.record_runner_identity(RunnerIdentity(RUNNER_ID, "runner-local", _t(82)))
+    stores.served_projects.record_served_projects((ServedProject("default", "prj_1", "default", "Default"),), at=_t(82))
     stores.resume_intent.record_resume_intent(lease_id=lease_8, marked_at=_t(83))
     workspace_id = "ws_1"
     stores.workspace_prompt.set_workspace_prompt(workspace_id, prompt="hello", at=_t(84))
@@ -736,6 +768,9 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     (IReadPauseRepository, "local_paused"): lambda w: w.read.pause.local_paused(),
     (IReadPauseRepository, "local_pause_reason"): lambda w: w.read.pause.local_pause_reason(),
     (IReadRunnerIdentityRepository, "runner_identity"): lambda w: w.read.identity.runner_identity(),
+    (IReadServedProjectsRepository, "served_projects_answer"): lambda w: (
+        w.read.served_projects.served_projects_answer()
+    ),
     (IReadPauseRepository, "last_daemon_liveness"): lambda w: w.read.pause.last_daemon_liveness(),
     (IReadPauseRepository, "pause_parked_lease_ids"): lambda w: w.read.pause.pause_parked_lease_ids(),
     (IReadPauseRepository, "open_pause_parks"): lambda w: w.read.pause.open_pause_parks(),
@@ -860,21 +895,43 @@ _HUB_BASE = datetime(2026, 7, 20, 12, 0, 0, tzinfo=UTC)
 _HUB_UNTIL = _HUB_BASE + timedelta(days=365)
 
 
-def _trace_store_of(connections: HubStoreConnections, hub: HubHarness) -> TraceStore:
+def _label(ref: WorkRef) -> str | None:
+    return f"{ref.source}#{ref.ref}"
+
+
+def _trace_store_of(connections: ScopedConnections, hub: HubHarness) -> TraceStore:
     return TraceStore(
         connections,
-        graphs=hub.services.graphs,
-        names=hub.services.registry,
-        label=lambda ref: f"{ref.source}#{ref.ref}",
+        hub_events=_hub_events_of(hub),
+        corpus=hub.hub_services.hub_scoped_reads.corpus,
+        hydration=lambda _tenant: StepHydration(
+            graphs=hub.services.graphs,
+            names=hub.services.registry,
+            projects=ProjectLabels(hub.services.projects),
+            label=_label,
+        ),
+        tenant_name=hub.hub_services.tenants.open_tenants.name,
     )
 
 
-def _egress_store_of(connections: HubStoreConnections) -> EgressStore:
-    return EgressStore(connections)
+def _egress_store_of(connections: ScopedConnections, hub: HubHarness) -> EgressStore:
+    return EgressStore(connections, hub_events=_hub_events_of(hub), usage=hub.hub_services.hub_scoped_reads.corpus)
 
 
-def _egress_events_of(connections: HubStoreConnections) -> IReadEgressEvents:
-    return EgressEventStore(connections)
+def _hub_events_of(hub: HubHarness) -> HubEventLogStore:
+    return HubEventLogStore(hub_level_connections(hub.engine))
+
+
+def _teardowns_of(hub: HubHarness) -> TenantTeardownStore:
+    return TenantTeardownStore(hub_level_connections(hub.engine))
+
+
+def _memberships_of(hub: HubHarness) -> MembershipRepository:
+    return MembershipRepository(hub_level_connections(hub.engine))
+
+
+def _hub_admins_of(hub: HubHarness) -> HubAdminRepository:
+    return HubAdminRepository(hub_level_connections(hub.engine))
 
 
 def _ht(offset_seconds: float) -> datetime:
@@ -959,7 +1016,7 @@ class HubWorld:
     hub: HubHarness
     engine: Engine
     clock: FixedClock
-    store_connections: HubStoreConnections
+    store_connections: ScopedConnections
     write: ChunkStores
     read: ChunkReadStores
     auth_state: IReadAuthStateRepository
@@ -972,6 +1029,7 @@ class HubWorld:
     garden_trend: IReadGardenTrendRepository
     work_items: IReadWorkItemRepository
     secrets: ISecretCatalog
+    invitations: IReadInvitationRepository
     config_revisions: IReadConfigRevisions
     config_imports: IReadConfigImports
     default_graph: Graph
@@ -984,8 +1042,11 @@ class HubWorld:
     session_id_hash: str
     auth_state_value: str
     runner_token_hash: str
+    invitation_id: str
+    invitation_token_hash: str
     routine_id: str
     scope_a: str
+    scope_a_id: str
     scope_c: str
     finding_1: str
     finding_2: str
@@ -1014,6 +1075,9 @@ class HubWorld:
     chunk_route_b: str
     transcript_chunk: str
     transcript_segment_id: str
+    #: The tenant's one project, renamed ``default`` -> ``census``, linked to ``census-source`` (unlinked, then
+    #: relinked) and to ``census-repo``.
+    project_id: ProjectId
 
 
 def build_hub_world(tmp_path: Path) -> HubWorld:
@@ -1077,7 +1141,6 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         username="alice",
         display_name="Alice",
         email="alice@example.com",
-        role=Role.CONTRIBUTOR,
         created_at=_ht(0),
     )
     user_2 = User(
@@ -1085,13 +1148,12 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         username="bob",
         display_name="Bob",
         email="bob@example.com",
-        role=Role.ADMIN,
         created_at=_ht(1),
     )
     user_store.create(user_1)
     user_store.create(user_2)
 
-    _plaintext, session_1 = hub.services.auth.mint_session(user_1)
+    _plaintext, session_1 = hub.hub_services.auth.mint_session(user_1)
     session_id_hash = session_1.id_hash
 
     identity_store.link(
@@ -1114,8 +1176,8 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         )
     )
 
-    hub.services.auth_facts.login_failed(actor="anon", subject="alice@example.com", detail="bad state")
-    hub.services.auth_facts.sso_refused(actor="anon", subject="alice@example.com", detail="wrong provider")
+    hub.hub_services.auth_facts.login_failed(actor="anon", subject="alice@example.com", detail="bad state")
+    hub.hub_services.auth_facts.sso_refused(actor="anon", subject="alice@example.com", detail="wrong provider")
 
     superuser_bootstrap_store.upsert(
         SuperuserBootstrap(email="root@example.com", claimed_user_id=None, updated_at=_ht(5))
@@ -1141,9 +1203,16 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
 
     # --- scopes and routines ---------------------------------------------------------------
     operator = ChangeContext(actor="operator", door=Door.API)
-    scope_a = hub.services.scope_registry.ensure(ScopeSlug.parse("blizzard"), operator, description="core")
-    scope_b = hub.services.scope_registry.ensure(ScopeSlug.parse("runner-scope"), operator, description="runner side")
-    scope_c = hub.services.scope_registry.ensure(ScopeSlug.parse("legacy"), operator, description="retired")
+    garden_project = default_project(hub.engine)
+    scope_a = hub.services.scope_registry.ensure(
+        garden_project, ScopeSlug.parse("blizzard"), operator, description="core"
+    )
+    scope_b = hub.services.scope_registry.ensure(
+        garden_project, ScopeSlug.parse("runner-scope"), operator, description="runner side"
+    )
+    scope_c = hub.services.scope_registry.ensure(
+        garden_project, ScopeSlug.parse("legacy"), operator, description="retired"
+    )
     hub.services.scope_lifecycle.retire(scope_c, operator, by="operator")
 
     # --- secrets ----------------------------------------------------------------------------
@@ -1180,6 +1249,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     )
 
     routine = hub.services.routine_authoring.create(
+        project_id=garden_project,
         ctx=operator,
         name="gardening",
         graph_name=default_graph.name,
@@ -1189,7 +1259,11 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     )
     hub.services.routine_scope_membership.link(routine, scope_b, operator)
     routine_2 = hub.services.routine_authoring.create(
-        ctx=operator, name="nightly", graph_name=default_graph.name, default_scope_slug=ScopeSlug.parse("runner-scope")
+        project_id=garden_project,
+        ctx=operator,
+        name="nightly",
+        graph_name=default_graph.name,
+        default_scope_slug=ScopeSlug.parse("runner-scope"),
     )
 
     # --- routine runs: garden_run/run_context's own source ---------------------------------
@@ -1217,6 +1291,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     finding_1 = "fin_hub_1"
     finding_store.add(
         finding_1,
+        project_id=garden_project,
         routine_name="gardening",
         scope_slug="blizzard",
         class_="stale-docstring",
@@ -1230,6 +1305,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     finding_2 = "fin_hub_2"
     finding_store.add(
         finding_2,
+        project_id=garden_project,
         routine_name="gardening",
         scope_slug="blizzard",
         class_="dead-code",
@@ -1243,6 +1319,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     garden_proposal_1 = "gprop_hub_1"
     garden_proposal_store.create(
         garden_proposal_1,
+        project_id=garden_project,
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="gardening",
         class_="remediate",
@@ -1254,6 +1331,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     garden_proposal_2 = "gprop_hub_2"
     garden_proposal_store.create(
         garden_proposal_2,
+        project_id=garden_project,
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="gardening",
         class_="remediate",
@@ -1299,6 +1377,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     assert artifact_1 is not None
     finding_set_store.create(
         "fins_hub_1",
+        project_id=garden_project,
         artifact_id=artifact_1.artifact_id,
         chunk_id=run_chunk_1,
         scope_slug="blizzard",
@@ -1320,6 +1399,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     assert artifact_2 is not None
     finding_set_store.create(
         "fins_hub_2",
+        project_id=garden_project,
         artifact_id=artifact_2.artifact_id,
         chunk_id=run_chunk_1,
         scope_slug="runner-scope",
@@ -1356,7 +1436,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         headers={"Authorization": f"Bearer {runner_token}"},
     )
     assert pushed.status_code == 200, pushed.text
-    hub.services.event_derivation.sweep()
+    hub.hub_services.event_derivation.sweep()
 
     # --- chunk record / queue ----------------------------------------------------------------
     chunk_ready_1 = "ch_hub_ready_1"
@@ -1601,9 +1681,15 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     chunk_delivery_b = "ch_hub_delivery_b"
     _mint(chunk_delivery_a, "1015", at=_ht(69))
     _mint(chunk_delivery_b, "1016", at=_ht(70))
-    write.delivery.record_delivery_repo_landed(chunk_delivery_a, repo="acme/widget", commit_hash="c1", at=_ht(71))
-    write.delivery.record_delivery_repo_landed(chunk_delivery_a, repo="acme/other", commit_hash="c2", at=_ht(72))
-    write.delivery.record_delivery_repo_landed(chunk_delivery_b, repo="acme/widget", commit_hash="c3", at=_ht(73))
+    write.delivery.record_delivery_repo_landed(
+        chunk_delivery_a, repo="acme/widget", commit_hash="c1", repository_name=None, at=_ht(71)
+    )
+    write.delivery.record_delivery_repo_landed(
+        chunk_delivery_a, repo="acme/other", commit_hash="c2", repository_name=None, at=_ht(72)
+    )
+    write.delivery.record_delivery_repo_landed(
+        chunk_delivery_b, repo="acme/widget", commit_hash="c3", repository_name=None, at=_ht(73)
+    )
     write.delivery.record_delivery_landed(chunk_delivery_a, at=_ht(74))
     write.artifacts.record_hub_artifact(
         chunk_delivery_a,
@@ -1740,9 +1826,57 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
 
     # --- trace export cursor ----------------------------------------------------------
     _trace_store_of(store_connections, hub).append_cursor(TraceCheckpoint(CursorKey.opening(_ht(0)), 0, _ht(100)))
-    _egress_store_of(store_connections).append_cursor(
+    _egress_store_of(store_connections, hub).append_cursor(
         EgressCheckpoint("steps", CursorKey.opening(_ht(0)), UsagePosition(_ht(0)), 0, (), _ht(100))
     )
+
+    # --- the hub's own event log ------------------------------------------------------
+    hub_event_log = HubEventLogService(events=_hub_events_of(hub))
+    hub_event_log.record(kind="trace-export-failed", message="failed", detail=None, at=_ht(101))
+    hub_event_log.record(kind="egress-write-recovered", message="recovered", detail=None, at=_ht(102))
+
+    # --- memberships and hub administrators -------------------------------------------
+    memberships = _memberships_of(hub)
+    tenant = default_tenant(engine)
+    memberships.record(MembershipFact(tenant, user_1.user_id, Role.GUEST, _ht(103), "bootstrap"))
+    memberships.record(MembershipFact(tenant, user_1.user_id, Role.ADMIN, _ht(104), user_2.user_id))
+    memberships.record(MembershipFact(tenant, user_2.user_id, Role.CONTRIBUTOR, _ht(105), user_1.user_id))
+    hub_admins = _hub_admins_of(hub)
+    hub_admins.record(HubAdminFact(user_1.user_id, True, _ht(106), "bootstrap"))
+    hub_admins.record(HubAdminFact(user_2.user_id, True, _ht(107), user_1.user_id))
+    hub_admins.record(HubAdminFact(user_2.user_id, False, _ht(108), user_1.user_id))
+
+    # --- invitations: one live, one revoked -----------------------------------------------------
+    invitation_store = InvitationStore(store_connections)
+    invitation_token_hash = InvitationToken("census-invitation-1").hash
+    for invitation_id, token_hash in (
+        ("inv_census_1", invitation_token_hash),
+        ("inv_census_2", InvitationToken("census-invitation-2").hash),
+    ):
+        invitation_store.create(
+            Invitation(
+                invitation_id=invitation_id,
+                tenant=default_tenant(engine),
+                email="invitee@example.com",
+                role=Role.CONTRIBUTOR,
+                token_hash=token_hash,
+                created_by=user_1.user_id,
+                created_at=_ht(109),
+                expires_at=_ht(109 + 7 * 86400),
+            )
+        )
+    invitation_store.record(InvitationOutcome("inv_census_2", InvitationOutcomeKind.REVOKED, user_1.user_id, _ht(110)))
+
+    # --- projects and their links: last, so every write above lands in the tenant's one project ----
+    [project] = hub.services.projects.list_all()
+    census_source = hub.services.work_source_records.get("census-source")
+    census_repo = hub.services.repository_records.get("census-repo")
+    assert census_source is not None and census_repo is not None
+    source_link = hub.services.project_authoring.link_source(project, census_source, operator)
+    hub.services.project_authoring.unlink_source(source_link, operator)
+    hub.services.project_authoring.link_source(project, census_source, operator)
+    hub.services.project_authoring.link_repository(project, census_repo, operator)
+    project = hub.services.project_authoring.edit(project, ProjectEdit(slug="census"), operator)
 
     return HubWorld(
         hub=hub,
@@ -1761,6 +1895,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         garden_trend=garden_trend_store,
         work_items=work_items,
         secrets=secret_store,
+        invitations=invitation_store,
         config_revisions=ConfigRevisionsStore(store_connections),
         config_imports=ConfigImportStore(store_connections),
         default_graph=default_graph,
@@ -1773,8 +1908,11 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         session_id_hash=session_id_hash,
         auth_state_value=auth_state_value,
         runner_token_hash=runner_token_hash,
+        invitation_id="inv_census_1",
+        invitation_token_hash=invitation_token_hash,
         routine_id=routine.routine_id,
         scope_a="blizzard",
+        scope_a_id=scope_a.scope_id,
         scope_c="legacy",
         finding_1=finding_1,
         finding_2=finding_2,
@@ -1803,6 +1941,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         chunk_route_b=chunk_route_b,
         transcript_chunk=transcript_chunk,
         transcript_segment_id=transcript_segment_id,
+        project_id=project.project_id,
     )
 
 
@@ -1810,22 +1949,27 @@ HubRecipe = Callable[[HubWorld], object]
 
 #: Every reflected hub ``(Protocol, method)``, mapped to a recipe against :func:`build_hub_world`'s world.
 #: Hub read seams named outside the ``IRead*`` convention, reflected beside it.
-HUB_NAMED_READ_SEAMS: tuple[type, ...] = (ISecretCatalog,)
+HUB_NAMED_READ_SEAMS: tuple[type, ...] = (ISecretCatalog, CredentialReads, InvitationReads)
 
 HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadAuthStateRepository, "get"): lambda w: w.auth_state.get(w.auth_state_value),
     (IReadAuthFactsRepository, "list_recent"): lambda w: w.auth_facts.list_recent(limit=50),
-    (IReadIdentityRepository, "get"): lambda w: w.hub.services.identities.get("github", "12345"),
-    (IReadIdentityRepository, "list_for_user"): lambda w: w.hub.services.identities.list_for_user(w.user_1.user_id),
-    (IReadIdentityRepository, "list_for_users"): lambda w: w.hub.services.identities.list_for_users(
+    (IReadIdentityRepository, "get"): lambda w: w.hub.hub_services.identities.get("github", "12345"),
+    (IReadIdentityRepository, "list_for_user"): lambda w: w.hub.hub_services.identities.list_for_user(w.user_1.user_id),
+    (IReadIdentityRepository, "list_for_users"): lambda w: w.hub.hub_services.identities.list_for_users(
         [w.user_1.user_id, w.user_2.user_id]
     ),
-    (IReadIdentityRepository, "distinct_provider_names"): lambda w: w.hub.services.identities.distinct_provider_names(),
-    (IReadSessionRepository, "get_by_hash"): lambda w: w.hub.services.sessions.get_by_hash(w.session_id_hash),
+    (IReadIdentityRepository, "distinct_provider_names"): lambda w: (
+        w.hub.hub_services.identities.distinct_provider_names()
+    ),
+    (IReadSessionRepository, "get_by_hash"): lambda w: w.hub.hub_services.sessions.get_by_hash(w.session_id_hash),
     (IReadSuperuserBootstrapRepository, "get"): lambda w: w.superuser_bootstrap.get(),
     (IReadUserRepository, "get"): lambda w: w.hub.services.users.get(w.user_1.user_id),
     (IReadUserRepository, "get_by_username"): lambda w: w.hub.services.users.get_by_username("alice"),
     (IReadUserRepository, "get_by_email"): lambda w: w.hub.services.users.get_by_email("alice@example.com"),
+    (IReadUserRepository, "list_by_email_any_case"): lambda w: w.hub.services.users.list_by_email_any_case(
+        "Alice@Example.com"
+    ),
     (IReadUserRepository, "username_exists"): lambda w: w.hub.services.users.username_exists("alice"),
     (IReadUserRepository, "get_many"): lambda w: w.hub.services.users.get_many([w.user_1.user_id, w.user_2.user_id]),
     (IReadUserRepository, "list_all"): lambda w: w.hub.services.users.list_all(),
@@ -1848,38 +1992,75 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadTranscriptEvents, "segment_contexts"): lambda w: w.transcript_events.segment_contexts(
         [w.transcript_segment_id]
     ),
-    (IReadOperationalAnalytics, "durations_by_node"): lambda w: w.hub.services.operational_analytics.durations_by_node(
-        OperationalCriteria()
+    (IReadDerivationCorpus, "derivation_signature"): lambda w: (
+        w.hub.hub_services.hub_scoped_reads.corpus.derivation_signature()
+    ),
+    (IReadDerivationCorpus, "candidacy"): lambda w: w.hub.hub_services.hub_scoped_reads.corpus.candidacy(
+        EXTRACTOR_VERSION
+    ),
+    (IReadDerivationCorpus, "derived_segment_ids"): lambda w: (
+        w.hub.hub_services.hub_scoped_reads.corpus.derived_segment_ids()
+    ),
+    (IReadWorkRefsCorpus, "live_work_refs"): lambda w: w.hub.hub_services.hub_scoped_reads.corpus.live_work_refs(),
+    (IReadWorkRefsCorpus, "live_work_refs_signature"): lambda w: (
+        w.hub.hub_services.hub_scoped_reads.corpus.live_work_refs_signature()
+    ),
+    (IReadCloseIntentCorpus, "pending_close_intents"): lambda w: (
+        w.hub.hub_services.hub_scoped_reads.corpus.pending_close_intents()
+    ),
+    (IReadOperationalAnalytics, "durations_by_node"): lambda w: (
+        w.hub.services.operational_analytics.durations_by_node(OperationalCriteria()),
+        w.hub.services.operational_analytics.durations_by_node(OperationalCriteria(project=w.project_id)),
     ),
     (IReadOperationalAnalytics, "durations_by_graph"): lambda w: (
-        w.hub.services.operational_analytics.durations_by_graph(OperationalCriteria())
+        w.hub.services.operational_analytics.durations_by_graph(OperationalCriteria()),
+        w.hub.services.operational_analytics.durations_by_graph(OperationalCriteria(project=w.project_id)),
     ),
-    (IReadOperationalAnalytics, "spend_by_node"): lambda w: w.hub.services.operational_analytics.spend_by_node(
-        OperationalCriteria()
+    (IReadOperationalAnalytics, "spend_by_node"): lambda w: (
+        w.hub.services.operational_analytics.spend_by_node(OperationalCriteria()),
+        w.hub.services.operational_analytics.spend_by_node(OperationalCriteria(project=w.project_id)),
     ),
-    (IReadOperationalAnalytics, "spend_by_graph"): lambda w: w.hub.services.operational_analytics.spend_by_graph(
-        OperationalCriteria()
+    (IReadOperationalAnalytics, "spend_by_graph"): lambda w: (
+        w.hub.services.operational_analytics.spend_by_graph(OperationalCriteria()),
+        w.hub.services.operational_analytics.spend_by_graph(OperationalCriteria(project=w.project_id)),
     ),
-    (IReadOperationalAnalytics, "spend_by_chunk"): lambda w: w.hub.services.operational_analytics.spend_by_chunk(
-        OperationalCriteria(), limit=50
+    (IReadOperationalAnalytics, "spend_by_chunk"): lambda w: (
+        w.hub.services.operational_analytics.spend_by_chunk(OperationalCriteria(), limit=50),
+        w.hub.services.operational_analytics.spend_by_chunk(OperationalCriteria(project=w.project_id), limit=50),
     ),
-    (IReadOperationalAnalytics, "outcomes_by_node"): lambda w: w.hub.services.operational_analytics.outcomes_by_node(
-        OperationalCriteria()
+    (IReadOperationalAnalytics, "outcomes_by_node"): lambda w: (
+        w.hub.services.operational_analytics.outcomes_by_node(OperationalCriteria()),
+        w.hub.services.operational_analytics.outcomes_by_node(OperationalCriteria(project=w.project_id)),
     ),
-    (IReadAnalyticsEventQueries, "events"): lambda w: w.hub.services.analytics_events.events(
-        EventQueryCriteria(extractor_version=EXTRACTOR_VERSION), limit=50
+    (IReadAnalyticsEventQueries, "events"): lambda w: (
+        w.hub.services.analytics_events.events(EventQueryCriteria(extractor_version=EXTRACTOR_VERSION), limit=50),
+        w.hub.services.analytics_events.events(
+            EventQueryCriteria(extractor_version=EXTRACTOR_VERSION, project=w.project_id), limit=50
+        ),
     ),
-    (IReadAnalyticsEventQueries, "counts_by_file"): lambda w: w.hub.services.analytics_events.counts_by_file(
-        EventQueryCriteria(extractor_version=EXTRACTOR_VERSION)
+    (IReadAnalyticsEventQueries, "counts_by_file"): lambda w: (
+        w.hub.services.analytics_events.counts_by_file(EventQueryCriteria(extractor_version=EXTRACTOR_VERSION)),
+        w.hub.services.analytics_events.counts_by_file(
+            EventQueryCriteria(extractor_version=EXTRACTOR_VERSION, project=w.project_id)
+        ),
     ),
-    (IReadAnalyticsEventQueries, "counts_by_skill"): lambda w: w.hub.services.analytics_events.counts_by_skill(
-        EventQueryCriteria(extractor_version=EXTRACTOR_VERSION)
+    (IReadAnalyticsEventQueries, "counts_by_skill"): lambda w: (
+        w.hub.services.analytics_events.counts_by_skill(EventQueryCriteria(extractor_version=EXTRACTOR_VERSION)),
+        w.hub.services.analytics_events.counts_by_skill(
+            EventQueryCriteria(extractor_version=EXTRACTOR_VERSION, project=w.project_id)
+        ),
     ),
     (IReadAnalyticsEventQueries, "counts_by_agent_type"): lambda w: (
-        w.hub.services.analytics_events.counts_by_agent_type(EventQueryCriteria(extractor_version=EXTRACTOR_VERSION))
+        w.hub.services.analytics_events.counts_by_agent_type(EventQueryCriteria(extractor_version=EXTRACTOR_VERSION)),
+        w.hub.services.analytics_events.counts_by_agent_type(
+            EventQueryCriteria(extractor_version=EXTRACTOR_VERSION, project=w.project_id)
+        ),
     ),
-    (IReadAnalyticsEventQueries, "counts_by_node"): lambda w: w.hub.services.analytics_events.counts_by_node(
-        EventQueryCriteria(extractor_version=EXTRACTOR_VERSION)
+    (IReadAnalyticsEventQueries, "counts_by_node"): lambda w: (
+        w.hub.services.analytics_events.counts_by_node(EventQueryCriteria(extractor_version=EXTRACTOR_VERSION)),
+        w.hub.services.analytics_events.counts_by_node(
+            EventQueryCriteria(extractor_version=EXTRACTOR_VERSION, project=w.project_id)
+        ),
     ),
     (IReadChunkArtifactsRepository, "load_artifacts"): lambda w: w.read.artifacts.load_artifacts(w.chunk_artifacts),
     (IReadChunkArtifactsRepository, "delivery_sources_for"): lambda w: w.read.artifacts.delivery_sources_for(
@@ -1920,13 +2101,23 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadChunkDependenciesRepository, "standing_edges_for_dependents"): lambda w: (
         w.read.dependencies.standing_edges_for_dependents([w.chunk_dependency_dependent])
     ),
-    (IReadChunkEscalationsRepository, "list_open_escalations"): lambda w: w.read.escalations.list_open_escalations(),
-    (IReadChunkEventsRepository, "list_events"): lambda w: w.read.events.list_events(),
-    (IReadChunkEventsRepository, "activity_facts_since"): lambda w: w.read.events.activity_facts_since(
-        _HUB_BASE, limit=50
+    (IReadChunkEscalationsRepository, "list_open_escalations"): lambda w: (
+        w.read.escalations.list_open_escalations(),
+        w.read.escalations.list_open_escalations(project=w.project_id),
     ),
-    (IReadChunkEventsRepository, "activity_events_since"): lambda w: w.read.events.activity_events_since(
-        _HUB_BASE, limit=50
+    (IReadChunkEventsRepository, "list_events"): lambda w: (
+        w.read.events.list_events(),
+        w.read.events.list_events(lens=FeedLens(w.project_id, frozenset({HUB_RUNNER_ID}))),
+    ),
+    (IReadChunkEventsRepository, "activity_facts_since"): lambda w: (
+        w.read.events.activity_facts_since(_HUB_BASE, limit=50),
+        w.read.events.activity_facts_since(_HUB_BASE, limit=50, project=w.project_id),
+    ),
+    (IReadChunkEventsRepository, "activity_events_since"): lambda w: (
+        w.read.events.activity_events_since(_HUB_BASE, limit=50),
+        w.read.events.activity_events_since(
+            _HUB_BASE, limit=50, lens=FeedLens(w.project_id, frozenset({HUB_RUNNER_ID}))
+        ),
     ),
     (IReadChunkFactsRepository, "load_facts"): lambda w: w.read.facts.load_facts(w.chunk_ready_1),
     (IReadChunkFactsRepository, "load_all_facts"): lambda w: w.read.facts.load_all_facts(),
@@ -1934,7 +2125,10 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
         [w.chunk_ready_1, w.chunk_ready_2]
     ),
     (IReadChunkFactsRepository, "load_live_statuses"): lambda w: w.read.facts.load_live_statuses(),
-    (IReadChunkFactsRepository, "status_counts"): lambda w: w.read.facts.status_counts(),
+    (IReadChunkFactsRepository, "status_counts"): lambda w: (
+        w.read.facts.status_counts(),
+        w.read.facts.status_counts(project=w.project_id),
+    ),
     (IReadChunkFactsRepository, "status_facts_for"): lambda w: w.read.facts.status_facts_for(
         [w.chunk_ready_1, w.chunk_ready_2]
     ),
@@ -1967,13 +2161,19 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
         statuses=w.read.facts.load_live_statuses()
     ),
     (IReadChunkRecordRepository, "list_all"): lambda w: w.read.record.list_all(),
-    (IReadChunkRecordRepository, "list_page"): lambda w: w.read.record.list_page(limit=50, done_since=_HUB_BASE),
+    (IReadChunkRecordRepository, "list_page"): lambda w: (
+        w.read.record.list_page(limit=50, done_since=_HUB_BASE),
+        w.read.record.list_page(limit=50, done_since=_HUB_BASE, project=w.project_id),
+    ),
     (IReadChunkRouteRepository, "route_of"): lambda w: w.read.route.route_of(w.chunk_route_a),
     (IReadChunkRouteRepository, "load_all_routes"): lambda w: w.read.route.load_all_routes(),
     (IReadChunkRouteRepository, "routes_for"): lambda w: w.read.route.routes_for([w.chunk_route_a, w.chunk_route_b]),
     (IReadChunkRouteRepository, "runner_high_water"): lambda w: w.read.route.runner_high_water(HUB_RUNNER_ID),
     (IReadChunkRouteRepository, "live_routes_of_runner"): lambda w: w.read.route.live_routes_of_runner(HUB_RUNNER_ID),
-    (IReadChunkUsageRepository, "usage_total_since"): lambda w: w.read.usage.usage_total_since(_HUB_BASE),
+    (IReadChunkUsageRepository, "usage_total_since"): lambda w: (
+        w.read.usage.usage_total_since(_HUB_BASE),
+        w.read.usage.usage_total_since(_HUB_BASE, project=w.project_id),
+    ),
     (IReadChunkWorkRefsRepository, "find_live_holder"): lambda w: w.read.work_refs.find_live_holder(
         WorkRef(source="default", ref="1001")
     ),
@@ -1986,17 +2186,23 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadFindingRepository, "get"): lambda w: w.hub.services.findings.get(w.finding_1),
     (IReadFindingRepository, "get_many"): lambda w: w.hub.services.findings.get_many([w.finding_1, w.finding_2]),
     (IReadFindingRepository, "get_with_facts"): lambda w: w.hub.services.findings.get_with_facts(w.finding_1),
-    (IReadFindingRepository, "list_for"): lambda w: w.hub.services.findings.list_for("gardening", "blizzard"),
-    (IReadFindingRepository, "list_for_routine"): lambda w: w.hub.services.findings.list_for_routine("gardening"),
-    (IReadFindingRepository, "list_by_source"): lambda w: w.hub.services.findings.list_by_source(
-        scope_slug="blizzard", source="review"
+    (IReadFindingRepository, "list_for"): lambda w: w.hub.services.findings.list_for(
+        w.project_id, "gardening", "blizzard"
     ),
-    (IReadFindingRepository, "list_across_routines"): lambda w: w.hub.services.findings.list_across_routines(),
+    (IReadFindingRepository, "list_for_routine"): lambda w: w.hub.services.findings.list_for_routine(
+        w.project_id, "gardening"
+    ),
+    (IReadFindingRepository, "list_by_source"): lambda w: w.hub.services.findings.list_by_source(
+        w.project_id, scope_slug="blizzard", source="review"
+    ),
+    (IReadFindingRepository, "list_across_routines"): lambda w: w.hub.services.findings.list_across_routines(
+        w.project_id
+    ),
     (IReadFindingRepository, "list_page"): lambda w: w.hub.services.findings.list_page(
-        routine_name=None, scope_slug=None, limit=50
+        project_id=None, routine_name=None, scope_slug=None, limit=50
     ),
     (IReadFindingRepository, "count_by_class"): lambda w: w.hub.services.findings.count_by_class(
-        "gardening", "stale-docstring"
+        w.project_id, "gardening", "stale-docstring"
     ),
     (IReadFindingRepository, "has_delivery_for_proposal"): lambda w: w.hub.services.findings.has_delivery_for_proposal(
         w.garden_proposal_2
@@ -2004,10 +2210,10 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadFindingSetRepository, "get"): lambda w: w.hub.services.finding_sets.get("fins_hub_1"),
     (IReadFindingSetRepository, "list_for_chunk"): lambda w: w.hub.services.finding_sets.list_for_chunk(w.run_chunk_1),
     (IReadFindingSetRepository, "newest_for_routine_scope"): lambda w: (
-        w.hub.services.finding_sets.newest_for_routine_scope("gardening", "blizzard")
+        w.hub.services.finding_sets.newest_for_routine_scope(w.project_id, "gardening", "blizzard")
     ),
     (IReadFindingSetRepository, "newest_by_scope_for_routine"): lambda w: (
-        w.hub.services.finding_sets.newest_by_scope_for_routine("gardening")
+        w.hub.services.finding_sets.newest_by_scope_for_routine(w.project_id, "gardening")
     ),
     (IReadGardenProposalClosureRepository, "get"): lambda w: w.hub.services.garden_proposal_closures.get(
         w.garden_proposal_1
@@ -2020,21 +2226,27 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     ),
     (IReadGardenProposalRepository, "get"): lambda w: w.hub.services.garden_proposals.get(w.garden_proposal_1),
     (IReadGardenProposalRepository, "list_all"): lambda w: w.hub.services.garden_proposals.list_all(),
-    (IReadGardenProposalRepository, "list_page"): lambda w: w.hub.services.garden_proposals.list_page(limit=50),
+    (IReadGardenProposalRepository, "list_page"): lambda w: (
+        w.hub.services.garden_proposals.list_page(limit=50),
+        w.hub.services.garden_proposals.list_page(limit=50, project_id=w.project_id),
+    ),
     (IReadGardenProposalRepository, "list_for_routine"): lambda w: w.hub.services.garden_proposals.list_for_routine(
-        "gardening"
+        w.project_id, "gardening"
     ),
     (IReadGardenProposalRepository, "counts_by_class"): lambda w: w.hub.services.garden_proposals.counts_by_class(
         since=_ht(11), until=_ht(14)
     ),
-    (IReadGardenRunRepository, "runs_in_window"): lambda w: w.garden_run.runs_in_window(
-        since=_HUB_BASE, until=_HUB_UNTIL
+    (IReadGardenRunRepository, "runs_in_window"): lambda w: (
+        w.garden_run.runs_in_window(since=_HUB_BASE, until=_HUB_UNTIL),
+        w.garden_run.runs_in_window(since=_HUB_BASE, until=_HUB_UNTIL, project_id=w.project_id),
     ),
     (IReadGardenRunRepository, "run_identity"): lambda w: w.garden_run.run_identity(w.run_chunk_1),
     (IReadGardenRunRepository, "delivered_sets"): lambda w: w.garden_run.delivered_sets(w.run_chunk_1),
-    (IReadGardenSweepsRepository, "sweeps_for_routine"): lambda w: w.garden_sweeps.sweeps_for_routine("gardening"),
+    (IReadGardenSweepsRepository, "sweeps_for_routine"): lambda w: w.garden_sweeps.sweeps_for_routine(
+        w.project_id, "gardening"
+    ),
     (IReadGardenTrendRepository, "facts_for_trend"): lambda w: w.garden_trend.facts_for_trend(
-        "gardening", since=_HUB_BASE, until=_HUB_UNTIL
+        w.project_id, "gardening", since=_HUB_BASE, until=_HUB_UNTIL
     ),
     (IReadGraphRepository, "get"): lambda w: w.hub.services.graphs.get(w.graph.graph_id),
     (IReadGraphRepository, "get_enabled_by_name"): lambda w: w.hub.services.graphs.get_enabled_by_name(_HUB_GRAPH_NAME),
@@ -2058,29 +2270,37 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     ),
     (IReadRunnerRegistry, "get_runner"): lambda w: w.hub.services.registry.get_runner(HUB_RUNNER_ID),
     (IReadRunnerRegistry, "list_runners"): lambda w: w.hub.services.registry.list_runners(),
-    (IReadRunnerRegistry, "registration_for_token_hash"): lambda w: w.hub.services.registry.registration_for_token_hash(
-        w.runner_token_hash
+    (CredentialReads, "runner_for_token_hash"): lambda w: (
+        w.hub.hub_services.hub_scoped_reads.credentials.runner_for_token_hash(w.runner_token_hash)
     ),
-    (IReadRunnerRegistry, "is_token_revoked"): lambda w: w.hub.services.registry.is_token_revoked(w.runner_token_hash),
-    (IReadRunnerRegistry, "revoked_token_runner_id"): lambda w: w.hub.services.registry.revoked_token_runner_id(
-        w.runner_token_hash
+    (CredentialReads, "revoked_token_runner"): lambda w: (
+        w.hub.hub_services.hub_scoped_reads.credentials.revoked_token_runner(w.runner_token_hash)
+    ),
+    (CredentialReads, "runner_by_id"): lambda w: w.hub.hub_services.hub_scoped_reads.credentials.runner_by_id(
+        HUB_RUNNER_ID
     ),
     (IReadRunnerRegistry, "list_pause_facts_since"): lambda w: w.hub.services.registry.list_pause_facts_since(
         _HUB_BASE, limit=50
     ),
     (IReadRunnerRegistry, "names_for"): lambda w: w.hub.services.registry.names_for([HUB_RUNNER_ID]),
     (IReadRunnerNames, "names_for"): lambda w: w.hub.services.registry.names_for([HUB_RUNNER_ID]),
+    (IReadProjectLabels, "labels_for"): lambda w: ProjectLabels(w.hub.services.projects).labels_for([w.project_id]),
     (IReadRoutineRepository, "get"): lambda w: w.hub.services.routines.get(w.routine_id),
-    (IReadRoutineRepository, "get_by_name"): lambda w: w.hub.services.routines.get_by_name("gardening"),
-    (IReadRoutineRepository, "get_many_by_name"): lambda w: w.hub.services.routines.get_many_by_name(["gardening"]),
-    (IReadRoutineRepository, "list_all"): lambda w: w.hub.services.routines.list_all(),
+    (IReadRoutineRepository, "get_by_name"): lambda w: w.hub.services.routines.get_by_name(w.project_id, "gardening"),
+    (IReadRoutineRepository, "get_many_by_name"): lambda w: w.hub.services.routines.get_many_by_name(
+        w.project_id, ["gardening"]
+    ),
+    (IReadRoutineRepository, "list_all"): lambda w: (
+        w.hub.services.routines.list_all(),
+        w.hub.services.routines.list_all(w.project_id),
+    ),
     (IReadRoutineRepository, "is_retired"): lambda w: w.hub.services.routines.is_retired(w.routine_id),
     (IReadRoutineRepository, "retired_ids"): lambda w: w.hub.services.routines.retired_ids(),
     (IReadRoutineScopeRepository, "list_scopes"): lambda w: w.hub.services.routine_scopes.list_scopes(w.routine_id),
     (IReadRoutineScopeRepository, "list_scopes_for"): lambda w: w.hub.services.routine_scopes.list_scopes_for(
         [w.routine_id]
     ),
-    (IReadRoutineScopeRepository, "list_routines"): lambda w: w.hub.services.routine_scopes.list_routines("blizzard"),
+    (IReadRoutineScopeRepository, "list_routines"): lambda w: w.hub.services.routine_scopes.list_routines(w.scope_a_id),
     (IReadRunContextRepository, "for_chunk"): lambda w: w.hub.services.run_context.for_chunk(w.run_chunk_1_chunk),
     (ISecretCatalog, "get"): lambda w: w.secrets.get("gh-token"),
     (ISecretCatalog, "get_many"): lambda w: w.secrets.get_many(["gh-token", "old-token"]),
@@ -2102,14 +2322,39 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     ),
     (IReadConfigRevisions, "revisions"): lambda w: w.config_revisions.revisions(RecordKind.REPOSITORY, "census-repo"),
     (IReadConfigImports, "recorded"): lambda w: w.config_imports.recorded(),
+    (IReadProjectRepository, "get"): lambda w: w.hub.services.projects.get(w.project_id),
+    (IReadProjectRepository, "get_many"): lambda w: w.hub.services.projects.get_many([w.project_id]),
+    (IReadProjectRepository, "list_all"): lambda w: w.hub.services.projects.list_all(),
+    (IReadProjectRepository, "get_by_slug"): lambda w: w.hub.services.projects.get_by_slug(ProjectSlug.parse("census")),
+    (IReadProjectRepository, "get_by_former_slug"): lambda w: w.hub.services.projects.get_by_former_slug(
+        ProjectSlug.parse("default")
+    ),
+    (IReadProjectRepository, "resolve"): lambda w: w.hub.services.projects.resolve("default"),
+    (IReadProjectLinks, "source_link"): lambda w: w.hub.services.project_links.source_link(
+        w.project_id, "census-source"
+    ),
+    (IReadProjectLinks, "repository_link"): lambda w: w.hub.services.project_links.repository_link(
+        w.project_id, "census-repo"
+    ),
+    (IReadProjectLinks, "sources_of"): lambda w: w.hub.services.project_links.sources_of(w.project_id),
+    (IReadProjectLinks, "repositories_of"): lambda w: w.hub.services.project_links.repositories_of(w.project_id),
+    (IReadProjectLinks, "projects_linking_source"): lambda w: w.hub.services.project_links.projects_linking_source(
+        "census-source"
+    ),
+    (IReadProjectLinks, "linked_at"): lambda w: w.hub.services.project_links.linked_at(
+        w.project_id, "census-source", w.clock.now()
+    ),
     (IReadConfigImports, "commit_coordinates"): lambda w: w.config_imports.commit_coordinates(),
     (IReadConfigChanges, "page"): lambda w: w.hub.services.config_changes.page(
         before=None, limit=10, record_kind=None, record_key=None
     ),
-    (IReadScopeRepository, "get"): lambda w: w.hub.services.scopes.get(w.scope_a),
-    (IReadScopeRepository, "list_all"): lambda w: w.hub.services.scopes.list_all(),
-    (IReadScopeRepository, "is_retired"): lambda w: w.hub.services.scopes.is_retired(w.scope_c),
-    (IReadScopeRepository, "retired_slugs"): lambda w: w.hub.services.scopes.retired_slugs(),
+    (IReadScopeRepository, "get"): lambda w: w.hub.services.scopes.get(w.project_id, w.scope_a),
+    (IReadScopeRepository, "list_all"): lambda w: (
+        w.hub.services.scopes.list_all(),
+        w.hub.services.scopes.list_all(w.project_id),
+    ),
+    (IReadScopeRepository, "is_retired"): lambda w: w.hub.services.scopes.is_retired(w.project_id, w.scope_c),
+    (IReadScopeRepository, "retired_slugs"): lambda w: w.hub.services.scopes.retired_slugs(w.project_id),
     (IReadTranscriptSegments, "segments_for_chunk"): lambda w: w.hub.services.transcripts.segments_for_chunk(
         w.transcript_chunk
     ),
@@ -2135,37 +2380,71 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
             w.chunk_route_a,
         ]
     ),
+    (IReadStepCorpus, "closing_candidates"): lambda w: w.hub.hub_services.hub_scoped_reads.corpus.closing_candidates(
+        _HUB_BASE, _ht(10_000), 50
+    ),
+    (IReadStepCorpus, "step_facts_for"): lambda w: w.hub.hub_services.hub_scoped_reads.corpus.step_facts_for(
+        [w.chunk_transition, w.chunk_question, w.chunk_dependency_dependent], lambda _tenant: _label
+    ),
+    (IReadUsageCorpus, "usage_after"): lambda w: w.hub.hub_services.hub_scoped_reads.corpus.usage_after(
+        UsagePosition(_HUB_BASE), _HUB_UNTIL, 50
+    ),
     (IReadTraceSteps, "newest_cursor"): lambda w: _trace_store_of(w.store_connections, w.hub).newest_cursor(),
     (IReadTraceSteps, "newest_export_latch"): lambda w: _trace_store_of(
         w.store_connections, w.hub
     ).newest_export_latch(),
-    (IReadEgress, "newest_cursor"): lambda w: _egress_store_of(w.store_connections).newest_cursor("steps"),
-    (IReadEgress, "usage_after"): lambda w: _egress_store_of(w.store_connections).usage_after(
+    (IReadEgress, "newest_cursor"): lambda w: _egress_store_of(w.store_connections, w.hub).newest_cursor("steps"),
+    (IReadEgress, "usage_after"): lambda w: _egress_store_of(w.store_connections, w.hub).usage_after(
         UsagePosition(_HUB_BASE), _HUB_UNTIL, 50
     ),
     (IReadEgress, "newest_cursor_with_files"): lambda w: _egress_store_of(
-        w.store_connections
+        w.store_connections, w.hub
     ).newest_cursor_with_files(),
-    (IReadEgress, "newest_egress_failure"): lambda w: _egress_store_of(w.store_connections).newest_egress_failure(),
-    (IReadEgress, "newest_egress_latch"): lambda w: _egress_store_of(w.store_connections).newest_egress_latch(),
-    (IReadEgressEvents, "markers_after"): lambda w: _egress_events_of(w.store_connections).markers_after(
+    (IReadEgress, "newest_egress_failure"): lambda w: _egress_store_of(
+        w.store_connections, w.hub
+    ).newest_egress_failure(),
+    (IReadEgress, "newest_egress_latch"): lambda w: _egress_store_of(w.store_connections, w.hub).newest_egress_latch(),
+    (IReadMembershipRepository, "role_in"): lambda w: _memberships_of(w.hub).role_in(
+        default_tenant(w.engine), w.user_1.user_id
+    ),
+    (IReadMembershipRepository, "memberships_for"): lambda w: _memberships_of(w.hub).memberships_for(w.user_1.user_id),
+    (IReadMembershipRepository, "members"): lambda w: _memberships_of(w.hub).members(default_tenant(w.engine)),
+    (IReadMembershipRepository, "admin_count"): lambda w: _memberships_of(w.hub).admin_count(default_tenant(w.engine)),
+    (IReadMembershipRepository, "only_tenant"): lambda w: _memberships_of(w.hub).only_tenant(),
+    (IReadHubAdminRepository, "is_hub_admin"): lambda w: _hub_admins_of(w.hub).is_hub_admin(w.user_1.user_id),
+    (IReadHubAdminRepository, "holders"): lambda w: _hub_admins_of(w.hub).holders(),
+    (IReadInvitationRepository, "get"): lambda w: w.invitations.get(w.invitation_id),
+    (IReadInvitationRepository, "list"): lambda w: w.invitations.list(),
+    (InvitationReads, "invitation_for_token_hash"): lambda w: (
+        w.hub.hub_services.hub_scoped_reads.invitations.invitation_for_token_hash(w.invitation_token_hash)
+    ),
+    (IReadHubEventLog, "newest"): lambda w: _hub_events_of(w.hub).newest(
+        ("egress-write-failed", "trace-export-failed")
+    ),
+    (IReadHubEventLog, "recent"): lambda w: _hub_events_of(w.hub).recent(50),
+    (IReadTenantTeardowns, "underway"): lambda w: _teardowns_of(w.hub).underway(),
+    (IReadTenantTeardowns, "deletion"): lambda w: _teardowns_of(w.hub).deletion(TenantId("ten_census_missing")),
+    (IReadTenantDirectory, "list_tenants"): lambda w: w.hub.hub_services.tenant_admin.list_tenants(),
+    (IReadEgressEvents, "markers_after"): lambda w: w.hub.hub_services.hub_scoped_reads.corpus.markers_after(
         EventsPosition(_HUB_BASE), _HUB_UNTIL, 50, extractor_version=EXTRACTOR_VERSION
     ),
-    (IReadEgressEvents, "drops_after"): lambda w: _egress_events_of(w.store_connections).drops_after(
+    (IReadEgressEvents, "drops_after"): lambda w: w.hub.hub_services.hub_scoped_reads.corpus.drops_after(
         EventsPosition(_HUB_BASE), _HUB_UNTIL, 50
     ),
     (IReadEgressEvents, "derivations"): lambda w: (
         lambda events: events.derivations(
             events.markers_after(EventsPosition(_HUB_BASE), _HUB_UNTIL, 50, extractor_version=None)
         )
-    )(_egress_events_of(w.store_connections)),
-    (IReadEgressEvents, "epochs_minted_between"): lambda w: _egress_events_of(
-        w.store_connections
-    ).epochs_minted_between(_HUB_BASE, _HUB_UNTIL, EpochKey(w.transcript_chunk, 0), 50),
-    (IReadEgressEvents, "epoch_markers"): lambda w: _egress_events_of(w.store_connections).epoch_markers(
+    )(w.hub.hub_services.hub_scoped_reads.corpus),
+    (IReadEgressEvents, "epochs_minted_between"): lambda w: (
+        w.hub.hub_services.hub_scoped_reads.corpus.epochs_minted_between(
+            _HUB_BASE, _HUB_UNTIL, EpochKey(w.transcript_chunk, 0), 50
+        )
+    ),
+    (IReadEgressEvents, "epoch_markers"): lambda w: w.hub.hub_services.hub_scoped_reads.corpus.epoch_markers(
         [EpochKey(w.transcript_chunk, 1)], extractor_version=EXTRACTOR_VERSION
     ),
-    (IReadEgressEvents, "epoch_drops"): lambda w: _egress_events_of(w.store_connections).epoch_drops(
+    (IReadEgressEvents, "epoch_drops"): lambda w: w.hub.hub_services.hub_scoped_reads.corpus.epoch_drops(
         [EpochKey(w.transcript_chunk, 1)]
     ),
     (IReadTraceStatus, "newest_export_cursor"): lambda w: _trace_store_of(

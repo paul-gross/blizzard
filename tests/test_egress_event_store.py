@@ -21,11 +21,22 @@ from blizzard.hub.domain.observability.egress.repository import (
 )
 from blizzard.hub.domain.observability.transcripts import TranscriptSlice
 from blizzard.hub.runtime import migration_runner
-from blizzard.hub.store.internal.egress_event_store import EgressEventStore
 from blizzard.hub.store.internal.egress_store import EgressStore
+from blizzard.hub.store.internal.hub_scoped_corpus import SweepCorpusReads
+from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
-from tests.support import count_queries, hub_store_connections, seed_chunk, seed_graph, seed_lease
+from tests.hub_event_rows import hub_events_of
+from tests.support import (
+    add_tenant,
+    count_queries,
+    default_tenant,
+    hub_level_connections,
+    hub_store_connections,
+    seed_chunk,
+    seed_graph,
+    seed_lease,
+)
 
 pytestmark = pytest.mark.component
 
@@ -109,8 +120,8 @@ def _drop(engine: Engine, segment_id: str, at: datetime) -> None:
     TranscriptEventStore(hub_store_connections(engine)).drop_segments(frozenset({segment_id}), at=at)
 
 
-def _store(engine: Engine) -> EgressEventStore:
-    return EgressEventStore(hub_store_connections(engine))
+def _store(engine: Engine) -> SweepCorpusReads:
+    return build_hub_scoped_reads(hub_level_connections(engine)).corpus
 
 
 def test_markers_after_a_position_come_in_cursor_order_settled_and_limited(tmp_path: Path) -> None:
@@ -242,8 +253,8 @@ def test_the_backfill_reads_select_epochs_minted_in_the_window_and_their_markers
 
 def test_the_events_cursor_round_trips(tmp_path: Path) -> None:
     engine = _engine(tmp_path)
-    store = EgressStore(hub_store_connections(engine))
-    position = EventsPosition(_at(10), "sg_a", _V1)
+    store = EgressStore(hub_store_connections(engine), hub_events=hub_events_of(engine), usage=_store(engine))
+    position = EventsPosition(_at(10), "sg_a", _V1, default_tenant(engine))
 
     store.append_cursor(EgressCheckpoint("events", None, UsagePosition(_at(0)), 3, ("a", "m"), _at(11), position))
     store.append_cursor(EgressCheckpoint("invocations", None, UsagePosition(_at(5), 7), 0, (), _at(11)))
@@ -258,3 +269,23 @@ def test_the_events_cursor_round_trips(tmp_path: Path) -> None:
     reset = store.newest_cursor("events")
     assert reset is not None
     assert reset.events == EventsPosition(_at(1), "", "")
+
+
+def test_an_events_position_two_tenants_tie_at_keeps_its_tenant_and_one_recorded_without_stands_past_both(
+    tmp_path: Path,
+) -> None:
+    engine = _engine(tmp_path)
+    tenants = (default_tenant(engine), add_tenant(engine, "second"))
+    store = EgressStore(hub_level_connections(engine), hub_events=hub_events_of(engine), usage=_store(engine))
+    tied = [EventsPosition(_at(10), "sg_a", _V1, tenant) for tenant in tenants]
+    untenanted = EventsPosition(_at(10), "sg_a", _V1)
+
+    recorded: list[EventsPosition | None] = []
+    for seconds, position in enumerate([*tied, untenanted], start=11):
+        store.append_cursor(EgressCheckpoint("events", None, UsagePosition(_at(0)), 1, (), _at(seconds), position))
+        newest = store.newest_cursor("events")
+        assert newest is not None
+        recorded.append(newest.events)
+
+    assert recorded == [*tied, untenanted]
+    assert all(position < untenanted for position in tied)

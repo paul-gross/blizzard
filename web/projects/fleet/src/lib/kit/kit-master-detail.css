@@ -44,6 +44,10 @@
   box-sizing: border-box;
 }
 .s-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   padding: 6px 8px 0;
 }
 .tag {

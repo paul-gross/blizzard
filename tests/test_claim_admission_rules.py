@@ -11,6 +11,7 @@ from typing import Any, cast
 import pytest
 
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
+from blizzard.foundation.claim_denials import ClaimDenialReason
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.hub.domain.chunk.model import (
     CHUNK_VERB_LEGALITY,
@@ -35,9 +36,11 @@ from blizzard.hub.domain.execution.claim import (
     first_unmet_prerequisite,
     refuse_paused_runner,
     refuse_rekey,
+    refuse_unserved_project,
 )
 from blizzard.hub.domain.graph.model import Choice, Edge, Node
-from blizzard.hub.domain.runners.registration import RunnerCapability, RunnerRegistration, RunnerRetired
+from blizzard.hub.domain.projects.model import ProjectId
+from blizzard.hub.domain.runners.registration import RunnerCapability, RunnerRegistration, RunnerRetired, ServedEntry
 from blizzard.hub.domain.runners.route import Route
 from tests.support import make_graph
 
@@ -63,7 +66,8 @@ _NODE = Node(
 _GRAPH = make_graph(
     "gr_a", "work", entry_node_id="nd_build", nodes=[_NODE], edges=[Edge("nd_build", "ch_ship", "done")]
 )
-_CHUNK = Chunk(chunk_id="chk_1", graph_id="gr_a", work_refs=[], minted_at=_T0)
+_PROJECT = ProjectId("proj_alpha")
+_CHUNK = Chunk(chunk_id="chk_1", graph_id="gr_a", work_refs=[], minted_at=_T0, project_id=_PROJECT)
 _READY = ChunkFacts(minted=True, promoted=True)
 _REGISTERED = RunnerRegistration(
     runner_id="runner-a",
@@ -74,6 +78,7 @@ _REGISTERED = RunnerRegistration(
     last_seen_at=_T0,
     hub_paused=False,
     capabilities=(RunnerCapability(harness_id="claude_code", default=True),),
+    served=(ServedEntry("alpha", _PROJECT),),
 )
 
 
@@ -239,6 +244,53 @@ def test_an_unmet_prerequisite_is_refused_before_a_capability_mismatch() -> None
     assert refused.value.prerequisite_chunk_id == "chk_pre"
     with pytest.raises(ClaimDeniedIncompatible):
         _admit(_READY, registration=withdrawn)
+
+
+def test_a_capability_refusal_carries_the_capability_reason_and_no_project() -> None:
+    withdrawn = replace(_REGISTERED, capabilities=(RunnerCapability(harness_id="claude_code", available=False),))
+    with pytest.raises(ClaimDeniedIncompatible) as refused:
+        _admit(_READY, registration=withdrawn)
+    assert refused.value.reason is ClaimDenialReason.CAPABILITY
+    assert refused.value.project_id is None
+    assert str(refused.value) == "runner runner-a's capabilities no longer satisfy chunk chk_1"
+
+
+def test_a_runner_not_serving_the_chunks_project_is_refused_naming_the_project() -> None:
+    project = ProjectId("proj_alpha")
+    elsewhere = replace(_REGISTERED, served=(ServedEntry("beta", ProjectId("proj_beta")), ServedEntry("gamma", None)))
+    with pytest.raises(ClaimDeniedIncompatible) as refused:
+        refuse_unserved_project(elsewhere, chunk_id="chk_1", project_id=project)
+    assert (refused.value.reason, refused.value.project_id) == (ClaimDenialReason.PROJECT, project)
+    assert (refused.value.chunk_id, refused.value.runner_id) == ("chk_1", "runner-a")
+    assert str(refused.value) == "runner runner-a does not serve project proj_alpha of chunk chk_1"
+
+
+def test_a_runner_serving_nothing_is_refused_every_project() -> None:
+    with pytest.raises(ClaimDeniedIncompatible) as refused:
+        refuse_unserved_project(replace(_REGISTERED, served=()), chunk_id="chk_1", project_id=_PROJECT)
+    assert refused.value.reason is ClaimDenialReason.PROJECT
+
+
+def test_a_runner_serving_the_chunks_project_passes_the_project_guard() -> None:
+    refuse_unserved_project(_REGISTERED, chunk_id="chk_1", project_id=_PROJECT)
+
+
+def test_an_unmet_prerequisite_is_refused_before_an_unserved_project() -> None:
+    elsewhere = replace(_REGISTERED, served=(ServedEntry("beta", ProjectId("proj_beta")),))
+    with pytest.raises(ClaimDeniedDependency):
+        _admit(_READY, unmet="chk_pre", registration=elsewhere)
+    with pytest.raises(ClaimDeniedIncompatible) as refused:
+        _admit(_READY, registration=elsewhere)
+    assert (refused.value.reason, refused.value.project_id) == (ClaimDenialReason.PROJECT, _PROJECT)
+
+
+def test_an_unserved_project_is_refused_before_a_capability_mismatch() -> None:
+    neither = replace(
+        _REGISTERED, served=(), capabilities=(RunnerCapability(harness_id="claude_code", available=False),)
+    )
+    with pytest.raises(ClaimDeniedIncompatible) as refused:
+        _admit(_READY, registration=neither)
+    assert refused.value.reason is ClaimDenialReason.PROJECT
 
 
 def test_a_registration_reporting_no_capabilities_is_refused() -> None:

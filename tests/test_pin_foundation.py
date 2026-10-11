@@ -19,9 +19,11 @@ import blizzard
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.runtime import init_environment as init_hub
 from blizzard.hub.store import schema as hub
+from blizzard.hub.tenancy import HUB_SCOPED_OPTION, TenantId
 from blizzard.runner.runtime import init_environment as init_runner
 from blizzard.runner.store import schema as runner
-from blizzard.tools.invariants import HubInvariants, RunnerInvariants
+from blizzard.tools.invariants import HubInvariants, OneLiveExecSlot, RunnerInvariants, Violation
+from tests.support import add_tenant, default_tenant, hub_scoped, stamp
 
 _NOW = datetime(2026, 7, 14, tzinfo=UTC)
 
@@ -67,19 +69,26 @@ def test_an_open_pause_park_over_a_closed_lease_is_not_a_violation(tmp_path: Pat
 
 @pytest.mark.component
 def test_two_live_hub_exec_slots_are_a_violation(tmp_path: Path) -> None:
-    """The fleet-wide hub-execution slot is a durable fact, so at-most-one-live is a
+    """A tenant's hub-execution slot is a durable fact, so at-most-one-live is a
     question the store can answer after any crash — two live rows are named (#65)."""
     engine = _hub_engine(tmp_path)
     with engine.begin() as conn:
         for chunk_id in ("ch_1", "ch_2"):
-            conn.execute(insert(hub.chunks).values(chunk_id=chunk_id, graph_id="gr_1", minted_at=_NOW, model="m"))
+            conn.execute(
+                insert(hub.chunks).values(
+                    stamp(hub.chunks, chunk_id=chunk_id, graph_id="gr_1", minted_at=_NOW, model="m")
+                )
+            )
             conn.execute(
                 insert(hub.hub_exec_slot).values(
-                    slot_id=f"hes_{chunk_id}",
-                    holder_chunk_id=chunk_id,
-                    node_id="nd_merge",
-                    acquired_at=_NOW,
-                    released_at=None,
+                    stamp(
+                        hub.hub_exec_slot,
+                        slot_id=f"hes_{chunk_id}",
+                        holder_chunk_id=chunk_id,
+                        node_id="nd_merge",
+                        acquired_at=_NOW,
+                        released_at=None,
+                    )
                 )
             )
     slugs = {v.invariant for v in HubInvariants(engine).run()}
@@ -88,9 +97,53 @@ def test_two_live_hub_exec_slots_are_a_violation(tmp_path: Path) -> None:
     # The release is itself a durable fact: recording it leaves exactly one live slot.
     with engine.begin() as conn:
         conn.execute(
-            update(hub.hub_exec_slot).where(hub.hub_exec_slot.c.slot_id == "hes_ch_2").values(released_at=_NOW)
+            hub_scoped(
+                update(hub.hub_exec_slot).where(hub.hub_exec_slot.c.slot_id == "hes_ch_2").values(released_at=_NOW)
+            )
         )
     assert HubInvariants(engine).run() == []
+
+
+@pytest.mark.component
+def test_one_live_hub_exec_slot_holds_per_tenant(tmp_path: Path) -> None:
+    """Each tenant holds its own slot: two tenants' live slots at once are legal, and a
+    tenant with two live slots is named on its own. The check runs alone over the whole
+    store, as the checker's query pass runs it."""
+    engine = _hub_engine(tmp_path)
+    first = default_tenant(engine)
+    second = add_tenant(engine, "second")
+
+    def live_slot(tenant: TenantId, chunk_id: str) -> None:
+        with engine.begin() as conn:
+            conn.execute(
+                insert(hub.chunks).values(
+                    stamp(hub.chunks, chunk_id=chunk_id, graph_id="gr_1", minted_at=_NOW, model="m", tenant_id=tenant)
+                )
+            )
+            conn.execute(
+                insert(hub.hub_exec_slot).values(
+                    slot_id=f"hes_{chunk_id}",
+                    holder_chunk_id=chunk_id,
+                    node_id="nd_merge",
+                    acquired_at=_NOW,
+                    released_at=None,
+                    tenant_id=tenant,
+                )
+            )
+
+    def check() -> list[Violation]:
+        with engine.execution_options(**{HUB_SCOPED_OPTION: True}).connect() as conn:
+            return OneLiveExecSlot(conn).run()
+
+    live_slot(first, "ch_a1")
+    live_slot(second, "ch_b1")
+    assert check() == []
+
+    live_slot(second, "ch_b2")
+    violations = check()
+    assert [v.invariant for v in violations] == ["hub:one-live-exec-slot"]
+    assert second in violations[0].detail
+    assert first not in violations[0].detail
 
 
 @pytest.mark.component

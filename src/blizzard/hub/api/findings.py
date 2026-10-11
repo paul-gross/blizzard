@@ -18,10 +18,13 @@ from blizzard.auth_core import Permission
 from blizzard.foundation.findings import FindingFactKind
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
-from blizzard.hub.api.auth_session import require
-from blizzard.hub.api.deps import get_services
+from blizzard.hub.api.auth_session import require, tenant_bound
+from blizzard.hub.api.chunk_views import ProjectLabelFields
+from blizzard.hub.api.deps import Services
+from blizzard.hub.api.project_labels import ProjectLabels
+from blizzard.hub.api.project_params import PathProject, QueryProject, project_of_call
 from blizzard.hub.auth.models import ResolvedIdentity
-from blizzard.hub.composition import HubServices
+from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.garden.findings.model import (
     AbsorberNotLive,
     DuplicateFindingError,
@@ -43,10 +46,12 @@ from blizzard.wire.finding import (
     FindingView,
 )
 
-router = APIRouter(prefix="/api", tags=["findings"], dependencies=[Depends(reject_runner_principal)])
+_GUARDS = [Depends(reject_runner_principal), Depends(tenant_bound)]
+router = APIRouter(prefix="/api", tags=["findings"], dependencies=_GUARDS)
+project_router = APIRouter(prefix="/api/projects/{project}", tags=["findings"], dependencies=_GUARDS)
 
 
-def _finding_view_fields(finding: Finding) -> dict[str, object]:
+def _finding_view_fields(finding: Finding, labels: ProjectLabelFields | None = None) -> dict[str, object]:
     """The one `Finding` -> wire-dict projection — `finding_view` wraps it in
     `FindingView.model_validate`, `get_finding` extends it with `facts` and wraps in
     `FindingDetailView.model_validate`, so neither round-trips the other's already-
@@ -70,15 +75,16 @@ def _finding_view_fields(finding: Finding) -> dict[str, object]:
         "severity": finding.severity,
         "raised_by_chunk_id": finding.raised_by_chunk_id,
         "exit": finding_exit(finding.state),
+        **(labels if labels is not None else {}),
     }
 
 
-def finding_view(finding: Finding) -> FindingView:
-    """The one ``Finding`` -> ``FindingView`` projection — reused as-is by the runner-facing
-    fleet route (``blizzard.hub.api.fleet``) rather than restated there."""
+def finding_view(finding: Finding, labels: ProjectLabelFields | None = None) -> FindingView:
+    """The one ``Finding`` -> ``FindingView`` projection, labelled with its project when ``labels`` is given —
+    reused as-is by the runner-facing fleet route (``blizzard.hub.api.fleet``) rather than restated there."""
     # `class_`'s alias is the Python keyword `class` — constructed by alias via
     # `model_validate`, the `garden_proposal_view` shape.
-    return FindingView.model_validate(_finding_view_fields(finding))
+    return FindingView.model_validate(_finding_view_fields(finding, labels))
 
 
 def _fact_view(fact: FindingFact) -> FindingFactView:
@@ -94,7 +100,7 @@ def _fact_view(fact: FindingFact) -> FindingFactView:
     )
 
 
-def _load_or_404(finding_ids: list[str], services: HubServices) -> list[Finding]:
+def _load_or_404(finding_ids: list[str], services: TenantServices) -> list[Finding]:
     """`finding_ids`, in order — one batched read (`get_many`), not one query per id."""
     by_id = services.findings.get_many(finding_ids)
     findings = []
@@ -106,22 +112,53 @@ def _load_or_404(finding_ids: list[str], services: HubServices) -> list[Finding]
     return findings
 
 
-def _reread(findings: list[Finding], services: HubServices) -> list[FindingView]:
+def _reread(findings: list[Finding], services: TenantServices) -> list[FindingView]:
     """Every named finding, re-read post-write, so the response carries the fresh state
     and note an exit verb just recorded rather than the stale pre-call snapshot — one
     batched read (`get_many`), not one query per finding."""
     by_id = services.findings.get_many([f.finding_id for f in findings])
+    labels = ProjectLabels.read(services, (f.project_id for f in findings))
     views = []
     for f in findings:
         fresh = by_id.get(f.finding_id)
         assert fresh is not None  # just written a fact against it; cannot have vanished
-        views.append(finding_view(fresh))
+        views.append(finding_view(fresh, labels.fields(fresh.project_id)))
     return views
+
+
+def _page(
+    services: TenantServices,
+    project_id: str | None,
+    *,
+    routine: str | None,
+    scope: str | None,
+    source: str | None,
+    include_gone: bool,
+    cursor: str | None,
+    limit: int,
+) -> FindingsPageView:
+    try:
+        page = services.findings.list_page(
+            project_id=project_id,
+            routine_name=routine,
+            scope_slug=scope,
+            source=source,
+            include_gone=include_gone,
+            cursor=cursor,
+            limit=limit,
+        )
+    except MalformedCursor as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="malformed cursor") from exc
+    labels = ProjectLabels.read(services, (f.project_id for f in page.findings))
+    return FindingsPageView(
+        findings=[finding_view(f, labels.fields(f.project_id)) for f in page.findings], next_cursor=page.next_cursor
+    )
 
 
 @router.get("/findings", response_model=FindingsPageView, dependencies=[Depends(require(Permission.FLEET_VIEW))])
 def list_findings(
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
+    project: QueryProject,
     routine: Annotated[str | None, Query()] = None,
     scope: Annotated[str | None, Query()] = None,
     source: Annotated[str | None, Query()] = None,
@@ -140,37 +177,70 @@ def list_findings(
     - both absent — every finding across every routine and every scope
 
     `source` further narrows to `"routine"` or `"review"`; absent reads
-    both. All share `list_page`'s own total `finding_id` order."""
-    try:
-        page = services.findings.list_page(
-            routine_name=routine,
-            scope_slug=scope,
-            source=source,
-            include_gone=include_gone,
-            cursor=cursor,
-            limit=limit,
-        )
-    except MalformedCursor as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="malformed cursor") from exc
-    return FindingsPageView(findings=[finding_view(f) for f in page.findings], next_cursor=page.next_cursor)
+    both. All share `list_page`'s own total `finding_id` order. `?project=` narrows to that project. A named
+    `routine` or `scope` with no `?project=` is read in the call's project (the tenant's only one, else `422
+    project_required`); naming none of the three reads the whole tenant."""
+    project_id: str | None = project
+    if project_id is None and (routine is not None or scope is not None):
+        project_id = project_of_call(services).project_id
+    return _page(
+        services,
+        project_id,
+        routine=routine,
+        scope=scope,
+        source=source,
+        include_gone=include_gone,
+        cursor=cursor,
+        limit=limit,
+    )
+
+
+@project_router.get(
+    "/findings", response_model=FindingsPageView, dependencies=[Depends(require(Permission.FLEET_VIEW))]
+)
+def list_project_findings(
+    services: Services,
+    project: PathProject,
+    routine: Annotated[str | None, Query()] = None,
+    scope: Annotated[str | None, Query()] = None,
+    source: Annotated[str | None, Query()] = None,
+    include_gone: Annotated[bool, Query()] = False,
+    cursor: Annotated[str | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
+) -> FindingsPageView:
+    """The project's findings bucket, bounded and keyset-paginated, narrowed as `GET /api/findings` narrows by
+    `routine`, `scope`, `source` and `include_gone`; 404 on an unknown project."""
+    return _page(
+        services,
+        project.project_id,
+        routine=routine,
+        scope=scope,
+        source=source,
+        include_gone=include_gone,
+        cursor=cursor,
+        limit=limit,
+    )
 
 
 @router.get(
     "/findings/{finding_id}", response_model=FindingDetailView, dependencies=[Depends(require(Permission.FLEET_VIEW))]
 )
-def get_finding(finding_id: str, services: Annotated[HubServices, Depends(get_services)]) -> FindingDetailView:
+def get_finding(finding_id: str, services: Services) -> FindingDetailView:
     """One finding's whole record, plus its whole fact chain oldest-first;
     404 on an unknown id."""
     result = services.findings.get_with_facts(finding_id)
     if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown finding {finding_id}")
     finding, facts = result
-    return FindingDetailView.model_validate({**_finding_view_fields(finding), "facts": [_fact_view(f) for f in facts]})
+    labels = ProjectLabels.read(services, [finding.project_id]).fields(finding.project_id)
+    return FindingDetailView.model_validate(
+        {**_finding_view_fields(finding, labels), "facts": [_fact_view(f) for f in facts]}
+    )
 
 
 def _exit_verb(
     request: FindingExitRequest,
-    services: HubServices,
+    services: TenantServices,
     identity: ResolvedIdentity,
     verb: Callable[..., None],
 ) -> list[FindingView]:
@@ -198,7 +268,7 @@ def _refusals_mapped() -> Iterator[None]:
 @router.post("/findings/resolve", response_model=list[FindingView])
 def resolve_findings(
     request: FindingExitRequest,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
 ) -> list[FindingView]:
     """Resolve every finding in `finding_ids`, recording NOTE: the work that answers a
@@ -211,7 +281,7 @@ def resolve_findings(
 @router.post("/findings/confirm-gone", response_model=list[FindingView])
 def confirm_gone_findings(
     request: FindingExitRequest,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
 ) -> list[FindingView]:
     """Confirm by hand that every finding in `finding_ids` no longer reproduces,
@@ -223,7 +293,7 @@ def confirm_gone_findings(
 @router.post("/findings/wont-fix", response_model=list[FindingView])
 def wont_fix_findings(
     request: FindingExitRequest,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
 ) -> list[FindingView]:
     """Withdraw every finding in `finding_ids` as won't-fix, recording NOTE: the ground
@@ -235,7 +305,7 @@ def wont_fix_findings(
 @router.post("/findings/not-a-finding", response_model=list[FindingView])
 def not_a_finding_findings(
     request: FindingExitRequest,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
 ) -> list[FindingView]:
     """Withdraw every finding in `finding_ids` as not a finding, recording NOTE. 404 for
@@ -246,7 +316,7 @@ def not_a_finding_findings(
 @router.post("/findings/supersede", response_model=list[FindingView])
 def supersede_findings(
     request: FindingSupersedeRequest,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
 ) -> list[FindingView]:
     """Withdraw every finding in `finding_ids` as superseded by `superseded_by`,
@@ -264,7 +334,7 @@ def supersede_findings(
 @router.post("/findings/reopen", response_model=list[FindingView])
 def reopen_findings(
     request: FindingExitRequest,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
 ) -> list[FindingView]:
     """Reopen every finding in `finding_ids`, undoing whichever exit or `gone` fact was

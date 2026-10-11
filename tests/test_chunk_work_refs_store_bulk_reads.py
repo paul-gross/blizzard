@@ -18,7 +18,7 @@ from blizzard.foundation.store import batching as batching_module
 from blizzard.hub.domain.chunk.model import Chunk, WorkRef
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.store.internal.chunk_rows import record_grouped_row_conn
-from tests.support import chunk_stores, migrate_to, seed_chunk_record, seed_graph
+from tests.support import chunk_stores, hub_store_connections, migrate_to, seed_chunk_record, seed_graph
 
 pytestmark = pytest.mark.component
 
@@ -49,7 +49,7 @@ def test_live_holders_matches_find_live_holder_across_live_ephemeral_terminal_an
     store.queue.record_promote("ch_live", at=_T0)
 
     _mint(store, "ch_grouped", work_refs=[grouped_ref])
-    with engine.begin() as conn:
+    with hub_store_connections(engine).write("seed") as conn:
         record_grouped_row_conn(conn, "ch_grouped", grouped_into="ch_live", at=_T0)
 
     _mint(store, "ch_terminal", work_refs=[terminal_ref])

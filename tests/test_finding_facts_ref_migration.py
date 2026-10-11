@@ -29,11 +29,13 @@ from blizzard.hub.store.schema import findings as findings_table
 from blizzard.hub.store.schema import garden_proposal_findings
 from tests.support import hub_store_connections, migrate_to, seed_chunk, seed_graph
 
+_PROJECT = "proj_test"
+
 pytestmark = pytest.mark.component
 
 _BEFORE = "20260902_0900_chunk_dependencies"  # the head just before finding_facts.ref
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
-_RUN = RunContext(routine_name="nightly", scope_slug="blizzard", mode="dry_run")
+_RUN = RunContext(project_id=_PROJECT, routine_name="nightly", scope_slug="blizzard", mode="dry_run")
 
 _SCOPES = sa.Table(
     "scopes",
@@ -214,6 +216,7 @@ def test_republish_over_a_preref_finding_set_drops_the_unresolvable_citation(tmp
 
     assert store.deliver(_republish_plan(), admission=EpochAdmission.AT_OR_ABOVE) is DeliveryOutcome.RECORDED
 
+    scoped = hub_store_connections(engine)
     with engine.connect() as conn:
-        assert {r.finding_id for r in conn.execute(sa.select(findings_table))} == {"fin_a"}
-        assert conn.execute(sa.select(garden_proposal_findings)).all() == []
+        assert {r.finding_id for r in conn.execute(scoped.select(findings_table))} == {"fin_a"}
+        assert conn.execute(scoped.select(garden_proposal_findings)).all() == []

@@ -2,14 +2,15 @@
 
 The reference :class:`~blizzard.runner.hub.client.IHubClient` and
 :class:`~blizzard.runner.hub.client.ITokenIdentityReader` binding, and the
-:class:`~blizzard.runner.hub.client.IHubRunnerAdmin` one. All httpx usage is confined here; a
+:class:`~blizzard.runner.hub.client.IHubRunnerAdmin` one, and the auth presenting the runner's held
+token. All httpx usage is confined here; a
 transport failure or unexpected status is wrapped once into
 :class:`~blizzard.runner.hub.client.HubClientError` (``bzh:structlog-logging``).
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Generator, Iterable, Sequence
 
 import httpx
 from pydantic import TypeAdapter
@@ -26,11 +27,13 @@ from blizzard.runner.hub.client import (
     FactPushAck,
     HubClientError,
     HubQuestion,
+    IdentityRouteMissing,
     IHubClient,
     IHubRunnerAdmin,
     IncompatibleDenial,
     IssuedIdentity,
     ITokenIdentityReader,
+    OperatorTenant,
     PausedDenial,
     PushedFact,
     QueueBlock,
@@ -47,12 +50,14 @@ from blizzard.runner.hub.client import (
     TranscriptPush,
     TranscriptPushAck,
 )
+from blizzard.runner.hub.held_token import ICurrentHubToken
 from blizzard.runner.hub.node_steps import (
     apply_reply_of,
     completion_submission,
     decision_submission,
     envelope_of,
 )
+from blizzard.runner.hub.served_projects import ServedProject
 from blizzard.runner.node_steps.chunk_state import ChunkGate, ChunkPause, ChunkSpend, ChunkState
 from blizzard.runner.node_steps.envelope import Envelope
 from blizzard.runner.node_steps.submissions import ApplyReply, Completion, GateSubmission
@@ -81,8 +86,10 @@ from blizzard.wire.runner import (
     RunnerRegistrationResponse,
     RunnerSubscriptionDeclaration,
     RunnerView,
+    ServedProjectView,
 )
 from blizzard.wire.transcript_segment import TranscriptSegmentAck, TranscriptSegmentBatch, TranscriptSegmentRecord
+from blizzard.wire.user import CallerTenantsView
 
 _log = get_logger("blizzard.runner.hub")
 
@@ -98,6 +105,12 @@ _CHUNK_STATUSES_BATCH_LIMIT = 500
 #: The operator route adding a runner — the one call this module makes outside the fleet API.
 _RUNNERS_API = "/api/runners"
 
+#: The hub-level route naming the tenants the operator may enter.
+_ME_API = "/api/me"
+
+#: The header an operator call names its tenant in, by id.
+TENANT_HEADER = "X-Blizzard-Tenant"
+
 #: The statuses an add is refused with, each a reason the caller acts on rather than retries.
 _ADD_REFUSALS: dict[int, RunnerAddRefusalReason] = {
     httpx.codes.UNAUTHORIZED: RunnerAddRefusalReason.SIGN_IN_REQUIRED,
@@ -105,6 +118,25 @@ _ADD_REFUSALS: dict[int, RunnerAddRefusalReason] = {
     httpx.codes.NOT_FOUND: RunnerAddRefusalReason.UNSUPPORTED,
     httpx.codes.METHOD_NOT_ALLOWED: RunnerAddRefusalReason.UNSUPPORTED,
 }
+
+#: The hub's refusal text for a named tenant the caller cannot enter — one text for an unknown, a
+#: closed, and an unenterable tenant.
+_NO_SUCH_TENANT = "no such tenant"
+
+#: The ``detail.code`` of the hub's ``409`` when the caller may enter several tenants and named none.
+_TENANT_REQUIRED = "tenant_required"
+
+
+class HeldTokenAuth(httpx.Auth):
+    """Authorizes each request with the token ``token`` holds when it is sent, so a client built once
+    presents a token the runner takes up later."""
+
+    def __init__(self, token: ICurrentHubToken) -> None:
+        self._token = token
+
+    def auth_flow(self, request: httpx.Request) -> Generator[httpx.Request, httpx.Response, None]:
+        request.headers.update(self._token.auth_headers())
+        yield request
 
 
 class HttpHubClient:
@@ -225,6 +257,7 @@ class HttpHubClient:
         capabilities: tuple[HarnessCapability, ...] = (),
         subscriptions: tuple[SubscriptionDeclaration, ...] = (),
         gates: tuple[str, ...] = (),
+        projects: tuple[str, ...] | None = None,
     ) -> RegistrationReply:
         resp = self._post(
             f"{_FLEET_API}/runners",
@@ -239,6 +272,7 @@ class HttpHubClient:
                     RunnerSubscriptionDeclaration(slug=d.slug, name=d.name, provider=d.provider) for d in subscriptions
                 ],
                 gates=list(gates),
+                projects=list(projects) if projects is not None else None,
             ).model_dump(mode="json"),
         )
         reply = RunnerRegistrationResponse.model_validate(resp.json())
@@ -247,6 +281,9 @@ class HttpHubClient:
             # A hub reply carrying no name leaves the one this registration declared.
             runner_name=reply.runner_name if reply.runner_name is not None else name,
             first_registration=reply.first_registration,
+            tenant_id=reply.tenant_id,
+            tenant_name=reply.tenant_name,
+            projects=tuple(_served(p) for p in reply.projects) if reply.projects is not None else None,
         )
 
     def fetch_runner_paused(self, runner_id: str) -> bool:
@@ -264,12 +301,17 @@ class HttpHubClient:
             if refusal is not None:
                 _log.info("hub call refused", operation=operation, status=resp.status_code, reason=refusal.reason)
                 return refusal
-        self._raise_for_status(resp, operation)
+        self._raise_for_status(resp, operation, not_found_as=IdentityRouteMissing)
         try:
             view = RunnerIdentityView.model_validate(resp.json())
         except ValueError as exc:
             raise _malformed(operation, exc) from exc
-        return TokenIdentity(runner_id=view.runner_id, runner_name=view.runner_name)
+        return TokenIdentity(
+            runner_id=view.runner_id,
+            runner_name=view.runner_name,
+            tenant_id=view.tenant_id,
+            tenant_name=view.tenant_name,
+        )
 
     def rekey_route_token(self, chunk_id: str) -> str:
         resp = self._post(
@@ -348,24 +390,27 @@ class HttpHubClient:
 
 
 class HttpHubRunnerAdmin:
-    """Runner add over an injected ``httpx.Client``, sending ``operator_token`` as a Bearer
-    credential when set and no credential otherwise."""
+    """Runner add and the operator's tenants over an injected ``httpx.Client``, sending
+    ``operator_token`` as a Bearer credential when set and no credential otherwise."""
 
     def __init__(self, client: httpx.Client, *, operator_token: str | None) -> None:
         self._client = client
         self._operator_token = operator_token
 
-    def add_runner(self, name: str) -> IssuedIdentity:
+    def add_runner(
+        self, name: str, *, tenant_id: str | None = None, projects: tuple[str, ...] | None = None
+    ) -> IssuedIdentity:
         operation = f"POST {_RUNNERS_API}"
-        headers = {"Authorization": f"Bearer {self._operator_token}"} if self._operator_token else {}
+        headers = self._headers()
+        if tenant_id is not None:
+            headers[TENANT_HEADER] = tenant_id
+        request = RunnerAddRequest(name=name, projects=list(projects) if projects is not None else None)
         try:
-            resp = self._client.post(
-                _RUNNERS_API, json=RunnerAddRequest(name=name).model_dump(mode="json"), headers=headers
-            )
+            resp = self._client.post(_RUNNERS_API, json=request.model_dump(mode="json"), headers=headers)
         except httpx.HTTPError as exc:
             _log.error("hub unreachable", operation=operation, detail=str(exc))
             raise HubClientError(f"{operation} failed: {exc}") from exc
-        reason = _ADD_REFUSALS.get(resp.status_code)
+        reason = _add_refusal(resp)
         if reason is not None:
             _log.info("hub call refused", operation=operation, status=resp.status_code, reason=reason)
             raise RunnerAddRefused(f"{operation} -> {resp.status_code}", reason=reason, detail=_detail(resp))
@@ -377,6 +422,51 @@ class HttpHubRunnerAdmin:
         except ValueError as exc:
             raise _malformed(operation, exc) from exc
         return IssuedIdentity(runner_id=added.runner_id, runner_name=added.runner_name, token=added.token)
+
+    def tenants(self) -> list[OperatorTenant]:
+        operation = f"GET {_ME_API}"
+        try:
+            resp = self._client.get(_ME_API, headers=self._headers())
+        except httpx.HTTPError as exc:
+            _log.error("hub unreachable", operation=operation, detail=str(exc))
+            raise HubClientError(f"{operation} failed: {exc}") from exc
+        if not resp.is_success:
+            _log.error("hub call failed", operation=operation, status=resp.status_code, body=resp.text[:500])
+            raise HubClientError(f"{operation} -> {resp.status_code}: {resp.text[:200]}")
+        try:
+            me = CallerTenantsView.model_validate(resp.json())
+        except ValueError as exc:
+            raise _malformed(operation, exc) from exc
+        return [OperatorTenant(tenant_id=t.tenant_id, name=t.name) for t in me.tenants]
+
+    def _headers(self) -> dict[str, str]:
+        return {"Authorization": f"Bearer {self._operator_token}"} if self._operator_token else {}
+
+
+def _add_refusal(resp: httpx.Response) -> RunnerAddRefusalReason | None:
+    """The reason an add's answer refuses it, or ``None`` when it is no refusal the caller acts on.
+    A ``404`` is the tenant refusal only when it carries the hub's tenant text — a hub that predates
+    adding runners answers its own; a ``409`` is a refusal only when it is the tenant one; a ``422``
+    is the project refusal only when its detail is the hub's text — a malformed request's carries a
+    list of field errors instead."""
+    if resp.status_code == httpx.codes.NOT_FOUND and _detail(resp) == _NO_SUCH_TENANT:
+        return RunnerAddRefusalReason.NO_SUCH_TENANT
+    if resp.status_code == httpx.codes.UNPROCESSABLE_ENTITY:
+        return RunnerAddRefusalReason.NO_SUCH_PROJECT if _text_detail(resp) else None
+    if resp.status_code == httpx.codes.CONFLICT:
+        return RunnerAddRefusalReason.TENANT_REQUIRED if _refusal_code(resp) == _TENANT_REQUIRED else None
+    return _ADD_REFUSALS.get(resp.status_code)
+
+
+def _refusal_code(resp: httpx.Response) -> str | None:
+    """The ``detail.code`` of a structured FastAPI refusal, or ``None`` when it carries none."""
+    try:
+        body = resp.json()
+    except ValueError:
+        return None
+    detail = body.get("detail") if isinstance(body, dict) else None
+    code = detail.get("code") if isinstance(detail, dict) else None
+    return code if isinstance(code, str) else None
 
 
 def _conforms_hub_client(x: HttpHubClient) -> IHubClient:
@@ -416,6 +506,15 @@ def _detail(resp: httpx.Response) -> str:
     return str(detail) if detail is not None else resp.text[:200]
 
 
+def _text_detail(resp: httpx.Response) -> bool:
+    """Whether a refusal's ``detail`` is the hub's own text, as opposed to a list of field errors."""
+    try:
+        body = resp.json()
+    except ValueError:
+        return False
+    return isinstance(body, dict) and isinstance(body.get("detail"), str)
+
+
 def _claimed(wire: RouteClaimResponse) -> ClaimedRoute:
     return ClaimedRoute(
         chunk_id=wire.chunk_id,
@@ -443,8 +542,15 @@ def _dependency(wire: RouteClaimDependencyDenial) -> DependencyDenial:
 
 def _incompatible(wire: RouteClaimIncompatibleDenial) -> IncompatibleDenial:
     return IncompatibleDenial(
-        chunk_id=wire.chunk_id, incompatible_runner_id=wire.incompatible_runner_id, detail=wire.detail
+        chunk_id=wire.chunk_id,
+        incompatible_runner_id=wire.incompatible_runner_id,
+        detail=wire.detail,
+        reason=wire.reason,
     )
+
+
+def _served(wire: ServedProjectView) -> ServedProject:
+    return ServedProject(entry=wire.entry, project_id=wire.project_id, slug=wire.slug, name=wire.name)
 
 
 def _paused(wire: RouteClaimPausedDenial) -> PausedDenial:

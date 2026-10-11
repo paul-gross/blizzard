@@ -3,16 +3,23 @@ boundary, and the schema's column parity with :class:`ExportedEventsEntry`."""
 
 from __future__ import annotations
 
-from dataclasses import fields
+from dataclasses import fields, replace
 from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from blizzard.hub.domain.observability.analytics.events import DerivationMarker, DropFact
-from blizzard.hub.domain.observability.egress.event_rows import ExportedEventsEntry
-from blizzard.hub.domain.observability.egress.events_window import position_of, take
+from blizzard.hub.domain.observability.analytics.events import DerivationMarker, DropFact, SegmentProvenance
+from blizzard.hub.domain.observability.egress.event_rows import EventDerivation, ExportedEventsEntry, FilePathPolicy
+from blizzard.hub.domain.observability.egress.events_window import (
+    derivations_by_marker,
+    events_rows,
+    position_of,
+    take,
+)
 from blizzard.hub.domain.observability.egress.repository import EventsPosition
 from blizzard.hub.domain.observability.egress.schema import EVENTS_SCHEMA, events_position_text
+from blizzard.hub.tenancy import TenantId
+from tests import trace_fixtures as fx
 
 pytestmark = pytest.mark.unit
 
@@ -44,6 +51,14 @@ def test_a_drop_sorts_before_a_derivation_at_its_own_time_and_segment() -> None:
     assert position_of(_drop(5, "sg_a")) < position_of(_marker(5, "sg_a"))
     assert position_of(_drop(5, "sg_a")) == EventsPosition(_at(5), "sg_a", "")
     assert events_position_text(position_of(_drop(5, "sg_a"))) < events_position_text(position_of(_marker(5, "sg_a")))
+
+
+def test_the_tenant_orders_items_at_one_time_segment_and_version_and_a_tenantless_position_is_past_them_all() -> None:
+    first, second = (replace(_marker(5, "sg_a"), tenant=TenantId(t)) for t in ("ten_a", "ten_b"))
+    assert position_of(first) == EventsPosition(_at(5), "sg_a", "v1", TenantId("ten_a"))
+    assert position_of(first) < position_of(second) < EventsPosition(_at(5), "sg_a", "v1")
+    assert EventsPosition(_at(5), "sg_a", "v1") < position_of(replace(_marker(5, "sg_b"), tenant=TenantId("ten_a")))
+    assert position_of(replace(_drop(5, "sg_a"), tenant=TenantId("ten_b"))) < position_of(first)
 
 
 def test_markers_and_drops_merge_in_cursor_order() -> None:
@@ -84,3 +99,23 @@ def test_nothing_past_a_full_read_is_taken_from_the_other_source() -> None:
 
 def test_nothing_read_takes_nothing() -> None:
     assert take([], [], 10, read_limit=10) == ()
+
+
+def test_two_tenants_holding_a_marker_for_one_segment_and_version_each_export_their_own_derivation() -> None:
+    runner_step = fx.scenarios()["runner-step"]
+    provenance = SegmentProvenance("claude-code", "2.1", "opus", "high")
+    held = [
+        EventDerivation(replace(_marker(1, "sg_x"), tenant=TenantId(tenant)), provenance, (), chunk_id, 1, 1, None)
+        for tenant, chunk_id in (("ten_a", "ch_a"), ("ten_b", "ch_b"))
+    ]
+    facts = {derivation.chunk_id: replace(runner_step, chunk_id=derivation.chunk_id) for derivation in held}
+
+    rows = events_rows(
+        [derivation.marker for derivation in held],
+        derivations_by_marker(held),
+        facts,
+        FilePathPolicy("absolute"),
+        _at(9),
+    )
+
+    assert [row.values["chunk_id"] for _, row in rows] == ["ch_a", "ch_b"]

@@ -11,7 +11,7 @@ import click
 import httpx
 
 from blizzard.foundation.roles import dto
-from blizzard.hub.cli.command import FleetCommand
+from blizzard.hub.cli.command import AdminCommand, FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.views import Listing
 from blizzard.hub.graphs import GraphFile
@@ -32,6 +32,22 @@ class GraphSyncListing(Listing):
         detail = f" — {row['detail']}" if row.get("detail") else ""
         graph_id = f" {row['graph_id']}" if row.get("graph_id") else ""
         return f"{row['name']}: {row['status']}{graph_id}{detail}"
+
+
+@dto
+@dataclass(frozen=True)
+class TenantGraphSyncReport:
+    """One block per open tenant — its id and name, then a line per packaged graph."""
+
+    tenants: list[dict[str, Any]]
+
+    def lines(self) -> Iterator[str]:
+        if not self.tenants:
+            yield "no open tenants"
+        for tenant in self.tenants:
+            yield f"{tenant['tenant_id']}  {tenant['name']}"
+            for line in GraphSyncListing(tenant.get("entries", [])).lines():
+                yield f"  {line}"
 
 
 @dto
@@ -117,16 +133,15 @@ def graph_mint(cli: CliContext, path: str) -> None:
     cli.show_lines(body, f"minted graph {body['graph_id']}", *warnings)
 
 
-@graph_group.command("sync", cls=FleetCommand)
+@graph_group.command("sync", cls=AdminCommand)
 def graph_sync(cli: CliContext) -> None:
-    """Reconcile the hub's packaged graphs into its store, minting only what changed.
+    """Reconcile the hub's packaged graphs into every open tenant, minting only what changed, and report per tenant.
 
     Idempotent. The **hub's own** packaged set is what is reconciled, not this CLI's.
-    Exits non-zero only if a packaged graph failed to load. When to run it:
+    Exits non-zero only if a packaged graph failed to load in some tenant. When to run it:
     https://github.com/paul-gross/blizzard/blob/master/docs/deployment/install.md#graph-sync-after-a-deploy"""
-    resp = cli.post("/api/graphs/sync", "POST /graphs/sync", json_body={})
-    body = resp.json()
-    cli.show(body, GraphSyncListing(body.get("entries", [])))
+    body = cli.post("/api/admin/graphs/sync", "POST /admin/graphs/sync", json_body={}).json()
+    cli.show(body, TenantGraphSyncReport(body.get("tenants", [])))
     if not body.get("ok", True):
         raise click.ClickException("one or more packaged graphs failed to reconcile")
 

@@ -1,0 +1,98 @@
+id: bzh:hub-scoped-reads-confined
+snapshots:
+  ? |
+    def handle(reads: HubScopedReads) -> None: ...
+  : labels:
+    - source: HubScopedReads
+      style: primary
+      start: 18
+      end: 32
+  ? |
+    from blizzard.hub import composition
+    reads = composition.HubScopedReads
+  : labels:
+    - source: HubScopedReads
+      style: primary
+      start: 57
+      end: 71
+  ? |
+    from blizzard.hub.composition import build_hub_scoped_reads
+  : labels:
+    - source: build_hub_scoped_reads
+      style: primary
+      start: 37
+      end: 59
+  ? |
+    from blizzard.hub.store import internal
+    reads = internal.hub_scoped_reads.HubScopedReads
+  : labels:
+    - source: hub_scoped_reads
+      style: primary
+      start: 57
+      end: 73
+  ? |
+    from blizzard.hub.store.internal import hub_scoped_reads
+  : labels:
+    - source: hub_scoped_reads
+      style: primary
+      start: 40
+      end: 56
+  ? |
+    from blizzard.hub.store.internal.hub_scoped_credentials import CredentialReads
+  : labels:
+    - source: hub_scoped_credentials
+      style: primary
+      start: 33
+      end: 55
+  ? |
+    from blizzard.hub.store.internal.hub_scoped_reads import HubScopedReads
+  : labels:
+    - source: hub_scoped_reads
+      style: primary
+      start: 33
+      end: 49
+  ? |
+    from blizzard.hub.store.internal.hub_scoped_reads import TenantStateReads, hub_scoped_read
+  : labels:
+    - source: hub_scoped_reads
+      style: primary
+      start: 33
+      end: 49
+  ? |
+    from somewhere import (
+        Other,
+        HubScopedReads as Reads,
+    )
+  : labels:
+    - source: HubScopedReads
+      style: primary
+      start: 39
+      end: 53
+  ? |
+    import blizzard.hub.store.internal.hub_scoped_reads as reads
+  : labels:
+    - source: hub_scoped_reads
+      style: primary
+      start: 35
+      end: 51
+  ? |
+    reads = core.hub_scoped_reads
+  : labels:
+    - source: hub_scoped_reads
+      style: primary
+      start: 13
+      end: 29
+  ? |
+    reads = getattr(core, "hub_scoped_reads")
+  : labels:
+    - source: '"hub_scoped_reads"'
+      style: primary
+      start: 22
+      end: 40
+  ? |
+    reads = importlib.import_module("blizzard.hub.store.internal.hub_scoped_reads")
+  : labels:
+    - source: '"blizzard.hub.store.internal.hub_scoped_reads"'
+      style: primary
+      start: 32
+      end: 78

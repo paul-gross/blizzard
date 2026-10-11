@@ -91,12 +91,12 @@ describe('GardeningRoutinesPage', () => {
     return { fixture, router, el: fixture.nativeElement as HTMLElement };
   }
 
-  it('keeps a detail pane mounted on the bare route, with no row highlighted', async () => {
+  it('opens the first row on the bare route, beside its detail pane', async () => {
     const { el } = await render();
 
     expect(el.querySelector('[data-testid="routine-detail-stub"]')).toBeTruthy();
     expect(el.querySelector('[data-testid="gardening-routine-row-nightly"]')?.classList.contains('selected')).toBe(
-      false,
+      true,
     );
   });
 

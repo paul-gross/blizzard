@@ -14,6 +14,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 from blizzard.auth_core import Permission
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
@@ -21,13 +22,14 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.work_items import WorkItemPriority
 from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
-from blizzard.hub.api.auth_session import require
+from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.chunk_edit import ChunkPatchBody
-from blizzard.hub.api.chunk_views import ChunkView, blocked_view
-from blizzard.hub.api.deps import get_services
+from blizzard.hub.api.chunk_views import ChunkView, blocked_view, project_label_fields
+from blizzard.hub.api.deps import Services
 from blizzard.hub.api.graph_names import GraphNames, graph_by_ref
 from blizzard.hub.api.marker_auth import require_marker_authority
-from blizzard.hub.composition import HubServices
+from blizzard.hub.api.project_params import QueryProject, body_project, project_of_call, project_ref
+from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.chunk.delivery_read import DeliveryRead, DeliverySources
 from blizzard.hub.domain.chunk.dependencies import (
     ChunkNeighbor,
@@ -35,7 +37,14 @@ from blizzard.hub.domain.chunk.dependencies import (
     derive_chunk_neighborhood,
 )
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
-from blizzard.hub.domain.chunk.ingest import EmptyIngest, IngestConflict, ingest_work_refs
+from blizzard.hub.domain.chunk.ingest import (
+    EmptyIngest,
+    IngestConflict,
+    IngestProjectAmbiguous,
+    IngestProjectUnknown,
+    IngestSourceNotLinked,
+    ingest_work_refs,
+)
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, FleetSummary, WorkRef
 from blizzard.hub.domain.chunk.ports.work_refs import resolve_live_holders
 from blizzard.hub.domain.execution.decisions import NotEscalated
@@ -64,6 +73,7 @@ from blizzard.hub.domain.operations.restart import (
     RestartNodeUnknown,
 )
 from blizzard.hub.domain.operations.stop import ChunkNotStoppable
+from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.work_sources.source import AuthorView, WorkSourceError
 from blizzard.wire.chunk import (
     BlockedView,
@@ -93,12 +103,15 @@ from blizzard.wire.chunk import (
     WorkItemsView,
 )
 from blizzard.wire.fleet import FleetSummaryView
+from blizzard.wire.project import ProjectRequiredBody, SourceNotLinkedBody
 from blizzard.wire.work_source import WorkItemAuthorView
 
 #: How long a finished ``done`` chunk stays on ``GET /api/chunks?board_window=true``.
 BOARD_DONE_WINDOW = timedelta(hours=48)
 
-router = APIRouter(prefix="/api", tags=["chunks"], dependencies=[Depends(reject_runner_principal)])
+router = APIRouter(
+    prefix="/api", tags=["chunks"], dependencies=[Depends(reject_runner_principal), Depends(tenant_bound)]
+)
 
 #: A delivery the write fence refused — a 409, never ``invalid``, which would write a failure marker.
 _FENCED_DELIVERY_DETAIL = "delivery superseded: the chunk is terminal or was restarted"
@@ -108,16 +121,48 @@ _FENCED_DELIVERY_DETAIL = "delivery superseded: the chunk is terminal or was res
 class OpenDecision:
     """A chunk's graph gate."""
 
-    services: HubServices
+    services: TenantServices
     chunk_id: str
 
     def publish(self) -> None:
         """Emit ``decision-opened`` if the chunk now carries a live, unresolved gate."""
         decision = self.services.chunks.decisions.decision_for_chunk(self.chunk_id)
         if decision is not None and decision.is_open:
+            chunk = self.services.chunks.record.get(self.chunk_id)
             self.services.events.publish_decision_opened(
-                self.chunk_id, decision.decision_id, key=f"decisions:{decision.decision_id}"
+                self.chunk_id,
+                decision.decision_id,
+                key=f"decisions:{decision.decision_id}",
+                project_id=chunk.project_id if chunk is not None else None,
             )
+
+
+def _ingest_project(services: TenantServices, pointers: list[WorkRef], named: ProjectId | None) -> ProjectId:
+    """The project an ingest of ``pointers`` mints into: ``named``, or the one its configured sources agree on,
+    or the one its hub items record. When nothing it holds names one, the call acts in the tenant's only
+    project, :class:`ProjectRequired` otherwise."""
+    try:
+        return services.ingest.choose_project(pointers, named)
+    except IngestProjectUnknown:
+        return project_of_call(services).project_id
+
+
+def ingest_project_refusal(
+    services: TenantServices, exc: IngestProjectAmbiguous | IngestSourceNotLinked
+) -> JSONResponse:
+    """An ingest's project refusal as its ``422`` body: ``source_not_linked`` naming the source and
+    the project it is not linked to (``null`` when it is linked to none); otherwise
+    ``project_required`` listing the candidates the tokens left open."""
+    if isinstance(exc, IngestSourceNotLinked):
+        project = services.projects.get(exc.project) if exc.project is not None else None
+        body: BaseModel = SourceNotLinkedBody(
+            message=str(exc), source=exc.source, project=project_ref(project) if project is not None else None
+        )
+    else:
+        found = services.projects.get_many(list(exc.candidates))
+        projects = [found[project_id] for project_id in exc.candidates if project_id in found]
+        body = ProjectRequiredBody(message=str(exc), projects=[project_ref(project) for project in projects])
+    return JSONResponse(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, content={"detail": body.model_dump()})
 
 
 @router.post(
@@ -126,13 +171,16 @@ class OpenDecision:
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(require(Permission.CHUNK_INGEST))],
 )
-def ingest_chunk(request: ChunkIngestRequest, services: Annotated[HubServices, Depends(get_services)]) -> object:
-    """Ingest by source-native token; 422 on a token no configured source
-    claims; 409 on a pointer held by a live chunk; 503 if every graph named after the
-    packaged default has been retired (the operator's brake, not a code
-    bug: re-enable one or mint a new one)."""
+def ingest_chunk(request: ChunkIngestRequest, services: Services) -> object:
+    """Ingest by source-native token into the project named, or the one the tokens' sources
+    agree on; 422 on a project the tenant does not hold, a token no configured source
+    claims, a project the tokens leave open (``project_required``) and a source the
+    project is not linked to (``source_not_linked``); 409 on a pointer held by a live chunk;
+    503 if every graph named after the packaged default has been retired (the operator's
+    brake, not a code bug: re-enable one or mint a new one)."""
     # Resolution before minting, and before the live-holder check: an unresolvable
     # token should not consult the store, and the request rejects as a whole.
+    named = body_project(request.project, services).project_id if request.project is not None else None
     pointers: list[WorkRef] = []
     for token in request.tokens:
         pointer = services.work_sources.resolve(token)
@@ -146,8 +194,11 @@ def ingest_chunk(request: ChunkIngestRequest, services: Annotated[HubServices, D
     try:
         # The batch is refused before the default graph resolves, which may mint one.
         pointers = ingest_work_refs(pointers)
+        project = _ingest_project(services, pointers, named)
     except EmptyIngest as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    except (IngestProjectAmbiguous, IngestSourceNotLinked) as exc:
+        return ingest_project_refusal(services, exc)
     try:
         graph = services.graph_mint.ensure_default(
             services.default_graph_doc, definition_yaml=services.default_graph_yaml
@@ -155,7 +206,9 @@ def ingest_chunk(request: ChunkIngestRequest, services: Annotated[HubServices, D
     except DefaultGraphRetired as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
     try:
-        chunk_id = services.ingest.ingest(pointers, graph=graph)
+        chunk_id = services.ingest.ingest(pointers, graph=graph, project=project)
+    except IngestSourceNotLinked as exc:  # unlinked after the project was chosen
+        return ingest_project_refusal(services, exc)
     except IngestConflict as exc:
         conflict = ChunkIngestConflict(
             existing_chunk_id=exc.existing_chunk_id, source=exc.pointer.source, ref=exc.pointer.ref
@@ -163,17 +216,19 @@ def ingest_chunk(request: ChunkIngestRequest, services: Annotated[HubServices, D
         return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=conflict.model_dump())
     chunk_events.ChunkChanged.of(services, chunk_id, prev_status=None).publish(cause="minted", key=f"chunks:{chunk_id}")
     services.events.publish_queue_changed()  # mint adds the chunk to the backlog list
-    return ChunkIngestResponse(chunk_id=chunk_id)
+    return ChunkIngestResponse(chunk_id=chunk_id, **project_label_fields(project, services.projects.get(project)))
 
 
 @router.get("/chunks", response_model=ChunksPageView, dependencies=[Depends(require(Permission.FLEET_VIEW))])
 def list_chunks(
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
+    project: QueryProject,
     cursor: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
     board_window: Annotated[bool, Query()] = False,
 ) -> ChunksPageView:
-    """The fleet chunk list — derived status per chunk, bounded and keyset-paginated.
+    """The fleet chunk list — derived status per chunk, bounded and keyset-paginated;
+    ``?project=`` narrows the rows to that project's chunks, in the same order.
 
     Only the page's own rows render, but live-holder and blocked-marking derivation still
     see the whole fleet — a pointer this page renders can be held live by a
@@ -188,7 +243,7 @@ def list_chunks(
     statuses = {chunk_id: chunk_facts.status() for chunk_id, chunk_facts in facts.items()}
     markings = derive_blocked_prerequisites(services.chunks.dependencies.list_standing_edges(), statuses)
     try:
-        page = services.chunks.record.list_page(cursor=cursor, limit=limit, done_since=done_since)
+        page = services.chunks.record.list_page(cursor=cursor, limit=limit, done_since=done_since, project=project)
     except MalformedCursor as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="malformed cursor") from exc
     if done_since is not None:
@@ -215,6 +270,8 @@ def list_chunks(
     runner_names = services.registry.names_for(
         route.runner_id for chunk in page_chunks if (route := routes.get(chunk.chunk_id)) is not None
     )
+    # The page's projects — one batched read, narrowed to the page.
+    projects = services.projects.get_many(sorted({c.project_id for c in page_chunks if c.project_id is not None}))
     return ChunksPageView(
         chunks=[
             ChunkView.injected(
@@ -230,6 +287,7 @@ def list_chunks(
                     delivery_sources.get(chunk.chunk_id, DeliverySources()),
                 ),
                 runner_names=runner_names,
+                projects=projects,
             ).summary()
             for chunk in page_chunks
         ],
@@ -238,10 +296,11 @@ def list_chunks(
 
 
 @router.get("/chunk-counts", response_model=ChunkCountsView, dependencies=[Depends(require(Permission.FLEET_VIEW))])
-def chunk_counts(services: Annotated[HubServices, Depends(get_services)]) -> ChunkCountsView:
+def chunk_counts(services: Services, project: QueryProject) -> ChunkCountsView:
     """The all-time fleet count per derived status — over exactly the chunks
-    ``GET /api/chunks`` pages over, with no window applied."""
-    counts = services.chunks.facts.status_counts()
+    ``GET /api/chunks`` pages over, with no window applied; ``?project=`` counts that
+    project's chunks alone."""
+    counts = services.chunks.facts.status_counts(project=project)
     return ChunkCountsView(
         total=sum(counts.values()),
         terminal=sum(n for st, n in counts.items() if st in TERMINAL_STATUSES),
@@ -254,7 +313,7 @@ def _neighbor_view(neighbor: ChunkNeighbor) -> ChunkNeighborView:
 
 
 def _dependency_views_for_chunk(
-    services: HubServices, chunk_id: str, *, status: ChunkStatus
+    services: TenantServices, chunk_id: str, *, status: ChunkStatus
 ) -> tuple[BlockedView | None, ChunkNeighborhoodView]:
     """``GET /api/chunks/{chunk_id}``'s blocked marking and neighborhood — both derived
     from the one standing-edges read and one statuses map, since a chunk's dependent edges are a subset of its own
@@ -283,7 +342,7 @@ def _dependency_views_for_chunk(
 class FleetPulse:
     """Every chunk's derived status folded to the four fleet-summary counts."""
 
-    services: HubServices
+    services: TenantServices
 
     def view(self) -> FleetSummaryView:
         """Not a route of its own here. Derives each chunk's status the same way
@@ -301,7 +360,7 @@ class FleetPulse:
 
 
 @router.get("/chunks/{chunk_id}", response_model=ChunkDetail, dependencies=[Depends(require(Permission.FLEET_VIEW))])
-def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> ChunkDetail:
+def get_chunk(chunk_id: str, services: Services) -> ChunkDetail:
     """One chunk aggregate in full — derived status, current node, route."""
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
@@ -343,7 +402,7 @@ def record_hub_marker(
     node_id: str,
     epoch: int,
     request_body: HubMarkerRequest,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
 ) -> HubMarkerResponse:
     """The mid-run marker callback (#65) — a ``run:`` step's own dynamic-loop marker.
 
@@ -377,7 +436,7 @@ def record_garden_delivery(
     node_id: str,
     epoch: int,
     request_body: GardenDeliveryRequest,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
 ) -> GardenDeliveryResponse:
     """The garden delivery node's own route — validates a delivering node's
     ``--delta``/``--proposals`` artifacts and, on success, materializes them in one
@@ -423,7 +482,7 @@ def record_review_findings_delivery(
     chunk_id: str,
     node_id: str,
     epoch: int,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
 ) -> ReviewFindingsDeliveryResponse:
     """The `record-findings` node's own route — validates the chunk's
     newest `review-finding-delta` artifact and, on success, materializes its `deferred`
@@ -455,7 +514,7 @@ def record_review_findings_delivery(
     status_code=status.HTTP_202_ACCEPTED,
     dependencies=[Depends(require(Permission.CHUNK_CONTROL))],
 )
-def requeue_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> ChunkSummary:
+def requeue_chunk(chunk_id: str, services: Services) -> ChunkSummary:
     """Close an escalation by supersession: requeue at the current node."""
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
@@ -478,9 +537,7 @@ def requeue_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_se
     status_code=status.HTTP_202_ACCEPTED,
     dependencies=[Depends(require(Permission.CHUNK_CONTROL))],
 )
-def restart_chunk(
-    chunk_id: str, request: ChunkRestartRequest, services: Annotated[HubServices, Depends(get_services)]
-) -> ChunkSummary:
+def restart_chunk(chunk_id: str, request: ChunkRestartRequest, services: Services) -> ChunkSummary:
     """Force a chunk onto a node now, on a freshly minted session (#370, #371).
 
     At a bumped epoch, so the running attempt is fenced out and the holding runner re-enters;
@@ -519,7 +576,7 @@ def restart_chunk(
     status_code=status.HTTP_202_ACCEPTED,
     dependencies=[Depends(require(Permission.CHUNK_CONTROL))],
 )
-def detach_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> ChunkSummary:
+def detach_chunk(chunk_id: str, services: Services) -> ChunkSummary:
     """Forcibly release a chunk from its runner without touching any escalation."""
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
@@ -540,9 +597,7 @@ def detach_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_ser
     status_code=status.HTTP_202_ACCEPTED,
     dependencies=[Depends(require(Permission.CHUNK_CONTROL))],
 )
-def pause_chunk(
-    chunk_id: str, request: ChunkPauseRequest, services: Annotated[HubServices, Depends(get_services)]
-) -> ChunkSummary:
+def pause_chunk(chunk_id: str, request: ChunkPauseRequest, services: Services) -> ChunkSummary:
     """Set a chunk's operator pause brake — the claim is kept, unlike detach."""
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
@@ -565,9 +620,7 @@ def pause_chunk(
     status_code=status.HTTP_202_ACCEPTED,
     dependencies=[Depends(require(Permission.CHUNK_CONTROL))],
 )
-def resume_chunk(
-    chunk_id: str, request: ChunkPauseRequest, services: Annotated[HubServices, Depends(get_services)]
-) -> ChunkSummary:
+def resume_chunk(chunk_id: str, request: ChunkPauseRequest, services: Services) -> ChunkSummary:
     """Clear a chunk's operator pause brake — idempotent, never refused."""
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
@@ -585,9 +638,7 @@ def resume_chunk(
     status_code=status.HTTP_202_ACCEPTED,
     dependencies=[Depends(require(Permission.CHUNK_CONTROL))],
 )
-def stop_chunk(
-    chunk_id: str, request: ChunkStopRequest, services: Annotated[HubServices, Depends(get_services)]
-) -> ChunkSummary:
+def stop_chunk(chunk_id: str, request: ChunkStopRequest, services: Services) -> ChunkSummary:
     """Terminally abandon CHUNK — the operator's last-resort verb.
 
     Records the ``chunk_stopped`` fact so the chunk derives ``stopped`` and never
@@ -614,9 +665,7 @@ def stop_chunk(
     status_code=status.HTTP_202_ACCEPTED,
     dependencies=[Depends(require(Permission.CHUNK_CONTROL))],
 )
-def complete_chunk(
-    chunk_id: str, request: ChunkCompleteRequest, services: Annotated[HubServices, Depends(get_services)]
-) -> ChunkSummary:
+def complete_chunk(chunk_id: str, request: ChunkCompleteRequest, services: Services) -> ChunkSummary:
     """Manually complete CHUNK, from any non-``done`` status, including ``stopped``.
     Records the ``chunk_completed`` fact so the chunk derives ``done``, releases any live route
     and held hub-exec slot, and makes the chunk's work refs eligible for closure. Idempotent:
@@ -642,7 +691,7 @@ def complete_chunk(
     status_code=status.HTTP_202_ACCEPTED,
     dependencies=[Depends(require(Permission.CHUNK_CONTROL))],
 )
-def promote_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> ChunkSummary:
+def promote_chunk(chunk_id: str, services: Services) -> ChunkSummary:
     """Promote a not-ready chunk to ready so a runner may claim it.
 
     Idempotent: promoting an already-promoted chunk is a harmless no-op. 404 when the chunk
@@ -670,9 +719,7 @@ def promote_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_se
     status_code=status.HTTP_202_ACCEPTED,
     dependencies=[Depends(require(Permission.CHUNK_CONTROL))],
 )
-def patch_chunk(
-    chunk_id: str, request: ChunkPatchRequest, services: Annotated[HubServices, Depends(get_services)]
-) -> ChunkPatchResponse:
+def patch_chunk(chunk_id: str, request: ChunkPatchRequest, services: Services) -> ChunkPatchResponse:
     """Apply the body's fields in one all-or-nothing edit.
 
     404 for an unknown chunk or an unresolvable graph, 422 for a blank value, 409 for a
@@ -704,6 +751,9 @@ def patch_chunk(
         default_effort=updated.default_effort,
         default_harnesses=list(updated.default_harnesses),
         intended_migration=ChunkView.of(services, updated, facts=facts).intended_migration(),
+        **project_label_fields(
+            updated.project_id, services.projects.get(updated.project_id) if updated.project_id is not None else None
+        ),
     )
 
 
@@ -713,9 +763,7 @@ def patch_chunk(
     status_code=status.HTTP_202_ACCEPTED,
     dependencies=[Depends(require(Permission.CHUNK_CONTROL))],
 )
-def delete_chunk(
-    chunk_id: str, request: ChunkDeleteRequest, services: Annotated[HubServices, Depends(get_services)]
-) -> ChunkDeleteResponse:
+def delete_chunk(chunk_id: str, request: ChunkDeleteRequest, services: Services) -> ChunkDeleteResponse:
     """Delete an unacquired CHUNK, withdrawing every open ``hub:``-source item it holds
     in the same write. 404 for an unknown chunk or one a race deletes
     between resolving it and this write; 409 for one held, terminal, or a standing
@@ -758,7 +806,7 @@ def _author_view(author: AuthorView, runner_names: Mapping[str, str]) -> WorkIte
     response_model=WorkItemsView,
     dependencies=[Depends(require(Permission.FLEET_VIEW))],
 )
-def get_work_items(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> WorkItemsView:
+def get_work_items(chunk_id: str, services: Services) -> WorkItemsView:
     """Pass-through work items read, one entry per pointer, contents never stored. A
     per-pointer resolution or forge failure becomes that entry's own ``error`` instead of
     failing the whole read; a chunk with no pointers reads as an empty list, not a 404."""

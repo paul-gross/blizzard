@@ -1,10 +1,13 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject } from '@angular/core';
 import { Router, RouterOutlet } from '@angular/router';
 import { FleetRunList } from './run-list';
 import { KitMasterDetail, KitPanel, ViewportService } from 'fleet';
 
 import { injectChildRouteParam } from '../../core/route-state';
 import { GardeningRunsState } from './gardening-runs-state';
+import { ProjectLens } from '../../core/project-lens';
+import { injectLensedProject } from '../../core/lensed-project';
+import { firstRowToOpen } from '../core/garden-first-row';
 
 /**
  * The `/gardening/runs` sub-tab — the run list, beside a `<router-outlet>` holding
@@ -30,6 +33,8 @@ import { GardeningRunsState } from './gardening-runs-state';
   providers: [GardeningRunsState],
 })
 export class GardeningRunsPage {
+  private readonly lens = inject(ProjectLens);
+
   private readonly router = inject(Router);
   private readonly viewport = inject(ViewportService);
 
@@ -37,14 +42,33 @@ export class GardeningRunsPage {
 
   protected readonly runs = inject(GardeningRunsState);
 
+  private readonly project = injectLensedProject();
+
+  /** The project every row listed here belongs to: its name once read, its slug until then. */
+  protected readonly projectName = computed(() => this.project()?.name ?? this.lens.slug() ?? '');
+
   /** The `chunkId` the active detail child names (`route-state.ts`). */
   protected readonly chunkId = injectChildRouteParam('chunkId');
 
   protected selectRun(chunkId: string): void {
-    void this.router.navigate(['/gardening', 'runs', chunkId], { queryParamsHandling: 'preserve' });
+    void this.router.navigate(this.lens.link(['/gardening', 'runs', chunkId]), { queryParamsHandling: 'preserve' });
   }
 
   protected onBack(): void {
-    void this.router.navigate(['/gardening', 'runs'], { queryParamsHandling: 'preserve' });
+    void this.router.navigate(this.lens.link(['/gardening', 'runs']), { queryParamsHandling: 'preserve' });
+  }
+
+  constructor() {
+    effect(() => {
+      const query = this.runs.runsQuery;
+      const settled = !query.isPending() && !query.isError();
+      const ids = this.runs.listRows().map((row) => row.chunkId);
+      const first = firstRowToOpen(this.chunkId(), ids, settled, this.mobile());
+      if (first === null) return;
+      void this.router.navigate(this.lens.link(['/gardening', 'runs', first]), {
+        replaceUrl: true,
+        queryParamsHandling: 'preserve',
+      });
+    });
   }
 }

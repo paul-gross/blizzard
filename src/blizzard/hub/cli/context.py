@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Iterable, Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Protocol
 
 import click
@@ -31,6 +31,19 @@ _LOGIN_HINT = "not authenticated — run `blizzard hub login`"
 #: The fallback a verb's own unnamed 403 falls back to when the body carries no ``detail``.
 _FORBIDDEN_FALLBACK = "forbidden"
 
+#: The header a person's call names its tenant in; with none, the hub acts in the caller's only membership.
+TENANT_HEADER = "X-Blizzard-Tenant"
+
+#: The error code a call answers when the caller belongs to several tenants and named none.
+_TENANT_REQUIRED = "tenant_required"
+
+#: The error code a call answers when it needs a project, named none, and the tenant holds several.
+_PROJECT_REQUIRED = "project_required"
+
+#: The ``detail`` a call answers when the tenant it acts in does not exist, is closed, or is one the caller cannot
+#: enter — the hub tells those apart for no one.
+_NO_SUCH_TENANT = "no such tenant"
+
 
 @dto
 @dataclass(frozen=True)
@@ -44,22 +57,30 @@ class RawBody:
 @dataclass(frozen=True)
 class CliContext:
     """One operator verb's invocation — the resolved hub, the read-only local session
-    seam (``bzh:controller-read-only``), where its requests' trace headers come from, and whether to print JSON."""
+    seam (``bzh:controller-read-only``), where its requests' trace headers come from, whether to print JSON,
+    and the tenant the call names — ``None`` leaves it to the hub, which acts in the caller's only membership."""
 
     hub_url: str
     session_reader: IReadSessionStore
     trace: ITraceHeaders
     as_json: bool = False
+    tenant: str | None = None
 
     @classmethod
     def of(
-        cls, hub_url: str | None, session_reader: IReadSessionStore, trace: ITraceHeaders, as_json: bool = False
+        cls,
+        hub_url: str | None,
+        session_reader: IReadSessionStore,
+        trace: ITraceHeaders,
+        as_json: bool = False,
+        tenant: str | None = None,
     ) -> CliContext:
         return cls(
             hub_url=hub_url or os.environ.get(ENV_HUB_URL, DEFAULT_HUB_URL),
             session_reader=session_reader,
             trace=trace,
             as_json=as_json,
+            tenant=tenant,
         )
 
     def get(
@@ -138,9 +159,18 @@ class CliContext:
         )
 
     def put(
-        self, path: str, operation: str, *, json_body: object | None = None, on_status: dict[int, str] | None = None
+        self,
+        path: str,
+        operation: str,
+        *,
+        json_body: object | None = None,
+        on_status: dict[int, str] | None = None,
+        if_match: int | None = None,
+        door: bool = False,
     ) -> httpx.Response:
-        return self._verb("put", path, operation, json_body=json_body, on_status=on_status)
+        return self._verb(
+            "put", path, operation, json_body=json_body, on_status=on_status, if_match=if_match, door=door
+        )
 
     def delete(
         self,
@@ -164,7 +194,8 @@ class CliContext:
         """A ``GET`` read one decoded line at a time (the NDJSON bulk-export seam).
         Dispatches through ``httpx``'s module-level ``stream``, mirroring :meth:`send` so
         ``monkeypatch.setattr`` still intercepts it; a refusal resolves before any line is
-        yielded, so it surfaces like :meth:`check`'s buffered path, not mid-iteration."""
+        yielded, so it surfaces like :meth:`check`'s buffered path, not mid-iteration — a
+        tenant or project refusal as :meth:`send` raises it."""
         full_url = f"{self.hub_url.rstrip('/')}{path}"
         try:
             with httpx.stream(
@@ -172,6 +203,8 @@ class CliContext:
             ) as resp:
                 if resp.status_code >= 400:
                     resp.read()
+                self._refuse_tenant(resp)
+                self._refuse_project(resp)
                 self.check(resp, operation, on_status=on_status)
                 yield from resp.iter_lines()
         except httpx.HTTPError as exc:
@@ -189,10 +222,11 @@ class CliContext:
         door: bool = False,
         raw_body: RawBody | None = None,
     ) -> httpx.Response:
-        """The call itself, unchecked — for a verb that reads a status code of its own first.
-        Dispatches through ``httpx``'s module-level verb function, same as :meth:`stream` —
-        except a DELETE carrying a JSON body, which ``httpx.delete`` refuses a ``json`` keyword
-        for: that case goes through ``httpx.request`` instead."""
+        """The call itself, unchecked — for a verb that reads a status code of its own first —
+        except a tenant or project refusal, which no verb answers itself (:meth:`_refuse_tenant`,
+        :meth:`_refuse_project`). Dispatches through
+        ``httpx``'s module-level verb function, same as :meth:`stream` — except a DELETE carrying a JSON body, which
+        ``httpx.delete`` refuses a ``json`` keyword for: that case goes through ``httpx.request`` instead."""
         full_url = f"{self.hub_url.rstrip('/')}{path}"
         kwargs: dict[str, Any] = {"timeout": timeout}
         if json_body is not None:
@@ -210,10 +244,14 @@ class CliContext:
             kwargs["headers"] = headers
         try:
             if method == "delete" and json_body is not None:
-                return httpx.request("delete", full_url, **kwargs)
-            return getattr(httpx, method)(full_url, **kwargs)
+                resp = httpx.request("delete", full_url, **kwargs)
+            else:
+                resp = getattr(httpx, method)(full_url, **kwargs)
         except httpx.HTTPError as exc:
             raise self.failed(f"{method.upper()} {path}", exc) from exc
+        self._refuse_tenant(resp)
+        self._refuse_project(resp)
+        return resp
 
     def check(self, resp: httpx.Response, operation: str, *, on_status: dict[int, str] | None = None) -> None:
         """Map a handful of status codes to a ``ClickException`` reading the body's own
@@ -242,6 +280,9 @@ class CliContext:
             detail = body.get("detail")
             if isinstance(detail, str):
                 return detail
+            if isinstance(detail, dict) and isinstance(detail.get("message"), str):
+                # A structured refusal: its code beside a sentence naming what was refused.
+                return detail["message"]
             if isinstance(detail, list):
                 # A validation refusal: one "field: message" per entry.
                 parts = [
@@ -309,11 +350,93 @@ class CliContext:
         self.check(resp, operation, on_status=on_status)
         return resp
 
+    def _refuse_tenant(self, resp: httpx.Response) -> None:
+        """Raise when the hub refuses the tenant the call acts in, before a verb can read the status code as its own:
+        a ``409 tenant_required`` (the caller belongs to several tenants and the call named none), or a ``404 no such
+        tenant`` for the tenant ``--tenant`` named. Either lists the caller's tenants from ``/api/me``, ids beside
+        names. A ``404 no such tenant`` on a call naming no tenant stays the hub's own words: it is the caller holding
+        no membership, or a hub-level verb's own tenant argument."""
+        if resp.status_code == httpx.codes.CONFLICT and _error_code(resp) == _TENANT_REQUIRED:
+            raise self._tenant_refusal(
+                "you belong to several tenants — name the one to act in with --tenant <tenant_id>"
+            )
+        if resp.status_code == httpx.codes.NOT_FOUND and self.detail(resp, "") == _NO_SUCH_TENANT:
+            if self.tenant is None:
+                raise click.ClickException(_NO_SUCH_TENANT)
+            raise self._tenant_refusal(
+                f"no tenant {self.tenant} you can enter — it does not exist, it is closed, or you are not its member"
+            )
+
+    def _refuse_project(self, resp: httpx.Response) -> None:
+        """Raise on a ``422 project_required`` — the call needs a project, named none, and the tenant holds several —
+        listing the tenant's projects from the refusal itself, ids beside slugs and names, and asking for
+        ``--project``."""
+        if resp.status_code != httpx.codes.UNPROCESSABLE_ENTITY or _error_code(resp) != _PROJECT_REQUIRED:
+            return
+        raise project_required(_projects_of(resp))
+
+    def _tenant_refusal(self, headline: str) -> click.ClickException:
+        """``headline``, then the tenants the caller can name with ``--tenant``. ``/api/me`` is asked without the
+        refused tenant's header, which would refuse it too."""
+        me = replace(self, tenant=None).send("get", "/api/me")
+        tenants = _tenants_of(me) if me.status_code == httpx.codes.OK else []
+        lines = [headline]
+        if tenants:
+            lines.append("your tenants:")
+            lines.extend(f"  {t['tenant_id']}  {t['name']}  ({t['role']})" for t in tenants)
+        return click.ClickException("\n".join(lines))
+
     def _headers(self, *, door: bool = False) -> dict[str, str]:
         """``X-Blizzard-Door: cli`` when ``door``; the ``Authorization: Bearer`` header
         for this hub — absent when the local session store holds none, so every verb keeps working
-        with no login — and the running operator command's ``traceparent`` when it is traced."""
+        with no login; ``X-Blizzard-Tenant`` only when the call names its tenant; and the running
+        operator command's ``traceparent`` when it is traced."""
         token = self.session_reader.load(self.hub_url)
         headers = {"Authorization": f"Bearer {token}"} if token else {}
         door_header = {"X-Blizzard-Door": "cli"} if door else {}
-        return {**door_header, **headers, **self.trace.headers()}
+        tenant_header = {TENANT_HEADER: self.tenant} if self.tenant else {}
+        return {**door_header, **headers, **tenant_header, **self.trace.headers()}
+
+
+def project_required(projects: list[dict[str, str]]) -> click.ClickException:
+    """The refusal of a call that needs a project and named none while the tenant holds several: ``projects``
+    (each with ``project_id``, ``slug`` and ``name``) listed, ids beside slugs and names, asking for ``--project``."""
+    lines = ["this tenant holds several projects — name the one to act in with --project <id|slug>"]
+    if projects:
+        lines.append("its projects:")
+        lines.extend(f"  {p['project_id']}  {p['slug']}  {p['name']}" for p in projects)
+    return click.ClickException("\n".join(lines))
+
+
+def _error_code(resp: httpx.Response) -> str | None:
+    """The ``code`` of a structured error body (``{"detail": {"code": …}}``), else ``None``."""
+    try:
+        body = resp.json()
+    except ValueError:
+        return None
+    detail = body.get("detail") if isinstance(body, dict) else None
+    code = detail.get("code") if isinstance(detail, dict) else None
+    return code if isinstance(code, str) else None
+
+
+def _tenants_of(me: httpx.Response) -> list[dict[str, str]]:
+    """The ``tenants`` rows of an ``/api/me`` body that carry an id, a name and a role."""
+    try:
+        body = me.json()
+    except ValueError:
+        return []
+    rows = body.get("tenants") if isinstance(body, dict) else None
+    if not isinstance(rows, list):
+        return []
+    keys = ("tenant_id", "name", "role")
+    return [{k: str(row[k]) for k in keys} for row in rows if isinstance(row, dict) and all(row.get(k) for k in keys)]
+
+
+def _projects_of(refusal: httpx.Response) -> list[dict[str, str]]:
+    """The ``projects`` rows of a ``project_required`` refusal that carry an id, a slug and a name."""
+    detail = refusal.json().get("detail")
+    rows = detail.get("projects") if isinstance(detail, dict) else None
+    if not isinstance(rows, list):
+        return []
+    keys = ("project_id", "slug", "name")
+    return [{k: str(row[k]) for k in keys} for row in rows if isinstance(row, dict) and all(row.get(k) for k in keys)]

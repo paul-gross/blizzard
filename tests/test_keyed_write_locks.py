@@ -18,7 +18,7 @@ import sqlalchemy as sa
 
 from blizzard.hub.domain.operations.promote import ChunkNotPromotable
 from blizzard.hub.store import schema as s
-from tests.support import build_hub, ingest, pointer_token
+from tests.support import build_hub, hub_scoped, ingest, pointer_token
 
 pytestmark = pytest.mark.component
 
@@ -74,7 +74,9 @@ def test_ingests_of_different_pointers_lock_only_their_own_keys(tmp_path: Path) 
 
     with hub.engine.connect() as conn:
         rows = conn.execute(
-            sa.select(s.keyed_locks.c.namespace, s.keyed_locks.c.key).where(s.keyed_locks.c.namespace == "work_ref")
+            hub_scoped(
+                sa.select(s.keyed_locks.c.namespace, s.keyed_locks.c.key).where(s.keyed_locks.c.namespace == "work_ref")
+            )
         ).all()
     assert sorted(row.key for row in rows) == sorted(
         json.dumps(pair) for pair in (["default", "1"], ["default", "2"], ["hub", "1"])
@@ -119,7 +121,7 @@ def test_two_concurrent_first_default_graph_resolutions_mint_it_once(tmp_path: P
     assert ids["first"] == ids["second"]
     with hub.engine.connect() as conn:
         minted = conn.execute(
-            sa.select(s.graphs.c.graph_id).where(s.graphs.c.name == services.default_graph_doc.name)
+            hub_scoped(sa.select(s.graphs.c.graph_id).where(s.graphs.c.name == services.default_graph_doc.name))
         ).all()
     assert [row.graph_id for row in minted] == [ids["first"]]
 
@@ -148,4 +150,7 @@ def test_a_chunk_stopped_between_promote_reads_and_its_locked_write_is_not_promo
         hub.services.promote.promote(chunk, statuses=hub.services.chunks.facts.load_live_statuses())
 
     with hub.engine.connect() as conn:
-        assert conn.execute(sa.select(s.chunk_promoted).where(s.chunk_promoted.c.chunk_id == chunk_id)).first() is None
+        assert (
+            conn.execute(hub_scoped(sa.select(s.chunk_promoted).where(s.chunk_promoted.c.chunk_id == chunk_id))).first()
+            is None
+        )

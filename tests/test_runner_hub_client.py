@@ -333,6 +333,7 @@ def test_register_runner_posts_registration() -> None:
     assert reply == RegistrationReply(runner_id="rn_1", runner_name="r-claude", first_registration=True)
     assert seen == {
         "name": "r-claude",
+        "projects": None,
         "workspace_id": "ws1",
         "env_capacity": 4,
         "url": None,
@@ -359,6 +360,7 @@ def test_register_runner_sends_null_capacity_when_unset() -> None:
     assert reply.runner_name == "r-claude"
     assert seen == {
         "name": "r-claude",
+        "projects": None,
         "workspace_id": "ws1",
         "env_capacity": None,
         "url": None,
@@ -399,6 +401,30 @@ def test_register_runner_posts_its_own_federation_identity() -> None:
     )
     assert seen["url"] == "https://runner-a.example"
     assert seen["redirect_uris"] == ["https://runner-a.example/api/auth/callback"]
+
+
+_TENANT = {"tenant_id": "tn_1", "tenant_name": "acme"}
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("answered", "tenant"),
+    [(_TENANT, ("tn_1", "acme")), ({}, (None, None))],
+    ids=["names-its-tenant", "predates-tenants"],
+)
+def test_register_runner_reads_the_tenant_the_hub_answers_with(
+    answered: dict[str, str], tenant: tuple[str | None, str | None]
+) -> None:
+    """The reply's tenant reaches the runner as the hub answered it; a hub that predates tenants
+    names none, and the reply carries none rather than failing to parse."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            201, json={"runner_id": "rn_1", "runner_name": "r-claude", "first_registration": False, **answered}
+        )
+
+    reply = _client(handler).register_runner("r-claude", "ws1")
+    assert (reply.tenant_id, reply.tenant_name) == tenant
 
 
 @pytest.mark.unit
@@ -529,6 +555,23 @@ def test_identity_presents_the_runner_token_and_reads_its_runner() -> None:
 
 @pytest.mark.unit
 @pytest.mark.parametrize(
+    ("answered", "tenant"),
+    [(_TENANT, ("tn_1", "acme")), ({}, (None, None))],
+    ids=["names-its-tenant", "predates-tenants"],
+)
+def test_identity_reads_the_tenant_the_hub_answers_with(
+    answered: dict[str, str], tenant: tuple[str | None, str | None]
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"runner_id": "rn_1", "runner_name": "r-claude", **answered})
+
+    identity = _client(handler).identity()
+    assert isinstance(identity, TokenIdentity)
+    assert (identity.tenant_id, identity.tenant_name) == tenant
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
     "refusal",
     [
         TokenRefusal(reason=RunnerTokenRefusalReason.MISSING),
@@ -573,7 +616,7 @@ def test_add_runner_posts_the_name_under_the_operators_session_when_one_is_held(
 ) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         assert (request.method, request.url.path) == ("POST", "/api/runners")
-        assert json.loads(request.content) == {"name": "r-claude"}
+        assert json.loads(request.content) == {"name": "r-claude", "projects": None}
         assert request.headers.get("Authorization") == authorization
         return httpx.Response(201, json={"runner_id": "rn_1", "runner_name": "r-claude", "token": "tok"})
 

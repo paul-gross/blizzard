@@ -12,7 +12,7 @@ from collections.abc import Mapping, Sequence
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Select, and_, or_, select, update
+from sqlalchemy import Select, and_, or_
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
@@ -22,8 +22,8 @@ from blizzard.hub.domain.chunk.model import Chunk, IntendedMigration, WorkRef
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead, ILockedWorkRefRead
 from blizzard.hub.domain.chunk.ports.record import ChunkPage, IWriteChunkRecordRepository
 from blizzard.hub.domain.kernel.pagination import MalformedCursor, decode_cursor, encode_cursor
+from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import (
     DEFAULT_HARNESSES,
     DEFAULT_MODEL,
@@ -38,6 +38,7 @@ from blizzard.hub.store.internal.chunk_rows import (
     work_ref_conn_of,
 )
 from blizzard.hub.store.internal.chunk_terminal_predicates import settled_done
+from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements
 
 #: `(minted_at, chunk_id)` — the tiebreak `minted_at desc` alone lacks.
 _CURSOR_ARITY = 2
@@ -58,10 +59,18 @@ def _decode_chunk_cursor(cursor: str) -> tuple[datetime, str]:
     return minted_at, parts[1]
 
 
-def _chunk_page_stmt(after: tuple[datetime, str] | None, limit: int, done_since: datetime | None) -> Select[Any]:
-    stmt = select(s.chunks)
+def _chunk_page_stmt(
+    stmts: ScopedStatements,
+    after: tuple[datetime, str] | None,
+    limit: int,
+    done_since: datetime | None,
+    project: ProjectId | None,
+) -> Select[Any]:
+    stmt = stmts.select(s.chunks)
+    if project is not None:
+        stmt = stmt.where(s.chunks.c.project_id == project)
     if done_since is not None:
-        stmt = stmt.where(~settled_done(finished_before=done_since))
+        stmt = stmt.where(~settled_done(stmts, finished_before=done_since))
     if after is not None:
         minted_at, chunk_id = after
         c = s.chunks.c
@@ -74,7 +83,7 @@ def _chunk_page_stmt(after: tuple[datetime, str] | None, limit: int, done_since:
 class ChunkRecordStore:
     """The chunk row itself — mint, listing, and the repin columns."""
 
-    def __init__(self, store: HubStoreConnections, clock: IClock) -> None:
+    def __init__(self, store: ScopedConnections, clock: IClock) -> None:
         self._store = store
         self._clock = clock
 
@@ -86,7 +95,7 @@ class ChunkRecordStore:
         """`get`'s already-open-connection sibling — the locked-transaction seam's own
         read (``bzh:store-exclusive-write``), resolved on the caller's connection rather
         than a fresh one."""
-        row = conn.execute(select(s.chunks).where(s.chunks.c.chunk_id == chunk_id)).one_or_none()
+        row = conn.execute(self._store.select(s.chunks).where(s.chunks.c.chunk_id == chunk_id)).one_or_none()
         if row is None or is_ephemeral_id(conn, chunk_id):
             return None  # a grouped-away or deleted chunk is ephemeral — gone from every read
         return chunk_row(conn, row)
@@ -109,13 +118,20 @@ class ChunkRecordStore:
             return {}
         result: dict[str, Chunk] = {}
         for batch in id_batches(chunk_ids):
-            rows = {r.chunk_id: r for r in conn.execute(select(s.chunks).where(s.chunks.c.chunk_id.in_(batch))).all()}
+            rows = {
+                r.chunk_id: r
+                for r in conn.execute(self._store.select(s.chunks).where(s.chunks.c.chunk_id.in_(batch))).all()
+            }
             if not rows:
                 continue
             ephemeral = ephemeral_ids_in(conn, batch)
             surviving = [chunk_id for chunk_id in rows if chunk_id not in ephemeral]
             pointers: dict[str, list[WorkRef]] = defaultdict(list)
-            for p in conn.execute(select(s.chunk_work_refs).where(s.chunk_work_refs.c.chunk_id.in_(surviving))).all():
+            for p in conn.execute(
+                self._store.select(s.chunk_work_refs)
+                .where(s.chunk_work_refs.c.chunk_id.in_(surviving))
+                .order_by(s.chunk_work_refs.c.id)
+            ).all():
                 pointers[p.chunk_id].append(WorkRef(source=p.source, ref=p.ref))
             for chunk_id in surviving:
                 r = rows[chunk_id]
@@ -128,6 +144,7 @@ class ChunkRecordStore:
                     default_effort=r.default_effort,
                     default_harnesses=DEFAULT_HARNESSES.decode(r.default_harnesses),
                     intended_migration=INTENDED_MIGRATION.decode(r.intended_migration),
+                    project_id=r.project_id,
                 )
         return result
 
@@ -151,11 +168,11 @@ class ChunkRecordStore:
             ephemeral = ephemeral_ids(conn)
             rows = [
                 r
-                for r in conn.execute(select(s.chunks).order_by(s.chunks.c.minted_at.desc())).all()
+                for r in conn.execute(self._store.select(s.chunks).order_by(s.chunks.c.minted_at.desc())).all()
                 if r.chunk_id not in ephemeral  # a grouped-away or deleted chunk is removed from every listing
             ]
             pointers: dict[str, list[WorkRef]] = defaultdict(list)
-            for p in conn.execute(select(s.chunk_work_refs)).all():
+            for p in conn.execute(self._store.select(s.chunk_work_refs).order_by(s.chunk_work_refs.c.id)).all():
                 pointers[p.chunk_id].append(WorkRef(source=p.source, ref=p.ref))
             return [
                 Chunk(
@@ -167,23 +184,32 @@ class ChunkRecordStore:
                     default_effort=r.default_effort,
                     default_harnesses=DEFAULT_HARNESSES.decode(r.default_harnesses),
                     intended_migration=INTENDED_MIGRATION.decode(r.intended_migration),
+                    project_id=r.project_id,
                 )
                 for r in rows
             ]
 
-    def list_page(self, *, cursor: str | None = None, limit: int, done_since: datetime | None = None) -> ChunkPage:
+    def list_page(
+        self,
+        *,
+        cursor: str | None = None,
+        limit: int,
+        done_since: datetime | None = None,
+        project: ProjectId | None = None,
+    ) -> ChunkPage:
         """`list_all`'s bounded sibling: a SQL keyset window with
         ephemeral chunks excluded in Python after the read, so a window landing wholly
         on ephemeral rows can come back short of `limit` live chunks. Each retry doubles
         the window rather than stopping there, so a `next_cursor` walk still sees every
-        visible chunk exactly once; ``done_since`` narrows it in SQL (:func:`settled_done`)."""
+        visible chunk exactly once; ``done_since`` narrows it in SQL (:func:`settled_done`), and
+        ``project`` to that project's chunks."""
         if limit < 1:
             raise ValueError(f"limit must be at least 1, got {limit}")
         after = _decode_chunk_cursor(cursor) if cursor is not None else None
         fetch = limit + 1
         with self._store.read("list_page") as conn:
             while True:
-                rows = conn.execute(_chunk_page_stmt(after, fetch, done_since)).all()
+                rows = conn.execute(_chunk_page_stmt(self._store, after, fetch, done_since, project)).all()
                 ephemeral: set[str] = set()
                 for batch in id_batches([r.chunk_id for r in rows]):
                     ephemeral |= ephemeral_ids_in(conn, batch)
@@ -194,7 +220,11 @@ class ChunkRecordStore:
             page_rows = surviving[:limit]
             pointers: dict[str, list[WorkRef]] = defaultdict(list)
             for batch in id_batches([r.chunk_id for r in page_rows]):
-                for p in conn.execute(select(s.chunk_work_refs).where(s.chunk_work_refs.c.chunk_id.in_(batch))).all():
+                for p in conn.execute(
+                    self._store.select(s.chunk_work_refs)
+                    .where(s.chunk_work_refs.c.chunk_id.in_(batch))
+                    .order_by(s.chunk_work_refs.c.id)
+                ).all():
                     pointers[p.chunk_id].append(WorkRef(source=p.source, ref=p.ref))
         chunks = [
             Chunk(
@@ -206,6 +236,7 @@ class ChunkRecordStore:
                 default_effort=r.default_effort,
                 default_harnesses=DEFAULT_HARNESSES.decode(r.default_harnesses),
                 intended_migration=INTENDED_MIGRATION.decode(r.intended_migration),
+                project_id=r.project_id,
             )
             for r in page_rows
         ]
@@ -242,7 +273,7 @@ class ChunkRecordStore:
         self._set_graph_conn(conn_of(handle), chunk_id, graph_id=graph_id)
 
     def _set_graph_conn(self, conn, chunk_id: str, *, graph_id: str) -> None:  # type: ignore[no-untyped-def]
-        conn.execute(update(s.chunks).where(s.chunks.c.chunk_id == chunk_id).values(graph_id=graph_id))
+        conn.execute(self._store.update(s.chunks).where(s.chunks.c.chunk_id == chunk_id).values(graph_id=graph_id))
 
     def set_defaults_locked(
         self,
@@ -268,7 +299,7 @@ class ChunkRecordStore:
         self, conn, chunk_id: str, *, default_model: list[str], default_effort: str | None, default_harnesses: list[str]
     ) -> None:
         conn.execute(
-            update(s.chunks)
+            self._store.update(s.chunks)
             .where(s.chunks.c.chunk_id == chunk_id)
             .values(
                 default_model=DEFAULT_MODEL.encode(default_model),
@@ -287,7 +318,7 @@ class ChunkRecordStore:
 
     def _set_intended_migration_conn(self, conn, chunk_id: str, *, intended: IntendedMigration | None) -> None:  # type: ignore[no-untyped-def]
         conn.execute(
-            update(s.chunks)
+            self._store.update(s.chunks)
             .where(s.chunks.c.chunk_id == chunk_id)
             .values(intended_migration=INTENDED_MIGRATION.encode(intended))
         )

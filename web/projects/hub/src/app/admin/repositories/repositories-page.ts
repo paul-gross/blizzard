@@ -15,9 +15,12 @@ import {
   parseLifecycleFilter,
 } from '../config-filter.model';
 import { ConfigMaster } from '../config-master';
+import { injectLensLinks, withinLens } from '../projects/lens-links';
+import { lensedListState } from '../projects/projects.model';
 import type { ConfigRowVm } from '../config-record-list';
 import { REPOSITORY_FIELDS, repositoryRows } from './repositories.model';
 import { injectRepositoriesQuery } from './repositories.query';
+import { ProjectLens } from '../../core/project-lens';
 
 /**
  * `/admin/repositories` — the repository list beside a `<router-outlet>` holding the
@@ -33,22 +36,33 @@ import { injectRepositoriesQuery } from './repositories.query';
   styleUrl: '../config-page-host.css',
 })
 export class RepositoriesPage {
+  private readonly lens = inject(ProjectLens);
+
   private readonly router = inject(Router);
   private readonly viewport = inject(ViewportService);
   private readonly filters = injectQueryFilters();
 
   protected readonly mobile = computed(() => this.viewport.mode() === 'mobile');
   protected readonly lifecycle = computed(() => parseLifecycleFilter(this.filters.read(LIFECYCLE_FILTER_PARAM)));
+  /** Under a project lens the list narrows to the records that project links. */
+  private readonly lensLinks = injectLensLinks('repository');
   private readonly repositoriesQuery = injectRepositoriesQuery(() => includeRetired(this.lifecycle()));
 
   protected readonly selectedKey = injectChildRouteParam('key');
   protected readonly rows = computed<readonly ConfigRowVm[]>(() =>
-    repositoryRows(this.repositoriesQuery.data() ?? [], this.lifecycle()),
+    repositoryRows(withinLens(this.repositoriesQuery.data() ?? [], this.lensLinks.names()), this.lifecycle()),
   );
   protected readonly state = computed<KitAsyncStateValue>(() =>
-    asyncState(this.repositoriesQuery, this.rows().length === 0),
+    lensedListState(
+      this.lensLinks.failed(),
+      this.lensLinks.pending(),
+      asyncState(this.repositoriesQuery, this.rows().length === 0),
+    ),
   );
-  protected readonly emptyText = computed(() => lifecycleEmptyText('repositories', this.lifecycle()));
+  protected readonly caption = computed(() => this.lensLinks.caption('Repositories'));
+  protected readonly emptyText = computed(() =>
+    this.lensLinks.emptyText(lifecycleEmptyText('repositories', this.lifecycle()), 'repositories'),
+  );
 
   protected onFilter(value: string): void {
     this.filters.patch({
@@ -57,13 +71,13 @@ export class RepositoriesPage {
   }
 
   protected onPick(key: string): void {
-    void this.router.navigate(['/admin', 'repositories', key], {
+    void this.router.navigate(this.lens.link(['/admin', 'repositories', key]), {
       queryParamsHandling: 'preserve',
     });
   }
 
   protected onBack(): void {
-    void this.router.navigate(['/admin', 'repositories'], {
+    void this.router.navigate(this.lens.link(['/admin', 'repositories']), {
       queryParamsHandling: 'preserve',
     });
   }
@@ -88,7 +102,7 @@ export class RepositoriesPage {
     this.createMutation.mutate(body, {
       onSuccess: () => {
         this.createOpen.set(false);
-        void this.router.navigate(['/admin', 'repositories', body.name], {
+        void this.router.navigate(this.lens.link(['/admin', 'repositories', body.name]), {
           queryParamsHandling: 'preserve',
         });
       },

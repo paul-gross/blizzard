@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
@@ -16,12 +15,14 @@ from blizzard.auth_core import Permission
 from blizzard.foundation.roles import dto
 from blizzard.foundation.store.utc import as_utc
 from blizzard.hub.api.auth import reject_runner_principal
-from blizzard.hub.api.auth_session import require
-from blizzard.hub.api.deps import get_services
-from blizzard.hub.composition import HubServices
+from blizzard.hub.api.auth_session import require, tenant_bound
+from blizzard.hub.api.deps import Services
+from blizzard.hub.api.project_params import QueryProject
 from blizzard.wire.fleet import FleetSpendView
 
-router = APIRouter(prefix="/api", tags=["spend"], dependencies=[Depends(reject_runner_principal)])
+router = APIRouter(
+    prefix="/api", tags=["spend"], dependencies=[Depends(reject_runner_principal), Depends(tenant_bound)]
+)
 
 
 @dto
@@ -51,14 +52,12 @@ def _instant(value: str, *, field: str) -> datetime:
 
 
 @router.get("/spend", response_model=FleetSpendView, dependencies=[Depends(require(Permission.FLEET_VIEW))])
-def fleet_spend(
-    since: str, services: Annotated[HubServices, Depends(get_services)], until: str | None = None
-) -> FleetSpendView:
+def fleet_spend(since: str, services: Services, project: QueryProject, until: str | None = None) -> FleetSpendView:
     """The fleet's total usage/cost since ``since`` (an ISO-8601 instant) — summed
-    over every usage fact recorded at or after it, across every chunk. An optional
-    ``until`` bounds the window's other edge, exclusive."""
+    over every usage fact recorded at or after it, across every chunk, or ``?project=``'s
+    chunks alone. An optional ``until`` bounds the window's other edge, exclusive."""
     window = SpendWindow.of(since, until)
-    usage = services.chunks.usage.usage_total_since(window.since, until=window.until)
+    usage = services.chunks.usage.usage_total_since(window.since, until=window.until, project=project)
     return FleetSpendView(
         since=since,
         until=until,

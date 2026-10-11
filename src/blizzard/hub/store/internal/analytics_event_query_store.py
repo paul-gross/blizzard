@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, func
 
 from blizzard.hub.domain.kernel.pagination import MalformedCursor, decode_cursor, encode_cursor
 from blizzard.hub.domain.observability.analytics.events import KIND_FILE_READ, KIND_SKILL_INVOCATION
@@ -20,8 +20,10 @@ from blizzard.hub.domain.observability.analytics.queries import (
     KeyedCount,
     QueriedEvent,
 )
+from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.errors import HubStoreConnections
+from blizzard.hub.store.internal.project_reach import chunks_of_project
+from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements
 
 #: ``events``' cursor is the shared codec over one part: the last row's id.
 _CURSOR_ARITY = 1
@@ -30,7 +32,8 @@ _CURSOR_ARITY = 1
 # compiles the real ones under both dialects (`bzh:sql-portable`).
 
 
-def _filtered_stmt(base: Select[Any], criteria: EventQueryCriteria) -> Select[Any]:
+def _filtered_stmt(stmts: ScopedStatements, base: Select[Any], criteria: EventQueryCriteria) -> Select[Any]:
+    """``base`` — a scoped read of ``transcript_events`` — narrowed by ``criteria``."""
     t = s.transcript_events
     stmt = base.where(t.c.extractor_version == criteria.extractor_version)
     if criteria.kind is not None:
@@ -46,8 +49,12 @@ def _filtered_stmt(base: Select[Any], criteria: EventQueryCriteria) -> Select[An
     if criteria.graph_id is not None:
         stmt = stmt.where(t.c.graph_id == criteria.graph_id)
     if criteria.source is not None:
-        matching_chunks = select(s.chunk_work_refs.c.chunk_id).where(s.chunk_work_refs.c.source == criteria.source)
+        matching_chunks = stmts.select(s.chunk_work_refs, s.chunk_work_refs.c.chunk_id).where(
+            s.chunk_work_refs.c.source == criteria.source
+        )
         stmt = stmt.where(t.c.chunk_id.in_(matching_chunks))
+    if criteria.project is not None:
+        stmt = stmt.where(t.c.chunk_id.in_(chunks_of_project(stmts, ProjectId(criteria.project))))
     if criteria.since is not None:
         stmt = stmt.where(t.c.occurred_at >= criteria.since)
     if criteria.until is not None:
@@ -70,19 +77,24 @@ def _decode_cursor(cursor: str) -> int:
     return parts[0]
 
 
-def _events_stmt(criteria: EventQueryCriteria, *, cursor: str | None, limit: int) -> Select[Any]:
+def _events_stmt(
+    stmts: ScopedStatements, criteria: EventQueryCriteria, *, cursor: str | None, limit: int
+) -> Select[Any]:
     t = s.transcript_events
-    stmt = _filtered_stmt(select(t), criteria)
+    stmt = _filtered_stmt(stmts, stmts.select(t), criteria)
     if cursor is not None:
         stmt = stmt.where(t.c.id > _decode_cursor(cursor))
     # `id` alone is already total (`bzh:sql-portable`), unlike the nullable `occurred_at`.
     return stmt.order_by(t.c.id).limit(limit + 1)
 
 
-def _counts_stmt(criteria: EventQueryCriteria, *, group_col: Any, kind: str | None) -> Select[Any]:
+def _counts_stmt(
+    stmts: ScopedStatements, criteria: EventQueryCriteria, *, group_col: Any, kind: str | None
+) -> Select[Any]:
     # Labeled "occurrences", never "count" — `Row` inherits `tuple.count`, so a same-named
     # label would shadow attribute access to the aggregate with a bound method.
-    stmt = _filtered_stmt(select(group_col.label("key"), func.count().label("occurrences")), criteria)
+    base = stmts.select(s.transcript_events, group_col.label("key"), func.count().label("occurrences"))
+    stmt = _filtered_stmt(stmts, base, criteria)
     if kind is not None:
         # Intersected with `criteria.kind`, never substituted for it: a caller naming a
         # different kind asked for an empty scope and gets one.
@@ -91,19 +103,23 @@ def _counts_stmt(criteria: EventQueryCriteria, *, group_col: Any, kind: str | No
     return stmt.order_by(func.count().desc(), group_col.asc())
 
 
-def _counts_by_node_stmt(criteria: EventQueryCriteria) -> Select[Any]:
+def _counts_by_node_stmt(stmts: ScopedStatements, criteria: EventQueryCriteria) -> Select[Any]:
     """Counts by node id, each naming its node and graph by scalar lookups on the primary
     keys — null where the id no longer resolves — so the names add no grouping column."""
     t, gn, g = s.transcript_events, s.graph_nodes, s.graphs
-    graph_name = select(g.c.name).where(g.c.graph_id == gn.c.graph_id, gn.c.node_id == t.c.node_id).scalar_subquery()
-    node_name = select(gn.c.name).where(gn.c.node_id == t.c.node_id).scalar_subquery()
+    graph_name = (
+        stmts.select(stmts.scope_join(g, gn, g.c.graph_id == gn.c.graph_id), g.c.name)
+        .where(gn.c.node_id == t.c.node_id)
+        .scalar_subquery()
+    )
+    node_name = stmts.select(gn, gn.c.name).where(gn.c.node_id == t.c.node_id).scalar_subquery()
     cols = (
         t.c.node_id.label("key"),
         graph_name.label("graph_name"),
         node_name.label("node_name"),
         func.count().label("occurrences"),
     )
-    stmt = _filtered_stmt(select(*cols), criteria)
+    stmt = _filtered_stmt(stmts, stmts.select(t, *cols), criteria)
     stmt = stmt.where(t.c.node_id.is_not(None)).group_by(t.c.node_id)
     return stmt.order_by(func.count().desc(), t.c.node_id.asc())
 
@@ -133,14 +149,14 @@ def _to_record(row: Any) -> QueriedEvent:
 class AnalyticsEventQueryStore:
     """Read-only analytics-event query adapter over the hub store engine."""
 
-    def __init__(self, store: HubStoreConnections) -> None:
+    def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
     def events(self, criteria: EventQueryCriteria, *, cursor: str | None = None, limit: int) -> EventPage:
         if limit < 1:
             raise ValueError(f"limit must be at least 1, got {limit}")
         with self._store.read("events") as conn:
-            rows = conn.execute(_events_stmt(criteria, cursor=cursor, limit=limit)).all()
+            rows = conn.execute(_events_stmt(self._store, criteria, cursor=cursor, limit=limit)).all()
         page_rows = rows[:limit]
         next_cursor = encode_cursor(page_rows[-1].id) if len(rows) > limit else None
         return EventPage(events=[_to_record(row) for row in page_rows], next_cursor=next_cursor)
@@ -156,7 +172,7 @@ class AnalyticsEventQueryStore:
 
     def counts_by_node(self, criteria: EventQueryCriteria) -> list[KeyedCount]:
         with self._store.read("counts_by_node") as conn:
-            rows = conn.execute(_counts_by_node_stmt(criteria)).all()
+            rows = conn.execute(_counts_by_node_stmt(self._store, criteria)).all()
         return [
             KeyedCount(key=row.key, count=row.occurrences, graph_name=row.graph_name, node_name=row.node_name)
             for row in rows
@@ -164,7 +180,7 @@ class AnalyticsEventQueryStore:
 
     def _counts(self, criteria: EventQueryCriteria, *, group_col: Any, kind: str | None) -> list[KeyedCount]:
         with self._store.read("counts") as conn:
-            rows = conn.execute(_counts_stmt(criteria, group_col=group_col, kind=kind)).all()
+            rows = conn.execute(_counts_stmt(self._store, criteria, group_col=group_col, kind=kind)).all()
         return [KeyedCount(key=row.key, count=row.occurrences) for row in rows]
 
 

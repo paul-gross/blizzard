@@ -4,7 +4,8 @@
     "kind": "chunk.transitioned",
     "chunk_id": "ch_1",
     "runner_id": "runner-a",
-    "key": "event_log:ev_1"
+    "key": "event_log:ev_1",
+    "project_id": "proj_1"
   },
   "runner-scoped": {
     "severity": "info",

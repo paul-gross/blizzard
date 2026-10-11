@@ -1,0 +1,20 @@
+<div class="picker" data-testid="tenant-picker">
+  <p class="headline">Choose a tenant</p>
+  @if (me(); as identity) {
+    <p class="detail" data-testid="tenant-picker-username">Signed in as {{ identity.display_name }} ({{ identity.username }})</p>
+  }
+  <ul class="tenants">
+    @for (tenant of tenants(); track tenant.tenant_id) {
+      <li>
+        <fleet-kit-button testid="tenant-picker-option" [ariaLabel]="tenant.name + ' (' + tenant.tenant_id + ')'" (click)="choose.emit(tenant.tenant_id)">
+          <span class="name">{{ tenant.name }}</span>
+          <span class="id">{{ tenant.tenant_id }}</span>
+        </fleet-kit-button>
+      </li>
+    }
+  </ul>
+  <fleet-kit-button testid="tenant-picker-logout" [disabled]="logoutPending()" (click)="logout.emit()">Log out</fleet-kit-button>
+  @if (logoutError(); as error) {
+    <p class="detail" role="alert" data-testid="tenant-picker-logout-error">{{ error }}</p>
+  }
+</div>

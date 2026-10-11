@@ -16,6 +16,7 @@ import sqlalchemy as sa
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner
+from tests.support import hub_scoped_engine
 
 pytestmark = pytest.mark.component
 
@@ -87,7 +88,7 @@ def test_issue_shaped_row_backfills_to_the_repo_tail(tmp_path: Path) -> None:
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     runner.upgrade(_BEFORE)
-    engine = create_engine_from_url(db_url)
+    engine = hub_scoped_engine(create_engine_from_url(db_url))
     _seed(engine)
 
     runner.upgrade(_RESHAPE)
@@ -102,7 +103,7 @@ def test_non_issue_shaped_row_survives_verbatim(tmp_path: Path) -> None:
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     runner.upgrade(_BEFORE)
-    engine = create_engine_from_url(db_url)
+    engine = hub_scoped_engine(create_engine_from_url(db_url))
     _seed(engine)
 
     runner.upgrade(_RESHAPE)
@@ -117,7 +118,7 @@ def test_downgrade_reconstructs_a_structurally_canonical_url(tmp_path: Path) -> 
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     runner.upgrade(_BEFORE)
-    engine = create_engine_from_url(db_url)
+    engine = hub_scoped_engine(create_engine_from_url(db_url))
     _seed(engine)
     runner.upgrade(_RESHAPE)
 
@@ -142,7 +143,7 @@ def test_down_then_up_returns_the_identical_source_ref_rows(tmp_path: Path) -> N
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     runner.upgrade(_BEFORE)
-    engine = create_engine_from_url(db_url)
+    engine = hub_scoped_engine(create_engine_from_url(db_url))
     _seed(engine)
 
     runner.upgrade(_RESHAPE)
@@ -168,7 +169,7 @@ def test_upgrade_is_idempotent_over_an_already_reshaped_store(tmp_path: Path) ->
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     runner.upgrade(_BEFORE)
-    engine = create_engine_from_url(db_url)
+    engine = hub_scoped_engine(create_engine_from_url(db_url))
     _seed(engine)
     runner.upgrade(_RESHAPE)
 
@@ -188,7 +189,7 @@ def test_a_fresh_store_reaches_0013_in_the_pre_reshape_shape(tmp_path: Path) -> 
     pointer-identity revision's ``if "url" not in columns: return`` backfill guard."""
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
-    engine = create_engine_from_url(db_url)
+    engine = hub_scoped_engine(create_engine_from_url(db_url))
 
     def columns() -> set[str]:
         with engine.connect() as conn:
@@ -209,7 +210,7 @@ def test_a_fresh_store_s_work_ref_table_keeps_the_chunk_id_foreign_key(tmp_path:
     Checked via ``Inspector.get_foreign_keys``, so this holds on both backends."""
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
-    engine = create_engine_from_url(db_url)
+    engine = hub_scoped_engine(create_engine_from_url(db_url))
 
     runner.upgrade(_RESHAPE)
 

@@ -16,7 +16,7 @@ from typing import cast
 import pytest
 import yaml
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
-from sqlalchemy import select
+from sqlalchemy import insert
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import FixedClock
@@ -65,9 +65,14 @@ from tests.support import (
     FakeHubWorkdir,
     FakeWorkSource,
     build_hub,
+    default_project,
     emitted_events,
+    hub_store_connections,
+    link_project,
     pointer_token,
     report_lease,
+    seed_project,
+    stamp,
 )
 
 pytestmark = pytest.mark.unit
@@ -1268,8 +1273,11 @@ def test_a_fresh_merged_marker_records_the_delivery_landed_fact(tmp_path: Path) 
     assert hub.services.chunks.delivery.count_landed_since("acme-widget", since) == 1
     with hub.engine.begin() as conn:
         row = conn.execute(
-            select(
-                s.delivery_repo_landed.c.repo, s.delivery_repo_landed.c.commit_hash, s.delivery_repo_landed.c.landed_at
+            hub_store_connections(hub.engine).select(
+                s.delivery_repo_landed,
+                s.delivery_repo_landed.c.repo,
+                s.delivery_repo_landed.c.commit_hash,
+                s.delivery_repo_landed.c.landed_at,
             )
         ).one()
         assert row.repo == "acme-widget"
@@ -1469,6 +1477,29 @@ def test_boot_release_frees_a_dead_runs_live_slot_so_the_chunk_resumes(tmp_path:
     assert len(runner.calls) == 1
 
 
+@pytest.mark.component
+def test_two_projects_linking_one_repository_share_the_tenants_hub_exec_slot(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, hub_command_runner=FakeHubCommandRunner(), hub_workdir=FakeHubWorkdir())
+    first = default_project(hub.engine)
+    second = seed_project(hub.engine, "second")
+    link_project(hub.engine, project=second, repository="acme-widget")
+    with hub.engine.begin() as conn:
+        for chunk_id, project_id in (("ch_first", first), ("ch_second", second)):
+            row = stamp(s.chunks, chunk_id=chunk_id, graph_id="gr_1", minted_at=hub.clock.now(), project_id=project_id)
+            conn.execute(insert(s.chunks).values(row))
+    hub_exec = cast(IWriteChunkHubExecRepository, hub.services.chunks.hub_exec)
+    assert hub_exec.acquire_hub_exec_slot(
+        "ch_first", node_id="nd_merge", at=hub.clock.now(), stale_after=timedelta(hours=1)
+    )
+
+    deferred = hub_exec.acquire_hub_exec_slot(
+        "ch_second", node_id="nd_merge", at=hub.clock.now(), stale_after=timedelta(hours=1)
+    )
+
+    assert deferred is None
+    assert hub_exec.count_live_hub_exec_slots() == 1
+
+
 # Component — pending outcome (#66): polls without blocking the queue
 
 _POLL_GRAPH_YAML = """
@@ -1581,6 +1612,33 @@ def test_hub_advance_respects_the_poll_interval_then_succeeds(tmp_path: Path) ->
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["status"] == "done"
     assert detail["pending"] is None
+
+
+@pytest.mark.component
+def test_a_slug_renamed_between_two_steps_of_one_chunk_reaches_the_second_step_under_the_same_id(
+    tmp_path: Path,
+) -> None:
+    """Each hub step reads its chunk's project as it starts: a re-poll after a rename names the new slug."""
+    runner = FakeHubCommandRunner()
+    runner.arm(
+        "check-ci",
+        CommandResult(exit_code=0, stdout="pending", stderr=""),
+        CommandResult(exit_code=0, stdout="success", stderr=""),
+    )
+    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
+    project_id = hub.client.get("/api/projects/default").json()["project_id"]
+    chunk_id, build_node_id, _graph = _to_poll_merge_node(hub, {"source": "default", "ref": "poll-rename"})
+    assert _submit_build_pass(hub, chunk_id, build_node_id, 1).json()["outcome"] == "hub_node_taken"
+
+    renamed = hub.client.patch("/api/projects/default", json={"slug": "widgets"})
+    assert renamed.status_code == 200, renamed.text
+    hub.clock.advance(timedelta(seconds=31))
+    assert hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance").json()["ran"] is True
+
+    assert [(env["BZ_HUB_PROJECT_ID"], env["BZ_HUB_PROJECT"]) for _, _, env in runner.calls] == [
+        (project_id, "default"),
+        (project_id, "widgets"),
+    ]
 
 
 @pytest.mark.component

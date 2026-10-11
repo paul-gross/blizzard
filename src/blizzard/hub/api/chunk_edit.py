@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from fastapi import HTTPException, status
 
 from blizzard.hub.api.graph_names import graph_by_ref
-from blizzard.hub.composition import HubServices
+from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.chunk.model import Chunk, IntendedMigration
 from blizzard.hub.domain.graph.harnesses import InvalidHarnesses
 from blizzard.hub.domain.graph.model import Graph
@@ -25,7 +25,7 @@ class ChunkPatchBody:
     whether the edit it asks for is allowed."""
 
     request: ChunkPatchRequest
-    services: HubServices
+    services: TenantServices
 
     def apply(self, chunk: Chunk) -> None:
         try:

@@ -7,7 +7,7 @@ queue-shaping domain (``bzh:controller-read-only``). Backlog routes require
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Annotated
 
@@ -19,26 +19,31 @@ from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, ChunkStatus
 from blizzard.foundation.roles import dto
 from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
-from blizzard.hub.api.auth_session import require
-from blizzard.hub.api.chunk_views import blocked_view
-from blizzard.hub.api.deps import get_services
-from blizzard.hub.composition import HubServices
+from blizzard.hub.api.auth_session import require, tenant_bound
+from blizzard.hub.api.chunk_views import blocked_view, project_label_fields
+from blizzard.hub.api.deps import Services
+from blizzard.hub.api.project_params import QueryProject
+from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.chunk.dependencies import derive_blocked_prerequisites
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.kernel.pagination import DEFAULT_LIMIT, MAX_LIMIT, MalformedCursor
 from blizzard.hub.domain.operations.queue import (
     ChunkNotGroupable,
+    ChunksInDifferentProjects,
     DuplicateReorderIds,
     FoldWouldCloseCycle,
     MatchedEntry,
     NotInList,
+    QueueEntry,
     QueueList,
     QueueMatchPolicy,
     QueuePage,
     SelfAnchoredMove,
+    entries_of,
     select_matched_entry,
 )
+from blizzard.hub.domain.projects.model import Project, ProjectId
 from blizzard.hub.domain.runners.registration import RunnerCapability
 from blizzard.wire.chunk import WorkRefModel
 from blizzard.wire.queue import (
@@ -58,11 +63,13 @@ from blizzard.wire.queue import (
 )
 from blizzard.wire.runner import RunnerCapability as WireRunnerCapability
 
-router = APIRouter(prefix="/api", tags=["queue"], dependencies=[Depends(reject_runner_principal)])
+router = APIRouter(
+    prefix="/api", tags=["queue"], dependencies=[Depends(reject_runner_principal), Depends(tenant_bound)]
+)
 
 
 def _blocked_markings(
-    services: HubServices, statuses: Mapping[str, ChunkStatus], dependent_ids: Sequence[str] | None = None
+    services: TenantServices, statuses: Mapping[str, ChunkStatus], dependent_ids: Sequence[str] | None = None
 ) -> dict[str, list[str]]:
     """Mark only the displayed dependents (or the whole live order for peeks and writes).
     The live status map still resolves on-page and off-page prerequisites; a finished
@@ -76,7 +83,7 @@ def _blocked_markings(
 
 
 def _replace(
-    list_: QueueList, chunk_ids: list[str], services: HubServices, statuses: Mapping[str, ChunkStatus]
+    list_: QueueList, chunk_ids: list[str], services: TenantServices, statuses: Mapping[str, ChunkStatus]
 ) -> list[Chunk]:
     """Replace ``list_``'s order — the body ``PUT /api/queue`` and ``PUT /api/backlog`` share,
     differing only in which list they rank (``bzh:ranking-is-per-list``). ``statuses`` is the
@@ -95,7 +102,7 @@ def _reposition(
     list_: QueueList,
     chunk_id: str,
     after_chunk_id: str | None,
-    services: HubServices,
+    services: TenantServices,
     statuses: Mapping[str, ChunkStatus],
 ) -> None:
     """Move one chunk within ``list_`` — the body ``POST /api/queue/position`` and
@@ -111,33 +118,50 @@ def _reposition(
     services.events.publish_queue_changed()
 
 
+def _projects_of(services: TenantServices, entries: Iterable[QueueEntry]) -> dict[ProjectId, Project]:
+    """The projects ``entries``' chunks belong to — one batched read, narrowed to the entries."""
+    return services.projects.get_many(sorted({e.chunk.project_id for e in entries if e.chunk.project_id is not None}))
+
+
+def _entry_view[Entry: (QueuePeekEntry, BacklogPeekEntry)](
+    model: type[Entry], entry: QueueEntry, markings: Mapping[str, list[str]], projects: Mapping[ProjectId, Project]
+) -> Entry:
+    """One queue or backlog row at its whole-order position, labelled with its chunk's project."""
+    chunk = entry.chunk
+    project = projects.get(chunk.project_id) if chunk.project_id is not None else None
+    return model(
+        chunk_id=chunk.chunk_id,
+        graph_id=chunk.graph_id,
+        position=entry.position,
+        work_refs=[WorkRefModel(source=p.source, ref=p.ref) for p in chunk.work_refs],
+        blocked=blocked_view(markings.get(chunk.chunk_id)),
+        **project_label_fields(chunk.project_id, project),
+    )
+
+
 @dto
 @dataclass(frozen=True)
 class ReadyQueue:
-    """The hub-ordered ready queue as every peek renders it — position is the order itself.
-    ``markings`` is resolved once in :meth:`of`, alongside ``chunks``, so :attr:`view` stays
-    a pure projection over already-fetched state rather than an I/O-performing property."""
+    """The hub-ordered ready queue as every peek renders it — position is the whole order's
+    own index, kept when ``project`` narrows the entries. ``markings`` and ``projects`` are
+    resolved once in :meth:`of`, alongside ``entries``, so :attr:`view` stays a pure
+    projection over already-fetched state rather than an I/O-performing property."""
 
-    chunks: list[Chunk]
+    entries: list[QueueEntry]
     markings: dict[str, list[str]]
+    projects: dict[ProjectId, Project]
 
     @classmethod
-    def of(cls, services: HubServices, statuses: Mapping[str, ChunkStatus]) -> ReadyQueue:
-        return cls(services.queue.ordered_ready(statuses=statuses), _blocked_markings(services, statuses))
+    def of(
+        cls, services: TenantServices, statuses: Mapping[str, ChunkStatus], *, project: ProjectId | None = None
+    ) -> ReadyQueue:
+        entries = entries_of(services.queue.ordered_ready(statuses=statuses), None if project is None else {project})
+        return cls(entries, _blocked_markings(services, statuses), _projects_of(services, entries))
 
     @property
     def view(self) -> QueuePeekResponse:
         return QueuePeekResponse(
-            entries=[
-                QueuePeekEntry(
-                    chunk_id=chunk.chunk_id,
-                    graph_id=chunk.graph_id,
-                    position=position,
-                    work_refs=[WorkRefModel(source=p.source, ref=p.ref) for p in chunk.work_refs],
-                    blocked=blocked_view(self.markings.get(chunk.chunk_id)),
-                )
-                for position, chunk in enumerate(self.chunks)
-            ]
+            entries=[_entry_view(QueuePeekEntry, entry, self.markings, self.projects) for entry in self.entries]
         )
 
 
@@ -156,15 +180,24 @@ def _domain_capabilities(capabilities: Sequence[WireRunnerCapability]) -> tuple[
 @dto
 @dataclass(frozen=True)
 class MatchedPeek:
-    """The matched fleet peek — at most one ready entry the calling runner can both work
-    (``EligibilityCheck``) and claim (existing blocked-dependency marking), resolved via
-    the same plural bulk reads ``bzh:bulk-reconstitution`` names, so the statement count
-    stays flat as the ready order grows."""
+    """The matched fleet peek — at most one ready entry of a project the calling runner
+    serves that it can both work (``EligibilityCheck``) and claim (existing
+    blocked-dependency marking), resolved via the same plural bulk reads
+    ``bzh:bulk-reconstitution`` names, so the statement count stays flat as the ready
+    order grows. ``served`` is the runner's stored served set, never the request's."""
 
     entry: MatchedEntry | None
+    project: Project | None
 
     @classmethod
-    def of(cls, services: HubServices, statuses: Mapping[str, ChunkStatus], request: QueuePeekRequest) -> MatchedPeek:
+    def of(
+        cls,
+        services: TenantServices,
+        statuses: Mapping[str, ChunkStatus],
+        request: QueuePeekRequest,
+        *,
+        served: Collection[str],
+    ) -> MatchedPeek:
         chunks = services.queue.ordered_ready(statuses=statuses)
         markings = _blocked_markings(services, statuses)
         chunk_ids = [chunk.chunk_id for chunk in chunks]
@@ -173,13 +206,15 @@ class MatchedPeek:
         graphs = services.graphs.get_many(graph_ids)
         entry = select_matched_entry(
             chunks,
+            served=served,
             graphs=graphs,
             facts=facts,
             capabilities=_domain_capabilities(request.capabilities),
             blocked=markings,
             policy=QueueMatchPolicy.of(request.policy),
         )
-        return cls(entry)
+        project_id = entry.chunk.project_id if entry is not None else None
+        return cls(entry, services.projects.get(project_id) if project_id is not None else None)
 
     @property
     def view(self) -> QueuePeekResponse:  # ast-grep-ignore: bzh:property-delegates
@@ -196,47 +231,45 @@ class MatchedPeek:
                     # A matched entry is, by construction, never blocked (`select_matched_entry`'s own
                     # policy check covers that dimension too before one is ever selected).
                     blocked=None,
+                    **project_label_fields(chunk.project_id, self.project),
                 )
             ]
         )
 
 
-def _page_view(page: QueuePage, markings: Mapping[str, list[str]]) -> QueuePageView:
+def _page_view(
+    page: QueuePage, markings: Mapping[str, list[str]], projects: Mapping[ProjectId, Project]
+) -> QueuePageView:
     return QueuePageView(
-        entries=[
-            QueuePeekEntry(
-                chunk_id=entry.chunk.chunk_id,
-                graph_id=entry.chunk.graph_id,
-                position=entry.position,
-                work_refs=[WorkRefModel(source=p.source, ref=p.ref) for p in entry.chunk.work_refs],
-                blocked=blocked_view(markings.get(entry.chunk.chunk_id)),
-            )
-            for entry in page.entries
-        ],
+        entries=[_entry_view(QueuePeekEntry, entry, markings, projects) for entry in page.entries],
         next_cursor=page.next_cursor,
     )
 
 
 @router.get("/queue", response_model=QueuePageView, dependencies=[Depends(require(Permission.FLEET_VIEW))])
 def get_queue(
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
+    project: QueryProject,
     cursor: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
 ) -> QueuePageView:
     """The hub-ordered ready queue, read-only and keyset-paginated
-    — honours reorder/replace + grouping."""
+    — honours reorder/replace + grouping. ``?project=`` narrows it to that project's
+    chunks at their whole-queue positions, never reranked; without it, the whole tenant's."""
     statuses = services.chunks.facts.load_live_statuses()
     try:
-        page = services.queue.page(QueueList.READY, statuses=statuses, cursor=cursor, limit=limit)
+        page = services.queue.page(QueueList.READY, statuses=statuses, cursor=cursor, limit=limit, project=project)
     except MalformedCursor as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="malformed cursor") from exc
-    return _page_view(page, _blocked_markings(services, statuses, [entry.chunk.chunk_id for entry in page.entries]))
+    return _page_view(
+        page,
+        _blocked_markings(services, statuses, [entry.chunk.chunk_id for entry in page.entries]),
+        _projects_of(services, page.entries),
+    )
 
 
 @router.put("/queue", response_model=QueuePeekResponse, dependencies=[Depends(require(Permission.QUEUE_REORDER))])
-def replace_queue(
-    request: QueueReplaceRequest, services: Annotated[HubServices, Depends(get_services)]
-) -> QueuePeekResponse:
+def replace_queue(request: QueueReplaceRequest, services: Services) -> QueuePeekResponse:
     """Idempotent whole-order replacement of the ready queue.
 
     Resolves every named id against the current ready set: ``409`` names the first id
@@ -252,9 +285,7 @@ def replace_queue(
 @router.post(
     "/queue/position", response_model=QueuePeekResponse, dependencies=[Depends(require(Permission.QUEUE_REORDER))]
 )
-def reposition_queue(
-    request: QueuePositionRequest, services: Annotated[HubServices, Depends(get_services)]
-) -> QueuePeekResponse:
+def reposition_queue(request: QueuePositionRequest, services: Services) -> QueuePeekResponse:
     """Single-chunk fractional reorder.
 
     Resolves both ids against the current ready set: ``409`` names either one if it is
@@ -271,71 +302,60 @@ def reposition_queue(
 @dataclass(frozen=True)
 class Backlog:
     """The hub-ordered ``not_ready`` list as every peek renders it — position is the
-    order itself. ``markings`` is resolved once in :meth:`of`, alongside ``chunks``, so
-    :attr:`view` stays a pure projection over already-fetched state rather than an
-    I/O-performing property."""
+    order itself. ``markings`` and ``projects`` are resolved once in :meth:`of`, alongside
+    ``entries``, so :attr:`view` stays a pure projection over already-fetched state rather
+    than an I/O-performing property."""
 
-    chunks: list[Chunk]
+    entries: list[QueueEntry]
     markings: dict[str, list[str]]
+    projects: dict[ProjectId, Project]
 
     @classmethod
-    def of(cls, services: HubServices, statuses: Mapping[str, ChunkStatus]) -> Backlog:
-        return cls(services.queue.ordered_not_ready(statuses=statuses), _blocked_markings(services, statuses))
+    def of(cls, services: TenantServices, statuses: Mapping[str, ChunkStatus]) -> Backlog:
+        entries = entries_of(services.queue.ordered_not_ready(statuses=statuses))
+        return cls(entries, _blocked_markings(services, statuses), _projects_of(services, entries))
 
     @property
     def view(self) -> BacklogPeekResponse:
         return BacklogPeekResponse(
-            entries=[
-                BacklogPeekEntry(
-                    chunk_id=chunk.chunk_id,
-                    graph_id=chunk.graph_id,
-                    position=position,
-                    work_refs=[WorkRefModel(source=p.source, ref=p.ref) for p in chunk.work_refs],
-                    blocked=blocked_view(self.markings.get(chunk.chunk_id)),
-                )
-                for position, chunk in enumerate(self.chunks)
-            ]
+            entries=[_entry_view(BacklogPeekEntry, entry, self.markings, self.projects) for entry in self.entries]
         )
 
 
-def _backlog_page_view(page: QueuePage, markings: Mapping[str, list[str]]) -> BacklogPageView:
+def _backlog_page_view(
+    page: QueuePage, markings: Mapping[str, list[str]], projects: Mapping[ProjectId, Project]
+) -> BacklogPageView:
     return BacklogPageView(
-        entries=[
-            BacklogPeekEntry(
-                chunk_id=entry.chunk.chunk_id,
-                graph_id=entry.chunk.graph_id,
-                position=entry.position,
-                work_refs=[WorkRefModel(source=p.source, ref=p.ref) for p in entry.chunk.work_refs],
-                blocked=blocked_view(markings.get(entry.chunk.chunk_id)),
-            )
-            for entry in page.entries
-        ],
+        entries=[_entry_view(BacklogPeekEntry, entry, markings, projects) for entry in page.entries],
         next_cursor=page.next_cursor,
     )
 
 
 @router.get("/backlog", response_model=BacklogPageView, dependencies=[Depends(require(Permission.QUEUE_REORDER))])
 def get_backlog(
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
+    project: QueryProject,
     cursor: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
 ) -> BacklogPageView:
     """The hub-ordered ``not_ready`` list, read-only and keyset-paginated
-    — an operator triage surface, requiring ``queue:reorder`` not ``fleet:view``."""
+    — an operator triage surface, requiring ``queue:reorder`` not ``fleet:view``.
+    ``?project=`` narrows it to that project's chunks at their whole-list positions, never
+    reranked; without it, the whole tenant's."""
     statuses = services.chunks.facts.load_live_statuses()
     try:
-        page = services.queue.page(QueueList.NOT_READY, statuses=statuses, cursor=cursor, limit=limit)
+        page = services.queue.page(QueueList.NOT_READY, statuses=statuses, cursor=cursor, limit=limit, project=project)
     except MalformedCursor as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="malformed cursor") from exc
     return _backlog_page_view(
-        page, _blocked_markings(services, statuses, [entry.chunk.chunk_id for entry in page.entries])
+        page,
+        _blocked_markings(services, statuses, [entry.chunk.chunk_id for entry in page.entries]),
+        _projects_of(services, page.entries),
     )
 
 
 @router.put("/backlog", response_model=BacklogPeekResponse, dependencies=[Depends(require(Permission.QUEUE_REORDER))])
-def replace_backlog(
-    request: BacklogReplaceRequest, services: Annotated[HubServices, Depends(get_services)]
-) -> BacklogPeekResponse:
+def replace_backlog(request: BacklogReplaceRequest, services: Services) -> BacklogPeekResponse:
     """Idempotent whole-order replacement of the backlog.
 
     Resolves every named id against the current ``not_ready`` set: ``409`` names the
@@ -351,9 +371,7 @@ def replace_backlog(
 @router.post(
     "/backlog/position", response_model=BacklogPeekResponse, dependencies=[Depends(require(Permission.QUEUE_REORDER))]
 )
-def reposition_backlog(
-    request: BacklogPositionRequest, services: Annotated[HubServices, Depends(get_services)]
-) -> BacklogPeekResponse:
+def reposition_backlog(request: BacklogPositionRequest, services: Services) -> BacklogPeekResponse:
     """Single-chunk fractional reorder within the backlog.
 
     Resolves both ids against the current ``not_ready`` set: ``409`` names either one if
@@ -374,18 +392,19 @@ def reposition_backlog(
 def group_chunks(
     chunk_id: str,
     request: ChunkGroupRequest,
-    services: Annotated[HubServices, Depends(get_services)],
+    services: Services,
 ) -> object:
     """Merge unacquired chunks into ``chunk_id``. Accepts ``not_ready`` and ``ready``
     participants alike; 409 names the first chunk a runner holds, or one
-    already finished. The survivor also absorbs each folded chunk's standing dependency
-    edges; 409 refuses a fold that would close a cycle."""
+    already finished, or one of another project than the survivor's. The survivor also
+    absorbs each folded chunk's standing dependency edges; 409 refuses a fold that would
+    close a cycle."""
     before = chunk_events.ChunkChanged.before(services, chunk_id)
     try:
         result = services.group.group(chunk_id, request.merge_chunk_ids)
     except ChunkNotFound as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    except ChunkNotGroupable as exc:
+    except (ChunkNotGroupable, ChunksInDifferentProjects) as exc:
         return JSONResponse(status_code=status.HTTP_409_CONFLICT, content={"detail": str(exc)})
     except FoldWouldCloseCycle as exc:
         return JSONResponse(status_code=status.HTTP_409_CONFLICT, content={"detail": str(exc)})

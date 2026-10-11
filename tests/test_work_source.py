@@ -15,19 +15,29 @@ import pytest
 from fastapi.testclient import TestClient
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.composition import HubCore, build_hub_core, build_live_config
+from blizzard.hub.composition import TenantStores, build_hub_core, build_live_config
 from blizzard.hub.domain.chunk.delivery_read import DeliveryTrace, TraceLanding
 from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.secrets import SecretName
 from blizzard.hub.domain.config.work_sources import WorkSourceFields
 from blizzard.hub.secrets import hub_key_provider
+from blizzard.hub.tenancy import StoreScope
 from blizzard.hub.work_sources.annotator import WorkAnnotateError, WorkStatusMarker
 from blizzard.hub.work_sources.closer import WorkCloseError, WorkItemGoneError
 from blizzard.hub.work_sources.internal.factory import WorkSourceEntry
 from blizzard.hub.work_sources.internal.github_work_source import GitHubWorkSource
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
-from tests.support import OMIT_TITLE, OP, WorkSourceRegistry, config_authoring, forge_state, github_double, migrate_to
+from tests.support import (
+    OMIT_TITLE,
+    OP,
+    WorkSourceRegistry,
+    config_authoring,
+    default_tenant,
+    forge_state,
+    github_double,
+    migrate_to,
+)
 
 pytestmark = pytest.mark.component
 
@@ -45,30 +55,31 @@ def _registry_world(
     *sources: tuple[str, WorkSourceFields],
     tokens: dict[str, str] | None = None,
     close_forge_writes_enabled: bool = True,
-) -> tuple[IWorkSourceRegistry, ConfigAuthoring, HubCore]:
+) -> tuple[IWorkSourceRegistry, ConfigAuthoring, TenantStores]:
     """The production registry over a migrated store holding ``sources`` and their secrets,
     each written through ``ConfigAuthoring``."""
     engine = migrate_to(tmp_path, "head")[1]
     clock = FixedClock(datetime(2026, 1, 1, tzinfo=UTC))
     keys = hub_key_provider({}, data_dir=tmp_path / "data")
     core = build_hub_core(engine, clock=clock)
+    stores = core.open(StoreScope(default_tenant(engine)))
     authoring = config_authoring(engine, keys=keys, clock=clock)
     for secret, value in (tokens or {"gh": "token"}).items():
         authoring.create_secret(SecretName.parse(secret), value, OP)
     for name, fields in sources:
         authoring.create_work_source(name, fields, OP)
-    live = build_live_config(core, secret_keys=keys)
+    live = build_live_config(stores, secret_keys=keys)
     registry = WorkSourceEntry.registry(
-        records=core.work_source_records,
+        records=stores.work_source_records,
         objects=live.objects,
         secrets=live.secrets,
         users=core.users,
-        work_item_store=core.work_item_store,
-        edits=core.work_item_edits,
-        resolution=core.garden_proposal_resolution,
+        work_item_store=stores.work_item_store,
+        edits=stores.work_item_edits,
+        resolution=stores.garden_proposal_resolution,
         close_forge_writes_enabled=close_forge_writes_enabled,
     )
-    return registry, authoring, core
+    return registry, authoring, stores
 
 
 def _registry(
@@ -120,12 +131,6 @@ def test_forge_reference_names_the_configured_repo_not_the_source_alias() -> Non
     """GitHub cross-links ``owner/repo#n``; the source ``name`` is only a config alias."""
     source = GitHubWorkSource(github_double(), name="widget", repo="acme/widget", web_base="https://github.com")
     assert source.forge_reference(WorkRef(source="widget", ref="12")) == "acme/widget#12"
-
-
-def test_branch_url_qualifies_a_bare_repo_with_this_source_s_owner() -> None:
-    source = GitHubWorkSource(github_double(), name="widget", repo="acme/widget", web_base="https://github.com")
-    assert source.branch_url("widget", "feat/x") == "https://github.com/acme/widget/tree/feat/x"
-    assert source.branch_url("other/widget", "feat/x") == "https://github.com/other/widget/tree/feat/x"
 
 
 def test_parse_accepts_this_source_s_own_colon_token_form() -> None:
@@ -230,11 +235,11 @@ def test_factory_gives_each_source_its_own_credentialed_client(tmp_path: Path) -
 def test_a_retired_source_whose_secret_cannot_be_revealed_reads_as_absent(tmp_path: Path) -> None:
     """Items already ingested from a retired source must stay readable: once its secret is retired too,
     the source reads as absent rather than failing every read path."""
-    registry, authoring, core = _registry_world(tmp_path, ("one", _github("acme/one")))
-    record = core.work_source_records.get("one")
+    registry, authoring, stores = _registry_world(tmp_path, ("one", _github("acme/one")))
+    record = stores.work_source_records.get("one")
     assert record is not None
     authoring.retire_work_source(record, OP)
-    secret = core.secrets.get("gh")
+    secret = stores.secrets.get("gh")
     assert secret is not None
     authoring.retire_secret(secret, OP)
     assert registry.get("one") is None

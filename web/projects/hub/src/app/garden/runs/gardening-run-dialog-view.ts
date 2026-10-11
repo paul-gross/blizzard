@@ -17,6 +17,7 @@ import {
 } from 'fleet';
 
 import { EMPTY_SCOPE_SELECTION, GardeningRunScopeField, type ScopeSelection } from './gardening-run-scope-field';
+import { LensLink } from 'fleet/shell';
 
 /** What the view asks the container to do once the operator submits. */
 export interface RunSubmission {
@@ -48,7 +49,7 @@ export interface RunSubmission {
     KitOption,
     KitPanel,
     KitTextInput,
-    RouterLink,
+    RouterLink, LensLink,
   ],
   templateUrl: './gardening-run-dialog-view.html',
   styleUrl: './gardening-run-dialog-view.css',

@@ -15,6 +15,7 @@ from blizzard.hub.domain.observability.forge_status import (
     departed,
     marker_action,
 )
+from blizzard.hub.tenancy import TenantId
 from blizzard.hub.work_sources.annotator import WorkStatusMarker
 
 _INGESTED = WorkStatusMarker.INGESTED
@@ -82,9 +83,17 @@ _FLOOR = timedelta(minutes=10)
 _NOW = datetime(2026, 1, 1, tzinfo=UTC)
 
 
+def _other_tenants_probe() -> AnnotationProbe:
+    """:func:`_probe`'s one source, annotating in another tenant."""
+    return AnnotationProbe(
+        work_refs=WorkRefsSignature(marks=(("chunks", 1, None),)), annotating=frozenset({(TenantId("ten_b"), "a")})
+    )
+
+
 def _probe(marks: int = 1, annotating: tuple[str, ...] = ("a",)) -> AnnotationProbe:
     return AnnotationProbe(
-        work_refs=WorkRefsSignature(marks=(("chunks", marks, None),)), annotating=frozenset(annotating)
+        work_refs=WorkRefsSignature(marks=(("chunks", marks, None),)),
+        annotating=frozenset((TenantId("ten_a"), name) for name in annotating),
     )
 
 
@@ -96,6 +105,7 @@ def _probe(marks: int = 1, annotating: tuple[str, ...] = ("a",)) -> AnnotationPr
         (_probe(), _probe(), _NOW, _NOW + timedelta(seconds=1), False),
         (_probe(), _probe(marks=2), _NOW, _NOW + timedelta(seconds=1), True),  # a fact or work-ref insert
         (_probe(), _probe(annotating=("a", "b")), _NOW, _NOW + timedelta(seconds=1), True),  # the set moved
+        (_probe(), _other_tenants_probe(), _NOW, _NOW + timedelta(seconds=1), True),  # another tenant's source
         (_probe(), _probe(), _NOW, _NOW + _FLOOR - timedelta(seconds=1), False),
         (_probe(), _probe(), _NOW, _NOW + _FLOOR, True),  # the floor elapsed
     ],

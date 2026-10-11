@@ -26,7 +26,7 @@ from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.garden_proposal_closure_store import insert_garden_proposal_closure_row
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
 from blizzard.hub.store.internal.routine_store import RoutineStore
-from tests.support import build_hub, hub_store_connections
+from tests.support import build_hub, default_project, hub_store_connections, stamp
 
 pytestmark = pytest.mark.component
 
@@ -38,7 +38,7 @@ _UNTIL = datetime(2026, 1, 15, tzinfo=UTC)
 
 def _seed_scope(hub, slug: str = "blizzard") -> None:  # type: ignore[no-untyped-def]
     with hub.engine.begin() as conn:
-        conn.execute(insert(s.scopes).values(slug=slug, description="", created_at=_SINCE))
+        conn.execute(insert(s.scopes).values(stamp(s.scopes, slug=slug, description="", created_at=_SINCE)))
 
 
 def _seed_routine(hub, name: str = "nightly", *, default_scope_slug: str = "blizzard") -> None:  # type: ignore[no-untyped-def]
@@ -48,6 +48,7 @@ def _seed_routine(hub, name: str = "nightly", *, default_scope_slug: str = "bliz
         graph_name="g",
         default_scope_slug=default_scope_slug,
         created_at=_SINCE,
+        project_id=default_project(hub.engine),
     )
     change = ConfigChange.of(_CTX, RecordKind.ROUTINE, name, 1, ChangeOp.CREATE, (), routine.created_at)
     RoutineStore(hub_store_connections(hub.engine)).create(routine, change=change, scope_mint=None)
@@ -57,14 +58,17 @@ def _seed_finding(hub, finding_id: str, *, routine_name: str = "nightly", scope_
     with hub.engine.begin() as conn:
         conn.execute(
             insert(s.findings).values(
-                finding_id=finding_id,
-                routine_name=routine_name,
-                scope_slug=scope_slug,
-                class_="stale-docstring",
-                locus="a.py:1",
-                summary="s",
-                introduced=None,
-                introduced_at=None,
+                stamp(
+                    s.findings,
+                    finding_id=finding_id,
+                    routine_name=routine_name,
+                    scope_slug=scope_slug,
+                    class_="stale-docstring",
+                    locus="a.py:1",
+                    summary="s",
+                    introduced=None,
+                    introduced_at=None,
+                )
             )
         )
 
@@ -80,6 +84,7 @@ def _seed_proposal(
 ) -> None:
     GardenProposalStore(hub_store_connections(hub.engine)).create(
         proposal_id,
+        project_id=default_project(hub.engine),
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name=routine_name,
         class_=class_,
@@ -141,9 +146,13 @@ def test_proposal_counts_reports_bucketed_counts_per_routine_and_class(tmp_path:
     assert body["since"] == iso_utc(_SINCE)
     assert body["until"] == iso_utc(_UNTIL)
     assert body["routine"] is None
+    [project] = hub.services.projects.list_all()
     assert body["rows"] == [
         {
             "origin": "routine-run",
+            "project_id": project.project_id,
+            "project_slug": project.slug,
+            "project_name": project.name,
             "routine_name": "nightly",
             "class": "fix-the-source",
             "open": 1,

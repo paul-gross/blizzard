@@ -21,13 +21,14 @@ from blizzard.foundation.garden_proposals import (
 )
 from blizzard.foundation.store import batching as batching_module
 from blizzard.hub.domain.chunk.model import IWriteWorkItemRepository, WorkItemAuthor, WorkRef, mint_chunk
+from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_closure_store import GardenProposalClosureStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
-from tests.support import build_hub, count_queries, hub_store_connections
+from tests.support import build_hub, count_queries, default_project, hub_scoped, hub_store_connections, stamp
 
 pytestmark = pytest.mark.component
 
@@ -36,10 +37,11 @@ _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 
 def _seed_proposal(hub, *, proposal_id: str = "gprop_1") -> None:  # type: ignore[no-untyped-def]
     with hub.engine.begin() as conn:
-        conn.execute(s.scopes.insert().values(slug="blizzard", description="", created_at=_NOW))
+        conn.execute(s.scopes.insert().values(stamp(s.scopes, slug="blizzard", description="", created_at=_NOW)))
     store = hub_store_connections(hub.engine)
     FindingStore(store).add(
         "fin_1",
+        project_id=default_project(hub.engine),
         routine_name="nightly",
         scope_slug="blizzard",
         class_="stale-docstring",
@@ -50,6 +52,7 @@ def _seed_proposal(hub, *, proposal_id: str = "gprop_1") -> None:  # type: ignor
     )
     GardenProposalStore(store).create(
         proposal_id,
+        project_id=default_project(hub.engine),
         origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="fix-the-source",
@@ -62,7 +65,7 @@ def _seed_proposal(hub, *, proposal_id: str = "gprop_1") -> None:  # type: ignor
 
 def _seed_proposals(hub, proposal_ids: list[str]) -> None:  # type: ignore[no-untyped-def]
     with hub.engine.begin() as conn:
-        conn.execute(s.scopes.insert().values(slug="blizzard", description="", created_at=_NOW))
+        conn.execute(s.scopes.insert().values(stamp(s.scopes, slug="blizzard", description="", created_at=_NOW)))
     store = hub_store_connections(hub.engine)
     findings = FindingStore(store)
     proposals = GardenProposalStore(store)
@@ -70,6 +73,7 @@ def _seed_proposals(hub, proposal_ids: list[str]) -> None:  # type: ignore[no-un
         finding_id = f"fin_{i}"
         findings.add(
             finding_id,
+            project_id=default_project(hub.engine),
             routine_name="nightly",
             scope_slug="blizzard",
             class_="stale-docstring",
@@ -80,6 +84,7 @@ def _seed_proposals(hub, proposal_ids: list[str]) -> None:  # type: ignore[no-un
         )
         proposals.create(
             proposal_id,
+            project_id=default_project(hub.engine),
             origin=GardenProposalOrigin.ROUTINE_RUN,
             routine_name="nightly",
             class_="fix-the-source",
@@ -175,7 +180,7 @@ def test_record_pass_returns_false_on_a_second_call(tmp_path: Path) -> None:
     assert second is False
     with hub.engine.connect() as conn:
         rows = conn.execute(
-            select(s.garden_proposal_closures).where(s.garden_proposal_closures.c.proposal_id == "gprop_1")
+            hub_scoped(select(s.garden_proposal_closures).where(s.garden_proposal_closures.c.proposal_id == "gprop_1"))
         ).all()
     assert len(rows) == 1
     assert rows[0].reason == "r1"
@@ -211,7 +216,7 @@ def test_accept_create_mints_the_closure_item_and_chunk_atomically_and_is_idempo
     items = cast(IWriteWorkItemRepository, WorkItemStore(store))
     author = WorkItemAuthor.user("u1")
     pointer = WorkRef(source="hub", ref=items.allocate_ref("hub"))
-    chunk = mint_chunk([pointer], graph_id=graph.graph_id, at=_NOW)
+    chunk = mint_chunk([pointer], graph_id=graph.graph_id, at=_NOW, project_id=ProjectId(default_project(hub.engine)))
 
     first = items.accept_create(
         proposal_id="gprop_1",
@@ -247,7 +252,7 @@ def test_accept_create_mints_the_closure_item_and_chunk_atomically_and_is_idempo
 
     with hub.engine.connect() as conn:
         rows = conn.execute(
-            select(s.garden_proposal_closures).where(s.garden_proposal_closures.c.proposal_id == "gprop_1")
+            hub_scoped(select(s.garden_proposal_closures).where(s.garden_proposal_closures.c.proposal_id == "gprop_1"))
         ).all()
     assert len(rows) == 1
 
@@ -261,7 +266,7 @@ def test_accept_create_writes_nothing_when_the_proposal_is_already_closed(tmp_pa
     closures.record_pass("gprop_1", reason="already passed", closed_by="u0", at=_NOW)
     items = cast(IWriteWorkItemRepository, WorkItemStore(store))
     pointer = WorkRef(source="hub", ref=items.allocate_ref("hub"))
-    chunk = mint_chunk([pointer], graph_id=graph.graph_id, at=_NOW)
+    chunk = mint_chunk([pointer], graph_id=graph.graph_id, at=_NOW, project_id=ProjectId(default_project(hub.engine)))
 
     result = items.accept_create(
         proposal_id="gprop_1",

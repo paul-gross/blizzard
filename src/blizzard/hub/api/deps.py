@@ -1,22 +1,22 @@
-"""Shared FastAPI dependency for the fleet routers (``bzh:dependency-injection``).
+"""The tenant services dependency for the people and fleet routers (``bzh:dependency-injection``).
 
-The composition root stashes the wired :class:`~blizzard.hub.composition.HubServices`
-on ``app.state.services``; routers reach it through this dependency. With no services
-wired, a route reports the store is unwired (503) rather than serving on none."""
+A handler names the half it serves from: :data:`Services` for the services of the tenant the
+request resolves (:func:`~blizzard.hub.api.auth_session.resolve_tenant`), :data:`Hub`
+(``src/blizzard/hub/api/hub_level.py``) for the hub-level ones."""
 
 from __future__ import annotations
 
-from fastapi import Request, status
-from fastapi.exceptions import HTTPException
+from typing import Annotated
 
-from blizzard.hub.composition import HubServices
+from fastapi import Depends
+
+from blizzard.hub.api.auth_session import TenantRequest, resolve_tenant
+from blizzard.hub.composition import TenantServices
 
 
-def get_services(request: Request) -> HubServices:
-    services: HubServices | None = getattr(request.app.state, "services", None)
-    if services is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="hub store not wired — start via `blizzard hub host`",
-        )
-    return services
+def tenant_services(tenant: Annotated[TenantRequest, Depends(resolve_tenant)]) -> TenantServices:
+    """A dependency: the services of the tenant the request resolves."""
+    return tenant.services
+
+
+Services = Annotated[TenantServices, Depends(tenant_services)]

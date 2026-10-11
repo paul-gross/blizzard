@@ -19,6 +19,10 @@ single [repository](./repositories.md) record — none stands for one of them or
 resolve to differ on forge, owner, base branch or secret. The step is refused before any command runs and routes its
 failure choice; the remedy is creating or editing the repository records, then requeuing.
 
+`repository-not-linked` (critical): a `deliver` step's chunk commits resolve to a repository record of the tenant that
+the chunk's project does not link. The step is refused before any command runs and routes its failure choice; the remedy
+is linking the repository to the project ([projects.md](./projects.md#links)), then requeuing.
+
 `owner-unresolvable` (critical): a runner reached an existing session whose recorded harness owner it cannot resolve
 right now. The runner binds every enabled declared harness ([worker-spawn.md](./worker-spawn.md) owns that binding).
 **Unknown** means the session was recorded under a harness id this runner build doesn't bind at all — the remedy is to

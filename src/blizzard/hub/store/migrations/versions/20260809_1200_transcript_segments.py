@@ -13,7 +13,6 @@ import sqlalchemy as sa
 from alembic import op
 
 from blizzard.foundation.store.utc import UtcDateTime
-from blizzard.hub.store.schema import transcript_high_water
 
 revision: str = "20260809_1200_hub_transcript_segments"
 down_revision: str | None = "20260803_1000_hub_escalation_wrapped_takeover"
@@ -52,7 +51,17 @@ _transcript_segments = sa.Table(
     sa.UniqueConstraint("segment_id", "turn_range_start", name="uq_transcript_segments_segment_turn_start"),
 )
 
-_TABLES = (_transcript_segments, transcript_high_water)
+# Frozen (``bzh:frozen-revisions``): ``transcript_high_water`` is a local literal of the hub store's declared
+# shape.
+_transcript_high_water = sa.Table(
+    "transcript_high_water",
+    _frozen_metadata,
+    sa.Column("runner_id", sa.String, primary_key=True),
+    sa.Column("seq", sa.Integer, nullable=False),
+    sa.Column("updated_at", UtcDateTime, nullable=False),
+)
+
+_TABLES = (_transcript_segments, _transcript_high_water)
 _CHUNK_INDEX = sa.Index("ix_transcript_segments_chunk_id", _transcript_segments.c.chunk_id)
 _RUNNER_RECEIVED_INDEX = sa.Index(
     "ix_transcript_segments_runner_received_at",

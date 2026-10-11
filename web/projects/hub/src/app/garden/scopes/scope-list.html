@@ -12,9 +12,17 @@
           [testid]="'gardening-scope-row-' + row.slug"
           (picked)="pick(row.slug)"
         >
-          <span class="sc-slug">{{ row.slug }}</span>
-          @if (row.retired) {
-            <fleet-kit-badge class="sc-flag" [tone]="lifecycleTone(true)">retired</fleet-kit-badge>
+          <div class="sc-top">
+            <span class="sc-slug">{{ row.slug }}</span>
+            @if (row.retired) {
+              <fleet-kit-badge class="sc-flag" [tone]="lifecycleTone(true)">retired</fleet-kit-badge>
+            }
+            @if (row.lastSwept; as swept) {
+              <fleet-when class="sc-swept" [iso]="swept" [attr.data-testid]="'gardening-scope-swept-' + row.slug" />
+            }
+          </div>
+          @if (row.description) {
+            <div class="sc-desc">{{ row.description }}</div>
           }
         </fleet-kit-select-row>
       </li>

@@ -53,6 +53,12 @@ export class FleetScopePanel {
   readonly vm = input<ScopePanelVm | null>(null);
   readonly state = input.required<KitAsyncStateValue>();
 
+  /** The project the scope belongs to, shown beside its slug; `null` until read. */
+  readonly project = input<string | null>(null);
+
+  /** The other projects holding a scope of the same slug — different records that share a name. */
+  readonly sameSlugIn = input<readonly string[]>([]);
+
   /** Whether the current identity may author scopes (`graph:edit`) — withholds the
    * description editor and the retire/enable controls when `false`. */
   readonly canEdit = input(false);

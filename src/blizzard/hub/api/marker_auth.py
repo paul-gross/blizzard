@@ -1,50 +1,34 @@
 """The marker-write route's own authorization dependency.
 
 A second way past that route's gate, layered in front of the human
-``require(Permission.CHUNK_CONTROL)`` rather than replacing it: a live marker token for the exact
-``(chunk_id, node_id, epoch)`` triple grants without a session, else it falls through.
+``require(Permission.CHUNK_CONTROL)`` rather than replacing it: a marker token the request's tenant
+was resolved by (:func:`~blizzard.hub.api.auth_session.resolve_tenant` verifies it, in every auth
+mode, against this request's exact ``(chunk_id, node_id, epoch)`` triple) grants without a session,
+else it falls through.
 """
 
 from __future__ import annotations
 
-from fastapi import Request
+from typing import Annotated
+
+from fastapi import Depends, Request
 
 from blizzard.auth_core import Permission
-from blizzard.foundation.platform_tracing.attributes import annotate_caller
-from blizzard.hub.api.auth_session import IMPLICIT_OPERATOR, require
-from blizzard.hub.api.deps import get_services
+from blizzard.hub.api.auth_session import MARKER_TOKEN_HEADER, TenantRequest, require, resolve_tenant
 from blizzard.hub.auth.models import ResolvedIdentity
-from blizzard.hub.config import AUTH_MODE_NONE
+from blizzard.hub.delivery.marker_auth import MarkerPrincipal
 
-_MARKER_TOKEN_HEADER = "X-Blizzard-Marker-Token"
+#: The header the ``record-marker`` command presents its token in.
+_MARKER_TOKEN_HEADER = MARKER_TOKEN_HEADER
 
 #: The human gate this dependency falls through to, built once and shared.
 _require_chunk_control = require(Permission.CHUNK_CONTROL)
 
 
-def require_marker_authority(request: Request) -> ResolvedIdentity:
-    """Grant on a live marker token for this exact node-step, else defer to the human gate.
-
-    Path and query params are read off the request because FastAPI resolves a route's
-    dependencies alongside its own param validation: a bad ``epoch`` falls through.
-    """
-    mode = request.app.state.config.auth.mode
-    if mode == AUTH_MODE_NONE:
-        annotate_caller("operator")
-        return IMPLICIT_OPERATOR
-    token = request.headers.get(_MARKER_TOKEN_HEADER)
-    if token:
-        chunk_id = request.path_params.get("chunk_id")
-        node_id = request.query_params.get("node_id")
-        epoch_raw = request.query_params.get("epoch")
-        epoch: int | None = None
-        if epoch_raw is not None:
-            try:
-                epoch = int(epoch_raw)
-            except ValueError:
-                epoch = None
-        if isinstance(chunk_id, str) and node_id is not None and epoch is not None:
-            services = get_services(request)
-            if services.marker_authority.verify(token, chunk_id=chunk_id, node_id=node_id, epoch=epoch):
-                return IMPLICIT_OPERATOR
-    return _require_chunk_control(request)
+def require_marker_authority(
+    request: Request, tenant: Annotated[TenantRequest, Depends(resolve_tenant)]
+) -> ResolvedIdentity | MarkerPrincipal:
+    """Grant on a live marker token for this exact node-step, else defer to the human gate."""
+    if isinstance(tenant.identity, MarkerPrincipal):
+        return tenant.identity
+    return _require_chunk_control(request, tenant)

@@ -11,7 +11,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from sqlalchemy import select
 from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.sql import ClauseElement, visitors
 from sqlalchemy.sql.elements import TextClause
@@ -24,9 +23,13 @@ from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal import transcript_segment_store as store_module
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
+from blizzard.hub.store.scoped import ScopedStatements
+from blizzard.hub.tenancy import StoreScope, TenantId
 from tests.support import hub_store_connections
 
 pytestmark = pytest.mark.unit
+
+_STMTS = ScopedStatements(StoreScope(TenantId("ten_transcripts")))
 
 _NOW = datetime(2026, 8, 9, tzinfo=UTC)
 
@@ -66,24 +69,28 @@ def _executed_statements() -> dict[str, ClauseElement]:
     record = _record()
     m = store_module
     return {
-        "_segments_for_chunk_stmt": m._segments_for_chunk_stmt("ch_1"),
-        "_records_for_segment_stmt": m._records_for_segment_stmt("ch_1", "sg_1"),
-        "_lease_runner_ids_stmt": m._lease_runner_ids_stmt("ch_1", "nd_build", 1),
-        "_records_for_lease_stmt": m._records_for_lease_stmt("ch_1", "nd_build", 1, "r1"),
-        "_high_water_stmt": m._high_water_stmt("r1"),
-        "_high_water_owner_stmt": m._high_water_owner_stmt("r1"),
-        "_natural_key_state_stmt": m._natural_key_state_stmt("sg_1", 0),
-        "_chunk_stored_bytes_stmt": m._chunk_stored_bytes_stmt("ch_1"),
-        "_runner_window_bytes_stmt": m._runner_window_bytes_stmt("r1", _NOW),
-        "_insert_high_water_stmt": m._insert_high_water_stmt("r1", seq=7, at=_NOW),
-        "_update_high_water_stmt": m._update_high_water_stmt("r1", seq=7, at=_NOW),
-        "_insert_accepted_stmt": m._insert_accepted_stmt(record, byte_count=10, codec="zlib", content=b"z", at=_NOW),
-        "_insert_rejected_stmt": m._insert_rejected_stmt(record, byte_count=999, reason="record_too_large", at=_NOW),
+        "_segments_for_chunk_stmt": m._segments_for_chunk_stmt(_STMTS, "ch_1"),
+        "_records_for_segment_stmt": m._records_for_segment_stmt(_STMTS, "ch_1", "sg_1"),
+        "_lease_runner_ids_stmt": m._lease_runner_ids_stmt(_STMTS, "ch_1", "nd_build", 1),
+        "_records_for_lease_stmt": m._records_for_lease_stmt(_STMTS, "ch_1", "nd_build", 1, "r1"),
+        "_high_water_stmt": m._high_water_stmt(_STMTS, "r1"),
+        "_high_water_owner_stmt": m._high_water_owner_stmt(_STMTS, "r1"),
+        "_natural_key_state_stmt": m._natural_key_state_stmt(_STMTS, "sg_1", 0),
+        "_chunk_stored_bytes_stmt": m._chunk_stored_bytes_stmt(_STMTS, "ch_1"),
+        "_runner_window_bytes_stmt": m._runner_window_bytes_stmt(_STMTS, "r1", _NOW),
+        "_insert_high_water_stmt": m._insert_high_water_stmt(_STMTS, "r1", seq=7, at=_NOW),
+        "_update_high_water_stmt": m._update_high_water_stmt(_STMTS, "r1", seq=7, at=_NOW),
+        "_insert_accepted_stmt": m._insert_accepted_stmt(
+            _STMTS, record, byte_count=10, codec="zlib", content=b"z", at=_NOW
+        ),
+        "_insert_rejected_stmt": m._insert_rejected_stmt(
+            _STMTS, record, byte_count=999, reason="record_too_large", at=_NOW
+        ),
         "_update_to_accepted_stmt": m._update_to_accepted_stmt(
-            record, byte_count=10, codec="zlib", content=b"z", at=_NOW
+            _STMTS, record, byte_count=10, codec="zlib", content=b"z", at=_NOW
         ),
         "_update_still_rejected_stmt": m._update_still_rejected_stmt(
-            record, byte_count=999, reason="record_too_large", at=_NOW
+            _STMTS, record, byte_count=999, reason="record_too_large", at=_NOW
         ),
     }
 
@@ -183,7 +190,9 @@ def test_turn_content_round_trips_through_the_codec(tmp_path: Path) -> None:
     [content] = store.records_for_segment("ch_1", "sg_1")
     assert content.turns_json == record.turns_json
     with engine.connect() as conn:
-        row = conn.execute(select(s.transcript_segments.c.codec)).one()
+        row = conn.execute(
+            hub_store_connections(engine).select(s.transcript_segments, s.transcript_segments.c.codec)
+        ).one()
     assert row.codec == "zlib"
 
 
@@ -199,7 +208,9 @@ def test_turn_content_is_compressed_at_rest_not_stored_as_plaintext(tmp_path: Pa
     store.insert_accepted(record, byte_count=len(plaintext), codec="zlib", at=_NOW)
 
     with engine.connect() as conn:
-        row = conn.execute(select(s.transcript_segments.c.content)).one()
+        row = conn.execute(
+            hub_store_connections(engine).select(s.transcript_segments, s.transcript_segments.c.content)
+        ).one()
     assert row.content != plaintext
     assert zlib.decompress(row.content) == plaintext
     assert len(row.content) * 10 < len(plaintext)
@@ -213,7 +224,7 @@ def test_a_rejected_record_stores_no_content_or_codec(tmp_path: Path) -> None:
     store.insert_rejected(record, byte_count=999, reason="record_too_large", at=_NOW)
 
     with engine.connect() as conn:
-        row = conn.execute(select(s.transcript_segments)).one()
+        row = conn.execute(hub_store_connections(engine).select(s.transcript_segments)).one()
     assert row.content is None
     assert row.codec is None
     assert row.rejected is True
@@ -268,7 +279,7 @@ def test_update_to_accepted_transitions_a_rejected_row_in_place(tmp_path: Path) 
     assert content.rejected is False
     assert content.turns_json == record.turns_json
     with engine.connect() as conn:
-        rows = conn.execute(select(s.transcript_segments)).all()
+        rows = conn.execute(hub_store_connections(engine).select(s.transcript_segments)).all()
     assert len(rows) == 1
 
 
@@ -379,7 +390,7 @@ def test_update_still_rejected_refreshes_the_row_without_storing_content(tmp_pat
     store.update_still_rejected(_record(record_truncated=True), byte_count=1200, reason="record_too_large", at=later)
 
     with engine.connect() as conn:
-        rows = conn.execute(select(s.transcript_segments)).all()
+        rows = conn.execute(hub_store_connections(engine).select(s.transcript_segments)).all()
     assert len(rows) == 1
     assert rows[0].content is None
     assert rows[0].byte_count == 1200
@@ -412,5 +423,7 @@ def test_spawn_cwd_round_trips_and_is_null_when_absent(tmp_path: Path) -> None:
         store.insert_accepted(record, byte_count=len(record.turns_json.encode("utf-8")), codec="zlib", at=_NOW)
 
     with engine.connect() as conn:
-        rows = {r.segment_id: r.spawn_cwd for r in conn.execute(select(s.transcript_segments))}
+        rows = {
+            r.segment_id: r.spawn_cwd for r in conn.execute(hub_store_connections(engine).select(s.transcript_segments))
+        }
     assert rows == {"sg_a": "/ws", "sg_b": None}

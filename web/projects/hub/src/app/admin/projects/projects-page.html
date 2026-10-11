@@ -1,0 +1,36 @@
+<fleet-kit-master-detail
+  paneId="admin-projects"
+  [listCaption]="caption()"
+  [drilldown]="mobile()"
+  [hasSelection]="selectedKey() !== null"
+  backLabel="Projects"
+  testidPrefix="admin-projects"
+  (back)="onBack()"
+>
+  @if (canCreate()) {
+    <fleet-kit-button kit-master-detail-list-action variant="primary" testid="admin-projects-new" (click)="onNew()"
+      >+ New project</fleet-kit-button
+    >
+  }
+  <div kit-master-detail-list class="list-pane">
+    <app-projects-table [rows]="rows()" [state]="state()" [selectedKey]="selectedKey()" (pick)="onPick($event)" />
+    <p class="foot">A project is a lens over the tenant.</p>
+  </div>
+  <div kit-master-detail-detail class="detail-pane">
+    <router-outlet />
+  </div>
+</fleet-kit-master-detail>
+@if (createOpen()) {
+  <app-config-form-dialog
+    heading="New project"
+    mode="create"
+    [fields]="fields"
+    [hint]="slugHint"
+    submitLabel="Create"
+    [submitError]="createError()"
+    [submitting]="createMutation.isPending()"
+    testidPrefix="admin-projects-create"
+    (closed)="createOpen.set(false)"
+    (submitted)="onCreate($event)"
+  />
+}
