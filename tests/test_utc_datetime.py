@@ -81,3 +81,23 @@ def test_iso_utc_normalizes_a_naive_value_before_serializing() -> None:
     # Store-sourced values are aware once every column is UtcDateTime-typed; this
     # pins the defensive path a legacy or hand-built naive datetime still takes.
     assert iso_utc(datetime(2026, 7, 16, 12, 0, 0)) == "2026-07-16T12:00:00+00:00"
+
+
+def test_bind_is_naive_utc_wall_time_on_postgres() -> None:
+    # An aware bind would reach Postgres as ``timestamptz`` and be rendered in the
+    # session's ``TimeZone``; a naive UTC bind is session-independent.
+    from sqlalchemy.dialects import postgresql
+
+    bind = UtcDateTime().process_bind_param
+    dialect = postgresql.dialect()
+    plus_five = timezone(timedelta(hours=5))
+    expected = datetime(2026, 1, 15, 12, 0, 0)
+    assert bind(datetime(2026, 1, 15, 17, 0, 0, tzinfo=plus_five), dialect) == expected
+    assert bind(datetime(2026, 1, 15, 12, 0, 0, tzinfo=UTC), dialect) == expected
+    assert bind(expected, dialect) == expected
+    for value in (
+        bind(datetime(2026, 1, 15, 17, 0, 0, tzinfo=plus_five), dialect),
+        bind(datetime(2026, 1, 15, 12, 0, 0, tzinfo=UTC), dialect),
+        bind(expected, dialect),
+    ):
+        assert value is not None and value.tzinfo is None
