@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from typing import Final, TypedDict
@@ -28,12 +28,13 @@ from blizzard.hub.domain.chunk.model import (
     holds_claim,
     verb_legal_from,
 )
+from blizzard.hub.domain.config.repositories import CommitOrigin, resolve_origin_record
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.domain.operations.complete import is_completion_replay
 from blizzard.hub.domain.operations.edit import is_graph_editable
 from blizzard.hub.domain.projects.model import Project, ProjectId
 from blizzard.hub.domain.runners.route import Route
-from blizzard.hub.work_sources.source import IWorkSource
+from blizzard.hub.forge.web import branch_url as forge_branch_url
 from blizzard.wire.chunk import (
     ArtifactView,
     BlockedView,
@@ -469,23 +470,36 @@ class ChunkView:
             for b in sorted(self.facts.bounces, key=lambda b: b.recorded_at)
         ]
 
-    def _branch_url_source(self) -> IWorkSource | None:
-        """The binding a chunk's artifact branch links resolve through.
+    def _branch_links(self, rows: list[StoredArtifact]) -> Callable[[StoredArtifact, GitCommitArtifact], str | None]:
+        """Each git-commit artifact's branch link: the forge ``tree`` address on the repository
+        record its repository resolves to by delivery's rules — among the records the chunk's
+        project links, standing at the chunk's mint time. ``None`` for a repository resolving
+        to no one record (unknown, ambiguous, or not linked); a chunk with no project links
+        none. One read of the links and one of the records serve every commit of the view,
+        and none at all when the view carries no commit."""
+        if not any(isinstance(row.artifact, GitCommitArtifact) for row in rows):
+            return lambda _row, _commit: None
+        project_id = self.chunk.project_id
+        linked = (
+            frozenset(link.repository_name for link in self.services.project_links.repositories_of(project_id))
+            if project_id is not None
+            else frozenset[str]()
+        )
+        records = self.services.repository_records.list_all(include_retired=True) if linked else []
+        minted_at = self.chunk.minted_at
 
-        One forge per chunk, *declared*: the chunk's first pointer whose ``source`` names a
-        configured binding lends its ``branch_url``. ``None`` when no pointer's source is
-        configured."""
-        for p in self.chunk.work_refs:
-            source = self.services.work_sources.get(p.source)
-            if source is not None:
-                return source
-        return None
+        def link(row: StoredArtifact, commit: GitCommitArtifact) -> str | None:
+            origin = CommitOrigin.of(commit.forge or None, commit.repo or row.name)
+            record = resolve_origin_record(origin, records, minted_at=minted_at, linked=linked)
+            return forge_branch_url(record.fields, commit.branch_name) if record is not None else None
+
+        return link
 
     def _artifacts(self, rows: list[StoredArtifact]) -> list[ArtifactView]:
         """The chunk's inline artifact store — every entry, with an asset's content and a
         git-commit's pinned reference surfaced; ordered by ``{node}.{name}.{epoch}``
         so a re-run's later-epoch entry follows its predecessors (append-only history)."""
-        web_base = self._branch_url_source()
+        branch_link = self._branch_links(rows)
         views: list[ArtifactView] = []
         for row in sorted(rows, key=lambda r: (r.node_name, r.name, r.epoch)):
             artifact = row.artifact
@@ -501,14 +515,13 @@ class ChunkView:
                 "recorded_at": iso_utc(attached) if attached is not None else None,
             }
             if isinstance(artifact, GitCommitArtifact):
-                branch_url = web_base.branch_url(artifact.repo, artifact.branch_name) if web_base is not None else None
                 views.append(
                     ArtifactView(
                         **common,
                         repo=artifact.repo,
                         branch_name=artifact.branch_name,
                         commit_hash=artifact.commit_hash,
-                        branch_url=branch_url,
+                        branch_url=branch_link(row, artifact),
                     )
                 )
             else:

@@ -574,9 +574,6 @@ class FakeWorkSource:
     def forge_reference(self, pointer: WorkRef) -> str | None:
         return f"{self.repo}#{pointer.ref}"
 
-    def branch_url(self, repo: str, branch_name: str) -> str | None:
-        return f"http://forge.local/{repo}/tree/{branch_name}"
-
 
 def _conforms_fake_work_source(x: FakeWorkSource) -> IWorkSource:
     return x

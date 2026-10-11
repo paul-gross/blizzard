@@ -118,11 +118,6 @@ def test_label_renders_the_reserved_name_colon_ref(tmp_path: Path) -> None:
     assert source.label(WorkRef(source="hub", ref="42")) == "hub:42"
 
 
-def test_branch_url_is_always_none(tmp_path: Path) -> None:
-    source, _, _, _, _, _ = _source(tmp_path)
-    assert source.branch_url("acme/widget", "feat/x") is None
-
-
 def test_forge_reference_is_always_none(tmp_path: Path) -> None:
     source, _, _, _, _, _ = _source(tmp_path)
     assert source.forge_reference(WorkRef(source="hub", ref="42")) is None

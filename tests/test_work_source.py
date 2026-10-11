@@ -133,12 +133,6 @@ def test_forge_reference_names_the_configured_repo_not_the_source_alias() -> Non
     assert source.forge_reference(WorkRef(source="widget", ref="12")) == "acme/widget#12"
 
 
-def test_branch_url_qualifies_a_bare_repo_with_this_source_s_owner() -> None:
-    source = GitHubWorkSource(github_double(), name="widget", repo="acme/widget", web_base="https://github.com")
-    assert source.branch_url("widget", "feat/x") == "https://github.com/acme/widget/tree/feat/x"
-    assert source.branch_url("other/widget", "feat/x") == "https://github.com/other/widget/tree/feat/x"
-
-
 def test_parse_accepts_this_source_s_own_colon_token_form() -> None:
     source = GitHubWorkSource(github_double(), name="widget", repo="acme/widget", web_base="https://github.com")
     pointer = source.parse("widget:12")

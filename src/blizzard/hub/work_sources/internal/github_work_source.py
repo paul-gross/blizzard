@@ -112,17 +112,6 @@ class GitHubWorkSource:
         """``{owner}/{repo}#{ref}`` from the configured ``repo``, not the ``name`` alias."""
         return f"{self._repo}#{pointer.ref}"
 
-    def branch_url(self, repo: str, branch_name: str) -> str | None:
-        """The forge ``tree`` URL for ``branch_name`` on ``repo`` — an owner-less repo (a
-        produced artifact names its repo by the worktree dir alone) is qualified with this
-        source's own repo's owner; an already ``owner/name`` repo passes through."""
-        repo_path = repo if "/" in repo else f"{self._owner}/{repo}"
-        return f"{self._web_base}/{repo_path}/tree/{branch_name}"
-
-    @property
-    def _owner(self) -> str:
-        return self._repo.split("/", 1)[0]
-
     # -- IWorkAnnotator ------------------------------------------------------
 
     def _ensure_labels_bootstrapped(self) -> None:

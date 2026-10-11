@@ -19,6 +19,7 @@ from blizzard.hub.domain.config.secrets import ISecretReader, SecretName, Secret
 from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, IReadWorkSourceRepository
 from blizzard.hub.domain.garden.proposals.resolution import GardenProposalDeliveryResolution
 from blizzard.hub.domain.work_items.editing import WorkItemEditService
+from blizzard.hub.forge.web import web_origin
 from blizzard.hub.live_config import ConfigObjectCache
 from blizzard.hub.work_sources.internal.github_work_source import GitHubWorkSource
 from blizzard.hub.work_sources.internal.hub_work_source import HubWorkSource
@@ -125,18 +126,8 @@ class GithubEntry(WorkSourceEntry):
 
     @property
     def web_base(self) -> str:  # ast-grep-ignore: bzh:property-delegates
-        """The provider's web origin from its API base — GitHub-adapter knowledge.
-
-        Two unrelated derivations for one vendor — an ``api.`` host prefix for public GitHub,
-        an ``/api/v3`` path suffix for Enterprise — so neither generalizes."""
-        if self.record.fields.web_base:
-            return self.record.fields.web_base
-        stripped = self.api_base.rstrip("/")
-        if stripped.endswith("/api/v3"):
-            return stripped[: -len("/api/v3")]
-        if "://api." in stripped:
-            return stripped.replace("://api.", "://", 1)
-        return stripped
+        """The record's own web origin, else the one its API base implies."""
+        return self.record.fields.web_base or web_origin(self.api_base)
 
     def source(self, client: httpx.Client) -> IWorkSource:
         return GitHubWorkSource(client, name=self.record.name, repo=self.record.fields.locator, web_base=self.web_base)

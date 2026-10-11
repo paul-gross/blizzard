@@ -73,10 +73,6 @@ class HubWorkSource:
         """The built-in source lives on no forge, so there is nothing to cross-link."""
         return None
 
-    def branch_url(self, repo: str, branch_name: str) -> str | None:
-        """The built-in source names no forge to link a branch through."""
-        return None
-
     # -- IWorkCloser -----------------------------------------------------------
 
     def close(self, pointer: WorkRef, *, trace: DeliveryTrace | None) -> None:
