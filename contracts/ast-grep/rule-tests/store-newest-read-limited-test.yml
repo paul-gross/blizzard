@@ -1,0 +1,28 @@
+id: bzh:store-newest-read-limited
+valid:
+  # Ordered descending and bounded to one row — the rule's own fix.
+  - |
+    def latest(self, key):
+        stmt = select(t).where(t.c.k == key).order_by(t.c.at.desc()).limit(1)
+        rows = self._store.all(stmt)
+        return rows[0] if rows else None
+  # Takes the first row of an ascending order — not a newest-per-key read.
+  - |
+    def oldest(self, key):
+        stmt = select(t).where(t.c.k == key).order_by(t.c.at.asc())
+        return conn.execute(stmt).first()
+  # Descending order but no single-row take — a listing, not a newest-per-key read.
+  - |
+    def listing(self, key):
+        return self._store.all(select(t).order_by(t.c.at.desc()))
+invalid:
+  # `.first()` on an unbounded descending statement.
+  - |
+    def latest(self, key):
+        return conn.execute(select(t).where(t.c.k == key).order_by(t.c.at.desc())).first()
+  # `rows[0]` after `self._store.all(...)` materialises every row.
+  - |
+    def latest(self, key):
+        stmt = select(t).where(t.c.k == key).order_by(t.c.at.desc(), t.c.id.desc())
+        rows = self._store.all(stmt)
+        return rows[0] if rows else None

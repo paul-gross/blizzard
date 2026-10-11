@@ -41,6 +41,7 @@ class TakeoverStore:
             .where(takeovers.c.chunk_id == chunk_id)
             .where(_OPEN_TAKEOVER.clause)
             .order_by(takeovers.c.opened_at.desc())
+            .limit(1)
         )
         rows = self._store.all(stmt)
         return self._row_to_takeover(rows[0]) if rows else None

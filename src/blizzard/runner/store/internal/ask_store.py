@@ -47,6 +47,7 @@ class AskStore:
             .where(park_facts.c.lease_id == lease_id)
             .where(park_facts.c.question_id.not_in(select(park_resumes.c.question_id)))
             .order_by(park_facts.c.id.desc())
+            .limit(1)
         )
         rows = self._store.all(stmt)
         if not rows:

@@ -1,0 +1,29 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ast-grep/ast-grep/main/schemas/rule.json
+
+id: bzh:store-newest-read-limited
+language: Python
+severity: error
+message: >-
+  This store read orders descending and keeps one row but never bounds the statement, so it
+  pulls a key's whole history to keep the newest. Add `.limit(1)` to the statement
+  (`bzh:newest-per-key-read`, `bzh:sql-portable`).
+files:
+  - src/blizzard/hub/store/internal/**
+  - src/blizzard/runner/store/internal/**
+rule:
+  kind: function_definition
+  all:
+    - has:
+        pattern: $ORDERED.desc()
+        stopBy: end
+    - any:
+        - has:
+            pattern: $TAKEN.first()
+            stopBy: end
+        - has:
+            pattern: $ROWS[0]
+            stopBy: end
+    - not:
+        has:
+            pattern: $BOUNDED.limit($$$)
+            stopBy: end

@@ -1,0 +1,42 @@
+id: bzh:store-newest-read-limited
+snapshots:
+  ? |
+    def latest(self, key):
+        return conn.execute(select(t).where(t.c.k == key).order_by(t.c.at.desc())).first()
+  : labels:
+    - source: |-
+        def latest(self, key):
+            return conn.execute(select(t).where(t.c.k == key).order_by(t.c.at.desc())).first()
+      style: primary
+      start: 0
+      end: 109
+    - source: t.c.at.desc()
+      style: secondary
+      start: 86
+      end: 99
+    - source: conn.execute(select(t).where(t.c.k == key).order_by(t.c.at.desc())).first()
+      style: secondary
+      start: 34
+      end: 109
+  ? |
+    def latest(self, key):
+        stmt = select(t).where(t.c.k == key).order_by(t.c.at.desc(), t.c.id.desc())
+        rows = self._store.all(stmt)
+        return rows[0] if rows else None
+  : labels:
+    - source: |-
+        def latest(self, key):
+            stmt = select(t).where(t.c.k == key).order_by(t.c.at.desc(), t.c.id.desc())
+            rows = self._store.all(stmt)
+            return rows[0] if rows else None
+      style: primary
+      start: 0
+      end: 172
+    - source: t.c.at.desc()
+      style: secondary
+      start: 73
+      end: 86
+    - source: rows[0]
+      style: secondary
+      start: 147
+      end: 154

@@ -63,6 +63,7 @@ class LeaseRecordStore:
             .where(leases.c.chunk_id == chunk_id)
             .where(_OPEN_LEASE.clause)
             .order_by(leases.c.created_at.desc())
+            .limit(1)
         )
         rows = self._store.all(stmt)
         return row_to_lease(rows[0]) if rows else None
@@ -73,7 +74,7 @@ class LeaseRecordStore:
         return row_to_lease(rows[0]) if rows else None
 
     def latest_lease_for_chunk(self, chunk_id: str) -> Lease | None:
-        stmt = lease_select().where(leases.c.chunk_id == chunk_id).order_by(leases.c.created_at.desc())
+        stmt = lease_select().where(leases.c.chunk_id == chunk_id).order_by(leases.c.created_at.desc()).limit(1)
         rows = self._store.all(stmt)
         return row_to_lease(rows[0]) if rows else None
 
@@ -83,6 +84,7 @@ class LeaseRecordStore:
             .where(leases.c.chunk_id == chunk_id)
             .where(leases.c.session_id.is_not(None))
             .order_by(leases.c.created_at.desc(), leases.c.lease_id.desc())
+            .limit(1)
         )
         rows = self._store.all(stmt)
         return row_to_lease(rows[0]) if rows else None
