@@ -7,10 +7,14 @@ import os
 from dataclasses import replace
 from pathlib import Path
 
+import pytest
+
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.lifecycle.judgement.internal.elicitation_files import ElicitationFiles
 from blizzard.runner.loop.context import LoopContext
 from tests.runner_fakes import FakeHarness, FakeHub, FakeProbe, FakeProvider, make_context, make_store
+
+pytestmark = pytest.mark.component
 
 
 def _context(tmp_path: Path) -> LoopContext:
