@@ -45,6 +45,9 @@ _DOCKET = [
 ]
 
 
+_PAGE = {"proposals": _DOCKET, "next_cursor": None}
+
+
 class _HubRouter:
     """A late-bound handler behind the proxy's ``httpx.Client`` — ``_app_with_store`` builds
     the client (and the app wired to it) before a test knows how the hub should answer, so
@@ -161,12 +164,38 @@ def test_forwards_to_the_hub_chunks_garden_proposals_route_and_returns_the_docke
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
     seen: list[str] = []
-    _stub_hub(app, 200, _DOCKET, seen)
+    _stub_hub(app, 200, _PAGE, seen)
     with TestClient(app) as client:
         resp = client.get("/api/leases/lease_1/garden/proposals", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 200, resp.text
-    assert seen == [f"{_HUB_URL}/api/fleet/chunks/{_CHUNK}/garden/proposals?state=open"]
+    assert seen == [f"{_HUB_URL}/api/fleet/chunks/{_CHUNK}/garden/proposals/page?state=open"]
     assert resp.json() == _DOCKET
+
+
+@pytest.mark.component
+def test_concatenates_the_hubs_pages_into_the_whole_docket(tmp_path: Path) -> None:
+    app, store = _app_with_store(tmp_path)
+    _seed_lease(store)
+    seen: list[str] = []
+    rows = [{**_DOCKET[0], "proposal_id": f"gprop_{n}"} for n in range(3)]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(str(request.url))
+        cursor = request.url.params.get("cursor")
+        index = 0 if cursor is None else int(cursor)
+        nxt = index + 1
+        return httpx.Response(200, json={"proposals": [rows[index]], "next_cursor": str(nxt) if nxt < 3 else None})
+
+    app.state.hub_router.handler = handler
+    with TestClient(app) as client:
+        resp = client.get("/api/leases/lease_1/garden/proposals?state=all", headers={"X-Blizzard-Lease-Token": _TOKEN})
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == rows
+    assert seen == [
+        f"{_HUB_URL}/api/fleet/chunks/{_CHUNK}/garden/proposals/page?state=all",
+        f"{_HUB_URL}/api/fleet/chunks/{_CHUNK}/garden/proposals/page?state=all&cursor=1",
+        f"{_HUB_URL}/api/fleet/chunks/{_CHUNK}/garden/proposals/page?state=all&cursor=2",
+    ]
 
 
 @pytest.mark.component
@@ -174,13 +203,13 @@ def test_forwards_the_state_query_param(tmp_path: Path) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
     seen: list[str] = []
-    _stub_hub(app, 200, _DOCKET, seen)
+    _stub_hub(app, 200, _PAGE, seen)
     with TestClient(app) as client:
         resp = client.get(
             "/api/leases/lease_1/garden/proposals?state=closed", headers={"X-Blizzard-Lease-Token": _TOKEN}
         )
     assert resp.status_code == 200, resp.text
-    assert seen == [f"{_HUB_URL}/api/fleet/chunks/{_CHUNK}/garden/proposals?state=closed"]
+    assert seen == [f"{_HUB_URL}/api/fleet/chunks/{_CHUNK}/garden/proposals/page?state=closed"]
 
 
 @pytest.mark.component
@@ -195,7 +224,7 @@ def test_forwards_the_runner_bearer_when_a_token_is_configured(tmp_path: Path) -
 
     def handler(request: httpx.Request) -> httpx.Response:
         seen_headers.append(request.headers)
-        return httpx.Response(200, json=_DOCKET)
+        return httpx.Response(200, json=_PAGE)
 
     hub_proxy_client = httpx.Client(transport=httpx.MockTransport(handler))
     with TestClient(create_app(config, runner_stores=make_stores(store), hub_proxy_client=hub_proxy_client)) as client:

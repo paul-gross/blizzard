@@ -20431,7 +20431,7 @@
     },
     "/api/fleet/chunks/{chunk_id}/garden/proposals": {
       "get": {
-        "description": "A worker's own routine's garden proposals, filtered by `state` (`open` by\ndefault, plus `closed` and `all`, each closed entry carrying its closure) \u2014 the\nchunk's own run context derives the routine; no caller-supplied flag can name\nanother, and no scope filter applies (a proposal carries no scope column). 404 both\nfor an unknown chunk and for one carrying no run context (not a routine run): a\nchunk with nothing to read is refused rather than answered with an empty bucket.",
+        "description": "A worker's own routine's garden proposals, filtered by `state` (`open` by\ndefault, plus `closed` and `all`, each closed entry carrying its closure) \u2014 the\nchunk's own run context derives the routine; no caller-supplied flag can name\nanother, and no scope filter applies (a proposal carries no scope column). 404 both\nfor an unknown chunk and for one carrying no run context (not a routine run): a\nchunk with nothing to read is refused rather than answered with an empty bucket.\n\nUnpaged, kept for a previous-minor runner that reads the whole docket in one request;\n`/garden/proposals/page` is the bounded form current runners follow.",
         "operationId": "get_garden_proposals_api_fleet_chunks__chunk_id__garden_proposals_get",
         "parameters": [
           {
@@ -20480,6 +20480,86 @@
           }
         },
         "summary": "Get Garden Proposals",
+        "tags": [
+          "fleet"
+        ]
+      }
+    },
+    "/api/fleet/chunks/{chunk_id}/garden/proposals/page": {
+      "get": {
+        "description": "One keyset page of `get_garden_proposals`'s docket, newest first \u2014 the same filters and\n404s, `limit` bounding what the request reads however long the routine's history; follow\n`next_cursor` until it is `None` for the whole docket. 422 on a cursor this route did not issue.",
+        "operationId": "get_garden_proposals_page_api_fleet_chunks__chunk_id__garden_proposals_page_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/RoutineProposalState",
+              "default": "open"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GardenProposalsPageView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Garden Proposals Page",
         "tags": [
           "fleet"
         ]
@@ -21805,7 +21885,7 @@
     },
     "/api/graphs": {
       "get": {
-        "description": "Every minted graph, newest first, newest non-retired per name marked ``effective``.\n\nReads the listing-shape projection \u2014 nothing here touches nodes,\nedges, sessions or artifacts.",
+        "description": "Every minted graph, newest first, newest non-retired per name marked ``effective``.\n\nReads the listing-shape projection \u2014 nothing here touches nodes,\nedges, sessions or artifacts. Unpaged by design: ``effective`` is each name's newest\nnon-retired mint, which a page of mints cannot compute, and mints are insert-only\nand few.",
         "operationId": "list_graphs_api_graphs_get",
         "responses": {
           "200": {

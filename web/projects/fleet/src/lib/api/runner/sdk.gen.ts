@@ -350,7 +350,9 @@ export const listGardenFindingsApiLeasesLeaseIdGardenFindingsGet = <ThrowOnError
  * List Garden Proposals
  *
  * Forward this lease's chunk's garden-proposals read to the hub, ``state`` unvalidated;
- * its refusals pass through verbatim.
+ * its refusals pass through verbatim. Answers the whole docket, not a page: the worker's reconcile
+ * step compares what it found against every proposal in ``state``, so a window would change what it
+ * dedups against. Each hub request is bounded by its page; the whole read is that consumer's need.
  */
 export const listGardenProposalsApiLeasesLeaseIdGardenProposalsGet = <ThrowOnError extends boolean = false>(options: Options<ListGardenProposalsApiLeasesLeaseIdGardenProposalsGetData, ThrowOnError>): RequestResult<ListGardenProposalsApiLeasesLeaseIdGardenProposalsGetResponses, ListGardenProposalsApiLeasesLeaseIdGardenProposalsGetErrors, ThrowOnError> => (options.client ?? client).get<ListGardenProposalsApiLeasesLeaseIdGardenProposalsGetResponses, ListGardenProposalsApiLeasesLeaseIdGardenProposalsGetErrors, ThrowOnError>({ url: '/api/leases/{lease_id}/garden/proposals', ...options });
 

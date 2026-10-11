@@ -65,10 +65,7 @@ def _live(*, in_scope: bool = True) -> dict[str, str]:
 
 
 def _bucket(findings: list[Finding]) -> FindingBucket:
-    return FindingBucket(
-        citable=[f for f in findings if f.state not in EXIT_KINDS],
-        exited_ids=frozenset(f.finding_id for f in findings if f.state in EXIT_KINDS),
-    )
+    return FindingBucket(citable=[f for f in findings if f.state not in EXIT_KINDS])
 
 
 def _finding(
@@ -711,8 +708,29 @@ def test_validate_delivery_rejects_an_op_naming_an_exited_finding() -> None:
             run=_RUN,
             delta_artifacts={"survey.json": wire_json(delta)},
             proposal_artifacts={},
-            bucket=_bucket([_finding(_FIN1, live=False, state="resolved")]),
+            bucket=_bucket([]),
+            resolve_exited=lambda ids: ids & {_FIN1},
         )
+
+
+def test_validate_delivery_asks_for_exited_status_once_and_only_of_cited_absent_ids() -> None:
+    asked: list[frozenset[str]] = []
+
+    def _resolve(ids: frozenset[str]) -> frozenset[str]:
+        asked.append(ids)
+        return frozenset()
+
+    delta = DeliveredDelta(scope="runner", findings=[FindingObservedOp(id=_FIN1), FindingObservedOp(id=_FIN2)])
+    with pytest.raises(GardenDeliveryRejected, match="is not live"):
+        validate_delivery(
+            formats=_FORMATS,
+            run=_RUN,
+            delta_artifacts={"survey.json": wire_json(delta)},
+            proposal_artifacts={},
+            bucket=_bucket([_finding(_FIN1)]),
+            resolve_exited=_resolve,
+        )
+    assert asked == [frozenset({_FIN2})]
 
 
 def test_validate_delivery_resolves_each_distinct_commit_at_most_once() -> None:

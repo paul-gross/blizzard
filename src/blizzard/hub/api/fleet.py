@@ -67,6 +67,7 @@ from blizzard.hub.domain.execution.submissions import Completion
 from blizzard.hub.domain.garden.proposals.model import RoutineProposalState
 from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.domain.graph.model import FollowLatest, Graph
+from blizzard.hub.domain.kernel.pagination import DEFAULT_LIMIT, MAX_LIMIT, MalformedCursor
 from blizzard.hub.domain.observability.transcripts import LeaseSegmentsNotOwned, refuse_foreign_lease_read
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.runners.registration import (
@@ -94,7 +95,7 @@ from blizzard.wire.facts import (
 )
 from blizzard.wire.finding import FindingView
 from blizzard.wire.fleet import FleetSummaryView
-from blizzard.wire.garden_proposal import GardenProposalView
+from blizzard.wire.garden_proposal import GardenProposalsPageView, GardenProposalView
 from blizzard.wire.question import QuestionView
 from blizzard.wire.queue import QueuePeekRequest, QueuePeekResponse
 from blizzard.wire.route import (
@@ -390,13 +391,40 @@ def get_garden_proposals(
     chunk's own run context derives the routine; no caller-supplied flag can name
     another, and no scope filter applies (a proposal carries no scope column). 404 both
     for an unknown chunk and for one carrying no run context (not a routine run): a
-    chunk with nothing to read is refused rather than answered with an empty bucket."""
+    chunk with nothing to read is refused rather than answered with an empty bucket.
+
+    Unpaged, kept for a previous-minor runner that reads the whole docket in one request;
+    `/garden/proposals/page` is the bounded form current runners follow."""
     run = _routine_run_or_404(chunk_id, services)
     labels = ProjectLabels.read(services, [run.project_id]).fields(run.project_id)
     return [
         garden_proposal_view(p, closure, labels)
         for p, closure in services.routine_garden_proposals.list_for_routine(run.project_id, run.routine_name, state)
     ]
+
+
+@router.get("/chunks/{chunk_id}/garden/proposals/page", response_model=GardenProposalsPageView)
+def get_garden_proposals_page(
+    chunk_id: str,
+    services: Services,
+    state: Annotated[RoutineProposalState, Query()] = RoutineProposalState.OPEN,
+    cursor: Annotated[str | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
+) -> GardenProposalsPageView:
+    """One keyset page of `get_garden_proposals`'s docket, newest first — the same filters and
+    404s, `limit` bounding what the request reads however long the routine's history; follow
+    `next_cursor` until it is `None` for the whole docket. 422 on a cursor this route did not issue."""
+    run = _routine_run_or_404(chunk_id, services)
+    labels = ProjectLabels.read(services, [run.project_id]).fields(run.project_id)
+    try:
+        pairs, next_cursor = services.routine_garden_proposals.list_page_for_routine(
+            run.project_id, run.routine_name, state=state, cursor=cursor, limit=limit
+        )
+    except MalformedCursor as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="malformed cursor") from exc
+    return GardenProposalsPageView(
+        proposals=[garden_proposal_view(p, closure, labels) for p, closure in pairs], next_cursor=next_cursor
+    )
 
 
 @dto

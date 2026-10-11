@@ -8,13 +8,14 @@ keep its slug beside it as the label every read here keys on."""
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime
 
 from sqlalchemy import ColumnElement, Connection, and_, desc, func, or_
 
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.garden.findings.model import (
+    EXIT_KINDS,
     FACT_KINDS,
     LIVE_KINDS,
     FactEntry,
@@ -36,11 +37,12 @@ from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements, state
 _CURSOR_ARITY = 1
 
 
-def _newest_fact_is_live(stmts: ScopedStatements) -> ColumnElement[bool]:
-    """True exactly when no fact of the finding is both outside `LIVE_KINDS` and its newest —
-    `derive_liveness`'s answer, so a finding with no facts reads live. Newest is
-    `(recorded_at, id)` descending, correlated to `findings.finding_id`. Each `EXISTS` is
-    confined to the tenant on its own alias."""
+def _no_newest_fact_in(
+    stmts: ScopedStatements, kinds_ok: Callable[[ColumnElement[str]], ColumnElement[bool]]
+) -> ColumnElement[bool]:
+    """True exactly when no fact of the finding both satisfies `kinds_ok` and is its newest.
+    Newest is `(recorded_at, id)` descending, correlated to `findings.finding_id`. Each `EXISTS`
+    is confined to the tenant on its own alias."""
     fact = finding_facts.alias("fact")
     newer = finding_facts.alias("newer")
     has_newer = stmts.exists(
@@ -51,12 +53,19 @@ def _newest_fact_is_live(stmts: ScopedStatements) -> ColumnElement[bool]:
             and_(newer.c.recorded_at == fact.c.recorded_at, newer.c.id > fact.c.id),
         ),
     )
-    return ~stmts.exists(
-        fact,
-        fact.c.finding_id == findings.c.finding_id,
-        fact.c.kind.not_in(sorted(LIVE_KINDS)),
-        ~has_newer,
-    )
+    return ~stmts.exists(fact, fact.c.finding_id == findings.c.finding_id, kinds_ok(fact.c.kind), ~has_newer)
+
+
+def _newest_fact_is_live(stmts: ScopedStatements) -> ColumnElement[bool]:
+    """True exactly when no fact of the finding is both outside `LIVE_KINDS` and its newest —
+    `derive_liveness`'s answer, so a finding with no facts reads live."""
+    return _no_newest_fact_in(stmts, lambda kind: kind.not_in(sorted(LIVE_KINDS)))
+
+
+def _newest_fact_is_not_exited(stmts: ScopedStatements) -> ColumnElement[bool]:
+    """True exactly when the finding's newest fact is not an `EXIT_KINDS` one — the
+    complement of `Finding.exited`, under the same newest order as `derive_liveness`."""
+    return _no_newest_fact_in(stmts, lambda kind: kind.in_(sorted(EXIT_KINDS)))
 
 
 def _encode_finding_cursor(finding: Finding) -> str:
@@ -287,15 +296,21 @@ class FindingStore:
             result = [self._of(row, facts_by_id[row.finding_id]) for row in rows]
         return [f for f in result if include_gone or f.live]
 
-    def list_for_routine(self, project_id: str, routine_name: str, *, include_gone: bool = False) -> list[Finding]:
+    def list_for_routine(
+        self, project_id: str, routine_name: str, *, include_gone: bool = False, exclude_exited: bool = False
+    ) -> list[Finding]:
         """Every finding live on `routine_name`, across every scope
-        — `list_for`'s scope-narrowed sibling, minus the `scope_slug` filter."""
+        — `list_for`'s scope-narrowed sibling, minus the `scope_slug` filter. `exclude_exited`
+        drops an exited finding in the query itself, so its row and facts are never read."""
+        stmt = (
+            self._store.select(findings)
+            .where(findings.c.project_id == project_id, findings.c.routine_name == routine_name)
+            .order_by(findings.c.finding_id)
+        )
+        if exclude_exited:
+            stmt = stmt.where(_newest_fact_is_not_exited(self._store))
         with self._store.read("list_for_routine") as conn:
-            rows = conn.execute(
-                self._store.select(findings)
-                .where(findings.c.project_id == project_id, findings.c.routine_name == routine_name)
-                .order_by(findings.c.finding_id)
-            ).all()
+            rows = conn.execute(stmt).all()
             facts_by_id = self._facts_for_many(conn, [row.finding_id for row in rows])
             result = [self._of(row, facts_by_id[row.finding_id]) for row in rows]
         return [f for f in result if include_gone or f.live]
@@ -315,19 +330,29 @@ class FindingStore:
         return [f for f in result if include_gone or f.live]
 
     def list_by_source(
-        self, project_id: str, *, scope_slug: str, source: str, include_gone: bool = False
+        self,
+        project_id: str,
+        *,
+        scope_slug: str,
+        source: str,
+        include_gone: bool = False,
+        exclude_exited: bool = False,
     ) -> list[Finding]:
-        """Filtered on `ix_findings_tenant_project_scope_source`."""
+        """Filtered on `ix_findings_tenant_project_scope_source`; `exclude_exited` drops an
+        exited finding in the query itself."""
+        stmt = (
+            self._store.select(findings)
+            .where(
+                findings.c.project_id == project_id,
+                findings.c.scope_slug == scope_slug,
+                findings.c.source == source,
+            )
+            .order_by(findings.c.finding_id)
+        )
+        if exclude_exited:
+            stmt = stmt.where(_newest_fact_is_not_exited(self._store))
         with self._store.read("list_by_source") as conn:
-            rows = conn.execute(
-                self._store.select(findings)
-                .where(
-                    findings.c.project_id == project_id,
-                    findings.c.scope_slug == scope_slug,
-                    findings.c.source == source,
-                )
-                .order_by(findings.c.finding_id)
-            ).all()
+            rows = conn.execute(stmt).all()
             facts_by_id = self._facts_for_many(conn, [row.finding_id for row in rows])
             result = [self._of(row, facts_by_id[row.finding_id]) for row in rows]
         return [f for f in result if include_gone or f.live]

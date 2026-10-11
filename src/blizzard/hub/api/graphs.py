@@ -165,7 +165,9 @@ def list_graphs(services: Services) -> list[GraphSummaryView]:
     """Every minted graph, newest first, newest non-retired per name marked ``effective``.
 
     Reads the listing-shape projection — nothing here touches nodes,
-    edges, sessions or artifacts."""
+    edges, sessions or artifacts. Unpaged by design: ``effective`` is each name's newest
+    non-retired mint, which a page of mints cannot compute, and mints are insert-only
+    and few."""
     graphs = services.graphs.list_summaries()
     retired_ids = services.graphs.retired_graph_ids()
     effective_by_id = Mints.of(graphs, retired_ids=retired_ids).effective

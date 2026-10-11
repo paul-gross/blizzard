@@ -62,9 +62,16 @@ def _proposal_page_stmt(
     *,
     origin: GardenProposalOrigin | None,
     project_id: str | None,
+    routine_name: str | None = None,
+    state: RoutineProposalState | None = None,
 ) -> Select[Any]:
     stmt = stmts.select(garden_proposals)
     c = garden_proposals.c
+    if routine_name is not None:
+        stmt = stmt.where(c.routine_name == routine_name)
+    if state is not None and state is not RoutineProposalState.ALL:
+        closure_exists = stmts.exists(garden_proposal_closures, garden_proposal_closures.c.proposal_id == c.proposal_id)
+        stmt = stmt.where(~closure_exists if state is RoutineProposalState.OPEN else closure_exists)
     if origin is not None:
         stmt = stmt.where(c.origin == origin.value)
     if project_id is not None:
@@ -247,9 +254,12 @@ class GardenProposalStore:
         limit: int,
         origin: GardenProposalOrigin | None = None,
         project_id: str | None = None,
+        routine_name: str | None = None,
+        state: RoutineProposalState | None = None,
     ) -> GardenProposalPage:
         """`list_all`'s bounded sibling — same total order, a SQL
-        keyset window. `origin` narrows in SQL, inside the window. No
+        keyset window. `origin`, `routine_name` and `state` (a closure-state filter) narrow
+        in SQL, inside the window, so the page's cost is set by `limit`. No
         post-read filter narrows a garden proposal the way findings' liveness does, so
         no top-up: one over-fetch-by-one window suffices."""
         if limit < 1:
@@ -257,7 +267,15 @@ class GardenProposalStore:
         after = _decode_proposal_cursor(cursor) if cursor is not None else None
         with self._store.read("list_page") as conn:
             rows = conn.execute(
-                _proposal_page_stmt(self._store, after, limit + 1, origin=origin, project_id=project_id)
+                _proposal_page_stmt(
+                    self._store,
+                    after,
+                    limit + 1,
+                    origin=origin,
+                    project_id=project_id,
+                    routine_name=routine_name,
+                    state=state,
+                )
             ).all()
             page_rows = rows[:limit]
             findings = self._findings_for(conn, [row.proposal_id for row in page_rows])

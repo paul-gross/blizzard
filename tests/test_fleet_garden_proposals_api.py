@@ -175,3 +175,51 @@ def test_takes_no_routine_flag(tmp_path: Path) -> None:
     resp = hub.client.get(f"/api/fleet/chunks/{chunk_id}/garden/proposals", params={"routine": "other-routine"})
     assert resp.status_code == 200, resp.text
     assert [row["proposal_id"] for row in resp.json()] == ["gprop_1"]
+
+
+def _follow_pages(hub: HubHarness, chunk_id: str, **params: object) -> list[dict]:  # type: ignore[type-arg]
+    rows: list[dict] = []  # type: ignore[type-arg]
+    while True:
+        resp = hub.client.get(f"/api/fleet/chunks/{chunk_id}/garden/proposals/page", params=params)
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert len(body["proposals"]) <= int(params["limit"])  # type: ignore[call-overload]
+        rows += body["proposals"]
+        if body["next_cursor"] is None:
+            return rows
+        params = {**params, "cursor": body["next_cursor"]}
+
+
+@pytest.mark.parametrize("state", ["open", "closed", "all"])
+def test_page_route_followed_to_its_end_equals_the_legacy_route(tmp_path: Path, state: str) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = _seed_chunk(hub)
+    _seed_finding(hub, "fin_1")
+    for n in range(5):
+        _seed_proposal(hub, f"gprop_{n}")
+        if n % 2:
+            _pass_proposal(hub, f"gprop_{n}")
+    _seed_proposal(hub, "gprop_other", routine_name="other-routine")
+
+    legacy = hub.client.get(f"/api/fleet/chunks/{chunk_id}/garden/proposals", params={"state": state}).json()
+
+    assert _follow_pages(hub, chunk_id, state=state, limit=2) == legacy
+
+
+def test_page_route_refuses_a_malformed_cursor_and_an_out_of_range_limit(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = _seed_chunk(hub)
+    url = f"/api/fleet/chunks/{chunk_id}/garden/proposals/page"
+
+    assert hub.client.get(url, params={"cursor": "junk"}).status_code == 422
+    assert hub.client.get(url, params={"limit": 0}).status_code == 422
+    assert hub.client.get(url, params={"limit": 1001}).status_code == 422
+
+
+def test_page_route_404s_on_an_unknown_chunk_and_a_chunk_with_no_run_context(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    assert hub.client.get("/api/fleet/chunks/ch_ghost/garden/proposals/page").status_code == 404
+    chunk_id = _seed_chunk(hub, with_run_context=False)
+    resp = hub.client.get(f"/api/fleet/chunks/{chunk_id}/garden/proposals/page")
+    assert resp.status_code == 404
+    assert "no run context" in resp.json()["detail"]

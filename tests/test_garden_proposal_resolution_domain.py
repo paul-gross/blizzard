@@ -135,6 +135,8 @@ class _FakeProposals:
         limit: int,
         origin: GardenProposalOrigin | None = None,
         project_id: str | None = None,
+        routine_name: str | None = None,
+        state: RoutineProposalState | None = None,
     ) -> GardenProposalPage:
         raise NotImplementedError
 
@@ -169,7 +171,9 @@ class _FakeFindings:
     ) -> list[Finding]:
         raise NotImplementedError
 
-    def list_for_routine(self, project_id: str, routine_name: str, *, include_gone: bool = False) -> list[Finding]:
+    def list_for_routine(
+        self, project_id: str, routine_name: str, *, include_gone: bool = False, exclude_exited: bool = False
+    ) -> list[Finding]:
         raise NotImplementedError
 
     def list_across_routines(
@@ -178,7 +182,13 @@ class _FakeFindings:
         raise NotImplementedError
 
     def list_by_source(
-        self, project_id: str, *, scope_slug: str, source: str, include_gone: bool = False
+        self,
+        project_id: str,
+        *,
+        scope_slug: str,
+        source: str,
+        include_gone: bool = False,
+        exclude_exited: bool = False,
     ) -> list[Finding]:
         raise NotImplementedError
 

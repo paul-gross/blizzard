@@ -374,8 +374,12 @@ class IReadGardenProposalRepository(Protocol):
         limit: int,
         origin: GardenProposalOrigin | None = None,
         project_id: str | None = None,
+        routine_name: str | None = None,
+        state: RoutineProposalState | None = None,
     ) -> GardenProposalPage:
         """`list_all`'s bounded sibling, ordered ``(created_at desc, proposal_id desc)``.
+        ``routine_name`` narrows to one routine and ``state`` to one closure state (``None`` and
+        ``ALL`` read every one) — together `list_for_routine`'s keyset-paged form.
         ``cursor`` is a prior :attr:`GardenProposalPage.next_cursor`;
         any other raises :class:`~blizzard.hub.domain.kernel.pagination.MalformedCursor`.
         ``origin`` narrows to one origin and ``project_id`` to one project when given, each applied in SQL inside
@@ -585,3 +589,25 @@ class RoutineGardenProposalReader:
         if state is RoutineProposalState.OPEN:
             return pair_with_closures(proposals, {}, state)
         return pair_with_closures(proposals, self._closures.get_many([p.proposal_id for p in proposals]), state)
+
+    def list_page_for_routine(
+        self,
+        project_id: str,
+        routine_name: str,
+        *,
+        state: RoutineProposalState,
+        cursor: str | None,
+        limit: int,
+    ) -> tuple[list[tuple[GardenProposal, GardenProposalClosure | None]], str | None]:
+        """`list_for_routine`'s keyset-paged form: one page of the same newest-first docket, paired
+        with closures, and the cursor of the next page (`None` on the last). Raises
+        :class:`~blizzard.hub.domain.kernel.pagination.MalformedCursor` on a cursor it did not issue."""
+        page = self._proposals.list_page(
+            cursor=cursor, limit=limit, project_id=project_id, routine_name=routine_name, state=state
+        )
+        closures = (
+            {}
+            if state is RoutineProposalState.OPEN
+            else self._closures.get_many([p.proposal_id for p in page.proposals])
+        )
+        return pair_with_closures(page.proposals, closures, state), page.next_cursor

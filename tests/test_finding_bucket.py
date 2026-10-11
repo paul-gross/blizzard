@@ -1,6 +1,6 @@
 """``FindingBucketReader`` (unit tier) — a run's bucket over an in-memory finding store:
 the routine's own non-exited findings across every scope, review findings on the run's
-scope only, exited ids carried but never shown, own scope ordered first."""
+scope only, exited findings never read, own scope ordered first."""
 
 from __future__ import annotations
 
@@ -46,14 +46,22 @@ class _Repo:
         self._routine = routine
         self._review = review
 
-    def list_for_routine(self, project_id: str, routine_name: str, *, include_gone: bool = False) -> list[Finding]:
-        assert include_gone
+    def list_for_routine(
+        self, project_id: str, routine_name: str, *, include_gone: bool = False, exclude_exited: bool = False
+    ) -> list[Finding]:
+        assert include_gone and exclude_exited
         return [f for f in self._routine if f.project_id == project_id and f.routine_name == routine_name]
 
     def list_by_source(
-        self, project_id: str, *, scope_slug: str, source: str, include_gone: bool = False
+        self,
+        project_id: str,
+        *,
+        scope_slug: str,
+        source: str,
+        include_gone: bool = False,
+        exclude_exited: bool = False,
     ) -> list[Finding]:
-        assert include_gone and source == "review"
+        assert include_gone and exclude_exited and source == "review"
         return [f for f in self._review if f.project_id == project_id and f.scope_slug == scope_slug]
 
 
@@ -72,15 +80,13 @@ def test_bucket_spans_scopes_and_orders_own_scope_first() -> None:
     assert [f.finding_id for f in bucket.citable] == ["fin_b", "fin_d", "fin_a", "fin_c"]
 
 
-def test_gone_is_shown_and_exited_is_only_carried_by_id() -> None:
+def test_gone_and_delivered_are_shown() -> None:
     routine = [
         _finding("fin_a", scope="other", state="gone"),
         _finding("fin_b", scope="runner", state="delivered"),
-        _finding("fin_c", scope="other", state="resolved"),
     ]
     bucket = _reader(routine, []).for_run(_RUN)
     assert {f.finding_id for f in bucket.citable} == {"fin_a", "fin_b"}
-    assert bucket.exited_ids == {"fin_c"}
 
 
 def test_review_findings_only_on_the_runs_own_scope() -> None:

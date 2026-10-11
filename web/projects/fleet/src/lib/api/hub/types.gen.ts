@@ -12111,6 +12111,46 @@ export type GetGardenProposalsApiFleetChunksChunkIdGardenProposalsGetResponses =
 
 export type GetGardenProposalsApiFleetChunksChunkIdGardenProposalsGetResponse = GetGardenProposalsApiFleetChunksChunkIdGardenProposalsGetResponses[keyof GetGardenProposalsApiFleetChunksChunkIdGardenProposalsGetResponses];
 
+export type GetGardenProposalsPageApiFleetChunksChunkIdGardenProposalsPageGetData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: {
+        state?: RoutineProposalState;
+        /**
+         * Cursor
+         */
+        cursor?: string | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/fleet/chunks/{chunk_id}/garden/proposals/page';
+};
+
+export type GetGardenProposalsPageApiFleetChunksChunkIdGardenProposalsPageGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetGardenProposalsPageApiFleetChunksChunkIdGardenProposalsPageGetError = GetGardenProposalsPageApiFleetChunksChunkIdGardenProposalsPageGetErrors[keyof GetGardenProposalsPageApiFleetChunksChunkIdGardenProposalsPageGetErrors];
+
+export type GetGardenProposalsPageApiFleetChunksChunkIdGardenProposalsPageGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: GardenProposalsPageView;
+};
+
+export type GetGardenProposalsPageApiFleetChunksChunkIdGardenProposalsPageGetResponse = GetGardenProposalsPageApiFleetChunksChunkIdGardenProposalsPageGetResponses[keyof GetGardenProposalsPageApiFleetChunksChunkIdGardenProposalsPageGetResponses];
+
 export type HubAdvanceApiFleetChunksChunkIdHubAdvancePostData = {
     body?: never;
     path: {
