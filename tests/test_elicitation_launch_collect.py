@@ -25,6 +25,7 @@ from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.attempt import Attempt
 from blizzard.runner.lifecycle.dormant import DormantSession
 from blizzard.runner.lifecycle.judgement.judgement import Judgement
+from blizzard.runner.lifecycle.spawn import Spawner
 from blizzard.runner.loop.steps import Advance
 from tests.runner_fakes import (
     FakeHarness,
@@ -338,9 +339,18 @@ def test_pause_park_interrupts_the_in_flight_elicitation_and_the_later_unpause_c
     probe.alive = set()
     parked_lease = store.active_lease("lease_1")
     assert parked_lease is not None
-    DormantSession(ctx, parked_lease).on_unpause(park, elicitation)
+    DormantSession(ctx, parked_lease).on_unpause(
+        park,
+        elicitation,
+        bindings=store.bindings_for_chunk("ch_1"),
+        ask_parked=False,
+        brakes=Spawner(ctx).brakes(),
+    )
     assert store.in_flight_elicitation("lease_1", 1) is None
     assert store.active_lease("lease_1") is not None
+    # The cleared record is not read back as a standing judge park: the worker wakes, no judge relaunches.
+    assert len(harness.resumed) == 1
+    assert store.in_flight_elicitation("lease_1", 1) is None
 
 
 def test_preempt_kills_the_in_flight_elicitation(tmp_path):  # type: ignore[no-untyped-def]

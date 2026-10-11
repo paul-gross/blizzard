@@ -1572,6 +1572,56 @@ def test_usage_limit_pause_resumes_the_same_lease_in_place_after_unpause(tmp_pat
     assert store.attempt_count("ch_1", "nd_build") == 1  # still no retry consumed
 
 
+def test_a_usage_limit_brake_engaged_earlier_in_the_pass_keeps_a_later_pause_parked_lease_asleep(tmp_path):  # type: ignore[no-untyped-def]
+    """The brakes a pause-parked lease is handed postdate every brake engaged earlier in the pass:
+    lease_1 wakes ahead of the limit, lease_2's exit engages it, lease_3 must stay parked."""
+    store = _store(tmp_path)
+    hub = FakeHub()
+    for i in (1, 2, 3):
+        store.record_lease(
+            NewLease(
+                lease_id=f"lease_{i}",
+                chunk_id=f"ch_{i}",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
+        )
+        store.record_spawn(
+            f"lease_{i}",
+            pid=100 + i,
+            process_start_time=f"start-{100 + i}",
+            session=SessionReference(CLAUDE_CODE_HARNESS_ID, f"sess-{i}"),
+            spawned_at=_NOW,
+        )
+        store.record_binding(chunk_id=f"ch_{i}", environment_id=f"e{i}", workdir=f"/ws/e{i}", bound_at=_NOW)
+        hub.chunks[f"ch_{i}"] = ChunkState(
+            chunk_id=f"ch_{i}", status=ChunkStatus.RUNNING, latest_epoch=1, route_runner_id="r1"
+        )
+        hub.envelopes[f"ch_{i}"] = make_envelope(f"ch_{i}", "build", node_id="nd_build", choices=_CHOICES)
+    for i in (1, 3):
+        store.record_pause_park(lease_id=f"lease_{i}", chunk_id=f"ch_{i}", parked_at=_NOW)
+    limit = UsageLimit(resets_at=_NOW + timedelta(hours=1), detail="limited")
+    harness = FakeHarness(handle=_HANDLE, verdict="pass", usage_limit=limit)
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({f"e{i}": f"/ws/e{i}" for i in (1, 2, 3)}),
+        harness=harness,
+        probe=FakeProbe(),
+        clock=FixedClock(_NOW),
+    )
+
+    Advance(ctx).run()
+
+    assert store.local_paused() is True
+    assert [session for _, session, _ in harness.resumed] == ["sess-1"]
+    assert store.pause_parked_lease_ids() == {"lease_2", "lease_3"}  # lease_2 parked by its own usage limit
+
+
 def test_usage_limit_already_engaged_brake_keeps_its_original_reason(tmp_path):  # type: ignore[no-untyped-def]
     """A usage limit does not overwrite an already-engaged brake's reason."""
     store = _store(tmp_path)

@@ -24,6 +24,7 @@ from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHar
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.hub.client import ChunkNotFoundError, HubClientError
 from blizzard.runner.leases.activity import Liveness
+from blizzard.runner.leases.elicitation import PendingElicitation
 from blizzard.runner.leases.model import Lease
 from blizzard.runner.leases.overload import backing_off_facts
 from blizzard.runner.lifecycle.attempt import Attempt
@@ -31,7 +32,7 @@ from blizzard.runner.lifecycle.claim import InterruptedClaims, ReadyQueue
 from blizzard.runner.lifecycle.dormant import DormantSession
 from blizzard.runner.lifecycle.drain import OutboundDrain
 from blizzard.runner.lifecycle.held_chunk import HeldChunk
-from blizzard.runner.lifecycle.judgement.judgement import Judgement, elicitation_still_pending
+from blizzard.runner.lifecycle.judgement.judgement import Judgement, KnownElicitation, elicitation_still_pending
 from blizzard.runner.lifecycle.model import (
     AdvanceMove,
     ExitedMove,
@@ -66,7 +67,7 @@ from blizzard.runner.throttle.overload import (
     record_worker_overload,
     reset_if_streak_open,
 )
-from blizzard.runner.throttle.pause import PauseService, spend_ceiling_reason
+from blizzard.runner.throttle.pause import PauseService, RunnerBrakes, spend_ceiling_reason
 from blizzard.runner.usage.repository import ContextSampleState, external_usage_attempt
 
 #: This module's public API — the loop steps it owns, in tick order.
@@ -199,12 +200,12 @@ class Reap(Step):
                     # failing the attempt, so REAP doesn't leave the generation ambiguously open.
                     ctx.stores.liveness.record_identity_failed(lease.lease_id, at=now)
                 _log.info("reaping unspawned lease", lease_id=lease.lease_id, chunk_id=lease.chunk_id)
-                Attempt(ctx, lease).fail(reason=LeaseClosureReason.REAPED, via="reap")
+                Attempt(ctx, lease, braked).fail(reason=LeaseClosureReason.REAPED, via="reap")
             elif move is ReapMove.DEFER:
                 deferred += 1
             elif move is ReapMove.REAP_STALLED:
                 _log.info("reaping stalled worker", lease_id=lease.lease_id, chunk_id=lease.chunk_id, pid=lease.pid)
-                Attempt(ctx, lease).fail(reason=LeaseClosureReason.REAPED, via="reap")
+                Attempt(ctx, lease, braked).fail(reason=LeaseClosureReason.REAPED, via="reap")
         if deferred:
             _log.info("reap deferred — locally paused", runner_name=ctx.config.runner_name, count=deferred)
         _CP_REAP_AFTER.reached()
@@ -451,6 +452,12 @@ class Advance(Step):
         ask_parked = ctx.stores.asks.ask_parked_lease_ids()
         open_parks = ctx.stores.pause.open_pause_parks()  # hoisted: the parks' teardown facts, one read per tick
         in_flight_elicitations = ctx.stores.elicitations.in_flight_elicitations_by_lease()  # hoisted: same, by lease id
+        bindings_by_chunk = group_bindings_by_chunk(
+            ctx.stores.environments.held_bindings()
+        )  # hoisted: one read, a pass
+        # Read when a pause-parked lease first needs it, and dropped after each exited-worker handler: that
+        # path alone engages brakes, and a later lease must not wake under a value read before one engaged.
+        brakes: RunnerBrakes | None = None
         backing_off = backing_off_facts(ctx.stores.overload, ctx.stores.liveness, ctx.stores.elicitations)
         resume_intents = ctx.stores.resume_intent.resume_intent_lease_ids()
         takeovers = TakeoverHolds.of(ctx.stores.takeover.open_takeovers())
@@ -467,13 +474,24 @@ class Advance(Step):
                 alive=lease.pid is not None and ctx.process.is_alive(lease.pid, lease.process_start_time or ""),
             )
             if move is AdvanceMove.ON_UNPAUSE and park is not None:
-                DormantSession(ctx, lease).on_unpause(park, in_flight_elicitations.get(lease.lease_id))
+                if brakes is None:
+                    brakes = Spawner(ctx).brakes()
+                DormantSession(ctx, lease).on_unpause(
+                    park,
+                    in_flight_elicitations.get(lease.lease_id),
+                    bindings=bindings_by_chunk.get(lease.chunk_id, []),
+                    ask_parked=lease.lease_id in ask_parked,
+                    brakes=brakes,
+                )
             elif move is AdvanceMove.ON_ANSWER:
                 DormantSession(ctx, lease).on_answer()
             elif move is AdvanceMove.ON_OVERLOAD_BACKOFF:
                 DormantSession(ctx, lease).on_overload_backoff(backing_off[lease.lease_id])
             elif move is AdvanceMove.EXITED:
-                self._advance_exited_worker(lease)
+                self._advance_exited_worker(
+                    lease, bindings_by_chunk.get(lease.chunk_id, []), in_flight_elicitations.get(lease.lease_id)
+                )
+                brakes = None
 
         # Read AFTER the loop above, not the same set it started with (`bzh:bulk-reconstitution`):
         # that loop can close a lease whose chunk this one must now drive in the same pass.
@@ -482,7 +500,9 @@ class Advance(Step):
             if chunk_id not in active_chunk_ids:
                 HeldChunk(ctx, chunk_id).drive(takeovers)
 
-    def _advance_exited_worker(self, lease: Lease) -> None:
+    def _advance_exited_worker(
+        self, lease: Lease, bindings: list[EnvBinding], hoisted_elicitation: PendingElicitation | None
+    ) -> None:
         """Collect an in-flight elicitation, else park on an open ask, else launch the verdict
         elicitation.
 
@@ -495,7 +515,12 @@ class Advance(Step):
         if lease.session_id is None:
             return  # not spawned — REAP's residue (guarded by the caller too)
         ctx = self.ctx
-        elicitation = ctx.stores.elicitations.in_flight_elicitation(lease.lease_id, lease.epoch)
+        # The tick's map is keyed by lease alone; the singular read it replaces also matched the epoch.
+        elicitation = (
+            hoisted_elicitation
+            if hoisted_elicitation is not None and hoisted_elicitation.epoch == lease.epoch
+            else None
+        )
         move = exited_worker_elicitation_move(
             in_flight=elicitation is not None,
             still_pending=elicitation is not None and elicitation_still_pending(ctx, elicitation),
@@ -503,7 +528,7 @@ class Advance(Step):
         if move is ExitedMove.AWAIT_ELICITATION:
             return
         if move is ExitedMove.COLLECT:
-            judgement = Judgement.of(ctx, lease)
+            judgement = Judgement.of(ctx, lease, bindings=bindings)
             if judgement is not None and elicitation is not None:
                 judgement.collect(elicitation)
             return
@@ -512,7 +537,6 @@ class Advance(Step):
         # itself reporting it could not run at all. Both read the one `output`/`lines` pair.
         generation = ctx.stores.liveness.lease_generation(lease.lease_id)
         output = ctx.worker_files.read_stdout(lease.lease_id, generation)
-        bindings = ctx.stores.environments.bindings_for_chunk(lease.chunk_id)
         lines = ctx.usage.worker_transcript_lines(lease, bindings, generation=generation)
         limit = classify_worker_usage_limit(ctx, lease, output, lines)
         overload = None if limit is not None else classify_worker_overload(ctx, lease, output, lines)
@@ -535,7 +559,9 @@ class Advance(Step):
         if move is ExitedMove.PARK_ON_ASK and ask is not None:
             DormantSession(ctx, lease).park_on_ask(ask)
             return
-        judgement = Judgement.of(ctx, lease)
+        judgement = Judgement.of(
+            ctx, lease, bindings=bindings, generation=generation, known_elicitation=KnownElicitation(elicitation)
+        )
         if judgement is not None:
             judgement.run()
 
