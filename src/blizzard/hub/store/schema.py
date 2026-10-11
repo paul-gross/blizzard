@@ -717,7 +717,7 @@ transitions = Table(
 # Leading chunk_id also serves chunk-only filters.
 Index("ix_transitions_tenant_chunk_id_epoch", transitions.c.tenant_id, transitions.c.chunk_id, transitions.c.epoch)
 
-# Serves the per-chunk "superseded by a newer fact" check, which a (tenant_id, recorded_at) index would walk tenant-wide.
+# Serves the per-chunk "superseded by a newer fact" check, which a (tenant_id, recorded_at) index walks tenant-wide.
 Index(
     "ix_transitions_tenant_chunk_id_recorded_at",
     transitions.c.tenant_id,
