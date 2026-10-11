@@ -1,7 +1,8 @@
 """``GET /api/chunks`` — the bulk-read list path (component tier).
 
-Proves the route reads the fleet's facts and routes with one bulk query each, so the query
-count is unchanged as fleet size grows and never reaches `load_facts`/`route_of` at all."""
+Proves the route reads only its page's facts, routes, edges, and live holders with one
+batched query each, so the query count is unchanged as fleet size grows and the route never
+reaches a whole-tenant read or `load_facts`/`route_of`."""
 
 from __future__ import annotations
 
@@ -74,11 +75,16 @@ class _CountingFactsStore(ChunkFactsStore):
     def __init__(self, store: ScopedConnections, clock: IClock) -> None:
         super().__init__(store, clock)
         self.load_all_facts_calls = 0
+        self.load_facts_for_calls = 0
         self.load_facts_calls = 0
 
     def load_all_facts(self) -> dict[str, ChunkFacts]:
         self.load_all_facts_calls += 1
         return super().load_all_facts()
+
+    def load_facts_for(self, chunk_ids):  # type: ignore[no-untyped-def]
+        self.load_facts_for_calls += 1
+        return super().load_facts_for(chunk_ids)
 
     def load_facts(self, chunk_id: str) -> ChunkFacts | None:
         self.load_facts_calls += 1
@@ -92,18 +98,23 @@ class _CountingRouteStore(ChunkRouteStore):
     def __init__(self, store: ScopedConnections, clock: IClock) -> None:
         super().__init__(store, clock)
         self.load_all_routes_calls = 0
+        self.routes_for_calls = 0
         self.route_of_calls = 0
 
     def load_all_routes(self) -> dict[str, Route]:
         self.load_all_routes_calls += 1
         return super().load_all_routes()
 
+    def routes_for(self, chunk_ids):  # type: ignore[no-untyped-def]
+        self.routes_for_calls += 1
+        return super().routes_for(chunk_ids)
+
     def route_of(self, chunk_id: str) -> Route | None:
         self.route_of_calls += 1
         return super().route_of(chunk_id)
 
 
-def test_list_chunks_calls_bulk_reads_and_never_load_facts_or_route_of(tmp_path: Path) -> None:
+def test_list_chunks_reads_its_page_in_batches_and_never_the_whole_tenant(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     ingest(hub, [{"source": "default", "ref": "1"}])
     ingest(hub, [{"source": "default", "ref": "2"}])
@@ -119,8 +130,10 @@ def test_list_chunks_calls_bulk_reads_and_never_load_facts_or_route_of(tmp_path:
 
     assert resp.status_code == 200, resp.text
     assert len(resp.json()["chunks"]) == 2
-    assert counting_facts.load_all_facts_calls == 1
-    assert counting_route.load_all_routes_calls == 1
+    assert counting_facts.load_all_facts_calls == 0
+    assert counting_route.load_all_routes_calls == 0
+    assert counting_facts.load_facts_for_calls == 1
+    assert counting_route.routes_for_calls == 1
     assert counting_facts.load_facts_calls == 0
     assert counting_route.route_of_calls == 0
 
@@ -143,9 +156,9 @@ class _CountingWorkRefsStore(ChunkWorkRefsStore):
         return super().live_holders(pointers)
 
 
-def test_list_chunks_renders_work_refs_with_no_fact_load_or_live_holders_call(tmp_path: Path) -> None:
-    """`list_chunks` derives its live-holder map from the chunks and statuses it
-    already loaded, with no second read to resolve a pointer's URL."""
+def test_list_chunks_renders_work_refs_with_one_batched_live_holders_call(tmp_path: Path) -> None:
+    """`list_chunks` resolves its live-holder map with one batched `live_holders` call over the
+    page's pointers, never the per-pointer `find_live_holder` or a per-chunk fact load."""
     hub = build_hub(tmp_path)
     ingest(hub, [{"source": "default", "ref": "1"}])
     created = hub.client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"}).json()
@@ -165,7 +178,7 @@ def test_list_chunks_renders_work_refs_with_no_fact_load_or_live_holders_call(tm
     assert by_source_ref[("default", "1")]["work_refs"][0]["web_url"] == "http://forge.local/acme/widget/issues/1"
     assert by_source_ref[("hub", created["ref"])]["work_refs"][0]["web_url"] == f"/board/chunk/{created['chunk_id']}"
     assert counting_work_refs.find_live_holder_calls == 0
-    assert counting_work_refs.live_holders_calls == 0
+    assert counting_work_refs.live_holders_calls == 1
     assert counting_facts.load_facts_calls == 0
 
 
@@ -311,9 +324,8 @@ def test_ephemeral_only_window_still_pages_every_visible_chunk_exactly_once(tmp_
 
 
 def test_live_holder_and_blocked_markings_survive_a_page_boundary(tmp_path: Path) -> None:
-    """Live-holder/blocked derivation reads the whole fleet though only the page's
-    own chunks render, so a marking must be identical whether its cause shares the page
-    or not — forced here by putting every chunk on its own page (`limit=1`)."""
+    """Live-holder/blocked derivation resolves a cause held off the page, so a marking must
+    be identical whether its cause shares the page or not — forced here by putting every chunk on its own page (`limit=1`)."""
     hub = build_hub(tmp_path)
     assert hub.client.post("/api/graphs", json={"definition_yaml": _BUILD_REVIEW_DELIVER_YAML}).status_code == 201
 
@@ -410,3 +422,43 @@ def test_next_cursor_is_non_null_until_the_final_page(tmp_path: Path) -> None:
     second_body = second.json()
     assert len(second_body["chunks"]) == 2
     assert second_body["next_cursor"] is None
+
+
+def test_list_chunks_never_reads_standing_edges_or_records_tenant_wide(tmp_path: Path) -> None:
+    from blizzard.hub.store.internal.chunk_dependencies_store import ChunkDependenciesStore
+    from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
+
+    hub = build_hub(tmp_path)
+    prerequisite_id = ingest(hub, [{"source": "default", "ref": "prereq"}])
+    hub.clock.advance(timedelta(seconds=1))
+    dependent_id = ingest(hub, [{"source": "default", "ref": "dependent"}])
+    assert (
+        hub.client.post(
+            f"/api/chunks/{dependent_id}/dependencies", json={"prerequisite_chunk_id": prerequisite_id}
+        ).status_code
+        == 202
+    )
+
+    class _NoEdges(ChunkDependenciesStore):
+        def list_standing_edges(self):  # type: ignore[no-untyped-def]
+            raise AssertionError("list_standing_edges")
+
+    class _NoList(ChunkRecordStore):
+        def list_all(self):  # type: ignore[no-untyped-def]
+            raise AssertionError("list_all")
+
+    edges = _NoEdges.__new__(_NoEdges)
+    edges.__dict__.update(hub.services.chunks.dependencies.__dict__)
+    record = _NoList.__new__(_NoList)
+    record.__dict__.update(hub.services.chunks.record.__dict__)
+    serve_default_tenant(
+        hub, replace(hub.services, chunks=replace(hub.services.chunks, dependencies=edges, record=record))
+    )
+
+    # Newest first: the dependent is alone on page one; its prerequisite is off the page.
+    resp = hub.client.get("/api/chunks", params={"limit": 1})
+
+    assert resp.status_code == 200, resp.text
+    (row,) = resp.json()["chunks"]
+    assert row["chunk_id"] == dependent_id
+    assert row["blocked"] == {"prerequisite_chunk_id": prerequisite_id, "unmet_count": 1}
