@@ -8,6 +8,7 @@ from typing import Protocol
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.leases import LeaseClosureReason
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.roles import domain_model
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.trace_ids import StepKey, step_root
 from blizzard.runner.environments.repository import EnvBinding
@@ -95,6 +96,15 @@ def elicitation_still_pending(ctx: JudgementContext, elicitation: PendingElicita
     return elicitation.pending(ctx.clock.now(), alive=_elicitation_alive(ctx, elicitation))
 
 
+@domain_model
+@dataclass(frozen=True)
+class KnownElicitation:
+    """A lease's in-flight elicitation as the caller already read it — ``None`` inside is a
+    read that found no record, which a bare ``None`` standing for "not read" could not say."""
+
+    standing: PendingElicitation | None
+
+
 @dataclass(frozen=True)
 class Judgement:
     """One exited worker's node-step, judged — its declared commits confirmed, its ``checks:``
@@ -104,6 +114,10 @@ class Judgement:
     lease: Lease
     envelope: Envelope
     bindings: list[EnvBinding]
+    #: The lease's generation and in-flight elicitation as the tick's caller already read them;
+    #: ``None`` reads each fresh at the launch.
+    generation: int | None = None
+    known_elicitation: KnownElicitation | None = None
 
     @property
     def session(self) -> SessionReference:
@@ -112,16 +126,28 @@ class Judgement:
         return JudgeableExit.of(self.lease).session
 
     @classmethod
-    def of(cls, ctx: JudgementContext, lease: Lease) -> Judgement | None:
+    def of(
+        cls,
+        ctx: JudgementContext,
+        lease: Lease,
+        *,
+        bindings: list[EnvBinding] | None = None,
+        generation: int | None = None,
+        known_elicitation: KnownElicitation | None = None,
+    ) -> Judgement | None:
         """This exit's judgement, or ``None`` when there is nothing to judge this tick — a
         lease with no recorded session (left to REAP), no bound environment, or a hub that
-        could not hand over the envelope to judge against."""
+        could not hand over the envelope to judge against.
+
+        ``bindings``, ``generation`` and ``known_elicitation`` are reads the caller already
+        holds; each one omitted is read fresh."""
         try:
             JudgeableExit.of(lease)
         except ExitNotJudgeable:
             _log.warning("exited worker with no recorded session — not judging", lease_id=lease.lease_id)
             return None
-        bindings = ctx.stores.environments.bindings_for_chunk(lease.chunk_id)
+        if bindings is None:
+            bindings = ctx.stores.environments.bindings_for_chunk(lease.chunk_id)
         if not bindings:
             _log.warning("exited worker with no bound env — skipping", chunk_id=lease.chunk_id)
             return None
@@ -130,7 +156,7 @@ class Judgement:
                 envelope = ctx.hub.get_envelope(lease.chunk_id)
         except HubClientError:
             return None  # hub unreachable — the worker's exit is durable; retry next tick
-        return cls(ctx, lease, envelope, bindings)
+        return cls(ctx, lease, envelope, bindings, generation, known_elicitation)
 
     def run(self) -> None:
         """Confirm the commits, then buffer a human's decision, resume a premature exit, or
@@ -386,7 +412,10 @@ class Judgement:
         leaves a record REAP's staleness absorbs. A launch over a standing record restarts the bound and
         sweeps the prior record's output files first."""
         lease = self.lease
-        standing = self.ctx.stores.elicitations.in_flight_elicitation(lease.lease_id, lease.epoch)
+        if self.known_elicitation is not None:
+            standing = self.known_elicitation.standing
+        else:
+            standing = self.ctx.stores.elicitations.in_flight_elicitation(lease.lease_id, lease.epoch)
         if standing is not None:
             self.ctx.elicitation_files.cleanup(lease.lease_id, lease.epoch, through_attempt=standing.relaunch_count)
         output_path = self.ctx.elicitation_files.output_path(lease.lease_id, lease.epoch, attempt=0)
@@ -396,12 +425,17 @@ class Judgement:
         # The judgement's own boundary, riding `record_elicitation_launch`'s own
         # pre-launch write. Keyed by the CURRENT generation — a judgement mints no new one.
         start_position, start_unreadable = self.ctx.resolve_boundary_start(self.session, self.bindings[0].workdir)
+        generation = (
+            self.generation
+            if self.generation is not None
+            else self.ctx.stores.liveness.lease_generation(lease.lease_id)
+        )
         self.ctx.stores.invocation_boundaries.record_boundary_open(
             lease_id=lease.lease_id,
             chunk_id=lease.chunk_id,
             node_id=lease.node_id,
             epoch=lease.epoch,
-            generation=self.ctx.stores.liveness.lease_generation(lease.lease_id),
+            generation=generation,
             kind="judge",
             start_position=start_position,
             start_unreadable=start_unreadable,

@@ -7,6 +7,7 @@ on each fresh store is the measure."""
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -16,6 +17,7 @@ from sqlalchemy import Engine
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.fact_kinds import RUNNER_LOCALLY_PAUSED
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.hub.client import HubQuestion
@@ -56,8 +58,8 @@ class _Run:
         return support.count_queries(self.engine, self.tick_once)
 
 
-def _seed_lease(store: SqlAlchemyRunnerStore, i: int, *, pid_alive: bool) -> None:
-    """One active, spawned, beating, bound lease; ``pid_alive`` is for the caller's probe."""
+def _seed_lease(store: SqlAlchemyRunnerStore, i: int) -> None:
+    """One active, spawned, beating, bound lease whose worker pid is never in the probe: dead."""
     lease_id, chunk_id = f"lease_{i}", f"ch_{i}"
     store.record_lease(
         NewLease(
@@ -126,7 +128,7 @@ def _assert_flat(counts: list[int]) -> None:
 
 
 def _seed_exited_awaiting(store: SqlAlchemyRunnerStore, hub: FakeHub, i: int) -> None:
-    _seed_lease(store, i, pid_alive=False)  # the worker's pid 1000+i is never in the probe: dead
+    _seed_lease(store, i)  # the worker's pid 1000+i is never in the probe: dead
     store.record_elicitation_launch(f"lease_{i}", 1, output_path=f"/tmp/elicit-{i}", at=_NOW)
     store.record_elicitation_started(f"lease_{i}", 1, pid=2000 + i, process_start_time=f"p{i}", pgid=2000 + i)
 
@@ -142,9 +144,15 @@ def test_the_exited_awaiting_arm_is_linear_and_flat_in_leases(tmp_path: Path) ->
 
 
 def _seed_pause_parked(store: SqlAlchemyRunnerStore, hub: FakeHub, i: int) -> None:
-    _seed_lease(store, i, pid_alive=False)
-    store.set_hub_paused(paused=True, at=_NOW)
-    hub.paused = True
+    _seed_lease(store, i)
+    # Only the local brake stops a start; a hub pause alone lets an unpaused park resume.
+    store.record_local_pause(
+        paused=True,
+        at=_NOW,
+        by="operator",
+        report_kind=RUNNER_LOCALLY_PAUSED,
+        report_payload=json.dumps({"by": "operator"}),
+    )
     store.record_pause_park(lease_id=f"lease_{i}", chunk_id=f"ch_{i}", parked_at=_NOW)
 
 
@@ -159,7 +167,7 @@ def test_the_pause_parked_arm_is_linear_and_flat_in_leases(tmp_path: Path) -> No
 
 
 def _seed_ask_parked(store: SqlAlchemyRunnerStore, hub: FakeHub, i: int) -> None:
-    _seed_lease(store, i, pid_alive=False)
+    _seed_lease(store, i)
     question_id = f"qn_{i}"
     store.record_ask(
         lease_id=f"lease_{i}",

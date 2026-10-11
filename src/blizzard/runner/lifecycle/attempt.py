@@ -85,6 +85,8 @@ class Attempt:
 
     ctx: AttemptContext
     lease: Lease
+    #: The runner's brake as the caller already read it; ``None`` reads it fresh.
+    braked: bool | None = None
 
     def _kill_process(self) -> None:
         """Best-effort teardown of this lease's own worker process — the shared,
@@ -523,6 +525,8 @@ class Attempt:
 
     def _braked(self) -> bool:
         """The runner's own brake holds back this attempt's escalations and starts."""
+        if self.braked is not None:
+            return self.braked
         return not Spawner(self.ctx).brakes().starts_processes
 
     def close(

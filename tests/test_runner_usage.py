@@ -29,6 +29,7 @@ from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.leases.internal.worker_stdout_files import WorkerStdoutFiles
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.dormant import DormantSession
+from blizzard.runner.lifecycle.spawn import Spawner
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.steps import Advance, Resume, ResumeIntents
 from blizzard.runner.node_steps.chunk_state import ChunkState
@@ -955,7 +956,13 @@ def test_on_unpause_records_the_paused_generations_usage_before_waking(tmp_path)
     assert lease is not None
 
     park = PausePark(lease_id="lease_1", chunk_id="ch_1", parked_at=_NOW, interrupted_elicitation_id=None)
-    DormantSession(ctx, lease).on_unpause(park, None)
+    DormantSession(ctx, lease).on_unpause(
+        park,
+        None,
+        bindings=store.bindings_for_chunk("ch_1"),
+        ask_parked=False,
+        brakes=Spawner(ctx).brakes(),
+    )
 
     payloads = _usage_payloads(store)
     resume_payload = next(p for p in payloads if p["kind"] == "resume")

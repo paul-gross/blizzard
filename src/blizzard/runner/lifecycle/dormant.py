@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from enum import StrEnum
 from typing import Protocol
 
 from blizzard.foundation.crash import crashpoint
@@ -39,7 +40,7 @@ from blizzard.runner.lifecycle.spawn import SpawnConfig, Spawner
 from blizzard.runner.lifecycle.usage_limit import UsageLimitContext, UsageLimitStores
 from blizzard.runner.process.owned_process import kill_owned_process, owned_process_alive
 from blizzard.runner.throttle.overload import OverloadContext, OverloadStores
-from blizzard.runner.throttle.pause import PausePark
+from blizzard.runner.throttle.pause import PausePark, RunnerBrakes
 from blizzard.runner.transcripts.invocation_boundaries import worker_boundary_open
 from blizzard.runner.usage.recorder import UsageRecorder
 
@@ -93,6 +94,15 @@ class DormantContext(UsageLimitContext, GitCommitsContext, OverloadContext, Prot
     def usage(self) -> UsageRecorder: ...
     @property
     def check_runner(self) -> ICheckRunner | None: ...
+
+
+class PauseParkSettle(StrEnum):
+    """How a pause park's teardown stood: still draining, settled with any in-flight elicitation
+    record left standing, or settled and the named elicitation's record cleared."""
+
+    UNSETTLED = "unsettled"
+    SETTLED = "settled"
+    CLEARED = "cleared"
 
 
 @dataclass(frozen=True)
@@ -218,17 +228,28 @@ class DormantSession:
         OutboundFacts(self.ctx).answer_delivered(lease, park.question_id, at=now)
         _log.info("resumed dormant session with answer", chunk_id=lease.chunk_id, question_id=park.question_id, pid=pid)
 
-    def on_unpause(self, park: PausePark, elicitation: PendingElicitation | None) -> None:
+    def on_unpause(
+        self,
+        park: PausePark,
+        elicitation: PendingElicitation | None,
+        *,
+        bindings: list[EnvBinding],
+        ask_parked: bool,
+        brakes: RunnerBrakes,
+    ) -> None:
         """Finish a pause park's teardown, then poll its chunk; once the operator resumes it, restart
         its session. The teardown runs ahead of every read and move below,
         since a kill is not a spawn and the interrupted envelope is owed its recording regardless.
         The pause cost the chunk a process, not an attempt; an **ask-parked** lease
         returns early even once unpaused, so a lift never conjures an absent answer.
-        ``elicitation`` is the tick's hoisted read (``bzh:bulk-reconstitution``) of this lease's
-        in-flight elicitation, if any — the settled-check's own use of it below; the later,
-        far rarer resume-time check reads fresh, since settling may have just cleared it."""
+        ``elicitation``, ``bindings``, ``ask_parked`` and ``brakes`` are the tick's hoisted reads
+        (``bzh:bulk-reconstitution``) of this lease's in-flight elicitation, if any, its chunk's
+        bindings, whether it is also ask-parked, and the runner's brakes. The elicitation still
+        standing at resume time follows from the settle outcome, since settling is the only
+        thing that clears it."""
         lease = self.lease
-        if not self._pause_park_settled(park, elicitation):
+        settle = self._pause_park_settled(park, elicitation, bindings)
+        if settle is PauseParkSettle.UNSETTLED:
             return
         try:
             view = self.ctx.chunk_views.get(lease.chunk_id)
@@ -239,17 +260,22 @@ class DormantSession:
         except HubClientError:
             return  # hub unreachable — the park is durable; retry next tick
         now = self.ctx.clock.now()
-        # Read fresh, not the tick's hoisted read: settling above may have just cleared it.
-        standing = self.ctx.stores.elicitations.in_flight_elicitation(lease.lease_id, lease.epoch)
-        bindings = self.ctx.stores.environments.bindings_for_chunk(lease.chunk_id)
+        # The hoisted record stands unless settling just cleared it; its epoch is the lease's own to match.
+        standing = (
+            elicitation
+            if settle is PauseParkSettle.SETTLED and elicitation is not None and elicitation.epoch == lease.epoch
+            else None
+        )
         runner_id = registered_runner_id(self.ctx.identity)
         if runner_id is None:
             return  # stays parked: whether the route is still ours waits for the first registration
         move = unpause_move(
             view,
             runner_id,
-            braked=Spawner(self.ctx).suppressed(via="pause-resume", chunk_id=lease.chunk_id, lease_id=lease.lease_id),
-            ask_parked=lease.lease_id in self.ctx.stores.asks.ask_parked_lease_ids(),
+            braked=Spawner(self.ctx).suppressed(
+                via="pause-resume", chunk_id=lease.chunk_id, lease_id=lease.lease_id, brakes=brakes
+            ),
+            ask_parked=ask_parked,
             judge_parked=standing is not None,
             has_env_and_session=bool(bindings) and lease.session is not None,
         )
@@ -282,29 +308,31 @@ class DormantSession:
             pid=pid,
         )
 
-    def _pause_park_settled(self, park: PausePark, elicitation: PendingElicitation | None) -> bool:
-        """True once nothing of the lease's is alive after `park_paused`'s interrupt — the worker's
-        group and the elicitation the park names. Alive within the drain budget of
+    def _pause_park_settled(
+        self, park: PausePark, elicitation: PendingElicitation | None, bindings: list[EnvBinding]
+    ) -> PauseParkSettle:
+        """``SETTLED`` (or ``CLEARED``) once nothing of the lease's is alive after `park_paused`'s interrupt —
+        the worker's group and the elicitation the park names. Alive within the drain budget of
         ``parked_at``: left alone, no wake. Past it: SIGKILLed. A named elicitation that has exited
         books its ``judge`` usage, then clears — ``Judgement.collect``'s own order, both replays
-        idempotent. An unnamed standing record is a usage-limit judge park's, left for its relaunch.
-        ``elicitation`` is the tick's hoisted read of this lease's in-flight elicitation, if any."""
+        idempotent (``CLEARED``). An unnamed standing record is a usage-limit judge park's, left for its
+        relaunch. ``elicitation`` and ``bindings`` are the tick's hoisted reads of this lease's
+        in-flight elicitation, if any, and its chunk's bindings."""
         lease = self.lease
         past_deadline = pause_park_drain_expired(park, now=self.ctx.clock.now())
         if not self._owned_group_settled(
             pid=lease.pid, process_start_time=lease.process_start_time, pgid=lease.pgid, past_deadline=past_deadline
         ):
-            return False
+            return PauseParkSettle.UNSETTLED
         if not park_names_elicitation(park, elicitation) or elicitation is None:
-            return True
+            return PauseParkSettle.SETTLED
         if not self._owned_group_settled(
             pid=elicitation.pid,
             process_start_time=elicitation.process_start_time,
             pgid=elicitation.pgid,
             past_deadline=past_deadline,
         ):
-            return False
-        bindings = self.ctx.stores.environments.bindings_for_chunk(lease.chunk_id)
+            return PauseParkSettle.UNSETTLED
         if self._resolve_harness_for_usage_only(via="pause-park-elicitation-usage") is not None:
             output = self.ctx.elicitation_files.read(elicitation.output_path)
             self.ctx.usage.record_attempt(lease, bindings, judge_output=output)
@@ -316,7 +344,7 @@ class DormantSession:
             lease_id=lease.lease_id,
             epoch=lease.epoch,
         )
-        return True
+        return PauseParkSettle.CLEARED
 
     def _owned_group_settled(
         self, *, pid: int | None, process_start_time: str | None, pgid: int | None, past_deadline: bool

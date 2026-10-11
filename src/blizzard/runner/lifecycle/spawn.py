@@ -211,12 +211,16 @@ class Spawner:
         pause = self.ctx.stores.pause
         return RunnerBrakes(local=pause.local_paused(), hub=pause.hub_paused())
 
-    def suppressed(self, *, via: str, chunk_id: str, lease_id: str | None = None) -> bool:
+    def suppressed(
+        self, *, via: str, chunk_id: str, lease_id: str | None = None, brakes: RunnerBrakes | None = None
+    ) -> bool:
         """True — and logged once — when the runner's brakes or the chunk's own pause block this start.
+
+        ``brakes`` is a read the caller already holds; without one the brakes are read here.
 
         Which call sites must consult it is held mechanically by
         ``tests/test_spawn_suppressed_registry.py``, not by an enumeration to recount by hand."""
-        if not self.brakes().starts_processes:
+        if not (brakes if brakes is not None else self.brakes()).starts_processes:
             self._log_suppressed("spawn suppressed — locally paused", via, chunk_id, lease_id)
             return True
         if self._chunk_paused(chunk_id):
