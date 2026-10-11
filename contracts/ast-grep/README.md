@@ -72,6 +72,15 @@ load-bearing: without it a stale `# ast-grep-ignore` comment goes unreported ins
   in `blizzard-context:/architecture/system-shape/exclusive-writes.md` (a no-op `UPDATE` as the first statement).
   - Scoped to `src/blizzard/hub/**`; matches any `$X.with_for_update($$$)` call.
 
+- **`bzh:store-newest-read-limited`** (`rules/store-newest-read-limited.yml`) — a newest-per-key store read bounds its
+  statement with `.limit(...)` rather than pulling a key's whole history to keep one row. The related rule is
+  `bzh:newest-per-key-read`; this rule covers only the crisp sub-shape below and does not replace it.
+  - Scoped to `src/blizzard/hub/store/internal/**` and `src/blizzard/runner/store/internal/**`.
+  - Matches a function that contains a `.desc()` ordering and a `.first()` or `[0]` take and contains no `.limit(...)`.
+    The Python-fold variant (select all rows, overwrite into a dict) and the walk-to-first-non-retired variant are not
+    matched — a floor, not a proof.
+  - No exemption stands.
+
 - **`bzh:seam-answers-binding-facts`** (`rules/seam-answers-binding-facts.yml`) — a binding's config name is compared only at
   its selection point; every other consumer asks the seam for the binding's fact (`IWorkspaceProvider`, the harness
   catalog's declarations). The rule's own prose home is `blizzard-context:/architecture/system-shape.md`; this file

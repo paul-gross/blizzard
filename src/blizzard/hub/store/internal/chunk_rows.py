@@ -298,6 +298,7 @@ def route_of_conn(conn: Connection, chunk_id: str) -> Route | None:
         stmts.select(s.route_created)
         .where(s.route_created.c.chunk_id == chunk_id)
         .order_by(s.route_created.c.created_at.desc(), s.route_created.c.seq.desc())
+        .limit(1)
     ).first()
     if created is None:
         return None
@@ -306,6 +307,7 @@ def route_of_conn(conn: Connection, chunk_id: str) -> Route | None:
         stmts.select(s.route_released, s.route_released.c.released_at, s.route_released.c.seq)
         .where(s.route_released.c.chunk_id == chunk_id)
         .order_by(s.route_released.c.released_at.desc(), s.route_released.c.seq.desc())
+        .limit(1)
     ).first()
     routes_released = [RouteReleasedFact(released_at=released.released_at, seq=released.seq)] if released else []
     routes_created = [RouteCreatedFact(created_at=created.created_at, seq=created.seq)]

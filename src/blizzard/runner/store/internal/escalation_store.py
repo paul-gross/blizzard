@@ -38,6 +38,7 @@ class EscalationStore:
             .where(LIVE_ESCALATION.clause)
             .where(UNRESOLVED_ESCALATION.clause)
             .order_by(lease_closures.c.closed_at.desc())
+            .limit(1)
         )
         rows = self._store.all(stmt)
         return self._row_to_escalation(rows[0]) if rows else None

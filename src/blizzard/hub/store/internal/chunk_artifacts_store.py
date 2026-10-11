@@ -114,6 +114,7 @@ class ChunkArtifactsStore:
                 .order_by(
                     s.artifacts.c.epoch.desc(), s.artifacts.c.produced_at.desc(), s.artifacts.c.artifact_id.desc()
                 )
+                .limit(1)
             ).first()
             if a is None:
                 return None

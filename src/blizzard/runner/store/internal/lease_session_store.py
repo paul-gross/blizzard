@@ -61,7 +61,7 @@ class LeaseSessionStore:
         )
         if node_name is not None:
             stmt = stmt.where(lease_context.c.node_name == node_name)
-        stmt = stmt.order_by(leases.c.created_at.desc(), leases.c.lease_id.desc())
+        stmt = stmt.order_by(leases.c.created_at.desc(), leases.c.lease_id.desc()).limit(1)
         rows = self._store.all(stmt)
         if not rows:
             return None
@@ -82,6 +82,7 @@ class LeaseSessionStore:
             .where(lease_context.c.session_name == session_name)
             .where(_after_newest_release(chunk_id))
             .order_by(leases.c.created_at.desc(), leases.c.lease_id.desc())
+            .limit(1)
         )
         rows = self._store.all(stmt)
         if not rows:
@@ -115,6 +116,7 @@ class LeaseSessionStore:
             .where(leases.c.session_id == session.session_id)
             .where(leases.c.harness_id == session.harness_id)
             .order_by(leases.c.created_at.desc(), leases.c.lease_id.desc())
+            .limit(1)
         )
         rows = self._store.all(stmt)
         return row_to_lease(rows[0]) if rows else None
