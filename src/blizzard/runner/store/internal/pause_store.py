@@ -52,18 +52,23 @@ class PauseStore:
         return {str(r.lease_id) for r in self._store.all(PAUSE_PARKED_LEASE_IDS)}
 
     def open_pause_parks(self) -> dict[str, PausePark]:
+        # The newest open park per lease, grouped in SQL so the read costs the leases parked, not the re-park history.
+        newest = (
+            select(func.max(pause_parks.c.id).label("id"))
+            .where(OPEN_PAUSE_PARK)
+            .group_by(pause_parks.c.lease_id)
+            .subquery()
+        )
         rows = self._store.all(
             select(
                 pause_parks.c.lease_id,
                 pause_parks.c.chunk_id,
                 pause_parks.c.parked_at,
                 pause_parks.c.interrupted_elicitation_id,
-            )
-            .where(OPEN_PAUSE_PARK)
-            .order_by(pause_parks.c.id)
+            ).join(newest, pause_parks.c.id == newest.c.id)
         )
         parks: dict[str, PausePark] = {}
-        for r in rows:  # ascending id: a lease's newest open park overwrites an earlier re-park's
+        for r in rows:
             parks[str(r.lease_id)] = PausePark(
                 lease_id=str(r.lease_id),
                 chunk_id=str(r.chunk_id),

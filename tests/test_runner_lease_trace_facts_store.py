@@ -32,7 +32,7 @@ from blizzard.runner.tracing.facts import (
 from blizzard.runner.usage.repository import InvocationCost
 from tests import runner_trace_fixtures as fx
 from tests.runner_fakes import SqlAlchemyRunnerStore, make_store, runner_store_errors
-from tests.support import count_queries
+from tests.support import capture_statements, count_queries, offending_index_scans
 
 pytestmark = pytest.mark.component
 
@@ -271,3 +271,19 @@ def test_the_plural_read_issues_the_same_statements_for_one_lease_as_for_many(tm
 
     assert one == many
     assert len(reader.lease_trace_facts_for(ids)) == len(ids)
+
+
+def test_the_closure_read_never_scans_lease_closures_whatever_the_unrelated_history(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    for n in range(20):
+        _write_lease(store, f"lease_other_{n}", f"ch_other_{n}")
+    ids = [f"lease_{n}" for n in range(3)]
+    for n, lease_id in enumerate(ids):
+        _write_lease(store, lease_id, f"ch_{n}")
+    reader = _reader(store)
+
+    with capture_statements(store._engine) as statements:
+        read = reader.lease_trace_facts_for(ids)
+
+    assert set(read) == set(ids)
+    assert offending_index_scans(store._engine, statements, ["lease_closures"]) == []
