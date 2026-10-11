@@ -1,7 +1,8 @@
 """Observability reads under a project lens (component tier): ``?project=`` on every ``/api/analytics/*`` read,
 both NDJSON streams included, narrows it to the facts of one project's chunks; ``GET /api/events`` and
 ``GET /api/activity`` keep a row naming a chunk of the project, a row naming only a runner that serves it, and a
-row naming neither. Without ``?project=`` each read covers the whole tenant; an unknown project answers ``422``."""
+row naming neither. Without ``?project=`` each read covers the whole tenant; an unknown project answers ``422``.
+A question carries its chunk's project: its listed row names the chunk, and its frames are stamped with it."""
 
 from __future__ import annotations
 
@@ -19,6 +20,8 @@ from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStor
 from tests.support import (
     HubHarness,
     build_hub,
+    claim_route,
+    emitted_events,
     hub_store_connections,
     ingest,
     link_project,
@@ -212,3 +215,56 @@ def test_the_activity_feed_narrows_each_source_to_the_project(tmp_path: Path) ->
     assert ("event-logged", b1, "beta-chunk") in beta_rows
     assert ("chunk-changed", b1, None) in beta_rows
     assert hub.client.get("/api/activity", params={"project": "nope"}).status_code == 422
+
+
+def _ask(hub: HubHarness, chunk_id: str, question_id: str, runner_id: str) -> None:
+    claim_route(hub, chunk_id, runner_id=runner_id)
+    resp = hub.client.post(
+        "/api/questions",
+        json={
+            "question_id": question_id,
+            "chunk_id": chunk_id,
+            "node_id": "nd_build",
+            "session_id": f"sess-{question_id}",
+            "runner_id": runner_id,
+            "epoch": 1,
+            "question": "Which API?",
+            "options": ["rest", "graphql"],
+            "asked_at": "2026-08-12T09:00:00+00:00",
+        },
+    )
+    assert resp.status_code == 201, resp.text
+
+
+def test_a_question_is_labelled_with_its_chunks_project(tmp_path: Path) -> None:
+    """``GET /api/questions`` takes no project: each row names its chunk, whose project is the question's, and the
+    question's frames carry that project — the label a project-filtered stream and the board select on."""
+    hub, beta = _two_project_hub(tmp_path)
+    seed_runner(hub, "r-default", projects=("default",))
+    seed_runner(hub, "r-beta", projects=("beta",))
+    d1 = _ingest(hub, "1", "default")
+    b1 = _ingest(hub, "2", "beta")
+    _ask(hub, d1, "qn_default", "r-default")
+    _ask(hub, b1, "qn_beta", "r-beta")
+    answered = hub.client.post("/api/questions/qn_beta/answers", json={"answer": "rest", "answered_by": "alice"})
+    assert answered.status_code == 201, answered.text
+
+    def project_of(chunk_id: str) -> str:
+        return hub.client.get(f"/api/chunks/{chunk_id}").json()["project_slug"]
+
+    listed = hub.client.get("/api/questions")
+    assert listed.status_code == 200, listed.text
+    assert {row["question_id"]: project_of(row["chunk_id"]) for row in listed.json()} == {"qn_default": "default"}
+
+    default_id = hub.client.get(f"/api/chunks/{d1}").json()["project_id"]
+    frames = {
+        (event["event"], data["question_id"]): data["project_id"]
+        for event in emitted_events(hub)
+        if event["event"] in {"question-asked", "question-answered"}
+        for data in [json.loads(event["data"])]
+    }
+    assert frames == {
+        ("question-asked", "qn_default"): default_id,
+        ("question-asked", "qn_beta"): beta,
+        ("question-answered", "qn_beta"): beta,
+    }

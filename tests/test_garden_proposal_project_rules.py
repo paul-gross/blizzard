@@ -1,7 +1,7 @@
 """A garden proposal cites only its own project's findings (component tier): the domain refuses an operator create and
-an attach naming a finding of another project, the attach route answers ``422`` naming it, the proposal store refuses
-the same links beneath the domain, and a delivery citing another project's finding is rejected naming it, with nothing
-written.
+an attach naming a finding of another project, the create under a project and the attach routes answer ``422`` naming
+it, the proposal store refuses the same links beneath the domain, and a delivery citing another project's finding is
+rejected naming it, with nothing written.
 
 Every store here holds two projects in its one tenant, so every write names its project and no call relies on the
 sole-project fallback."""
@@ -147,6 +147,34 @@ def test_attaching_another_projects_finding_is_422_naming_it(tmp_path: Path) -> 
     assert resp.status_code == 422, resp.text
     assert _FOREIGN in resp.json()["detail"]
     assert hub.client.get("/api/garden-proposals/gprop_1").json()["findings"] == [_OWN]
+
+
+@pytest.mark.parametrize(
+    ("project", "findings", "foreign"),
+    [("default", [_OWN, _FOREIGN], _FOREIGN), ("other", [_FOREIGN, _OWN], _OWN)],
+    ids=["default", "other"],
+)
+def test_creating_under_a_project_citing_another_projects_finding_is_422_naming_it(
+    tmp_path: Path, project: str, findings: list[str], foreign: str
+) -> None:
+    hub, _, _ = _two_projects(tmp_path)
+    body = {"class": "c", "title": "t", "body": "b", "findings": findings}
+
+    resp = hub.client.post(f"/api/projects/{project}/garden-proposals", json=body)
+
+    assert resp.status_code == 422, resp.text
+    assert foreign in resp.json()["detail"]
+    assert _proposal_rows(hub) == []
+
+
+def test_creating_under_a_project_citing_its_own_finding_links_it(tmp_path: Path) -> None:
+    hub, _, other = _two_projects(tmp_path)
+    body = {"class": "c", "title": "t", "body": "b", "findings": [_FOREIGN]}
+
+    resp = hub.client.post("/api/projects/other/garden-proposals", json=body)
+
+    assert resp.status_code == 201, resp.text
+    assert (resp.json()["project_id"], resp.json()["findings"]) == (other, [_FOREIGN])
 
 
 def test_a_delivery_citing_another_projects_finding_is_rejected_naming_it(tmp_path: Path) -> None:
