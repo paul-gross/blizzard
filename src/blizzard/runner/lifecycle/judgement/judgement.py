@@ -138,9 +138,7 @@ class Judgement:
         """This exit's judgement, or ``None`` when there is nothing to judge this tick — a
         lease with no recorded session (left to REAP), no bound environment, or a hub that
         could not hand over the envelope to judge against.
-
-        ``bindings``, ``generation`` and ``known_elicitation`` are reads the caller already
-        holds; each one omitted is read fresh."""
+        Each read passed in is the caller's; each omitted is read fresh."""
         try:
             JudgeableExit.of(lease)
         except ExitNotJudgeable:
