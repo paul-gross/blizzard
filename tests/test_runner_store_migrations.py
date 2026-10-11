@@ -21,6 +21,7 @@ from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
 pytestmark = pytest.mark.component
 
 _IDENTITY_PARENT = "20261005_1000_runner_credential_renewal_facts"
+_IDENTITY = "20261006_1000_runner_identity"
 _KEYED_TABLES = ("hub_control", "local_pause_facts", "daemon_liveness", "leases")
 
 _OLD = datetime(2026, 9, 1, 12, tzinfo=UTC)
@@ -113,10 +114,11 @@ def test_identity_migration_keeps_the_newest_liveness_ids_singletons_and_every_h
     migration, engine = _store_at_parent(tmp_path)
     try:
         _seed_a_store_spanning_a_rename(engine)
-        migration.upgrade("head")
+        migration.upgrade(_IDENTITY)
 
         for table in _KEYED_TABLES:
             assert "runner_id" not in _columns(engine, table)
+        migration.upgrade("head")
         store = SqlAlchemyRunnerStore(engine, runner_store_errors())
         assert _rows(engine, "SELECT count(*) FROM hub_control") == [(1,)]
         assert store.hub_paused() is False  # r-claude's mirror, not the older id's pause
@@ -213,7 +215,7 @@ def test_frozen_keyed_tables_carry_the_runner_id_until_the_identity_revision(tab
         runner.upgrade(_IDENTITY_PARENT)
         assert "runner_id" in _columns(engine, table)
         assert "runner_identity" not in sa.inspect(engine).get_table_names()
-        runner.upgrade("head")
+        runner.upgrade(_IDENTITY)
         assert "runner_id" not in _columns(engine, table)
         assert "runner_identity" in sa.inspect(engine).get_table_names()
     finally:
@@ -321,6 +323,7 @@ def test_hub_projects_migration_adds_the_answer_and_its_marker_and_drops_both_lo
             "slug",
             "name",
             "answered_at",
+            "runner_id",
         }
     finally:
         engine.dispose()

@@ -146,11 +146,11 @@ def test_the_downgrade_drops_both_columns_keeping_the_row_and_upgrades_back(tmp_
         engine.dispose()
 
 
-def test_no_table_but_the_identity_row_carries_a_tenant(tmp_path: Path) -> None:
-    """One store, one runner, one tenant: nothing keys or filters on the tenant, in the declared schema
-    or in a store migrated to head."""
+def test_no_table_but_the_identity_rows_carries_a_tenant(tmp_path: Path) -> None:
+    """One store, one tenant: nothing keys or filters on the tenant, in the declared schema or in a store migrated to
+    head — only the runner's and the host's identity rows name it."""
     declared = {t.name for t in runner_schema.metadata.sorted_tables if any("tenant" in c.name for c in t.columns)}
-    assert declared == {"runner_identity"}
+    assert declared == {"runner_identity", "host_identity"}
 
     url = f"sqlite:///{tmp_path / 'store.db'}"
     engine = create_engine_from_url(url)
@@ -160,7 +160,7 @@ def test_no_table_but_the_identity_row_carries_a_tenant(tmp_path: Path) -> None:
         migrated = {
             t for t in inspector.get_table_names() if any("tenant" in c["name"] for c in inspector.get_columns(t))
         }
-        assert migrated == {"runner_identity"}
+        assert migrated == {"runner_identity", "host_identity"}
         assert not any(
             "tenant" in column
             for table in inspector.get_table_names()
