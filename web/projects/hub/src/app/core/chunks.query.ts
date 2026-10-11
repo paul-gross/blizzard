@@ -31,7 +31,7 @@ export function boardChunksQueryOptions(project: string | null) {
 
 /**
  * Hub `GET /api/chunks?board_window=true` read — the board's chunk list (derived
- * status + current node): every chunk but a `done` one finished more than 48 hours ago,
+ * status + current node): every chunk but a `done` one finished more than 48 hours ago that is not among the 10 newest finished,
  * through TanStack Query and the generated hub client. Under a project lens it reads only the lensed project's chunks,
  * in the same order — the lens filters, it never re-ranks.
  * Like the health read this is real plumbing: the request is the

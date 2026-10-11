@@ -108,6 +108,10 @@ from blizzard.wire.work_source import WorkItemAuthorView
 #: How long a finished ``done`` chunk stays on ``GET /api/chunks?board_window=true``.
 BOARD_DONE_WINDOW = timedelta(hours=48)
 
+#: How many of the most recently finished ``done`` chunks stay on it however old, per tenant (per project
+#: under ``?project=``) — the board's Done lane is never emptier than this while that many exist.
+BOARD_DONE_FLOOR = 10
+
 router = APIRouter(
     prefix="/api", tags=["chunks"], dependencies=[Depends(reject_runner_principal), Depends(tenant_bound)]
 )
@@ -233,18 +237,27 @@ def list_chunks(
     each resolved for the page's chunks and pointers through narrowed, batched reads. A pointer
     the page renders held live by a chunk outside it, or a dependent's prerequisite outside it,
     still resolves — the narrowing happens in the store, not by dropping the off-page side."""
-    # ``board_window`` drops ``done`` chunks finished before the window; a page can come back short.
+    # ``board_window`` drops ``done`` chunks finished before the window, bar the floor of newest ones; a page
+    # can come back short. The floor is one extra statement returning at most ``BOARD_DONE_FLOOR`` ids, ranking
+    # the scope's done chunks by a derived instant no index orders — a fleet-sized walk by design.
     done_since = services.clock.now() - BOARD_DONE_WINDOW if board_window else None
+    done_floor = services.chunks.record.newest_done(limit=BOARD_DONE_FLOOR, project=project) if board_window else []
     names = GraphNames(services.graphs)
     try:
-        page = services.chunks.record.list_page(cursor=cursor, limit=limit, done_since=done_since, project=project)
+        page = services.chunks.record.list_page(
+            cursor=cursor, limit=limit, done_since=done_since, done_kept=done_floor, project=project
+        )
     except MalformedCursor as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="malformed cursor") from exc
     facts = services.chunks.facts.load_facts_for([c.chunk_id for c in page.chunks])
     if done_since is not None:
-        # The store's exclusion leaves a same-instant movement tie in; the derivation settles it.
+        # The store's exclusion leaves a same-instant movement tie in; the derivation settles it. A floor
+        # member is exempt: it stays however old.
+        kept = set(done_floor)
         page_chunks = [
-            c for c in page.chunks if not ChunkFacts.or_default(facts.get(c.chunk_id)).finished_before(done_since)
+            c
+            for c in page.chunks
+            if c.chunk_id in kept or not ChunkFacts.or_default(facts.get(c.chunk_id)).finished_before(done_since)
         ]
     else:
         page_chunks = page.chunks

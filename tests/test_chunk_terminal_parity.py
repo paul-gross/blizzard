@@ -29,7 +29,7 @@ from sqlalchemy import (
 )
 from structlog import get_logger
 
-from blizzard.foundation.chunk_status import TERMINAL_STATUSES
+from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.store import schema as s
@@ -121,6 +121,27 @@ def test_every_terminal_form_agrees_with_the_derived_status(tmp_path: Path) -> N
     assert live_ids | residue <= kept
     for chunk_id in sorted(decided):
         assert _fence_refuses_as_terminal(hub, chunk_id) is (chunk_id in terminal_ids), chunk_id
+
+
+def test_newest_done_ranks_by_the_derived_completion_instant(tmp_path: Path) -> None:
+    hub = hub_with_graph(tmp_path)
+    every_branch(hub)
+    visible = {c.chunk_id for c in hub.services.chunks.record.list_all()}
+    ranked = sorted(
+        (
+            (f.completed_at(), chunk_id)
+            for chunk_id, f in hub.services.chunks.facts.load_all_facts().items()
+            if chunk_id in visible
+            and not chunk_id.startswith("ch_mixed_tie_")  # the tie residue the SQL form leaves live
+            and f.status() is ChunkStatus.DONE
+            and f.completed_at() is not None
+        ),
+        reverse=True,
+    )
+    expected = [chunk_id for _, chunk_id in ranked]
+    assert len(expected) > 2
+    for limit in (1, 2, len(expected), len(expected) + 5):
+        assert hub.services.chunks.record.newest_done(limit=limit) == expected[:limit], limit
 
 
 # --- every nested statement is confined to the scope's tenant ------------------------------------

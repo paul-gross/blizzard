@@ -8,7 +8,7 @@ composition over already-loaded facts."""
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
@@ -78,12 +78,16 @@ class _FakeChunkRecords:
     def list_all(self) -> list[Chunk]:
         return list(self.chunks.values())
 
+    def newest_done(self, *, limit: int, project: ProjectId | None = None) -> list[str]:
+        raise NotImplementedError
+
     def list_page(
         self,
         *,
         cursor: str | None = None,
         limit: int,
         done_since: datetime | None = None,
+        done_kept: Collection[str] = (),
         project: ProjectId | None = None,
     ) -> ChunkPage:
         raise NotImplementedError

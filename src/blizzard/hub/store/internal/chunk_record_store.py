@@ -8,7 +8,7 @@ already resolved; nothing here derives status. Timestamps arrive already stamped
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from datetime import datetime
 from typing import Any
 
@@ -37,7 +37,7 @@ from blizzard.hub.store.internal.chunk_rows import (
     is_ephemeral_id,
     work_ref_conn_of,
 )
-from blizzard.hub.store.internal.chunk_terminal_predicates import settled_done
+from blizzard.hub.store.internal.chunk_terminal_predicates import done_completed_at, settled_done
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements
 
 #: `(minted_at, chunk_id)` — the tiebreak `minted_at desc` alone lacks.
@@ -64,13 +64,17 @@ def _chunk_page_stmt(
     after: tuple[datetime, str] | None,
     limit: int,
     done_since: datetime | None,
+    done_kept: Collection[str],
     project: ProjectId | None,
 ) -> Select[Any]:
     stmt = stmts.select(s.chunks)
     if project is not None:
         stmt = stmt.where(s.chunks.c.project_id == project)
     if done_since is not None:
-        stmt = stmt.where(~settled_done(stmts, finished_before=done_since))
+        outside_window = ~settled_done(stmts, finished_before=done_since)
+        stmt = stmt.where(
+            or_(outside_window, s.chunks.c.chunk_id.in_(list(done_kept))) if done_kept else outside_window
+        )
     if after is not None:
         minted_at, chunk_id = after
         c = s.chunks.c
@@ -189,27 +193,45 @@ class ChunkRecordStore:
                 for r in rows
             ]
 
+    def newest_done(self, *, limit: int, project: ProjectId | None = None) -> list[str]:
+        """The ids of the ``limit`` most recently finished ``done`` chunks, newest first — one
+        statement ranking every ``done`` chunk of the scope by :func:`done_completed_at`, ``chunk_id``
+        breaking a same-instant tie, ephemeral chunks excluded in SQL. ``project`` narrows the ranking
+        to that project's chunks."""
+        if limit < 1:
+            raise ValueError(f"limit must be at least 1, got {limit}")
+        instant = done_completed_at(self._store)
+        stmt = self._store.select(s.chunks, s.chunks.c.chunk_id).where(settled_done(self._store))
+        for table in (s.chunk_grouped, s.chunk_deleted):
+            stmt = stmt.where(~self._store.exists(table, table.c.chunk_id == s.chunks.c.chunk_id))
+        if project is not None:
+            stmt = stmt.where(s.chunks.c.project_id == project)
+        stmt = stmt.order_by(instant.desc(), s.chunks.c.chunk_id.desc()).limit(limit)
+        with self._store.read("newest_done") as conn:
+            return [r.chunk_id for r in conn.execute(stmt).all()]
+
     def list_page(
         self,
         *,
         cursor: str | None = None,
         limit: int,
         done_since: datetime | None = None,
+        done_kept: Collection[str] = (),
         project: ProjectId | None = None,
     ) -> ChunkPage:
         """`list_all`'s bounded sibling: a SQL keyset window with
         ephemeral chunks excluded in Python after the read, so a window landing wholly
         on ephemeral rows can come back short of `limit` live chunks. Each retry doubles
         the window rather than stopping there, so a `next_cursor` walk still sees every
-        visible chunk exactly once; ``done_since`` narrows it in SQL (:func:`settled_done`), and
-        ``project`` to that project's chunks."""
+        visible chunk exactly once; ``done_since`` narrows it in SQL (:func:`settled_done`) except
+        for the ``done_kept`` ids, and ``project`` to that project's chunks."""
         if limit < 1:
             raise ValueError(f"limit must be at least 1, got {limit}")
         after = _decode_chunk_cursor(cursor) if cursor is not None else None
         fetch = limit + 1
         with self._store.read("list_page") as conn:
             while True:
-                rows = conn.execute(_chunk_page_stmt(self._store, after, fetch, done_since, project)).all()
+                rows = conn.execute(_chunk_page_stmt(self._store, after, fetch, done_since, done_kept, project)).all()
                 ephemeral: set[str] = set()
                 for batch in id_batches([r.chunk_id for r in rows]):
                     ephemeral |= ephemeral_ids_in(conn, batch)
