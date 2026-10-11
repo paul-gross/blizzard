@@ -62,6 +62,10 @@ class RunnerRegistryStore:
         with self._store.read("get_runner") as conn:
             return self.get_runner_conn(conn, runner_id)
 
+    def is_retired(self, runner_id: str) -> bool:
+        with self._store.read("is_retired") as conn:
+            return self._lifecycle(conn, runner_id)[0]
+
     def get_runner_conn(self, conn, runner_id: str) -> RunnerRegistration | None:  # type: ignore[no-untyped-def]
         """`get_runner`'s already-open-connection sibling — the locked-transaction seam's
         own read (``bzh:store-exclusive-write``), resolved on the caller's connection

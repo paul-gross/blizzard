@@ -546,6 +546,12 @@ class IReadRunnerRegistry(Protocol):
     """Read-only registry access."""
 
     def get_runner(self, runner_id: str) -> RunnerRegistration | None: ...
+    def is_retired(self, runner_id: str) -> bool:
+        """Whether ``runner_id``'s newest lifecycle fact reads retired — the one boolean the
+        id-keyed guard needs, read without reconstituting the registration. A runner with no
+        facts (or never added) is not retired."""
+        ...
+
     def list_runners(self, *, include_retired: bool = False) -> list[RunnerRegistration]:
         """Every registration, oldest added first — retired runners only when ``include_retired``."""
         ...
@@ -742,11 +748,8 @@ class RetiredRunnerGuard:
     def __init__(self, *, registry: IReadRunnerRegistry) -> None:
         self._registry = registry
 
-    # runner_id resolves the retired-runner guard, a domain rule (bzh:domain-takes-objects).
-    # ast-grep-ignore: bzh:domain-takes-objects
     def refuse_if_retired(self, runner_id: str, *, action: str) -> None:
         """Raise :class:`RunnerRetired` when ``runner_id`` names a retired runner. A runner the
         hub never added passes — it has no row, so there is nothing to be retired."""
-        registration = self._registry.get_runner(runner_id)
-        if registration is not None:
-            registration.refuse_if_retired(action=action)
+        if self._registry.is_retired(runner_id):
+            raise RunnerRetired(runner_id, action=action)
