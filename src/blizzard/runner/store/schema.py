@@ -163,6 +163,8 @@ lease_closures = Table(
 )
 # The trace sweep's window read, in cursor order.
 Index("ix_lease_closures_closed_at_lease_id", lease_closures.c.closed_at, lease_closures.c.lease_id)
+# The trace drain's first-closure-per-lease read, bounded to the batch's lease ids.
+Index("ix_lease_closures_lease_id_id", lease_closures.c.lease_id, lease_closures.c.id)
 
 # --- Trace export cursor and failure latch -----------------------------------
 # Append-only; the newest row of each is the cursor's position and the latch's state.

@@ -251,13 +251,6 @@ _FACT_READS = (
     ),
 )
 
-# A lease closes once; should a second closure ever land, the first is the one that closed it.
-_FIRST_CLOSURE = (
-    select(lease_closures.c.lease_id, func.min(lease_closures.c.id).label("closure_id"))
-    .group_by(lease_closures.c.lease_id)
-    .subquery()
-)
-
 
 def _work_ref_tokens(raw: str | None) -> tuple[str, ...]:
     """Each ref's hub-rendered source-native token; a ref no source rendered carries none, as on the hub."""
@@ -265,6 +258,13 @@ def _work_ref_tokens(raw: str | None) -> tuple[str, ...]:
 
 
 def _closed_leases(conn: Connection, ids: Sequence[str]) -> list[Row[Any]]:
+    # A lease closes once; should a second closure ever land, the first is the one that closed it.
+    first_closure = (
+        select(lease_closures.c.lease_id, func.min(lease_closures.c.id).label("closure_id"))
+        .where(lease_closures.c.lease_id.in_(ids))
+        .group_by(lease_closures.c.lease_id)
+        .subquery()
+    )
     stmt = (
         select(
             leases.c.lease_id,
@@ -283,8 +283,8 @@ def _closed_leases(conn: Connection, ids: Sequence[str]) -> list[Row[Any]]:
             lease_closures.c.closed_at,
         )
         .join(lease_context, lease_context.c.lease_id == leases.c.lease_id)
-        .join(_FIRST_CLOSURE, _FIRST_CLOSURE.c.lease_id == leases.c.lease_id)
-        .join(lease_closures, lease_closures.c.id == _FIRST_CLOSURE.c.closure_id)
+        .join(first_closure, first_closure.c.lease_id == leases.c.lease_id)
+        .join(lease_closures, lease_closures.c.id == first_closure.c.closure_id)
         .where(leases.c.lease_id.in_(ids))
     )
     return list(conn.execute(stmt))

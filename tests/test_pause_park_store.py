@@ -235,3 +235,24 @@ def test_open_pause_parks_reads_a_re_parked_leases_newest_park(tmp_path):  # typ
 
     assert park.parked_at == later
     assert park.interrupted_elicitation_id is None
+
+
+def test_open_pause_parks_reads_one_row_per_lease_whatever_the_repark_depth(tmp_path):  # type: ignore[no-untyped-def]
+    from tests.support import count_rows_read
+
+    def parks_at(depth: int, path):  # type: ignore[no-untyped-def]
+        path.mkdir()
+        store = _store(path)
+        for lease in ("lease_a", "lease_b"):
+            for n in range(depth):
+                store.record_pause_park(lease_id=lease, chunk_id="ch_" + lease, parked_at=_NOW + timedelta(minutes=n))
+                if n < depth - 1:
+                    store.record_pause_park_resume(lease_id=lease, resumed_at=_NOW + timedelta(minutes=n, seconds=30))
+        rows = count_rows_read(store._engine, store.open_pause_parks)
+        return rows, {k: v.parked_at for k, v in store.open_pause_parks().items()}
+
+    shallow_rows, shallow = parks_at(2, tmp_path / "shallow")
+    deep_rows, deep = parks_at(8, tmp_path / "deep")
+
+    assert set(shallow) == set(deep) == {"lease_a", "lease_b"}
+    assert shallow_rows == deep_rows == 2

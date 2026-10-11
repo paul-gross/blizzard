@@ -26,12 +26,12 @@ class AskStore:
         self._store = store
 
     def unforwarded_ask(self, lease_id: str) -> OpenAsk | None:
-        stmt = select(asks).where(asks.c.lease_id == lease_id).order_by(asks.c.id.desc())
-        lease_asks = [self._row_to_ask(r) for r in self._store.all(stmt)]
-        parked = select(park_facts.c.question_id).where(
-            park_facts.c.question_id.in_([a.question_id for a in lease_asks])
-        )
-        return newest_unforwarded(lease_asks, forwarded={str(r.question_id) for r in self._store.all(parked)})
+        stmt = select(asks).where(asks.c.lease_id == lease_id).order_by(asks.c.id.desc()).limit(1)
+        newest = [self._row_to_ask(r) for r in self._store.all(stmt)]
+        if not newest:
+            return None
+        parked = select(park_facts.c.question_id).where(park_facts.c.question_id == newest[0].question_id)
+        return newest_unforwarded(newest, forwarded={str(r.question_id) for r in self._store.all(parked)})
 
     def parked_lease_ids(self) -> set[str]:
         pause_parked = {str(r.lease_id) for r in self._store.all(PAUSE_PARKED_LEASE_IDS)}

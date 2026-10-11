@@ -136,3 +136,32 @@ def test_only_an_unforwarded_ask_can_be_superseded() -> None:
     assert AskState.SUPERSEDED in ASK_TRANSITIONS[AskState.UNFORWARDED]
     assert ASK_TRANSITIONS[AskState.FORWARDED] == frozenset({AskState.ANSWERED})
     assert ASK_TRANSITIONS[AskState.ANSWERED] == ASK_TRANSITIONS[AskState.SUPERSEDED] == frozenset()
+
+
+def test_unforwarded_ask_reads_a_flat_number_of_rows_whatever_the_ask_history(tmp_path):  # type: ignore[no-untyped-def]
+    from datetime import UTC, datetime
+
+    from tests.runner_fakes import make_store
+    from tests.support import count_rows_read
+
+    at = datetime(2026, 7, 16, tzinfo=UTC)
+
+    def at_depth(depth: int, path):  # type: ignore[no-untyped-def]
+        path.mkdir()
+        store = make_store(f"sqlite:///{path / 'runner.db'}")
+        for n in range(depth):
+            store.record_ask(
+                lease_id="lease_1", chunk_id="ch_1", question_id=f"q{n}", question="?", options=[], asked_at=at
+            )
+            if n % 2 == 0 and n < depth - 1:
+                store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id=f"q{n}", parked_at=at)
+        ask = store.unforwarded_ask("lease_1")
+        return count_rows_read(
+            store._engine, lambda: store.unforwarded_ask("lease_1")
+        ), ask.question_id if ask else None
+
+    shallow_rows, shallow = at_depth(2, tmp_path / "shallow")
+    deep_rows, deep = at_depth(9, tmp_path / "deep")
+
+    assert shallow == "q1" and deep == "q8"
+    assert shallow_rows == deep_rows <= 2
