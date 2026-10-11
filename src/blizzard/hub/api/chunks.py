@@ -46,7 +46,6 @@ from blizzard.hub.domain.chunk.ingest import (
     ingest_work_refs,
 )
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, FleetSummary, WorkRef
-from blizzard.hub.domain.chunk.ports.work_refs import resolve_live_holders
 from blizzard.hub.domain.execution.decisions import NotEscalated
 from blizzard.hub.domain.execution.detach import NotRouted
 from blizzard.hub.domain.garden.delivery.materialize import DeliveryOutcome
@@ -230,22 +229,18 @@ def list_chunks(
     """The fleet chunk list — derived status per chunk, bounded and keyset-paginated;
     ``?project=`` narrows the rows to that project's chunks, in the same order.
 
-    Only the page's own rows render, but live-holder and blocked-marking derivation still
-    see the whole fleet — a pointer this page renders can be held live by a
-    chunk outside it, same for a dependent's prerequisite."""
+    Reads only what the page renders: facts, routes, blocked markings, and live holders are
+    each resolved for the page's chunks and pointers through narrowed, batched reads. A pointer
+    the page renders held live by a chunk outside it, or a dependent's prerequisite outside it,
+    still resolves — the narrowing happens in the store, not by dropping the off-page side."""
     # ``board_window`` drops ``done`` chunks finished before the window; a page can come back short.
     done_since = services.clock.now() - BOARD_DONE_WINDOW if board_window else None
     names = GraphNames(services.graphs)
-    facts = services.chunks.facts.load_all_facts()
-    routes = services.chunks.route.load_all_routes()
-    # The dependency edges join the same bulk facts pass at this call site, not
-    # inside a store (``bzh:dependency-inversion``).
-    statuses = {chunk_id: chunk_facts.status() for chunk_id, chunk_facts in facts.items()}
-    markings = derive_blocked_prerequisites(services.chunks.dependencies.list_standing_edges(), statuses)
     try:
         page = services.chunks.record.list_page(cursor=cursor, limit=limit, done_since=done_since, project=project)
     except MalformedCursor as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="malformed cursor") from exc
+    facts = services.chunks.facts.load_facts_for([c.chunk_id for c in page.chunks])
     if done_since is not None:
         # The store's exclusion leaves a same-instant movement tie in; the derivation settles it.
         page_chunks = [
@@ -253,19 +248,28 @@ def list_chunks(
         ]
     else:
         page_chunks = page.chunks
-    # Live-holder resolution needs every chunk's pointers, not just this page's —
-    # narrowing to the page could miss a pointer another, unlisted chunk holds live.
-    all_chunks = services.chunks.record.list_all()
+    page_ids = [c.chunk_id for c in page_chunks]
+    routes = services.chunks.route.routes_for(page_ids)
+    # The dependency edges join the facts at this call site, not inside a store
+    # (``bzh:dependency-inversion``): the page dependents' standing edges, with their
+    # prerequisites' statuses read by id when the prerequisite is off the page.
+    edges = services.chunks.dependencies.standing_edges_for_dependents(page_ids)
+    statuses = {chunk_id: chunk_facts.status() for chunk_id, chunk_facts in facts.items()}
+    off_page = sorted({e.prerequisite_chunk_id for e in edges if e.prerequisite_chunk_id not in statuses})
+    if off_page:
+        statuses.update(
+            (chunk_id, chunk_facts.status())
+            for chunk_id, chunk_facts in services.chunks.facts.status_facts_for(off_page).items()
+        )
+    markings = derive_blocked_prerequisites(edges, statuses)
     # One priming call resolves the page's own pinned graphs' name/entry-node/node-names
     # up front — narrowed to the page, since nothing outside it is rendered.
     names.prime(chunk.graph_id for chunk in page_chunks)
     # Unlike the fleet-wide status/holder reads above, delivery belongs only to
     # rendered rows: one narrowed, batched read over this page's ids.
     delivery_sources = services.chunks.artifacts.delivery_sources_for([chunk.chunk_id for chunk in page_chunks])
-    # Derives from the chunks and statuses already loaded above, no further fact load.
-    live_holders = resolve_live_holders(
-        ((p, chunk.chunk_id) for chunk in all_chunks for p in chunk.work_refs), statuses
-    )
+    # A pointer the page renders can be held live by a chunk outside it; the store narrows to live candidates.
+    live_holders = services.chunks.work_refs.live_holders(p for chunk in page_chunks for p in chunk.work_refs)
     # The page's routed runners' registered names — one batched read, narrowed to the page.
     runner_names = services.registry.names_for(
         route.runner_id for chunk in page_chunks if (route := routes.get(chunk.chunk_id)) is not None
