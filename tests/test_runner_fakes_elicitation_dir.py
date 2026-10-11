@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import gc
 import os
+from dataclasses import replace
 from pathlib import Path
 
 from blizzard.runner.harness.adapter import WorkerHandle
@@ -26,5 +27,17 @@ def test_discarding_a_context_removes_its_fallback_elicitation_directory(tmp_pat
     root = ctx.elicitation_files.root
     assert root and os.path.isdir(root)
     del ctx
+    gc.collect()
+    assert not os.path.exists(root)
+
+
+def test_a_derived_context_keeps_the_directory_alive_until_every_context_is_gone(tmp_path: Path) -> None:
+    ctx = _context(tmp_path)
+    root = ctx.elicitation_files.root
+    derived = replace(ctx, config=ctx.config)
+    del ctx
+    gc.collect()
+    assert os.path.isdir(root)
+    del derived
     gc.collect()
     assert not os.path.exists(root)

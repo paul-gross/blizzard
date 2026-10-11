@@ -1427,10 +1427,13 @@ def make_context(
     # Load-bearing — unlike `worker_stdout_dir`, never the empty-disables convention,
     # so an unset config falls back to a fresh throwaway directory rather than "" (which
     # would make every `FakeHarness.judge` write raise `IsADirectoryError`/`FileNotFoundError`).
-    # The fallback directory is removed when the returned context is discarded.
+    # The fallback directory is removed when its `ElicitationFiles` is discarded — derived contexts
+    # (`dataclasses.replace`) share that instance, so it outlives any one `LoopContext`.
     _fallback_root = None if resolved_config.elicitation_output_dir else tempfile.mkdtemp(prefix="blizzard-elicit-")
     _elicitation_root = resolved_config.elicitation_output_dir or _fallback_root or ""
     _elicitation_files = ElicitationFiles(_elicitation_root)
+    if _fallback_root is not None:
+        weakref.finalize(_elicitation_files, shutil.rmtree, _fallback_root, ignore_errors=True)
     _stores = make_stores(store)
     _identity = RunnerIdentityHolder()
     if registered:
@@ -1482,8 +1485,6 @@ def make_context(
         harnesses=_harnesses,
         harness_versions=harness_versions,
     )
-    if _fallback_root is not None:
-        weakref.finalize(context, shutil.rmtree, _fallback_root, ignore_errors=True)
     return context
 
 
