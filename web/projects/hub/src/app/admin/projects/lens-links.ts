@@ -3,12 +3,12 @@ import { computed, inject, type Signal } from '@angular/core';
 import { injectLensedProject } from '../../core/lensed-project';
 import { ProjectLens } from '../../core/project-lens';
 import type { ProjectLinkKind } from './projects.mutations';
-import { linkedNames } from './projects.model';
+import { linkedKeys } from './projects.model';
 import { injectProjectRepositoryLinksQuery, injectProjectSourceLinksQuery } from './projects.query';
 
 /** A tenant list under the project lens: on All every record, under a project the ones it links. */
 export interface LensLinks {
-  /** The names the lensed project links, or `null` on All, where nothing is narrowed. */
+  /** The keys the lensed project links — a source's name, a repository's id, or `null` on All, where nothing is narrowed. */
   readonly names: Signal<ReadonlySet<string> | null>;
   /** Whether the lensed project's links are still loading, so the narrowed list is not known yet. */
   readonly pending: Signal<boolean>;
@@ -28,7 +28,7 @@ export function injectLensLinks(kind: ProjectLinkKind): LensLinks {
   const query = kind === 'source' ? injectProjectSourceLinksQuery(lens.slug) : injectProjectRepositoryLinksQuery(lens.slug);
   const names = computed(() => {
     if (!lens.lensed()) return null;
-    return linkedNames(query.data() ?? []);
+    return linkedKeys(query.data() ?? []);
   });
   /** The lensed project's name, its slug until the projects read holds it. */
   const lensName = (): string => project()?.name ?? lens.slug() ?? '';
@@ -42,10 +42,11 @@ export function injectLensLinks(kind: ProjectLinkKind): LensLinks {
   };
 }
 
-/** The records `names` keeps — every one when `names` is `null`. */
-export function withinLens<T extends { readonly name: string }>(
+/** The records whose `keyOf` the lens keeps — every one when `keys` is `null`. */
+export function withinLens<T>(
   records: readonly T[],
-  names: ReadonlySet<string> | null,
+  keyOf: (record: T) => string,
+  keys: ReadonlySet<string> | null,
 ): readonly T[] {
-  return names === null ? records : records.filter((record) => names.has(record.name));
+  return keys === null ? records : records.filter((record) => keys.has(keyOf(record)));
 }

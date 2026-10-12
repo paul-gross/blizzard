@@ -17,9 +17,13 @@ export function repositoryRows(
   filter: LifecycleFilter,
 ): readonly ConfigRowVm[] {
   return filterByLifecycle(repositories, filter).map((repository) => ({
-    key: repository.name,
-    title: repository.name,
-    sub: [`${repository.owner}/${repository.repo}`, `base ${repository.base_branch}`],
+    key: repository.repository_id,
+    title: repository.slug,
+    sub: [
+      ...(repository.name === repository.slug ? [] : [repository.name]),
+      `${repository.owner}/${repository.repo}`,
+      `base ${repository.base_branch}`,
+    ],
     badges: repositoryBadges(repository),
     revision: repository.revision,
     retired: repository.retired ?? false,
@@ -30,9 +34,10 @@ export function repositoryRows(
 export function repositoryRecordVm(repository: RepositorySummary | undefined): ConfigRecordVm | null {
   if (!repository) return null;
   return {
-    name: repository.name,
+    name: repository.slug,
     badges: repositoryBadges(repository),
     facts: [
+      { label: 'Name', value: factText(repository.name) },
       { label: 'Forge API', value: factText(repository.forge_api_url) },
       { label: 'Owner', value: factText(repository.owner) },
       { label: 'Repository', value: factText(repository.repo) },
@@ -50,15 +55,11 @@ export function repositoryRecordVm(repository: RepositorySummary | undefined): C
   };
 }
 
-/** A repository's form fields. The name is set on create alone. */
+/** A repository's form fields. The slug is the handle people type and may be renamed; the
+ * name is its display label, and left blank on create it takes the slug. */
 export const REPOSITORY_FIELDS: readonly ConfigFieldDef[] = [
-  {
-    key: 'name',
-    label: 'Name',
-    kind: 'text',
-    required: true,
-    createOnly: true,
-  },
+  { key: 'slug', label: 'Slug', kind: 'text', required: true },
+  { key: 'name', label: 'Name', kind: 'text' },
   { key: 'forge_api_url', label: 'Forge API', kind: 'text', required: true },
   { key: 'owner', label: 'Owner', kind: 'text', required: true },
   { key: 'repo', label: 'Repository', kind: 'text', required: true },

@@ -4,6 +4,8 @@ import { describe, expect, it } from 'vitest';
 import { repositoryBadges, repositoryRecordVm, repositoryRows } from './repositories.model';
 
 const BLIZZARD: RepositorySummary = {
+  repository_id: 'repo_1',
+  slug: 'blizzard',
   name: 'blizzard',
   owner: 'paul-gross',
   repo: 'blizzard',
@@ -14,7 +16,7 @@ const BLIZZARD: RepositorySummary = {
   created_at: '2026-01-01T00:00:00Z',
   created_by: 'pgross',
 };
-const OLD: RepositorySummary = { ...BLIZZARD, name: 'old', retired: true };
+const OLD: RepositorySummary = { ...BLIZZARD, repository_id: 'repo_2', slug: 'old', name: 'Old one', retired: true };
 
 describe('repositoryBadges', () => {
   it('badges only a retired repository', () => {
@@ -25,10 +27,10 @@ describe('repositoryBadges', () => {
 
 describe('repositoryRows', () => {
   it('filters by lifecycle and maps each repository', () => {
-    expect(repositoryRows([BLIZZARD, OLD], 'all').map((r) => r.key)).toEqual(['blizzard', 'old']);
+    expect(repositoryRows([BLIZZARD, OLD], 'all').map((r) => r.key)).toEqual(['repo_1', 'repo_2']);
     expect(repositoryRows([BLIZZARD, OLD], 'active')).toEqual([
       {
-        key: 'blizzard',
+        key: 'repo_1',
         title: 'blizzard',
         sub: ['paul-gross/blizzard', 'base master'],
         badges: [],
@@ -47,6 +49,7 @@ describe('repositoryRecordVm', () => {
   it('shows the fields, revision, and token link', () => {
     const vm = repositoryRecordVm(BLIZZARD)!;
     expect(vm.facts.map((f) => [f.label, f.value])).toEqual([
+      ['Name', 'blizzard'],
       ['Forge API', 'https://api.github.com'],
       ['Owner', 'paul-gross'],
       ['Repository', 'blizzard'],
@@ -56,6 +59,10 @@ describe('repositoryRecordVm', () => {
     expect(vm.revision).toBe(2);
     expect(vm.links?.links.map((l) => l.name)).toEqual(['gh-blizzard']);
     expect(vm.hasHistory).toBe(true);
+  });
+
+  it('titles a row by slug and shows a name that differs from it', () => {
+    expect(repositoryRows([OLD], 'all')[0]).toMatchObject({ title: 'old', sub: ['Old one', 'paul-gross/blizzard', 'base master'] });
   });
 
   it('notes a retired repository', () => {

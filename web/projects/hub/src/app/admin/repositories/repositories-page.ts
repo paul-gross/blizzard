@@ -50,7 +50,7 @@ export class RepositoriesPage {
 
   protected readonly selectedKey = injectChildRouteParam('key');
   protected readonly rows = computed<readonly ConfigRowVm[]>(() =>
-    repositoryRows(withinLens(this.repositoriesQuery.data() ?? [], this.lensLinks.names()), this.lifecycle()),
+    repositoryRows(withinLens(this.repositoriesQuery.data() ?? [], (repository) => repository.repository_id, this.lensLinks.names()), this.lifecycle()),
   );
   protected readonly state = computed<KitAsyncStateValue>(() =>
     lensedListState(
@@ -102,7 +102,7 @@ export class RepositoriesPage {
     this.createMutation.mutate(body, {
       onSuccess: () => {
         this.createOpen.set(false);
-        void this.router.navigate(this.lens.link(['/admin', 'repositories', body.name]), {
+        void this.router.navigate(this.lens.link(['/admin', 'repositories', body.slug]), {
           queryParamsHandling: 'preserve',
         });
       },

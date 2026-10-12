@@ -26,7 +26,17 @@ const SOURCES = {
   ],
 };
 const REPOSITORIES = {
-  repositories: [{ name: 'core', owner: 'acme', repo: 'core', base_branch: 'main', revision: 1 }],
+  repositories: [
+    {
+      repository_id: 'repo_c',
+      slug: 'core',
+      name: 'Core',
+      owner: 'acme',
+      repo: 'core',
+      base_branch: 'main',
+      revision: 1,
+    },
+  ],
 };
 const SOURCE_LINKS = {
   source_links: [

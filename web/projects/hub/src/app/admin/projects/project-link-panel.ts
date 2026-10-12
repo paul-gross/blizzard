@@ -23,8 +23,8 @@ export class ProjectLinkPanel {
   readonly linkLabel = input.required<string>();
   /** Whether the viewer may link and unlink here. */
   readonly canEdit = input(false);
-  /** The link a write is in flight for, whose Unlink waits. */
-  readonly pendingName = input<string | null>(null);
+  /** The key of the link a write is in flight for, whose Unlink waits. */
+  readonly pendingKey = input<string | null>(null);
   readonly error = input<string | null>(null);
   readonly testid = input.required<string>();
 

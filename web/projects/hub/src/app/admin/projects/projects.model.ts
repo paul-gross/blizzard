@@ -179,6 +179,9 @@ export function formerSlugs(
 
 /** One stored link a project holds, as its panel lists it. */
 export interface ProjectLinkRowVm {
+  /** What a link call names: a source's name, a repository's id. */
+  readonly key: string;
+  /** What the row shows: a source's name, a repository's slug. */
   readonly name: string;
   /** What the linked record is, in a few words. */
   readonly detail: string;
@@ -187,9 +190,14 @@ export interface ProjectLinkRowVm {
   readonly revision: number | null;
 }
 
-/** The names of the links in force — an unlinked link stays in the listing with `linked: false`. */
-export function linkedNames(links: readonly (SourceLinkView | RepositoryLinkView)[]): ReadonlySet<string> {
-  return new Set(links.filter((link) => link.linked).map((link) => link.name));
+/** What a link names its record by: a repository's id, a work source's name. */
+export function linkKey(link: SourceLinkView | RepositoryLinkView): string {
+  return 'repository_id' in link ? link.repository_id : link.name;
+}
+
+/** The keys of the links in force — an unlinked link stays in the listing with `linked: false`. */
+export function linkedKeys(links: readonly (SourceLinkView | RepositoryLinkView)[]): ReadonlySet<string> {
+  return new Set(links.filter((link) => link.linked).map(linkKey));
 }
 
 /** A source as its link row describes it. */
@@ -201,7 +209,7 @@ export function sourceDetail(source: WorkSourceSummary | undefined): string {
 /** A repository as its link row describes it. */
 export function repositoryDetail(repository: RepositorySummary | undefined): string {
   if (!repository) return '';
-  return `${repository.owner}/${repository.repo} · ${repository.base_branch}`;
+  return `${repository.name} · ${repository.owner}/${repository.repo} · ${repository.base_branch}`;
 }
 
 /** The source links in force, built-in first, then by name. */
@@ -213,6 +221,7 @@ export function sourceLinkRows(
   return links
     .filter((link) => link.linked)
     .map((link) => ({
+      key: link.name,
       name: link.name,
       detail: link.built_in ? 'built-in · linked to every project' : sourceDetail(byName.get(link.name)),
       builtIn: link.built_in === true,
@@ -221,17 +230,18 @@ export function sourceLinkRows(
     .sort((a, b) => Number(b.builtIn) - Number(a.builtIn) || a.name.localeCompare(b.name));
 }
 
-/** The repository links in force, by name. */
+/** The repository links in force, by slug. */
 export function repositoryLinkRows(
   links: readonly RepositoryLinkView[],
   repositories: readonly RepositorySummary[],
 ): readonly ProjectLinkRowVm[] {
-  const byName = new Map(repositories.map((repository) => [repository.name, repository]));
+  const byId = new Map(repositories.map((repository) => [repository.repository_id, repository]));
   return links
     .filter((link) => link.linked)
     .map((link) => ({
-      name: link.name,
-      detail: repositoryDetail(byName.get(link.name)),
+      key: link.repository_id,
+      name: link.slug,
+      detail: repositoryDetail(byId.get(link.repository_id)),
       builtIn: false,
       revision: link.revision,
     }))
@@ -247,15 +257,20 @@ export interface LinkChoiceVm {
 /** The live records of a kind the project does not link yet — a retired record takes no new link
  * from the board, and the built-in source is linked already. */
 export function linkChoices(
-  records: readonly { readonly name: string; readonly retired?: boolean | null; readonly built_in?: boolean | null }[],
+  records: readonly {
+    readonly key: string;
+    readonly name: string;
+    readonly retired?: boolean | null;
+    readonly built_in?: boolean | null;
+  }[],
   linked: ReadonlySet<string>,
-  describe: (name: string) => string,
+  describe: (key: string) => string,
 ): readonly LinkChoiceVm[] {
   return records
-    .filter((record) => !record.retired && !record.built_in && !linked.has(record.name))
+    .filter((record) => !record.retired && !record.built_in && !linked.has(record.key))
     .map((record) => {
-      const detail = describe(record.name);
-      return { value: record.name, label: detail ? `${record.name} — ${detail}` : record.name };
+      const detail = describe(record.key);
+      return { value: record.key, label: detail ? `${record.name} — ${detail}` : record.name };
     })
     .sort((a, b) => a.value.localeCompare(b.value));
 }
@@ -324,7 +339,11 @@ export function sourceChoices(
   links: readonly SourceLinkView[] | undefined,
 ): readonly LinkChoiceVm[] {
   const byName = new Map((sources ?? []).map((source) => [source.name, source]));
-  return linkChoices(sources ?? [], linkedNames(links ?? []), (name) => sourceDetail(byName.get(name)));
+  return linkChoices(
+    (sources ?? []).map((source) => ({ ...source, key: source.name })),
+    linkedKeys(links ?? []),
+    (name) => sourceDetail(byName.get(name)),
+  );
 }
 
 /** The repositories a link dialog offers. */
@@ -332,8 +351,12 @@ export function repositoryChoices(
   repositories: readonly RepositorySummary[] | undefined,
   links: readonly RepositoryLinkView[] | undefined,
 ): readonly LinkChoiceVm[] {
-  const byName = new Map((repositories ?? []).map((repository) => [repository.name, repository]));
-  return linkChoices(repositories ?? [], linkedNames(links ?? []), (name) => repositoryDetail(byName.get(name)));
+  const byId = new Map((repositories ?? []).map((repository) => [repository.repository_id, repository]));
+  return linkChoices(
+    (repositories ?? []).map((repository) => ({ ...repository, key: repository.repository_id, name: repository.slug })),
+    linkedKeys(links ?? []),
+    (id) => repositoryDetail(byId.get(id)),
+  );
 }
 
 /** A tenant list's state under the lens: the lensed links' failure or wait first, then the list's own. */

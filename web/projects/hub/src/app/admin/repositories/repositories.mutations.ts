@@ -3,10 +3,10 @@ import { QueryClient, injectMutation } from '@tanstack/angular-query-experimenta
 
 import {
   createRepositoryApiRepositoriesPost,
-  enableRepositoryApiRepositoriesNameEnablePost,
+  enableRepositoryApiRepositoriesRepositoryEnablePost,
   hubConfigKey,
-  patchRepositoryApiRepositoriesNamePatch,
-  retireRepositoryApiRepositoriesNameRetirePost,
+  patchRepositoryApiRepositoriesRepositoryPatch,
+  retireRepositoryApiRepositoriesRepositoryRetirePost,
   type RepositoryDocument,
   type RepositoryPatchRequest,
 } from 'fleet';
@@ -18,14 +18,14 @@ import {
 
 /** A repository edit — the sparse patch against the shown `revision`. */
 export interface RepositoryEditVars {
-  readonly name: string;
+  readonly repositoryId: string;
   readonly revision: number;
   readonly body: RepositoryPatchRequest;
 }
 
 /** Retire or re-enable a repository at the shown `revision`. */
 export interface RepositoryLifecycleVars {
-  readonly name: string;
+  readonly repositoryId: string;
   readonly revision: number;
   readonly retired: boolean;
 }
@@ -47,15 +47,15 @@ export function injectCreateRepositoryMutation() {
   }));
 }
 
-/** `PATCH /api/repositories/{name}` with `If-Match` — a stale revision is a 409 the
+/** `PATCH /api/repositories/{repository}` with `If-Match` — a stale revision is a 409 the
  * caller shows; the settle refetches the record so the next save diffs against it. */
 export function injectEditRepositoryMutation() {
   const queryClient = inject(QueryClient);
   return injectMutation(() => ({
     mutationKey: editRepositoryMutationKey,
     mutationFn: async (vars: RepositoryEditVars): Promise<void> => {
-      const { error } = await patchRepositoryApiRepositoriesNamePatch({
-        path: { name: vars.name },
+      const { error } = await patchRepositoryApiRepositoriesRepositoryPatch({
+        path: { repository: vars.repositoryId },
         headers: { 'if-match': vars.revision },
         body: vars.body,
         throwOnError: false,
@@ -66,7 +66,7 @@ export function injectEditRepositoryMutation() {
   }));
 }
 
-/** `POST /api/repositories/{name}/retire|enable` with `If-Match`, routed by the
+/** `POST /api/repositories/{repository}/retire|enable` with `If-Match`, routed by the
  * desired `retired` state. */
 export function injectRepositoryLifecycleMutation() {
   const queryClient = inject(QueryClient);
@@ -74,10 +74,10 @@ export function injectRepositoryLifecycleMutation() {
     mutationKey: repositoryLifecycleMutationKey,
     mutationFn: async (vars: RepositoryLifecycleVars): Promise<void> => {
       const call = vars.retired
-        ? retireRepositoryApiRepositoriesNameRetirePost
-        : enableRepositoryApiRepositoriesNameEnablePost;
+        ? retireRepositoryApiRepositoriesRepositoryRetirePost
+        : enableRepositoryApiRepositoriesRepositoryEnablePost;
       const { error } = await call({
-        path: { name: vars.name },
+        path: { repository: vars.repositoryId },
         headers: { 'if-match': vars.revision },
         throwOnError: false,
       });

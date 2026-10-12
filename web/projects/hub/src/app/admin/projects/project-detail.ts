@@ -259,12 +259,12 @@ export class ProjectDetail {
     this.linkOpen.set(kind);
   }
 
-  protected onLink(kind: ProjectLinkKind, name: string): void {
+  protected onLink(kind: ProjectLinkKind, key: string): void {
     const projectId = this.projectId();
     if (projectId === null) return;
     this.linkError.set(null);
     this.linkMutation.mutate(
-      { projectId, kind, name, linked: true, revision: null },
+      { projectId, kind, name: key, linked: true, revision: null },
       {
         onSuccess: () => this.linkOpen.set(null),
         onError: (error) => this.linkError.set(errorMessage(error, 'Link failed.')),
@@ -276,9 +276,9 @@ export class ProjectDetail {
     const projectId = this.projectId();
     if (projectId === null) return;
     this.linkFailure.set(null);
-    this.pendingUnlink.set(row.name);
+    this.pendingUnlink.set(row.key);
     this.linkMutation.mutate(
-      { projectId, kind, name: row.name, linked: false, revision: row.revision },
+      { projectId, kind, name: row.key, linked: false, revision: row.revision },
       {
         onError: (error) => this.linkFailure.set({ kind, message: errorMessage(error, 'Unlink failed.') }),
         onSettled: () => this.pendingUnlink.set(null),

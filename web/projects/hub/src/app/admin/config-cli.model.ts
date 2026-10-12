@@ -11,7 +11,8 @@ const CLI_CHANGE_PATH: Record<AdminRecordKind, string> = {
   [RecordKind.SECRET]: 'blizzard hub secret set',
 };
 
-/** The command that changes the record `kind` + `name` names. */
+/** The command that changes the record `kind` + `name` names — `name` is what the verb takes: a
+ * repository's slug, a source's or secret's name. */
 export function cliChangeCommand(kind: AdminRecordKind, name: string): string {
   return `${CLI_CHANGE_PATH[kind]} ${name}`;
 }
@@ -24,8 +25,9 @@ export function cliChangeCommand(kind: AdminRecordKind, name: string): string {
 export function detailCliCommand(
   mode: ViewportMode,
   kind: AdminRecordKind,
-  record: { readonly name: string; readonly built_in?: boolean } | null | undefined,
+  record: { readonly name: string; readonly built_in?: boolean } | string | null | undefined,
 ): string | null {
-  if (mode !== 'mobile' || !record || record.built_in) return null;
-  return cliChangeCommand(kind, record.name);
+  if (mode !== 'mobile' || !record) return null;
+  if (typeof record === 'string') return cliChangeCommand(kind, record);
+  return record.built_in ? null : cliChangeCommand(kind, record.name);
 }

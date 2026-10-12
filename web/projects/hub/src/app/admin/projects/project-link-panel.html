@@ -27,7 +27,7 @@
               @if (canEdit()) {
                 <fleet-kit-button
                   variant="danger"
-                  [disabled]="pendingName() === row.name"
+                  [disabled]="pendingKey() === row.key"
                   [testid]="testid() + '-unlink-' + row.name"
                   (click)="unlink.emit(row)"
                 >
