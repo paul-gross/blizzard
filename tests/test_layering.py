@@ -525,6 +525,7 @@ def test_no_protocol_is_declared_under_runner_store() -> None:
 _RUNNER_STORE_INTERNAL_DIR = _RUNNER_STORE_DIR / "internal"
 _RUNNER_STORE_SCHEMA_FILE = _RUNNER_STORE_DIR / "schema.py"
 _RUNNER_STORE_ERRORS_FILE = _RUNNER_STORE_DIR / "errors.py"
+_RUNNER_STORE_GUARD_FILE = _RUNNER_STORE_DIR / "runner_guard.py"
 _RUNNER_STORE_MIGRATIONS_DIR = _RUNNER_STORE_DIR / "migrations"
 _RUNNER_COMPOSITION_FILE = _RUNNER_DIR / "composition.py"
 _RUNNER_APP_FILE = _RUNNER_DIR / "app.py"
@@ -564,13 +565,13 @@ def _sqlalchemy_import_names(path: Path) -> set[str]:
 
 def test_sqlalchemy_is_imported_only_from_the_store_seam() -> None:
     """AC3: ``sqlalchemy`` is a name the store's own adapters,
-    schema, errors and migrations may hold — every other module takes the Protocol seam,
+    schema, errors, statement guard and migrations may hold — every other module takes the Protocol seam,
     never the driver underneath it, bar the individually-justified exceptions above."""
     violations: list[str] = []
     for path in sorted(_RUNNER_DIR.rglob("*.py")):
         if (
             path.is_relative_to(_RUNNER_STORE_INTERNAL_DIR)
-            or path in (_RUNNER_STORE_SCHEMA_FILE, _RUNNER_STORE_ERRORS_FILE)
+            or path in (_RUNNER_STORE_SCHEMA_FILE, _RUNNER_STORE_ERRORS_FILE, _RUNNER_STORE_GUARD_FILE)
             or path.is_relative_to(_RUNNER_STORE_MIGRATIONS_DIR)
         ):
             continue

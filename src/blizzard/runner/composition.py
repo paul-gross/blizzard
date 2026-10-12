@@ -78,6 +78,7 @@ from blizzard.runner.store.internal.token_store import TokenStore
 from blizzard.runner.store.internal.transcript_ledger_store import TranscriptLedgerStore
 from blizzard.runner.store.internal.usage_store import UsageStore
 from blizzard.runner.store.internal.workspace_prompt_store import WorkspacePromptStore
+from blizzard.runner.store.runner_guard import install_runner_guard
 from blizzard.runner.stores import RunnerReadStores, RunnerStores
 from blizzard.runner.subscriptions.internal.credential_renewer_factory import select_renewer
 from blizzard.runner.subscriptions.internal.subprocess_one_shot_process import SubprocessOneShotProcess
@@ -241,18 +242,22 @@ def build_runner_process(
     from; the graph seeds it from the store's identity row either way."""
     platform_tracing = platform_tracing or DisabledPlatformTracing()
     identity = identity or RunnerIdentityHolder()
+    install_runner_guard()
     engine = create_engine_from_url(config.db_url)
     platform_tracing.instrument_engine(engine)
     executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="blizzard-spawner")
     try:
-        stores, connections = build_stores_and_connections(
-            engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store"))
-        )
         readiness = ReadinessService(
             reader=SqlAlchemyStoreStatusReader(engine), expected_revision=migration_runner(config).script_head()
         )
-        # Seeded only from a store at the code's schema head: a store mid-migration fails readiness, not boot.
-        registered = stores.identity.runner_identity() if readiness.evaluate().ready else None
+        # Bound and seeded only from a store at the code's schema head: a store mid-migration fails readiness, not
+        # boot, and binds when registration adopts an id.
+        ready = readiness.evaluate().ready
+        connections = RunnerStoreConnections(engine, RunnerStoreErrorFactory(get_logger("blizzard.runner.store")))
+        if ready:
+            connections.bind_to_stored()
+        stores = _build_stores(connections)
+        registered = stores.identity.runner_identity() if ready else None
         if registered is not None:
             identity.hold(registered)
         clock = SystemClock()
@@ -371,19 +376,10 @@ def _otlp_exporter(environ: Mapping[str, str] | None) -> OtlpTraceExporter:
     )
 
 
-def build_stores(engine: Engine, *, errors: RunnerStoreErrorFactory) -> RunnerStores:
-    """Construct and wire every extracted concept-store adapter over a migrated engine."""
-    return _build_stores(RunnerStoreConnections(engine, errors))
-
-
-def build_stores_and_connections(
-    engine: Engine, *, errors: RunnerStoreErrorFactory
-) -> tuple[RunnerStores, RunnerStoreConnections]:
-    """Build the store bundle and hand back the ``RunnerStoreConnections`` every adapter in it
-    shares, so a caller can wire a further ``store/internal/`` collaborator over the same
-    instance."""
-    connections = RunnerStoreConnections(engine, errors)
-    return _build_stores(connections), connections
+def build_stores(engine: Engine, *, errors: RunnerStoreErrorFactory, runner_id: str | None) -> RunnerStores:
+    """Construct and wire every extracted concept-store adapter over a migrated engine, bound to ``runner_id`` (or
+    unbound, ``None``)."""
+    return _build_stores(RunnerStoreConnections(engine, errors, runner_id))
 
 
 def _build_stores(connections: RunnerStoreConnections) -> RunnerStores:
@@ -419,5 +415,8 @@ def _build_stores(connections: RunnerStoreConnections) -> RunnerStores:
 
 def build_read_stores(engine: Engine, *, errors: RunnerStoreErrorFactory) -> RunnerReadStores:
     """The read-only bundle a controller-facing collaborator takes — narrows build_stores's
-    bundle over the same adapter instances, never a second one."""
-    return RunnerReadStores.of(build_stores(engine, errors=errors))
+    bundle over the same adapter instances, never a second one — bound to the runner the store's identity row names,
+    or unbound (reading as empty) when it holds none."""
+    connections = RunnerStoreConnections(engine, errors)
+    connections.bind_to_stored()
+    return RunnerReadStores.of(_build_stores(connections))

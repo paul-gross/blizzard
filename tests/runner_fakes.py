@@ -137,6 +137,10 @@ from blizzard.tools.invariants import RunnerInvariants, Violation
 from blizzard.wire.chunk import HubAdvanceResponse
 from blizzard.wire.transcript_segment import TranscriptSegmentRecord
 
+#: The runner every test store is bound to unless a test names another — the id :class:`FakeHub` mints by default, so
+#: a fixture's registration adopts the binding it already holds.
+FIXTURE_RUNNER_ID = "r1"
+
 
 class SqlAlchemyRunnerStore(
     LeaseRecordStore,
@@ -172,8 +176,11 @@ class SqlAlchemyRunnerStore(
     test fixture wants one object standing in for every concept at once, structurally
     satisfying every one of the nineteen concept Protocols by inheritance."""
 
-    def __init__(self, engine: Engine, errors: RunnerStoreErrorFactory) -> None:
-        store = RunnerStoreConnections(engine, errors)
+    def __init__(
+        self, engine: Engine, errors: RunnerStoreErrorFactory, runner_id: str | None = FIXTURE_RUNNER_ID
+    ) -> None:
+        store = RunnerStoreConnections(engine, errors, runner_id)
+        self.connections = store
         LeaseRecordStore.__init__(self, store)
         LeaseSessionStore.__init__(self, store)
         LeaseLivenessStore.__init__(self, store)
@@ -217,11 +224,11 @@ def record_usage(usage, **kwargs):  # type: ignore[no-untyped-def]
     return usage.record_usage(cost=cost, **kwargs)
 
 
-def make_store(tmp_path_url: str) -> SqlAlchemyRunnerStore:
-    """A migrated (schema-created) runner store over a fresh sqlite file."""
+def make_store(tmp_path_url: str, runner_id: str | None = FIXTURE_RUNNER_ID) -> SqlAlchemyRunnerStore:
+    """A migrated (schema-created) runner store over a fresh sqlite file, bound to ``runner_id``."""
     engine = create_engine_from_url(tmp_path_url)
     _create_all(runner_metadata, engine)
-    return SqlAlchemyRunnerStore(engine, runner_store_errors())
+    return SqlAlchemyRunnerStore(engine, runner_store_errors(), runner_id)
 
 
 _runner_prototype_lock = threading.Lock()
@@ -318,8 +325,8 @@ def strip_transcript_segments(store: object) -> None:
     runtime, the same flat :class:`SqlAlchemyRunnerStore` this asserts for."""
     assert isinstance(store, SqlAlchemyRunnerStore)
     with store._engine.begin() as conn:
-        conn.execute(transcript_outbound_buffer.delete())
-        conn.execute(transcript_segments.delete())
+        conn.execute(store.connections.delete(transcript_outbound_buffer))
+        conn.execute(store.connections.delete(transcript_segments))
 
 
 class StubbedBufferBytesStore:
@@ -412,7 +419,7 @@ class FakeHub:
     and omits the id from a `chunk_statuses` response.
     """
 
-    def __init__(self, *, default_runner_id: str = "r1") -> None:
+    def __init__(self, *, default_runner_id: str = FIXTURE_RUNNER_ID) -> None:
         # The runner id this client's token was issued to — what a registration replies, and what the
         # unscripted `chunk_statuses` fallback's route reports as holding the chunk.
         self.default_runner_id = default_runner_id

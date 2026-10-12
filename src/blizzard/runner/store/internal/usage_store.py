@@ -6,6 +6,7 @@ import json
 from collections.abc import Sequence
 from datetime import datetime, timedelta
 
+import sqlalchemy as sa
 from sqlalchemy import Connection, Row, and_, case, func, select
 
 from blizzard.foundation.credential_renewal import RenewalFailureReason, RenewalResult
@@ -86,23 +87,24 @@ class UsageStore:
         self._store = store
 
     def usage_since(self, at: datetime) -> UsageTotals:
-        stmt = select(
-            func.coalesce(func.sum(usage_facts.c.input_tokens), 0),
-            func.coalesce(func.sum(usage_facts.c.output_tokens), 0),
-            func.coalesce(func.sum(usage_facts.c.cache_read_tokens), 0),
-            func.coalesce(func.sum(usage_facts.c.cache_create_tokens), 0),
-            func.coalesce(func.sum(usage_facts.c.cost_usd), 0.0),
-            func.coalesce(func.sum(case((usage_facts.c.cost_usd.is_(None), 1), else_=0)), 0),
+        stmt = self._store.select(
+            usage_facts,
+            func.coalesce(func.sum(usage_facts.c.input_tokens), 0).label("input_tokens"),
+            func.coalesce(func.sum(usage_facts.c.output_tokens), 0).label("output_tokens"),
+            func.coalesce(func.sum(usage_facts.c.cache_read_tokens), 0).label("cache_read_tokens"),
+            func.coalesce(func.sum(usage_facts.c.cache_create_tokens), 0).label("cache_create_tokens"),
+            func.coalesce(func.sum(usage_facts.c.cost_usd), 0.0).label("cost_usd"),
+            func.coalesce(func.sum(case((usage_facts.c.cost_usd.is_(None), 1), else_=0)), 0).label("cost_partial"),
         ).where(usage_facts.c.recorded_at >= at)
         with self._store.connect() as conn:
             row = conn.execute(stmt).one()
         return UsageTotals(
-            input_tokens=int(row[0]),
-            output_tokens=int(row[1]),
-            cache_read_tokens=int(row[2]),
-            cache_create_tokens=int(row[3]),
-            cost_usd=float(row[4]),
-            cost_partial=bool(row[5]),
+            input_tokens=int(row.input_tokens),
+            output_tokens=int(row.output_tokens),
+            cache_read_tokens=int(row.cache_read_tokens),
+            cache_create_tokens=int(row.cache_create_tokens),
+            cost_usd=float(row.cost_usd),
+            cost_partial=bool(row.cost_partial),
         )
 
     def session_cost_basis(self, lease_id: str) -> SessionCostBasis | None:
@@ -111,7 +113,7 @@ class UsageStore:
 
     def _session_cost_basis(self, conn: Connection, lease_id: str) -> SessionCostBasis | None:
         row = conn.execute(
-            select(leases.c.session_id, leases.c.harness_id).where(leases.c.lease_id == lease_id)
+            self._store.select(leases, leases.c.session_id, leases.c.harness_id).where(leases.c.lease_id == lease_id)
         ).one_or_none()
         if row is None or not row.session_id or not row.harness_id:
             return None
@@ -122,17 +124,20 @@ class UsageStore:
             + usage_facts.c.cache_create_tokens
         )
         banked = conn.execute(
-            select(
-                func.coalesce(func.sum(tokens), 0),
+            self._store.select(
+                sa.join(usage_facts, leases, leases.c.lease_id == usage_facts.c.lease_id),
+                func.coalesce(func.sum(tokens), 0).label("token_total"),
                 # Shares sum. A non-share row's figure is a running total, so the largest
                 # of them already covers every earlier one.
-                func.coalesce(func.sum(case((usage_facts.c.cost_is_share, usage_facts.c.cost_usd))), 0.0)
-                + func.coalesce(func.max(case((~usage_facts.c.cost_is_share, usage_facts.c.reported_cost_usd))), 0.0),
-            )
-            .select_from(usage_facts.join(leases, leases.c.lease_id == usage_facts.c.lease_id))
-            .where(and_(leases.c.session_id == row.session_id, leases.c.harness_id == row.harness_id))
+                (
+                    func.coalesce(func.sum(case((usage_facts.c.cost_is_share, usage_facts.c.cost_usd))), 0.0)
+                    + func.coalesce(
+                        func.max(case((~usage_facts.c.cost_is_share, usage_facts.c.reported_cost_usd))), 0.0
+                    )
+                ).label("banked_cost_usd"),
+            ).where(and_(leases.c.session_id == row.session_id, leases.c.harness_id == row.harness_id))
         ).one()
-        return SessionCostBasis(token_total=int(banked[0]), banked_cost_usd=float(banked[1]))
+        return SessionCostBasis(token_total=int(banked.token_total), banked_cost_usd=float(banked.banked_cost_usd))
 
     def last_external_usage_attempt_at(self, slug: str) -> datetime | None:
         stmt = select(func.max(external_usage_samples.c.sampled_at)).where(external_usage_samples.c.slug == slug)
@@ -211,7 +216,8 @@ class UsageStore:
         return newest
 
     def context_sample_state(self, lease_id: str) -> ContextSampleState | None:
-        stmt = select(
+        stmt = self._store.select(
+            context_samples,
             func.max(context_samples.c.sampled_at).label("last_sampled_at"),
             func.max(context_samples.c.context_tokens).label("max_context_tokens"),
         ).where(context_samples.c.lease_id == lease_id)
@@ -235,7 +241,8 @@ class UsageStore:
         with self._store.connect() as conn:
             for batch in id_batches(lease_ids):
                 stmt = (
-                    select(
+                    self._store.select(
+                        context_samples,
                         context_samples.c.lease_id,
                         func.max(context_samples.c.sampled_at).label("last_sampled_at"),
                         func.max(context_samples.c.context_tokens).label("max_context_tokens"),
@@ -266,7 +273,7 @@ class UsageStore:
         # reconciled later.
         with self._store.begin() as conn:
             existing = conn.execute(
-                select(usage_facts.c.id).where(
+                self._store.select(usage_facts, usage_facts.c.id).where(
                     and_(
                         usage_facts.c.lease_id == lease_id,
                         usage_facts.c.generation == generation,
@@ -278,7 +285,7 @@ class UsageStore:
                 # Row already present; insert nothing.
                 return None
             conn.execute(
-                usage_facts.insert().values(
+                self._store.insert(usage_facts).values(
                     lease_id=lease_id,
                     chunk_id=chunk_id,
                     node_id=node_id,
@@ -318,7 +325,7 @@ class UsageStore:
                 }
             )
             result = conn.execute(
-                outbound_buffer.insert().values(
+                self._store.insert(outbound_buffer).values(
                     kind=USAGE_RECORDED,
                     chunk_id=chunk_id,
                     lease_id=lease_id,
@@ -353,7 +360,7 @@ class UsageStore:
         seq: int | None = None
         with self._store.begin() as conn:
             conn.execute(
-                context_samples.insert().values(
+                self._store.insert(context_samples).values(
                     lease_id=lease_id,
                     session_id=session.session_id,
                     harness_id=session.harness_id,
@@ -363,7 +370,7 @@ class UsageStore:
             )
             if report_kind:
                 result = conn.execute(
-                    outbound_buffer.insert().values(
+                    self._store.insert(outbound_buffer).values(
                         kind=report_kind,
                         chunk_id=chunk_id,
                         lease_id=lease_id,
@@ -406,7 +413,7 @@ class UsageStore:
             # only with a sample `payload`: a miss buffers its `missed` report with a NULL payload.
             if report_kind:
                 result = conn.execute(
-                    outbound_buffer.insert().values(
+                    self._store.insert(outbound_buffer).values(
                         kind=report_kind, chunk_id=None, lease_id=None, payload=report_payload, created_at=sampled_at
                     )
                 )

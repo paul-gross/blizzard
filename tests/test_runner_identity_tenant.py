@@ -18,7 +18,6 @@ from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.foundation.store.utc import UtcDateTime
 from blizzard.runner import runtime as runner_runtime
 from blizzard.runner.hub.identity import IdentityState, IdentityVerdictHolder, RunnerIdentity, RunnerIdentityHolder
-from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.identity_check import IdentityCheck
 from blizzard.runner.lifecycle.registration import Registration
 from blizzard.runner.loop.context import LoopConfig, LoopContext
@@ -67,6 +66,40 @@ def _seed_a_pre_tenant_identity(engine: sa.Engine) -> None:
     with engine.begin() as conn:
         conn.execute(
             _identity_at_parent.insert().values(runner_id=_RUNNER, runner_name="r-claude", registered_at=_REGISTERED)
+        )
+
+
+# ``leases`` and ``lease_context`` at the revision's parent — the columns a pre-tenant runner's lease mint wrote.
+_leases_at_parent = sa.table(
+    "leases", sa.column("lease_id"), sa.column("chunk_id"), sa.column("epoch"), sa.column("created_at", UtcDateTime())
+)
+_lease_context_at_parent = sa.table(
+    "lease_context",
+    sa.column("lease_id"),
+    sa.column("chunk_id"),
+    sa.column("graph_id"),
+    sa.column("node_id"),
+    sa.column("node_name"),
+    sa.column("retries_max"),
+    sa.column("recorded_at", UtcDateTime()),
+)
+
+
+def _seed_a_pre_tenant_lease(engine: sa.Engine) -> None:
+    with engine.begin() as conn:
+        conn.execute(
+            _leases_at_parent.insert().values(lease_id="lease_1", chunk_id="ch_1", epoch=1, created_at=_REGISTERED)
+        )
+        conn.execute(
+            _lease_context_at_parent.insert().values(
+                lease_id="lease_1",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                retries_max=2,
+                recorded_at=_REGISTERED,
+            )
         )
 
 
@@ -177,20 +210,9 @@ def test_a_runner_upgraded_from_before_tenants_adopts_its_tenant_at_its_first_co
     migration, engine = _store_at_parent(tmp_path)
     try:
         _seed_a_pre_tenant_identity(engine)
-        SqlAlchemyRunnerStore(engine, runner_store_errors()).record_lease(
-            NewLease(
-                lease_id="lease_1",
-                chunk_id="ch_1",
-                graph_id="gr_1",
-                node_id="nd_build",
-                node_name="build",
-                epoch=1,
-                retries_max=2,
-                created_at=_REGISTERED,
-            )
-        )
+        _seed_a_pre_tenant_lease(engine)
         migration.upgrade("head")
-        store = SqlAlchemyRunnerStore(engine, runner_store_errors())
+        store = SqlAlchemyRunnerStore(engine, runner_store_errors(), _RUNNER)
         ctx = _ctx(store, _tenant_hub())
 
         IdentityCheck(ctx).run()

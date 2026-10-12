@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Connection, func, select
+from sqlalchemy import Connection, func
 
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.logging import get_logger
@@ -36,7 +36,9 @@ class TranscriptLedgerStore:
     # --- reads --------------------------------------------------------------
 
     def transcript_segment(self, segment_id: str) -> TranscriptSegmentState | None:
-        rows = self._store.all(select(transcript_segments).where(transcript_segments.c.segment_id == segment_id))
+        rows = self._store.all(
+            self._store.select(transcript_segments).where(transcript_segments.c.segment_id == segment_id)
+        )
         return self._row_to_transcript_segment(rows[0]) if rows else None
 
     def transcript_segments(self, segment_ids: Sequence[str]) -> dict[str, TranscriptSegmentState]:
@@ -44,7 +46,7 @@ class TranscriptLedgerStore:
             return {}
         result: dict[str, TranscriptSegmentState] = {}
         for batch in id_batches(segment_ids):
-            stmt = select(transcript_segments).where(transcript_segments.c.segment_id.in_(batch))
+            stmt = self._store.select(transcript_segments).where(transcript_segments.c.segment_id.in_(batch))
             for r in self._store.all(stmt):
                 row = self._row_to_transcript_segment(r)
                 result[row.segment_id] = row
@@ -52,7 +54,7 @@ class TranscriptLedgerStore:
 
     def open_transcript_segments(self) -> list[TranscriptSegmentState]:
         stmt = (
-            select(transcript_segments)
+            self._store.select(transcript_segments)
             .where(transcript_segments.c.finalized_at.is_(None))
             .order_by(transcript_segments.c.segment_id)
         )
@@ -60,7 +62,7 @@ class TranscriptLedgerStore:
 
     def open_transcript_segments_for_lease(self, lease_id: str) -> list[TranscriptSegmentState]:
         stmt = (
-            select(transcript_segments)
+            self._store.select(transcript_segments)
             .where(transcript_segments.c.lease_id == lease_id)
             .where(transcript_segments.c.finalized_at.is_(None))
             .order_by(transcript_segments.c.segment_id)
@@ -69,7 +71,7 @@ class TranscriptLedgerStore:
 
     def transcript_segments_for_chunk(self, chunk_id: str) -> list[TranscriptSegmentState]:
         stmt = (
-            select(transcript_segments)
+            self._store.select(transcript_segments)
             .where(transcript_segments.c.chunk_id == chunk_id)
             .order_by(transcript_segments.c.stamped_at, transcript_segments.c.segment_id)
         )
@@ -82,7 +84,8 @@ class TranscriptLedgerStore:
         with self._store.connect() as conn:
             for batch in id_batches(chunk_ids):
                 stmt = (
-                    select(
+                    self._store.select(
+                        transcript_segments,
                         transcript_segments.c.chunk_id,
                         func.sum(transcript_segments.c.shipped_bytes).label("total"),
                     )
@@ -96,15 +99,15 @@ class TranscriptLedgerStore:
     def outstanding_transcript_buffer_bytes(self) -> int:
         # Payloads are `json.dumps(ensure_ascii=True)`, so SQL `length()` (chars) agrees
         # with the encoded byte length here.
-        stmt = select(func.coalesce(func.sum(func.length(transcript_outbound_buffer.c.payload)), 0)).where(
-            transcript_outbound_buffer.c.acked_at.is_(None)
-        )
+        stmt = self._store.select(
+            transcript_outbound_buffer, func.coalesce(func.sum(func.length(transcript_outbound_buffer.c.payload)), 0)
+        ).where(transcript_outbound_buffer.c.acked_at.is_(None))
         with self._store.connect() as conn:
             return int(conn.execute(stmt).scalar_one())
 
     def has_unshipped_transcript_content(self, chunk_id: str) -> bool:
         stmt = (
-            select(transcript_outbound_buffer.c.seq)
+            self._store.select(transcript_outbound_buffer, transcript_outbound_buffer.c.seq)
             .where(transcript_outbound_buffer.c.chunk_id == chunk_id)
             .where(transcript_outbound_buffer.c.acked_at.is_(None))
             .where(transcript_outbound_buffer.c.final.is_(False))
@@ -114,7 +117,7 @@ class TranscriptLedgerStore:
 
     def pending_transcript_outbound(self, *, limit: int | None = None) -> list[BufferedTranscriptDelta]:
         stmt = (
-            select(transcript_outbound_buffer)
+            self._store.select(transcript_outbound_buffer)
             .where(transcript_outbound_buffer.c.acked_at.is_(None))
             .order_by(transcript_outbound_buffer.c.seq)
         )
@@ -135,14 +138,13 @@ class TranscriptLedgerStore:
     def transcript_backfill_leases(self) -> list[TranscriptBackfillLease]:
         # Correlated EXISTS on the session, not the lease: several leases share one
         # resumed session, and any segment for it means the session is already imported.
-        has_segment = (
-            select(transcript_segments.c.segment_id)
-            .where(transcript_segments.c.session_id == leases.c.session_id)
-            .where(transcript_segments.c.harness_id == leases.c.harness_id)
-            .exists()
+        has_segment = self._store.exists(
+            transcript_segments,
+            transcript_segments.c.session_id == leases.c.session_id,
+            transcript_segments.c.harness_id == leases.c.harness_id,
         )
         stmt = (
-            lease_select()
+            lease_select(self._store)
             .add_columns(has_segment.label("has_segment"))
             .where(leases.c.session_id.is_not(None))
             .order_by(leases.c.created_at, leases.c.lease_id)
@@ -165,7 +167,8 @@ class TranscriptLedgerStore:
     def mark_transcript_record_truncated(self, segment_id: str, *, reason: str, severity: int) -> bool:
         with self._store.begin() as conn:
             row = conn.execute(
-                select(
+                self._store.select(
+                    transcript_segments,
                     transcript_segments.c.truncated_reason,
                     transcript_segments.c.truncated_reason_severity,
                     transcript_segments.c.truncated_reasons_warned,
@@ -173,7 +176,11 @@ class TranscriptLedgerStore:
             ).first()
             if row is None:
                 return False
-            current_reason, current_severity, warned_json = row
+            current_reason, current_severity, warned_json = (
+                row.truncated_reason,
+                row.truncated_reason_severity,
+                row.truncated_reasons_warned,
+            )
             # The read-modify-write stays in this one transaction; `TruncationMark` decides.
             mark = TruncationMark(
                 current_reason=current_reason,
@@ -189,7 +196,9 @@ class TranscriptLedgerStore:
                 values["truncated_reason_severity"] = update.truncated_reason_severity
             if values:
                 conn.execute(
-                    transcript_segments.update().where(transcript_segments.c.segment_id == segment_id).values(**values)
+                    self._store.update(transcript_segments)
+                    .where(transcript_segments.c.segment_id == segment_id)
+                    .values(**values)
                 )
         changed = update.newly_warned
         if changed:
@@ -200,7 +209,7 @@ class TranscriptLedgerStore:
         with self._store.begin() as conn:
             # `IS NULL` guards on `shipping_stopped_reason` and `finalized_at` (`SEGMENT_TRANSITIONS`).
             result = conn.execute(
-                transcript_segments.update()
+                self._store.update(transcript_segments)
                 .where(transcript_segments.c.segment_id == segment_id)
                 .where(transcript_segments.c.shipping_stopped_reason.is_(None))
                 .where(transcript_segments.c.finalized_at.is_(None))
@@ -214,7 +223,7 @@ class TranscriptLedgerStore:
     def mark_sidechain_dropped_warned(self, segment_id: str, *, agent_id: str | None) -> bool:
         with self._store.begin() as conn:
             row = conn.execute(
-                select(transcript_segments.c.sidechain_warned_agents).where(
+                self._store.select(transcript_segments, transcript_segments.c.sidechain_warned_agents).where(
                     transcript_segments.c.segment_id == segment_id
                 )
             ).first()
@@ -223,7 +232,7 @@ class TranscriptLedgerStore:
                 return False
             warned.append(agent_id)
             conn.execute(
-                transcript_segments.update()
+                self._store.update(transcript_segments)
                 .where(transcript_segments.c.segment_id == segment_id)
                 .values(sidechain_warned_agents=json.dumps(warned))
             )
@@ -248,7 +257,7 @@ class TranscriptLedgerStore:
             if not self._accepts_content(conn, segment_id):
                 return []
             conn.execute(
-                transcript_segments.update()
+                self._store.update(transcript_segments)
                 .where(transcript_segments.c.segment_id == segment_id)
                 .values(
                     cursor=cursor,
@@ -262,7 +271,7 @@ class TranscriptLedgerStore:
             seqs: list[int] = []
             for payload in payloads:
                 result = conn.execute(
-                    transcript_outbound_buffer.insert().values(
+                    self._store.insert(transcript_outbound_buffer).values(
                         segment_id=segment_id,
                         chunk_id=chunk_id,
                         final=False,
@@ -290,7 +299,7 @@ class TranscriptLedgerStore:
         segment_id = Id.mint_at(IdPrefix.SEGMENT, stamped_at).value
         with self._store.begin() as conn:
             conn.execute(
-                transcript_segments.insert().values(
+                self._store.insert(transcript_segments).values(
                     segment_id=segment_id,
                     chunk_id=chunk_id,
                     node_id=node_id,
@@ -326,18 +335,18 @@ class TranscriptLedgerStore:
             # The open-only guard and the marker share this transaction, so a second call
             # can neither re-finalize nor enqueue a second final row.
             segment = conn.execute(
-                select(transcript_segments)
+                self._store.select(transcript_segments)
                 .where(transcript_segments.c.segment_id == segment_id)
                 .where(transcript_segments.c.finalized_at.is_(None))
             ).one_or_none()
             if segment is None:
                 return False
             conn.execute(
-                transcript_segments.update()
+                self._store.update(transcript_segments)
                 .where(transcript_segments.c.segment_id == segment_id)
                 .values(finalized_at=finalized_at)
             )
-            enqueue_transcript_final(conn, segment, at=finalized_at)
+            enqueue_transcript_final(self._store, conn, segment, at=finalized_at)
         _log.info("transcript segment finalized", segment_id=segment_id)
         return True
 
@@ -354,7 +363,7 @@ class TranscriptLedgerStore:
             if not self._accepts_content(conn, segment_id):
                 return
             conn.execute(
-                transcript_segments.update()
+                self._store.update(transcript_segments)
                 .where(transcript_segments.c.segment_id == segment_id)
                 .values(
                     cursor=cursor,
@@ -372,13 +381,13 @@ class TranscriptLedgerStore:
             # Non-final rows are pruned outright, nothing reading an acked one; a final
             # marker stays, acked in place — its row is the exactly-once receipt.
             conn.execute(
-                transcript_outbound_buffer.delete()
+                self._store.delete(transcript_outbound_buffer)
                 .where(transcript_outbound_buffer.c.seq.in_(seqs))
                 .where(transcript_outbound_buffer.c.final.is_(False))
             )
             # Only `acked_at IS NULL` markers take the update.
             conn.execute(
-                transcript_outbound_buffer.update()
+                self._store.update(transcript_outbound_buffer)
                 .where(transcript_outbound_buffer.c.seq.in_(seqs))
                 .where(transcript_outbound_buffer.c.final.is_(True))
                 .where(transcript_outbound_buffer.c.acked_at.is_(None))
@@ -389,7 +398,9 @@ class TranscriptLedgerStore:
         """Whether the segment, read in the caller's transaction, takes a content write — a
         finalized one takes none. An unknown id is left to the write itself, as before."""
         row = conn.execute(
-            select(transcript_segments.c.finalized_at).where(transcript_segments.c.segment_id == segment_id)
+            self._store.select(transcript_segments, transcript_segments.c.finalized_at).where(
+                transcript_segments.c.segment_id == segment_id
+            )
         ).first()
         return row is None or row.finalized_at is None  # open: SEGMENT_TRANSITIONS lets "ship" write
 
@@ -422,8 +433,9 @@ class TranscriptLedgerStore:
             agent_tool_use_ids=json.loads(r.agent_tool_use_ids) if r.agent_tool_use_ids else {},
         )
 
-    @staticmethod
-    def _merged_agent_tool_use_ids(conn: Connection, segment_id: str, learned: dict[str, str] | None) -> dict[str, str]:
+    def _merged_agent_tool_use_ids(
+        self, conn: Connection, segment_id: str, learned: dict[str, str] | None
+    ) -> dict[str, str]:
         """The stored map merged with this window's pairs, as `values()` kwargs — empty when
         nothing was learned, so the column is left untouched rather than rewritten. Merged in
         the CALLER's transaction: a pair persisted without the cursor that read it re-learns
@@ -431,7 +443,9 @@ class TranscriptLedgerStore:
         if not learned:
             return {}
         row = conn.execute(
-            select(transcript_segments.c.agent_tool_use_ids).where(transcript_segments.c.segment_id == segment_id)
+            self._store.select(transcript_segments, transcript_segments.c.agent_tool_use_ids).where(
+                transcript_segments.c.segment_id == segment_id
+            )
         ).first()
         stored: dict[str, str] = json.loads(row[0]) if row is not None and row[0] else {}
         # Stored wins: the first window to name a pair saw the `tool_result` that defines it,

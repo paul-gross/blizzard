@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import and_, select
+from sqlalchemy import and_
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.store.errors import RunnerStoreConnections
@@ -28,7 +28,7 @@ class InvocationBoundaryStore:
 
     def boundary(self, lease_id: str, generation: int, kind: InvocationBoundaryKind) -> InvocationBoundary | None:
         rows = self._store.all(
-            select(invocation_boundaries).where(
+            self._store.select(invocation_boundaries).where(
                 and_(
                     invocation_boundaries.c.lease_id == lease_id,
                     invocation_boundaries.c.generation == generation,
@@ -42,7 +42,7 @@ class InvocationBoundaryStore:
 
     def open_boundaries_for_lease(self, lease_id: str) -> list[InvocationBoundary]:
         rows = self._store.all(
-            select(invocation_boundaries)
+            self._store.select(invocation_boundaries)
             .where(and_(invocation_boundaries.c.lease_id == lease_id, invocation_boundaries.c.closed_at.is_(None)))
             .order_by(invocation_boundaries.c.opened_at, invocation_boundaries.c.id)
         )
@@ -64,7 +64,7 @@ class InvocationBoundaryStore:
         # Check-then-insert in one transaction (`bzh:sql-portable`), gated by `boundary_transition_applies`.
         with self._store.begin() as conn:
             existing = conn.execute(
-                select(invocation_boundaries).where(
+                self._store.select(invocation_boundaries).where(
                     and_(
                         invocation_boundaries.c.lease_id == lease_id,
                         invocation_boundaries.c.generation == generation,
@@ -77,7 +77,7 @@ class InvocationBoundaryStore:
             ):
                 return
             conn.execute(
-                invocation_boundaries.insert().values(
+                self._store.insert(invocation_boundaries).values(
                     lease_id=lease_id,
                     chunk_id=chunk_id,
                     node_id=node_id,
@@ -107,7 +107,7 @@ class InvocationBoundaryStore:
         # Check-then-insert in one transaction (`bzh:sql-portable`), gated by `boundary_transition_applies`.
         with self._store.begin() as conn:
             marker = conn.execute(
-                select(invocation_boundaries).where(
+                self._store.select(invocation_boundaries).where(
                     and_(
                         invocation_boundaries.c.lease_id == lease_id,
                         invocation_boundaries.c.generation == generation,
@@ -120,7 +120,7 @@ class InvocationBoundaryStore:
             ):
                 return
             existing = conn.execute(
-                select(invocation_boundary_advances.c.id).where(
+                self._store.select(invocation_boundary_advances, invocation_boundary_advances.c.id).where(
                     and_(
                         invocation_boundary_advances.c.lease_id == lease_id,
                         invocation_boundary_advances.c.generation == generation,
@@ -132,7 +132,7 @@ class InvocationBoundaryStore:
             if existing is not None:
                 return
             conn.execute(
-                invocation_boundary_advances.insert().values(
+                self._store.insert(invocation_boundary_advances).values(
                     lease_id=lease_id,
                     generation=generation,
                     kind=kind,
@@ -148,7 +148,7 @@ class InvocationBoundaryStore:
         self, lease_id: str, generation: int, kind: InvocationBoundaryKind
     ) -> InvocationBoundaryStart | None:
         advances = self._store.all(
-            select(invocation_boundary_advances)
+            self._store.select(invocation_boundary_advances)
             .where(
                 and_(
                     invocation_boundary_advances.c.lease_id == lease_id,
@@ -177,7 +177,7 @@ class InvocationBoundaryStore:
         # An UPDATE over `closed_at IS NULL`.
         with self._store.begin() as conn:
             conn.execute(
-                invocation_boundaries.update()
+                self._store.update(invocation_boundaries)
                 .where(and_(invocation_boundaries.c.lease_id == lease_id, invocation_boundaries.c.closed_at.is_(None)))
                 .values(closed_at=at, closed_reason=reason)
             )

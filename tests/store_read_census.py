@@ -238,12 +238,12 @@ class RunnerWorld:
     usage_slug: str
 
 
-def build_runner_world(engine: Engine) -> RunnerWorld:
+def build_runner_world(engine: Engine, runner_id: str = RUNNER_ID) -> RunnerWorld:
     """Seed a migrated-to-head runner store through its own write Protocols, so every
     read method in :data:`RUNNER_CENSUS` reaches real, non-empty behavior — the store
     bundle comes from :func:`~blizzard.runner.composition.build_stores`, the production
     wiring, never a hand-rolled adapter or ``tests/runner_fakes.py``'s flat fake."""
-    stores = build_stores(engine, errors=RunnerStoreErrorFactory(get_logger("test")))
+    stores = build_stores(engine, errors=RunnerStoreErrorFactory(get_logger("test")), runner_id=runner_id)
 
     chunk_1, chunk_2, chunk_3 = "ch_1", "ch_2", "ch_3"
     chunk_4, chunk_5, chunk_6, chunk_7 = "ch_4", "ch_5", "ch_6", "ch_7"
@@ -594,7 +594,7 @@ def build_runner_world(engine: Engine) -> RunnerWorld:
     stores.pause.record_local_pause(
         paused=False, at=_t(82), by="operator", report_kind="runner.locally_resumed", report_payload="{}"
     )
-    stores.identity.record_runner_identity(RunnerIdentity(RUNNER_ID, "runner-local", _t(82)))
+    stores.identity.record_runner_identity(RunnerIdentity(runner_id, "runner-local", _t(82)))
     stores.served_projects.record_served_projects((ServedProject("default", "prj_1", "default", "Default"),), at=_t(82))
     stores.resume_intent.record_resume_intent(lease_id=lease_8, marked_at=_t(83))
     workspace_id = "ws_1"

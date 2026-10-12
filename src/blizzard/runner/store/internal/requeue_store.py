@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import select
-
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.leases.operator_requests import IWriteRequeueRepository
 from blizzard.runner.store.errors import RunnerStoreConnections
@@ -29,12 +27,14 @@ class RequeueStore:
         self._store = store
 
     def pending_requeue_chunk_ids(self) -> set[str]:
-        stmt = select(requeues.c.chunk_id).where(_UNCONSUMED_REQUEUE.clause).distinct()
+        stmt = (
+            self._store.select(requeues, requeues.c.chunk_id).where(_UNCONSUMED_REQUEUE.clause(self._store)).distinct()
+        )
         return {str(r.chunk_id) for r in self._store.all(stmt)}
 
     def record_requeue(self, *, chunk_id: str, at: datetime) -> None:
         with self._store.begin() as conn:
-            conn.execute(requeues.insert().values(chunk_id=chunk_id, requeued_at=at))
+            conn.execute(self._store.insert(requeues).values(chunk_id=chunk_id, requeued_at=at))
         _log.info("chunk requeued locally", chunk_id=chunk_id)
 
 

@@ -1,7 +1,10 @@
 """Package-private infrastructure shared by every ``runner/store/internal/`` adapter:
 the connection helper each concept adapter takes in place of a bare
 ``Engine``, and the fact-closure predicates more than one concept's rows share — a
-predicate used by exactly one concept is defined at that concept's own adapter instead."""
+predicate used by exactly one concept is defined at that concept's own adapter instead.
+
+Every predicate is a builder over the store's scoped statements (:class:`RunnerStoreConnections`), so its subqueries
+are confined to the bound runner as it is built: no runner-scoped statement is built at import time."""
 
 from __future__ import annotations
 
@@ -10,10 +13,11 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import ColumnElement, Connection, and_, select
+from sqlalchemy import ColumnElement, Connection, Select, and_, join
 
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.leases.model import Lease, WorkRefStamp
+from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.schema import (
     binding_releases,
     env_bindings,
@@ -44,9 +48,9 @@ class Unsuperseded:
     marker: Any
     conditions: tuple[Any, ...]
 
-    @property
-    def clause(self):  # type: ignore[no-untyped-def]
-        return ~select(self.marker).where(*self.conditions).exists()
+    def clause(self, store: RunnerStoreConnections) -> ColumnElement[bool]:
+        """The ``NOT EXISTS``, its superseding rows confined to ``store``'s runner."""
+        return ~store.exists(self.marker.table, *self.conditions)
 
 
 @domain_model
@@ -60,9 +64,9 @@ class Unclosed:
     key: Any
     closers: Any
 
-    @property
-    def clause(self):  # type: ignore[no-untyped-def]
-        return self.key.not_in(select(self.closers))
+    def clause(self, store: RunnerStoreConnections) -> ColumnElement[bool]:
+        """The ``NOT IN``, its closing rows confined to ``store``'s runner."""
+        return self.key.not_in(store.select(self.closers.table, self.closers))
 
 
 # Pinned by tests/test_pin_runner_store.py::test_a_rebind_after_a_release_reads_as_held.
@@ -98,12 +102,16 @@ _UNRESUMED_PAUSE_PARK = Unsuperseded(
 _PAUSE_PARK_LEASE_UNCLOSED = Unclosed(pause_parks.c.lease_id, lease_closures.c.lease_id)
 
 
-# A pause park stands until its own resume, or until its lease closes.
-OPEN_PAUSE_PARK: ColumnElement[bool] = and_(_UNRESUMED_PAUSE_PARK.clause, _PAUSE_PARK_LEASE_UNCLOSED.clause)
+def open_pause_park(store: RunnerStoreConnections) -> ColumnElement[bool]:
+    """A pause park stands until its own resume, or until its lease closes."""
+    return and_(_UNRESUMED_PAUSE_PARK.clause(store), _PAUSE_PARK_LEASE_UNCLOSED.clause(store))
 
-#: The pause-park half of ask/park's ``parked_lease_ids`` union — shared so the ask
-#: adapter never reaches into a sibling adapter for it.
-PAUSE_PARKED_LEASE_IDS = select(pause_parks.c.lease_id).where(OPEN_PAUSE_PARK).distinct()
+
+def pause_parked_lease_ids(store: RunnerStoreConnections) -> Select[Any]:
+    """The pause-park half of ask/park's ``parked_lease_ids`` union — shared so the ask
+    adapter never reaches into a sibling adapter for it."""
+    return store.select(pause_parks, pause_parks.c.lease_id).where(open_pause_park(store)).distinct()
+
 
 # Correlated against ``open_escalations``'s own outer ``leases``/``lease_closures`` join.
 _LATER_LEASE = leases.alias("later_escalation_leases")
@@ -123,10 +131,11 @@ UNRESOLVED_ESCALATION = Unsuperseded(
 )
 
 
-def lease_select():  # type: ignore[no-untyped-def]
+def lease_select(store: RunnerStoreConnections) -> Select[Any]:
     """The lease+context join every lease read selects from — shared with the transcripts
-    ledger's backfill read, which also joins a lease."""
-    return select(
+    ledger's backfill read, which also joins a lease — both sides confined to ``store``'s runner."""
+    return store.select(
+        join(leases, lease_context, lease_context.c.lease_id == leases.c.lease_id),
         leases.c.lease_id,
         leases.c.chunk_id,
         leases.c.epoch,
@@ -148,7 +157,7 @@ def lease_select():  # type: ignore[no-untyped-def]
         lease_context.c.resolved_compaction_window,
         lease_context.c.graph_name,
         lease_context.c.work_refs,
-    ).join(lease_context, lease_context.c.lease_id == leases.c.lease_id)
+    )
 
 
 def encode_work_refs(refs: tuple[WorkRefStamp, ...] | None) -> str | None:
@@ -190,14 +199,14 @@ def row_to_lease(r) -> Lease:  # type: ignore[no-untyped-def]
     )
 
 
-def enqueue_transcript_final(conn: Connection, segment: Any, *, at: datetime) -> None:
+def enqueue_transcript_final(store: RunnerStoreConnections, conn: Connection, segment: Any, *, at: datetime) -> None:
     """Enqueue a marker noting ``segment`` is finalized — a minimal row; the
     wire-shaped ``TranscriptSegmentRecord`` itself is rendered at the drain boundary from
     the ledger row (``bzh:dependency-inversion``). Ships unconditionally. Shared by the
     leases adapter (a spawn/closure boundary implicitly finalizes) and the transcripts
     adapter (an explicit finalize)."""
     conn.execute(
-        transcript_outbound_buffer.insert().values(
+        store.insert(transcript_outbound_buffer).values(
             segment_id=str(segment.segment_id),
             chunk_id=str(segment.chunk_id),
             final=True,

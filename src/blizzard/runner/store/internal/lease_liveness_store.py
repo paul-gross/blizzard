@@ -9,7 +9,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import datetime, timedelta
 
-from sqlalchemy import Connection, and_, func, select
+from sqlalchemy import Connection, and_, func, join
 
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.logging import get_logger
@@ -26,27 +26,27 @@ _log = get_logger("blizzard.runner.store")
 _HEARTBEAT_RETENTION_WINDOW = timedelta(days=1)
 
 
-def _lease_generation(conn: Connection, lease_id: str) -> int:
+def _lease_generation(store: RunnerStoreConnections, conn: Connection, lease_id: str) -> int:
     """This lease's spawn generation as of the row just written in THIS transaction —
     shared by :meth:`~LeaseLivenessStore.record_spawn`'s single-shot write and
     :meth:`~LeaseLivenessStore.record_identified_spawn`'s phase-two write, since either one
     inserts (or, for the two-phase path, already inserted at phase one) exactly one
     ``lease_spawns`` row per generation regardless of whether it identifies successfully."""
     return int(
-        conn.execute(
-            select(func.count()).select_from(lease_spawns).where(lease_spawns.c.lease_id == lease_id)
-        ).scalar_one()
+        conn.execute(store.select(lease_spawns, func.count()).where(lease_spawns.c.lease_id == lease_id)).scalar_one()
     )
 
 
-def _open_provisional_spawn_id(conn: Connection, lease_id: str, *, required: bool = True) -> int | None:
+def _open_provisional_spawn_id(
+    store: RunnerStoreConnections, conn: Connection, lease_id: str, *, required: bool = True
+) -> int | None:
     """The newest ``lease_spawns`` row for ``lease_id`` with no ``session_id`` yet —
     phase one's own row, found by :meth:`~LeaseLivenessStore.record_identified_spawn` and
     :meth:`~LeaseLivenessStore.record_identity_failed` to close it one way or the other.
     ``session_id IS NULL`` alone can't tell that apart from a pre-two-phase legacy row (an
     additive migration, no backfill) — requiring ``pid`` non-NULL too is what does."""
     row = conn.execute(
-        select(lease_spawns.c.id)
+        store.select(lease_spawns, lease_spawns.c.id)
         .where(
             lease_spawns.c.lease_id == lease_id,
             lease_spawns.c.session_id.is_(None),
@@ -65,6 +65,7 @@ def _open_provisional_spawn_id(conn: Connection, lease_id: str, *, required: boo
 
 
 def _open_transcript_segment(
+    store: RunnerStoreConnections,
     conn: Connection,
     *,
     lease_id: str,
@@ -78,20 +79,19 @@ def _open_transcript_segment(
     and :meth:`~LeaseLivenessStore.record_identified_spawn`. Every start path is a segment
     boundary, stamped here so a future write can't miss it."""
     context_row = conn.execute(
-        select(
+        store.select(
+            join(leases, lease_context, leases.c.lease_id == lease_context.c.lease_id),
             leases.c.chunk_id,
             leases.c.epoch,
             lease_context.c.node_id,
             lease_context.c.resolved_model,
             lease_context.c.resolved_effort,
-        )
-        .select_from(leases.join(lease_context, leases.c.lease_id == lease_context.c.lease_id))
-        .where(leases.c.lease_id == lease_id)
+        ).where(leases.c.lease_id == lease_id)
     ).one()
     # Carries a resumed session's cursor forward — the cross-lease case finds its
     # predecessor already finalized, so this reads regardless of finalization.
     prior_segment = conn.execute(
-        select(transcript_segments)
+        store.select(transcript_segments)
         .where(transcript_segments.c.chunk_id == context_row.chunk_id)
         .where(transcript_segments.c.session_id == session.session_id)
         .where(transcript_segments.c.harness_id == session.harness_id)
@@ -105,13 +105,13 @@ def _open_transcript_segment(
         carried_cursor = str(prior_segment.cursor) if prior_segment.cursor is not None else None
         if prior_segment.finalized_at is None:
             conn.execute(
-                transcript_segments.update()
+                store.update(transcript_segments)
                 .where(transcript_segments.c.segment_id == prior_segment.segment_id)
                 .values(finalized_at=at)
             )
-            enqueue_transcript_final(conn, prior_segment, at=at)
+            enqueue_transcript_final(store, conn, prior_segment, at=at)
     conn.execute(
-        transcript_segments.insert().values(
+        store.insert(transcript_segments).values(
             segment_id=Id.mint_at(IdPrefix.SEGMENT, at).value,
             chunk_id=str(context_row.chunk_id),
             node_id=str(context_row.node_id),
@@ -145,13 +145,15 @@ class LeaseLivenessStore:
     # --- reads --------------------------------------------------------------
 
     def latest_heartbeat(self, lease_id: str) -> datetime | None:
-        stmt = select(func.max(heartbeats.c.beat_at)).where(heartbeats.c.lease_id == lease_id)
+        stmt = self._store.select(heartbeats, func.max(heartbeats.c.beat_at)).where(heartbeats.c.lease_id == lease_id)
         with self._store.connect() as conn:
             value = conn.execute(stmt).scalar_one_or_none()
         return value
 
     def latest_spawn(self, lease_id: str) -> datetime | None:
-        stmt = select(func.max(lease_spawns.c.spawned_at)).where(lease_spawns.c.lease_id == lease_id)
+        stmt = self._store.select(lease_spawns, func.max(lease_spawns.c.spawned_at)).where(
+            lease_spawns.c.lease_id == lease_id
+        )
         with self._store.connect() as conn:
             value = conn.execute(stmt).scalar_one_or_none()
         return value
@@ -164,14 +166,18 @@ class LeaseLivenessStore:
         with self._store.connect() as conn:
             for batch in id_batches(lease_ids):
                 hb_stmt = (
-                    select(heartbeats.c.lease_id, func.max(heartbeats.c.beat_at).label("beat_at"))
+                    self._store.select(
+                        heartbeats, heartbeats.c.lease_id, func.max(heartbeats.c.beat_at).label("beat_at")
+                    )
                     .where(heartbeats.c.lease_id.in_(batch))
                     .group_by(heartbeats.c.lease_id)
                 )
                 for row in conn.execute(hb_stmt):
                     heartbeat_by_lease[str(row.lease_id)] = row.beat_at
                 sp_stmt = (
-                    select(lease_spawns.c.lease_id, func.max(lease_spawns.c.spawned_at).label("spawned_at"))
+                    self._store.select(
+                        lease_spawns, lease_spawns.c.lease_id, func.max(lease_spawns.c.spawned_at).label("spawned_at")
+                    )
                     .where(lease_spawns.c.lease_id.in_(batch))
                     .group_by(lease_spawns.c.lease_id)
                 )
@@ -191,7 +197,7 @@ class LeaseLivenessStore:
         with self._store.connect() as conn:
             for batch in id_batches(lease_ids):
                 stmt = (
-                    select(lease_spawns.c.lease_id, func.count().label("n"))
+                    self._store.select(lease_spawns, lease_spawns.c.lease_id, func.count().label("n"))
                     .where(lease_spawns.c.lease_id.in_(batch))
                     .group_by(lease_spawns.c.lease_id)
                 )
@@ -200,7 +206,7 @@ class LeaseLivenessStore:
         return result
 
     def lease_generation(self, lease_id: str) -> int:
-        stmt = select(func.count()).select_from(lease_spawns).where(lease_spawns.c.lease_id == lease_id)
+        stmt = self._store.select(lease_spawns, func.count()).where(lease_spawns.c.lease_id == lease_id)
         with self._store.connect() as conn:
             return int(conn.execute(stmt).scalar_one())
 
@@ -208,7 +214,7 @@ class LeaseLivenessStore:
         # `id` orders "newest generation" here exactly as `_open_provisional_spawn_id`
         # does — insertion order is the ordering fact, not `spawned_at`.
         stmt = (
-            select(lease_spawns.c.harness_version)
+            self._store.select(lease_spawns, lease_spawns.c.harness_version)
             .where(lease_spawns.c.lease_id == lease_id)
             .order_by(lease_spawns.c.id.desc())
             .limit(1)
@@ -220,14 +226,14 @@ class LeaseLivenessStore:
 
     def record_heartbeat(self, *, lease_id: str, beat_at: datetime) -> None:
         with self._store.begin() as conn:
-            conn.execute(heartbeats.insert().values(lease_id=lease_id, beat_at=beat_at))
+            conn.execute(self._store.insert(heartbeats).values(lease_id=lease_id, beat_at=beat_at))
         _log.debug("heartbeat recorded", lease_id=lease_id)
 
     def prune_heartbeats(self, *, now: datetime) -> int:
         cutoff = now - _HEARTBEAT_RETENTION_WINDOW
         newest_beat = heartbeats.alias("newest_beat")
         latest_beat = (
-            select(func.max(newest_beat.c.beat_at))
+            self._store.select(newest_beat, func.max(newest_beat.c.beat_at))
             .where(newest_beat.c.lease_id == heartbeats.c.lease_id)
             .scalar_subquery()
         )
@@ -235,7 +241,9 @@ class LeaseLivenessStore:
             # `< latest_beat` (never `<=`) keeps EVERY row tied for newest — a same-instant
             # pair is not a superseded beat, so neither is pruned out from under the other.
             result = conn.execute(
-                heartbeats.delete().where(and_(heartbeats.c.beat_at < cutoff, heartbeats.c.beat_at < latest_beat))
+                self._store.delete(heartbeats).where(
+                    and_(heartbeats.c.beat_at < cutoff, heartbeats.c.beat_at < latest_beat)
+                )
             )
         return result.rowcount
 
@@ -253,7 +261,7 @@ class LeaseLivenessStore:
     ) -> None:
         with self._store.begin() as conn:
             conn.execute(
-                leases.update()
+                self._store.update(leases)
                 .where(leases.c.lease_id == lease_id)
                 .values(
                     pid=pid,
@@ -268,7 +276,7 @@ class LeaseLivenessStore:
             # One transaction with the in-place pid rewrite: the spawn generation and the process
             # it describes are one fact, and a crash between them would leave the two disagreeing.
             conn.execute(
-                lease_spawns.insert().values(
+                self._store.insert(lease_spawns).values(
                     lease_id=lease_id,
                     spawned_at=spawned_at,
                     harness_id=session.harness_id,
@@ -280,9 +288,15 @@ class LeaseLivenessStore:
                     identified_at=spawned_at,
                 )
             )
-            generation = _lease_generation(conn, lease_id)
+            generation = _lease_generation(self._store, conn, lease_id)
             _open_transcript_segment(
-                conn, lease_id=lease_id, session=session, generation=generation, at=spawned_at, spawn_cwd=spawn_cwd
+                self._store,
+                conn,
+                lease_id=lease_id,
+                session=session,
+                generation=generation,
+                at=spawned_at,
+                spawn_cwd=spawn_cwd,
             )
         _log.info(
             "worker spawned",
@@ -304,12 +318,12 @@ class LeaseLivenessStore:
     ) -> None:
         with self._store.begin() as conn:
             conn.execute(
-                leases.update()
+                self._store.update(leases)
                 .where(leases.c.lease_id == lease_id)
                 .values(pid=pid, process_start_time=process_start_time, pgid=pgid)
             )
             conn.execute(
-                lease_spawns.insert().values(
+                self._store.insert(lease_spawns).values(
                     lease_id=lease_id,
                     spawned_at=spawned_at,
                     harness_id=harness_id,
@@ -330,20 +344,26 @@ class LeaseLivenessStore:
         spawn_cwd: str | None = None,
     ) -> None:
         with self._store.begin() as conn:
-            provisional_id = _open_provisional_spawn_id(conn, lease_id)
+            provisional_id = _open_provisional_spawn_id(self._store, conn, lease_id)
             conn.execute(
-                lease_spawns.update()
+                self._store.update(lease_spawns)
                 .where(lease_spawns.c.id == provisional_id)
                 .values(session_id=session.session_id, harness_version=harness_version, identified_at=identified_at)
             )
             conn.execute(
-                leases.update()
+                self._store.update(leases)
                 .where(leases.c.lease_id == lease_id)
                 .values(session_id=session.session_id, harness_id=session.harness_id)
             )
-            generation = _lease_generation(conn, lease_id)
+            generation = _lease_generation(self._store, conn, lease_id)
             _open_transcript_segment(
-                conn, lease_id=lease_id, session=session, generation=generation, at=identified_at, spawn_cwd=spawn_cwd
+                self._store,
+                conn,
+                lease_id=lease_id,
+                session=session,
+                generation=generation,
+                at=identified_at,
+                spawn_cwd=spawn_cwd,
             )
         _log.info(
             "worker identified",
@@ -354,10 +374,14 @@ class LeaseLivenessStore:
 
     def record_identity_failed(self, lease_id: str, *, at: datetime) -> None:
         with self._store.begin() as conn:
-            provisional_id = _open_provisional_spawn_id(conn, lease_id, required=False)
+            provisional_id = _open_provisional_spawn_id(self._store, conn, lease_id, required=False)
             if provisional_id is None:
                 return
-            conn.execute(lease_spawns.update().where(lease_spawns.c.id == provisional_id).values(identity_failed_at=at))
+            conn.execute(
+                self._store.update(lease_spawns)
+                .where(lease_spawns.c.id == provisional_id)
+                .values(identity_failed_at=at)
+            )
         _log.info("worker identity failed — provisional generation closed unidentified", lease_id=lease_id)
 
 

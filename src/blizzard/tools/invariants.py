@@ -35,6 +35,7 @@ from blizzard.hub.tenancy import HUB_SCOPED_OPTION, StoreScope, TenantId
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from blizzard.runner.process.probe import IProcessProbe
 from blizzard.runner.store import schema as runner
+from blizzard.runner.store.errors import RUNNER_SCOPED_OPTION
 from blizzard.runner.transcripts.invocation_boundaries import WORKER_STARTING_KINDS
 
 # The ``lease_facts.runner_id`` a hub mint records — its own lease row, never a runner's.
@@ -358,7 +359,7 @@ class OneOpenPauseParkPerLease(QueryCheck):
         return violations
 
     def _open_pause_parks(self) -> list[tuple[str, datetime]]:
-        """The plain-query mirror of the store adapter's ``OPEN_PAUSE_PARK`` — same ``>=``
+        """The plain-query mirror of the store adapter's ``open_pause_park`` — same ``>=``
         (a same-instant resume is a resume), same per-lease correlation, and the same
         exclusion of a closed lease's park."""
         closed = {row[0] for row in self.conn.execute(select(runner.lease_closures.c.lease_id))}
@@ -992,7 +993,8 @@ class RunnerInvariants:
         violation, before REAP/RESUME ever reconciles it. A live-system or post-convergence
         caller passes ``True``; right after a raw kill -9 leaves it ``False``."""
         violations: list[Violation] = []
-        with self.engine.connect() as conn:
+        # The audit reads every runner's rows at once, deliberately unscoped by runner.
+        with self.engine.connect().execution_options(**{RUNNER_SCOPED_OPTION: True}) as conn:
             checks: tuple[QueryCheck, ...] = (
                 OneLiveLeasePerChunk(conn),
                 NoUnownedLiveLeaseProcess(conn),

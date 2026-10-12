@@ -13,7 +13,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, cast
 
-from sqlalchemy import Connection, Row, and_, func, insert, or_, select
+import sqlalchemy as sa
+from sqlalchemy import Connection, Row, and_, func, or_
 
 from blizzard.foundation.event_log import EventLogKind
 from blizzard.foundation.roles import adapter_model
@@ -84,10 +85,11 @@ class _FactRead:
     build: Callable[[Row[Any]], Any]
     via: tuple[Any, Any] | None = None
 
-    def statement(self, ids: Sequence[str]):  # type: ignore[no-untyped-def]
-        stmt = select(self.lease_id.label("fact_lease_id"), *self.columns)
+    def statement(self, store: RunnerStoreConnections, ids: Sequence[str]):  # type: ignore[no-untyped-def]
+        from_ = self.columns[0].table
         if self.via is not None:
-            stmt = stmt.join(*self.via)
+            from_ = sa.join(from_, *self.via)
+        stmt = store.select(from_, self.lease_id.label("fact_lease_id"), *self.columns)
         return stmt.where(self.lease_id.in_(ids)).order_by(self.columns[0])
 
 
@@ -257,43 +259,44 @@ def _work_ref_tokens(raw: str | None) -> tuple[str, ...]:
     return tuple(stamp.label for stamp in decode_work_refs(raw) or () if stamp.label is not None)
 
 
-def _closed_leases(conn: Connection, ids: Sequence[str]) -> list[Row[Any]]:
+def _closed_leases(store: RunnerStoreConnections, conn: Connection, ids: Sequence[str]) -> list[Row[Any]]:
     # A lease closes once; should a second closure ever land, the first is the one that closed it.
     first_closure = (
-        select(lease_closures.c.lease_id, func.min(lease_closures.c.id).label("closure_id"))
+        store.select(lease_closures, lease_closures.c.lease_id, func.min(lease_closures.c.id).label("closure_id"))
         .where(lease_closures.c.lease_id.in_(ids))
         .group_by(lease_closures.c.lease_id)
         .subquery()
     )
-    stmt = (
-        select(
-            leases.c.lease_id,
-            leases.c.chunk_id,
-            leases.c.epoch,
-            leases.c.created_at,
-            lease_context.c.graph_id,
-            lease_context.c.node_id,
-            lease_context.c.node_name,
-            lease_context.c.graph_name,
-            lease_context.c.work_refs,
-            lease_context.c.session_name,
-            lease_context.c.resolved_model,
-            lease_context.c.resolved_effort,
-            lease_closures.c.reason,
-            lease_closures.c.closed_at,
-        )
-        .join(lease_context, lease_context.c.lease_id == leases.c.lease_id)
+    stmt = store.select(
+        sa.join(leases, lease_context, lease_context.c.lease_id == leases.c.lease_id)
         .join(first_closure, first_closure.c.lease_id == leases.c.lease_id)
-        .join(lease_closures, lease_closures.c.id == first_closure.c.closure_id)
-        .where(leases.c.lease_id.in_(ids))
-    )
+        .join(lease_closures, lease_closures.c.id == first_closure.c.closure_id),
+        leases.c.lease_id,
+        leases.c.chunk_id,
+        leases.c.epoch,
+        leases.c.created_at,
+        lease_context.c.graph_id,
+        lease_context.c.node_id,
+        lease_context.c.node_name,
+        lease_context.c.graph_name,
+        lease_context.c.work_refs,
+        lease_context.c.session_name,
+        lease_context.c.resolved_model,
+        lease_context.c.resolved_effort,
+        lease_closures.c.reason,
+        lease_closures.c.closed_at,
+    ).where(leases.c.lease_id.in_(ids))
     return list(conn.execute(stmt))
 
 
-def _registered_runner(conn: Connection) -> RunnerFact | None:
+def _registered_runner(store: RunnerStoreConnections, conn: Connection) -> RunnerFact | None:
     """The newest ``runner_identity`` row's id, name and tenant, or ``None`` when there is none."""
     c = runner_identity.c
-    stmt = select(c.runner_id, c.runner_name, c.tenant_id, c.tenant_name).order_by(c.id.desc()).limit(1)
+    stmt = (
+        store.select(runner_identity, c.runner_id, c.runner_name, c.tenant_id, c.tenant_name)
+        .order_by(c.id.desc())
+        .limit(1)
+    )
     row = conn.execute(stmt).first()
     if row is None:
         return None
@@ -305,14 +308,16 @@ def _registered_runner(conn: Connection) -> RunnerFact | None:
     )
 
 
-def _facts(conn: Connection, ids: Sequence[str], runner: RunnerFact) -> dict[str, LeaseTraceFacts]:
-    closed = _closed_leases(conn, ids)
+def _facts(
+    store: RunnerStoreConnections, conn: Connection, ids: Sequence[str], runner: RunnerFact
+) -> dict[str, LeaseTraceFacts]:
+    closed = _closed_leases(store, conn, ids)
     if not closed:
         return {}
     closed_ids = [str(r.lease_id) for r in closed]
     rows: dict[str, dict[str, list[Any]]] = defaultdict(lambda: defaultdict(list))
     for read in _FACT_READS:
-        for r in conn.execute(read.statement(closed_ids)):
+        for r in conn.execute(read.statement(store, closed_ids)):
             rows[str(r.fact_lease_id)][read.field].append(read.build(r))
     return {
         str(r.lease_id): LeaseTraceFacts(
@@ -351,29 +356,29 @@ class LeaseTraceFactsStore:
 
     def lease_trace_facts(self, lease_id: str) -> LeaseTraceFacts | None:
         with self._store.connect() as conn:
-            runner = _registered_runner(conn)
-            return None if runner is None else _facts(conn, [lease_id], runner).get(lease_id)
+            runner = _registered_runner(self._store, conn)
+            return None if runner is None else _facts(self._store, conn, [lease_id], runner).get(lease_id)
 
     def lease_trace_facts_for(self, lease_ids: Collection[str]) -> dict[str, LeaseTraceFacts]:
         result: dict[str, LeaseTraceFacts] = {}
         with self._store.connect() as conn:
-            runner = _registered_runner(conn)
+            runner = _registered_runner(self._store, conn)
             if runner is None:
                 return result
             for batch in id_batches(sorted(set(lease_ids))):
-                result.update(_facts(conn, batch, runner))
+                result.update(_facts(self._store, conn, batch, runner))
         return result
 
     def closed_leases_after(self, since: LeaseCursorKey, until: datetime, limit: int) -> tuple[LeaseCursorKey, ...]:
         c = lease_closures.c
         earlier = lease_closures.alias("earlier")
         stmt = (
-            select(c.closed_at, c.lease_id)
+            self._store.select(lease_closures, c.closed_at, c.lease_id)
             .where(
                 c.closed_at >= since.at,
                 c.closed_at <= until,
                 or_(c.closed_at > since.at, c.lease_id > since.lease_id),
-                ~select(earlier.c.id).where(and_(earlier.c.lease_id == c.lease_id, earlier.c.id < c.id)).exists(),
+                ~self._store.exists(earlier, and_(earlier.c.lease_id == c.lease_id, earlier.c.id < c.id)),
             )
             .order_by(c.closed_at, c.lease_id)
             .limit(limit)
@@ -395,7 +400,7 @@ class LeaseTraceFactsStore:
         c = trace_cursor.c
         with self._store.connect() as conn:
             row = conn.execute(
-                select(trace_cursor).where(*where).order_by(c.recorded_at.desc(), c.id.desc()).limit(1)
+                self._store.select(trace_cursor).where(*where).order_by(c.recorded_at.desc(), c.id.desc()).limit(1)
             ).first()
         if row is None:
             return None
@@ -405,13 +410,17 @@ class LeaseTraceFactsStore:
         c = trace_export_latch.c
         with self._store.connect() as conn:
             kind = conn.execute(
-                select(c.kind).order_by(c.recorded_at.desc(), c.id.desc()).limit(1)
+                self._store.select(trace_export_latch, c.kind).order_by(c.recorded_at.desc(), c.id.desc()).limit(1)
             ).scalar_one_or_none()
         return next((k for k in _LATCH_KINDS if k == kind), None)
 
     def newest_export_failure(self) -> LeaseTraceExportFailure | None:
         c = trace_export_latch.c
-        stmt = select(c.recorded_at).where(c.kind == "trace-export-failed").order_by(c.recorded_at.desc(), c.id.desc())
+        stmt = (
+            self._store.select(trace_export_latch, c.recorded_at)
+            .where(c.kind == "trace-export-failed")
+            .order_by(c.recorded_at.desc(), c.id.desc())
+        )
         with self._store.connect() as conn:
             at = conn.execute(stmt.limit(1)).scalar_one_or_none()
         return LeaseTraceExportFailure(at) if at is not None else None
@@ -419,7 +428,7 @@ class LeaseTraceFactsStore:
     def append_trace_cursor(self, record: LeaseTraceCheckpoint) -> None:
         with self._store.begin() as conn:
             conn.execute(
-                insert(trace_cursor).values(
+                self._store.insert(trace_cursor).values(
                     position_at=record.position.at,
                     lease_id=record.position.lease_id,
                     span_count=record.span_count,
@@ -430,9 +439,9 @@ class LeaseTraceFactsStore:
     def record_trace_latch(self, kind: EventLogKind, *, at: datetime, report_kind: str, report_payload: str) -> int:
         # One transaction: a kill between the two would either re-announce after restart or never announce.
         with self._store.begin() as conn:
-            conn.execute(insert(trace_export_latch).values(kind=kind, recorded_at=at))
+            conn.execute(self._store.insert(trace_export_latch).values(kind=kind, recorded_at=at))
             result = conn.execute(
-                insert(outbound_buffer).values(
+                self._store.insert(outbound_buffer).values(
                     kind=report_kind, chunk_id=None, lease_id=None, payload=report_payload, created_at=at
                 )
             )

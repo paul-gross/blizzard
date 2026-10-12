@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import func
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.lifecycle.judgement.git_commit_declaration import (
@@ -25,7 +25,8 @@ class GitCommitDeclarationStore:
 
     def git_commit_declarations_for_lease(self, lease_id: str) -> dict[tuple[str, str], GitCommitDeclaration]:
         newest = (
-            select(
+            self._store.select(
+                git_commit_declarations,
                 git_commit_declarations.c.environment_id,
                 git_commit_declarations.c.repo,
                 func.max(git_commit_declarations.c.id).label("id"),
@@ -34,7 +35,8 @@ class GitCommitDeclarationStore:
             .group_by(git_commit_declarations.c.environment_id, git_commit_declarations.c.repo)
             .subquery()
         )
-        stmt = select(
+        stmt = self._store.select(
+            git_commit_declarations,
             git_commit_declarations.c.environment_id,
             git_commit_declarations.c.repo,
             git_commit_declarations.c.branch,
@@ -67,7 +69,7 @@ class GitCommitDeclarationStore:
         # a `kill -9` right after.
         with self._store.begin() as conn:
             conn.execute(
-                git_commit_declarations.insert().values(
+                self._store.insert(git_commit_declarations).values(
                     lease_id=lease_id,
                     chunk_id=chunk_id,
                     node_id=node_id,

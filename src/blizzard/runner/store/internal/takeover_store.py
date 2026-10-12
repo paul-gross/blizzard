@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import Select
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.harness.identity import SessionReference
@@ -27,19 +28,20 @@ class TakeoverStore:
 
     def lease_for_open_takeover(self, lease_id: str) -> Lease | None:
         stmt = (
-            lease_select()
+            lease_select(self._store)
             .join(takeovers, takeovers.c.lease_id == leases.c.lease_id)
+            .where(*self._store.key_predicates(takeovers))
             .where(leases.c.lease_id == lease_id)
-            .where(_OPEN_TAKEOVER.clause)
+            .where(_OPEN_TAKEOVER.clause(self._store))
         )
         rows = self._store.all(stmt)
         return row_to_lease(rows[0]) if rows else None
 
     def open_takeover_for_chunk(self, chunk_id: str) -> OpenTakeover | None:
         stmt = (
-            self._takeover_select()
+            self._takeover_select(self._store)
             .where(takeovers.c.chunk_id == chunk_id)
-            .where(_OPEN_TAKEOVER.clause)
+            .where(_OPEN_TAKEOVER.clause(self._store))
             .order_by(takeovers.c.opened_at.desc())
             .limit(1)
         )
@@ -47,11 +49,15 @@ class TakeoverStore:
         return self._row_to_takeover(rows[0]) if rows else None
 
     def open_takeover_chunk_ids(self) -> set[str]:
-        stmt = select(takeovers.c.chunk_id).where(_OPEN_TAKEOVER.clause).distinct()
+        stmt = self._store.select(takeovers, takeovers.c.chunk_id).where(_OPEN_TAKEOVER.clause(self._store)).distinct()
         return {str(r.chunk_id) for r in self._store.all(stmt)}
 
     def open_takeovers(self) -> list[OpenTakeover]:
-        stmt = self._takeover_select().where(_OPEN_TAKEOVER.clause).order_by(takeovers.c.opened_at.desc())
+        stmt = (
+            self._takeover_select(self._store)
+            .where(_OPEN_TAKEOVER.clause(self._store))
+            .order_by(takeovers.c.opened_at.desc())
+        )
         return [self._row_to_takeover(r) for r in self._store.all(stmt)]
 
     def record_takeover(
@@ -68,7 +74,7 @@ class TakeoverStore:
     ) -> None:
         with self._store.begin() as conn:
             conn.execute(
-                takeovers.insert().values(
+                self._store.insert(takeovers).values(
                     takeover_id=takeover_id,
                     chunk_id=chunk_id,
                     lease_id=lease_id,
@@ -84,14 +90,16 @@ class TakeoverStore:
 
     def record_takeover_end(self, *, takeover_id: str, ended_at: datetime) -> None:
         with self._store.begin() as conn:
-            conn.execute(takeover_ends.insert().values(takeover_id=takeover_id, ended_at=ended_at))
+            conn.execute(self._store.insert(takeover_ends).values(takeover_id=takeover_id, ended_at=ended_at))
         _log.info("takeover ended", takeover_id=takeover_id)
 
     @staticmethod
-    def _takeover_select():  # type: ignore[no-untyped-def]
+    def _takeover_select(store: RunnerStoreConnections) -> Select[Any]:
         # The reference lease's own epoch rides along, so the takeover's hold is scoped to it.
-        return select(takeovers, leases.c.epoch.label("reference_epoch")).select_from(
-            takeovers.outerjoin(leases, leases.c.lease_id == takeovers.c.lease_id)
+        return store.select(
+            store.scope_join(takeovers, leases, leases.c.lease_id == takeovers.c.lease_id, isouter=True),
+            takeovers,
+            leases.c.epoch.label("reference_epoch"),
         )
 
     @staticmethod

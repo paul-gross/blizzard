@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
-from sqlalchemy import select
+import sqlalchemy as sa
+from sqlalchemy import Select
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.leases.closure import ESCALATION_REASONS, cause_of
@@ -25,8 +27,8 @@ class EscalationStore:
     def open_escalations(self) -> list[ParkedEscalation]:
         stmt = (
             self._escalation_select()
-            .where(LIVE_ESCALATION.clause)
-            .where(UNRESOLVED_ESCALATION.clause)
+            .where(LIVE_ESCALATION.clause(self._store))
+            .where(UNRESOLVED_ESCALATION.clause(self._store))
             .order_by(lease_closures.c.closed_at.desc())
         )
         return [self._row_to_escalation(r) for r in self._store.all(stmt)]
@@ -35,8 +37,8 @@ class EscalationStore:
         stmt = (
             self._escalation_select()
             .where(lease_closures.c.chunk_id == chunk_id)
-            .where(LIVE_ESCALATION.clause)
-            .where(UNRESOLVED_ESCALATION.clause)
+            .where(LIVE_ESCALATION.clause(self._store))
+            .where(UNRESOLVED_ESCALATION.clause(self._store))
             .order_by(lease_closures.c.closed_at.desc())
             .limit(1)
         )
@@ -45,47 +47,42 @@ class EscalationStore:
 
     def record_escalation_closure(self, *, chunk_id: str, reason: str, at: datetime) -> None:
         with self._store.begin() as conn:
-            conn.execute(escalation_closures.insert().values(chunk_id=chunk_id, reason=reason, closed_at=at))
+            conn.execute(self._store.insert(escalation_closures).values(chunk_id=chunk_id, reason=reason, closed_at=at))
         _log.info("escalation closed by the hub", chunk_id=chunk_id, reason=reason)
 
-    @staticmethod
-    def _escalation_select():  # type: ignore[no-untyped-def]
+    def _escalation_select(self) -> Select[Any]:
+        st = self._store
         # The lease's current generation's own recorded version — `id`
         # orders "newest generation" here exactly as the liveness store's own
         # `latest_spawn_harness_version` does: insertion order, not `spawned_at`.
         latest_harness_version = (
-            select(lease_spawns.c.harness_version)
+            st.select(lease_spawns, lease_spawns.c.harness_version)
             .where(lease_spawns.c.lease_id == leases.c.lease_id)
             .order_by(lease_spawns.c.id.desc())
             .limit(1)
             .correlate(leases)
             .scalar_subquery()
         )
-        return (
-            select(
-                lease_closures.c.lease_id,
-                lease_closures.c.chunk_id,
-                lease_closures.c.node_id,
-                lease_closures.c.closed_at,
-                lease_closures.c.reason,
-                lease_closures.c.escalation_cause,
-                leases.c.epoch,
-                leases.c.session_id,
-                leases.c.harness_id,
-                # The escalated lease's session stamps — joined here rather
-                # than read back per row.
-                lease_context.c.session_name,
-                lease_context.c.resolved_model,
-                lease_context.c.resolved_effort,
-                latest_harness_version.label("harness_version"),
-            )
-            .select_from(
-                lease_closures.join(leases, leases.c.lease_id == lease_closures.c.lease_id).join(
-                    lease_context, lease_context.c.lease_id == leases.c.lease_id
-                )
-            )
-            .where(lease_closures.c.reason.in_(sorted(ESCALATION_REASONS)))
-        )
+        return st.select(
+            sa.join(lease_closures, leases, leases.c.lease_id == lease_closures.c.lease_id).join(
+                lease_context, lease_context.c.lease_id == leases.c.lease_id
+            ),
+            lease_closures.c.lease_id,
+            lease_closures.c.chunk_id,
+            lease_closures.c.node_id,
+            lease_closures.c.closed_at,
+            lease_closures.c.reason,
+            lease_closures.c.escalation_cause,
+            leases.c.epoch,
+            leases.c.session_id,
+            leases.c.harness_id,
+            # The escalated lease's session stamps — joined here rather
+            # than read back per row.
+            lease_context.c.session_name,
+            lease_context.c.resolved_model,
+            lease_context.c.resolved_effort,
+            latest_harness_version.label("harness_version"),
+        ).where(lease_closures.c.reason.in_(sorted(ESCALATION_REASONS)))
 
     @staticmethod
     def _row_to_escalation(r) -> ParkedEscalation:  # type: ignore[no-untyped-def]

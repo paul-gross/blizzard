@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from sqlalchemy import delete, select, update
-
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.hub.identity import IWriteRunnerIdentityRepository, RunnerIdentity
 from blizzard.runner.store.errors import RunnerStoreConnections
@@ -20,7 +18,8 @@ class RunnerIdentityStore:
 
     def runner_identity(self) -> RunnerIdentity | None:
         rows = self._store.all(
-            select(
+            self._store.select(
+                runner_identity,
                 runner_identity.c.runner_id,
                 runner_identity.c.runner_name,
                 runner_identity.c.registered_at,
@@ -48,15 +47,13 @@ class RunnerIdentityStore:
             "tenant_id": identity.tenant_id,
             "tenant_name": identity.tenant_name,
         }
+        # Registration's adoption binds an unbound store; a bound one refuses another runner's id.
+        self._store.bind(identity.runner_id)
         with self._store.begin() as conn:
-            # A row naming the same runner is updated in place, so the served-projects answer's marker on it
-            # stays; any other row goes, and the new row holds no answer.
-            conn.execute(delete(runner_identity).where(runner_identity.c.runner_id != identity.runner_id))
-            kept = conn.execute(
-                update(runner_identity).where(runner_identity.c.runner_id == identity.runner_id).values(**values)
-            ).rowcount
+            # The bound runner's row is updated in place, so the served-projects answer's marker on it stays.
+            kept = conn.execute(self._store.update(runner_identity).values(**values)).rowcount
             if not kept:
-                conn.execute(runner_identity.insert().values(runner_id=identity.runner_id, **values))
+                conn.execute(self._store.insert(runner_identity).values(**values))
         _log.debug(
             "runner identity recorded",
             runner_id=identity.runner_id,
