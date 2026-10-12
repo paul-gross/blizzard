@@ -154,14 +154,15 @@ def upgrade() -> None:
     current_rows: list = []  # type: ignore[type-arg]
     # Streamed, like the write side's own `_FLUSH_EVERY` batching below — `content` at
     # production scale (~178 MB compressed) must never sit in memory as one result set.
-    rows_iter = bind.execution_options(yield_per=_FLUSH_EVERY).execute(
+    rows_iter = bind.execute(
         sa.select(
             _segments.c.id,
             _segments.c.segment_id,
             _segments.c.turn_range_start,
             _segments.c.rejected,
             _segments.c.content,
-        ).order_by(_segments.c.segment_id, _segments.c.turn_range_start)
+        ).order_by(_segments.c.segment_id, _segments.c.turn_range_start),
+        execution_options={"yield_per": _FLUSH_EVERY},
     )
     for row in rows_iter:
         if current_segment_id is not None and row.segment_id != current_segment_id:

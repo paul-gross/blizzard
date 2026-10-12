@@ -515,9 +515,9 @@ def _reattach(bind: sa.Connection, link: _Link) -> None:
     if rekey:
         _rekey(reflected, old_key)
         reflected.constraints.discard(reflected.primary_key)
-    # Only a copy creates an unnamed constraint, so restoring one copies the table on every dialect.
-    unnamed = restore_foreign_key or rekey
-    with op.batch_alter_table(table, recreate="always" if unnamed else "auto", copy_from=reflected) as batch:
+    # Only a copy creates an unnamed key, so restoring one copies the table; a table other tables' foreign keys
+    # reference is never copied where a copy cannot replace it, and takes the foreign key in place below instead.
+    with op.batch_alter_table(table, recreate="always" if rekey else "auto", copy_from=reflected) as batch:
         if drop_index and index is not None:
             batch.drop_index(index[1])
         if drop_id:
@@ -526,6 +526,8 @@ def _reattach(bind: sa.Connection, link: _Link) -> None:
             batch.alter_column(slug, existing_type=sa.String(), nullable=False)
         if create_index and index is not None:
             batch.create_index(index[0], [_TENANT_COLUMN, slug])
+    if not _scope_foreign_keys(bind, table, slug, "slug"):
+        op.create_foreign_key(None, table, _SCOPES, [slug], ["slug"])
 
 
 def downgrade() -> None:

@@ -1,0 +1,13 @@
+id: bzh:statement-scoped-streaming
+valid:
+  - |
+    rows = conn.execute(stmt, execution_options={"yield_per": 1000})
+  - |
+    rows = conn.execute(stmt, execution_options={"stream_results": True})
+  - |
+    stmt = select(t).execution_options(populate_existing=True)
+invalid:
+  - |
+    rows = bind.execution_options(yield_per=1000).execute(stmt)
+  - |
+    stmt = select(t).execution_options(stream_results=True)

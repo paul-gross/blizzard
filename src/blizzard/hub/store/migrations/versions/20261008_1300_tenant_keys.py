@@ -362,7 +362,7 @@ _PRIOR: tuple[_TablePlan, ...] = (
         (),
         (
             (
-                "ix_transcript_event_derivations_derived_at_segment_id_extractor_version",
+                "ix_transcript_event_derivations_derived_at_segment_id",
                 ("derived_at", "segment_id", "extractor_version"),
                 False,
             ),
