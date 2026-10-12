@@ -1,4 +1,4 @@
-"""Wire the served runner app from the process graph (``bzh:dependency-injection``).
+"""Wire the served runner app from the host graph (``bzh:dependency-injection``).
 
 The single place collaborators are constructed and injected. ``create_app`` does **not**
 open the store, which lets the OpenAPI exporter and unit tests build the app without a
@@ -26,7 +26,6 @@ from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.handle import DISABLED_TELEMETRY, IPlatformTracing
 from blizzard.foundation.roles import collaborator
-from blizzard.foundation.store.internal.store_status_reader import SqlAlchemyStoreStatusReader
 from blizzard.foundation.store.readiness import ReadinessService
 from blizzard.foundation.web import Frontend, install_schema_components
 from blizzard.runner.api.analytics import router as analytics_router
@@ -73,7 +72,7 @@ from blizzard.runner.api.work_items import router as work_items_router
 from blizzard.runner.api.workspace_prompt import router as workspace_prompt_router
 from blizzard.runner.auth.internal.http_jwks_cache import JwksCache
 from blizzard.runner.auth.jti_cache import IJtiCache
-from blizzard.runner.composition import RunnerProcess, build_runner_process
+from blizzard.runner.composition import HostProcess, RunnerProcess, build_host_process
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.provider import IWorkspaceProvider
 from blizzard.runner.events.broker import EventBroker
@@ -95,7 +94,6 @@ from blizzard.runner.loop_wiring import ResumeMarking
 from blizzard.runner.operator.attachments import AttachmentService
 from blizzard.runner.operator.requeue import RequeueService
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
-from blizzard.runner.runtime import migration_runner
 from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessScratchGit
 from blizzard.runner.selftest.service import SelfTestService
 from blizzard.runner.status.view import RunnerStatusService
@@ -390,60 +388,73 @@ def create_app(
 
 @dataclass(frozen=True)
 class HostedApp:
-    """The served app and restart-resume hook wired from one process graph."""
+    """The served app and restart-resume hooks wired from one host graph."""
 
     app: FastAPI
-    resume: ResumeMarking
+    #: One resume hook per hosted runner, in the host's runner order.
+    resumes: tuple[ResumeMarking, ...]
     engine: Engine
     #: The one `HarnessHealthCache` shared with the app, so a read and the registered availability agree.
     harness_health: HarnessHealthCache
     archived_transcript_client: httpx.Client
     hub_proxy_client: httpx.Client
     hub_http_client: httpx.Client
-    owned_graph: RunnerProcess | None = None
+    owned_host: HostProcess | None = None
+
+    @property
+    def resume(self) -> ResumeMarking:
+        """The sole runner's resume hook."""
+        (resume,) = self.resumes
+        return resume
 
     def close(self) -> None:
         with contextlib.ExitStack() as closing:
-            if self.owned_graph is not None:
-                closing.callback(self.owned_graph.close)
+            if self.owned_host is not None:
+                closing.callback(self.owned_host.close)
             closing.callback(self.archived_transcript_client.close)
             closing.callback(self.hub_proxy_client.close)
             closing.callback(self.hub_http_client.close)
 
 
 def build_hosted_app(
-    config: RunnerConfig, *, events: EventBroker | None = None, process_graph: RunnerProcess | None = None
+    config: RunnerConfig,
+    host: HostProcess | None = None,
+    *,
+    events: EventBroker | None = None,
+    process_graph: RunnerProcess | None = None,
 ) -> HostedApp:
-    """Wire the served app and recovery hooks from the hosted process graph.
+    """Wire the served app and recovery hooks from the host graph.
 
-    The standalone entry builds a graph for its caller; ``host`` supplies its own
-    graph so app and driver share the same stores, provider and harness registry."""
-    graph = process_graph or build_runner_process(config, events=events)
+    ``host`` is the host the caller built and owns; ``process_graph`` names a runner whose host serves instead.
+    With neither, this builds a host of one and the returned app closes it."""
+    owned = host is None and process_graph is None
+    if host is None:
+        host = process_graph.host if process_graph is not None else build_host_process(config, events=events)
     with contextlib.ExitStack() as startup:
-        if process_graph is None:
-            startup.callback(graph.close)
-        hosted = _wire_hosted_app(config, graph, startup, owned_graph=graph if process_graph is None else None)
+        if owned:
+            startup.callback(host.close)
+        hosted = _wire_hosted_app(config, host, startup, owned_host=host if owned else None)
         startup.pop_all()  # HostedApp.close now owns every registered resource.
         return hosted
 
 
 def _wire_hosted_app(
-    config: RunnerConfig, graph: RunnerProcess, startup: contextlib.ExitStack, *, owned_graph: RunnerProcess | None
+    config: RunnerConfig, host: HostProcess, startup: contextlib.ExitStack, *, owned_host: HostProcess | None
 ) -> HostedApp:
-    engine = graph.engine
-    reader = SqlAlchemyStoreStatusReader(engine)
-    expected = migration_runner(config).script_head()
-    readiness = ReadinessService(reader=reader, expected_revision=expected)
+    # One runner's services mount at the unprefixed paths; a second runner has no route prefix to mount under yet.
+    (graph,) = host.runners
+    engine = host.engine
+    readiness = host.readiness
     runner_stores = graph.stores
     connections = graph.connections
     harness_health = graph.health
-    workspace_provider = graph.provider
+    workspace_provider = host.provider
     spawn_root = workspace_provider.spawn_root()
     harnesses = graph.harnesses
-    clock = graph.clock
-    process = graph.process
-    events = graph.events
-    platform_tracing = graph.platform_tracing
+    clock = host.clock
+    process = host.process
+    events = host.events
+    platform_tracing = host.platform_tracing
     read_stores = RunnerReadStores.of(runner_stores)
     # ``stale_after`` is left at its default so the two readers never desync (#28).
     leases = LocalLeaseService(
@@ -542,7 +553,7 @@ def _wire_hosted_app(
         workspace_provider=workspace_provider,
         harnesses=harnesses,
         runner_stores=runner_stores,
-        host_stores=graph.host_stores,
+        host_stores=host.host_stores,
         leases=leases,
         transcripts=transcripts,
         runner_status=runner_status,
@@ -550,15 +561,15 @@ def _wire_hosted_app(
             settings=graph.trace_settings,
             leases=read_stores.lease_traces,
             clock=clock,
-            receiver=graph.receiver_counter,
+            receiver=host.receiver_counter,
             replay_max_window=config.tracing.replay_max_window,
             harness_telemetry=graph.harness_telemetry,
-            harness_span_receiver=graph.harness_span_counter,
-            metric_receiver=graph.metric_bounds.counter,
-            log_receiver=graph.log_bounds.counter,
+            harness_span_receiver=host.harness_span_counter,
+            metric_receiver=host.metric_bounds.counter,
+            log_receiver=host.log_bounds.counter,
         ),
         trace_replay=graph.trace_replay,
-        telemetry_receiver=graph.telemetry_receiver,
+        telemetry_receiver=host.telemetry_receiver,
         takeover=takeover,
         requeue=requeue,
         attachments=attachments,
@@ -570,16 +581,16 @@ def _wire_hosted_app(
         clock=clock,
         process=process,
     )
-    resume = ResumeMarking(runner_stores, graph.host_stores, clock, process)
+    resumes = tuple(ResumeMarking(runner.stores, runner.host_stores, clock, process) for runner in host.runners)
     return HostedApp(
         app,
-        resume,
+        resumes,
         engine,
         harness_health,
         archived_transcript_client,
         hub_proxy_client,
         hub_http_client,
-        owned_graph,
+        owned_host,
     )
 
 

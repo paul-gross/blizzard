@@ -535,7 +535,7 @@ def test_runner_host_without_a_token_names_both_ways_to_get_one(
     def stop(*_args: object, **_kwargs: object) -> None:
         raise RuntimeError("stop before serving")
 
-    monkeypatch.setattr("blizzard.runner.cli.runtime.build_runner_process", stop)
+    monkeypatch.setattr("blizzard.runner.cli.runtime.build_host_process", stop)
 
     result = runner.invoke(blizzard, ["runner", "host", "--dir", str(root)])
 

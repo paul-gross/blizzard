@@ -251,7 +251,7 @@ def test_a_tick_with_an_openai_subscription_never_invokes_a_renewer(
         assert (
             graph.host_stores.external_usage.last_external_usage_attempt_at("codex") is not None
         )  # the tick sampled it
-        assert graph.credential_renewal is not None  # composed for `runner host` alone
+        assert graph.host.host_tick.credential_renewal is not None  # composed for `runner host` alone
 
     assert calls == []
 
@@ -265,7 +265,7 @@ def test_no_renewal_pass_is_composed_when_no_provider_binds_a_renewer(tmp_path: 
     )
 
     with loop_graph(config) as graph:
-        assert graph.credential_renewal is None
+        assert graph.host.host_tick.credential_renewal is None
 
 
 @pytest.mark.unit
@@ -584,7 +584,7 @@ def test_failed_hosted_app_wiring_closes_partial_clients_and_only_its_own_graph(
         real_dispose()
 
     monkeypatch.setattr(graph.engine, "dispose", dispose)
-    monkeypatch.setattr(runner_app, "build_runner_process", lambda *_args, **_kwargs: graph)
+    monkeypatch.setattr(runner_app, "build_host_process", lambda *_args, **_kwargs: graph.host)
     original_client = httpx.Client
     clients: list[httpx.Client] = []
 

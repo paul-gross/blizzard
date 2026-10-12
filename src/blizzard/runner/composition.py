@@ -1,4 +1,4 @@
-"""The runner process and store composition root.
+"""The runner host, runner process and store composition root.
 
 The only module under ``src/`` that names a concrete ``runner/store/internal/`` adapter,
 asserted by
@@ -8,8 +8,9 @@ asserted by
 
 from __future__ import annotations
 
+import contextlib
 import os
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 
@@ -47,8 +48,14 @@ from blizzard.runner.harness.wiring import (
     declared_telemetry_names,
 )
 from blizzard.runner.hub.held_token import HubTokenHolder
-from blizzard.runner.hub.identity import ICurrentRunnerIdentity, IdentityVerdictHolder, RunnerIdentityHolder
+from blizzard.runner.hub.identity import (
+    ICurrentRunnerIdentity,
+    IdentityVerdictHolder,
+    RunnerIdentity,
+    RunnerIdentityHolder,
+)
 from blizzard.runner.hub.internal.token_file import HubTokenFile
+from blizzard.runner.listeners import Listeners
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from blizzard.runner.runtime import migration_runner, reset_command
 from blizzard.runner.store.errors import RunnerStoreConnections, RunnerStoreErrorFactory
@@ -108,35 +115,32 @@ from blizzard.runner.tracing.receiving import TelemetryReceiver
 from blizzard.runner.tracing.replay import LeaseTraceReplay
 from blizzard.runner.tracing.sweep import LeaseTraceSweep
 from blizzard.runner.usage.credential_renewal import CredentialRenewalPass, RenewableSubscription
+from blizzard.runner.usage.host_tick import HostTick
 
 
-@dataclass(frozen=True)
-class RunnerProcess:
-    """One owner for the hosted app, loop and recovery hooks' shared collaborators.
+@dataclass
+class HostProcess:
+    """The per-host graph: the pieces one daemon shares across every runner it hosts, and the runners themselves.
 
-    Close after the loop has stopped and resume marking has drained workers: the
-    spawner thread is the kernel parent of children awaiting durable confirmation.
+    The host reaches a runner only through :attr:`runners`; a runner reaches the host it was built over. Close after
+    every serving thread has stopped: closing the host closes each runner first, then disposes the engine and shuts
+    tracing down, so a runner's spawner thread and resume drain finish before the engine they write through goes.
     """
 
     engine: Engine
-    stores: RunnerStores
-    #: The host-scoped stores, built once beside ``stores`` over the same connections.
-    host_stores: HostStores
+    readiness: ReadinessService
+    #: The host's own connections, never bound to a runner; ``host_stores`` runs over them.
     connections: RunnerStoreConnections
+    host_stores: HostStores
+    listeners: Listeners
     provider: IWorkspaceProvider
-    harnesses: HarnessRegistry
+    events: EventBroker | None
     clock: SystemClock
     process: LinuxProcessProbe
-    health: HarnessHealthCache
-    events: EventBroker | None
-    executor: ThreadPoolExecutor
-    #: Whether OpenTelemetry's own variables enable lease tracing, read once for this process.
-    trace_settings: TracingSettings
-    #: The lease-trace sweep — ``None`` unless tracing is enabled.
-    trace_sweep: LeaseTraceSweep | None
-    #: The operator's replay over the same assembly and exporter.
-    trace_replay: LeaseTraceReplay
-    #: The span receiver's per-lease rate bound and its received/dropped tally, one of each per process.
+    #: The worker telemetry receiver over the host's limiters, tallies, export and identity resolver — one per host,
+    #: so every reader and writer of those counters shares them.
+    telemetry_receiver: TelemetryReceiver
+    #: The span receiver's per-lease rate bound and its received/dropped tally, one of each per host.
     span_limiter: SpanRateLimiter
     receiver_counter: ReceiverCounter
     #: The harness bindings' spans alone, counted apart from the shared span tally above.
@@ -144,37 +148,153 @@ class RunnerProcess:
     #: The metrics and logs receivers' own bound and tally, counted in data points and log records.
     metric_bounds: ReceiverBounds
     log_bounds: ReceiverBounds
-    #: Who this runner is at its hub; seeded from the store at boot and refreshed by every registration.
-    identity: RunnerIdentityHolder
-    #: Whether this process has verified its token names the store's runner — unchecked from start.
-    identity_verdict: IdentityVerdictHolder
-    #: The token every runner->hub client presents — re-read from ``.env`` while the identity mismatches.
-    hub_token: HubTokenHolder
-    #: The worker telemetry receiver over this process's limiters, tallies, export and identity — one per
-    #: process, so every reader and writer of those counters shares them.
-    telemetry_receiver: TelemetryReceiver
+    #: What every declared binding's telemetry arrives under, which the receiver admits and routes by.
+    harness_telemetry_names: tuple[HarnessTelemetryNames, ...]
+    #: The pass the host's own thread runs; its one step today is credential renewal.
+    host_tick: HostTick
     #: Platform spans — disabled unless a handle is supplied; every collaborator opens spans through it.
     platform_tracing: IPlatformTracing = field(default_factory=DisabledPlatformTracing)
     #: Where admitted metrics and logs leave — disabled unless a handle is supplied.
     received_telemetry: IReceivedTelemetryExport = field(default_factory=DisabledReceivedTelemetryExport)
+    runners: tuple[RunnerProcess, ...] = ()
+
+    def close(self) -> None:
+        with contextlib.ExitStack() as closing:
+            closing.callback(self.platform_tracing.shutdown, PLATFORM_TRACING_SHUTDOWN_SECONDS)
+            closing.callback(self.received_telemetry.shutdown, PLATFORM_TRACING_SHUTDOWN_SECONDS)
+            closing.callback(self.engine.dispose)
+            for runner in self.runners:
+                closing.callback(runner.close_runner)
+
+
+@dataclass(frozen=True)
+class RunnerProcess:
+    """One runner's own graph over a :class:`HostProcess`: its bound stores, identity, harnesses and spawner.
+
+    Close after the loop has stopped and resume marking has drained workers: the spawner thread is the kernel parent
+    of children awaiting durable confirmation. The host's engine outlives it.
+    """
+
+    host: HostProcess
+    #: This runner's connections over the host's engine, bound to the runner it is.
+    connections: RunnerStoreConnections
+    stores: RunnerStores
+    #: A host-scoped view over ``connections``: the tick's cross-kind write reports through the bound runner.
+    host_stores: HostStores
+    harnesses: HarnessRegistry
+    health: HarnessHealthCache
+    executor: ThreadPoolExecutor
+    #: Whether OpenTelemetry's own variables enable lease tracing, read once for this runner.
+    trace_settings: TracingSettings
+    #: The lease-trace sweep — ``None`` unless tracing is enabled.
+    trace_sweep: LeaseTraceSweep | None
+    #: The operator's replay over the same assembly and exporter.
+    trace_replay: LeaseTraceReplay
+    #: Who this runner is at its hub; seeded from the store at boot and refreshed by every registration.
+    identity: RunnerIdentityHolder
+    #: Whether this runner has verified its token names the store's runner — unchecked from start.
+    identity_verdict: IdentityVerdictHolder
+    #: The token every runner->hub client presents — re-read from ``.env`` while the identity mismatches.
+    hub_token: HubTokenHolder
     #: What the enabled bindings together do with each of a worker's telemetry signals, derived once at startup.
     harness_telemetry: HarnessTelemetryPlan = field(default_factory=HarnessTelemetryPlan)
-    #: What every declared binding's telemetry arrives under, which the receiver admits and routes by.
-    harness_telemetry_names: tuple[HarnessTelemetryNames, ...] = ()
-    #: The credential-renewal pass, ``None`` when no provider binds a renewer.
-    credential_renewal: CredentialRenewalPass | None = None
+    #: Whether closing this runner closes the host it was built over — the host-of-one a standalone build makes.
+    closes_host: bool = False
+
+    @property
+    def engine(self) -> Engine:
+        return self.host.engine
+
+    @property
+    def provider(self) -> IWorkspaceProvider:
+        return self.host.provider
+
+    @property
+    def events(self) -> EventBroker | None:
+        return self.host.events
+
+    @property
+    def clock(self) -> SystemClock:
+        return self.host.clock
+
+    @property
+    def process(self) -> LinuxProcessProbe:
+        return self.host.process
+
+    @property
+    def platform_tracing(self) -> IPlatformTracing:
+        return self.host.platform_tracing
+
+    @property
+    def received_telemetry(self) -> IReceivedTelemetryExport:
+        return self.host.received_telemetry
+
+    @property
+    def telemetry_receiver(self) -> TelemetryReceiver:
+        return self.host.telemetry_receiver
+
+    @property
+    def span_limiter(self) -> SpanRateLimiter:
+        return self.host.span_limiter
+
+    @property
+    def receiver_counter(self) -> ReceiverCounter:
+        return self.host.receiver_counter
+
+    @property
+    def harness_span_counter(self) -> ReceiverCounter:
+        return self.host.harness_span_counter
+
+    @property
+    def metric_bounds(self) -> ReceiverBounds:
+        return self.host.metric_bounds
+
+    @property
+    def log_bounds(self) -> ReceiverBounds:
+        return self.host.log_bounds
+
+    @property
+    def harness_telemetry_names(self) -> tuple[HarnessTelemetryNames, ...]:
+        return self.host.harness_telemetry_names
+
+    def close_runner(self) -> None:
+        """Shut the spawner executor down, waiting for its running work."""
+        self.executor.shutdown(wait=True)
 
     def close(self) -> None:
         try:
-            self.executor.shutdown(wait=True)
+            self.close_runner()
         finally:
-            try:
-                self.engine.dispose()
-            finally:
-                try:
-                    self.received_telemetry.shutdown(PLATFORM_TRACING_SHUTDOWN_SECONDS)
-                finally:
-                    self.platform_tracing.shutdown(PLATFORM_TRACING_SHUTDOWN_SECONDS)
+            if self.closes_host:
+                self.host.close()
+
+
+class _RunnersIdentity:
+    """The :class:`~blizzard.runner.hub.identity.ICurrentRunnerIdentity` the host's shared pieces stamp from: the
+    identity of the first of the host's runners that holds one. With one runner it answers exactly what that
+    runner's holder answers, and nothing before its first registration."""
+
+    def __init__(self, runners: Callable[[], tuple[RunnerProcess, ...]]) -> None:
+        self._runners = runners
+
+    def current(self) -> RunnerIdentity | None:
+        for runner in self._runners():
+            held = runner.identity.current()
+            if held is not None:
+                return held
+        return None
+
+
+def _held_environment_ids(runners: Callable[[], tuple[RunnerProcess, ...]]) -> Callable[[], list[str]]:
+    """The environment ids held by any of the host's runners, in runner order."""
+
+    def held() -> list[str]:
+        ids: dict[str, None] = {}
+        for runner in runners():
+            ids.update(dict.fromkeys(runner.stores.environments.held_environment_ids()))
+        return list(ids)
+
+    return held
 
 
 def _credential_renewal_pass(
@@ -232,6 +352,137 @@ def held_hub_token(config: RunnerConfig) -> HubTokenHolder:
     return HubTokenHolder(config.hub_token, file=file)
 
 
+def build_host_process(
+    config: RunnerConfig,
+    *,
+    events: EventBroker | None = None,
+    bundle: BundleSnapshot | None = None,
+    environ: Mapping[str, str] | None = None,
+    trace_exporter: ITraceExporter | None = None,
+    platform_tracing: IPlatformTracing | None = None,
+    received_telemetry: IReceivedTelemetryExport | None = None,
+    identity: RunnerIdentityHolder | None = None,
+    runner_id: str | None = None,
+    trace_platform: bool = False,
+) -> HostProcess:
+    """Construct the host graph and the runner it hosts; dispose partial resources on failure.
+
+    ``environ`` decides whether tracing is enabled; ``trace_exporter`` replaces the OTLP binding an enabled sweep would
+    otherwise build. ``trace_platform`` builds the platform-tracing and received-telemetry handles the config and
+    environment decide, stamped from the host's runners; otherwise ``platform_tracing`` and ``received_telemetry`` are
+    used as given. ``identity`` is the holder the runner keeps, seeded from the store's identity row either way, and
+    ``runner_id`` binds the runner to that id instead of the store's newest identity row."""
+    return _build_host_process(
+        config,
+        events=events,
+        bundle=bundle,
+        environ=environ,
+        trace_exporter=trace_exporter,
+        platform_tracing=platform_tracing,
+        received_telemetry=received_telemetry,
+        identity=identity,
+        runner_id=runner_id,
+        trace_platform=trace_platform,
+        closes_host=False,
+    )
+
+
+def _build_host_process(
+    config: RunnerConfig,
+    *,
+    events: EventBroker | None,
+    bundle: BundleSnapshot | None,
+    environ: Mapping[str, str] | None,
+    trace_exporter: ITraceExporter | None,
+    platform_tracing: IPlatformTracing | None,
+    received_telemetry: IReceivedTelemetryExport | None,
+    identity: RunnerIdentityHolder | None,
+    runner_id: str | None,
+    trace_platform: bool,
+    closes_host: bool,
+) -> HostProcess:
+    install_runner_guard()
+    engine = create_engine_from_url(config.db_url)
+    try:
+        built: list[HostProcess] = []
+
+        def runners() -> tuple[RunnerProcess, ...]:
+            return built[0].runners if built else ()
+
+        resolver = _RunnersIdentity(runners)
+        if trace_platform:
+            platform_tracing = build_runner_platform_tracing(config, environ, identity=resolver)
+            received_telemetry = build_runner_received_telemetry(config, environ)
+        platform_tracing = platform_tracing or DisabledPlatformTracing()
+        received_telemetry = received_telemetry or DisabledReceivedTelemetryExport()
+        platform_tracing.instrument_engine(engine)
+        readiness = ReadinessService(
+            reader=SqlAlchemyStoreStatusReader(engine), expected_revision=migration_runner(config).script_head()
+        )
+        errors = RunnerStoreErrorFactory(get_logger("blizzard.runner.store"))
+        connections = RunnerStoreConnections(engine, errors)
+        clock = SystemClock()
+        host_stores = _build_host_stores(connections, clock)
+        span_limiter = SpanRateLimiter(clock)
+        receiver_counter = ReceiverCounter()
+        harness_span_counter = ReceiverCounter()
+        metric_bounds = ReceiverBounds.fresh(clock)
+        log_bounds = ReceiverBounds.fresh(clock)
+        telemetry_names = declared_telemetry_names()
+        host = HostProcess(
+            engine=engine,
+            readiness=readiness,
+            connections=connections,
+            host_stores=host_stores,
+            listeners=Listeners.of(config),
+            provider=build_workspace_provider(config.workspace_settings, held_ids=_held_environment_ids(runners)),
+            events=events,
+            clock=clock,
+            process=LinuxProcessProbe(),
+            telemetry_receiver=TelemetryReceiver(
+                platform_tracing=platform_tracing,
+                received_telemetry=received_telemetry,
+                span_limiter=span_limiter,
+                span_counter=receiver_counter,
+                harness_span_counter=harness_span_counter,
+                telemetry_names=telemetry_names,
+                metric_bounds=metric_bounds,
+                log_bounds=log_bounds,
+                clock=clock,
+                identity=resolver,
+                worker_programs=config.tracing.worker_programs,
+                harness_telemetry=config.tracing.harness_telemetry,
+                mapped_services=config.tracing.worker_program_services,
+            ),
+            span_limiter=span_limiter,
+            receiver_counter=receiver_counter,
+            harness_span_counter=harness_span_counter,
+            metric_bounds=metric_bounds,
+            log_bounds=log_bounds,
+            harness_telemetry_names=telemetry_names,
+            host_tick=HostTick(credential_renewal=_credential_renewal_pass(config, host_stores, clock)),
+            platform_tracing=platform_tracing,
+            received_telemetry=received_telemetry,
+        )
+        built.append(host)
+        host.runners = (
+            _build_runner(
+                config,
+                host,
+                bundle=bundle,
+                environ=environ,
+                trace_exporter=trace_exporter,
+                identity=identity,
+                runner_id=runner_id,
+                closes_host=closes_host,
+            ),
+        )
+        return host
+    except BaseException:
+        engine.dispose()
+        raise
+
+
 def build_runner_process(
     config: RunnerConfig,
     *,
@@ -242,39 +493,80 @@ def build_runner_process(
     platform_tracing: IPlatformTracing | None = None,
     received_telemetry: IReceivedTelemetryExport | None = None,
     identity: RunnerIdentityHolder | None = None,
+    runner_id: str | None = None,
 ) -> RunnerProcess:
-    """Construct the process-scoped graph; dispose partial resources on failure.
+    """A host of one and its runner, for the standalone commands and tests that drive one runner: closing the
+    returned runner closes the host too. The arguments are :func:`build_host_process`'s."""
+    return _build_host_process(
+        config,
+        events=events,
+        bundle=bundle,
+        environ=environ,
+        trace_exporter=trace_exporter,
+        platform_tracing=platform_tracing,
+        received_telemetry=received_telemetry,
+        identity=identity,
+        runner_id=runner_id,
+        trace_platform=False,
+        closes_host=True,
+    ).runners[0]
 
-    ``environ`` decides whether tracing is enabled; ``trace_exporter`` replaces the OTLP binding an
-    enabled sweep would otherwise build. ``identity`` is the holder a host-built tracing handle stamps
-    from; the graph seeds it from the store's identity row either way."""
-    platform_tracing = platform_tracing or DisabledPlatformTracing()
+
+def add_runner(
+    config: RunnerConfig,
+    host: HostProcess,
+    *,
+    runner_id: str,
+    bundle: BundleSnapshot | None = None,
+    environ: Mapping[str, str] | None = None,
+    trace_exporter: ITraceExporter | None = None,
+) -> RunnerProcess:
+    """Host one more runner on ``host``, bound to ``runner_id``. The store's newest identity row names one runner
+    only, so a second runner on a host is bound by the id it is given."""
+    runner = _build_runner(
+        config,
+        host,
+        bundle=bundle,
+        environ=environ,
+        trace_exporter=trace_exporter,
+        identity=None,
+        runner_id=runner_id,
+        closes_host=False,
+    )
+    host.runners = (*host.runners, runner)
+    return runner
+
+
+def _build_runner(
+    config: RunnerConfig,
+    host: HostProcess,
+    *,
+    bundle: BundleSnapshot | None,
+    environ: Mapping[str, str] | None,
+    trace_exporter: ITraceExporter | None,
+    identity: RunnerIdentityHolder | None,
+    runner_id: str | None,
+    closes_host: bool,
+) -> RunnerProcess:
+    """One runner over ``host``'s engine, bound to ``runner_id`` or else the runner the store's identity row names."""
     identity = identity or RunnerIdentityHolder()
-    install_runner_guard()
-    engine = create_engine_from_url(config.db_url)
-    platform_tracing.instrument_engine(engine)
+    platform_tracing = host.platform_tracing
     executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="blizzard-spawner")
     try:
-        readiness = ReadinessService(
-            reader=SqlAlchemyStoreStatusReader(engine), expected_revision=migration_runner(config).script_head()
-        )
         # Bound and seeded only from a store at the code's schema head: a store mid-migration fails readiness, not
         # boot, and binds when registration adopts an id. Rows naming no runner are stamped by the command that starts
         # the process (`stamp_unowned_rows`), before it serves or ticks.
-        ready = readiness.evaluate().ready
-        connections = RunnerStoreConnections(engine, RunnerStoreErrorFactory(get_logger("blizzard.runner.store")))
-        if ready:
+        ready = host.readiness.evaluate().ready
+        connections = RunnerStoreConnections(host.engine, RunnerStoreErrorFactory(get_logger("blizzard.runner.store")))
+        if runner_id is not None:
+            connections.bind(runner_id)
+        elif ready:
             connections.bind_to_stored()
         stores = _build_stores(connections)
-        clock = SystemClock()
-        host_stores = _build_host_stores(connections, clock)
+        clock = host.clock
         registered = stores.identity.runner_identity() if ready else None
         if registered is not None:
             identity.hold(registered)
-        process = LinuxProcessProbe()
-        provider = build_workspace_provider(
-            config.workspace_settings, held_ids=stores.environments.held_environment_ids
-        )
         runner_environ = os.environ if environ is None else environ
         telemetry_enabled = config.tracing.harness_telemetry and platform_tracing.enabled
         plan = combined_telemetry_plan(
@@ -286,7 +578,7 @@ def build_runner_process(
         harnesses = build_production_harness_registry(
             config.harness_settings,
             executor=executor,
-            process=process,
+            process=host.process,
             bundle=bundle,
             harness_telemetry_enabled=telemetry_enabled,
             runner_environ=runner_environ,
@@ -296,12 +588,14 @@ def build_runner_process(
             harnesses.transcript_source(default_id)
         health = HarnessHealthCache(
             clock=clock,
-            probes=build_production_harness_health_probes(config.harness_settings, spawn_root=provider.spawn_root()),
+            probes=build_production_harness_health_probes(
+                config.harness_settings, spawn_root=host.provider.spawn_root()
+            ),
             corpus=CommittedCorpus(),
             selftest_results=stores.selftest_results,
             configured_tiers=configured_tiers(config.harness_sections),
         )
-        tracing = TracingSettings.of(os.environ if environ is None else environ)
+        tracing = TracingSettings.of(runner_environ)
         exporter = (trace_exporter or _otlp_exporter(environ)) if tracing.enabled() else None
         trace_sweep = (
             LeaseTraceSweep(
@@ -315,67 +609,28 @@ def build_runner_process(
             if exporter is not None
             else None
         )
-        credential_renewal = _credential_renewal_pass(config, host_stores, clock)
         trace_replay = LeaseTraceReplay(
             leases=stores.lease_traces, exporter=exporter, identity=identity, clock=clock, config=config.tracing
         )
-        span_limiter = SpanRateLimiter(clock)
-        receiver_counter = ReceiverCounter()
-        harness_span_counter = ReceiverCounter()
-        metric_bounds = ReceiverBounds.fresh(clock)
-        log_bounds = ReceiverBounds.fresh(clock)
-        received_telemetry = received_telemetry or DisabledReceivedTelemetryExport()
-        telemetry_names = declared_telemetry_names()
-        telemetry_receiver = TelemetryReceiver(
-            platform_tracing=platform_tracing,
-            received_telemetry=received_telemetry,
-            span_limiter=span_limiter,
-            span_counter=receiver_counter,
-            harness_span_counter=harness_span_counter,
-            telemetry_names=telemetry_names,
-            metric_bounds=metric_bounds,
-            log_bounds=log_bounds,
-            clock=clock,
-            identity=identity,
-            worker_programs=config.tracing.worker_programs,
-            harness_telemetry=config.tracing.harness_telemetry,
-            mapped_services=config.tracing.worker_program_services,
-        )
         return RunnerProcess(
-            engine,
-            stores,
-            host_stores,
-            connections,
-            provider,
-            harnesses,
-            clock,
-            process,
-            health,
-            events,
-            executor,
+            host=host,
+            connections=connections,
+            stores=stores,
+            host_stores=_build_host_stores(connections, clock),
+            harnesses=harnesses,
+            health=health,
+            executor=executor,
             trace_settings=tracing,
             trace_sweep=trace_sweep,
             trace_replay=trace_replay,
-            span_limiter=span_limiter,
-            receiver_counter=receiver_counter,
-            harness_span_counter=harness_span_counter,
-            metric_bounds=metric_bounds,
-            log_bounds=log_bounds,
             identity=identity,
             identity_verdict=IdentityVerdictHolder(reset_command(config.root)),
             hub_token=held_hub_token(config),
-            telemetry_receiver=telemetry_receiver,
-            platform_tracing=platform_tracing,
-            received_telemetry=received_telemetry,
             harness_telemetry=plan,
-            harness_telemetry_names=telemetry_names,
-            credential_renewal=credential_renewal,
+            closes_host=closes_host,
         )
     except BaseException:
-        try:
-            executor.shutdown(wait=True)
-        finally:
-            engine.dispose()
+        executor.shutdown(wait=True)
         raise
 
 
@@ -431,13 +686,13 @@ def build_read_stores(engine: Engine, *, errors: RunnerStoreErrorFactory) -> Run
     return RunnerReadStores.of(_build_stores(connections))
 
 
-def stamp_unowned_rows(graph: RunnerProcess) -> int:
-    """The start-up stamp: when the graph's store is bound, stamp the bound runner's id on every runner-scoped row that
-    names none; answer how many were stamped. Run by ``blizzard runner host`` and ``blizzard runner tick`` once the
-    graph is built and before either serves or ticks. A store not yet bound stamps nothing — registration's first
-    adoption stamps them in the identity write's commit."""
-    bound = graph.connections.runner_id
-    return graph.host_stores.unowned_row_stamp.stamp(bound) if bound is not None else 0
+def stamp_unowned_rows(runner: RunnerProcess) -> int:
+    """The start-up stamp: when the runner's store is bound, stamp the bound runner's id on every runner-scoped row that
+    names none, through the host's own stores; answer how many were stamped. Run by ``blizzard runner host`` and
+    ``blizzard runner tick`` once the graph is built and before either serves or ticks. A store not yet bound stamps
+    nothing — registration's first adoption stamps them in the identity write's commit."""
+    bound = runner.connections.runner_id
+    return runner.host.host_stores.unowned_row_stamp.stamp(bound) if bound is not None else 0
 
 
 def build_host_stores(
