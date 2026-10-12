@@ -34,6 +34,7 @@ from blizzard.runner.composition import (
     build_runner_platform_tracing,
     build_runner_process,
     build_runner_received_telemetry,
+    stamp_unowned_rows,
 )
 from blizzard.runner.config import ConfigError, RunnerConfig
 from blizzard.runner.events.broker import EventBroker
@@ -461,6 +462,9 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
         identity=identity,
     )
     try:
+        # The start-up stamp, before the process serves or ticks: rows the store holds that name no runner are the
+        # bound runner's.
+        stamp_unowned_rows(graph)
         hosted = build_hosted_app(config, process_graph=graph)
         try:
             _serve_host(config, graph, hosted)
@@ -612,7 +616,13 @@ def tick_cmd(directory: str) -> None:
     bundle = _publish_harness_bundle(config)
     with click_exception_on(RevisionMismatchError):
         ensure_current_revision(config)
-    LoopWiring.of(config, bundle=bundle).tick_once()
+    graph = build_runner_process(config, bundle=bundle)
+    try:
+        # The start-up stamp, before the tick, as `host` runs it before serving.
+        stamp_unowned_rows(graph)
+        LoopWiring.of(config, bundle=bundle).tick_once(process=graph)
+    finally:
+        graph.close()
     click.echo("tick complete")
 
 

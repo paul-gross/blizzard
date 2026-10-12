@@ -258,17 +258,15 @@ def build_runner_process(
             reader=SqlAlchemyStoreStatusReader(engine), expected_revision=migration_runner(config).script_head()
         )
         # Bound and seeded only from a store at the code's schema head: a store mid-migration fails readiness, not
-        # boot, and binds when registration adopts an id.
+        # boot, and binds when registration adopts an id. Rows naming no runner are stamped by the command that starts
+        # the process (`stamp_unowned_rows`), before it serves or ticks.
         ready = readiness.evaluate().ready
         connections = RunnerStoreConnections(engine, RunnerStoreErrorFactory(get_logger("blizzard.runner.store")))
-        bound = connections.bind_to_stored() if ready else None
+        if ready:
+            connections.bind_to_stored()
         stores = _build_stores(connections)
         clock = SystemClock()
         host_stores = _build_host_stores(connections, clock)
-        if bound is not None:
-            # The start-up stamp: rows the store holds that name no runner are the bound runner's, stamped before
-            # the process serves or ticks.
-            host_stores.unowned_row_stamp.stamp(bound)
         registered = stores.identity.runner_identity() if ready else None
         if registered is not None:
             identity.hold(registered)
@@ -430,6 +428,15 @@ def build_read_stores(engine: Engine, *, errors: RunnerStoreErrorFactory) -> Run
     connections = RunnerStoreConnections(engine, errors)
     connections.bind_to_stored()
     return RunnerReadStores.of(_build_stores(connections))
+
+
+def stamp_unowned_rows(graph: RunnerProcess) -> int:
+    """The start-up stamp: when the graph's store is bound, stamp the bound runner's id on every runner-scoped row that
+    names none; answer how many were stamped. Run by ``blizzard runner host`` and ``blizzard runner tick`` once the
+    graph is built and before either serves or ticks. A store not yet bound stamps nothing — registration's first
+    adoption stamps them in the identity write's commit."""
+    bound = graph.connections.runner_id
+    return graph.host_stores.unowned_row_stamp.stamp(bound) if bound is not None else 0
 
 
 def build_host_stores(

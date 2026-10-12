@@ -9,9 +9,7 @@ Seeded with rows built from the store's reflected shape at the parent revision, 
 
 from __future__ import annotations
 
-import re
 import shutil
-from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -22,21 +20,16 @@ from blizzard.cli.main import blizzard
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.runner import runtime as runner_runtime
-from blizzard.runner.store import schema
+from tests.runner_scope_seeding import KEYED, T0, reflect, seed_every_keyed_table
 
 pytestmark = pytest.mark.component
 
 _PARENT = "20261009_1000_runner_lease_closures_lease_id_index"
 _REVISION = "20261011_1000_runner_scope"
 _RUNNER_ID = "rn_01JX0000000000000000000000"
-_T0 = datetime(2026, 1, 1, tzinfo=UTC)
 _HOST_TABLES = {"host_identity", "host_outbound_buffer", "host_high_water_seen"}
 _ENV_BINDING_COLUMNS = {"workspace_id", "project_id"}
-_ALLOWED_VALUES = re.compile(r"^\s*(\w+)\s+IN\s*\(\s*'([^']*)'")
 _HEARTBEATS = 2500  # spans several of the backfill's bounded batches
-
-# Every runner-scoped table but the identity row, which keys itself by its own ``runner_id``.
-_KEYED = frozenset(t.name for t in schema.metadata.sorted_tables if t.info["scope"] == "runner") - {"runner_identity"}
 
 
 def _store_at_parent(tmp_path: Path) -> tuple[MigrationRunner, sa.Engine]:
@@ -46,55 +39,17 @@ def _store_at_parent(tmp_path: Path) -> tuple[MigrationRunner, sa.Engine]:
     return migration, create_engine_from_url(config.db_url)
 
 
-def _reflect(engine: sa.Engine) -> sa.MetaData:
-    reflected = sa.MetaData()
-    reflected.reflect(engine)
-    return reflected
-
-
-def _value_for(column: sa.Column) -> object:
-    try:
-        python_type = column.type.python_type
-    except NotImplementedError:
-        return f"{column.name}-1"
-    if python_type is bool:
-        return False
-    if python_type is int:
-        return 1
-    if python_type is float:
-        return 1.0
-    if python_type is datetime:
-        return _T0
-    return f"{column.name}-1"
-
-
-def _seed_every_keyed_table(engine: sa.Engine, shapes: sa.MetaData) -> None:
-    """One row in every keyed table, built from SHAPES: every column gets a value of its own type, or the first value
-    its ``IN (...)`` CHECK constraint allows. The shapes name only the columns they reflected, so built from the
-    parent's they write exactly as the previous release's statements do."""
-    inspector = sa.inspect(engine)
-    with engine.begin() as conn:
-        for name in sorted(_KEYED):
-            table = shapes.tables[name]
-            allowed = {
-                match.group(1): match.group(2)
-                for check in inspector.get_check_constraints(name)
-                if (match := _ALLOWED_VALUES.match(check["sqltext"])) is not None
-            }
-            conn.execute(sa.insert(table).values({c.name: allowed.get(c.name, _value_for(c)) for c in table.columns}))
-
-
 def _seed_identity(engine: sa.Engine) -> None:
     with engine.begin() as conn:
         conn.execute(
             sa.text("INSERT INTO runner_identity (runner_id, runner_name, registered_at) VALUES (:id, 'r', :at)"),
-            {"id": _RUNNER_ID, "at": _T0.isoformat()},
+            {"id": _RUNNER_ID, "at": T0.isoformat()},
         )
 
 
 def _runner_ids(engine: sa.Engine) -> dict[str, set[str | None]]:
     with engine.connect() as conn:
-        return {name: set(conn.execute(sa.text(f"SELECT DISTINCT runner_id FROM {name}")).scalars()) for name in _KEYED}
+        return {name: set(conn.execute(sa.text(f"SELECT DISTINCT runner_id FROM {name}")).scalars()) for name in KEYED}
 
 
 def _tables(engine: sa.Engine) -> set[str]:
@@ -136,8 +91,8 @@ def test_the_revision_keys_exactly_the_runner_scoped_tables(tmp_path: Path) -> N
         assert _tables(engine) - before == _HOST_TABLES
         inspector = sa.inspect(engine)
         keyed = {t for t in _tables(engine) if "runner_id" in {c["name"] for c in inspector.get_columns(t)}}
-        assert keyed == _KEYED | {"runner_identity"}
-        for table in _KEYED:
+        assert keyed == KEYED | {"runner_identity"}
+        for table in KEYED:
             [runner_id] = [c for c in inspector.get_columns(table) if c["name"] == "runner_id"]
             assert runner_id["nullable"], table
         added = {c["name"] for c in inspector.get_columns("env_bindings")} & _ENV_BINDING_COLUMNS
@@ -151,17 +106,17 @@ def test_upgrade_fills_every_runner_scoped_row_from_the_identity(tmp_path: Path)
     migration, engine = _store_at_parent(tmp_path)
     try:
         _seed_identity(engine)
-        _seed_every_keyed_table(engine, _reflect(engine))
+        seed_every_keyed_table(engine, reflect(engine))
         with engine.begin() as conn:
             conn.execute(
                 sa.text("INSERT INTO heartbeats (lease_id, beat_at) VALUES ('lease-1', :at)"),
-                [{"at": _T0.isoformat()} for _ in range(_HEARTBEATS)],
+                [{"at": T0.isoformat()} for _ in range(_HEARTBEATS)],
             )
         counts = _row_counts(engine)
 
         migration.upgrade(_REVISION)
 
-        assert _runner_ids(engine) == {table: {_RUNNER_ID} for table in _KEYED}
+        assert _runner_ids(engine) == {table: {_RUNNER_ID} for table in KEYED}
         assert {t: n for t, n in _row_counts(engine).items() if t in counts} == counts
         with engine.connect() as conn:
             stamped = conn.execute(sa.text("SELECT count(*) FROM heartbeats WHERE runner_id = :id"), {"id": _RUNNER_ID})
@@ -173,11 +128,11 @@ def test_upgrade_fills_every_runner_scoped_row_from_the_identity(tmp_path: Path)
 def test_a_store_with_no_identity_keeps_every_runner_id_null(tmp_path: Path) -> None:
     migration, engine = _store_at_parent(tmp_path)
     try:
-        _seed_every_keyed_table(engine, _reflect(engine))
+        seed_every_keyed_table(engine, reflect(engine))
 
         migration.upgrade(_REVISION)
 
-        assert _runner_ids(engine) == {table: {None} for table in _KEYED}
+        assert _runner_ids(engine) == {table: {None} for table in KEYED}
     finally:
         engine.dispose()
 
@@ -188,8 +143,8 @@ def test_a_rerun_after_an_interrupted_upgrade_finishes_it(tmp_path: Path) -> Non
     migration, engine = _store_at_parent(tmp_path)
     try:
         _seed_identity(engine)
-        _seed_every_keyed_table(engine, _reflect(engine))
-        done = sorted(_KEYED)[: len(_KEYED) // 2]
+        seed_every_keyed_table(engine, reflect(engine))
+        done = sorted(KEYED)[: len(KEYED) // 2]
         with engine.begin() as conn:
             for table in done:
                 conn.execute(sa.text(f"ALTER TABLE {table} ADD COLUMN runner_id VARCHAR"))
@@ -205,7 +160,7 @@ def test_a_rerun_after_an_interrupted_upgrade_finishes_it(tmp_path: Path) -> Non
         migration.upgrade(_REVISION)
 
         assert migration.current_revision() == _REVISION
-        assert _runner_ids(engine) == {table: {_RUNNER_ID} for table in _KEYED}
+        assert _runner_ids(engine) == {table: {_RUNNER_ID} for table in KEYED}
         assert _tables(engine) >= _HOST_TABLES
         assert {c["name"] for c in sa.inspect(engine).get_columns("env_bindings")} >= _ENV_BINDING_COLUMNS
     finally:
@@ -216,7 +171,7 @@ def test_downgrade_restores_the_parent_schema_exactly(tmp_path: Path) -> None:
     migration, engine = _store_at_parent(tmp_path)
     try:
         _seed_identity(engine)
-        _seed_every_keyed_table(engine, _reflect(engine))
+        seed_every_keyed_table(engine, reflect(engine))
         schema_before, counts_before = _schema(engine), _row_counts(engine)
 
         migration.upgrade(_REVISION)
@@ -232,12 +187,12 @@ def test_the_previous_releases_statements_write_to_the_migrated_store_with_no_ru
     migration, engine = _store_at_parent(tmp_path)
     try:
         _seed_identity(engine)
-        parent_shapes = _reflect(engine)
+        parent_shapes = reflect(engine)
         migration.upgrade(_REVISION)
 
-        _seed_every_keyed_table(engine, parent_shapes)
+        seed_every_keyed_table(engine, parent_shapes)
 
-        assert _runner_ids(engine) == {table: {None} for table in _KEYED}
+        assert _runner_ids(engine) == {table: {None} for table in KEYED}
     finally:
         engine.dispose()
 
@@ -249,7 +204,7 @@ def test_the_cli_migrates_a_copied_store_down_to_the_parent_and_back(tmp_path: P
     engine = create_engine_from_url(config.db_url)
     try:
         _seed_identity(engine)
-        _seed_every_keyed_table(engine, _reflect(engine))
+        seed_every_keyed_table(engine, reflect(engine))
         parent_schema = _schema(engine)
     finally:
         engine.dispose()
@@ -268,13 +223,13 @@ def test_the_cli_migrates_a_copied_store_down_to_the_parent_and_back(tmp_path: P
     engine = create_engine_from_url(copy_url)
     try:
         migrate()
-        assert _runner_ids(engine) == {table: {_RUNNER_ID} for table in _KEYED}
+        assert _runner_ids(engine) == {table: {_RUNNER_ID} for table in KEYED}
 
         migrate("--down", _PARENT)
         assert _schema(engine) == parent_schema
 
         migrate()
-        assert _runner_ids(engine) == {table: {_RUNNER_ID} for table in _KEYED}
+        assert _runner_ids(engine) == {table: {_RUNNER_ID} for table in KEYED}
         assert _tables(engine) >= _HOST_TABLES
     finally:
         engine.dispose()
