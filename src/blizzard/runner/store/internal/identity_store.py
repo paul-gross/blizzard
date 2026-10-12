@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
+from sqlalchemy import Connection
+
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.hub.identity import IWriteRunnerIdentityRepository, RunnerIdentity
 from blizzard.runner.store.errors import RunnerStoreConnections
-from blizzard.runner.store.internal.host_unowned_row_stamp import stamp_unowned_rows
 from blizzard.runner.store.schema import runner_identity
 
 _log = get_logger("blizzard.runner.store")
@@ -14,8 +17,10 @@ _log = get_logger("blizzard.runner.store")
 class RunnerIdentityStore:
     """Read-write adapter over the runner store's single identity row."""
 
-    def __init__(self, store: RunnerStoreConnections) -> None:
+    def __init__(self, store: RunnerStoreConnections, stamp_unowned: Callable[[Connection, str], int]) -> None:
+        # The stamp is a ``HostStores`` member's, handed in: a runner adapter holds no door to the exempt statements.
         self._store = store
+        self._stamp_unowned = stamp_unowned
 
     def runner_identity(self) -> RunnerIdentity | None:
         rows = self._store.all(
@@ -54,7 +59,7 @@ class RunnerIdentityStore:
         self._store.bind(identity.runner_id)
         with self._store.begin() as conn:
             if binding:
-                stamp_unowned_rows(conn, identity.runner_id)
+                self._stamp_unowned(conn, identity.runner_id)
             # The bound runner's row is updated in place, so the served-projects answer's marker on it stays.
             kept = conn.execute(self._store.update(runner_identity).values(**values)).rowcount
             if not kept:

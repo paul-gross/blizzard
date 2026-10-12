@@ -518,8 +518,14 @@ def _host_store_breaches(src_root: Path) -> list[str]:
             continue
         foreign = "runner" if host_module else "host"
         where = path.relative_to(src_root.parent)
+        tree = ast.parse(path.read_text(), filename=str(path))
+        if not host_module:
+            # A host module's exempt statements are reached through its HostStores member, handed in by composition.
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ImportFrom) and ".internal.host_" in f".{node.module or ''}":
+                    breaches.append(f"{where}:{node.lineno} — a runner adapter imports the host module {node.module}")
         seen: set[tuple[int, str]] = set()
-        for node, name, function in _table_names_in(ast.parse(path.read_text(), filename=str(path))):
+        for node, name, function in _table_names_in(tree):
             if scopes.get(name) != foreign:
                 continue
             module, method, table = _CROSS_KIND_WRITE
@@ -591,6 +597,10 @@ def _plant_host_store(tmp_path: Path, rel: str, text: str) -> list[str]:
         ),
         ("tools/invariants.py", "from blizzard.runner.store.errors import RUNNER_SCOPED_OPTION\n"),
         ("runner/store/internal/pause_store.py", 'OPTIONS = {"blizzard_runner_unscoped": True}\n'),
+        (
+            "runner/store/internal/identity_store.py",
+            "from blizzard.runner.store.internal.host_unowned_row_stamp import stamp_unowned_rows\n",
+        ),
         (
             "runner/store/internal/host_daemon_liveness_store.py",
             "conn.execution_options(**{RUNNER_SCOPED_OPTION: 1})\n",

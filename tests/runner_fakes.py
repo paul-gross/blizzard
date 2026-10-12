@@ -101,7 +101,7 @@ from blizzard.runner.store.internal.host_external_usage_store import ExternalUsa
 from blizzard.runner.store.internal.host_graph_artifact_store import GraphArtifactStore
 from blizzard.runner.store.internal.host_jti_cache_store import JtiCacheRepository
 from blizzard.runner.store.internal.host_runner_audit import RunnerAudit
-from blizzard.runner.store.internal.host_unowned_row_stamp import UnownedRowStamp
+from blizzard.runner.store.internal.host_unowned_row_stamp import UnownedRowStamp, stamp_unowned_rows
 from blizzard.runner.store.internal.host_workspace_prompt_store import WorkspacePromptStore
 from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
 from blizzard.runner.store.internal.invocation_boundary_store import InvocationBoundaryStore
@@ -201,7 +201,7 @@ class SqlAlchemyRunnerStore(
         OverloadStore.__init__(self, store)
         AskStore.__init__(self, store)
         PauseStore.__init__(self, store)
-        RunnerIdentityStore.__init__(self, store)
+        RunnerIdentityStore.__init__(self, store, stamp_unowned_rows)
         ServedProjectsStore.__init__(self, store)
         TakeoverStore.__init__(self, store)
         RequeueStore.__init__(self, store)

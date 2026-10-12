@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
+from posixpath import normpath
 from typing import Protocol
 
 from blizzard.foundation.roles import domain_model
@@ -95,7 +95,7 @@ def binding_completion(
 ) -> BindingCompletion | None:
     """The completion ``row`` takes, or ``None`` when it gains nothing this time.
 
-    The row takes ``workspace_id`` when its workdir resolves to one of ``listed_workdirs`` — the
+    The row takes ``workspace_id`` when its workdir normalizes to one of ``listed_workdirs`` — the
     workspace root joined with each environment its provider lists — never by environment name
     alone. It takes ``project_id`` when the hub answered one. A column already set is never
     overwritten."""
@@ -110,8 +110,9 @@ def binding_completion(
     return BindingCompletion(binding_id=row.binding_id, workspace_id=workspace, project_id=project)
 
 
-def _resolved(workdir: str) -> Path:
-    return Path(workdir).resolve()
+def _resolved(workdir: str) -> str:
+    """``workdir`` with redundant separators and dot segments folded away: a pure comparison, no filesystem."""
+    return normpath(workdir)
 
 
 def _holders_other_than(chunk_id: str, held: Sequence[EnvBinding]) -> dict[str, str]:

@@ -82,6 +82,9 @@ _KEYED: tuple[tuple[str, tuple[str, ...]], ...] = (
 )
 
 # The columns each table gains ahead of ``runner_id``, in the same batch.
+# The keyed tables the parent revision created with ``sqlite_autoincrement``.
+_AUTOINCREMENT = frozenset({"outbound_buffer", "transcript_outbound_buffer", "in_flight_elicitations"})
+
 _EXTRA_COLUMNS: dict[str, tuple[str, ...]] = {"env_bindings": ("workspace_id", "project_id")}
 
 # The host-scoped tables this revision creates, frozen at their created shape (``bzh:frozen-revisions``).
@@ -175,7 +178,10 @@ def downgrade() -> None:
         added = [name for name in (_RUNNER_COLUMN, *reversed(_EXTRA_COLUMNS.get(table, ()))) if name in present]
         if not added:
             continue
-        with op.batch_alter_table(table, recreate="auto") as batch:
+        # The recreate copies the table through a fresh CREATE, so a table the parent declared AUTOINCREMENT names it
+        # again, or pruned ids would be reused.
+        kwargs = {"sqlite_autoincrement": True} if table in _AUTOINCREMENT else {}
+        with op.batch_alter_table(table, recreate="auto", table_kwargs=kwargs) as batch:
             for name in added:
                 batch.drop_column(name)
     existing = set(sa.inspect(bind).get_table_names())

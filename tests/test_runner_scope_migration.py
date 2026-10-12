@@ -186,6 +186,29 @@ def test_downgrade_restores_the_parent_schema_exactly(tmp_path: Path) -> None:
         engine.dispose()
 
 
+def _autoincrement_tables(engine: sa.Engine) -> set[str]:
+    """The tables whose DDL names AUTOINCREMENT — which the inspector cannot see."""
+    with engine.connect() as conn:
+        rows = conn.execute(sa.text("SELECT name, sql FROM sqlite_master WHERE type = 'table'")).all()
+    return {name for name, ddl in rows if ddl and "AUTOINCREMENT" in ddl.upper()}
+
+
+def test_a_downgrade_and_upgrade_keep_every_autoincrement_table_autoincrementing(tmp_path: Path) -> None:
+    migration, engine = _store_at_parent(tmp_path)
+    try:
+        declared = _autoincrement_tables(engine)
+        assert declared
+
+        migration.upgrade(_REVISION)
+        assert _autoincrement_tables(engine) >= declared
+        migration.downgrade(_PARENT)
+        assert _autoincrement_tables(engine) == declared
+        migration.upgrade(_REVISION)
+        assert _autoincrement_tables(engine) >= declared
+    finally:
+        engine.dispose()
+
+
 def test_the_previous_releases_statements_write_to_the_migrated_store_with_no_runner(tmp_path: Path) -> None:
     migration, engine = _store_at_parent(tmp_path)
     try:

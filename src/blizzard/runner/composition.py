@@ -65,6 +65,7 @@ from blizzard.runner.store.internal.host_graph_artifact_store import GraphArtifa
 from blizzard.runner.store.internal.host_jti_cache_store import JtiCacheRepository
 from blizzard.runner.store.internal.host_runner_audit import RunnerAudit
 from blizzard.runner.store.internal.host_unowned_row_stamp import UnownedRowStamp
+from blizzard.runner.store.internal.host_unowned_row_stamp import stamp_unowned_rows as stamp_unowned_rows_on
 from blizzard.runner.store.internal.host_workspace_prompt_store import WorkspacePromptStore
 from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
 from blizzard.runner.store.internal.invocation_boundary_store import InvocationBoundaryStore
@@ -405,7 +406,7 @@ def _build_stores(connections: RunnerStoreConnections) -> RunnerStores:
         overload=OverloadStore(connections),
         asks=AskStore(connections),
         pause=PauseStore(connections),
-        identity=RunnerIdentityStore(connections),
+        identity=RunnerIdentityStore(connections, stamp_unowned_rows_on),
         served_projects=ServedProjectsStore(connections),
         takeover=TakeoverStore(connections),
         requeue=RequeueStore(connections),
