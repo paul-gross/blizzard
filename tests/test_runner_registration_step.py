@@ -36,7 +36,8 @@ pytestmark = pytest.mark.component
 def _ctx(db: Path, hub: FakeHub, *, name: str = "r-claude", registered: bool = False) -> LoopContext:
     """A context over the store at ``db``, its holder seeded from the store's identity row as
     composition seeds it at boot — so a second call over the same file is a restart."""
-    store = make_store(f"sqlite:///{db}")
+    store = make_store(f"sqlite:///{db}", runner_id=None)
+    store.connections.bind_to_stored()  # as composition binds the store at boot
     ctx = make_context(
         store,
         hub=hub,
@@ -254,7 +255,7 @@ def test_reap_and_resume_wait_for_the_first_registration_then_proceed(tmp_path: 
     store.record_heartbeat(lease_id="lease_stalled", beat_at=_NOW)  # stale by _LATER, its worker alive
     _running_lease(store, "lease_marked", "ch_2", pid=200, env="e2")
     store.record_resume_intent(lease_id="lease_marked", marked_at=_NOW)
-    hub = FakeHub(default_runner_id="rn_minted")
+    hub = FakeHub()  # the hub mints the id the store's leases are keyed to
     hub.ended = {"ch_1"}  # a retry re-reads nothing, so a reap only closes and releases
     hub.not_found = {"ch_2"}  # judged, the marked lease's chunk is gone: an abandon
     probe = FakeProbe(alive={(100, "start-100")})

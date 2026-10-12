@@ -19,9 +19,10 @@ from blizzard.runner.environments.provider import WorkspaceRepo
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
+from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.loop_wiring import LoopWiring
-from tests.runner_fakes import FakeHub, make_store, migrated_store_at
+from tests.runner_fakes import FIXTURE_RUNNER_ID, FakeHub, make_store, migrated_store_at
 
 _NOW = datetime(2026, 7, 17, 12, 0, 0, tzinfo=UTC)
 
@@ -38,12 +39,14 @@ def test_basic_takeover_escalation_and_transcript_resolve_to_the_environment_wor
     )
     workdir = str(tmp_path / "scratch" / "e1")
     migrated_store_at(config.db_url)
+    # The process graph binds to the stored identity at build — a registered runner's store.
+    store = make_store(config.db_url)
+    store.record_runner_identity(RunnerIdentity(FIXTURE_RUNNER_ID, "runner-local", _NOW))
     graph = build_runner_process(config, events=EventBroker())
     hosted = build_hosted_app(config, process_graph=graph)
     try:
         ctx = LoopWiring(config, "", "", graph.events).context(FakeHub(), graph)
         try:
-            store = make_store(config.db_url)
             for lease_id, chunk_id in (("lease_1", "ch_1"), ("lease_2", "ch_2")):
                 store.record_lease(
                     NewLease(

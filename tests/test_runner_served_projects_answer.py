@@ -32,7 +32,15 @@ from blizzard.runner.hub.served_projects import (
 from blizzard.runner.lifecycle.model import ClaimVerdict, claim_denial_fields, claim_verdict
 from blizzard.runner.lifecycle.registration import Registration
 from blizzard.runner.loop.context import LoopConfig, LoopContext
-from tests.runner_fakes import FakeHarness, FakeHub, FakeProbe, FakeProvider, make_context, make_store
+from tests.runner_fakes import (
+    FIXTURE_RUNNER_ID,
+    FakeHarness,
+    FakeHub,
+    FakeProbe,
+    FakeProvider,
+    make_context,
+    make_store,
+)
 from tests.runner_init_fakes import FakeInitHub, init_runner
 
 _AT = datetime(2026, 10, 8, 11, 0, tzinfo=UTC)
@@ -48,7 +56,7 @@ _HUB = "http://hub.test:8421"
 
 def _store(tmp_path: Path):  # type: ignore[no-untyped-def]
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
-    store.record_runner_identity(RunnerIdentity(runner_id="rn_1", runner_name="r", registered_at=_AT))
+    store.record_runner_identity(RunnerIdentity(runner_id=FIXTURE_RUNNER_ID, runner_name="r", registered_at=_AT))
     return store
 
 
@@ -73,7 +81,9 @@ def test_an_answer_is_kept_in_declared_order_and_replaced_whole(tmp_path: Path) 
 def test_re_recording_the_same_runners_identity_keeps_the_answer(tmp_path: Path) -> None:
     store = _store(tmp_path)
     store.record_served_projects((), at=_AT)
-    store.record_runner_identity(RunnerIdentity(runner_id="rn_1", runner_name="renamed", registered_at=_LATER))
+    store.record_runner_identity(
+        RunnerIdentity(runner_id=FIXTURE_RUNNER_ID, runner_name="renamed", registered_at=_LATER)
+    )
     assert store.served_projects_answer() == ServedProjectsAnswer(projects=(), answered_at=_AT)
 
 
@@ -133,7 +143,7 @@ def test_an_unreachable_hub_keeps_the_stored_answer(tmp_path: Path) -> None:
 
 @pytest.mark.component
 def test_a_reply_naming_another_runner_stores_no_answer(tmp_path: Path) -> None:
-    hub = FakeHub(default_runner_id="rn_store")
+    hub = FakeHub()
     hub.served_projects = (_BLIZZARD,)
     ctx = _ctx(tmp_path, hub, ("blizzard",))
     Registration(ctx).run()

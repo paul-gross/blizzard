@@ -61,7 +61,7 @@ def _pre_identity_store(tmp_path: Path) -> SqlAlchemyRunnerStore:
     finally:
         engine.dispose()
     migrations.upgrade("head")
-    return SqlAlchemyRunnerStore(create_engine_from_url(url), runner_store_errors())
+    return SqlAlchemyRunnerStore(create_engine_from_url(url), runner_store_errors(), runner_id=None)
 
 
 def _replayed(store: SqlAlchemyRunnerStore, identity: RunnerIdentityHolder) -> list[FinishedSpan]:
@@ -111,7 +111,7 @@ def _cursor_rows(store: SqlAlchemyRunnerStore) -> int:
 def test_an_upgraded_runner_holds_its_cursor_until_its_first_registration_then_tells_what_closed_meanwhile(
     tmp_path: Path,
 ) -> None:
-    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}", runner_id=_REGISTERED.runner_id)
     clock = FixedClock(_CLOSED_AT)
     exporter = InMemoryTraceExporter()
 

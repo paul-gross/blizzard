@@ -13,6 +13,7 @@ import threading
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
@@ -27,8 +28,9 @@ from blizzard.runner.app import build_hosted_app
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.cli.daemon import RunnerDaemon
 from blizzard.runner.config import RunnerConfig
+from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.listeners import Listeners, Uds
-from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
+from tests.runner_fakes import FIXTURE_RUNNER_ID, SqlAlchemyRunnerStore, runner_store_errors
 from tests.runner_init_fakes import init_runner
 
 
@@ -578,9 +580,15 @@ def _store(root: Path) -> SqlAlchemyRunnerStore:
 
 
 def _init_runner(tmp_path: Path) -> Path:
+    """An initialized runner that has registered — the local API writes only a bound store."""
     root = tmp_path / "runner"
     result = init_runner().invoke(runner_group, ["init", str(root)])
     assert result.exit_code == 0, result.output
+    _store(root).record_runner_identity(
+        RunnerIdentity(
+            runner_id=FIXTURE_RUNNER_ID, runner_name="runner-local", registered_at=datetime(2026, 7, 16, tzinfo=UTC)
+        )
+    )
     return root
 
 

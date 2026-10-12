@@ -44,6 +44,7 @@ from blizzard.runner.harness.opencode.adapter import OpenCodeAdapter
 from blizzard.runner.harness.opencode.section import OpenCodeSection
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.wiring import publish_harness_bundle
+from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.tick import tick
@@ -56,6 +57,7 @@ from blizzard.runner.subscriptions.internal.openai_subscription_sampler import O
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC, PROVIDER_OPENAI
 from tests.harness_sections import sections
 from tests.runner_fakes import (
+    FIXTURE_RUNNER_ID,
     FakeHub,
     FakeProbe,
     loop_context,
@@ -851,9 +853,11 @@ def test_hosted_app_composes_the_escalation_takeover_command_over_the_runner_roo
         workspace_repos=(WorkspaceRepo("toy", "file:///tmp/toy.git"),),
     )
     migrated_store_at(config.db_url)
+    store = make_store(config.db_url)
+    # The hosted app's read side binds to the runner the stored identity row names.
+    store.record_runner_identity(RunnerIdentity(FIXTURE_RUNNER_ID, "runner-local", _NOW))
     hosted = build_hosted_app(config)
     try:
-        store = make_store(config.db_url)
         store.record_lease(
             NewLease(
                 lease_id="lease_1",

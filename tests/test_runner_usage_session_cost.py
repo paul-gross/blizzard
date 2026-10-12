@@ -16,7 +16,7 @@ from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionRefe
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.store.schema import usage_facts
-from tests.runner_fakes import make_store, record_usage
+from tests.runner_fakes import FIXTURE_RUNNER_ID, make_store, record_usage
 
 pytestmark = pytest.mark.unit
 
@@ -111,9 +111,9 @@ def test_the_harness_figure_is_kept_beside_the_cost_derived_from_it(tmp_path):  
     engine = sa.create_engine(f"sqlite:///{tmp_path / 'runner.db'}")
     with engine.connect() as conn:
         rows = conn.execute(
-            sa.select(usage_facts.c.kind, usage_facts.c.cost_usd, usage_facts.c.reported_cost_usd).order_by(
-                usage_facts.c.id
-            )
+            sa.select(usage_facts.c.kind, usage_facts.c.cost_usd, usage_facts.c.reported_cost_usd)
+            .where(usage_facts.c.runner_id == FIXTURE_RUNNER_ID)
+            .order_by(usage_facts.c.id)
         ).all()
     assert [(r.kind, r.cost_usd, r.reported_cost_usd) for r in rows] == [
         ("spawn", pytest.approx(2.00), pytest.approx(2.00)),
@@ -167,6 +167,7 @@ def test_a_session_spanning_the_reading_change_charges_only_what_followed_it(tmp
         for generation, cumulative in ((1, 2.00), (2, 2.10)):
             conn.execute(
                 usage_facts.insert().values(
+                    runner_id=FIXTURE_RUNNER_ID,
                     lease_id="lease_1",
                     chunk_id="ch_1",
                     node_id="nd_build",
@@ -190,7 +191,7 @@ def test_a_session_spanning_the_reading_change_charges_only_what_followed_it(tmp
     with engine.connect() as conn:
         rows = conn.execute(
             sa.select(usage_facts.c.generation, usage_facts.c.cost_usd)
-            .where(usage_facts.c.generation > 2)
+            .where(usage_facts.c.generation > 2, usage_facts.c.runner_id == FIXTURE_RUNNER_ID)
             .order_by(usage_facts.c.id)
         ).all()
     # Read against the summed totals instead, both would have gone backwards and banked nothing.

@@ -20,7 +20,7 @@ from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.store.schema import external_usage_samples, heartbeats, transcript_outbound_buffer
 from blizzard.runner.usage.repository import InvocationCost
-from tests.runner_fakes import make_store, record_usage
+from tests.runner_fakes import FIXTURE_RUNNER_ID, make_store, record_usage
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 
@@ -1483,7 +1483,15 @@ def test_transcript_outbound_buffer_is_fifo_ackable_and_its_own_sequence(tmp_pat
 
     engine = sa.create_engine(f"sqlite:///{tmp_path / 'runner.db'}")
     with engine.connect() as conn:
-        remaining = conn.execute(sa.select(transcript_outbound_buffer.c.seq)).scalars().all()
+        remaining = (
+            conn.execute(
+                sa.select(transcript_outbound_buffer.c.seq).where(
+                    transcript_outbound_buffer.c.runner_id == FIXTURE_RUNNER_ID
+                )
+            )
+            .scalars()
+            .all()
+        )
     # An acked `delta` row is pruned outright, not merely marked — up to the per-record cap each.
     assert list(remaining) == [t2]
 
@@ -1556,7 +1564,9 @@ def test_ack_transcript_outbound_keeps_a_final_marker_row_acked_not_deleted(tmp_
     engine = sa.create_engine(f"sqlite:///{tmp_path / 'runner.db'}")
     with engine.connect() as conn:
         remaining = conn.execute(
-            sa.select(transcript_outbound_buffer.c.seq, transcript_outbound_buffer.c.acked_at)
+            sa.select(transcript_outbound_buffer.c.seq, transcript_outbound_buffer.c.acked_at).where(
+                transcript_outbound_buffer.c.runner_id == FIXTURE_RUNNER_ID
+            )
         ).all()
     # ...but the row itself is still there, marked acked — not deleted.
     assert len(remaining) == 1
@@ -1647,7 +1657,11 @@ def _outbound_row_seqs(tmp_path) -> set[int]:  # type: ignore[no-untyped-def]
     with engine.connect() as conn:
         from blizzard.runner.store.schema import outbound_buffer
 
-        return set(conn.execute(sa.select(outbound_buffer.c.seq)).scalars().all())
+        return set(
+            conn.execute(sa.select(outbound_buffer.c.seq).where(outbound_buffer.c.runner_id == FIXTURE_RUNNER_ID))
+            .scalars()
+            .all()
+        )
 
 
 @pytest.mark.component
@@ -1710,7 +1724,13 @@ def test_prune_heartbeats_removes_a_superseded_beat_but_never_the_newest(tmp_pat
     engine = sa.create_engine(f"sqlite:///{tmp_path / 'runner.db'}")
     with engine.connect() as conn:
         remaining = (
-            conn.execute(sa.select(heartbeats.c.beat_at).where(heartbeats.c.lease_id == "lease_1")).scalars().all()
+            conn.execute(
+                sa.select(heartbeats.c.beat_at).where(
+                    heartbeats.c.lease_id == "lease_1", heartbeats.c.runner_id == FIXTURE_RUNNER_ID
+                )
+            )
+            .scalars()
+            .all()
         )
     assert list(remaining) == [newest]
 
@@ -1730,7 +1750,9 @@ def test_prune_heartbeats_never_prunes_a_same_instant_tied_newest_pair(tmp_path)
     engine = sa.create_engine(f"sqlite:///{tmp_path / 'runner.db'}")
     with engine.connect() as conn:
         remaining = conn.execute(
-            sa.select(sa.func.count()).select_from(heartbeats).where(heartbeats.c.lease_id == "lease_1")
+            sa.select(sa.func.count())
+            .select_from(heartbeats)
+            .where(heartbeats.c.lease_id == "lease_1", heartbeats.c.runner_id == FIXTURE_RUNNER_ID)
         ).scalar_one()
     assert remaining == 2
 
@@ -1824,7 +1846,11 @@ def test_ack_of_an_acked_final_marker_keeps_its_first_acked_at(tmp_path):  # typ
 
     engine = sa.create_engine(f"sqlite:///{tmp_path / 'runner.db'}")
     with engine.connect() as conn:
-        acked_at = conn.execute(sa.select(transcript_outbound_buffer.c.acked_at)).scalar_one()
+        acked_at = conn.execute(
+            sa.select(transcript_outbound_buffer.c.acked_at).where(
+                transcript_outbound_buffer.c.runner_id == FIXTURE_RUNNER_ID
+            )
+        ).scalar_one()
     assert acked_at.replace(tzinfo=None) == _NOW.replace(tzinfo=None)
 
 

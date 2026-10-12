@@ -13,19 +13,13 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
-from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.cli import runner as runner_group
-from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.leases.model import NewLease
-from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
-from tests.test_runner_status_cli import _init_runner, _serve_local_api
+from tests.runner_fakes import SqlAlchemyRunnerStore
+from tests.test_runner_status_cli import _init_runner, _registered_store, _serve_local_api
 
 _NOW = datetime(2026, 7, 17, 12, 0, 0, tzinfo=UTC)
-
-
-def _store(root: Path) -> SqlAlchemyRunnerStore:
-    return SqlAlchemyRunnerStore(create_engine_from_url(RunnerConfig.load(root).db_url), runner_store_errors())
 
 
 def _seed_escalated_chunk(store: SqlAlchemyRunnerStore) -> None:
@@ -55,7 +49,7 @@ def _seed_escalated_chunk(store: SqlAlchemyRunnerStore) -> None:
 @pytest.mark.component
 def test_requeue_over_an_escalated_chunk_reports_success(tmp_path: Path) -> None:
     root = _init_runner(tmp_path)
-    store = _store(root)
+    store = _registered_store(root)
     _seed_escalated_chunk(store)
 
     with _serve_local_api(root):
@@ -69,7 +63,7 @@ def test_requeue_over_an_escalated_chunk_reports_success(tmp_path: Path) -> None
 @pytest.mark.component
 def test_requeue_refuses_while_a_takeover_is_open(tmp_path: Path) -> None:
     root = _init_runner(tmp_path)
-    store = _store(root)
+    store = _registered_store(root)
     _seed_escalated_chunk(store)
     store.record_takeover(
         takeover_id="tko_1",
@@ -92,7 +86,7 @@ def test_requeue_refuses_while_a_takeover_is_open(tmp_path: Path) -> None:
 @pytest.mark.component
 def test_requeue_refuses_a_chunk_that_is_not_needs_human(tmp_path: Path) -> None:
     root = _init_runner(tmp_path)
-    store = _store(root)
+    store = _registered_store(root)
     store.record_lease(
         NewLease(
             lease_id="lease_1",
@@ -116,7 +110,7 @@ def test_requeue_refuses_a_chunk_that_is_not_needs_human(tmp_path: Path) -> None
 @pytest.mark.component
 def test_requeue_refuses_a_needs_human_chunk_holding_no_environment(tmp_path: Path) -> None:
     root = _init_runner(tmp_path)
-    store = _store(root)
+    store = _registered_store(root)
     _seed_escalated_chunk(store)
     store.record_release(chunk_id="ch_1", environment_id="e1", released_at=_NOW)
 

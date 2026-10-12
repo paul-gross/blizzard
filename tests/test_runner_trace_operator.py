@@ -41,7 +41,9 @@ def _env(enabled: bool) -> dict[str, str]:
 
 class _Runner:
     def __init__(self, tmp_path: Path, *, on: bool = True) -> None:
-        self.store: SqlAlchemyRunnerStore = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+        self.store: SqlAlchemyRunnerStore = make_store(
+            f"sqlite:///{tmp_path / 'runner.db'}", runner_id=fx.REGISTERED.runner_id
+        )
         self.clock = FixedClock(fx.at(1000))
         self.exporter = InMemoryTraceExporter()
         self.settings = TracingSettings.of(_env(on))

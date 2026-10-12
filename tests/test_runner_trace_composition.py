@@ -17,7 +17,7 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.loop_wiring import LoopWiring
 from blizzard.runner.tracing.sweep import LeaseTraceSweep, announce_rejected_tracing
-from tests.runner_fakes import REGISTERED_AT, SqlAlchemyRunnerStore, make_store, migrated_store_at
+from tests.runner_fakes import FIXTURE_RUNNER_ID, REGISTERED_AT, SqlAlchemyRunnerStore, make_store, migrated_store_at
 from tests.runner_trace_leases import closed_lease
 from tests.support import InMemoryTraceExporter
 
@@ -35,7 +35,10 @@ def _config(tmp_path: Path) -> tuple[RunnerConfig, SqlAlchemyRunnerStore]:
     )
     config.data_dir.mkdir(parents=True, exist_ok=True)
     migrated_store_at(config.db_url)
-    return config, make_store(config.db_url)
+    store = make_store(config.db_url)
+    # Registered, as a running host is — the process graph binds its store to the identity row it reads at boot.
+    store.record_runner_identity(RunnerIdentity(FIXTURE_RUNNER_ID, "runner-local", REGISTERED_AT))
+    return config, store
 
 
 def _cursor_rows(store: SqlAlchemyRunnerStore) -> int:
@@ -78,7 +81,6 @@ def test_grpc_is_rejected_and_announced_once_with_no_sweep(tmp_path: Path) -> No
 
 def test_an_endpoint_builds_a_sweep_over_the_injected_exporter(tmp_path: Path) -> None:
     config, store = _config(tmp_path)
-    store.record_runner_identity(RunnerIdentity("rn_01JREGISTERED", "runner-local", REGISTERED_AT))
     exporter = InMemoryTraceExporter()
     graph = build_runner_process(config, environ=_ENDPOINT, trace_exporter=exporter)
     try:

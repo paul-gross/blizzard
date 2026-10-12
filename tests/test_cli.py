@@ -23,6 +23,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.cli.daemon import LOCAL_CLIENT_TIMEOUT, daemon_holding
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.store import schema as runner_schema
+from tests.runner_fakes import FIXTURE_RUNNER_ID
 from tests.runner_init_fakes import init_runner
 
 pytestmark = pytest.mark.unit
@@ -194,6 +195,7 @@ def test_dev_check_invariants_asks_for_active_lease_process_is_live(tmp_path: Pa
     with engine.begin() as conn:
         conn.execute(
             insert(runner_schema.leases).values(
+                runner_id=FIXTURE_RUNNER_ID,
                 lease_id="lease_a",
                 chunk_id="ch_1",
                 epoch=1,

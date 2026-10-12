@@ -20,13 +20,14 @@ from blizzard.runner.composition import build_runner_process
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.internal.winter_provider import WinterWorkspaceProvider
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.judgement.git_commit_declaration import (
     RIDES_NO_COMPLETION_NOTE,
     GitCommitDeclarationService,
 )
 from blizzard.runner.loop_wiring import LoopWiring
-from tests.runner_fakes import FakeHub, FakeProvider, make_store, make_stores
+from tests.runner_fakes import FIXTURE_RUNNER_ID, FakeHub, FakeProvider, make_store, make_stores, migrated_store_at
 from tests.test_runner_winter_provider import _FakeGit, _FakeWinter
 
 _NOW = datetime(2026, 7, 22, 12, 0, 0, tzinfo=UTC)
@@ -291,7 +292,10 @@ def test_hosted_winter_reacquire_updates_worker_declarations_on_the_shared_provi
     import blizzard.runner.composition as composition
 
     db_url = f"sqlite:///{tmp_path / 'runner.db'}"
+    # The process graph binds to the stored identity at build, and only over a head-migrated store.
+    migrated_store_at(db_url)
     store = make_store(db_url)
+    store.record_runner_identity(RunnerIdentity(FIXTURE_RUNNER_ID, "runner-local", _NOW))
     config = RunnerConfig(root=tmp_path, db_url=db_url, workspace_root=str(tmp_path), workspace_envs=("e1",))
     (tmp_path / "e1").mkdir()
     winter = _FakeWinter()

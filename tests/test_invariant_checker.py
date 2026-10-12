@@ -13,7 +13,6 @@ from pathlib import Path
 
 import pytest
 import sqlalchemy as sa
-from sqlalchemy import insert
 
 from blizzard.auth_core import Role
 from blizzard.foundation.store.engine import create_engine_from_url
@@ -25,7 +24,7 @@ from blizzard.hub.tenancy import TenantId
 from blizzard.runner.runtime import init_environment as init_runner
 from blizzard.runner.store import schema as runner
 from blizzard.tools.invariants import HubInvariants, RunnerInvariants
-from tests.runner_fakes import FakeProbe
+from tests.runner_fakes import FIXTURE_RUNNER_ID, FakeProbe
 from tests.support import (
     MIGRATION_CLOCK,
     add_tenant,
@@ -46,6 +45,14 @@ from tests.support import (
 pytestmark = pytest.mark.component
 
 _NOW = datetime(2026, 7, 14, tzinfo=UTC)
+
+
+def insert(table: sa.Table) -> sa.Insert:
+    """An insert that names the fixture runner on runner-scoped tables, as the statement guard requires."""
+    statement = sa.insert(table)
+    if table.info.get("scope") == "runner":
+        return statement.values(runner_id=FIXTURE_RUNNER_ID)
+    return statement
 
 
 def _runner_engine(tmp_path: Path):

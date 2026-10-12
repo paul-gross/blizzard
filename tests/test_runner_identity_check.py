@@ -60,8 +60,9 @@ class _HubWithoutIdentityRead(FakeHub):
 def _ctx(
     tmp_path: Path, hub: FakeHub, *, registered: bool = True, hub_token: HubTokenHolder | None = None
 ) -> LoopContext:
-    """A context whose hub is gated by an unchecked verdict, as a freshly started runner's is."""
-    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    """A context whose hub is gated by an unchecked verdict, as a freshly started runner's is — its store
+    bound by the seeded registration when ``registered``, else by the first one."""
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}", runner_id=None)
     return make_context(
         store,
         hub=hub,

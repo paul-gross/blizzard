@@ -17,21 +17,16 @@ import httpx
 import pytest
 from click.testing import CliRunner
 
-from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.cli.daemon import RunnerDaemon
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.takeover import TakeoverCommand
-from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
-from tests.test_runner_status_cli import _init_runner, _serve_local_api
+from tests.runner_fakes import SqlAlchemyRunnerStore
+from tests.test_runner_status_cli import _init_runner, _registered_store, _serve_local_api
 
 _NOW = datetime(2026, 7, 17, 12, 0, 0, tzinfo=UTC)
-
-
-def _store(root: Path) -> SqlAlchemyRunnerStore:
-    return SqlAlchemyRunnerStore(create_engine_from_url(RunnerConfig.load(root).db_url), runner_store_errors())
 
 
 def _seed_parked_lease(store: SqlAlchemyRunnerStore) -> None:
@@ -92,7 +87,7 @@ def test_takeover_hands_the_resumed_session_a_worker_verb_that_reaches_the_runne
     forwarded env authorizes a worker verb against the SAME closed reference lease the
     parked attempt held — no fresh lease, just the open-takeover fact widening the resolver."""
     root = _init_runner(tmp_path)
-    store = _store(root)
+    store = _registered_store(root)
     _seed_escalated_lease(store)
     assert store.active_lease("lease_1") is None  # the closed-lease shape the bug reproduced against
 
@@ -126,7 +121,7 @@ def test_takeover_hands_the_resumed_session_a_worker_verb_that_reaches_the_runne
 @pytest.mark.component
 def test_takeover_execs_the_command_and_marks_it_ended(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = _init_runner(tmp_path)
-    store = _store(root)
+    store = _registered_store(root)
     _seed_parked_lease(store)
 
     calls: list[tuple[str, bool, str]] = []
@@ -172,7 +167,7 @@ def test_takeover_execs_the_command_and_marks_it_ended(tmp_path: Path, monkeypat
 @pytest.mark.component
 def test_takeover_propagates_a_nonzero_exit_code(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = _init_runner(tmp_path)
-    store = _store(root)
+    store = _registered_store(root)
     _seed_parked_lease(store)
 
     monkeypatch.setattr(subprocess, "call", lambda command, shell=False, cwd=None, env=None: 7)
@@ -192,7 +187,7 @@ def test_takeover_ends_the_takeover_even_when_the_child_raises_keyboard_interrup
     the end-PATCH runs in a ``finally`` around the child, firing even for the
     ``BaseException`` `KeyboardInterrupt`, which the CLI's `httpx.HTTPError` handler misses."""
     root = _init_runner(tmp_path)
-    store = _store(root)
+    store = _registered_store(root)
     _seed_parked_lease(store)
 
     def fake_call(command: str, shell: bool = False, cwd: str | None = None, env: dict[str, str] | None = None) -> int:
@@ -212,7 +207,7 @@ def test_takeover_ends_the_takeover_even_when_the_child_raises_keyboard_interrup
 @pytest.mark.component
 def test_takeover_refuses_a_live_worker_without_force(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = _init_runner(tmp_path)
-    store = _store(root)
+    store = _registered_store(root)
     store.record_lease(
         NewLease(
             lease_id="lease_1",
@@ -296,7 +291,7 @@ def test_takeover_end_closes_a_stranded_takeover_without_starting_a_session(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = _init_runner(tmp_path)
-    store = _store(root)
+    store = _registered_store(root)
     _seed_escalated_lease(store)
     _open_stranded_takeover(store)
     calls: list[str] = []
@@ -318,7 +313,7 @@ def test_takeover_end_closes_a_stranded_takeover_without_starting_a_session(
 def test_takeover_end_reports_a_takeover_ended_elsewhere(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A PATCH 404 is a clear message, not the generic could-not-reach-the-runner failure."""
     root = _init_runner(tmp_path)
-    store = _store(root)
+    store = _registered_store(root)
     _seed_escalated_lease(store)
     _open_stranded_takeover(store)
     real_get = RunnerDaemon.get

@@ -23,7 +23,15 @@ from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.retention_floor import RETENTION_FLOOR, RetentionPasses
 from blizzard.runner.loop.steps import Retention
 from blizzard.runner.store.schema import external_usage_samples, heartbeats
-from tests.runner_fakes import FakeHarness, FakeHub, FakeProbe, FakeProvider, make_context, make_store
+from tests.runner_fakes import (
+    FIXTURE_RUNNER_ID,
+    FakeHarness,
+    FakeHub,
+    FakeProbe,
+    FakeProvider,
+    make_context,
+    make_store,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -93,7 +101,9 @@ def _heartbeat_row_count(store) -> int:  # type: ignore[no-untyped-def]
     with store._engine.connect() as conn:
         return int(
             conn.execute(
-                sa.select(sa.func.count()).select_from(heartbeats).where(heartbeats.c.lease_id == "lease_1")
+                sa.select(sa.func.count())
+                .select_from(heartbeats)
+                .where(heartbeats.c.lease_id == "lease_1", heartbeats.c.runner_id == FIXTURE_RUNNER_ID)
             ).scalar_one()
         )
 

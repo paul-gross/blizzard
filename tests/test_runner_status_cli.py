@@ -34,14 +34,25 @@ from blizzard.runner.subscriptions.credential_renewer import (
     RenewalOutcome,
     RenewalOutcomeKind,
 )
-from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
+from tests.runner_fakes import FIXTURE_RUNNER_ID, SqlAlchemyRunnerStore, runner_store_errors
 from tests.runner_init_fakes import init_runner
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 
 
-def _store(root: Path) -> SqlAlchemyRunnerStore:
-    return SqlAlchemyRunnerStore(create_engine_from_url(RunnerConfig.load(root).db_url), runner_store_errors())
+def _store(root: Path, runner_id: str | None = FIXTURE_RUNNER_ID) -> SqlAlchemyRunnerStore:
+    return SqlAlchemyRunnerStore(
+        create_engine_from_url(RunnerConfig.load(root).db_url), runner_store_errors(), runner_id=runner_id
+    )
+
+
+def _registered_store(root: Path) -> SqlAlchemyRunnerStore:
+    """The store with an identity row recorded — the local API reads only a registered runner's rows."""
+    store = _store(root)
+    store.record_runner_identity(
+        RunnerIdentity(runner_id=FIXTURE_RUNNER_ID, runner_name="runner-local", registered_at=_NOW)
+    )
+    return store
 
 
 def _init_runner(tmp_path: Path) -> Path:
@@ -113,7 +124,7 @@ def _no_hub(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_status_renders_the_full_view_with_the_hub_unreachable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = _init_runner(tmp_path)
     _no_hub(monkeypatch)
-    store = _store(root)
+    store = _registered_store(root)
     store.record_lease(
         NewLease(
             lease_id="lease_1",
@@ -248,7 +259,9 @@ def test_status_headline_names_no_tenant_before_a_hub_names_one(
 ) -> None:
     root = _init_runner(tmp_path)
     _no_hub(monkeypatch)
-    _store(root).record_runner_identity(RunnerIdentity(runner_id="rn_1", runner_name="r-one", registered_at=_NOW))
+    _store(root, runner_id=None).record_runner_identity(
+        RunnerIdentity(runner_id="rn_1", runner_name="r-one", registered_at=_NOW)
+    )
     with _serve_local_api(root):
         result = CliRunner().invoke(runner_group, ["status", "--dir", str(root)])
 
@@ -262,7 +275,7 @@ def test_status_headline_names_no_tenant_before_a_hub_names_one(
 def test_status_headline_names_the_tenant_beside_the_runner(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = _init_runner(tmp_path)
     _no_hub(monkeypatch)
-    _store(root).record_runner_identity(
+    _store(root, runner_id=None).record_runner_identity(
         RunnerIdentity(
             runner_id="rn_1", runner_name="r-one", registered_at=_NOW, tenant_id="tn_bravo", tenant_name="bravo"
         )
@@ -286,7 +299,7 @@ def test_status_names_the_served_projects_unresolved_and_not_yet_answered_with_t
         )
     )
     _no_hub(monkeypatch)
-    store = _store(root)
+    store = _store(root, runner_id=None)
     store.record_runner_identity(RunnerIdentity(runner_id="rn_1", runner_name="r-one", registered_at=_NOW))
     store.record_served_projects(
         (ServedProject("blizzard", "prj_1", "blizzard", "Blizzard"), ServedProject("old-slug")), at=_NOW
@@ -426,7 +439,7 @@ def test_status_omits_an_unheld_pool_slot_from_held_environments(
     config_path = root / "blizzard-runner.toml"
     config_path.write_text(config_path.read_text().replace('workspace_envs = ["e1"]', 'workspace_envs = ["e1", "e2"]'))
     _no_hub(monkeypatch)
-    store = _store(root)
+    store = _registered_store(root)
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
 
     with _serve_local_api(root):
@@ -467,7 +480,7 @@ def test_status_prints_the_local_pause_reason_on_the_brake_line(
 ) -> None:
     root = _init_runner(tmp_path)
     _no_hub(monkeypatch)
-    _store(root).record_local_pause(
+    _registered_store(root).record_local_pause(
         paused=True,
         at=_NOW,
         by="usage-limit",
@@ -516,7 +529,7 @@ def test_status_prints_harness_health_under_a_no_acceptable_harness_escalation(
 ) -> None:
     root = _init_runner(tmp_path)
     _no_hub(monkeypatch)
-    _seed_escalation(_store(root), reason="no-acceptable-harness-mint")
+    _seed_escalation(_registered_store(root), reason="no-acceptable-harness-mint")
     paths = _record_daemon_paths(monkeypatch)
 
     with _serve_local_api(root) as (_, tcp_url):
@@ -539,7 +552,7 @@ def test_status_reads_no_harness_health_without_a_no_acceptable_harness_escalati
 ) -> None:
     root = _init_runner(tmp_path)
     _no_hub(monkeypatch)
-    _seed_escalation(_store(root), reason="escalated")
+    _seed_escalation(_registered_store(root), reason="escalated")
     paths = _record_daemon_paths(monkeypatch)
 
     with _serve_local_api(root):

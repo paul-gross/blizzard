@@ -142,7 +142,7 @@ def test_the_upgrade_adds_both_columns_empty_and_keeps_the_row(tmp_path: Path) -
         assert all(
             c["nullable"] for c in sa.inspect(engine).get_columns("runner_identity") if c["name"] in _TENANT_COLUMNS
         )
-        store = SqlAlchemyRunnerStore(engine, runner_store_errors())
+        store = SqlAlchemyRunnerStore(engine, runner_store_errors(), _RUNNER)
         assert store.runner_identity() == RunnerIdentity(_RUNNER, "r-claude", _REGISTERED)
     finally:
         engine.dispose()
@@ -163,7 +163,7 @@ def test_the_downgrade_drops_both_columns_keeping_the_row_and_upgrades_back(tmp_
     migration, engine = _store_at_parent(tmp_path)
     try:
         migration.upgrade(_REVISION)
-        store = SqlAlchemyRunnerStore(engine, runner_store_errors())
+        store = SqlAlchemyRunnerStore(engine, runner_store_errors(), _RUNNER)
         store.record_runner_identity(RunnerIdentity(_RUNNER, "r-claude", _REGISTERED, "ten_default", "default"))
 
         migration.downgrade(_PARENT)
@@ -228,7 +228,7 @@ def test_a_runner_upgraded_from_before_tenants_adopts_its_tenant_at_its_first_co
 
 def test_an_empty_row_takes_the_registered_runner_with_its_tenant(tmp_path: Path) -> None:
     """The check adopts nothing into an empty row; the registration after it records the runner and its tenant."""
-    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}", runner_id=None)
     ctx = _ctx(store, _tenant_hub())
 
     IdentityCheck(ctx).run()
@@ -241,7 +241,7 @@ def test_an_empty_row_takes_the_registered_runner_with_its_tenant(tmp_path: Path
 
 
 def test_a_mismatched_answer_records_nothing_of_the_other_runners_tenant(tmp_path: Path) -> None:
-    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}", runner_id=_RUNNER)
     store.record_runner_identity(RunnerIdentity(_RUNNER, "r-claude", _REGISTERED))
     hub = _tenant_hub("ten_other", "other")
     hub.issued[hub.token] = "rn_other"
@@ -265,7 +265,7 @@ def test_a_mismatched_answer_records_nothing_of_the_other_runners_tenant(tmp_pat
 def test_each_registration_keeps_the_tenant_its_reply_names_else_the_rows(
     tmp_path: Path, answered: tuple[str | None, str | None], kept: tuple[str | None, str | None]
 ) -> None:
-    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}", runner_id=_RUNNER)
     store.record_runner_identity(RunnerIdentity(_RUNNER, "r-claude", _REGISTERED, "ten_default", "default"))
     ctx = _ctx(store, _tenant_hub(*answered), checked=True)
 
@@ -277,7 +277,7 @@ def test_each_registration_keeps_the_tenant_its_reply_names_else_the_rows(
 
 
 def test_a_first_registration_after_the_upgrade_fills_the_tenant_when_the_check_could_not(tmp_path: Path) -> None:
-    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}", runner_id=_RUNNER)
     store.record_runner_identity(RunnerIdentity(_RUNNER, "r-claude", _REGISTERED))
 
     Registration(_ctx(store, _tenant_hub(), checked=True)).run()

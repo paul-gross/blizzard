@@ -21,7 +21,7 @@ from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.leases.model import Lease, NewLease
 from blizzard.runner.store.schema import usage_facts
 from blizzard.runner.usage.recorder import UsageRecorder
-from tests.runner_fakes import make_store, make_usage_recorder
+from tests.runner_fakes import FIXTURE_RUNNER_ID, make_store, make_usage_recorder
 
 pytestmark = pytest.mark.unit
 
@@ -85,7 +85,9 @@ def _rows(tmp_path: Path) -> list[sa.Row]:
                     usage_facts.c.cost_usd,
                     usage_facts.c.reported_cost_usd,
                     usage_facts.c.recorded_at,
-                ).order_by(usage_facts.c.id)
+                )
+                .where(usage_facts.c.runner_id == FIXTURE_RUNNER_ID)
+                .order_by(usage_facts.c.id)
             )
         )
 

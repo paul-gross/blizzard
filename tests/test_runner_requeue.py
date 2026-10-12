@@ -28,7 +28,16 @@ from blizzard.runner.operator.requeue import (
     RequeueService,
 )
 from blizzard.runner.store.schema import leases, requeues
-from tests.runner_fakes import FakeHarness, FakeHub, FakeProbe, FakeProvider, make_context, make_envelope, make_store
+from tests.runner_fakes import (
+    FIXTURE_RUNNER_ID,
+    FakeHarness,
+    FakeHub,
+    FakeProbe,
+    FakeProvider,
+    make_context,
+    make_envelope,
+    make_store,
+)
 
 pytestmark = pytest.mark.component
 
@@ -304,7 +313,7 @@ def test_a_requeue_asked_while_one_is_pending_changes_nothing(tmp_path) -> None:
     _seed_escalated_chunk(store)
     _service(store, clock=FixedClock(_LATER)).requeue(_scope(store))
     _service(store, clock=FixedClock(_LATER + (_EVEN_LATER - _LATER) / 2)).requeue(_scope(store))
-    assert len(_rows(tmp_path, select(requeues.c.chunk_id))) == 2
+    assert len(_rows(tmp_path, select(requeues.c.chunk_id).where(requeues.c.runner_id == FIXTURE_RUNNER_ID))) == 2
     assert store.pending_requeue_chunk_ids() == {"ch_1"}
 
     hub = FakeHub()
@@ -326,5 +335,13 @@ def test_a_requeue_asked_while_one_is_pending_changes_nothing(tmp_path) -> None:
     assert len(harness.spawns) == 1
     assert store.pending_requeue_chunk_ids() == set()
     assert store.attempt_count("ch_1", "nd_build") == 2
-    assert len(_rows(tmp_path, select(leases.c.lease_id).where(leases.c.chunk_id == "ch_1"))) == 2
+    assert (
+        len(
+            _rows(
+                tmp_path,
+                select(leases.c.lease_id).where(leases.c.chunk_id == "ch_1", leases.c.runner_id == FIXTURE_RUNNER_ID),
+            )
+        )
+        == 2
+    )
     assert hub.claims == []
