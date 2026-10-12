@@ -45,11 +45,13 @@ class ReleasedRoute:
 class Registered:
     """What one registration recorded: whether it was the runner's first since it was added, the
     name the runner now holds — the one it declared, else the one it already held — and the served
-    declaration it now holds, the one it sent or else the stored one."""
+    declaration it now holds, the one it sent or else the stored one. ``changed`` is whether the registration
+    altered what the hub held for the runner, or found it offline — a bare liveness refresh is not a change."""
 
     first: bool
     name: str
     projects: tuple[ServedEntry, ...]
+    changed: bool
 
 
 @domain_model
@@ -116,6 +118,19 @@ class FleetService:
         runner_id = held.runner_id
         recorded_name = declared_name(name)
         served = declaration_at_registration(held.served, projects, self._served_projects)
+        now = self._clock.now()
+        changed = (
+            not RunnerLiveness.of(held, now=now, threshold=self._stale_after).online
+            or (recorded_name is not None and recorded_name != held.name)
+            or workspace_id != held.workspace_id
+            or env_capacity != held.env_capacity
+            or public_url != held.public_url
+            or redirect_uris != held.redirect_uris
+            or capabilities != held.capabilities
+            or subscriptions != held.declared_subscriptions
+            or gates != held.gates
+            or (served is not None and served != held.served)
+        )
         created = self._registry.record_registration(
             runner_id,
             name=recorded_name,
@@ -127,7 +142,7 @@ class FleetService:
             subscriptions=subscriptions,
             gates=gates,
             projects=served,
-            at=self._clock.now(),
+            at=now,
         )
         _log.info(
             "runner registered",
@@ -142,7 +157,10 @@ class FleetService:
             first_time=created,
         )
         return Registered(
-            first=created, name=recorded_name or held.name, projects=held.served if served is None else served
+            first=created,
+            name=recorded_name or held.name,
+            projects=held.served if served is None else served,
+            changed=changed or created,
         )
 
     def heartbeat(self, runner_id: str) -> bool:

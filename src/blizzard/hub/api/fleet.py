@@ -932,7 +932,8 @@ def register_runner(
         gates=tuple(request.gates),
         projects=request.projects,
     )
-    services.events.publish_runner_changed(runner_id, kind="registered", runner_name=registered.name)
+    if registered.changed:
+        services.events.publish_runner_changed(runner_id, kind="registered", runner_name=registered.name)
     return RunnerRegistrationResponse(
         runner_id=runner_id,
         runner_name=registered.name,
