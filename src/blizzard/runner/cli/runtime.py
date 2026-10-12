@@ -28,12 +28,12 @@ from blizzard.runner.app import HostedApp, build_hosted_app
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.cli.store import refuse_while_held
 from blizzard.runner.composition import (
+    HostProcess,
     RunnerProcess,
+    build_host_process,
     build_host_read_stores,
     build_read_stores,
-    build_runner_platform_tracing,
     build_runner_process,
-    build_runner_received_telemetry,
     stamp_unowned_rows,
 )
 from blizzard.runner.config import ConfigError, RunnerConfig
@@ -57,10 +57,9 @@ from blizzard.runner.hub.client import (
     RunnerAddRefused,
     TokenIdentity,
 )
-from blizzard.runner.hub.identity import RunnerIdentityHolder
 from blizzard.runner.hub.internal.http_hub import HttpHubClient, HttpHubRunnerAdmin
 from blizzard.runner.hub.internal.token_file import HubTokenFile
-from blizzard.runner.listeners import ListenerError, Listeners, Uds
+from blizzard.runner.listeners import ListenerError, Uds
 from blizzard.runner.loop_wiring import LoopWiring, PeriodicDriver
 from blizzard.runner.runtime import (
     Runtime,
@@ -452,26 +451,19 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
     # One broker for the process: `host` is the one composer building both the
     # served app and the ticked loop, so every writer and the stream route share it.
     broker = EventBroker()
-    identity = RunnerIdentityHolder()
-    graph = build_runner_process(
-        config,
-        events=broker,
-        bundle=bundle,
-        platform_tracing=build_runner_platform_tracing(config, identity=identity),
-        received_telemetry=build_runner_received_telemetry(config),
-        identity=identity,
-    )
+    host = build_host_process(config, events=broker, bundle=bundle, trace_platform=True)
     try:
         # The start-up stamp, before the process serves or ticks: rows the store holds that name no runner are the
         # bound runner's.
-        stamp_unowned_rows(graph)
-        hosted = build_hosted_app(config, process_graph=graph)
+        for runner in host.runners:
+            stamp_unowned_rows(runner)
+        hosted = build_hosted_app(config, host)
         try:
-            _serve_host(config, graph, hosted)
+            _serve_host(config, host, hosted)
         finally:
             hosted.close()
     finally:
-        graph.close()
+        host.close()
 
 
 def _publish_harness_bundle(config: RunnerConfig) -> BundleSnapshot | None:
@@ -491,29 +483,53 @@ def _publish_harness_bundle(config: RunnerConfig) -> BundleSnapshot | None:
     return snapshot
 
 
-def _serve_host(config: RunnerConfig, graph: RunnerProcess, hosted: HostedApp) -> None:
-    app = hosted.app
-    interval = float(os.environ.get(ENV_TICK_SECONDS, DEFAULT_TICK_SECONDS))
+@dataclass(frozen=True)
+class _RunnerThreads:
+    """One runner's serving threads: its reconciliation driver and the off-tick drivers beside it."""
+
+    runner: RunnerProcess
+    driver: PeriodicDriver
+    pass_drivers: list[PeriodicPassDriver]
+
+    def start(self) -> None:
+        self.driver.start()  # startup recovery is REAP running first inside the tick
+        for pass_driver in self.pass_drivers:
+            pass_driver.start()
+
+    def stop(self) -> None:
+        for pass_driver in self.pass_drivers:
+            pass_driver.stop()
+        self.driver.stop()
+
+
+def _runner_threads(config: RunnerConfig, runner: RunnerProcess, *, interval: float) -> _RunnerThreads:
     # `PeriodicDriver` resolves its prompt files on this thread, not in the loop thread: a
     # configured-but-missing prompt raises here, before any socket binds.
     with click_exception_on(ConfigError):
-        driver = PeriodicDriver(config, interval_seconds=interval, process_graph=graph)
-    connections = graph.connections
+        driver = PeriodicDriver(config, interval_seconds=interval, process_graph=runner)
     rejection = PendingTracingRejection(
-        graph.trace_settings, graph.stores.outbound, lambda: connections.runner_id is not None, graph.clock
+        runner.trace_settings, runner.stores.outbound, lambda: runner.connections.runner_id is not None, runner.clock
     )
     rejection.announce()
-    pass_drivers = _pass_drivers(config, graph, tick_seconds=interval, rejection=rejection)
+    return _RunnerThreads(runner, driver, _pass_drivers(config, runner, tick_seconds=interval, rejection=rejection))
+
+
+def _serve_host(config: RunnerConfig, host: HostProcess, hosted: HostedApp) -> None:
+    app = hosted.app
+    interval = float(os.environ.get(ENV_TICK_SECONDS, DEFAULT_TICK_SECONDS))
+    threads = [_runner_threads(config, runner, interval=interval) for runner in host.runners]
+    host_tick = _host_tick_driver(host, tick_seconds=interval)
 
     # Two doors onto the one app, bound up front so a clash fails startup loudly and
     # served by the single `Server` below, which keeps the shutdown path on one frame.
     with click_exception_on(ListenerError):
-        sockets = Listeners.of(config).bound()
+        sockets = host.listeners.bound()
     click.echo(
         f"serving blizzard-runner on {config.host}:{config.port} and {config.socket_path} (loop tick {interval}s)"
     )
 
-    started = False
+    started: list[_RunnerThreads] = []
+    host_tick_started = False
     try:
         # The shared early-shutdown wrapper sets the stream's shutdown signal
         # ahead of uvicorn's drain. Bound sockets belong to this whole startup.
@@ -528,40 +544,56 @@ def _serve_host(config: RunnerConfig, graph: RunnerProcess, hosted: HostedApp) -
         signal.signal(signal.SIGTERM, _handle_signal)
         signal.signal(signal.SIGINT, _handle_signal)
 
-        # Mark crash-orphaned sessions before the first reconciliation tick.
-        resumable = hosted.resume.on_startup()
-        if resumable:
-            click.echo(f"marked {resumable} crash-interrupted lease(s) for restart-resume")
+        # Mark crash-orphaned sessions, for every runner, before any driver or the host tick starts.
+        for resume in hosted.resumes:
+            resumable = resume.on_startup()
+            if resumable:
+                click.echo(f"marked {resumable} crash-interrupted lease(s) for restart-resume")
 
-        driver.start()  # startup recovery is REAP running first inside the tick
-        started = True
-        for pass_driver in pass_drivers:
-            pass_driver.start()
+        for runner_threads in threads:
+            runner_threads.start()
+            started.append(runner_threads)
+        host_tick.start()
+        host_tick_started = True
         server.run(sockets=sockets)
     finally:
         try:
+            # Quiesce before marking; the spawner executors and engine outlive
+            # the drain and are closed by the outer host frame.
+            if host_tick_started:
+                host_tick.stop()
+            for runner_threads in reversed(started):
+                runner_threads.stop()
             if started:
-                # Quiesce before marking; the spawner executor and engine outlive
-                # the drain and are closed by the outer host frame.
-                for pass_driver in pass_drivers:
-                    pass_driver.stop()
-                driver.stop()
-                marked = hosted.resume.on_shutdown()
-                if marked:
-                    click.echo(f"marked {marked} in-flight lease(s) for restart-resume")
+                for resume in hosted.resumes:
+                    marked = resume.on_shutdown()
+                    if marked:
+                        click.echo(f"marked {marked} in-flight lease(s) for restart-resume")
         finally:
             # uvicorn closes a pre-bound socket but does not unlink its file.
             Uds(config.socket_path).unlink()
 
 
+def _host_tick_driver(host: HostProcess, *, tick_seconds: float) -> PeriodicPassDriver:
+    """The host's own thread, built only here so `runner tick` never runs a credential renewal. It passes on the
+    tick's own interval with no jitter, so a credential lapsed across a restart is renewed at once; each slug's own
+    cadence gates it within the pass."""
+    return PeriodicPassDriver(
+        host.host_tick.run,
+        name="blizzard-host-tick",
+        label="host tick",
+        log=get_logger("blizzard.runner.subscriptions"),
+        interval_seconds=tick_seconds,
+        jitter_seconds=0,
+    )
+
+
 def _pass_drivers(
-    config: RunnerConfig, graph: RunnerProcess, *, tick_seconds: float, rejection: PendingTracingRejection
+    config: RunnerConfig, runner: RunnerProcess, *, tick_seconds: float, rejection: PendingTracingRejection
 ) -> list[PeriodicPassDriver]:
-    """The off-tick drivers, built only here so `runner tick` never runs a trace sweep or a
-    credential renewal. Renewal passes on the tick's own interval with no jitter, so a credential
-    lapsed across a restart is renewed at once; each slug's own cadence gates it within the pass.
-    A rejected tracing setting whose report the start could not buffer — the store bound to no runner
-    yet — retries on the tick's interval until the first registration binds it."""
+    """One runner's off-tick drivers, built only here so `runner tick` never runs a trace sweep. A rejected tracing
+    setting whose report the start could not buffer — the store bound to no runner yet — retries on the tick's
+    interval until the first registration binds it."""
     drivers: list[PeriodicPassDriver] = []
     if rejection.owed:
         drivers.append(
@@ -574,25 +606,14 @@ def _pass_drivers(
                 jitter_seconds=0,
             )
         )
-    if graph.trace_sweep is not None:
+    if runner.trace_sweep is not None:
         drivers.append(
             PeriodicPassDriver(
-                graph.trace_sweep.sweep,
+                runner.trace_sweep.sweep,
                 name="blizzard-runner-trace-sweep",
                 label="lease trace sweep",
                 log=get_logger("blizzard.runner.trace_export"),
                 interval_seconds=config.tracing.sweep_seconds,
-            )
-        )
-    if graph.credential_renewal is not None:
-        drivers.append(
-            PeriodicPassDriver(
-                graph.credential_renewal.run,
-                name="blizzard-runner-credential-renewal",
-                label="credential renewal pass",
-                log=get_logger("blizzard.runner.subscriptions"),
-                interval_seconds=tick_seconds,
-                jitter_seconds=0,
             )
         )
     return drivers

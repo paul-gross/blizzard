@@ -446,7 +446,7 @@ def test_host_with_a_malformed_bundle_fails_before_serving(tmp_path: Path, monke
     (bundle / "claude-code" / "stray").write_text("x")
     runtime = _runtime(tmp_path, bundle)
     started: list[str] = []
-    monkeypatch.setattr("blizzard.runner.cli.runtime.build_runner_process", lambda *a, **k: started.append("built"))
+    monkeypatch.setattr("blizzard.runner.cli.runtime.build_host_process", lambda *a, **k: started.append("built"))
 
     result = CliRunner().invoke(runner_group, ["host", "--dir", str(runtime)])
 
@@ -464,7 +464,7 @@ def test_host_publishes_before_building_the_process(tmp_path: Path, monkeypatch:
         seen.append(published_snapshot(runtime))
         raise RuntimeError("stop here")
 
-    monkeypatch.setattr("blizzard.runner.cli.runtime.build_runner_process", stop)
+    monkeypatch.setattr("blizzard.runner.cli.runtime.build_host_process", stop)
     result = CliRunner().invoke(runner_group, ["host", "--dir", str(runtime)])
 
     assert isinstance(result.exception, RuntimeError)
