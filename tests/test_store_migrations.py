@@ -248,9 +248,10 @@ def test_egress_cursor_table_and_usage_index_survive_migration_roundtrip(tmp_pat
 
 # The egress indexes under the name each carries at head; between their own revision and the tenant keys they carry
 # the name that revision gave them.
+_DERIVATIONS_HISTORICAL = "ix_transcript_event_derivations_derived_at_segment_id"
 _DROPS_EGRESS_ORDER = "ix_transcript_event_drops_egress_order"
 _DERIVATIONS_EGRESS_ORDER = {
-    "ix_transcript_event_derivations_derived_at_segment_id_extractor_version",
+    "ix_transcript_event_derivations_derived_at_segment_id",
     "ix_transcript_event_derivations_egress_order",
 }
 _DROPS_BY_CHUNK = {"ix_transcript_event_drops_chunk_id_epoch", "ix_transcript_event_drops_tenant_chunk_id_epoch"}
@@ -313,6 +314,36 @@ def test_egress_events_indexes_and_cursor_columns_survive_migration_roundtrip(tm
 
     runner.upgrade("head")
     assert _shape() == (True, True, True, {"segment_id", "extractor_version"})
+
+
+def test_legacy_long_derivations_index_is_renamed_on_the_way_to_head(tmp_path: Path) -> None:
+    """Hub-only — a store the egress revision once gave a 71-character index name reaches head holding the head name."""
+    legacy = "ix_transcript_event_derivations_derived_at_segment_id_extractor_version"
+    config = hub_runtime.init_environment(tmp_path)  # upgrades to head
+    runner = hub_runtime.migration_runner(config)
+    runner.downgrade("20261004_1300_egress_events")
+
+    engine = create_engine_from_url(config.db_url)
+    try:
+        with engine.begin() as conn:
+            conn.execute(sa.text(f"DROP INDEX {_DERIVATIONS_HISTORICAL}"))
+            conn.execute(
+                sa.text(
+                    f"CREATE INDEX {legacy} ON transcript_event_derivations (derived_at, segment_id, extractor_version)"
+                )
+            )
+    finally:
+        engine.dispose()
+
+    runner.upgrade("head")
+
+    engine = create_engine_from_url(config.db_url)
+    try:
+        names = {str(i["name"]) for i in sa.inspect(engine).get_indexes("transcript_event_derivations")}
+    finally:
+        engine.dispose()
+    assert "ix_transcript_event_derivations_egress_order" in names
+    assert legacy not in names
 
 
 def test_escalation_cause_columns_survive_migration_roundtrip(tmp_path: Path) -> None:

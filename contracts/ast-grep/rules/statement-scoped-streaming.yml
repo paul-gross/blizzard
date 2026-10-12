@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ast-grep/ast-grep/main/schemas/rule.json
+
+id: bzh:statement-scoped-streaming
+language: Python
+severity: error
+message: >-
+  `yield_per`/`stream_results` set through `.execution_options(...)` can land on a connection, where it
+  outlives the read and breaks the executemany that follows on Postgres. Pass it as the
+  `execution_options={...}` argument of the one `execute(...)` that streams
+  (`bzh:sql-portable`, blizzard-context:/standards/persistence.md).
+files:
+  - src/**
+rule:
+  pattern: $X.execution_options($$$ARGS)
+  has:
+    stopBy: end
+    kind: keyword_argument
+    has:
+      field: name
+      regex: ^(yield_per|stream_results)$

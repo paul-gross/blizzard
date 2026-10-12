@@ -21,7 +21,7 @@ _CURSOR = "egress_cursor"
 _CURSOR_COLUMNS = ("segment_id", "extractor_version")
 _INDEXES: tuple[tuple[str, str, list[str]], ...] = (
     (
-        "ix_transcript_event_derivations_derived_at_segment_id_extractor_version",
+        "ix_transcript_event_derivations_derived_at_segment_id",
         "transcript_event_derivations",
         ["derived_at", "segment_id", "extractor_version"],
     ),

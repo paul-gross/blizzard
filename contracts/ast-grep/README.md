@@ -93,3 +93,12 @@ load-bearing: without it a stale `# ast-grep-ignore` comment goes unreported ins
     tuple or list. A registry lookup keyed by the name is unmatched. A name rebound to another variable before the
     comparison slips past — a floor, not a proof.
   - No exemption stands.
+
+- **`bzh:statement-scoped-streaming`** (`rules/statement-scoped-streaming.yml`) — streaming is requested per statement,
+  never on a connection, where it outlives the read and breaks the writes that follow it on Postgres. The prose home is
+  the `bzh:sql-portable` rule's **Detect** in `blizzard-context:/standards/persistence.md`.
+  - Scoped to `src/**`.
+  - Matches any `.execution_options(...)` call passing `yield_per=` or `stream_results=`. The one admitted form is the
+    `execution_options={...}` argument of a single `execute(...)`. The rule is syntactic and cannot tell a connection
+    receiver from a statement receiver, so it admits only that form.
+  - No exemption stands.
