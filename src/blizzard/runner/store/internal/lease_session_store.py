@@ -5,8 +5,10 @@ Session-pool head, session-identity lookups, session-end, and preamble facts."""
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import ColumnElement, func, or_
+from sqlalchemy import join as sa_join
 
 from blizzard.foundation.leases import LeaseClosureReason
 from blizzard.foundation.logging import get_logger
@@ -29,14 +31,14 @@ from blizzard.runner.store.schema import (
 _log = get_logger("blizzard.runner.store")
 
 
-def _after_newest_release(chunk_id: str):  # type: ignore[no-untyped-def]
+def _after_newest_release(store: RunnerStoreConnections, chunk_id: str) -> ColumnElement[Any]:
     """A lease created after the chunk's newest ``released`` closure — or any lease when none exists.
 
     A released attempt's session is discarded (detach, reassignment), so it is a read barrier on the
     session lookups: a row older than it is never resumed, and no older ``transitioned`` session
     surfaces in its place."""
     newest_release = (
-        select(func.max(lease_closures.c.closed_at))
+        store.select(lease_closures, func.max(lease_closures.c.closed_at))
         .where(lease_closures.c.chunk_id == chunk_id)
         .where(lease_closures.c.reason == LeaseClosureReason.RELEASED)
         .scalar_subquery()
@@ -54,10 +56,10 @@ class LeaseSessionStore:
 
     def latest_session(self, chunk_id: str, node_name: str | None) -> SessionReference | None:
         stmt = (
-            lease_select()
+            lease_select(self._store)
             .where(leases.c.chunk_id == chunk_id)
             .where(leases.c.session_id.is_not(None))
-            .where(_after_newest_release(chunk_id))
+            .where(_after_newest_release(self._store, chunk_id))
         )
         if node_name is not None:
             stmt = stmt.where(lease_context.c.node_name == node_name)
@@ -76,11 +78,11 @@ class LeaseSessionStore:
         Same ordering, session-bearing filter and release barrier as :meth:`latest_session`,
         keyed on the stamped pool name rather than the node name."""
         stmt = (
-            lease_select()
+            lease_select(self._store)
             .where(leases.c.chunk_id == chunk_id)
             .where(leases.c.session_id.is_not(None))
             .where(lease_context.c.session_name == session_name)
-            .where(_after_newest_release(chunk_id))
+            .where(_after_newest_release(self._store, chunk_id))
             .order_by(leases.c.created_at.desc(), leases.c.lease_id.desc())
             .limit(1)
         )
@@ -100,9 +102,7 @@ class LeaseSessionStore:
 
     def session_invocation_count(self, session: SessionReference) -> int:
         stmt = (
-            select(func.count())
-            .select_from(usage_facts)
-            .join(leases, leases.c.lease_id == usage_facts.c.lease_id)
+            self._store.select(sa_join(usage_facts, leases, leases.c.lease_id == usage_facts.c.lease_id), func.count())
             .where(leases.c.session_id == session.session_id)
             .where(leases.c.harness_id == session.harness_id)
         )
@@ -112,7 +112,7 @@ class LeaseSessionStore:
     def lease_for_session(self, session: SessionReference) -> Lease | None:
         """The newest lease that ran ``session_id`` — same ordering as `pool_head`."""
         stmt = (
-            lease_select()
+            lease_select(self._store)
             .where(leases.c.session_id == session.session_id)
             .where(leases.c.harness_id == session.harness_id)
             .order_by(leases.c.created_at.desc(), leases.c.lease_id.desc())
@@ -122,14 +122,19 @@ class LeaseSessionStore:
         return row_to_lease(rows[0]) if rows else None
 
     def session_ended_lease_ids(self) -> set[str]:
+        st = self._store
         newest_spawn = (
-            select(lease_spawns.c.lease_id, func.max(lease_spawns.c.spawned_at).label("spawned_at"))
+            st.select(lease_spawns, lease_spawns.c.lease_id, func.max(lease_spawns.c.spawned_at).label("spawned_at"))
             .group_by(lease_spawns.c.lease_id)
             .subquery()
         )
         stmt = (
-            select(session_ends.c.lease_id)
-            .select_from(session_ends.outerjoin(newest_spawn, newest_spawn.c.lease_id == session_ends.c.lease_id))
+            st.select(
+                st.scope_join(
+                    session_ends, newest_spawn, newest_spawn.c.lease_id == session_ends.c.lease_id, isouter=True
+                ),
+                session_ends.c.lease_id,
+            )
             # No spawn fact: fall back to the unscoped reading, which over-reports
             # "declared done" and so can only suppress a resume, never invent one.
             .where(or_(newest_spawn.c.spawned_at.is_(None), session_ends.c.ended_at >= newest_spawn.c.spawned_at))
@@ -141,7 +146,11 @@ class LeaseSessionStore:
         # Ordered on the autoincrement pk, not on `recorded_at` or implicit insert order
         # (`bzh:sql-portable`).
         rows = self._store.all(
-            select(session_preamble_facts.c.blizzard_digest, session_preamble_facts.c.workspace_digest)
+            self._store.select(
+                session_preamble_facts,
+                session_preamble_facts.c.blizzard_digest,
+                session_preamble_facts.c.workspace_digest,
+            )
             .where(session_preamble_facts.c.session_id == session.session_id)
             .where(session_preamble_facts.c.harness_id == session.harness_id)
             .order_by(session_preamble_facts.c.id.desc())
@@ -157,12 +166,12 @@ class LeaseSessionStore:
         # `session_id` is untouched — spawn-return alone sets it, together with the same
         # `harness_id` value this stamps ahead of it.
         with self._store.begin() as conn:
-            conn.execute(leases.update().where(leases.c.lease_id == lease_id).values(harness_id=harness_id))
+            conn.execute(self._store.update(leases).where(leases.c.lease_id == lease_id).values(harness_id=harness_id))
         _log.info("mint owner recorded", lease_id=lease_id, harness_id=harness_id)
 
     def record_session_end(self, *, lease_id: str, ended_at: datetime) -> None:
         with self._store.begin() as conn:
-            conn.execute(session_ends.insert().values(lease_id=lease_id, ended_at=ended_at))
+            conn.execute(self._store.insert(session_ends).values(lease_id=lease_id, ended_at=ended_at))
         _log.info("session end recorded", lease_id=lease_id)
 
     def record_session_preamble(
@@ -172,7 +181,7 @@ class LeaseSessionStore:
         # answer, not a once-per-key guard.
         with self._store.begin() as conn:
             conn.execute(
-                session_preamble_facts.insert().values(
+                self._store.insert(session_preamble_facts).values(
                     session_id=session.session_id,
                     harness_id=session.harness_id,
                     blizzard_digest=fingerprint.blizzard,

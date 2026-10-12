@@ -30,6 +30,7 @@ from tests.runner_fakes import (
     FakeProvider,
     FakeWorktreeGit,
     fixed_hub_token,
+    make_host_stores,
     make_session_resolver,
     make_store,
     make_stores,
@@ -133,6 +134,7 @@ def test_migrated_chunk_reclaimed_by_a_fresh_runner_mints_above_the_hub_floor(tm
     )
     ctx = LoopContext(
         stores=make_stores(store),
+        host_stores=make_host_stores(store),
         clock=hub.clock,
         hub=_hub_client,
         token_identity=_hub_client,

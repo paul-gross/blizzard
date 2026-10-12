@@ -99,8 +99,7 @@ from blizzard.runner.runtime import migration_runner
 from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessScratchGit
 from blizzard.runner.selftest.service import SelfTestService
 from blizzard.runner.status.view import RunnerStatusService
-from blizzard.runner.store.internal.jti_cache_store import JtiCacheRepository
-from blizzard.runner.stores import RunnerReadStores, RunnerStores
+from blizzard.runner.stores import HostReadStores, HostStores, IRunnerBinding, RunnerReadStores, RunnerStores
 from blizzard.runner.throttle.pause import PauseService
 from blizzard.runner.tracing.exclusion import is_excluded
 from blizzard.runner.tracing.receiving import TelemetryReceiver
@@ -195,6 +194,7 @@ def create_app(
     workspace_provider: IWorkspaceProvider | None = None,
     harnesses: IHarnessRegistry | None = None,
     runner_stores: RunnerStores | None = None,
+    host_stores: HostStores | None = None,
     leases: LocalLeaseService | None = None,
     transcripts: TranscriptService | None = None,
     runner_status: RunnerStatusService | None = None,
@@ -224,6 +224,7 @@ def create_app(
     identity_verdict: ICurrentIdentityVerdict | None = None,
     identity_check: IIdentityOnContact | None = None,
     hub_token: ICurrentHubToken | None = None,
+    binding: IRunnerBinding | None = None,
 ) -> FastAPI:
     """Build a fully wired runner app from resolved config.
 
@@ -235,7 +236,8 @@ def create_app(
     routes answer 503. ``identity_verdict`` is the verdict the status reports. ``identity_check`` gates
     the hub proxy, which forwards only once it verifies the token names the store's runner; absent, the
     proxy forwards ungated. ``hub_token`` is the token the proxy presents; absent, the proxy
-    presents ``config``'s."""
+    presents ``config``'s. ``binding`` is the store's runner binding; while it names no runner, the routes that write
+    runner-scoped rows answer 503. ``host_stores`` are the host-scoped stores; ``jti_cache`` defaults to theirs."""
     log = get_logger("blizzard.runner")
     clock = clock or SystemClock()
     process = process or LinuxProcessProbe()
@@ -260,12 +262,15 @@ def create_app(
             role_policy=config.role_policy,
         )
     app.state.readiness = readiness
+    app.state.binding = binding
     # The seams below are None on the store-free app.
     app.state.workspace_provider = workspace_provider
     app.state.harnesses = resolved_harnesses
     # The controller-facing narrowing of `runner_stores`; the write bundle itself is never
     # stashed on `app.state`.
     app.state.runner_read_stores = RunnerReadStores.of(runner_stores) if runner_stores is not None else None
+    # The host-scoped twin, narrowed the same way.
+    app.state.host_read_stores = HostReadStores.of(host_stores) if host_stores is not None else None
     # The SSE broker; `None` when no stream is wired.
     app.state.events = events
     # Set on shutdown by `_lifespan`; the stream route's live wait races it.
@@ -296,7 +301,7 @@ def create_app(
         LeaseSessionService(runner_stores.session, clock) if runner_stores else None
     )
     app.state.workspace_prompts = workspace_prompts or (
-        WorkspacePromptService(runner_stores.workspace_prompt, clock) if runner_stores else None
+        WorkspacePromptService(host_stores.workspace_prompt, clock) if host_stores else None
     )
     # The adapter-drift canary: wired unconditionally regardless of `runner_stores` —
     # only `results` needs one, and stays `None` (no durable outcome) without it.
@@ -327,7 +332,7 @@ def create_app(
     )
     # The monotonic clock the hub retry schedule reads — the system clock unless one is injected.
     app.state.hub_retry_clock = hub_retry_clock or SystemMonotonicClock()
-    app.state.jti_cache = jti_cache
+    app.state.jti_cache = jti_cache or (host_stores.jti_cache if host_stores else None)
     # The reverse-proxy trust set, empty by default — so
     # `X-Forwarded-Proto` is ignored from every peer.
     app.state.trusted_proxies = TrustedProxies.parse(config.trusted_proxies)
@@ -476,6 +481,7 @@ def _wire_hosted_app(
     runner_status = RunnerStatusService(
         clock,
         pause=read_stores.pause,
+        daemon_liveness=graph.host_stores.daemon_liveness,
         lease_record=read_stores.lease_record,
         outbound=read_stores.outbound,
         environments=read_stores.environments,
@@ -520,12 +526,12 @@ def _wire_hosted_app(
         environments=runner_stores.environments,
         outbound=runner_stores.outbound,
     )
-    jti_cache = JtiCacheRepository(connections, clock)
     # The real, network-reaching hub client — only `host` wires one.
     hub_http_client = startup.enter_context(httpx.Client(base_url=config.hub_url, timeout=5.0))
     platform_tracing.instrument_client(hub_http_client)
     app = create_app(
         config,
+        binding=connections,
         platform_tracing=platform_tracing,
         identity=graph.identity,
         identity_verdict=graph.identity_verdict,
@@ -536,6 +542,7 @@ def _wire_hosted_app(
         workspace_provider=workspace_provider,
         harnesses=harnesses,
         runner_stores=runner_stores,
+        host_stores=graph.host_stores,
         leases=leases,
         transcripts=transcripts,
         runner_status=runner_status,
@@ -557,14 +564,13 @@ def _wire_hosted_app(
         attachments=attachments,
         git_commit_declarations=git_commit_declarations,
         harness_health=harness_health,
-        jti_cache=jti_cache,
         hub_http_client=hub_http_client,
         hub_proxy_client=hub_proxy_client,
         events=events,
         clock=clock,
         process=process,
     )
-    resume = ResumeMarking(runner_stores, clock, process)
+    resume = ResumeMarking(runner_stores, graph.host_stores, clock, process)
     return HostedApp(
         app,
         resume,

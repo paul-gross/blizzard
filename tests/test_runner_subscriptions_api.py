@@ -18,7 +18,7 @@ from blizzard.runner.subscriptions.credential_renewer import (
     RenewalOutcomeKind,
 )
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC, PROVIDER_OPENAI
-from tests.runner_fakes import SqlAlchemyRunnerStore, make_store, make_stores
+from tests.runner_fakes import SqlAlchemyRunnerStore, make_host_stores, make_store, make_stores
 
 pytestmark = pytest.mark.component
 
@@ -30,7 +30,7 @@ def _client(
 ) -> tuple[TestClient, SqlAlchemyRunnerStore]:
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}", subscriptions=subscriptions)
-    app = create_app(config, runner_stores=make_stores(store))
+    app = create_app(config, runner_stores=make_stores(store), host_stores=make_host_stores(store))
     return TestClient(app), store
 
 

@@ -12,7 +12,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-from blizzard.runner.store.schema import env_bindings, outbound_buffer
+from blizzard.foundation.store.utc import UtcDateTime
+
 
 revision: str = "20260713_1218_runner_walking_skeleton"
 down_revision: str | None = "20260713_1112_runner_initial"
@@ -32,7 +33,27 @@ _leases = sa.Table(
     sa.Column("session_id", sa.String(), nullable=True),
     sa.Column("created_at", sa.DateTime(), nullable=False),
 )
-_TABLES = [_leases, env_bindings, outbound_buffer]
+_env_bindings = sa.Table(
+    "env_bindings",
+    _frozen_metadata,
+    sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
+    sa.Column("chunk_id", sa.String(), nullable=False),
+    sa.Column("environment_id", sa.String(), nullable=False),
+    sa.Column("workdir", sa.String(), nullable=False),
+    sa.Column("bound_at", UtcDateTime(), nullable=False),
+)
+_outbound_buffer = sa.Table(
+    "outbound_buffer",
+    _frozen_metadata,
+    sa.Column("seq", sa.Integer(), primary_key=True, autoincrement=True),
+    sa.Column("kind", sa.String(), nullable=False),
+    sa.Column("chunk_id", sa.String(), nullable=True),
+    sa.Column("lease_id", sa.String(), nullable=True),
+    sa.Column("payload", sa.Text(), nullable=False),
+    sa.Column("created_at", UtcDateTime(), nullable=False),
+    sa.Column("acked_at", UtcDateTime(), nullable=True),
+)
+_TABLES = [_leases, _env_bindings, _outbound_buffer]
 
 
 def upgrade() -> None:

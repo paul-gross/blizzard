@@ -5,8 +5,6 @@ from __future__ import annotations
 from datetime import datetime
 from typing import cast
 
-from sqlalchemy import select
-
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.harness.selftest_result import (
     IWriteSelfTestResultRepository,
@@ -29,7 +27,8 @@ class SelfTestResultStore:
         # Ordered on the autoincrement pk, not `recorded_at` or insert order (`bzh:sql-portable`)
         # — mirrors `LeaseSessionStore.session_preamble_fingerprint`'s own latest-row read.
         rows = self._store.all(
-            select(
+            self._store.select(
+                selftest_results,
                 selftest_results.c.status,
                 selftest_results.c.error,
                 selftest_results.c.recorded_at,
@@ -59,7 +58,7 @@ class SelfTestResultStore:
     ) -> None:
         with self._store.begin() as conn:
             conn.execute(
-                selftest_results.insert().values(
+                self._store.insert(selftest_results).values(
                     harness_id=harness_id,
                     status=status,
                     error=error,

@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import func, select
+import sqlalchemy as sa
+from sqlalchemy import func
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.leases.operator_requests import IWriteAttachmentRepository
@@ -21,19 +22,22 @@ class AttachmentStore:
         self._store = store
 
     def attachments_for_lease(self, lease_id: str) -> dict[str, str]:
+        st = self._store
         newest = (
-            select(attachments.c.name, func.max(attachments.c.id).label("id"))
+            st.select(attachments, attachments.c.name, func.max(attachments.c.id).label("id"))
             .where(attachments.c.lease_id == lease_id)
             .group_by(attachments.c.name)
             .subquery()
         )
-        stmt = select(attachments.c.name, attachments.c.content).join(newest, attachments.c.id == newest.c.id)
+        stmt = st.select(
+            sa.join(attachments, newest, attachments.c.id == newest.c.id), attachments.c.name, attachments.c.content
+        )
         return {str(r.name): str(r.content) for r in self._store.all(stmt)}
 
     def attachment_names_for_lease(self, lease_id: str) -> set[str]:
         # The names-only equivalent of `attachments_for_lease` above — no `max(id)`/join
         # needed, since which names are attached does not depend on which content is newest.
-        stmt = select(attachments.c.name).distinct().where(attachments.c.lease_id == lease_id)
+        stmt = self._store.select(attachments, attachments.c.name).distinct().where(attachments.c.lease_id == lease_id)
         return {str(r.name) for r in self._store.all(stmt)}
 
     def record_attachment(
@@ -51,7 +55,7 @@ class AttachmentStore:
         # survives a `kill -9` right after.
         with self._store.begin() as conn:
             conn.execute(
-                attachments.insert().values(
+                self._store.insert(attachments).values(
                     lease_id=lease_id,
                     chunk_id=chunk_id,
                     node_id=node_id,

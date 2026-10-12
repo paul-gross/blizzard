@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import and_, select
+from sqlalchemy import and_
 
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.batching import id_batches
@@ -29,7 +29,7 @@ class ElicitationStore:
 
     def in_flight_elicitation(self, lease_id: str, epoch: int) -> PendingElicitation | None:
         row = self._store.all(
-            select(in_flight_elicitations).where(
+            self._store.select(in_flight_elicitations).where(
                 and_(in_flight_elicitations.c.lease_id == lease_id, in_flight_elicitations.c.epoch == epoch)
             )
         )
@@ -55,7 +55,9 @@ class ElicitationStore:
         lease_ids = sorted({lease_id for lease_id, _ in pairs})
         result: dict[tuple[str, int], PendingElicitation] = {}
         for batch in id_batches(lease_ids):
-            rows = self._store.all(select(in_flight_elicitations).where(in_flight_elicitations.c.lease_id.in_(batch)))
+            rows = self._store.all(
+                self._store.select(in_flight_elicitations).where(in_flight_elicitations.c.lease_id.in_(batch))
+            )
             for r in rows:
                 key = (str(r.lease_id), int(r.epoch))
                 if key not in wanted:
@@ -74,11 +76,11 @@ class ElicitationStore:
         return result
 
     def in_flight_elicitation_lease_ids(self) -> set[str]:
-        rows = self._store.all(select(in_flight_elicitations.c.lease_id))
+        rows = self._store.all(self._store.select(in_flight_elicitations, in_flight_elicitations.c.lease_id))
         return {str(r.lease_id) for r in rows}
 
     def in_flight_elicitations_by_lease(self) -> dict[str, PendingElicitation]:
-        rows = self._store.all(select(in_flight_elicitations))
+        rows = self._store.all(self._store.select(in_flight_elicitations))
         return {
             str(r.lease_id): PendingElicitation(
                 id=int(r.id),
@@ -99,12 +101,12 @@ class ElicitationStore:
         # record — the prior epoch's row, if any, was already cleared on its own collect.
         with self._store.begin() as conn:
             conn.execute(
-                in_flight_elicitations.delete().where(
+                self._store.delete(in_flight_elicitations).where(
                     and_(in_flight_elicitations.c.lease_id == lease_id, in_flight_elicitations.c.epoch == epoch)
                 )
             )
             conn.execute(
-                in_flight_elicitations.insert().values(
+                self._store.insert(in_flight_elicitations).values(
                     lease_id=lease_id,
                     epoch=epoch,
                     pid=None,
@@ -122,7 +124,7 @@ class ElicitationStore:
     ) -> None:
         with self._store.begin() as conn:
             result = conn.execute(
-                in_flight_elicitations.update()
+                self._store.update(in_flight_elicitations)
                 .where(and_(in_flight_elicitations.c.lease_id == lease_id, in_flight_elicitations.c.epoch == epoch))
                 .values(pid=pid, process_start_time=process_start_time, pgid=pgid)
             )
@@ -133,14 +135,14 @@ class ElicitationStore:
     def record_elicitation_relaunch(self, lease_id: str, epoch: int, *, output_path: str) -> None:
         with self._store.begin() as conn:
             existing = conn.execute(
-                select(in_flight_elicitations.c.relaunch_count).where(
+                self._store.select(in_flight_elicitations, in_flight_elicitations.c.relaunch_count).where(
                     and_(in_flight_elicitations.c.lease_id == lease_id, in_flight_elicitations.c.epoch == epoch)
                 )
             ).one_or_none()
             if existing is None:
                 raise ElicitationNotRecorded(ElicitationVerb.RELAUNCH, lease_id, epoch)
             conn.execute(
-                in_flight_elicitations.update()
+                self._store.update(in_flight_elicitations)
                 .where(and_(in_flight_elicitations.c.lease_id == lease_id, in_flight_elicitations.c.epoch == epoch))
                 .values(
                     pid=None,
@@ -155,7 +157,7 @@ class ElicitationStore:
     def clear_elicitation(self, lease_id: str, epoch: int) -> None:
         with self._store.begin() as conn:
             conn.execute(
-                in_flight_elicitations.delete().where(
+                self._store.delete(in_flight_elicitations).where(
                     and_(in_flight_elicitations.c.lease_id == lease_id, in_flight_elicitations.c.epoch == epoch)
                 )
             )

@@ -38,6 +38,7 @@ from blizzard.runner.node_steps.envelope import RotateBounds
 from blizzard.runner.node_steps.submissions import ApplyReply
 from blizzard.runner.store.schema import leases
 from tests.runner_fakes import (
+    FIXTURE_RUNNER_ID,
     FakeHarness,
     FakeHub,
     FakeProbe,
@@ -230,6 +231,8 @@ def _pool_leases(store, chunk_id: str, session_name: str):  # type: ignore[no-un
             .join(s.lease_context, s.lease_context.c.lease_id == s.leases.c.lease_id)
             .where(s.leases.c.chunk_id == chunk_id)
             .where(s.lease_context.c.session_name == session_name)
+            .where(s.leases.c.runner_id == FIXTURE_RUNNER_ID)
+            .where(s.lease_context.c.runner_id == FIXTURE_RUNNER_ID)
         ).all()
     return list(rows)
 
@@ -654,6 +657,7 @@ def _blank_stamps(store, chunk_id: str) -> None:  # type: ignore[no-untyped-def]
         conn.execute(
             update(s.lease_context)
             .where(s.lease_context.c.chunk_id == chunk_id)
+            .where(s.lease_context.c.runner_id == FIXTURE_RUNNER_ID)
             .values(
                 session_name=None,
                 resolved_model=None,
@@ -898,7 +902,7 @@ def _rotation_rig(tmp_path, *, owner_model: str = "opus"):  # type: ignore[no-un
     store = _store(tmp_path)
     _seed_head(store, model="sonnet")
     with store._engine.begin() as conn:
-        conn.execute(update(leases).values(harness_id="other"))
+        conn.execute(update(leases).where(leases.c.runner_id == FIXTURE_RUNNER_ID).values(harness_id="other"))
     default = FakeHarness(
         handle=WorkerHandle(session_id="default", pid=100, process_start_time="default", pgid=100), verdict="pass"
     )
@@ -986,7 +990,7 @@ def test_a_head_whose_owner_has_no_transcript_source_is_still_resumed(tmp_path):
     store = _store(tmp_path)
     head = _seed_head(store, model="sonnet")
     with store._engine.begin() as conn:
-        conn.execute(update(leases).values(harness_id="other"))
+        conn.execute(update(leases).where(leases.c.runner_id == FIXTURE_RUNNER_ID).values(harness_id="other"))
 
     default = FakeHarness(
         handle=WorkerHandle(session_id="default", pid=100, process_start_time="default", pgid=100), verdict="pass"
@@ -1031,7 +1035,7 @@ def test_a_pool_heads_unresolvable_owner_escalates_node_entry_in_place(tmp_path,
     store = _store(tmp_path)
     _seed_head(store, model="sonnet")
     with store._engine.begin() as conn:
-        conn.execute(update(leases).values(harness_id="foreign"))
+        conn.execute(update(leases).where(leases.c.runner_id == FIXTURE_RUNNER_ID).values(harness_id="foreign"))
     store.record_closure(
         lease_id="lease_head", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW
     )
@@ -1093,7 +1097,7 @@ def test_the_escalation_mints_never_spawned_lease_costs_a_later_real_attempt_no_
     store = _store(tmp_path)
     _seed_head(store, model="sonnet")
     with store._engine.begin() as conn:
-        conn.execute(update(leases).values(harness_id="foreign"))
+        conn.execute(update(leases).where(leases.c.runner_id == FIXTURE_RUNNER_ID).values(harness_id="foreign"))
     store.record_closure(
         lease_id="lease_head", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW
     )

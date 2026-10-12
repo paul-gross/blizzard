@@ -9,7 +9,13 @@ import pytest
 from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.internal.ask_store import AskStore
 from blizzard.runner.store.schema import lease_closures
-from tests.runner_fakes import _create_all, create_engine_from_url, runner_metadata, runner_store_errors
+from tests.runner_fakes import (
+    FIXTURE_RUNNER_ID,
+    _create_all,
+    create_engine_from_url,
+    runner_metadata,
+    runner_store_errors,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -31,7 +37,7 @@ class _RowCountingConnections(RunnerStoreConnections):
 def test_open_asks_does_not_read_the_park_rows_of_closed_leases(tmp_path) -> None:  # type: ignore[no-untyped-def]
     engine = create_engine_from_url(f"sqlite:///{tmp_path / 'runner.db'}")
     _create_all(runner_metadata, engine)
-    counting = _RowCountingConnections(engine, runner_store_errors())
+    counting = _RowCountingConnections(engine, runner_store_errors(), FIXTURE_RUNNER_ID)
     asks = AskStore(counting)
     for i in range(_HISTORY):
         lease, question = f"lease_old_{i}", f"q_old_{i}"
@@ -43,7 +49,12 @@ def test_open_asks_does_not_read_the_park_rows_of_closed_leases(tmp_path) -> Non
         with counting.begin() as conn:
             conn.execute(
                 lease_closures.insert().values(
-                    lease_id=lease, chunk_id="ch_old", node_id="nd", reason="transitioned", closed_at=_NOW
+                    runner_id=FIXTURE_RUNNER_ID,
+                    lease_id=lease,
+                    chunk_id="ch_old",
+                    node_id="nd",
+                    reason="transitioned",
+                    closed_at=_NOW,
                 )
             )
     asks.record_ask(

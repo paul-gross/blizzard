@@ -222,6 +222,9 @@ class BasicWorkspaceProvider:
     def pool(self) -> tuple[str, ...]:
         return ()
 
+    def environment_workdirs(self) -> dict[str, str]:
+        return {env.name: str(env) for env in self._environments()}
+
 
 def _conforms_workspace_provider(provider: BasicWorkspaceProvider) -> IWorkspaceProvider:
     return provider

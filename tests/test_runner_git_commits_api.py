@@ -20,13 +20,22 @@ from blizzard.runner.composition import build_runner_process
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.internal.winter_provider import WinterWorkspaceProvider
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.judgement.git_commit_declaration import (
     RIDES_NO_COMPLETION_NOTE,
     GitCommitDeclarationService,
 )
 from blizzard.runner.loop_wiring import LoopWiring
-from tests.runner_fakes import FakeHub, FakeProvider, make_store, make_stores
+from tests.runner_fakes import (
+    FIXTURE_RUNNER_ID,
+    FakeHub,
+    FakeProvider,
+    make_host_stores,
+    make_store,
+    make_stores,
+    migrated_store_at,
+)
 from tests.test_runner_winter_provider import _FakeGit, _FakeWinter
 
 _NOW = datetime(2026, 7, 22, 12, 0, 0, tzinfo=UTC)
@@ -39,7 +48,9 @@ def _app_with_declarations(tmp_path: Path):  # type: ignore[no-untyped-def]
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
     service = GitCommitDeclarationService(store, FixedClock(_NOW), _PROVIDER, environments=store, outbound=store)
-    return create_app(config, runner_stores=make_stores(store), git_commit_declarations=service), store
+    return create_app(
+        config, runner_stores=make_stores(store), host_stores=make_host_stores(store), git_commit_declarations=service
+    ), store
 
 
 def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-def]
@@ -238,7 +249,9 @@ def test_400_when_several_environments_are_held_and_none_is_named(tmp_path: Path
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
     service = GitCommitDeclarationService(store, FixedClock(_NOW), provider, environments=store, outbound=store)
-    app = create_app(config, runner_stores=make_stores(store), git_commit_declarations=service)
+    app = create_app(
+        config, runner_stores=make_stores(store), host_stores=make_host_stores(store), git_commit_declarations=service
+    )
     _seed_lease(store)
     store.record_binding(chunk_id="ch_1", environment_id="e2", workdir="/ws/e2", bound_at=_NOW)
 
@@ -265,7 +278,9 @@ def test_the_same_repo_in_two_environments_is_two_declarations(tmp_path: Path) -
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
     service = GitCommitDeclarationService(store, FixedClock(_NOW), provider, environments=store, outbound=store)
-    app = create_app(config, runner_stores=make_stores(store), git_commit_declarations=service)
+    app = create_app(
+        config, runner_stores=make_stores(store), host_stores=make_host_stores(store), git_commit_declarations=service
+    )
     _seed_lease(store)
     store.record_binding(chunk_id="ch_1", environment_id="e2", workdir="/ws/e2", bound_at=_NOW)
 
@@ -291,7 +306,10 @@ def test_hosted_winter_reacquire_updates_worker_declarations_on_the_shared_provi
     import blizzard.runner.composition as composition
 
     db_url = f"sqlite:///{tmp_path / 'runner.db'}"
+    # The process graph binds to the stored identity at build, and only over a head-migrated store.
+    migrated_store_at(db_url)
     store = make_store(db_url)
+    store.record_runner_identity(RunnerIdentity(FIXTURE_RUNNER_ID, "runner-local", _NOW))
     config = RunnerConfig(root=tmp_path, db_url=db_url, workspace_root=str(tmp_path), workspace_envs=("e1",))
     (tmp_path / "e1").mkdir()
     winter = _FakeWinter()

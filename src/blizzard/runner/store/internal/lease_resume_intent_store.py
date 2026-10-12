@@ -6,8 +6,6 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import select
-
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.leases.resume_intent import IWriteLeaseResumeIntentRepository
 from blizzard.runner.store.errors import RunnerStoreConnections
@@ -26,19 +24,23 @@ class LeaseResumeIntentStore:
     # --- reads --------------------------------------------------------------
 
     def resume_intent_lease_ids(self) -> set[str]:
-        stmt = select(resume_intents.c.lease_id).where(OPEN_INTENT.clause).distinct()
+        stmt = (
+            self._store.select(resume_intents, resume_intents.c.lease_id)
+            .where(OPEN_INTENT.clause(self._store))
+            .distinct()
+        )
         return {str(r.lease_id) for r in self._store.all(stmt)}
 
     # --- writes -------------------------------------------------------------
 
     def record_resume_intent(self, *, lease_id: str, marked_at: datetime) -> None:
         with self._store.begin() as conn:
-            conn.execute(resume_intents.insert().values(lease_id=lease_id, marked_at=marked_at))
+            conn.execute(self._store.insert(resume_intents).values(lease_id=lease_id, marked_at=marked_at))
         _log.info("resume intent marked", lease_id=lease_id)
 
     def record_resume_clear(self, *, lease_id: str, cleared_at: datetime) -> None:
         with self._store.begin() as conn:
-            conn.execute(resume_clears.insert().values(lease_id=lease_id, cleared_at=cleared_at))
+            conn.execute(self._store.insert(resume_clears).values(lease_id=lease_id, cleared_at=cleared_at))
         _log.info("resume intent cleared", lease_id=lease_id)
 
 

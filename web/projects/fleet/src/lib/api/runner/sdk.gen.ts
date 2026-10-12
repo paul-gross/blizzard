@@ -424,7 +424,8 @@ export const getRunnerApiRunnerGet = <ThrowOnError extends boolean = false>(opti
  * Set this runner's own pause brake — it starts no new workers.
  *
  * Independent of the hub's brake: it works with the hub unreachable, and neither reads nor
- * writes the hub's flag. Not a drain: a live worker is left running.
+ * writes the hub's flag. Not a drain: a live worker is left running. Refused with 503 until the
+ * runner first registers, since the brake is a fact of the runner the store is bound to.
  */
 export const patchRunnerApiRunnerPatch = <ThrowOnError extends boolean = false>(options: Options<PatchRunnerApiRunnerPatchData, ThrowOnError>): RequestResult<PatchRunnerApiRunnerPatchResponses, PatchRunnerApiRunnerPatchErrors, ThrowOnError> => (options.client ?? client).patch<PatchRunnerApiRunnerPatchResponses, PatchRunnerApiRunnerPatchErrors, ThrowOnError>({
     url: '/api/runner',

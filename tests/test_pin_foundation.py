@@ -23,13 +23,20 @@ from blizzard.hub.tenancy import HUB_SCOPED_OPTION, TenantId
 from blizzard.runner.runtime import init_environment as init_runner
 from blizzard.runner.store import schema as runner
 from blizzard.tools.invariants import HubInvariants, OneLiveExecSlot, RunnerInvariants, Violation
+from tests.runner_fakes import FIXTURE_RUNNER_ID
 from tests.support import add_tenant, default_tenant, hub_scoped, stamp
 
 _NOW = datetime(2026, 7, 14, tzinfo=UTC)
 
 
 def _runner_engine(tmp_path: Path):  # type: ignore[no-untyped-def]
-    return create_engine_from_url(init_runner(tmp_path / "runner").db_url)
+    """A head-migrated runner store whose identity names the fixture runner, as a registered runner's does."""
+    engine = create_engine_from_url(init_runner(tmp_path / "runner").db_url)
+    with engine.begin() as conn:
+        conn.execute(
+            insert(runner.runner_identity).values(runner_id=FIXTURE_RUNNER_ID, runner_name="r", registered_at=_NOW)
+        )
+    return engine
 
 
 def _hub_engine(tmp_path: Path):  # type: ignore[no-untyped-def]
@@ -57,11 +64,24 @@ def test_an_open_pause_park_over_a_closed_lease_is_not_a_violation(tmp_path: Pat
     so "a pause-parked lease has no closure" is deliberately not an invariant."""
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:
-        conn.execute(insert(runner.leases).values(lease_id="lease_a", chunk_id="ch_1", epoch=1, created_at=_NOW))
-        conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=_NOW))
+        conn.execute(
+            insert(runner.leases).values(
+                runner_id=FIXTURE_RUNNER_ID, lease_id="lease_a", chunk_id="ch_1", epoch=1, created_at=_NOW
+            )
+        )
+        conn.execute(
+            insert(runner.pause_parks).values(
+                runner_id=FIXTURE_RUNNER_ID, lease_id="lease_a", chunk_id="ch_1", parked_at=_NOW
+            )
+        )
         conn.execute(
             insert(runner.lease_closures).values(
-                lease_id="lease_a", chunk_id="ch_1", node_id="nd", reason="released", closed_at=_NOW
+                runner_id=FIXTURE_RUNNER_ID,
+                lease_id="lease_a",
+                chunk_id="ch_1",
+                node_id="nd",
+                reason="released",
+                closed_at=_NOW,
             )
         )
     assert RunnerInvariants(engine).run() == []

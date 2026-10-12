@@ -29,6 +29,7 @@ from blizzard.runner.hub.served_projects import (
 from blizzard.runner.leases.asks import IReadAskRepository, OpenAsk
 from blizzard.runner.leases.escalations import IReadEscalationRepository
 from blizzard.runner.leases.record import IReadLeaseRecordRepository
+from blizzard.runner.lifecycle.daemon_liveness import IReadDaemonLivenessRepository
 from blizzard.runner.lifecycle.takeover import EscalationCommands, IReadTakeoverRepository
 from blizzard.runner.throttle.pause import IReadPauseRepository, RunnerBrakes
 
@@ -146,6 +147,9 @@ class RunnerStatusSummary:
     #: The projects the runner serves, as its hub last answered, then each configured entry it has not
     #: answered yet; ``None`` when neither the configuration nor an answer names any.
     served_projects: tuple[ServedProjectStatus, ...] | None = None
+    #: Each held binding no workspace has claimed — its workdir matched none the provider lists. It
+    #: keeps its lease and still counts against ``max_agents``.
+    unmatched_bindings: tuple[EnvBinding, ...] = ()
 
 
 @domain_model
@@ -241,6 +245,7 @@ class RunnerStatusService:
         clock: IClock,
         *,
         pause: IReadPauseRepository,
+        daemon_liveness: IReadDaemonLivenessRepository,
         lease_record: IReadLeaseRecordRepository,
         outbound: IReadOutboundRepository,
         environments: IReadEnvironmentRepository,
@@ -263,6 +268,7 @@ class RunnerStatusService:
         contact_staleness: timedelta = HUB_CONTACT_STALENESS_THRESHOLD,
     ) -> None:
         self._pause = pause
+        self._daemon_liveness = daemon_liveness
         self._lease_record = lease_record
         self._outbound = outbound
         self._environments = environments
@@ -303,7 +309,7 @@ class RunnerStatusService:
                 now=self._clock.now(),
                 threshold=self._contact_staleness,
             ),
-            last_tick_at=self._pause.last_daemon_liveness(),
+            last_tick_at=self._daemon_liveness.last_daemon_liveness(),
             gates=self._gates,
             identity=self._identity_verdict.verdict() if self._identity_verdict is not None else None,
             tenant_id=identity.tenant_id if identity is not None else None,
@@ -312,6 +318,7 @@ class RunnerStatusService:
                 self._projects,
                 self._served_projects.served_projects_answer() if self._served_projects is not None else None,
             ),
+            unmatched_bindings=tuple(b for b in self._environments.held_bindings() if b.workspace_id is None),
         )
 
     def environments(self) -> list[EnvironmentSlot]:

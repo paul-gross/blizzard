@@ -88,7 +88,7 @@ def test_marks_worker_killed_mid_work(tmp_path):  # type: ignore[no-untyped-def]
     _seed_running_lease(store)
     store.record_heartbeat(lease_id="lease_1", beat_at=_NOW)  # was actively working when killed
 
-    marked = ResumeIntents(make_stores(store)).mark_crashed(process=FakeProbe(alive=set()), now=_NOW)
+    marked = ResumeIntents(make_stores(store)).mark_crashed(liveness=store, process=FakeProbe(alive=set()), now=_NOW)
 
     assert marked == 1
     assert store.resume_intent_lease_ids() == {"lease_1"}
@@ -102,7 +102,7 @@ def test_skips_worker_that_declared_done(tmp_path):  # type: ignore[no-untyped-d
     store.record_heartbeat(lease_id="lease_1", beat_at=_NOW)
     store.record_session_end(lease_id="lease_1", ended_at=_NOW)  # the worker declared done
 
-    marked = ResumeIntents(make_stores(store)).mark_crashed(process=FakeProbe(alive=set()), now=_NOW)
+    marked = ResumeIntents(make_stores(store)).mark_crashed(liveness=store, process=FakeProbe(alive=set()), now=_NOW)
 
     assert marked == 0
     assert store.resume_intent_lease_ids() == set()
@@ -118,7 +118,9 @@ def test_skips_stalled_worker(tmp_path):  # type: ignore[no-untyped-def]
     store.record_heartbeat(lease_id="lease_1", beat_at=_NOW)  # last tool call, two hours before the crash
     _crashed_at(store, _STALE_LATER)  # daemon still ticking until here
 
-    marked = ResumeIntents(make_stores(store)).mark_crashed(process=FakeProbe(alive=set()), now=_STALE_LATER)
+    marked = ResumeIntents(make_stores(store)).mark_crashed(
+        liveness=store, process=FakeProbe(alive=set()), now=_STALE_LATER
+    )
 
     assert marked == 0
     assert store.resume_intent_lease_ids() == set()
@@ -135,7 +137,7 @@ def test_marks_worker_killed_before_a_long_outage(tmp_path):  # type: ignore[no-
 
     # Back on its feet 90 minutes later — well past HEARTBEAT_STALENESS_THRESHOLD (~1h).
     marked = ResumeIntents(make_stores(store)).mark_crashed(
-        process=FakeProbe(alive=set()), now=_NOW + timedelta(minutes=90)
+        liveness=store, process=FakeProbe(alive=set()), now=_NOW + timedelta(minutes=90)
     )
 
     assert marked == 1
@@ -163,7 +165,9 @@ def test_marks_crash_after_an_earlier_session_ended(tmp_path):  # type: ignore[n
     store.record_heartbeat(lease_id="lease_1", beat_at=answered_at)
     _crashed_at(store, answered_at)  # then kill -9 lands mid-work
 
-    marked = ResumeIntents(make_stores(store)).mark_crashed(process=FakeProbe(alive=set()), now=answered_at)
+    marked = ResumeIntents(make_stores(store)).mark_crashed(
+        liveness=store, process=FakeProbe(alive=set()), now=answered_at
+    )
 
     assert marked == 1
     assert store.resume_intent_lease_ids() == {"lease_1"}
@@ -189,7 +193,9 @@ def test_marks_worker_respawned_just_before_the_crash_with_no_beat_of_its_own(tm
     crashed_at = respawned_at + timedelta(seconds=30)  # kill -9 lands 30s into the resumed turn
     _crashed_at(store, crashed_at)
 
-    marked = ResumeIntents(make_stores(store)).mark_crashed(process=FakeProbe(alive=set()), now=crashed_at)
+    marked = ResumeIntents(make_stores(store)).mark_crashed(
+        liveness=store, process=FakeProbe(alive=set()), now=crashed_at
+    )
 
     assert marked == 1
     assert store.resume_intent_lease_ids() == {"lease_1"}
@@ -214,7 +220,9 @@ def test_still_skips_a_worker_whose_newest_spawn_is_also_stale(tmp_path):  # typ
     crashed_at = respawned_at + HEARTBEAT_STALENESS_THRESHOLD + timedelta(minutes=1)
     _crashed_at(store, crashed_at)
 
-    marked = ResumeIntents(make_stores(store)).mark_crashed(process=FakeProbe(alive=set()), now=crashed_at)
+    marked = ResumeIntents(make_stores(store)).mark_crashed(
+        liveness=store, process=FakeProbe(alive=set()), now=crashed_at
+    )
 
     assert marked == 0
     assert store.resume_intent_lease_ids() == set()
@@ -240,7 +248,7 @@ def test_skips_worker_that_declared_done_in_its_current_spawn(tmp_path):  # type
     _crashed_at(store, respawned_at + timedelta(minutes=2))
 
     marked = ResumeIntents(make_stores(store)).mark_crashed(
-        process=FakeProbe(alive=set()), now=respawned_at + timedelta(minutes=2)
+        liveness=store, process=FakeProbe(alive=set()), now=respawned_at + timedelta(minutes=2)
     )
 
     assert marked == 0
@@ -254,7 +262,9 @@ def test_skips_orphaned_but_alive_worker(tmp_path):  # type: ignore[no-untyped-d
     _seed_running_lease(store)
     store.record_heartbeat(lease_id="lease_1", beat_at=_NOW)
 
-    marked = ResumeIntents(make_stores(store)).mark_crashed(process=FakeProbe(alive={(100, "start-100")}), now=_NOW)
+    marked = ResumeIntents(make_stores(store)).mark_crashed(
+        liveness=store, process=FakeProbe(alive={(100, "start-100")}), now=_NOW
+    )
 
     assert marked == 0
     assert store.resume_intent_lease_ids() == set()
@@ -295,7 +305,7 @@ def test_skips_parked_pending_and_unspawned(tmp_path):  # type: ignore[no-untype
         )
     )
 
-    marked = ResumeIntents(make_stores(store)).mark_crashed(process=FakeProbe(alive=set()), now=_NOW)
+    marked = ResumeIntents(make_stores(store)).mark_crashed(liveness=store, process=FakeProbe(alive=set()), now=_NOW)
 
     assert marked == 0
     assert store.resume_intent_lease_ids() == set()
@@ -311,7 +321,7 @@ def test_skips_a_lease_with_an_in_flight_elicitation(tmp_path):  # type: ignore[
     _seed_running_lease(store)
     store.record_elicitation_launch("lease_1", 1, output_path="/tmp/lease_1.1.0.elicitation", at=_NOW)
 
-    marked = ResumeIntents(make_stores(store)).mark_crashed(process=FakeProbe(alive=set()), now=_NOW)
+    marked = ResumeIntents(make_stores(store)).mark_crashed(liveness=store, process=FakeProbe(alive=set()), now=_NOW)
 
     assert marked == 0
     assert store.resume_intent_lease_ids() == set()
@@ -327,7 +337,7 @@ def test_marked_crash_lease_resumes_in_place(tmp_path):  # type: ignore[no-untyp
     store = _store(tmp_path)
     _seed_running_lease(store)
     store.record_heartbeat(lease_id="lease_1", beat_at=_NOW)
-    ResumeIntents(make_stores(store)).mark_crashed(process=FakeProbe(alive=set()), now=_NOW)
+    ResumeIntents(make_stores(store)).mark_crashed(liveness=store, process=FakeProbe(alive=set()), now=_NOW)
 
     hub = FakeHub()
     hub.chunks["ch_1"] = _running_chunk()
@@ -354,7 +364,7 @@ def test_crash_resumed_lease_is_not_judged_by_advance(tmp_path):  # type: ignore
     store = _store(tmp_path)
     _seed_running_lease(store)
     store.record_heartbeat(lease_id="lease_1", beat_at=_NOW)
-    ResumeIntents(make_stores(store)).mark_crashed(process=FakeProbe(alive=set()), now=_NOW)
+    ResumeIntents(make_stores(store)).mark_crashed(liveness=store, process=FakeProbe(alive=set()), now=_NOW)
 
     hub = FakeHub()
     hub.chunks["ch_1"] = _running_chunk()

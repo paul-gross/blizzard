@@ -180,6 +180,15 @@ def status(ctx: click.Context, directory: str, runner_url: str | None) -> None:
     click.echo(f"\nheld environments ({len(envs)}):")
     for env in envs:
         click.echo(f"  {env['environment_id']}  chunk={env['chunk_id']}  held since {env['held_since']}")
+    # Absent from a runner that predates the field; each one still holds its lease and agent slot.
+    unmatched = view.get("unmatched_bindings") or []
+    if unmatched:
+        click.echo(f"\nheld bindings matching no workspace ({len(unmatched)}):")
+        for binding in unmatched:
+            click.echo(
+                f"  {binding['environment_id']}  chunk={binding['chunk_id']}  workdir={binding['workdir']}"
+                f"  held since {binding['held_since']}"
+            )
 
     asks = asks_resp.json().get("items", [])
     click.echo(f"\nopen asks ({len(asks)}):")

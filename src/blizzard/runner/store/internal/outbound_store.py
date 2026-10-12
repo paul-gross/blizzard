@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, func
 
 from blizzard.runner.hub.outbound_buffer import (
     SUBMISSION_KINDS,
@@ -26,7 +26,7 @@ class OutboundStore:
         self._store = store
 
     def pending_submission_lease_ids(self) -> set[str]:
-        stmt = select(outbound_buffer.c.lease_id).where(
+        stmt = self._store.select(outbound_buffer, outbound_buffer.c.lease_id).where(
             and_(
                 outbound_buffer.c.acked_at.is_(None),
                 outbound_buffer.c.kind.in_(SUBMISSION_KINDS),
@@ -36,7 +36,11 @@ class OutboundStore:
         return {str(r.lease_id) for r in self._store.all(stmt)}
 
     def pending_outbound(self, *, limit: int | None = None) -> list[BufferedFact]:
-        stmt = select(outbound_buffer).where(outbound_buffer.c.acked_at.is_(None)).order_by(outbound_buffer.c.seq)
+        stmt = (
+            self._store.select(outbound_buffer)
+            .where(outbound_buffer.c.acked_at.is_(None))
+            .order_by(outbound_buffer.c.seq)
+        )
         if limit is not None:
             stmt = stmt.limit(limit)
         return [
@@ -52,12 +56,12 @@ class OutboundStore:
         ]
 
     def pending_outbound_count(self) -> int:
-        stmt = select(func.count()).select_from(outbound_buffer).where(outbound_buffer.c.acked_at.is_(None))
+        stmt = self._store.select(outbound_buffer, func.count()).where(outbound_buffer.c.acked_at.is_(None))
         rows = self._store.all(stmt)
         return int(rows[0][0]) if rows else 0
 
     def recent_outbound(self, limit: int) -> list[OutboundFactEntry]:
-        stmt = select(outbound_buffer).order_by(outbound_buffer.c.seq.desc()).limit(limit)
+        stmt = self._store.select(outbound_buffer).order_by(outbound_buffer.c.seq.desc()).limit(limit)
         return [
             OutboundFactEntry(
                 seq=int(r.seq),
@@ -75,7 +79,7 @@ class OutboundStore:
     ) -> int:
         with self._store.begin() as conn:
             result = conn.execute(
-                outbound_buffer.insert().values(
+                self._store.insert(outbound_buffer).values(
                     kind=kind, chunk_id=chunk_id, lease_id=lease_id, payload=payload, created_at=created_at
                 )
             )
@@ -89,7 +93,7 @@ class OutboundStore:
         # Only `acked_at IS NULL` rows take the update (`OUTBOUND_TRANSITIONS`).
         with self._store.begin() as conn:
             conn.execute(
-                outbound_buffer.update()
+                self._store.update(outbound_buffer)
                 .where(and_(outbound_buffer.c.seq.in_(seqs), outbound_buffer.c.acked_at.is_(None)))
                 .values(acked_at=acked_at)
             )
@@ -100,9 +104,11 @@ class OutboundStore:
             # Read in the SAME transaction as the delete below, so a fact enqueued between
             # the two can never be missed as "no pending row" and pruned as if above none.
             floor = conn.execute(
-                select(func.min(outbound_buffer.c.seq)).where(outbound_buffer.c.acked_at.is_(None))
+                self._store.select(outbound_buffer, func.min(outbound_buffer.c.seq)).where(
+                    outbound_buffer.c.acked_at.is_(None)
+                )
             ).scalar_one()
-            stmt = outbound_buffer.delete().where(
+            stmt = self._store.delete(outbound_buffer).where(
                 and_(outbound_buffer.c.acked_at.is_not(None), outbound_buffer.c.acked_at < cutoff)
             )
             if floor is not None:

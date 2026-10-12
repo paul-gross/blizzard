@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import and_, func, select
+from sqlalchemy import ColumnElement, and_, func
 
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
@@ -43,6 +43,15 @@ _NOT_SUPERSEDED_BY_RESET = Unsuperseded(
 _NOT_SUPERSEDED_BY_LEASE_CLOSURE = Unclosed(overload_facts.c.lease_id, lease_closures.c.lease_id)
 
 
+def _open_overload_fact(store: RunnerStoreConnections) -> list[ColumnElement[bool]]:
+    """An overload fact no later overload, reset, or lease closure of ``store``'s runner has closed."""
+    return [
+        _NOT_SUPERSEDED_BY_LATER_OVERLOAD.clause(store),
+        _NOT_SUPERSEDED_BY_RESET.clause(store),
+        _NOT_SUPERSEDED_BY_LEASE_CLOSURE.clause(store),
+    ]
+
+
 class OverloadStore:
     """Read-write provider-overload-backoff adapter over the runner store engine."""
 
@@ -50,26 +59,22 @@ class OverloadStore:
         self._store = store
 
     def overload_streak(self, lease_id: str, epoch: int) -> int:
+        st = self._store
         with self._store.connect() as conn:
             since = conn.execute(
-                select(func.max(overload_resets.c.reset_at)).where(
+                st.select(overload_resets, func.max(overload_resets.c.reset_at)).where(
                     and_(overload_resets.c.lease_id == lease_id, overload_resets.c.epoch == epoch)
                 )
             ).scalar_one_or_none()
             conditions = [overload_facts.c.lease_id == lease_id, overload_facts.c.epoch == epoch]
             if since is not None:
                 conditions.append(overload_facts.c.observed_at > since)
-            return int(
-                conn.execute(select(func.count()).select_from(overload_facts).where(and_(*conditions))).scalar_one()
-            )
+            return int(conn.execute(st.select(overload_facts, func.count()).where(and_(*conditions))).scalar_one())
 
     def open_overload_facts(self) -> list[OverloadExit]:
         rows = self._store.all(
-            select(overload_facts).where(
-                overload_facts.c.resume_after.is_not(None),
-                _NOT_SUPERSEDED_BY_LATER_OVERLOAD.clause,
-                _NOT_SUPERSEDED_BY_RESET.clause,
-                _NOT_SUPERSEDED_BY_LEASE_CLOSURE.clause,
+            self._store.select(overload_facts).where(
+                overload_facts.c.resume_after.is_not(None), *_open_overload_fact(self._store)
             )
         )
         return [self._row_to_record(r) for r in rows]
@@ -90,7 +95,7 @@ class OverloadStore:
         # Check-then-insert (`bzh:sql-portable`).
         with self._store.begin() as conn:
             existing = conn.execute(
-                select(overload_facts).where(
+                self._store.select(overload_facts).where(
                     and_(
                         overload_facts.c.lease_id == lease_id,
                         overload_facts.c.epoch == epoch,
@@ -102,7 +107,7 @@ class OverloadStore:
             if existing is not None:
                 return self._row_to_record(existing)
             conn.execute(
-                overload_facts.insert().values(
+                self._store.insert(overload_facts).values(
                     lease_id=lease_id,
                     chunk_id=chunk_id,
                     epoch=epoch,
@@ -126,7 +131,7 @@ class OverloadStore:
 
     def record_reset(self, *, lease_id: str, epoch: int, at: datetime) -> None:
         with self._store.begin() as conn:
-            conn.execute(overload_resets.insert().values(lease_id=lease_id, epoch=epoch, reset_at=at))
+            conn.execute(self._store.insert(overload_resets).values(lease_id=lease_id, epoch=epoch, reset_at=at))
         _log.info("provider overload streak reset", lease_id=lease_id, epoch=epoch)
 
     @staticmethod

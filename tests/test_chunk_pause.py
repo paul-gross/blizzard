@@ -43,6 +43,7 @@ from blizzard.runner.node_steps.chunk_state import ChunkPause, ChunkState
 from blizzard.runner.node_steps.submissions import ApplyReply
 from blizzard.runner.store import schema as runner_schema
 from tests.runner_fakes import (
+    FIXTURE_RUNNER_ID,
     FakeHarness,
     FakeHub,
     FakeProbe,
@@ -158,7 +159,10 @@ def test_restart_into_a_standing_pause_keeps_the_claim(tmp_path):  # type: ignor
     _seed_running_lease(store)
     probe = FakeProbe()  # the worker died with the daemon — a real restart's shape
     # Startup crash-recovery marks the killed-mid-work lease (the ungraceful path, #13).
-    assert ResumeIntents(make_stores(store)).mark_crashed(process=probe, now=_NOW + timedelta(seconds=1)) == 1
+    assert (
+        ResumeIntents(make_stores(store)).mark_crashed(liveness=store, process=probe, now=_NOW + timedelta(seconds=1))
+        == 1
+    )
 
     hub = FakeHub()
     hub.chunks["ch_1"] = _paused_chunk()  # paused while the runner was down; route still ours
@@ -201,7 +205,10 @@ def test_a_chunk_detached_and_then_paused_is_still_abandoned(tmp_path):  # type:
     store = _store(tmp_path)
     _seed_running_lease(store)
     probe = FakeProbe()
-    assert ResumeIntents(make_stores(store)).mark_crashed(process=probe, now=_NOW + timedelta(seconds=1)) == 1
+    assert (
+        ResumeIntents(make_stores(store)).mark_crashed(liveness=store, process=probe, now=_NOW + timedelta(seconds=1))
+        == 1
+    )
 
     hub = FakeHub()
     hub.chunks["ch_1"] = replace(_paused_chunk(), route_runner_id=None)  # detached at the hub, and paused too
@@ -283,7 +290,8 @@ def test_pull_parks_a_standing_pause_only_once_across_many_ticks(tmp_path):  # t
     engine = create_engine_from_url(db_url)
     try:
         with engine.connect() as conn:
-            rows = conn.execute(select(runner_schema.pause_parks.c.chunk_id)).all()
+            parks = runner_schema.pause_parks
+            rows = conn.execute(select(parks.c.chunk_id).where(parks.c.runner_id == FIXTURE_RUNNER_ID)).all()
     finally:
         engine.dispose()
     assert rows == [("ch_1",)], f"a standing pause appended {len(rows)} park rows — the idempotency guard is gone"

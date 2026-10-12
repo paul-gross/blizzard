@@ -7,18 +7,22 @@ release orchestration reads the clock and the held bindings, and writes what the
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
+from posixpath import normpath
 from typing import Protocol
 
 from blizzard.foundation.roles import domain_model
 
 __all__ = [
+    "BindingCompletion",
     "EnvBinding",
     "EnvironmentHeldError",
     "IReadEnvironmentRepository",
     "IWriteEnvironmentRepository",
+    "IncompleteBinding",
+    "binding_completion",
     "group_bindings_by_chunk",
     "releasable_after_refusal",
     "release_instants",
@@ -47,12 +51,68 @@ class EnvBinding:
     environment_id: str
     workdir: str
     bound_at: datetime
+    #: The configured workspace the environment belongs to; ``None`` until FILL or completion names it.
+    workspace_id: str | None = None
+    #: The bound chunk's project, as the hub names it; ``None`` until the hub has said.
+    project_id: str | None = None
 
     def release_instant(self, now: datetime) -> datetime:
         """The instant a release of this binding is stamped: ``now``, never earlier than the
         binding itself — a release stamped before ``bound_at`` (a clock stepped back) would not
         supersede the binding, leaving it held forever."""
         return max(now, self.bound_at)
+
+
+@domain_model
+@dataclass(frozen=True)
+class IncompleteBinding:
+    """A held binding row that still lacks its workspace or its project — the input to
+    :func:`binding_completion`. ``binding_id`` is the row's own key, the one a completion updates."""
+
+    binding_id: int
+    chunk_id: str
+    workdir: str
+    workspace_id: str | None
+    project_id: str | None
+
+
+@domain_model
+@dataclass(frozen=True)
+class BindingCompletion:
+    """What one held row gains: each column is a value to fill, or ``None`` to leave it as it is."""
+
+    binding_id: int
+    workspace_id: str | None
+    project_id: str | None
+
+
+def binding_completion(
+    row: IncompleteBinding,
+    *,
+    workspace_id: str,
+    listed_workdirs: Mapping[str, str],
+    project_id: str | None,
+) -> BindingCompletion | None:
+    """The completion ``row`` takes, or ``None`` when it gains nothing this time.
+
+    The row takes ``workspace_id`` when its workdir normalizes to one of ``listed_workdirs`` — the
+    workspace root joined with each environment its provider lists — never by environment name
+    alone. It takes ``project_id`` when the hub answered one. A column already set is never
+    overwritten."""
+    workspace = None
+    if row.workspace_id is None:
+        resolved = _resolved(row.workdir)
+        if any(resolved == _resolved(listed) for listed in listed_workdirs.values()):
+            workspace = workspace_id
+    project = project_id if row.project_id is None else None
+    if workspace is None and project is None:
+        return None
+    return BindingCompletion(binding_id=row.binding_id, workspace_id=workspace, project_id=project)
+
+
+def _resolved(workdir: str) -> str:
+    """``workdir`` with redundant separators and dot segments folded away: a pure comparison, no filesystem."""
+    return normpath(workdir)
 
 
 def _holders_other_than(chunk_id: str, held: Sequence[EnvBinding]) -> dict[str, str]:
@@ -123,12 +183,32 @@ class IReadEnvironmentRepository(Protocol):
         holds, on the same ``held`` predicate."""
         ...
 
+    def incomplete_held_bindings(self) -> list[IncompleteBinding]:
+        """Every held binding lacking its workspace or its project — one statement, empty once
+        every held row is complete."""
+        ...
+
 
 class IWriteEnvironmentRepository(IReadEnvironmentRepository, Protocol):
     """Read-write environment-binding store."""
 
-    def record_binding(self, *, chunk_id: str, environment_id: str, workdir: str, bound_at: datetime) -> None:
-        """Persist a chunk→env binding fact (written with the route claim)."""
+    def record_binding(
+        self,
+        *,
+        chunk_id: str,
+        environment_id: str,
+        workdir: str,
+        bound_at: datetime,
+        workspace_id: str | None = None,
+        project_id: str | None = None,
+    ) -> None:
+        """Persist a chunk→env binding fact (written with the route claim), naming its workspace
+        and its chunk's project where known."""
+        ...
+
+    def complete_bindings(self, completions: Sequence[BindingCompletion]) -> None:
+        """Fill each completion's non-``None`` columns on its row, in one transaction; a column
+        already set is left as it is."""
         ...
 
     def record_release(self, *, chunk_id: str, environment_id: str, released_at: datetime) -> None:

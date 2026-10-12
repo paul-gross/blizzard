@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from sqlalchemy import Engine
 
 from blizzard import __version__
-from blizzard.foundation.clock import SystemClock
+from blizzard.foundation.clock import IClock, SystemClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.handle import (
     DisabledPlatformTracing,
@@ -59,7 +59,14 @@ from blizzard.runner.store.internal.elicitation_store import ElicitationStore
 from blizzard.runner.store.internal.environment_store import EnvironmentStore
 from blizzard.runner.store.internal.escalation_store import EscalationStore
 from blizzard.runner.store.internal.git_commit_declaration_store import GitCommitDeclarationStore
-from blizzard.runner.store.internal.graph_artifact_store import GraphArtifactStore
+from blizzard.runner.store.internal.host_daemon_liveness_store import DaemonLivenessStore
+from blizzard.runner.store.internal.host_external_usage_store import ExternalUsageStore
+from blizzard.runner.store.internal.host_graph_artifact_store import GraphArtifactStore
+from blizzard.runner.store.internal.host_jti_cache_store import JtiCacheRepository
+from blizzard.runner.store.internal.host_runner_audit import RunnerAudit
+from blizzard.runner.store.internal.host_unowned_row_stamp import UnownedRowStamp
+from blizzard.runner.store.internal.host_unowned_row_stamp import stamp_unowned_rows as stamp_unowned_rows_on
+from blizzard.runner.store.internal.host_workspace_prompt_store import WorkspacePromptStore
 from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
 from blizzard.runner.store.internal.invocation_boundary_store import InvocationBoundaryStore
 from blizzard.runner.store.internal.lease_liveness_store import LeaseLivenessStore
@@ -77,8 +84,8 @@ from blizzard.runner.store.internal.takeover_store import TakeoverStore
 from blizzard.runner.store.internal.token_store import TokenStore
 from blizzard.runner.store.internal.transcript_ledger_store import TranscriptLedgerStore
 from blizzard.runner.store.internal.usage_store import UsageStore
-from blizzard.runner.store.internal.workspace_prompt_store import WorkspacePromptStore
-from blizzard.runner.stores import RunnerReadStores, RunnerStores
+from blizzard.runner.store.runner_guard import install_runner_guard
+from blizzard.runner.stores import HostReadStores, HostStores, RunnerReadStores, RunnerStores
 from blizzard.runner.subscriptions.internal.credential_renewer_factory import select_renewer
 from blizzard.runner.subscriptions.internal.subprocess_one_shot_process import SubprocessOneShotProcess
 from blizzard.runner.tracing.attributes import (
@@ -113,6 +120,8 @@ class RunnerProcess:
 
     engine: Engine
     stores: RunnerStores
+    #: The host-scoped stores, built once beside ``stores`` over the same connections.
+    host_stores: HostStores
     connections: RunnerStoreConnections
     provider: IWorkspaceProvider
     harnesses: HarnessRegistry
@@ -169,7 +178,7 @@ class RunnerProcess:
 
 
 def _credential_renewal_pass(
-    config: RunnerConfig, stores: RunnerStores, clock: SystemClock
+    config: RunnerConfig, host_stores: HostStores, clock: SystemClock
 ) -> CredentialRenewalPass | None:
     """Every declared subscription paired with its provider's renewer binding, sharing one
     one-shot subprocess seam; ``None`` when no provider binds one."""
@@ -183,7 +192,7 @@ def _credential_renewal_pass(
     ]
     if not renewable:
         return None
-    return CredentialRenewalPass(subscriptions=renewable, renewals=stores.usage, clock=clock)
+    return CredentialRenewalPass(subscriptions=renewable, renewals=host_stores.external_usage, clock=clock)
 
 
 #: How long the runner's shutdown waits for buffered platform spans to leave.
@@ -241,21 +250,27 @@ def build_runner_process(
     from; the graph seeds it from the store's identity row either way."""
     platform_tracing = platform_tracing or DisabledPlatformTracing()
     identity = identity or RunnerIdentityHolder()
+    install_runner_guard()
     engine = create_engine_from_url(config.db_url)
     platform_tracing.instrument_engine(engine)
     executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="blizzard-spawner")
     try:
-        stores, connections = build_stores_and_connections(
-            engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store"))
-        )
         readiness = ReadinessService(
             reader=SqlAlchemyStoreStatusReader(engine), expected_revision=migration_runner(config).script_head()
         )
-        # Seeded only from a store at the code's schema head: a store mid-migration fails readiness, not boot.
-        registered = stores.identity.runner_identity() if readiness.evaluate().ready else None
+        # Bound and seeded only from a store at the code's schema head: a store mid-migration fails readiness, not
+        # boot, and binds when registration adopts an id. Rows naming no runner are stamped by the command that starts
+        # the process (`stamp_unowned_rows`), before it serves or ticks.
+        ready = readiness.evaluate().ready
+        connections = RunnerStoreConnections(engine, RunnerStoreErrorFactory(get_logger("blizzard.runner.store")))
+        if ready:
+            connections.bind_to_stored()
+        stores = _build_stores(connections)
+        clock = SystemClock()
+        host_stores = _build_host_stores(connections, clock)
+        registered = stores.identity.runner_identity() if ready else None
         if registered is not None:
             identity.hold(registered)
-        clock = SystemClock()
         process = LinuxProcessProbe()
         provider = build_workspace_provider(
             config.workspace_settings, held_ids=stores.environments.held_environment_ids
@@ -300,7 +315,7 @@ def build_runner_process(
             if exporter is not None
             else None
         )
-        credential_renewal = _credential_renewal_pass(config, stores, clock)
+        credential_renewal = _credential_renewal_pass(config, host_stores, clock)
         trace_replay = LeaseTraceReplay(
             leases=stores.lease_traces, exporter=exporter, identity=identity, clock=clock, config=config.tracing
         )
@@ -329,6 +344,7 @@ def build_runner_process(
         return RunnerProcess(
             engine,
             stores,
+            host_stores,
             connections,
             provider,
             harnesses,
@@ -371,19 +387,10 @@ def _otlp_exporter(environ: Mapping[str, str] | None) -> OtlpTraceExporter:
     )
 
 
-def build_stores(engine: Engine, *, errors: RunnerStoreErrorFactory) -> RunnerStores:
-    """Construct and wire every extracted concept-store adapter over a migrated engine."""
-    return _build_stores(RunnerStoreConnections(engine, errors))
-
-
-def build_stores_and_connections(
-    engine: Engine, *, errors: RunnerStoreErrorFactory
-) -> tuple[RunnerStores, RunnerStoreConnections]:
-    """Build the store bundle and hand back the ``RunnerStoreConnections`` every adapter in it
-    shares, so a caller can wire a further ``store/internal/`` collaborator over the same
-    instance."""
-    connections = RunnerStoreConnections(engine, errors)
-    return _build_stores(connections), connections
+def build_stores(engine: Engine, *, errors: RunnerStoreErrorFactory, runner_id: str | None) -> RunnerStores:
+    """Construct and wire every extracted concept-store adapter over a migrated engine, bound to ``runner_id`` (or
+    unbound, ``None``)."""
+    return _build_stores(RunnerStoreConnections(engine, errors, runner_id))
 
 
 def _build_stores(connections: RunnerStoreConnections) -> RunnerStores:
@@ -395,12 +402,11 @@ def _build_stores(connections: RunnerStoreConnections) -> RunnerStores:
         environments=EnvironmentStore(connections),
         transcript_ledger=TranscriptLedgerStore(connections),
         tokens=TokenStore(connections),
-        workspace_prompt=WorkspacePromptStore(connections),
         outbound=OutboundStore(connections),
         overload=OverloadStore(connections),
         asks=AskStore(connections),
         pause=PauseStore(connections),
-        identity=RunnerIdentityStore(connections),
+        identity=RunnerIdentityStore(connections, stamp_unowned_rows_on),
         served_projects=ServedProjectsStore(connections),
         takeover=TakeoverStore(connections),
         requeue=RequeueStore(connections),
@@ -409,7 +415,6 @@ def _build_stores(connections: RunnerStoreConnections) -> RunnerStores:
         attachments=AttachmentStore(connections),
         git_commit_declarations=GitCommitDeclarationStore(connections),
         checks=CheckStore(connections),
-        graph_artifacts=GraphArtifactStore(connections),
         elicitations=ElicitationStore(connections),
         invocation_boundaries=InvocationBoundaryStore(connections),
         selftest_results=SelfTestResultStore(connections),
@@ -419,5 +424,43 @@ def _build_stores(connections: RunnerStoreConnections) -> RunnerStores:
 
 def build_read_stores(engine: Engine, *, errors: RunnerStoreErrorFactory) -> RunnerReadStores:
     """The read-only bundle a controller-facing collaborator takes — narrows build_stores's
-    bundle over the same adapter instances, never a second one."""
-    return RunnerReadStores.of(build_stores(engine, errors=errors))
+    bundle over the same adapter instances, never a second one — bound to the runner the store's identity row names,
+    or unbound (reading as empty) when it holds none."""
+    connections = RunnerStoreConnections(engine, errors)
+    connections.bind_to_stored()
+    return RunnerReadStores.of(_build_stores(connections))
+
+
+def stamp_unowned_rows(graph: RunnerProcess) -> int:
+    """The start-up stamp: when the graph's store is bound, stamp the bound runner's id on every runner-scoped row that
+    names none; answer how many were stamped. Run by ``blizzard runner host`` and ``blizzard runner tick`` once the
+    graph is built and before either serves or ticks. A store not yet bound stamps nothing — registration's first
+    adoption stamps them in the identity write's commit."""
+    bound = graph.connections.runner_id
+    return graph.host_stores.unowned_row_stamp.stamp(bound) if bound is not None else 0
+
+
+def build_host_stores(
+    engine: Engine, *, errors: RunnerStoreErrorFactory, clock: IClock, runner_id: str | None = None
+) -> HostStores:
+    """The host-scoped stores over a migrated engine, for a collaborator outside a runner process — the invariant
+    checker's audit. Host statements carry no runner equality; ``runner_id`` binds the connections only for the
+    cross-kind write's runner-scoped outbound report, and is left unbound otherwise."""
+    return _build_host_stores(RunnerStoreConnections(engine, errors, runner_id), clock)
+
+
+def build_host_read_stores(engine: Engine, *, errors: RunnerStoreErrorFactory) -> HostReadStores:
+    """The read-only host-store bundle a short-lived CLI verb takes."""
+    return HostReadStores.of(_build_host_stores(RunnerStoreConnections(engine, errors), SystemClock()))
+
+
+def _build_host_stores(connections: RunnerStoreConnections, clock: IClock) -> HostStores:
+    return HostStores(
+        workspace_prompt=WorkspacePromptStore(connections),
+        graph_artifacts=GraphArtifactStore(connections),
+        jti_cache=JtiCacheRepository(connections, clock),
+        daemon_liveness=DaemonLivenessStore(connections),
+        external_usage=ExternalUsageStore(connections),
+        unowned_row_stamp=UnownedRowStamp(connections),
+        runner_audit=RunnerAudit(connections),
+    )

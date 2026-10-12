@@ -106,6 +106,8 @@ class QueueEntry:
     position: int
     work_refs: list[QueueWorkRef] = field(default_factory=list)
     blocked: QueueBlock | None = None
+    #: The chunk's project, as the hub names it; ``None`` from a hub that does not say.
+    project_id: str | None = None
 
 
 @domain_model

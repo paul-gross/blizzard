@@ -21,7 +21,7 @@ from blizzard.runner.api.hub_proxy import _HUB_TIMEOUT
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.leases.model import NewLease
-from tests.runner_fakes import make_store, make_stores, no_retry_clock
+from tests.runner_fakes import make_host_stores, make_store, make_stores, no_retry_clock
 
 pytestmark = pytest.mark.component
 
@@ -88,6 +88,7 @@ def _app_with_store(tmp_path: Path, *, hub_url: str = _HUB_URL):  # type: ignore
     app = create_app(
         config,
         runner_stores=make_stores(store),
+        host_stores=make_host_stores(store),
         hub_proxy_client=httpx.Client(transport=httpx.MockTransport(router)),
         hub_retry_clock=no_retry_clock(),
     )

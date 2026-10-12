@@ -16,7 +16,7 @@ from tests.crash.support import start_runner, terminate, wait_death, wait_status
 from tests.crash.test_kill9_sweep import _abandon_graph_yaml, _await_marker, _leases_for_chunk, _wait_for_closure
 from tests.e2e.test_acceptance_loop import REPO, REPO_NAME, _forge, _free_port, _git_bare, _hub, _mock_bin_dir
 from tests.e2e.test_basic_workspace import bare_origin, basic_build_prompt, basic_config, basic_graph_yaml, trap_winter
-from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
+from tests.runner_fakes import daemon_store
 
 pytestmark = pytest.mark.crash_sweep
 
@@ -121,7 +121,7 @@ def test_basic_runner_releases_and_reclaims_after_abandon_kill9(
 
             engine = create_engine_from_url(config.db_url)
             try:
-                store = SqlAlchemyRunnerStore(engine, runner_store_errors())
+                store = daemon_store(engine)
                 assert chunk_id not in store.held_environment_ids()
                 provider = build_workspace_provider(config.workspace_settings, held_ids=store.held_environment_ids)
                 assert provider.repos(chunk_id) == [], "released worktree remained authorized after process death"

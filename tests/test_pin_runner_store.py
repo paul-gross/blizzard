@@ -19,7 +19,7 @@ from blizzard.runner.store.errors import (
     RunnerStoreErrorFactory,
 )
 from blizzard.runner.store.schema import binding_releases, park_facts, pause_parks
-from tests.runner_fakes import SqlAlchemyRunnerStore, make_store, runner_store_errors
+from tests.runner_fakes import FIXTURE_RUNNER_ID, SqlAlchemyRunnerStore, make_store, runner_store_errors
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 
@@ -87,7 +87,9 @@ def test_release_epoch_floor_and_tenure_read_are_chunk_scoped_at_equal_instants(
         )
     store.record_release(chunk_id="ch_1", environment_id="e1", released_at=_NOW)
     with store._engine.connect() as conn:
-        floor = conn.execute(sa.select(binding_releases.c.lease_epoch_floor)).scalar_one()
+        floor = conn.execute(
+            sa.select(binding_releases.c.lease_epoch_floor).where(binding_releases.c.runner_id == FIXTURE_RUNNER_ID)
+        ).scalar_one()
     assert floor == 1
     assert not store.has_lease_in_binding_tenure("ch_1", _NOW)
     assert store.has_lease_in_binding_tenure("ch_2", _NOW)

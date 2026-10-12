@@ -1,4 +1,4 @@
-"""The tick driver — CEILING → REAP → RESUME → PULL → FILL → ADVANCE → TRANSCRIPT DRAIN →
+"""The tick driver — CEILING → REAP → RESUME → PULL → COMPLETE → FILL → ADVANCE → TRANSCRIPT DRAIN →
 RETENTION → CONTEXT → SAMPLE.
 
 ``tick`` composes the steps in order — the single synchronous pass both the CLI verb and
@@ -19,6 +19,7 @@ from blizzard.runner.lifecycle.registration import Registration
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.steps import (
     Advance,
+    CompleteHeldBindings,
     ContextSample,
     ExternalUsageSample,
     Fill,
@@ -57,7 +58,7 @@ def _tick(ctx: LoopContext) -> None:
     _log.debug("tick start", runner_name=ctx.config.runner_name)
     # Stamp liveness first, so a pass that dies mid-step still leaves the beat
     # proving the daemon reached it — the reference the next startup's scan ages against.
-    ctx.stores.pause.record_daemon_liveness(alive_at=ctx.clock.now())
+    ctx.host_stores.daemon_liveness.record_daemon_liveness(alive_at=ctx.clock.now())
     # This tick's own memoized chunk-status cache — every step below shares
     # it via the rebound `ctx`, so a chunk read at more than one site this tick costs the
     # hub at most one round-trip. Primed with the ids every reconcile sweep below is about
@@ -90,6 +91,9 @@ def _tick(ctx: LoopContext) -> None:
         _traced(ctx, Reap)  # startup recovery IS reap running early
         _traced(ctx, Resume)  # before ADVANCE — else a killed-mid-work worker reads as done
         _traced(ctx, Pull)
+        # Before FILL: a held row still lacking its workspace or project is completed first, so the
+        # store FILL adds to holds every binding fully named that can be.
+        _traced(ctx, CompleteHeldBindings)
         _traced(ctx, Fill)
         _traced(ctx, Advance)
         # After every fact-lane-draining step — bounded (the real bound is in

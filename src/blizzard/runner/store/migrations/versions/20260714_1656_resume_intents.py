@@ -9,16 +9,34 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+import sqlalchemy as sa
 from alembic import op
 
-from blizzard.runner.store.schema import resume_clears, resume_intents
+from blizzard.foundation.store.utc import UtcDateTime
+
 
 revision: str = "20260714_1656_runner_resume_intents"
 down_revision: str | None = "20260713_1946_runner_hub_control"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-_TABLES = (resume_intents, resume_clears)
+_frozen_metadata = sa.MetaData()
+_resume_clears = sa.Table(
+    "resume_clears",
+    _frozen_metadata,
+    sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
+    sa.Column("lease_id", sa.String(), nullable=False),
+    sa.Column("cleared_at", UtcDateTime(), nullable=False),
+)
+_resume_intents = sa.Table(
+    "resume_intents",
+    _frozen_metadata,
+    sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
+    sa.Column("lease_id", sa.String(), nullable=False),
+    sa.Column("marked_at", UtcDateTime(), nullable=False),
+)
+
+_TABLES = (_resume_intents, _resume_clears)
 
 
 def upgrade() -> None:

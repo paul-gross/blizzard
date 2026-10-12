@@ -19,7 +19,7 @@ from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.leases.model import NewLease
-from tests.runner_fakes import make_store, make_stores, no_retry_clock
+from tests.runner_fakes import make_host_stores, make_store, make_stores, no_retry_clock
 
 _NOW = datetime(2026, 9, 2, 12, 0, 0, tzinfo=UTC)
 _TOKEN = "the-lease-token"
@@ -69,6 +69,7 @@ def _app_with_store(tmp_path: Path, *, hub_url: str = _HUB_URL):  # type: ignore
     app = create_app(
         config,
         runner_stores=make_stores(store),
+        host_stores=make_host_stores(store),
         hub_proxy_client=httpx.Client(transport=httpx.MockTransport(router)),
         hub_retry_clock=no_retry_clock(),
     )
@@ -227,7 +228,14 @@ def test_forwards_the_runner_bearer_when_a_token_is_configured(tmp_path: Path) -
         return httpx.Response(200, json=_PAGE)
 
     hub_proxy_client = httpx.Client(transport=httpx.MockTransport(handler))
-    with TestClient(create_app(config, runner_stores=make_stores(store), hub_proxy_client=hub_proxy_client)) as client:
+    with TestClient(
+        create_app(
+            config,
+            runner_stores=make_stores(store),
+            host_stores=make_host_stores(store),
+            hub_proxy_client=hub_proxy_client,
+        )
+    ) as client:
         resp = client.get("/api/leases/lease_1/garden/proposals", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 200, resp.text
     assert seen_headers[0]["Authorization"] == "Bearer hub-tok"

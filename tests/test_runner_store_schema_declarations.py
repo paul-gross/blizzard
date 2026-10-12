@@ -25,6 +25,9 @@ _HOST_TABLES = frozenset(
         "credential_renewal_claims",
         "credential_renewal_outcomes",
         "graph_artifacts",
+        "host_identity",
+        "host_outbound_buffer",
+        "host_high_water_seen",
     }
 )
 

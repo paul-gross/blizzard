@@ -26,6 +26,8 @@ from blizzard.hub.store.tenant_guard import GUARD_ENVIRONMENT_VARIABLE, install_
 from blizzard.runner import app as runner_app
 from blizzard.runner import runtime as runner_runtime
 from blizzard.runner.config import DEFAULT_TOKEN_ENV, ENV_HUB_URL
+from blizzard.runner.store.runner_guard import GUARD_ENVIRONMENT_VARIABLE as RUNNER_GUARD_ENVIRONMENT_VARIABLE
+from blizzard.runner.store.runner_guard import install_runner_guard
 from tests.repo_files import install_repo_read_guard
 
 # Its autouse fixture joins every in-process runner init to a fake hub.
@@ -155,8 +157,8 @@ def pytest_configure() -> None:
     Also drop the legacy forge variables a feature-env shell carries: every hub the suite
     spawns inherits this environ, and a hub refuses to start while one is set.
 
-    Switch the tenant statement guard on for every engine the suite opens: in process here, and in every hub
-    subprocess, which inherits the variable and installs the guard as it opens its engine."""
+    Switch the tenant and runner statement guards on for every engine the suite opens: in process here, and in every
+    hub and runner subprocess, which inherits the variables and installs its guard as it opens its engine."""
     for name in LEGACY_FORGE_VARIABLES:
         os.environ.pop(name, None)
     os.environ.update(
@@ -170,6 +172,8 @@ def pytest_configure() -> None:
     )
     os.environ[GUARD_ENVIRONMENT_VARIABLE] = "1"
     install_tenant_guard()
+    os.environ[RUNNER_GUARD_ENVIRONMENT_VARIABLE] = "1"
+    install_runner_guard()
 
 
 @pytest.fixture(autouse=True)

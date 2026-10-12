@@ -33,7 +33,7 @@ from blizzard.runner.hub.identity import (
 )
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.status.view import RunnerStatusService
-from tests.runner_fakes import FakeHarness, FakeProbe, make_store, make_stores, registered_identity
+from tests.runner_fakes import FakeHarness, FakeProbe, make_host_stores, make_store, make_stores, registered_identity
 from tests.support import assert_all_timestamps_utc
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
@@ -60,6 +60,7 @@ def _app_with_status(
     service = RunnerStatusService(
         clock or FixedClock(_NOW),
         pause=store,
+        daemon_liveness=store,
         lease_record=store,
         outbound=store,
         environments=store,
@@ -78,7 +79,9 @@ def _app_with_status(
         runner_dir=runner_dir,
         harnesses=HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=_harness)}),
     )
-    return create_app(config, runner_stores=make_stores(store), runner_status=service), store
+    return create_app(
+        config, runner_stores=make_stores(store), host_stores=make_host_stores(store), runner_status=service
+    ), store
 
 
 def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-def]
@@ -734,6 +737,7 @@ def test_the_escalation_paste_string_carries_no_permission_mode_even_when_config
     service = RunnerStatusService(
         FixedClock(_NOW),
         pause=store,
+        daemon_liveness=store,
         lease_record=store,
         outbound=store,
         environments=store,
@@ -968,3 +972,23 @@ def test_an_escalation_carries_the_parked_sessions_own_configuration(tmp_path: P
 
     assert (item["session_name"], item["model"], item["effort"]) == ("code", "opus", "high")
     assert item["resume_command"] == "cd /ws/e1 && claude --resume sess-a --model opus --effort high"
+
+
+@pytest.mark.component
+def test_summary_names_each_held_binding_matching_no_workspace(tmp_path: Path) -> None:
+    app, store = _app_with_status(tmp_path)
+    store.record_binding(
+        chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1", project_id="pr_1"
+    )
+    store.record_binding(chunk_id="ch_2", environment_id="e9", workdir="/elsewhere/e9", bound_at=_NOW)
+    with TestClient(app) as client:
+        body = client.get("/api/runner").json()
+
+    assert body["unmatched_bindings"] == [
+        {
+            "chunk_id": "ch_2",
+            "environment_id": "e9",
+            "workdir": "/elsewhere/e9",
+            "held_since": "2026-07-16T12:00:00+00:00",
+        }
+    ]

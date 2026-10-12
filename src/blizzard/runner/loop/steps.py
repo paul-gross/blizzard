@@ -19,7 +19,12 @@ from blizzard.foundation.leases import LeaseClosureReason
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.foundation.usage_windows import admit_usage_window
-from blizzard.runner.environments.repository import EnvBinding, group_bindings_by_chunk
+from blizzard.runner.environments.repository import (
+    BindingCompletion,
+    EnvBinding,
+    binding_completion,
+    group_bindings_by_chunk,
+)
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.hub.client import ChunkNotFoundError, HubClientError
@@ -29,6 +34,7 @@ from blizzard.runner.leases.model import Lease
 from blizzard.runner.leases.overload import backing_off_facts
 from blizzard.runner.lifecycle.attempt import Attempt
 from blizzard.runner.lifecycle.claim import InterruptedClaims, ReadyQueue
+from blizzard.runner.lifecycle.daemon_liveness import IReadDaemonLivenessRepository
 from blizzard.runner.lifecycle.dormant import DormantSession
 from blizzard.runner.lifecycle.drain import OutboundDrain
 from blizzard.runner.lifecycle.held_chunk import HeldChunk
@@ -73,6 +79,7 @@ from blizzard.runner.usage.repository import ContextSampleState, external_usage_
 #: This module's public API — the loop steps it owns, in tick order.
 __all__ = [
     "Advance",
+    "CompleteHeldBindings",
     "ContextSample",
     "ExternalUsageSample",
     "Fill",
@@ -229,14 +236,14 @@ class ResumeIntents:
             _log.info("marked in-flight leases for restart-resume", count=marked)
         return marked
 
-    def mark_crashed(self, *, process: IProcessProbe, now: datetime) -> int:
+    def mark_crashed(self, *, process: IProcessProbe, liveness: IReadDaemonLivenessRepository, now: datetime) -> int:
         """Mark the leases a crash orphaned mid-session, and return the count.
 
-        Staleness is measured against :meth:`last_daemon_liveness`, not the clock at recovery,
+        Staleness is measured against ``liveness``'s last beat, not the clock at recovery,
         which at startup is ``downtime + idle-at-crash``."""
         ended = self.stores.session.session_ended_lease_ids()
         # as_utc: this instant is about to be subtracted from, and a naive one compares wrong.
-        last_alive = self.stores.pause.last_daemon_liveness()
+        last_alive = liveness.last_daemon_liveness()
         crashed_at = as_utc(last_alive) if last_alive is not None else now
         marked = self._mark(self._crash_orphaned(ended, process, crashed_at), now=now)
         if marked:
@@ -415,6 +422,44 @@ class Pull(Step):
             )
 
 
+class CompleteHeldBindings(Step):
+    def run(self) -> None:
+        """Give each held binding lacking them its workspace and its chunk's project — ahead of FILL.
+
+        One read finds the incomplete held rows; with none, nothing else runs. A row takes the
+        configured workspace when its workdir matches one the provider lists, and its project from
+        the chunk-status batch read. A row the hub cannot answer, or whose workdir matches no
+        workspace, keeps its gap and its lease — it is retried next tick and named in status.
+        Each completion fills only an empty column in one transaction, so a crash re-runs it
+        harmlessly."""
+        ctx = self.ctx
+        rows = ctx.stores.environments.incomplete_held_bindings()
+        if not rows:
+            return
+        listed = ctx.provider.environment_workdirs()
+        lacking_project = {row.chunk_id for row in rows if row.project_id is None}
+        ctx.chunk_views.prime(lacking_project)
+        projects = {chunk_id: self._project(chunk_id) for chunk_id in lacking_project}
+        completions: list[BindingCompletion] = []
+        for row in rows:
+            completion = binding_completion(
+                row,
+                workspace_id=ctx.config.workspace_id,
+                listed_workdirs=listed,
+                project_id=projects.get(row.chunk_id),
+            )
+            if completion is not None:
+                completions.append(completion)
+        ctx.stores.environments.complete_bindings(completions)
+
+    def _project(self, chunk_id: str) -> str | None:
+        """The chunk's project from the tick's primed batch read; ``None`` when the hub cannot say yet."""
+        try:
+            return self.ctx.chunk_views.get(chunk_id).project_id
+        except HubClientError:  # covers ChunkNotFoundError: an unknown chunk names no project
+            return None
+
+
 class Fill(Step):
     def run(self) -> None:
         """Keep the fleet busy: peek → acquire → claim-by-route → bind → spawn.
@@ -588,8 +633,8 @@ class Retention(Step):
         lanes: tuple[tuple[str, Callable[[], int]], ...] = (
             ("outbound buffer", lambda: ctx.stores.outbound.prune_outbound(now=now)),
             ("heartbeat", lambda: ctx.stores.liveness.prune_heartbeats(now=now)),
-            ("external usage sample", lambda: ctx.stores.usage.prune_external_usage_samples(now=now)),
-            ("credential renewal", lambda: ctx.stores.usage.prune_credential_renewals(now=now)),
+            ("external usage sample", lambda: ctx.host_stores.external_usage.prune_external_usage_samples(now=now)),
+            ("credential renewal", lambda: ctx.host_stores.external_usage.prune_credential_renewals(now=now)),
             (
                 "worker stdout",
                 lambda: ctx.worker_files.sweep(
@@ -731,7 +776,7 @@ class ExternalUsageSample(Step):
 
     def _sample_one(self, resolved: ResolvedSubscription) -> None:
         ctx = self.ctx
-        anchor = ctx.stores.usage.last_external_usage_attempt_at(resolved.slug)
+        anchor = ctx.host_stores.external_usage.last_external_usage_attempt_at(resolved.slug)
         if not sample_due(anchor, ctx.clock.now(), resolved.sample_interval_seconds):
             return
         sampler = resolved.sampler
@@ -746,7 +791,7 @@ class ExternalUsageSample(Step):
             report_payload = json.dumps(self._miss_payload(resolved, result, missed_at=attempt.sampled_at))
         else:
             payload = report_payload = json.dumps(self._payload(resolved, result))
-        seq = ctx.stores.usage.record_external_usage_attempt(
+        seq = ctx.host_stores.external_usage.record_external_usage_attempt(
             slug=attempt.slug,
             sampled_at=attempt.sampled_at,
             payload=payload,

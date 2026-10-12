@@ -56,7 +56,12 @@ def _view(run: SelfTestRun) -> SelfTestView:
     "/selftests",
     response_model=SelfTestView,
     status_code=status.HTTP_201_CREATED,
-    responses={503: {"description": "The requested harness is known but unavailable."}},
+    responses={
+        503: {
+            "description": "The requested harness is known but unavailable, or the runner has not registered yet, so"
+            " its store is bound to no runner to record the result for."
+        }
+    },
 )
 def start_selftest(request_body: SelfTestStartRequest, request: Request) -> SelfTestView:
     """Mint a selftest run against ``harness`` and begin it off the request thread."""
@@ -72,6 +77,7 @@ def start_selftest(request_body: SelfTestStartRequest, request: Request) -> Self
         ) from exc
     except UnavailableHarnessError as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+    wiring.require_bound()
     return _view(service.start(request_body.harness, adapter))
 
 

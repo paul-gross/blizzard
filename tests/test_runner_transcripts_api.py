@@ -25,6 +25,7 @@ from blizzard.runner.transcripts.service import TranscriptService
 from tests.runner_fakes import (
     FakeArchivedTranscriptRepository,
     StaticTranscriptRepositoryResolver,
+    make_host_stores,
     make_store,
     make_stores,
 )
@@ -73,7 +74,11 @@ def _app_with_transcripts(
         archived=archived,
         workspace_root=workspace_root,
     )
-    return create_app(config, runner_stores=make_stores(store), transcripts=service), store, repo
+    return (
+        create_app(config, runner_stores=make_stores(store), host_stores=make_host_stores(store), transcripts=service),
+        store,
+        repo,
+    )
 
 
 def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-def]

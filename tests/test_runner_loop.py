@@ -71,6 +71,7 @@ from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.store.schema import lease_spawns
 from blizzard.runner.store.schema import metadata as runner_metadata
 from tests.runner_fakes import (
+    FIXTURE_RUNNER_ID,
     FakeHarness,
     FakeHub,
     FakeProbe,
@@ -849,7 +850,9 @@ def test_new_spawn_generations_record_their_bindings_actual_harness_version(tmp_
 
     with store._engine.connect() as conn:
         generations = conn.execute(
-            select(lease_spawns.c.harness_id, lease_spawns.c.harness_version).order_by(lease_spawns.c.id)
+            select(lease_spawns.c.harness_id, lease_spawns.c.harness_version)
+            .where(lease_spawns.c.runner_id == FIXTURE_RUNNER_ID)
+            .order_by(lease_spawns.c.id)
         ).all()
     assert generations == [("claude_code", "fresh-1.0"), ("claude_code", "resume-2.0")]
 
@@ -904,7 +907,11 @@ def test_a_version_probe_that_comes_back_empty_still_spawns_and_records_no_versi
     lease = store.active_lease_for_chunk("ch_1")
     assert lease is not None and lease.pid == 100  # the spawn itself is entirely unaffected
     with store._engine.connect() as conn:
-        (harness_id, version) = conn.execute(select(lease_spawns.c.harness_id, lease_spawns.c.harness_version)).one()
+        (harness_id, version) = conn.execute(
+            select(lease_spawns.c.harness_id, lease_spawns.c.harness_version).where(
+                lease_spawns.c.runner_id == FIXTURE_RUNNER_ID
+            )
+        ).one()
     assert (harness_id, version) == ("claude_code", None)
 
 
@@ -3070,7 +3077,7 @@ def test_a_real_identity_handshake_failure_kills_the_launch_and_leaves_a_durably
     with store._engine.connect() as conn:
         row = conn.execute(
             select(lease_spawns.c.session_id, lease_spawns.c.identity_failed_at).where(
-                lease_spawns.c.lease_id == lease.lease_id
+                lease_spawns.c.lease_id == lease.lease_id, lease_spawns.c.runner_id == FIXTURE_RUNNER_ID
             )
         ).one()
     assert row.session_id is None
@@ -3102,7 +3109,9 @@ def test_reap_closes_a_provisional_generation_left_by_an_identity_failure(tmp_pa
     # The prior generation stays durably closed-unidentified — REAP never leaves it ambiguous.
     with store._engine.connect() as conn:
         row = conn.execute(
-            select(lease_spawns.c.identity_failed_at).where(lease_spawns.c.lease_id == provisional.lease_id)
+            select(lease_spawns.c.identity_failed_at).where(
+                lease_spawns.c.lease_id == provisional.lease_id, lease_spawns.c.runner_id == FIXTURE_RUNNER_ID
+            )
         ).one()
     assert row.identity_failed_at is not None
 

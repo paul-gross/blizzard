@@ -32,9 +32,11 @@ from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
 from blizzard.hub.store.internal.chunk_rows import DEFAULT_MODEL
 from blizzard.hub.store.scoped import TENANT_COLUMN, is_tenant_owned
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION, StoreScope, TenantId
+from blizzard.runner.composition import build_host_stores
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from blizzard.runner.process.probe import IProcessProbe
 from blizzard.runner.store import schema as runner
+from blizzard.runner.store.errors import RUNNER_COLUMN, RUNNER_SCOPING, RunnerStoreErrorFactory
 from blizzard.runner.transcripts.invocation_boundaries import WORKER_STARTING_KINDS
 
 # The ``lease_facts.runner_id`` a hub mint records — its own lease row, never a runner's.
@@ -256,6 +258,33 @@ class UniqueEnvBinding(QueryCheck):
         return held
 
 
+class RowsNameRegisteredRunner(QueryCheck):
+    """Every runner-scoped row names a runner the store's ``runner_identity`` records — a row naming no runner (NULL)
+    included. A row the bound runner's scoped reads cannot see is lost to it: a lease never reaped, a binding never
+    released, an outbound fact never flushed. Rows a previous release wrote are stamped at the runner's start, before
+    any recovery this checker runs after; ``runner_identity`` keys itself by its own id, so it is not judged."""
+
+    _TABLES: ClassVar[tuple[Table, ...]] = tuple(
+        table
+        for table in runner.metadata.sorted_tables
+        if RUNNER_SCOPING.is_keyed(table) and table is not runner.runner_identity
+    )
+
+    def run(self) -> list[Violation]:
+        registered = select(runner.runner_identity.c.runner_id)
+        violations: list[Violation] = []
+        for table in self._TABLES:
+            key = table.c[RUNNER_COLUMN]
+            for row in self.conn.execute(
+                select(key, func.count()).where(key.is_(None) | key.not_in(registered)).group_by(key).order_by(key)
+            ):
+                named = "no runner" if row[0] is None else f"unregistered runner {row[0]}"
+                violations.append(
+                    Violation("runner:rows-name-registered-runner", f"{row[1]} {table.name} row(s) name {named}")
+                )
+        return violations
+
+
 class GaplessOutboundSeq(QueryCheck):
     """A hole in the outbound buffer's retained seqs would break FIFO idempotent replay —
     scoped to the pending floor upward, not every seq ever minted, since retention
@@ -358,7 +387,7 @@ class OneOpenPauseParkPerLease(QueryCheck):
         return violations
 
     def _open_pause_parks(self) -> list[tuple[str, datetime]]:
-        """The plain-query mirror of the store adapter's ``OPEN_PAUSE_PARK`` — same ``>=``
+        """The plain-query mirror of the store adapter's ``open_pause_park`` — same ``>=``
         (a same-instant resume is a resume), same per-lease correlation, and the same
         exclusion of a closed lease's park."""
         closed = {row[0] for row in self.conn.execute(select(runner.lease_closures.c.lease_id))}
@@ -984,6 +1013,7 @@ class RunnerInvariants:
 
     engine: Engine
     process: IProcessProbe = field(default_factory=LinuxProcessProbe)
+    clock: IClock = field(default_factory=SystemClock)
 
     def run(self, *, after_recovery: bool = False) -> list[Violation]:
         """``after_recovery=True`` additionally runs :class:`ActiveLeaseProcessIsLive`.
@@ -992,11 +1022,16 @@ class RunnerInvariants:
         violation, before REAP/RESUME ever reconciles it. A live-system or post-convergence
         caller passes ``True``; right after a raw kill -9 leaves it ``False``."""
         violations: list[Violation] = []
-        with self.engine.connect() as conn:
+        # The audit reads every runner's rows at once, through the host stores' runner audit.
+        audit = build_host_stores(
+            self.engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.tools.invariants")), clock=self.clock
+        ).runner_audit
+        with audit.connect() as conn:
             checks: tuple[QueryCheck, ...] = (
                 OneLiveLeasePerChunk(conn),
                 NoUnownedLiveLeaseProcess(conn),
                 UniqueEnvBinding(conn),
+                RowsNameRegisteredRunner(conn),
                 GaplessOutboundSeq(conn),
                 GaplessTranscriptOutboundSeq(conn),
                 TranscriptSegmentFinalizedExactlyOnce(conn),

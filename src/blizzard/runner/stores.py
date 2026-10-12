@@ -1,16 +1,24 @@
 """The runner-store bundles and umbrella Protocols.
 
-``RunnerStores`` is the frozen bundle of write-capable concept Protocol seams.
-``RunnerReadStores`` narrows it statically, one field per concept typed to its ``IRead*``
-twin, over the same adapter instances. ``IReadRunnerStore``/``IWriteRunnerStore`` compose
-every concept Protocol into one seam. This module, not ``runner/store/``, is their home,
-since no Protocol may be declared there."""
+``RunnerStores`` is the frozen bundle of write-capable concept Protocol seams over the runner-scoped tables, every
+adapter bound to one runner. ``RunnerReadStores`` narrows it statically, one field per concept typed to its ``IRead*``
+twin, over the same adapter instances. ``IReadRunnerStore``/``IWriteRunnerStore`` compose every runner-scoped concept
+Protocol into one seam.
+
+``HostStores`` is its host-scoped sibling, built once per process beside it: the adapters over the tables that belong
+to this host rather than to the runner it is bound to, and the closed list of members exempt from the runner statement
+guard — the start-up stamp and the invariant checker's runner audit. ``HostReadStores`` is its read-only narrowing.
+Host tables are reached only through it.
+
+This module, not ``runner/store/``, is their home, since no Protocol may be declared there."""
 
 from __future__ import annotations
 
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Protocol
 
+from blizzard.runner.auth.jti_cache import IJtiCache
 from blizzard.runner.auth.tokens import IReadTokenRepository, IWriteTokenRepository
 from blizzard.runner.environments.repository import IReadEnvironmentRepository, IWriteEnvironmentRepository
 from blizzard.runner.harness.selftest_result import (
@@ -35,6 +43,7 @@ from blizzard.runner.leases.overload import IReadOverloadRepository, IWriteOverl
 from blizzard.runner.leases.record import IReadLeaseRecordRepository, IWriteLeaseRecordRepository
 from blizzard.runner.leases.resume_intent import IReadLeaseResumeIntentRepository, IWriteLeaseResumeIntentRepository
 from blizzard.runner.leases.session import IReadLeaseSessionRepository, IWriteLeaseSessionRepository
+from blizzard.runner.lifecycle.daemon_liveness import IReadDaemonLivenessRepository, IWriteDaemonLivenessRepository
 from blizzard.runner.lifecycle.judgement.artifacts import IReadGraphArtifactRepository, IWriteGraphArtifactRepository
 from blizzard.runner.lifecycle.judgement.checks import IReadCheckRepository, IWriteCheckRepository
 from blizzard.runner.lifecycle.judgement.git_commit_declaration import (
@@ -49,9 +58,31 @@ from blizzard.runner.transcripts.invocation_boundaries import (
     IWriteInvocationBoundaryRepository,
 )
 from blizzard.runner.transcripts.ledger import IReadTranscriptLedgerRepository, IWriteTranscriptLedgerRepository
-from blizzard.runner.usage.repository import IReadUsageRepository, IWriteUsageRepository
+from blizzard.runner.usage.repository import (
+    IReadExternalUsageRepository,
+    IReadUsageRepository,
+    IWriteExternalUsageRepository,
+    IWriteUsageRepository,
+)
 
-__all__ = ["IReadRunnerStore", "IWriteRunnerStore", "RunnerReadStores", "RunnerStores"]
+__all__ = [
+    "HostReadStores",
+    "HostStores",
+    "IReadRunnerStore",
+    "IRunnerAudit",
+    "IRunnerBinding",
+    "IUnownedRowStamp",
+    "IWriteRunnerStore",
+    "RunnerReadStores",
+    "RunnerStores",
+]
+
+
+class IRunnerBinding(Protocol):
+    """The runner a store is bound to: the hub-minted id, or ``None`` until registration first adopts one."""
+
+    @property
+    def runner_id(self) -> str | None: ...
 
 
 class IReadRunnerStore(
@@ -62,7 +93,6 @@ class IReadRunnerStore(
     IReadEnvironmentRepository,
     IReadTranscriptLedgerRepository,
     IReadTokenRepository,
-    IReadWorkspacePromptRepository,
     IReadOutboundRepository,
     IReadOverloadRepository,
     IReadAskRepository,
@@ -76,7 +106,6 @@ class IReadRunnerStore(
     IReadAttachmentRepository,
     IReadGitCommitDeclarationRepository,
     IReadCheckRepository,
-    IReadGraphArtifactRepository,
     IReadElicitationRepository,
     IReadInvocationBoundaryRepository,
     IReadSelfTestResultRepository,
@@ -94,7 +123,6 @@ class IWriteRunnerStore(
     IWriteEnvironmentRepository,
     IWriteTranscriptLedgerRepository,
     IWriteTokenRepository,
-    IWriteWorkspacePromptRepository,
     IWriteOutboundRepository,
     IWriteOverloadRepository,
     IWriteAskRepository,
@@ -108,7 +136,6 @@ class IWriteRunnerStore(
     IWriteAttachmentRepository,
     IWriteGitCommitDeclarationRepository,
     IWriteCheckRepository,
-    IWriteGraphArtifactRepository,
     IWriteElicitationRepository,
     IWriteInvocationBoundaryRepository,
     IWriteSelfTestResultRepository,
@@ -130,7 +157,6 @@ class RunnerStores:
     environments: IWriteEnvironmentRepository
     transcript_ledger: IWriteTranscriptLedgerRepository
     tokens: IWriteTokenRepository
-    workspace_prompt: IWriteWorkspacePromptRepository
     outbound: IWriteOutboundRepository
     overload: IWriteOverloadRepository
     asks: IWriteAskRepository
@@ -144,7 +170,6 @@ class RunnerStores:
     attachments: IWriteAttachmentRepository
     git_commit_declarations: IWriteGitCommitDeclarationRepository
     checks: IWriteCheckRepository
-    graph_artifacts: IWriteGraphArtifactRepository
     elicitations: IWriteElicitationRepository
     invocation_boundaries: IWriteInvocationBoundaryRepository
     selftest_results: IWriteSelfTestResultRepository
@@ -163,7 +188,6 @@ class RunnerReadStores:
     environments: IReadEnvironmentRepository
     transcript_ledger: IReadTranscriptLedgerRepository
     tokens: IReadTokenRepository
-    workspace_prompt: IReadWorkspacePromptRepository
     outbound: IReadOutboundRepository
     overload: IReadOverloadRepository
     asks: IReadAskRepository
@@ -177,7 +201,6 @@ class RunnerReadStores:
     attachments: IReadAttachmentRepository
     git_commit_declarations: IReadGitCommitDeclarationRepository
     checks: IReadCheckRepository
-    graph_artifacts: IReadGraphArtifactRepository
     elicitations: IReadElicitationRepository
     invocation_boundaries: IReadInvocationBoundaryRepository
     selftest_results: IReadSelfTestResultRepository
@@ -195,7 +218,6 @@ class RunnerReadStores:
             environments=stores.environments,
             transcript_ledger=stores.transcript_ledger,
             tokens=stores.tokens,
-            workspace_prompt=stores.workspace_prompt,
             outbound=stores.outbound,
             overload=stores.overload,
             asks=stores.asks,
@@ -209,9 +231,62 @@ class RunnerReadStores:
             attachments=stores.attachments,
             git_commit_declarations=stores.git_commit_declarations,
             checks=stores.checks,
-            graph_artifacts=stores.graph_artifacts,
             elicitations=stores.elicitations,
             invocation_boundaries=stores.invocation_boundaries,
             selftest_results=stores.selftest_results,
             lease_traces=stores.lease_traces,
+        )
+
+
+class IUnownedRowStamp(Protocol):
+    """The start-up stamp: every runner-scoped row that names no runner, given the bound runner's id."""
+
+    def stamp(self, runner_id: str) -> int:
+        """Stamp ``runner_id`` on every runner-scoped row naming no runner, in a transaction of its own; answer how
+        many were stamped. Idempotent: a second call stamps nothing."""
+        ...
+
+
+class IRunnerAudit(Protocol):
+    """The invariant checker's audit: read connections over every runner's rows at once."""
+
+    def connect(self) -> AbstractContextManager[Any]:
+        """A store connection whose statements are exempt from the runner statement guard, closed on leaving the
+        ``with``. Typed ``Any``: the audit runs driver statements of its own, and no driver type is named here."""
+        ...
+
+
+@dataclass(frozen=True)
+class HostStores:
+    """The wired host-scoped collaborators, each typed to its write Protocol, plus the two named members exempt from
+    the runner statement guard."""
+
+    workspace_prompt: IWriteWorkspacePromptRepository
+    graph_artifacts: IWriteGraphArtifactRepository
+    jti_cache: IJtiCache
+    daemon_liveness: IWriteDaemonLivenessRepository
+    external_usage: IWriteExternalUsageRepository
+    #: Exempt: matches rows by the absence of a runner.
+    unowned_row_stamp: IUnownedRowStamp
+    #: Exempt: reads every runner's rows at once.
+    runner_audit: IRunnerAudit
+
+
+@dataclass(frozen=True)
+class HostReadStores:
+    """The read-only host-store bundle — the host-scoped concepts typed to their read Protocols, over the same
+    instances :meth:`of` is given; neither exempt member is carried."""
+
+    workspace_prompt: IReadWorkspacePromptRepository
+    graph_artifacts: IReadGraphArtifactRepository
+    daemon_liveness: IReadDaemonLivenessRepository
+    external_usage: IReadExternalUsageRepository
+
+    @classmethod
+    def of(cls, stores: HostStores) -> HostReadStores:
+        return cls(
+            workspace_prompt=stores.workspace_prompt,
+            graph_artifacts=stores.graph_artifacts,
+            daemon_liveness=stores.daemon_liveness,
+            external_usage=stores.external_usage,
         )

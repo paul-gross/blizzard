@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.store.schema import outbound_buffer, usage_facts
-from tests.runner_fakes import make_store, record_usage
+from tests.runner_fakes import FIXTURE_RUNNER_ID, make_store, record_usage
 
 pytestmark = pytest.mark.component
 
@@ -47,9 +47,19 @@ def _rows(tmp_path):  # type: ignore[no-untyped-def]
     engine = sa.create_engine(f"sqlite:///{tmp_path / 'runner.db'}")
     with engine.connect() as conn:
         facts = conn.execute(
-            sa.select(usage_facts.c.lease_id, usage_facts.c.estimated_cost_usd).order_by(usage_facts.c.id)
+            sa.select(usage_facts.c.lease_id, usage_facts.c.estimated_cost_usd)
+            .where(usage_facts.c.runner_id == FIXTURE_RUNNER_ID)
+            .order_by(usage_facts.c.id)
         ).all()
-        payloads = conn.execute(sa.select(outbound_buffer.c.payload).order_by(outbound_buffer.c.seq)).scalars().all()
+        payloads = (
+            conn.execute(
+                sa.select(outbound_buffer.c.payload)
+                .where(outbound_buffer.c.runner_id == FIXTURE_RUNNER_ID)
+                .order_by(outbound_buffer.c.seq)
+            )
+            .scalars()
+            .all()
+        )
     return facts, [json.loads(p)["estimated_cost_usd"] for p in payloads]
 
 

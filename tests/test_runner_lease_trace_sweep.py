@@ -33,7 +33,9 @@ class _Runner:
     """One runner process: its store, clock, exporter and sweep — a restart is a second one over the same file."""
 
     def __init__(self, tmp_path: Path, config: TracingConfig = _SETTLED, clock: FixedClock | None = None) -> None:
-        self.store: SqlAlchemyRunnerStore = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+        self.store: SqlAlchemyRunnerStore = make_store(
+            f"sqlite:///{tmp_path / 'runner.db'}", runner_id=fx.REGISTERED.runner_id
+        )
         self.clock = clock or FixedClock(fx.at(1000))
         self.exporter = InMemoryTraceExporter()
         self.store.record_runner_identity(fx.REGISTERED)

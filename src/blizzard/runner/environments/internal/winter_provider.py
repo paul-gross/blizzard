@@ -84,6 +84,9 @@ class WinterWorkspaceProvider:
     def pool(self) -> tuple[str, ...]:
         return self._pool
 
+    def environment_workdirs(self) -> dict[str, str]:
+        return {env: str(self._workspace_root / env) for env in self._pool}
+
     def acquire(self, chunk_id: str, count: int, held_ids: list[str]) -> list[AcquiredEnvironment]:
         with self._lock:
             return self._acquire(chunk_id, count, held_ids)

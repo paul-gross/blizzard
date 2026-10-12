@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, func
 
 from blizzard.foundation.leases import LeaseClosureReason
 from blizzard.foundation.logging import get_logger
@@ -49,19 +49,20 @@ class LeaseRecordStore:
     # --- reads --------------------------------------------------------------
 
     def list_active_leases(self) -> list[Lease]:
-        stmt = lease_select().where(_OPEN_LEASE.clause)
+        stmt = lease_select(self._store).where(_OPEN_LEASE.clause(self._store))
         return [row_to_lease(r) for r in self._store.all(stmt)]
 
     def count_active_leases(self) -> int:
-        stmt = select(func.count()).select_from(leases).where(_OPEN_LEASE.clause)
+        st = self._store
+        stmt = st.select(leases, func.count()).where(_OPEN_LEASE.clause(st))
         with self._store.connect() as conn:
             return int(conn.execute(stmt).scalar_one())
 
     def active_lease_for_chunk(self, chunk_id: str) -> Lease | None:
         stmt = (
-            lease_select()
+            lease_select(self._store)
             .where(leases.c.chunk_id == chunk_id)
-            .where(_OPEN_LEASE.clause)
+            .where(_OPEN_LEASE.clause(self._store))
             .order_by(leases.c.created_at.desc())
             .limit(1)
         )
@@ -69,18 +70,20 @@ class LeaseRecordStore:
         return row_to_lease(rows[0]) if rows else None
 
     def active_lease(self, lease_id: str) -> Lease | None:
-        stmt = lease_select().where(leases.c.lease_id == lease_id).where(_OPEN_LEASE.clause)
+        stmt = lease_select(self._store).where(leases.c.lease_id == lease_id).where(_OPEN_LEASE.clause(self._store))
         rows = self._store.all(stmt)
         return row_to_lease(rows[0]) if rows else None
 
     def latest_lease_for_chunk(self, chunk_id: str) -> Lease | None:
-        stmt = lease_select().where(leases.c.chunk_id == chunk_id).order_by(leases.c.created_at.desc()).limit(1)
+        stmt = (
+            lease_select(self._store).where(leases.c.chunk_id == chunk_id).order_by(leases.c.created_at.desc()).limit(1)
+        )
         rows = self._store.all(stmt)
         return row_to_lease(rows[0]) if rows else None
 
     def latest_lease_with_session_for_chunk(self, chunk_id: str) -> Lease | None:
         stmt = (
-            lease_select()
+            lease_select(self._store)
             .where(leases.c.chunk_id == chunk_id)
             .where(leases.c.session_id.is_not(None))
             .order_by(leases.c.created_at.desc(), leases.c.lease_id.desc())
@@ -90,15 +93,16 @@ class LeaseRecordStore:
         return row_to_lease(rows[0]) if rows else None
 
     def lease(self, lease_id: str) -> Lease | None:
-        stmt = lease_select().where(leases.c.lease_id == lease_id)
+        stmt = lease_select(self._store).where(leases.c.lease_id == lease_id)
         rows = self._store.all(stmt)
         return row_to_lease(rows[0]) if rows else None
 
     def list_closed_leases(self, limit: int) -> list[ClosedLease]:
         stmt = (
-            lease_select()
+            lease_select(self._store)
             .add_columns(lease_closures.c.reason, lease_closures.c.closed_at)
             .join(lease_closures, lease_closures.c.lease_id == leases.c.lease_id)
+            .where(*self._store.key_predicates(lease_closures))
             .order_by(lease_closures.c.closed_at.desc())
             .limit(limit)
         )
@@ -110,15 +114,17 @@ class LeaseRecordStore:
     def attempt_count(self, chunk_id: str, node_id: str) -> int:
         # A preempted attempt was superseded, not spent: counting it would carry
         # the node toward exhaustion and escalate the very chunk the operator is rescuing.
-        preempted = select(lease_closures.c.lease_id).where(lease_closures.c.reason == LeaseClosureReason.PREEMPTED)
+        st = self._store
+        preempted = st.select(lease_closures, lease_closures.c.lease_id).where(
+            lease_closures.c.reason == LeaseClosureReason.PREEMPTED
+        )
         # A never-spawned escalation-mint lease isn't spent either — its own closure
         # reason marks it, distinct from an ordinary exhausted-retries `escalated` closure.
-        escalation_mints = select(lease_closures.c.lease_id).where(
+        escalation_mints = st.select(lease_closures, lease_closures.c.lease_id).where(
             lease_closures.c.reason.in_(sorted(closure.MINT_REASONS))
         )
         stmt = (
-            select(func.count())
-            .select_from(lease_context)
+            st.select(lease_context, func.count())
             .where(and_(lease_context.c.chunk_id == chunk_id, lease_context.c.node_id == node_id))
             .where(lease_context.c.lease_id.not_in(preempted))
             .where(lease_context.c.lease_id.not_in(escalation_mints))
@@ -127,10 +133,11 @@ class LeaseRecordStore:
             return int(conn.execute(stmt).scalar_one())
 
     def latest_epoch(self, chunk_id: str) -> int:
-        lease_stmt = select(func.max(leases.c.epoch)).where(leases.c.chunk_id == chunk_id)
+        st = self._store
+        lease_stmt = st.select(leases, func.max(leases.c.epoch)).where(leases.c.chunk_id == chunk_id)
         # A forced takeover's fence bump mints no local lease, so it is folded
         # in here alongside the lease-minted epochs.
-        fence_stmt = select(func.max(takeovers.c.fence_epoch)).where(takeovers.c.chunk_id == chunk_id)
+        fence_stmt = st.select(takeovers, func.max(takeovers.c.fence_epoch)).where(takeovers.c.chunk_id == chunk_id)
         with self._store.connect() as conn:
             lease_max = conn.execute(lease_stmt).scalar_one_or_none()
             fence_max = conn.execute(fence_stmt).scalar_one_or_none()
@@ -139,11 +146,12 @@ class LeaseRecordStore:
     def has_lease_in_binding_tenure(self, chunk_id: str, bound_at: datetime) -> bool:
         # A release's epoch floor is recorded in the release transaction, so it orders
         # old and new tenures even when all their timestamps are identical.
-        release_floor = select(func.max(binding_releases.c.lease_epoch_floor)).where(
+        st = self._store
+        release_floor = st.select(binding_releases, func.max(binding_releases.c.lease_epoch_floor)).where(
             binding_releases.c.chunk_id == chunk_id
         )
         stmt = (
-            select(leases.c.lease_id)
+            st.select(leases, leases.c.lease_id)
             .where(leases.c.chunk_id == chunk_id)
             .where(leases.c.created_at >= bound_at)
             .where(leases.c.epoch > func.coalesce(release_floor.scalar_subquery(), 0))
@@ -152,7 +160,7 @@ class LeaseRecordStore:
         return bool(self._store.all(stmt))
 
     def lease_ids_for_chunk(self, chunk_id: str) -> list[str]:
-        stmt = select(leases.c.lease_id).where(leases.c.chunk_id == chunk_id)
+        stmt = self._store.select(leases, leases.c.lease_id).where(leases.c.chunk_id == chunk_id)
         return [str(r.lease_id) for r in self._store.all(stmt)]
 
     # --- writes -------------------------------------------------------------
@@ -160,7 +168,7 @@ class LeaseRecordStore:
     def record_lease(self, lease: NewLease) -> None:
         with self._store.begin() as conn:
             conn.execute(
-                leases.insert().values(
+                self._store.insert(leases).values(
                     lease_id=lease.lease_id,
                     chunk_id=lease.chunk_id,
                     epoch=lease.epoch,
@@ -168,7 +176,7 @@ class LeaseRecordStore:
                 )
             )
             conn.execute(
-                lease_context.insert().values(
+                self._store.insert(lease_context).values(
                     lease_id=lease.lease_id,
                     chunk_id=lease.chunk_id,
                     graph_id=lease.graph_id,
@@ -205,7 +213,7 @@ class LeaseRecordStore:
         event_seq: int | None = None
         with self._store.begin() as conn:
             conn.execute(
-                lease_closures.insert().values(
+                self._store.insert(lease_closures).values(
                     lease_id=lease_id,
                     chunk_id=chunk_id,
                     node_id=node_id,
@@ -216,7 +224,7 @@ class LeaseRecordStore:
             )
             if event_kind is not None and event_payload is not None:
                 result = conn.execute(
-                    outbound_buffer.insert().values(
+                    self._store.insert(outbound_buffer).values(
                         kind=event_kind,
                         chunk_id=chunk_id,
                         lease_id=lease_id,
@@ -229,17 +237,17 @@ class LeaseRecordStore:
             # Segments are final by step close — finalized atomically here, on
             # the transcript lane's OWN buffer, never `outbound_buffer` above.
             open_segments = conn.execute(
-                select(transcript_segments)
+                self._store.select(transcript_segments)
                 .where(transcript_segments.c.lease_id == lease_id)
                 .where(transcript_segments.c.finalized_at.is_(None))
             ).all()
             for segment in open_segments:
                 conn.execute(
-                    transcript_segments.update()
+                    self._store.update(transcript_segments)
                     .where(transcript_segments.c.segment_id == segment.segment_id)
                     .values(finalized_at=closed_at)
                 )
-                enqueue_transcript_final(conn, segment, at=closed_at)
+                enqueue_transcript_final(self._store, conn, segment, at=closed_at)
         _log.info(
             "lease closed",
             lease_id=lease_id,

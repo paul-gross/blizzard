@@ -197,12 +197,17 @@ def test_mark_crash_resume_intents_skips_a_pause_parked_lease(tmp_path):  # type
     probe = FakeProbe()  # the worker's process is gone — a crash to resume
     later = _NOW + timedelta(seconds=1)
 
-    assert ResumeIntents(make_stores(store)).mark_crashed(process=probe, now=later) == 1  # unparked: marked
+    assert (
+        ResumeIntents(make_stores(store)).mark_crashed(liveness=store, process=probe, now=later) == 1
+    )  # unparked: marked
     store.record_resume_clear(lease_id="lease_1", cleared_at=later)
 
     store.record_pause_park(lease_id="lease_1", chunk_id="ch_1", parked_at=later)
 
-    assert ResumeIntents(make_stores(store)).mark_crashed(process=probe, now=_NOW + timedelta(seconds=2)) == 0
+    assert (
+        ResumeIntents(make_stores(store)).mark_crashed(liveness=store, process=probe, now=_NOW + timedelta(seconds=2))
+        == 0
+    )
 
 
 def test_open_pause_parks_carries_each_parks_teardown_facts(tmp_path):  # type: ignore[no-untyped-def]

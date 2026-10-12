@@ -26,7 +26,6 @@ import httpx
 import pytest
 import uvicorn
 from fastapi import FastAPI
-from sqlalchemy import select
 
 from blizzard.foundation.leases import LeaseClosureReason
 from blizzard.foundation.store.engine import create_engine_from_url
@@ -47,7 +46,7 @@ from tests.e2e.test_acceptance_loop import (
     _runner_config,
     _terminate,
 )
-from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
+from tests.runner_fakes import daemon_store
 from tests.runner_join import fleet_headers, pin_runner, runner_spawn_env, seed_pinned_runner
 from tests.service.support import (
     JUDGEMENT_SCRIPT,
@@ -101,7 +100,7 @@ def _pending_outbound(config: RunnerConfig) -> int:
     """The depth of the runner's store-and-forward buffer."""
     engine = create_engine_from_url(config.db_url)
     try:
-        return len(SqlAlchemyRunnerStore(engine, runner_store_errors()).pending_outbound())
+        return len(daemon_store(engine).pending_outbound())
     finally:
         engine.dispose()
 
@@ -169,7 +168,7 @@ def _local_pause_reason(config: RunnerConfig) -> str | None:
     """The runner's own store, read directly — no local API server is up in this tier."""
     engine = create_engine_from_url(config.db_url)
     try:
-        return SqlAlchemyRunnerStore(engine, runner_store_errors()).local_pause_reason()
+        return daemon_store(engine).local_pause_reason()
     finally:
         engine.dispose()
 
@@ -305,7 +304,7 @@ def _pending_transcript_outbound(config: RunnerConfig) -> int:
     """The depth of the runner's transcript-lane buffer — the transcript lane's own, never the fact lane's."""
     engine = create_engine_from_url(config.db_url)
     try:
-        return len(SqlAlchemyRunnerStore(engine, runner_store_errors()).pending_transcript_outbound())
+        return len(daemon_store(engine).pending_transcript_outbound())
     finally:
         engine.dispose()
 
@@ -393,10 +392,7 @@ def test_stale_envelope_is_tolerated_and_the_chunk_still_lands(tmp_path: Path) -
 def _open_escalation_chunk_ids(config: RunnerConfig) -> list[str]:
     engine = create_engine_from_url(config.db_url)
     try:
-        return [
-            escalation.chunk_id
-            for escalation in SqlAlchemyRunnerStore(engine, runner_store_errors()).open_escalations()
-        ]
+        return [escalation.chunk_id for escalation in daemon_store(engine).open_escalations()]
     finally:
         engine.dispose()
 
@@ -404,7 +400,7 @@ def _open_escalation_chunk_ids(config: RunnerConfig) -> list[str]:
 def _lease_id_for_chunk(config: RunnerConfig, chunk_id: str) -> str | None:
     engine = create_engine_from_url(config.db_url)
     try:
-        for lease in SqlAlchemyRunnerStore(engine, runner_store_errors()).list_active_leases():
+        for lease in daemon_store(engine).list_active_leases():
             if lease.chunk_id == chunk_id:
                 return lease.lease_id
         return None
@@ -417,7 +413,7 @@ def _lease_closure_reason(config: RunnerConfig, lease_id: str) -> str | None:
     ``done`` (``transitioned``) — both empty the same active-leases row."""
     engine = create_engine_from_url(config.db_url)
     try:
-        for closed in SqlAlchemyRunnerStore(engine, runner_store_errors()).list_closed_leases(50):
+        for closed in daemon_store(engine).list_closed_leases(50):
             if closed.lease.lease_id == lease_id:
                 return closed.reason
         return None
@@ -431,7 +427,8 @@ def _escalation_closure_reason(config: RunnerConfig, chunk_id: str) -> str | Non
     try:
         with engine.connect() as conn:
             row = conn.execute(
-                select(escalation_closures.c.reason)
+                daemon_store(engine)
+                .connections.select(escalation_closures, escalation_closures.c.reason)
                 .where(escalation_closures.c.chunk_id == chunk_id)
                 .order_by(escalation_closures.c.closed_at.desc())
                 .limit(1)
@@ -705,7 +702,7 @@ def _worker_credential(config: RunnerConfig, lease_id: str) -> dict[str, str]:
     token, token_hash = LeaseToken.mint()
     engine = create_engine_from_url(config.db_url)
     try:
-        SqlAlchemyRunnerStore(engine, runner_store_errors()).record_lease_token(lease_id, token_hash, datetime.now(UTC))
+        daemon_store(engine).record_lease_token(lease_id, token_hash, datetime.now(UTC))
     finally:
         engine.dispose()
     return {"X-Blizzard-Lease-Token": token}
@@ -1182,7 +1179,11 @@ def _trace_config_rejections(config: RunnerConfig, *, pending: bool) -> int:
     engine = create_engine_from_url(config.db_url)
     try:
         with engine.connect() as conn:
-            rows = conn.execute(select(outbound_buffer.c.payload, outbound_buffer.c.acked_at)).all()
+            rows = conn.execute(
+                daemon_store(engine).connections.select(
+                    outbound_buffer, outbound_buffer.c.payload, outbound_buffer.c.acked_at
+                )
+            ).all()
     finally:
         engine.dispose()
     return sum(
@@ -1204,17 +1205,25 @@ def test_a_grpc_protocol_serves_with_tracing_off_and_one_rejection_reaches_the_h
             "OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:4318",
             "OTEL_EXPORTER_OTLP_PROTOCOL": "grpc",
         }
-        # Held unreachable first so the buffered rejection is read before any flush can ack it.
+        # Held unreachable first: a fresh runner is bound to no runner until it registers, so the rejection — a
+        # runner-scoped row — is held rather than buffered.
         assert hub.post("/_levers/unreachable", json={"remaining": 10_000}).status_code == 200
         log = config.root / "daemon.log"
         proc = _host(config, env)
         client = httpx.Client(base_url=f"http://127.0.0.1:{config.port}", timeout=10.0)
         try:
             _await_http(proc, client, "/api/health", log=log)
-            assert _trace_config_rejections(config, pending=True) == 1
+            assert _trace_config_rejections(config, pending=True) == 0
+            assert _trace_config_rejections(config, pending=False) == 0
 
             assert hub.post("/_levers/reset").status_code == 200
-            assert poll_until(lambda: _trace_config_rejections(config, pending=True) == 0, timeout=30.0)
+            assert poll_until(
+                lambda: (
+                    _trace_config_rejections(config, pending=False) == 1
+                    and _trace_config_rejections(config, pending=True) == 0
+                ),
+                timeout=30.0,
+            ), read_daemon_log(log)
             captured = hub.get("/_captured").json()["requests"]
             assert any(r["method"] == "POST" and r["path"] == "/api/fleet/events" for r in captured)
             assert client.get("/api/health").status_code == 200

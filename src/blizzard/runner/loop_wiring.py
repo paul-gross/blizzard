@@ -41,7 +41,7 @@ from blizzard.runner.loop.steps import ResumeIntents
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.process.internal.worker_scratch_dirs import WorkerScratchDirs
 from blizzard.runner.process.probe import IProcessProbe
-from blizzard.runner.stores import RunnerStores
+from blizzard.runner.stores import HostStores, RunnerStores
 from blizzard.runner.subscriptions.internal.subscription_sampler_factory import select_sampler
 from blizzard.runner.transcripts.transcript_backfill import (
     TranscriptBackfill,
@@ -185,6 +185,7 @@ class LoopWiring:
         verified = VerifiedHubClient(hub, graph.identity_verdict)
         return LoopContext(
             stores=stores,
+            host_stores=graph.host_stores,
             clock=clock,
             hub=verified,
             identity=graph.identity,
@@ -301,6 +302,7 @@ class ResumeMarking:
     Store-only — no hub, no workspace provider."""
 
     stores: RunnerStores
+    host_stores: HostStores
     clock: IClock
     process: IProcessProbe
     #: The drain's injected wait (``bzh:injected-clock``) — a test steps `clock` from here.
@@ -324,7 +326,9 @@ class ResumeMarking:
     def on_startup(self) -> int:
         """Mark the sessions a crash orphaned, before the loop starts — the ungraceful
         counterpart, needing a process probe as well as the store."""
-        return ResumeIntents(self.stores).mark_crashed(process=self.process, now=self.clock.now())
+        return ResumeIntents(self.stores).mark_crashed(
+            process=self.process, liveness=self.host_stores.daemon_liveness, now=self.clock.now()
+        )
 
 
 class PeriodicDriver:

@@ -27,8 +27,10 @@ __all__ = [
     "ExternalUsageAttempt",
     "ExternalUsageAttemptSummary",
     "IReadCredentialRenewalRepository",
+    "IReadExternalUsageRepository",
     "IReadUsageRepository",
     "IWriteCredentialRenewalRepository",
+    "IWriteExternalUsageRepository",
     "IWriteUsageRepository",
     "InvocationCost",
     "UsageTotals",
@@ -279,7 +281,7 @@ class IWriteCredentialRenewalRepository(IReadCredentialRenewalRepository, Protoc
         ...
 
 
-class IReadUsageRepository(IReadCredentialRenewalRepository, Protocol):
+class IReadUsageRepository(Protocol):
     """Read-only usage/context-sample queries."""
 
     def session_cost_basis(self, lease_id: str) -> SessionCostBasis | None:
@@ -310,37 +312,8 @@ class IReadUsageRepository(IReadCredentialRenewalRepository, Protocol):
         answers ``None`` for it."""
         ...
 
-    def last_external_usage_attempt_at(self, slug: str) -> datetime | None:
-        """``max(sampled_at)`` across this ``slug``'s own rows, or ``None``. A
-        NULL-``payload`` attempt counts like a successful one, so one subscription's
-        failed sample never masks its own windows."""
-        ...
 
-    def latest_external_usage_windows(self, slug: str) -> tuple[ExternalSubscriptionUsageWindow, ...]:
-        """This ``slug``'s own newest sampled snapshot's windows, decoded from the stored
-        payload — empty when never sampled, or when the newest attempt recorded none."""
-        ...
-
-    def latest_external_usage_windows_by_slug(
-        self, slugs: Sequence[str]
-    ) -> dict[str, tuple[ExternalSubscriptionUsageWindow, ...]]:
-        """:meth:`latest_external_usage_windows` for every slug in ``slugs``, in one batched read
-        (`bzh:bulk-reconstitution`) — each slug's answer exactly the singular's, including its
-        exclusion of failed-attempt rows before the newest is picked. A slug that answers no
-        windows is absent, which the caller reads as ``()``."""
-        ...
-
-    def latest_external_usage_attempt(self, slug: str) -> ExternalUsageAttemptSummary | None:
-        """This ``slug``'s own newest attempt row, or ``None`` when never attempted."""
-        ...
-
-    def latest_external_usage_attempts_by_slug(self, slugs: Sequence[str]) -> dict[str, ExternalUsageAttemptSummary]:
-        """:meth:`latest_external_usage_attempt` for every slug in ``slugs``, in one batched read
-        (`bzh:bulk-reconstitution`). A slug never attempted is absent, which the caller reads as ``None``."""
-        ...
-
-
-class IWriteUsageRepository(IReadUsageRepository, IWriteCredentialRenewalRepository, Protocol):
+class IWriteUsageRepository(IReadUsageRepository, Protocol):
     """Read-write usage/context-sample store — held only by the domain."""
 
     def record_usage(
@@ -380,6 +353,45 @@ class IWriteUsageRepository(IReadUsageRepository, IWriteCredentialRenewalReposit
         first crossing reports — and returns ``None``, no report buffered."""
         ...
 
+
+class IReadExternalUsageRepository(IReadCredentialRenewalRepository, Protocol):
+    """Read-only external-usage-sample queries: each declared subscription's sampling attempts — host-scoped, a fact
+    about the account rather than the runner, reached through :class:`~blizzard.runner.stores.HostStores`."""
+
+    def last_external_usage_attempt_at(self, slug: str) -> datetime | None:
+        """``max(sampled_at)`` across this ``slug``'s own rows, or ``None``. A
+        NULL-``payload`` attempt counts like a successful one, so one subscription's
+        failed sample never masks its own windows."""
+        ...
+
+    def latest_external_usage_windows(self, slug: str) -> tuple[ExternalSubscriptionUsageWindow, ...]:
+        """This ``slug``'s own newest sampled snapshot's windows, decoded from the stored
+        payload — empty when never sampled, or when the newest attempt recorded none."""
+        ...
+
+    def latest_external_usage_windows_by_slug(
+        self, slugs: Sequence[str]
+    ) -> dict[str, tuple[ExternalSubscriptionUsageWindow, ...]]:
+        """:meth:`latest_external_usage_windows` for every slug in ``slugs``, in one batched read
+        (`bzh:bulk-reconstitution`) — each slug's answer exactly the singular's, including its
+        exclusion of failed-attempt rows before the newest is picked. A slug that answers no
+        windows is absent, which the caller reads as ``()``."""
+        ...
+
+    def latest_external_usage_attempt(self, slug: str) -> ExternalUsageAttemptSummary | None:
+        """This ``slug``'s own newest attempt row, or ``None`` when never attempted."""
+        ...
+
+    def latest_external_usage_attempts_by_slug(self, slugs: Sequence[str]) -> dict[str, ExternalUsageAttemptSummary]:
+        """:meth:`latest_external_usage_attempt` for every slug in ``slugs``, in one batched read
+        (`bzh:bulk-reconstitution`). A slug never attempted is absent, which the caller reads as ``None``."""
+        ...
+
+
+class IWriteExternalUsageRepository(IReadExternalUsageRepository, IWriteCredentialRenewalRepository, Protocol):
+    """Read-write external-usage samples and credential renewals — held only by the sampling step, the renewal pass
+    and retention."""
+
     def record_external_usage_attempt(
         self,
         *,
@@ -400,6 +412,6 @@ class IWriteUsageRepository(IReadUsageRepository, IWriteCredentialRenewalReposit
         """Compact external-usage-sample attempts older than the store's own retention
         window, keeping each slug's newest attempt regardless of age —
         ``max(sampled_at)`` per slug is unchanged, so
-        :meth:`~IReadUsageRepository.last_external_usage_attempt_at` answers identically
+        :meth:`~IReadExternalUsageRepository.last_external_usage_attempt_at` answers identically
         before and after. Returns the number of rows pruned."""
         ...

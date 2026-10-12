@@ -36,7 +36,7 @@ from blizzard.runner.tracing.platform import (
 from blizzard.runner.tracing.platform import (
     PLATFORM_INSTRUMENTATION_SCOPE_VERSION as RUNNER_SCOPE_VERSION,
 )
-from tests.runner_fakes import make_store, make_stores, no_retry_clock
+from tests.runner_fakes import make_host_stores, make_store, make_stores, no_retry_clock
 
 pytestmark = pytest.mark.component
 
@@ -116,6 +116,7 @@ def test_a_worker_read_chains_runner_and_hub_spans_under_the_step_root(tmp_path:
         runner = create_app(
             RunnerConfig(root=tmp_path, db_url=db_url, hub_url=str(hub.base_url)),
             runner_stores=make_stores(store),
+            host_stores=make_host_stores(store),
             hub_proxy_client=hub,
             hub_retry_clock=no_retry_clock(),
             platform_tracing=runner_handle,

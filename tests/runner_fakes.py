@@ -21,7 +21,7 @@ import structlog
 from sqlalchemy import Engine, MetaData, make_url
 
 from blizzard.foundation.chunk_status import ChunkStatus
-from blizzard.foundation.clock import FixedClock, IClock, ManualMonotonicClock
+from blizzard.foundation.clock import FixedClock, IClock, ManualMonotonicClock, SystemClock
 from blizzard.foundation.node_steps import ApplyOutcome, SessionMode
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
 from blizzard.foundation.store.engine import create_engine_from_url
@@ -96,7 +96,13 @@ from blizzard.runner.store.internal.elicitation_store import ElicitationStore
 from blizzard.runner.store.internal.environment_store import EnvironmentStore
 from blizzard.runner.store.internal.escalation_store import EscalationStore
 from blizzard.runner.store.internal.git_commit_declaration_store import GitCommitDeclarationStore
-from blizzard.runner.store.internal.graph_artifact_store import GraphArtifactStore
+from blizzard.runner.store.internal.host_daemon_liveness_store import DaemonLivenessStore
+from blizzard.runner.store.internal.host_external_usage_store import ExternalUsageStore
+from blizzard.runner.store.internal.host_graph_artifact_store import GraphArtifactStore
+from blizzard.runner.store.internal.host_jti_cache_store import JtiCacheRepository
+from blizzard.runner.store.internal.host_runner_audit import RunnerAudit
+from blizzard.runner.store.internal.host_unowned_row_stamp import UnownedRowStamp, stamp_unowned_rows
+from blizzard.runner.store.internal.host_workspace_prompt_store import WorkspacePromptStore
 from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
 from blizzard.runner.store.internal.invocation_boundary_store import InvocationBoundaryStore
 from blizzard.runner.store.internal.lease_liveness_store import LeaseLivenessStore
@@ -114,10 +120,10 @@ from blizzard.runner.store.internal.takeover_store import TakeoverStore
 from blizzard.runner.store.internal.token_store import TokenStore
 from blizzard.runner.store.internal.transcript_ledger_store import TranscriptLedgerStore
 from blizzard.runner.store.internal.usage_store import UsageStore
-from blizzard.runner.store.internal.workspace_prompt_store import WorkspacePromptStore
 from blizzard.runner.store.schema import metadata as runner_metadata
 from blizzard.runner.store.schema import transcript_outbound_buffer, transcript_segments
 from blizzard.runner.stores import (
+    HostStores,
     IReadRunnerStore,
     IWriteRunnerStore,
     RunnerStores,
@@ -136,6 +142,10 @@ from blizzard.runner.usage.repository import derive_invocation_cost
 from blizzard.tools.invariants import RunnerInvariants, Violation
 from blizzard.wire.chunk import HubAdvanceResponse
 from blizzard.wire.transcript_segment import TranscriptSegmentRecord
+
+#: The runner every test store is bound to unless a test names another — the id :class:`FakeHub` mints by default, so
+#: a fixture's registration adopts the binding it already holds.
+FIXTURE_RUNNER_ID = "r1"
 
 
 class SqlAlchemyRunnerStore(
@@ -157,6 +167,8 @@ class SqlAlchemyRunnerStore(
     RequeueStore,
     EscalationStore,
     UsageStore,
+    ExternalUsageStore,
+    DaemonLivenessStore,
     AttachmentStore,
     GitCommitDeclarationStore,
     CheckStore,
@@ -172,8 +184,11 @@ class SqlAlchemyRunnerStore(
     test fixture wants one object standing in for every concept at once, structurally
     satisfying every one of the nineteen concept Protocols by inheritance."""
 
-    def __init__(self, engine: Engine, errors: RunnerStoreErrorFactory) -> None:
-        store = RunnerStoreConnections(engine, errors)
+    def __init__(
+        self, engine: Engine, errors: RunnerStoreErrorFactory, runner_id: str | None = FIXTURE_RUNNER_ID
+    ) -> None:
+        store = RunnerStoreConnections(engine, errors, runner_id)
+        self.connections = store
         LeaseRecordStore.__init__(self, store)
         LeaseSessionStore.__init__(self, store)
         LeaseLivenessStore.__init__(self, store)
@@ -186,12 +201,14 @@ class SqlAlchemyRunnerStore(
         OverloadStore.__init__(self, store)
         AskStore.__init__(self, store)
         PauseStore.__init__(self, store)
-        RunnerIdentityStore.__init__(self, store)
+        RunnerIdentityStore.__init__(self, store, stamp_unowned_rows)
         ServedProjectsStore.__init__(self, store)
         TakeoverStore.__init__(self, store)
         RequeueStore.__init__(self, store)
         EscalationStore.__init__(self, store)
         UsageStore.__init__(self, store)
+        ExternalUsageStore.__init__(self, store)
+        DaemonLivenessStore.__init__(self, store)
         AttachmentStore.__init__(self, store)
         GitCommitDeclarationStore.__init__(self, store)
         CheckStore.__init__(self, store)
@@ -210,6 +227,23 @@ def runner_store_errors() -> RunnerStoreErrorFactory:
     return RunnerStoreErrorFactory(structlog.get_logger("test"))
 
 
+def daemon_store(engine: Engine) -> SqlAlchemyRunnerStore:
+    """A store over a running daemon's own file, bound to the runner its registration stored there — not the fixture
+    runner, which the hub that daemon registered with never minted. Unbound while nothing has registered yet: reads
+    answer empty until the identity row lands, and a write refuses."""
+    store = SqlAlchemyRunnerStore(engine, runner_store_errors(), None)
+    store.connections.bind_to_stored()
+    return store
+
+
+def registered_fixture_store(engine: Engine) -> SqlAlchemyRunnerStore:
+    """A store bound to the fixture runner, with that runner's identity row recorded — so an API served over the same
+    file, never registered by a tick of its own, adopts the fixture runner and reads what this store seeds."""
+    store = SqlAlchemyRunnerStore(engine, runner_store_errors())
+    store.record_runner_identity(RunnerIdentity(FIXTURE_RUNNER_ID, "runner-local", REGISTERED_AT))
+    return store
+
+
 def record_usage(usage, **kwargs):  # type: ignore[no-untyped-def]
     """``record_usage`` as ``UsageRecorder`` drives it: the session's banked basis, then the
     domain cost policy, then the store's verbatim write."""
@@ -217,11 +251,11 @@ def record_usage(usage, **kwargs):  # type: ignore[no-untyped-def]
     return usage.record_usage(cost=cost, **kwargs)
 
 
-def make_store(tmp_path_url: str) -> SqlAlchemyRunnerStore:
-    """A migrated (schema-created) runner store over a fresh sqlite file."""
+def make_store(tmp_path_url: str, runner_id: str | None = FIXTURE_RUNNER_ID) -> SqlAlchemyRunnerStore:
+    """A migrated (schema-created) runner store over a fresh sqlite file, bound to ``runner_id``."""
     engine = create_engine_from_url(tmp_path_url)
     _create_all(runner_metadata, engine)
-    return SqlAlchemyRunnerStore(engine, runner_store_errors())
+    return SqlAlchemyRunnerStore(engine, runner_store_errors(), runner_id)
 
 
 _runner_prototype_lock = threading.Lock()
@@ -272,6 +306,20 @@ def _checkpoint_sqlite(db_url: str) -> None:
         engine.dispose()
 
 
+def make_host_stores(store: SqlAlchemyRunnerStore, clock: IClock | None = None) -> HostStores:
+    """The :class:`HostStores` bundle over one flat store — its host-scoped concepts the same object, the jti cache and
+    the two exempt members built over its connections."""
+    return HostStores(
+        workspace_prompt=store,
+        graph_artifacts=store,
+        jti_cache=JtiCacheRepository(store.connections, clock or SystemClock()),
+        daemon_liveness=store,
+        external_usage=store,
+        unowned_row_stamp=UnownedRowStamp(store.connections),
+        runner_audit=RunnerAudit(store.connections),
+    )
+
+
 def make_stores(store: IWriteRunnerStore) -> RunnerStores:
     """The :class:`RunnerStores` bundle over one flat store — every field the same object,
     since :class:`SqlAlchemyRunnerStore` structurally satisfies every concept Protocol."""
@@ -283,7 +331,6 @@ def make_stores(store: IWriteRunnerStore) -> RunnerStores:
         environments=store,
         transcript_ledger=store,
         tokens=store,
-        workspace_prompt=store,
         outbound=store,
         overload=store,
         asks=store,
@@ -297,7 +344,6 @@ def make_stores(store: IWriteRunnerStore) -> RunnerStores:
         attachments=store,
         git_commit_declarations=store,
         checks=store,
-        graph_artifacts=store,
         elicitations=store,
         invocation_boundaries=store,
         selftest_results=store,
@@ -318,8 +364,8 @@ def strip_transcript_segments(store: object) -> None:
     runtime, the same flat :class:`SqlAlchemyRunnerStore` this asserts for."""
     assert isinstance(store, SqlAlchemyRunnerStore)
     with store._engine.begin() as conn:
-        conn.execute(transcript_outbound_buffer.delete())
-        conn.execute(transcript_segments.delete())
+        conn.execute(store.connections.delete(transcript_outbound_buffer))
+        conn.execute(store.connections.delete(transcript_segments))
 
 
 class StubbedBufferBytesStore:
@@ -412,7 +458,7 @@ class FakeHub:
     and omits the id from a `chunk_statuses` response.
     """
 
-    def __init__(self, *, default_runner_id: str = "r1") -> None:
+    def __init__(self, *, default_runner_id: str = FIXTURE_RUNNER_ID) -> None:
         # The runner id this client's token was issued to — what a registration replies, and what the
         # unscripted `chunk_statuses` fallback's route reports as holding the chunk.
         self.default_runner_id = default_runner_id
@@ -731,6 +777,9 @@ class FakeProvider:
 
     def pool(self) -> tuple[str, ...]:
         return tuple(self._pool)
+
+    def environment_workdirs(self) -> dict[str, str]:
+        return dict(self._pool)
 
     def acquire(self, chunk_id: str, count: int, held_ids: list[str]) -> list[AcquiredEnvironment]:
         if self.refuse:
@@ -1387,7 +1436,7 @@ class FakeCheckRunner:
 
 
 def make_context(
-    store: IWriteRunnerStore,
+    store: SqlAlchemyRunnerStore,
     *,
     hub: FakeHub,
     provider: FakeProvider,
@@ -1446,6 +1495,7 @@ def make_context(
         _identity.hold(seeded)
     context = LoopContext(
         stores=_stores,
+        host_stores=make_host_stores(store, _clock),
         clock=_clock,
         hub=_hub,
         identity=_identity,

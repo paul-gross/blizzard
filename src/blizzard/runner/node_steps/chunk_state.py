@@ -63,7 +63,7 @@ class ChunkGate:
 @dataclass(frozen=True)
 class ChunkState:
     """One chunk's status, the runner its route names, its pause, its latest epoch and its
-    operator restarts' epochs (oldest first), its spend, and its gate decision."""
+    operator restarts' epochs (oldest first), its spend, its gate decision, and its project."""
 
     chunk_id: str
     status: ChunkStatus
@@ -73,3 +73,5 @@ class ChunkState:
     restart_epochs: list[int] = field(default_factory=list)
     cost: ChunkSpend = field(default_factory=ChunkSpend.zero)
     decision: ChunkGate | None = None
+    #: The chunk's project, as the hub names it; ``None`` from a hub that does not say.
+    project_id: str | None = None

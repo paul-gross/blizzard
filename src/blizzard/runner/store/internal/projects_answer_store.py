@@ -5,8 +5,6 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import delete, select, update
-
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.hub.served_projects import IWriteServedProjectsRepository, ServedProject, ServedProjectsAnswer
 from blizzard.runner.store.errors import RunnerStoreConnections
@@ -24,12 +22,15 @@ class ServedProjectsStore:
 
     def served_projects_answer(self) -> ServedProjectsAnswer | None:
         marker = self._store.all(
-            select(runner_identity.c.projects_answered_at).order_by(runner_identity.c.id.desc()).limit(1)
+            self._store.select(runner_identity, runner_identity.c.projects_answered_at)
+            .order_by(runner_identity.c.id.desc())
+            .limit(1)
         )
         if not marker or marker[0].projects_answered_at is None:
             return None
         rows = self._store.all(
-            select(
+            self._store.select(
+                hub_served_projects,
                 hub_served_projects.c.entry,
                 hub_served_projects.c.project_id,
                 hub_served_projects.c.slug,
@@ -45,10 +46,10 @@ class ServedProjectsStore:
 
     def record_served_projects(self, projects: Sequence[ServedProject], *, at: datetime) -> None:
         with self._store.begin() as conn:
-            conn.execute(delete(hub_served_projects))
+            conn.execute(self._store.delete(hub_served_projects))
             if projects:
                 conn.execute(
-                    hub_served_projects.insert(),
+                    self._store.insert(hub_served_projects),
                     [
                         {
                             "position": position,
@@ -61,7 +62,7 @@ class ServedProjectsStore:
                         for position, p in enumerate(projects)
                     ],
                 )
-            conn.execute(update(runner_identity).values(projects_answered_at=at))
+            conn.execute(self._store.update(runner_identity).values(projects_answered_at=at))
         _log.debug(
             "served projects recorded",
             entries=[p.entry for p in projects],

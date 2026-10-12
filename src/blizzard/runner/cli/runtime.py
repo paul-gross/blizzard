@@ -29,10 +29,12 @@ from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.cli.store import refuse_while_held
 from blizzard.runner.composition import (
     RunnerProcess,
+    build_host_read_stores,
     build_read_stores,
     build_runner_platform_tracing,
     build_runner_process,
     build_runner_received_telemetry,
+    stamp_unowned_rows,
 )
 from blizzard.runner.config import ConfigError, RunnerConfig
 from blizzard.runner.events.broker import EventBroker
@@ -70,8 +72,8 @@ from blizzard.runner.runtime import (
     reset_command,
 )
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
-from blizzard.runner.stores import RunnerReadStores
-from blizzard.runner.tracing.sweep import announce_rejected_tracing
+from blizzard.runner.stores import HostReadStores, RunnerReadStores
+from blizzard.runner.tracing.sweep import PendingTracingRejection
 from blizzard.runner.usage.periodic_pass_driver import PeriodicPassDriver
 
 ENV_TICK_SECONDS = "BZ_RUNNER_TICK_SECONDS"
@@ -460,6 +462,9 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
         identity=identity,
     )
     try:
+        # The start-up stamp, before the process serves or ticks: rows the store holds that name no runner are the
+        # bound runner's.
+        stamp_unowned_rows(graph)
         hosted = build_hosted_app(config, process_graph=graph)
         try:
             _serve_host(config, graph, hosted)
@@ -493,8 +498,12 @@ def _serve_host(config: RunnerConfig, graph: RunnerProcess, hosted: HostedApp) -
     # configured-but-missing prompt raises here, before any socket binds.
     with click_exception_on(ConfigError):
         driver = PeriodicDriver(config, interval_seconds=interval, process_graph=graph)
-    pass_drivers = _pass_drivers(config, graph, tick_seconds=interval)
-    announce_rejected_tracing(graph.trace_settings, graph.stores.outbound, graph.clock.now())
+    connections = graph.connections
+    rejection = PendingTracingRejection(
+        graph.trace_settings, graph.stores.outbound, lambda: connections.runner_id is not None, graph.clock
+    )
+    rejection.announce()
+    pass_drivers = _pass_drivers(config, graph, tick_seconds=interval, rejection=rejection)
 
     # Two doors onto the one app, bound up front so a clash fails startup loudly and
     # served by the single `Server` below, which keeps the shutdown path on one frame.
@@ -545,11 +554,26 @@ def _serve_host(config: RunnerConfig, graph: RunnerProcess, hosted: HostedApp) -
             Uds(config.socket_path).unlink()
 
 
-def _pass_drivers(config: RunnerConfig, graph: RunnerProcess, *, tick_seconds: float) -> list[PeriodicPassDriver]:
+def _pass_drivers(
+    config: RunnerConfig, graph: RunnerProcess, *, tick_seconds: float, rejection: PendingTracingRejection
+) -> list[PeriodicPassDriver]:
     """The off-tick drivers, built only here so `runner tick` never runs a trace sweep or a
     credential renewal. Renewal passes on the tick's own interval with no jitter, so a credential
-    lapsed across a restart is renewed at once; each slug's own cadence gates it within the pass."""
+    lapsed across a restart is renewed at once; each slug's own cadence gates it within the pass.
+    A rejected tracing setting whose report the start could not buffer — the store bound to no runner
+    yet — retries on the tick's interval until the first registration binds it."""
     drivers: list[PeriodicPassDriver] = []
+    if rejection.owed:
+        drivers.append(
+            PeriodicPassDriver(
+                rejection.announce,
+                name="blizzard-runner-tracing-rejection",
+                label="tracing rejection report",
+                log=get_logger("blizzard.runner.trace_export"),
+                interval_seconds=tick_seconds,
+                jitter_seconds=0,
+            )
+        )
     if graph.trace_sweep is not None:
         drivers.append(
             PeriodicPassDriver(
@@ -592,7 +616,13 @@ def tick_cmd(directory: str) -> None:
     bundle = _publish_harness_bundle(config)
     with click_exception_on(RevisionMismatchError):
         ensure_current_revision(config)
-    LoopWiring.of(config, bundle=bundle).tick_once()
+    graph = build_runner_process(config, bundle=bundle)
+    try:
+        # The start-up stamp, before the tick, as `host` runs it before serving.
+        stamp_unowned_rows(graph)
+        LoopWiring.of(config, bundle=bundle).tick_once(process=graph)
+    finally:
+        graph.close()
     click.echo("tick complete")
 
 
@@ -604,5 +634,15 @@ def read_stores(config: RunnerConfig) -> Iterator[RunnerReadStores]:
     engine = create_engine_from_url(config.db_url)
     try:
         yield build_read_stores(engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")))
+    finally:
+        engine.dispose()
+
+
+@contextmanager
+def read_host_stores(config: RunnerConfig) -> Iterator[HostReadStores]:
+    """:func:`read_stores`'s host-scoped twin, for a short-lived CLI verb reading a host table."""
+    engine = create_engine_from_url(config.db_url)
+    try:
+        yield build_host_read_stores(engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")))
     finally:
         engine.dispose()

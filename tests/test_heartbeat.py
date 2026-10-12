@@ -18,7 +18,7 @@ from blizzard.runner.app import create_app
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.leases.model import NewLease
-from tests.runner_fakes import make_store, make_stores
+from tests.runner_fakes import make_host_stores, make_store, make_stores
 from tests.worker_http import bind_stubs
 
 _NOW = datetime(2026, 7, 17, 12, 0, 0, tzinfo=UTC)
@@ -28,7 +28,7 @@ def _runner_app_with_store(tmp_path: Path):  # type: ignore[no-untyped-def]
     """A runner app wired to a real (migrated) store — the ``host`` heartbeat surface."""
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
-    return create_app(config, runner_stores=make_stores(store)), store
+    return create_app(config, runner_stores=make_stores(store), host_stores=make_host_stores(store)), store
 
 
 def _seed_lease(store, lease_id: str = "lease_1") -> None:  # type: ignore[no-untyped-def]

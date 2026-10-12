@@ -31,6 +31,7 @@ from tests.runner_fakes import (
     FakeProvider,
     FakeWorktreeGit,
     fixed_hub_token,
+    make_host_stores,
     make_session_resolver,
     make_store,
     make_stores,
@@ -137,6 +138,7 @@ def test_detach_at_the_real_hub_is_learned_by_a_real_pull_tick(tmp_path: Path) -
     )
     ctx = LoopContext(
         stores=make_stores(store),
+        host_stores=make_host_stores(store),
         clock=hub.clock,
         hub=_hub_client,
         token_identity=_hub_client,
@@ -233,6 +235,7 @@ def test_stop_at_the_real_hub_is_learned_by_a_real_pull_tick(tmp_path: Path) -> 
     )
     ctx = LoopContext(
         stores=make_stores(store),
+        host_stores=make_host_stores(store),
         clock=hub.clock,
         hub=_hub_client,
         token_identity=_hub_client,

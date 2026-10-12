@@ -15,7 +15,7 @@ from sqlalchemy import insert, select
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.store import schema as runner
-from tests.runner_fakes import make_store
+from tests.runner_fakes import FIXTURE_RUNNER_ID, make_store
 
 pytestmark = pytest.mark.unit
 
@@ -41,7 +41,9 @@ def _seed_legacy_row(store, *, lease_id: str = "lease_a") -> None:
     """Exactly what a pre-``20260916_1000_two_phase_spawn_ownership`` row reads as after
     that additive migration ran: every two-phase column NULL, never backfilled."""
     with store._engine.begin() as conn:
-        conn.execute(insert(runner.lease_spawns).values(lease_id=lease_id, spawned_at=_NOW))
+        conn.execute(
+            insert(runner.lease_spawns).values(runner_id=FIXTURE_RUNNER_ID, lease_id=lease_id, spawned_at=_NOW)
+        )
 
 
 def test_record_identified_spawn_refuses_a_lease_with_only_a_legacy_row(tmp_path) -> None:  # type: ignore[no-untyped-def]
@@ -66,7 +68,9 @@ def test_record_identity_failed_is_a_silent_no_op_for_a_lease_with_only_a_legacy
 
     with store._engine.connect() as conn:
         row = conn.execute(
-            select(runner.lease_spawns.c.identity_failed_at).where(runner.lease_spawns.c.lease_id == "lease_a")
+            select(runner.lease_spawns.c.identity_failed_at).where(
+                runner.lease_spawns.c.lease_id == "lease_a", runner.lease_spawns.c.runner_id == FIXTURE_RUNNER_ID
+            )
         ).one()
     assert row.identity_failed_at is None  # the legacy row, untouched
 
@@ -87,7 +91,7 @@ def test_record_identified_spawn_finds_the_genuine_row_beside_a_legacy_one(tmp_p
     with store._engine.connect() as conn:
         rows = conn.execute(
             select(runner.lease_spawns.c.pid, runner.lease_spawns.c.session_id)
-            .where(runner.lease_spawns.c.lease_id == "lease_a")
+            .where(runner.lease_spawns.c.lease_id == "lease_a", runner.lease_spawns.c.runner_id == FIXTURE_RUNNER_ID)
             .order_by(runner.lease_spawns.c.id)
         ).all()
     assert rows[0] == (None, None)  # the legacy row, untouched

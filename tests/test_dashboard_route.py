@@ -28,6 +28,7 @@ from blizzard.runner.status.view import RunnerStatusService
 from tests.runner_fakes import (
     FakeHarness,
     FakeHarnessHealth,
+    make_host_stores,
     make_store,
     make_stores,
     no_retry_clock,
@@ -50,6 +51,7 @@ def _app_with_status(
     service = RunnerStatusService(
         FixedClock(_NOW),
         pause=store,
+        daemon_liveness=store,
         lease_record=store,
         outbound=store,
         environments=store,
@@ -68,6 +70,7 @@ def _app_with_status(
     app = create_app(
         config,
         runner_stores=make_stores(store),
+        host_stores=make_host_stores(store),
         runner_status=service,
         harness_health=FakeHarnessHealth(),
         hub_proxy_client=hub_proxy_client,

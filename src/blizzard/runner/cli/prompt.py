@@ -10,7 +10,7 @@ from blizzard.cli.operator_trace import OperatorTrace
 from blizzard.runner.cli.control import ENV_LOCAL_API_URL
 from blizzard.runner.cli.daemon import RunnerDaemon
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
-from blizzard.runner.cli.runtime import read_stores
+from blizzard.runner.cli.runtime import read_host_stores
 from blizzard.runner.config import CONFIG_FILENAME, ConfigError, RunnerConfig
 from blizzard.runner.harness.workspace_prompts import (
     PACKAGED,
@@ -184,7 +184,7 @@ def _configured_source(config: RunnerConfig) -> str:
 def _stored_override(config: RunnerConfig) -> str | None:
     """The store's runtime override, or ``None``. A read-only query, so a live daemon is no bar."""
     try:
-        with read_stores(config) as stores:
+        with read_host_stores(config) as stores:
             return stores.workspace_prompt.workspace_prompt_override(config.workspace_id)
     except RunnerStoreError as exc:
         raise click.ClickException(f"could not read the runner store at {config.db_url}: {exc}") from exc

@@ -38,7 +38,7 @@ from tests.e2e.test_acceptance_loop import (
     _winter_source,
 )
 from tests.e2e.test_session_modes_e2e import _graph_yaml
-from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
+from tests.runner_fakes import daemon_store
 
 pytestmark = [
     pytest.mark.e2e,
@@ -107,7 +107,7 @@ def _spawn_turns(turns: list[str]) -> list[str]:
 
 def _build_sessions(db_url: str, chunk_id: str) -> list[str]:
     """The ``session_id`` of each ``build`` node-step lease, in mint order."""
-    store = SqlAlchemyRunnerStore(create_engine_from_url(db_url), runner_store_errors())
+    store = daemon_store(create_engine_from_url(db_url))
     leases = [store.lease(lid) for lid in store.lease_ids_for_chunk(chunk_id)]
     ordered = sorted((lz for lz in leases if lz is not None), key=lambda lz: lz.created_at)
     return [lz.session_id for lz in ordered if lz.node_name == "build" and lz.session_id is not None]
@@ -254,7 +254,7 @@ def test_resumed_node_entry_elides_unchanged_standing_layers(tmp_path: Path) -> 
 
     # AC6 at runtime: layer 3 is unconditional, and carries THIS attempt's lease — a stale
     # table surviving into a resumed spawn is the hazard, so the prior lease must be absent.
-    store = SqlAlchemyRunnerStore(create_engine_from_url(db_url), runner_store_errors())
+    store = daemon_store(create_engine_from_url(db_url))
     leases = [store.lease(lid) for lid in store.lease_ids_for_chunk(chunk_id)]
     build_leases = sorted(
         (lz for lz in leases if lz is not None and lz.node_name == "build"), key=lambda lz: lz.created_at
@@ -281,7 +281,7 @@ def test_resumed_node_entry_announces_a_replaced_workspace_prompt(tmp_path: Path
             # build's two entries. Idempotent: only the first crossing writes.
             if replaced:
                 return
-            store = SqlAlchemyRunnerStore(create_engine_from_url(db_url), runner_store_errors())
+            store = daemon_store(create_engine_from_url(db_url))
             nodes = {
                 lz.node_name for lid in store.lease_ids_for_chunk(chunk_id) if (lz := store.lease(lid)) is not None
             }

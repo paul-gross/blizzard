@@ -20,7 +20,7 @@ from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionRefe
 from blizzard.runner.leases.activity import LocalLeaseService
 from blizzard.runner.leases.model import NewLease
 from blizzard.wire.lease import LeaseView
-from tests.runner_fakes import FakeProbe, make_store, make_stores
+from tests.runner_fakes import FakeProbe, make_host_stores, make_store, make_stores
 from tests.support import assert_all_timestamps_utc
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
@@ -39,7 +39,9 @@ def _app_with_leases(tmp_path: Path, *, clock: FixedClock | None = None, probe: 
         overload=store,
         elicitations=store,
     )
-    return create_app(config, runner_stores=make_stores(store), leases=service), store
+    return create_app(
+        config, runner_stores=make_stores(store), host_stores=make_host_stores(store), leases=service
+    ), store
 
 
 def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-def]

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import and_, select
+from sqlalchemy import and_
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.lifecycle.judgement.checks import ExecutedCheck, IWriteCheckRepository
@@ -22,20 +22,24 @@ class CheckStore:
 
     def nudge_fired(self, lease_id: str, epoch: int) -> bool:
         rows = self._store.all(
-            select(nudge_facts.c.lease_id).where(and_(nudge_facts.c.lease_id == lease_id, nudge_facts.c.epoch == epoch))
+            self._store.select(nudge_facts, nudge_facts.c.lease_id).where(
+                and_(nudge_facts.c.lease_id == lease_id, nudge_facts.c.epoch == epoch)
+            )
         )
         return bool(rows)
 
     def checks_ran(self, lease_id: str, epoch: int) -> bool:
         rows = self._store.all(
-            select(checks_ran.c.id).where(and_(checks_ran.c.lease_id == lease_id, checks_ran.c.epoch == epoch))
+            self._store.select(checks_ran, checks_ran.c.id).where(
+                and_(checks_ran.c.lease_id == lease_id, checks_ran.c.epoch == epoch)
+            )
         )
         return bool(rows)
 
     def check_results_for_lease(self, lease_id: str, epoch: int) -> list[ExecutedCheck]:
         # Ordered by insert id so the results read back in the order the checks ran.
         rows = self._store.all(
-            select(check_results)
+            self._store.select(check_results)
             .where(and_(check_results.c.lease_id == lease_id, check_results.c.epoch == epoch))
             .order_by(check_results.c.id)
         )
@@ -48,11 +52,13 @@ class CheckStore:
         # construction rather than a DB constraint (`bzh:sql-portable`).
         with self._store.begin() as conn:
             existing = conn.execute(
-                select(nudge_facts.c.id).where(and_(nudge_facts.c.lease_id == lease_id, nudge_facts.c.epoch == epoch))
+                self._store.select(nudge_facts, nudge_facts.c.id).where(
+                    and_(nudge_facts.c.lease_id == lease_id, nudge_facts.c.epoch == epoch)
+                )
             ).one_or_none()
             if existing is not None:
                 return
-            conn.execute(nudge_facts.insert().values(lease_id=lease_id, epoch=epoch, nudged_at=at))
+            conn.execute(self._store.insert(nudge_facts).values(lease_id=lease_id, epoch=epoch, nudged_at=at))
         _log.info("nudge fired", lease_id=lease_id, epoch=epoch)
 
     def record_check_results(
@@ -69,11 +75,13 @@ class CheckStore:
         # is latest-wins. Written BEFORE `runner:checks-recorded-when-marked`'s marker.
         with self._store.begin() as conn:
             conn.execute(
-                check_results.delete().where(and_(check_results.c.lease_id == lease_id, check_results.c.epoch == epoch))
+                self._store.delete(check_results).where(
+                    and_(check_results.c.lease_id == lease_id, check_results.c.epoch == epoch)
+                )
             )
             for result in results:
                 conn.execute(
-                    check_results.insert().values(
+                    self._store.insert(check_results).values(
                         lease_id=lease_id,
                         chunk_id=chunk_id,
                         node_id=node_id,
@@ -91,11 +99,13 @@ class CheckStore:
         # constraint (`bzh:sql-portable`). Written AFTER `runner:checks-recorded-when-marked`.
         with self._store.begin() as conn:
             existing = conn.execute(
-                select(checks_ran.c.id).where(and_(checks_ran.c.lease_id == lease_id, checks_ran.c.epoch == epoch))
+                self._store.select(checks_ran, checks_ran.c.id).where(
+                    and_(checks_ran.c.lease_id == lease_id, checks_ran.c.epoch == epoch)
+                )
             ).one_or_none()
             if existing is not None:
                 return
-            conn.execute(checks_ran.insert().values(lease_id=lease_id, epoch=epoch, ran_at=at))
+            conn.execute(self._store.insert(checks_ran).values(lease_id=lease_id, epoch=epoch, ran_at=at))
         _log.info("checks marked ran", lease_id=lease_id, epoch=epoch)
 
 

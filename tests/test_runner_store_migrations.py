@@ -15,12 +15,12 @@ from blizzard.runner import runtime as runner_runtime
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.hub.served_projects import ServedProject
 from blizzard.runner.store import MIGRATIONS_DIR
-from blizzard.runner.store import schema as runner_schema
 from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
 
 pytestmark = pytest.mark.component
 
 _IDENTITY_PARENT = "20261005_1000_runner_credential_renewal_facts"
+_IDENTITY = "20261006_1000_runner_identity"
 _KEYED_TABLES = ("hub_control", "local_pause_facts", "daemon_liveness", "leases")
 
 _OLD = datetime(2026, 9, 1, 12, tzinfo=UTC)
@@ -63,6 +63,9 @@ _leases = sa.Table(
 )
 
 
+_liveness_unscoped = sa.table("daemon_liveness", sa.column("alive_at", UtcDateTime()))
+
+
 def _store_at_parent(tmp_path: Path) -> tuple[MigrationRunner, sa.Engine]:
     config = runner_runtime.init_environment(tmp_path)
     migration = runner_runtime.migration_runner(config)
@@ -100,6 +103,29 @@ def _seed_a_store_spanning_a_rename(engine: sa.Engine) -> None:
         )
 
 
+# The revision before the store is scoped by runner: its upgrade stamps every row with the runner the identity row
+# names, so a store meant to be read through a bound runner store carries its identity row by then.
+_SCOPE_PARENT = "20261009_1000_runner_lease_closures_lease_id_index"
+_RUNNER = "rn_01JX0000000000000000000000"
+
+_identity_at_scope_parent = sa.table(
+    "runner_identity",
+    sa.column("runner_id"),
+    sa.column("runner_name"),
+    sa.column("registered_at", UtcDateTime()),
+)
+
+
+def _seed_identity_before_the_scope(migration: MigrationRunner, engine: sa.Engine) -> None:
+    """Carry the store to the scope revision's parent holding no identity row, then record ``_RUNNER``'s there."""
+    migration.upgrade(_SCOPE_PARENT)
+    assert _rows(engine, "SELECT count(*) FROM runner_identity") == [(0,)]
+    with engine.begin() as conn:
+        conn.execute(
+            _identity_at_scope_parent.insert().values(runner_id=_RUNNER, runner_name="r-claude", registered_at=_LATER)
+        )
+
+
 def _columns(engine: sa.Engine, table: str) -> set[str]:
     return {c["name"] for c in sa.inspect(engine).get_columns(table)}
 
@@ -113,11 +139,13 @@ def test_identity_migration_keeps_the_newest_liveness_ids_singletons_and_every_h
     migration, engine = _store_at_parent(tmp_path)
     try:
         _seed_a_store_spanning_a_rename(engine)
-        migration.upgrade("head")
+        migration.upgrade(_IDENTITY)
 
         for table in _KEYED_TABLES:
             assert "runner_id" not in _columns(engine, table)
-        store = SqlAlchemyRunnerStore(engine, runner_store_errors())
+        _seed_identity_before_the_scope(migration, engine)  # the identity migration itself holds no identity
+        migration.upgrade("head")
+        store = SqlAlchemyRunnerStore(engine, runner_store_errors(), _RUNNER)
         assert _rows(engine, "SELECT count(*) FROM hub_control") == [(1,)]
         assert store.hub_paused() is False  # r-claude's mirror, not the older id's pause
         assert store.hub_contact_at() == _NEW
@@ -125,7 +153,6 @@ def test_identity_migration_keeps_the_newest_liveness_ids_singletons_and_every_h
         assert store.last_daemon_liveness() == _NEW
         assert _rows(engine, "SELECT paused FROM local_pause_facts ORDER BY id") == [(1,), (0,)]
         assert _rows(engine, "SELECT lease_id FROM leases ORDER BY lease_id") == [("l_new",), ("l_old",)]
-        assert store.runner_identity() is None
     finally:
         engine.dispose()
 
@@ -156,9 +183,10 @@ def test_identity_migration_keeps_the_kept_ids_local_brake_when_a_former_id_wrot
                 _local_pause_facts.insert(),
                 [{"runner_id": i, "paused": p, "set_at": at, "set_by": "runner", "reason": r} for i, p, at, r in facts],
             )
+        _seed_identity_before_the_scope(migration, engine)
         migration.upgrade("head")
 
-        store = SqlAlchemyRunnerStore(engine, runner_store_errors())
+        store = SqlAlchemyRunnerStore(engine, runner_store_errors(), _RUNNER)
         assert (store.local_paused(), store.local_pause_reason()) == (paused, reason)
         assert _rows(engine, "SELECT count(*) FROM local_pause_facts") == [(len(facts) + 1,)]
     finally:
@@ -169,9 +197,10 @@ def test_identity_migration_downgrades_onto_the_identity_rows_name_and_upgrades_
     migration, engine = _store_at_parent(tmp_path)
     try:
         _seed_a_store_spanning_a_rename(engine)
+        _seed_identity_before_the_scope(migration, engine)
         migration.upgrade("head")
-        store = SqlAlchemyRunnerStore(engine, runner_store_errors())
-        store.record_runner_identity(RunnerIdentity("rn_01JX0000000000000000000000", "r-claude", _LATER))
+        store = SqlAlchemyRunnerStore(engine, runner_store_errors(), _RUNNER)
+        store.record_runner_identity(RunnerIdentity(_RUNNER, "r-claude", _LATER))
         store.set_hub_paused(paused=True, at=_LATER)
 
         migration.downgrade(_IDENTITY_PARENT)
@@ -183,10 +212,12 @@ def test_identity_migration_downgrades_onto_the_identity_rows_name_and_upgrades_
         assert not next(c for c in sa.inspect(engine).get_columns("leases") if c["name"] == "runner_id")["nullable"]
 
         migration.upgrade("head")
-        assert store.hub_paused() is True
-        assert store.last_daemon_liveness() == _NEW
+        # Up again the store holds no identity, so no runner stamps the rows: they are read unscoped.
+        assert _rows(engine, "SELECT count(*) FROM runner_identity") == [(0,)]
+        assert _rows(engine, "SELECT paused FROM hub_control") == [(1,)]
+        with engine.connect() as conn:
+            assert conn.execute(sa.select(_liveness_unscoped.c.alive_at)).scalars().all() == [_NEW]
         assert _rows(engine, "SELECT count(*) FROM local_pause_facts") == [(2,)]
-        assert store.runner_identity() is None
     finally:
         engine.dispose()
 
@@ -213,7 +244,7 @@ def test_frozen_keyed_tables_carry_the_runner_id_until_the_identity_revision(tab
         runner.upgrade(_IDENTITY_PARENT)
         assert "runner_id" in _columns(engine, table)
         assert "runner_identity" not in sa.inspect(engine).get_table_names()
-        runner.upgrade("head")
+        runner.upgrade(_IDENTITY)
         assert "runner_id" not in _columns(engine, table)
         assert "runner_identity" in sa.inspect(engine).get_table_names()
     finally:
@@ -229,20 +260,35 @@ def test_rebuilt_store_holds_no_identity_until_a_registration_records_the_hubs(t
     rebuilt = runner_runtime.init_environment(tmp_path / "rebuilt")
     rebuilt_engine = create_engine_from_url(rebuilt.db_url)
     try:
-        store = SqlAlchemyRunnerStore(first_engine, runner_store_errors())
+        store = SqlAlchemyRunnerStore(first_engine, runner_store_errors(), None)
         store.record_runner_identity(identity)
         renamed = RunnerIdentity(identity.runner_id, "r-claude-2", _LATER)
         store.record_runner_identity(renamed)
         assert store.runner_identity() == renamed
         assert _rows(first_engine, "SELECT count(*) FROM runner_identity") == [(1,)]
 
-        again = SqlAlchemyRunnerStore(rebuilt_engine, runner_store_errors())
+        again = SqlAlchemyRunnerStore(rebuilt_engine, runner_store_errors(), None)
         assert again.runner_identity() is None
+        assert _rows(rebuilt_engine, "SELECT count(*) FROM runner_identity") == [(0,)]
         again.record_runner_identity(identity)
         assert again.runner_identity() == identity
     finally:
         first_engine.dispose()
         rebuilt_engine.dispose()
+
+
+# ``lease_closures`` and ``binding_releases`` as the release-floor revision's parent held them.
+_lease_closures_at_floor = sa.table(
+    "lease_closures",
+    sa.column("lease_id"),
+    sa.column("chunk_id"),
+    sa.column("node_id"),
+    sa.column("reason"),
+    sa.column("closed_at", UtcDateTime()),
+)
+_binding_releases_at_floor = sa.table(
+    "binding_releases", sa.column("chunk_id"), sa.column("environment_id"), sa.column("released_at", UtcDateTime())
+)
 
 
 def test_release_floor_backfill_does_not_include_a_later_equal_instant_mint(tmp_path: Path) -> None:
@@ -260,19 +306,20 @@ def test_release_floor_backfill_does_not_include_a_later_equal_instant_mint(tmp_
                     )
                 )
             conn.execute(
-                runner_schema.lease_closures.insert().values(
+                _lease_closures_at_floor.insert().values(
                     lease_id="old", chunk_id="ch_1", node_id="nd_build", reason="released", closed_at=instant
                 )
             )
             conn.execute(
-                runner_schema.binding_releases.insert().values(
-                    chunk_id="ch_1", environment_id="e1", released_at=instant
-                )
+                _binding_releases_at_floor.insert().values(chunk_id="ch_1", environment_id="e1", released_at=instant)
             )
+        _seed_identity_before_the_scope(migration, engine)
         migration.upgrade("head")
         with engine.connect() as conn:
-            floor = conn.execute(sa.select(runner_schema.binding_releases.c.lease_epoch_floor)).scalar_one()
-        store = SqlAlchemyRunnerStore(engine, runner_store_errors())
+            floor = conn.execute(
+                sa.select(sa.column("lease_epoch_floor")).select_from(sa.table("binding_releases"))
+            ).scalar_one()
+        store = SqlAlchemyRunnerStore(engine, runner_store_errors(), _RUNNER)
         assert floor == 1
         assert store.has_lease_in_binding_tenure("ch_1", instant)
     finally:
@@ -301,7 +348,7 @@ def test_hub_projects_migration_adds_the_answer_and_its_marker_and_drops_both_lo
             )
 
         migration.upgrade("head")
-        store = SqlAlchemyRunnerStore(engine, runner_store_errors())
+        store = SqlAlchemyRunnerStore(engine, runner_store_errors(), "rn_1")
         assert store.served_projects_answer() is None
         store.record_served_projects((ServedProject("default", "prj_1", "default", "Default"),), at=_LATER)
         assert store.served_projects_answer() is not None
@@ -321,6 +368,7 @@ def test_hub_projects_migration_adds_the_answer_and_its_marker_and_drops_both_lo
             "slug",
             "name",
             "answered_at",
+            "runner_id",
         }
     finally:
         engine.dispose()

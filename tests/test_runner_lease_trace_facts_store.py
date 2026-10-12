@@ -10,7 +10,6 @@ from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.leases.model import NewLease, WorkRefStamp
 from blizzard.runner.lifecycle.judgement.checks import ExecutedCheck
-from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.internal.lease_trace_facts_store import LeaseTraceFactsStore
 from blizzard.runner.tracing.assembly import assemble_lease
 from blizzard.runner.tracing.facts import (
@@ -31,7 +30,7 @@ from blizzard.runner.tracing.facts import (
 )
 from blizzard.runner.usage.repository import InvocationCost
 from tests import runner_trace_fixtures as fx
-from tests.runner_fakes import SqlAlchemyRunnerStore, make_store, runner_store_errors
+from tests.runner_fakes import SqlAlchemyRunnerStore, make_store
 from tests.support import capture_statements, count_queries, offending_index_scans
 
 pytestmark = pytest.mark.component
@@ -42,15 +41,21 @@ _HARNESS = "claude-code"
 _REGISTERED = RunnerIdentity(fx.REGISTERED.runner_id, fx.REGISTERED.runner_name, fx.at(0))
 
 
+# The id a not-yet-registered store's leases are written under, before its identity row lands.
+_LATER_ID = "rn_01JREGISTERED"
+
+
 def _store(tmp_path, *, registered: bool = True) -> SqlAlchemyRunnerStore:  # type: ignore[no-untyped-def]
-    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    store = make_store(
+        f"sqlite:///{tmp_path / 'runner.db'}", runner_id=_REGISTERED.runner_id if registered else _LATER_ID
+    )
     if registered:
         store.record_runner_identity(_REGISTERED)
     return store
 
 
 def _reader(store: SqlAlchemyRunnerStore) -> LeaseTraceFactsStore:
-    return LeaseTraceFactsStore(RunnerStoreConnections(store._engine, runner_store_errors()))
+    return LeaseTraceFactsStore(store.connections)
 
 
 def _session(lease_id: str, generation: int) -> SessionReference:
@@ -226,11 +231,11 @@ def test_facts_wait_for_the_first_registration_then_carry_its_id(tmp_path) -> No
     assert reader.lease_trace_facts(fx.LEASE_ID) is None
     assert reader.lease_trace_facts_for([fx.LEASE_ID]) == {}
 
-    store.record_runner_identity(RunnerIdentity("rn_01JREGISTERED", "r-claude", fx.at(200)))
+    store.record_runner_identity(RunnerIdentity(_LATER_ID, "r-claude", fx.at(200)))
 
     read = reader.lease_trace_facts(fx.LEASE_ID)
     assert read is not None
-    assert (read.runner.runner_id, read.runner.runner_name) == ("rn_01JREGISTERED", "r-claude")
+    assert (read.runner.runner_id, read.runner.runner_name) == (_LATER_ID, "r-claude")
     assert reader.lease_trace_facts_for([fx.LEASE_ID])[fx.LEASE_ID].lease == read.lease
 
 
@@ -238,7 +243,7 @@ def test_facts_carry_the_tenant_the_identity_row_records(tmp_path) -> None:  # t
     store = _store(tmp_path, registered=False)
     _write_lease(store, fx.LEASE_ID, fx.CHUNK_ID)
     store.record_runner_identity(
-        RunnerIdentity("rn_01JREGISTERED", "r-claude", fx.at(200), tenant_id="tn_bravo", tenant_name="bravo")
+        RunnerIdentity(_LATER_ID, "r-claude", fx.at(200), tenant_id="tn_bravo", tenant_name="bravo")
     )
 
     read = _reader(store).lease_trace_facts(fx.LEASE_ID)

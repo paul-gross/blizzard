@@ -12,7 +12,7 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.usage.repository import IReadUsageRepository
+from blizzard.runner.usage.repository import IReadExternalUsageRepository
 from blizzard.wire.runner_status import SubscriptionListResponse
 from blizzard.wire.runner_status import SubscriptionView as SubscriptionViewWire
 
@@ -23,10 +23,10 @@ router = APIRouter(prefix="/api", tags=["runner"])
 def list_subscriptions(request: Request) -> SubscriptionListResponse:
     """Every declared subscription's own newest sampling attempt and credential renewal."""
     wiring = RunnerWiring.of(request)
-    return _subscription_list(wiring.config(), wiring.read_stores().usage)
+    return _subscription_list(wiring.config(), wiring.host_read_stores().external_usage)
 
 
-def _subscription_list(config: RunnerConfig, usage: IReadUsageRepository) -> SubscriptionListResponse:
+def _subscription_list(config: RunnerConfig, usage: IReadExternalUsageRepository) -> SubscriptionListResponse:
     declarations = config.resolved_subscriptions()
     slugs = [d.slug for d in declarations]
     attempts = usage.latest_external_usage_attempts_by_slug(slugs)

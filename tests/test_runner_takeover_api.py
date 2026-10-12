@@ -21,7 +21,7 @@ from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionRefe
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.takeover import TakeoverService
-from tests.runner_fakes import FakeHarness, FakeProbe, make_store, make_stores
+from tests.runner_fakes import FakeHarness, FakeProbe, make_host_stores, make_store, make_stores
 
 _NOW = datetime(2026, 7, 17, 12, 0, 0, tzinfo=UTC)
 
@@ -54,7 +54,9 @@ def _app_with_takeover(
         workspace_root="",
         harnesses=resolved_harnesses,
     )
-    return create_app(config, runner_stores=make_stores(store), takeover=service), store
+    return create_app(
+        config, runner_stores=make_stores(store), host_stores=make_host_stores(store), takeover=service
+    ), store
 
 
 def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-def]

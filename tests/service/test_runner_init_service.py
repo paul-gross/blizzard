@@ -59,7 +59,7 @@ def _hub(hub_dir: Path, port: int) -> Iterator[httpx.Client]:
 
 def _identity(config: RunnerConfig) -> RunnerIdentity | None:
     """The runner store's identity row — written only by a registration the hub accepted."""
-    return make_store(config.db_url).runner_identity()
+    return make_store(config.db_url, runner_id=None).runner_identity()
 
 
 @contextlib.contextmanager

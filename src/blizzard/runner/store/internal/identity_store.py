@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from sqlalchemy import delete, select, update
+from collections.abc import Callable
+
+from sqlalchemy import Connection
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.hub.identity import IWriteRunnerIdentityRepository, RunnerIdentity
@@ -15,12 +17,15 @@ _log = get_logger("blizzard.runner.store")
 class RunnerIdentityStore:
     """Read-write adapter over the runner store's single identity row."""
 
-    def __init__(self, store: RunnerStoreConnections) -> None:
+    def __init__(self, store: RunnerStoreConnections, stamp_unowned: Callable[[Connection, str], int]) -> None:
+        # The stamp is a ``HostStores`` member's, handed in: a runner adapter holds no door to the exempt statements.
         self._store = store
+        self._stamp_unowned = stamp_unowned
 
     def runner_identity(self) -> RunnerIdentity | None:
         rows = self._store.all(
-            select(
+            self._store.select(
+                runner_identity,
                 runner_identity.c.runner_id,
                 runner_identity.c.runner_name,
                 runner_identity.c.registered_at,
@@ -48,15 +53,17 @@ class RunnerIdentityStore:
             "tenant_id": identity.tenant_id,
             "tenant_name": identity.tenant_name,
         }
+        # Registration's adoption binds an unbound store, and the rows written before it are stamped with the identity
+        # row in one commit; a bound one refuses another runner's id.
+        binding = self._store.runner_id is None
+        self._store.bind(identity.runner_id)
         with self._store.begin() as conn:
-            # A row naming the same runner is updated in place, so the served-projects answer's marker on it
-            # stays; any other row goes, and the new row holds no answer.
-            conn.execute(delete(runner_identity).where(runner_identity.c.runner_id != identity.runner_id))
-            kept = conn.execute(
-                update(runner_identity).where(runner_identity.c.runner_id == identity.runner_id).values(**values)
-            ).rowcount
+            if binding:
+                self._stamp_unowned(conn, identity.runner_id)
+            # The bound runner's row is updated in place, so the served-projects answer's marker on it stays.
+            kept = conn.execute(self._store.update(runner_identity).values(**values)).rowcount
             if not kept:
-                conn.execute(runner_identity.insert().values(runner_id=identity.runner_id, **values))
+                conn.execute(self._store.insert(runner_identity).values(**values))
         _log.debug(
             "runner identity recorded",
             runner_id=identity.runner_id,

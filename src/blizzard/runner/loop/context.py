@@ -40,7 +40,7 @@ from blizzard.runner.lifecycle.session import HarnessSelector, SessionResolver
 from blizzard.runner.loop.retention_floor import RetentionPasses
 from blizzard.runner.process.probe import IProcessProbe
 from blizzard.runner.process.worker_scratch import IWorkerScratchDirs
-from blizzard.runner.stores import RunnerStores
+from blizzard.runner.stores import HostStores, RunnerStores
 from blizzard.runner.subscriptions.subscription_sampler import ISubscriptionSampler
 from blizzard.runner.usage.recorder import UsageRecorder
 
@@ -162,6 +162,8 @@ class LoopContext:
     """The loop driver's bundle — every step's narrow context is satisfied by it, never module-global."""
 
     stores: RunnerStores
+    #: The host-scoped stores — the tables that belong to this host, not the runner ``stores`` is bound to.
+    host_stores: HostStores
     clock: IClock
     hub: IHubClient
     #: Who this runner is at its hub; it holds ``None`` until the first successful registration.

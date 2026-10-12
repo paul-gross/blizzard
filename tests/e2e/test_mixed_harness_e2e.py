@@ -31,7 +31,7 @@ from pathlib import Path
 
 import httpx
 import pytest
-from sqlalchemy import select
+from sqlalchemy import Engine, and_, select
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.trace_export.config import TracingConfig
@@ -61,7 +61,7 @@ from tests.crash.support import (
 )
 from tests.e2e.fleet_traces import FleetCollector, InvocationExpect, assert_invocations
 from tests.e2e.harness_variants import MOCK_CLAUDE_CODE_MODEL
-from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
+from tests.runner_fakes import daemon_store
 from tests.runner_join import runner_spawn_env
 from tests.support import (
     create_repositories,
@@ -253,7 +253,7 @@ def _daemon_start_count(log_path: Path) -> int:
 def _open_resume_intents(runner_dir: Path) -> set[str]:
     engine = create_engine_from_url(RunnerConfig.load(runner_dir).db_url)
     try:
-        return SqlAlchemyRunnerStore(engine, runner_store_errors()).resume_intent_lease_ids()
+        return daemon_store(engine).resume_intent_lease_ids()
     finally:
         engine.dispose()
 
@@ -266,7 +266,7 @@ def _await_committed(runner_dir: Path, chunk_id: str, landed_file: str, *, timeo
     while time.monotonic() < deadline:
         engine = create_engine_from_url(RunnerConfig.load(runner_dir).db_url)
         try:
-            store = SqlAlchemyRunnerStore(engine, runner_store_errors())
+            store = daemon_store(engine)
             committed = any(
                 (Path(binding.workdir) / REPO_NAME / landed_file).exists()
                 for binding in store.bindings_for_chunk(chunk_id)
@@ -279,6 +279,18 @@ def _await_committed(runner_dir: Path, chunk_id: str, landed_file: str, *, timeo
             engine.dispose()
         time.sleep(0.2)
     raise AssertionError(f"the opencode-review worker never committed+declared {landed_file} before the stop")
+
+
+def _registered_runner_id(engine: Engine) -> str | None:
+    """The id the daemon registered under — what every runner-scoped row it wrote is keyed on; ``None`` before it has
+    registered."""
+    return daemon_store(engine).connections.runner_id
+
+
+def _required_runner_id(engine: Engine) -> str:
+    runner_id = _registered_runner_id(engine)
+    assert runner_id is not None, "the daemon has not registered"
+    return runner_id
 
 
 def _leases_with_node(runner_dir: Path, chunk_id: str) -> list[dict[str, object]]:
@@ -303,10 +315,16 @@ def _leases_with_node(runner_dir: Path, chunk_id: str) -> list[dict[str, object]
                 .select_from(
                     runner_schema.leases.join(
                         runner_schema.lease_context,
-                        runner_schema.leases.c.lease_id == runner_schema.lease_context.c.lease_id,
+                        and_(
+                            runner_schema.leases.c.lease_id == runner_schema.lease_context.c.lease_id,
+                            runner_schema.lease_context.c.runner_id == _required_runner_id(engine),
+                        ),
                     )
                 )
-                .where(runner_schema.leases.c.chunk_id == chunk_id)
+                .where(
+                    runner_schema.leases.c.runner_id == _required_runner_id(engine),
+                    runner_schema.leases.c.chunk_id == chunk_id,
+                )
             ).all()
         return [dict(r._mapping) for r in rows]
     finally:
@@ -321,7 +339,10 @@ def _usage_rows(runner_dir: Path, chunk_id: str) -> list[dict[str, object]]:
     try:
         with engine.connect() as conn:
             rows = conn.execute(
-                select(runner_schema.usage_facts).where(runner_schema.usage_facts.c.chunk_id == chunk_id)
+                select(runner_schema.usage_facts).where(
+                    runner_schema.usage_facts.c.runner_id == _required_runner_id(engine),
+                    runner_schema.usage_facts.c.chunk_id == chunk_id,
+                )
             ).all()
         return [dict(r._mapping) for r in rows]
     finally:
@@ -351,9 +372,14 @@ def _wait_build_judged(runner_dir: Path, chunk_id: str, build_node_id: str, *, t
     engine = create_engine_from_url(RunnerConfig.load(runner_dir).db_url)
     try:
         while time.monotonic() < deadline:
+            runner_id = _registered_runner_id(engine)
+            if runner_id is None:
+                time.sleep(0.05)
+                continue
             with engine.connect() as conn:
                 row = conn.execute(
                     select(runner_schema.usage_facts.c.id)
+                    .where(runner_schema.usage_facts.c.runner_id == runner_id)
                     .where(runner_schema.usage_facts.c.chunk_id == chunk_id)
                     .where(runner_schema.usage_facts.c.node_id == build_node_id)
                     .where(runner_schema.usage_facts.c.kind == "judge")

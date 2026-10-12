@@ -60,8 +60,9 @@ class _HubWithoutIdentityRead(FakeHub):
 def _ctx(
     tmp_path: Path, hub: FakeHub, *, registered: bool = True, hub_token: HubTokenHolder | None = None
 ) -> LoopContext:
-    """A context whose hub is gated by an unchecked verdict, as a freshly started runner's is."""
-    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    """A context whose hub is gated by an unchecked verdict, as a freshly started runner's is — its store
+    bound by the seeded registration when ``registered``, else by the first one."""
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}", runner_id=None)
     return make_context(
         store,
         hub=hub,
@@ -164,7 +165,7 @@ def test_a_mismatched_tick_drives_no_lease_and_delivers_nothing_until_the_right_
     assert hub.peek_queue_calls == 0
     assert hub.claims == []
     assert hub.chunk_statuses_calls == []
-    assert ctx.stores.pause.last_daemon_liveness() == _NOW  # liveness keeps running
+    assert ctx.host_stores.daemon_liveness.last_daemon_liveness() == _NOW  # liveness keeps running
     warnings = [e for e in logs if e["log_level"] == "warning" and e["event"].startswith("runner refuses")]
     assert len(warnings) == 1  # once per transition, not once per tick
     assert (warnings[0]["store_runner_id"], warnings[0]["token_runner_id"]) == ("r1", "rn_other")

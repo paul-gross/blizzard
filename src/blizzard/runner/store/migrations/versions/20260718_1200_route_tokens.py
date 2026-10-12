@@ -9,16 +9,27 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+import sqlalchemy as sa
 from alembic import op
 
-from blizzard.runner.store.schema import route_tokens
+from blizzard.foundation.store.utc import UtcDateTime
+
 
 revision: str = "20260718_1200_runner_route_tokens"
 down_revision: str | None = "20260717_2200_runner_usage_facts"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-_TABLES = (route_tokens,)
+_frozen_metadata = sa.MetaData()
+_route_tokens = sa.Table(
+    "route_tokens",
+    _frozen_metadata,
+    sa.Column("chunk_id", sa.String(), primary_key=True),
+    sa.Column("token", sa.Text(), nullable=False),
+    sa.Column("acquired_at", UtcDateTime(), nullable=False),
+)
+
+_TABLES = (_route_tokens,)
 
 
 def upgrade() -> None:

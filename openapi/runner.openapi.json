@@ -4145,6 +4145,14 @@
             ],
             "title": "Tenant Name"
           },
+          "unmatched_bindings": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/UnmatchedBindingView"
+            },
+            "title": "Unmatched Bindings",
+            "type": "array"
+          },
           "workspace_id": {
             "title": "Workspace Id",
             "type": "string"
@@ -5393,6 +5401,35 @@
           "truncated"
         ],
         "title": "TurnSegmentView",
+        "type": "object"
+      },
+      "UnmatchedBindingView": {
+        "description": "One held binding whose workdir matches no workspace the runner's provider lists. It keeps its\nlease and still counts against ``max_agents``.",
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "environment_id": {
+            "title": "Environment Id",
+            "type": "string"
+          },
+          "held_since": {
+            "title": "Held Since",
+            "type": "string"
+          },
+          "workdir": {
+            "title": "Workdir",
+            "type": "string"
+          }
+        },
+        "required": [
+          "chunk_id",
+          "environment_id",
+          "workdir",
+          "held_since"
+        ],
+        "title": "UnmatchedBindingView",
         "type": "object"
       },
       "ValidationError": {
@@ -7979,7 +8016,7 @@
         ]
       },
       "patch": {
-        "description": "Set this runner's own pause brake \u2014 it starts no new workers.\n\nIndependent of the hub's brake: it works with the hub unreachable, and neither reads nor\nwrites the hub's flag. Not a drain: a live worker is left running.",
+        "description": "Set this runner's own pause brake \u2014 it starts no new workers.\n\nIndependent of the hub's brake: it works with the hub unreachable, and neither reads nor\nwrites the hub's flag. Not a drain: a live worker is left running. Refused with 503 until the\nrunner first registers, since the brake is a fact of the runner the store is bound to.",
         "operationId": "patch_runner_api_runner_patch",
         "requestBody": {
           "content": {
@@ -8011,6 +8048,9 @@
               }
             },
             "description": "Validation Error"
+          },
+          "503": {
+            "description": "The runner has not registered yet, so its store is bound to no runner."
           }
         },
         "summary": "Patch Runner",
@@ -8055,7 +8095,7 @@
             "description": "Validation Error"
           },
           "503": {
-            "description": "The requested harness is known but unavailable."
+            "description": "The requested harness is known but unavailable, or the runner has not registered yet, so its store is bound to no runner to record the result for."
           }
         },
         "summary": "Start Selftest",

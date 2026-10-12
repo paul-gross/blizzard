@@ -42,7 +42,7 @@ from blizzard.runner.operator.attachments import AttachmentService
 from blizzard.runner.operator.requeue import RequeueService
 from blizzard.runner.selftest.service import SelfTestService
 from blizzard.runner.status.view import RunnerStatusService
-from blizzard.runner.stores import RunnerReadStores
+from blizzard.runner.stores import HostReadStores, IRunnerBinding, RunnerReadStores
 from blizzard.runner.throttle.pause import PauseService
 from blizzard.runner.tracing.receiving import TelemetryReceiver
 from blizzard.runner.tracing.replay import LeaseTraceReplay
@@ -109,6 +109,10 @@ class RunnerWiring:
 
     def read_stores(self) -> RunnerReadStores:
         stores = self.maybe_read_stores()
+        return stores if stores is not None else self._refuse(_STORE)
+
+    def host_read_stores(self) -> HostReadStores:
+        stores = self.maybe_host_read_stores()
         return stores if stores is not None else self._refuse(_STORE)
 
     def worker_lease(self, lease_id: str) -> Lease:
@@ -235,6 +239,21 @@ class RunnerWiring:
 
     def maybe_read_stores(self) -> RunnerReadStores | None:
         return getattr(self.state, "runner_read_stores", None)
+
+    def maybe_host_read_stores(self) -> HostReadStores | None:
+        return getattr(self.state, "host_read_stores", None)
+
+    def require_bound(self) -> None:
+        """Refuse with a ``503`` naming the cause while the store is bound to no runner: a route that writes
+        runner-scoped rows has no runner to write them for until registration first adopts the hub-minted id. An app
+        wired without a binding checks nothing."""
+        binding: IRunnerBinding | None = getattr(self.state, "binding", None)
+        if binding is not None and binding.runner_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="runner not registered yet — its store binds to the hub-minted id at the first registration;"
+                " retry once the runner has registered with the hub",
+            )
 
     @staticmethod
     def _refuse(what: str) -> NoReturn:

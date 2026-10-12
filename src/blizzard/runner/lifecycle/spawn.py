@@ -130,13 +130,18 @@ class SpawnStores(TranscriptPumpStores, Protocol):
     @property
     def escalations(self) -> IReadEscalationRepository: ...
     @property
-    def graph_artifacts(self) -> IWriteGraphArtifactRepository: ...
-    @property
     def invocation_boundaries(self) -> IWriteInvocationBoundaryRepository: ...
     @property
     def pause(self) -> IWritePauseRepository: ...
     @property
     def tokens(self) -> IWriteTokenRepository: ...
+
+
+class SpawnHostStores(Protocol):
+    """The host-scoped stores a spawn reads and writes."""
+
+    @property
+    def graph_artifacts(self) -> IWriteGraphArtifactRepository: ...
     @property
     def workspace_prompt(self) -> IReadWorkspacePromptRepository: ...
 
@@ -175,6 +180,8 @@ class SpawnContext(TranscriptPumpContext, Protocol):
     def elicitation_files(self) -> IElicitationFiles: ...
     @property
     def stores(self) -> SpawnStores: ...
+    @property
+    def host_stores(self) -> SpawnHostStores: ...
     @property
     def config(self) -> SpawnConfig: ...
     @property
@@ -549,7 +556,7 @@ class Spawner:
         )
         # Before `record_lease`: a crash here leaves only an orphan row a retry
         # writes again identically — never a lease whose mint's declarations are absent.
-        self.ctx.stores.graph_artifacts.record_graph_artifacts(
+        self.ctx.host_stores.graph_artifacts.record_graph_artifacts(
             graph_id=envelope.graph_id,
             artifacts=[
                 PinnedGraphArtifact(name=a.name, ordinal=i, kind=a.kind, content=a.content)
@@ -603,7 +610,7 @@ class Spawner:
     ) -> Preamble:
         # The store's runtime override when set, else the static config prompt — read here so a
         # replace applies to the next spawn with no restart.
-        override = self.ctx.stores.workspace_prompt.workspace_prompt_override(self.ctx.config.workspace_id)
+        override = self.ctx.host_stores.workspace_prompt.workspace_prompt_override(self.ctx.config.workspace_id)
         # `prior` is read ONLY when this spawn resumes a session, so a fresh one can
         # never elide prose it has never seen; nothing recorded reads `None` and renders in full.
         return Preamble.of(

@@ -29,7 +29,7 @@ from tests.e2e.test_acceptance_loop import (
     _runner_config,
     _winter_source,
 )
-from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
+from tests.runner_fakes import daemon_store
 
 pytestmark = [
     pytest.mark.e2e,
@@ -135,7 +135,7 @@ def _sessions_by_node(db_url: str, chunk_id: str) -> dict[str, list[str]]:
     Reopens the runner's own sqlite store after the run — the runner-side truth that pairs
     with the mock's on-disk per-session ``turns``.
     """
-    store = SqlAlchemyRunnerStore(create_engine_from_url(db_url), runner_store_errors())
+    store = daemon_store(create_engine_from_url(db_url))
     leases = [store.lease(lid) for lid in store.lease_ids_for_chunk(chunk_id)]
     ordered = sorted((lz for lz in leases if lz is not None), key=lambda lz: lz.created_at)
     by_node: dict[str, list[str]] = {}
@@ -247,7 +247,7 @@ def test_session_modes_resume_targeted_and_fresh_across_a_cycle(tmp_path: Path) 
 
     # Why the TARGETED form matters (plan Q4): the chunk's most-recent session overall is
     # the reviewer's, not build's — `resume:build` avoids that wrong inheritance.
-    store = SqlAlchemyRunnerStore(create_engine_from_url(db_url), runner_store_errors())
+    store = daemon_store(create_engine_from_url(db_url))
     build_latest = store.latest_session(chunk_id, "build")
     assert build_latest is not None and build_latest.session_id == build_session
     latest = store.latest_session(chunk_id, None)
