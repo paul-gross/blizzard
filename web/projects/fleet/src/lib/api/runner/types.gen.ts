@@ -5041,6 +5041,10 @@ export type PatchRunnerApiRunnerPatchErrors = {
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * The runner has not registered yet, so its store is bound to no runner.
+     */
+    503: unknown;
 };
 
 export type PatchRunnerApiRunnerPatchError = PatchRunnerApiRunnerPatchErrors[keyof PatchRunnerApiRunnerPatchErrors];
@@ -5067,7 +5071,7 @@ export type StartSelftestApiSelftestsPostErrors = {
      */
     422: HttpValidationError;
     /**
-     * The requested harness is known but unavailable.
+     * The requested harness is known but unavailable, or the runner has not registered yet, so its store is bound to no runner to record the result for.
      */
     503: unknown;
 };

@@ -100,7 +100,7 @@ from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessS
 from blizzard.runner.selftest.service import SelfTestService
 from blizzard.runner.status.view import RunnerStatusService
 from blizzard.runner.store.internal.jti_cache_store import JtiCacheRepository
-from blizzard.runner.stores import RunnerReadStores, RunnerStores
+from blizzard.runner.stores import IRunnerBinding, RunnerReadStores, RunnerStores
 from blizzard.runner.throttle.pause import PauseService
 from blizzard.runner.tracing.exclusion import is_excluded
 from blizzard.runner.tracing.receiving import TelemetryReceiver
@@ -224,6 +224,7 @@ def create_app(
     identity_verdict: ICurrentIdentityVerdict | None = None,
     identity_check: IIdentityOnContact | None = None,
     hub_token: ICurrentHubToken | None = None,
+    binding: IRunnerBinding | None = None,
 ) -> FastAPI:
     """Build a fully wired runner app from resolved config.
 
@@ -235,7 +236,8 @@ def create_app(
     routes answer 503. ``identity_verdict`` is the verdict the status reports. ``identity_check`` gates
     the hub proxy, which forwards only once it verifies the token names the store's runner; absent, the
     proxy forwards ungated. ``hub_token`` is the token the proxy presents; absent, the proxy
-    presents ``config``'s."""
+    presents ``config``'s. ``binding`` is the store's runner binding; while it names no runner, the routes that write
+    runner-scoped rows answer 503."""
     log = get_logger("blizzard.runner")
     clock = clock or SystemClock()
     process = process or LinuxProcessProbe()
@@ -260,6 +262,7 @@ def create_app(
             role_policy=config.role_policy,
         )
     app.state.readiness = readiness
+    app.state.binding = binding
     # The seams below are None on the store-free app.
     app.state.workspace_provider = workspace_provider
     app.state.harnesses = resolved_harnesses
@@ -526,6 +529,7 @@ def _wire_hosted_app(
     platform_tracing.instrument_client(hub_http_client)
     app = create_app(
         config,
+        binding=connections,
         platform_tracing=platform_tracing,
         identity=graph.identity,
         identity_verdict=graph.identity_verdict,

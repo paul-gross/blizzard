@@ -5,6 +5,7 @@ from __future__ import annotations
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.hub.identity import IWriteRunnerIdentityRepository, RunnerIdentity
 from blizzard.runner.store.errors import RunnerStoreConnections
+from blizzard.runner.store.internal.unowned_row_stamp import stamp_unowned_rows
 from blizzard.runner.store.schema import runner_identity
 
 _log = get_logger("blizzard.runner.store")
@@ -47,9 +48,13 @@ class RunnerIdentityStore:
             "tenant_id": identity.tenant_id,
             "tenant_name": identity.tenant_name,
         }
-        # Registration's adoption binds an unbound store; a bound one refuses another runner's id.
+        # Registration's adoption binds an unbound store, and the rows written before it are stamped with the identity
+        # row in one commit; a bound one refuses another runner's id.
+        binding = self._store.runner_id is None
         self._store.bind(identity.runner_id)
         with self._store.begin() as conn:
+            if binding:
+                stamp_unowned_rows(conn, identity.runner_id)
             # The bound runner's row is updated in place, so the served-projects answer's marker on it stays.
             kept = conn.execute(self._store.update(runner_identity).values(**values)).rowcount
             if not kept:

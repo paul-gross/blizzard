@@ -43,13 +43,19 @@ class RunnerControlPatch(BaseModel):
     by: str = "operator"  # who flipped it — recorded on the fact
 
 
-@router.patch("/runner", response_model=RunnerControlView)
+@router.patch(
+    "/runner",
+    response_model=RunnerControlView,
+    responses={503: {"description": "The runner has not registered yet, so its store is bound to no runner."}},
+)
 def patch_runner(request_body: RunnerControlPatch, request: Request) -> RunnerControlView:
     """Set this runner's own pause brake — it starts no new workers.
 
     Independent of the hub's brake: it works with the hub unreachable, and neither reads nor
-    writes the hub's flag. Not a drain: a live worker is left running."""
+    writes the hub's flag. Not a drain: a live worker is left running. Refused with 503 until the
+    runner first registers, since the brake is a fact of the runner the store is bound to."""
     wiring = RunnerWiring.of(request)
+    wiring.require_bound()
     status = wiring.status()
     wiring.pause().set_local_pause(paused=request_body.paused, by=request_body.by)
     summary = status.summary()

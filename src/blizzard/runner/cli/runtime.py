@@ -71,7 +71,7 @@ from blizzard.runner.runtime import (
 )
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.stores import RunnerReadStores
-from blizzard.runner.tracing.sweep import announce_rejected_tracing
+from blizzard.runner.tracing.sweep import PendingTracingRejection
 from blizzard.runner.usage.periodic_pass_driver import PeriodicPassDriver
 
 ENV_TICK_SECONDS = "BZ_RUNNER_TICK_SECONDS"
@@ -493,8 +493,12 @@ def _serve_host(config: RunnerConfig, graph: RunnerProcess, hosted: HostedApp) -
     # configured-but-missing prompt raises here, before any socket binds.
     with click_exception_on(ConfigError):
         driver = PeriodicDriver(config, interval_seconds=interval, process_graph=graph)
-    pass_drivers = _pass_drivers(config, graph, tick_seconds=interval)
-    announce_rejected_tracing(graph.trace_settings, graph.stores.outbound, graph.clock.now())
+    connections = graph.connections
+    rejection = PendingTracingRejection(
+        graph.trace_settings, graph.stores.outbound, lambda: connections.runner_id is not None, graph.clock
+    )
+    rejection.announce()
+    pass_drivers = _pass_drivers(config, graph, tick_seconds=interval, rejection=rejection)
 
     # Two doors onto the one app, bound up front so a clash fails startup loudly and
     # served by the single `Server` below, which keeps the shutdown path on one frame.
@@ -545,11 +549,26 @@ def _serve_host(config: RunnerConfig, graph: RunnerProcess, hosted: HostedApp) -
             Uds(config.socket_path).unlink()
 
 
-def _pass_drivers(config: RunnerConfig, graph: RunnerProcess, *, tick_seconds: float) -> list[PeriodicPassDriver]:
+def _pass_drivers(
+    config: RunnerConfig, graph: RunnerProcess, *, tick_seconds: float, rejection: PendingTracingRejection
+) -> list[PeriodicPassDriver]:
     """The off-tick drivers, built only here so `runner tick` never runs a trace sweep or a
     credential renewal. Renewal passes on the tick's own interval with no jitter, so a credential
-    lapsed across a restart is renewed at once; each slug's own cadence gates it within the pass."""
+    lapsed across a restart is renewed at once; each slug's own cadence gates it within the pass.
+    A rejected tracing setting whose report the start could not buffer — the store bound to no runner
+    yet — retries on the tick's interval until the first registration binds it."""
     drivers: list[PeriodicPassDriver] = []
+    if rejection.owed:
+        drivers.append(
+            PeriodicPassDriver(
+                rejection.announce,
+                name="blizzard-runner-tracing-rejection",
+                label="tracing rejection report",
+                log=get_logger("blizzard.runner.trace_export"),
+                interval_seconds=tick_seconds,
+                jitter_seconds=0,
+            )
+        )
     if graph.trace_sweep is not None:
         drivers.append(
             PeriodicPassDriver(

@@ -43,6 +43,7 @@ from blizzard.runner.node_steps.chunk_state import ChunkPause, ChunkState
 from blizzard.runner.node_steps.submissions import ApplyReply
 from blizzard.runner.store import schema as runner_schema
 from tests.runner_fakes import (
+    FIXTURE_RUNNER_ID,
     FakeHarness,
     FakeHub,
     FakeProbe,
@@ -283,7 +284,8 @@ def test_pull_parks_a_standing_pause_only_once_across_many_ticks(tmp_path):  # t
     engine = create_engine_from_url(db_url)
     try:
         with engine.connect() as conn:
-            rows = conn.execute(select(runner_schema.pause_parks.c.chunk_id)).all()
+            parks = runner_schema.pause_parks
+            rows = conn.execute(select(parks.c.chunk_id).where(parks.c.runner_id == FIXTURE_RUNNER_ID)).all()
     finally:
         engine.dispose()
     assert rows == [("ch_1",)], f"a standing pause appended {len(rows)} park rows — the idempotency guard is gone"

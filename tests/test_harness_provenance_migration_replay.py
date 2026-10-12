@@ -26,9 +26,11 @@ from blizzard.runner.lifecycle.dormant import DormantSession
 from blizzard.runner.lifecycle.takeover import TakeoverOpenScope, TakeoverService
 from blizzard.runner.loop.steps import Advance
 from blizzard.runner.store import MIGRATIONS_DIR
+from blizzard.runner.store.internal.unowned_row_stamp import UnownedRowStamp
 from blizzard.runner.transcripts.internal.harness_transcript_repositories import HarnessTranscriptRepositories
 from blizzard.runner.transcripts.service import TranscriptService
 from tests.runner_fakes import (
+    FIXTURE_RUNNER_ID,
     FakeArchivedTranscriptRepository,
     FakeHarness,
     FakeHub,
@@ -64,7 +66,10 @@ def _migrated_store(tmp_path, seed: Callable[[Connection], None]) -> SqlAlchemyR
     finally:
         engine.dispose()
     migrations.upgrade("head")
-    return SqlAlchemyRunnerStore(create_engine_from_url(url), runner_store_errors())
+    # The store held no identity, so the upgrade left every row unowned; the runner's start-up stamp claims them.
+    store = SqlAlchemyRunnerStore(create_engine_from_url(url), runner_store_errors())
+    UnownedRowStamp(store.connections).stamp(FIXTURE_RUNNER_ID)
+    return store
 
 
 def _seed_lease(

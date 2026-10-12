@@ -76,6 +76,7 @@ from blizzard.runner.store.internal.selftest_result_store import SelfTestResultS
 from blizzard.runner.store.internal.takeover_store import TakeoverStore
 from blizzard.runner.store.internal.token_store import TokenStore
 from blizzard.runner.store.internal.transcript_ledger_store import TranscriptLedgerStore
+from blizzard.runner.store.internal.unowned_row_stamp import UnownedRowStamp
 from blizzard.runner.store.internal.usage_store import UsageStore
 from blizzard.runner.store.internal.workspace_prompt_store import WorkspacePromptStore
 from blizzard.runner.store.runner_guard import install_runner_guard
@@ -255,7 +256,11 @@ def build_runner_process(
         ready = readiness.evaluate().ready
         connections = RunnerStoreConnections(engine, RunnerStoreErrorFactory(get_logger("blizzard.runner.store")))
         if ready:
-            connections.bind_to_stored()
+            bound = connections.bind_to_stored()
+            if bound is not None:
+                # The start-up stamp: rows the store holds that name no runner are the bound runner's, stamped before
+                # the process serves or ticks.
+                UnownedRowStamp(connections).stamp(bound)
         stores = _build_stores(connections)
         registered = stores.identity.runner_identity() if ready else None
         if registered is not None:

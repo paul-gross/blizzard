@@ -51,7 +51,14 @@ from blizzard.runner.transcripts.invocation_boundaries import (
 from blizzard.runner.transcripts.ledger import IReadTranscriptLedgerRepository, IWriteTranscriptLedgerRepository
 from blizzard.runner.usage.repository import IReadUsageRepository, IWriteUsageRepository
 
-__all__ = ["IReadRunnerStore", "IWriteRunnerStore", "RunnerReadStores", "RunnerStores"]
+__all__ = ["IReadRunnerStore", "IRunnerBinding", "IWriteRunnerStore", "RunnerReadStores", "RunnerStores"]
+
+
+class IRunnerBinding(Protocol):
+    """The runner a store is bound to: the hub-minted id, or ``None`` until registration first adopts one."""
+
+    @property
+    def runner_id(self) -> str | None: ...
 
 
 class IReadRunnerStore(
