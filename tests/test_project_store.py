@@ -20,8 +20,8 @@ from blizzard.hub.domain.config.work_sources import ConfigRevisionConflict, Conf
 from blizzard.hub.domain.projects.authoring import ProjectAuthoring
 from blizzard.hub.domain.projects.model import Project, ProjectEdit, ProjectId, ProjectSlug, ProjectSlugTaken
 from blizzard.hub.secrets import hub_key_provider
-from blizzard.hub.store.internal import project_store as project_store_module
 from blizzard.hub.store.internal.config_change_store import ConfigChangeStore
+from blizzard.hub.store.internal.former_slugs import SlugTables
 from blizzard.hub.store.internal.project_link_store import ProjectLinkStore
 from blizzard.hub.store.internal.project_store import ProjectStore
 from blizzard.hub.store.schema import config_changes, project_former_slugs, project_source_link_facts
@@ -135,7 +135,7 @@ def test_a_slug_another_project_holds_is_refused(world: _World) -> None:
 def test_a_slug_taken_by_a_concurrent_write_is_refused_by_the_unique(
     world: _World, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(project_store_module, "_refuse_held_slug", lambda conn, record: None)
+    monkeypatch.setattr(SlugTables, "refuse_held", lambda self, conn, record_id, slug: None)
     with pytest.raises(ProjectSlugTaken):
         world.authoring().create("default", "Raced", OP)
 

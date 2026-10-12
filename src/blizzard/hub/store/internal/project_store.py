@@ -21,30 +21,16 @@ from blizzard.hub.domain.projects.model import (
 )
 from blizzard.hub.domain.projects.resolve import resolve
 from blizzard.hub.store.internal.config_change_store import append_change
+from blizzard.hub.store.internal.former_slugs import SlugTables
 from blizzard.hub.store.schema import project_former_slugs, projects
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
 
-
-def _refuse_held_slug(conn: Connection, record: Project) -> None:
-    """:class:`ProjectSlugTaken` when a project other than ``record`` holds its slug as its current one."""
-    holder = conn.execute(
-        statements_of(conn)
-        .select(projects, projects.c.project_id)
-        .where(projects.c.slug == record.slug, projects.c.project_id != record.project_id)
-    ).first()
-    if holder is not None:
-        raise ProjectSlugTaken(record.slug)
-
-
-def _take_slug(conn: Connection, slug: str) -> None:
-    """``slug`` stops being any project's former slug: its new holder answers to it from now on."""
-    conn.execute(statements_of(conn).delete(project_former_slugs).where(project_former_slugs.c.slug == slug))
+_SLUGS = SlugTables(projects, project_former_slugs, "project_id", ProjectSlugTaken)
 
 
 def insert_project(conn: Connection, record: Project, change: ConfigChange) -> None:
     """The create body, inside the caller's transaction. :class:`ProjectSlugTaken` when refused."""
-    _refuse_held_slug(conn, record)
-    _take_slug(conn, record.slug)
+    _SLUGS.claim(conn, record.project_id, record.slug)
     conn.execute(
         statements_of(conn)
         .insert(projects)
@@ -65,8 +51,7 @@ def update_project(
 ) -> None:
     """The compare-and-set edit body, inside the caller's transaction, moving the slug when ``left_slug`` is set."""
     if left_slug is not None:
-        _refuse_held_slug(conn, record)
-        _take_slug(conn, record.slug)
+        _SLUGS.claim(conn, record.project_id, record.slug)
     moved = conn.execute(
         statements_of(conn)
         .update(projects)
@@ -76,12 +61,7 @@ def update_project(
     if moved != 1:
         raise ConfigRevisionConflict("project", record.project_id, current=_revision(conn, record.project_id))
     if left_slug is not None:
-        _take_slug(conn, left_slug)
-        conn.execute(
-            statements_of(conn)
-            .insert(project_former_slugs)
-            .values(slug=left_slug, project_id=record.project_id, left_at=change.recorded_at)
-        )
+        _SLUGS.release(conn, record.project_id, left_slug, left_at=change.recorded_at)
     append_change(conn, change)
 
 

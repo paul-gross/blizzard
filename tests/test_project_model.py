@@ -11,6 +11,7 @@ import pytest
 from blizzard.foundation.ids import Id
 from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, Door, FieldChange, RecordKind
 from blizzard.hub.domain.config.work_sources import ConfigFieldError, ConfigRevisionConflict
+from blizzard.hub.domain.kernel.id_or_slug import MatchedBy
 from blizzard.hub.domain.projects.model import (
     Project,
     ProjectEdit,
@@ -20,7 +21,7 @@ from blizzard.hub.domain.projects.model import (
     ProjectSlug,
     sole_project,
 )
-from blizzard.hub.domain.projects.resolve import MatchedBy, ProjectMatch, locate, resolve
+from blizzard.hub.domain.projects.resolve import ProjectMatch, locate, resolve
 
 pytestmark = pytest.mark.unit
 
