@@ -221,7 +221,7 @@ ENV_GARDEN_DELIVERY_URL = "BZ_HUB_GARDEN_DELIVERY_URL"
 ENV_REVIEW_FINDINGS_URL = "BZ_HUB_REVIEW_FINDINGS_URL"
 ENV_FORGE_URL = "BZ_FORGE_URL"
 ENV_FORGE_TOKEN = "BZ_FORGE_TOKEN"
-ENV_FORGE_TOKENS = "BZ_FORGE_TOKENS"  # JSON object {repository record name: token}, one per record in the chunk
+ENV_FORGE_TOKENS = "BZ_FORGE_TOKENS"  # JSON object {repository record id: token}, one per record in the chunk
 ENV_FORGE_OWNER = "BZ_FORGE_OWNER"  # qualifies a bare (owner-less) repo, mirroring land_common.LandRun.repo
 # PR/merge title resolved from the primary work item, absent when unresolved.
 ENV_FEATURE_TITLE = "BZ_HUB_FEATURE_TITLE"
@@ -238,7 +238,7 @@ ENV_PROJECT = "BZ_HUB_PROJECT"
 @dataclass(frozen=True)
 class LandingProject:
     """The project a chunk lands for, read as a hub node visit starts: its id, its slug, and the
-    names of the repository records it links. A chunk record carrying no project links nothing."""
+    ids of the repository records it links. A chunk record carrying no project links nothing."""
 
     project_id: str = ""
     slug: str = ""
@@ -294,7 +294,7 @@ class GitCommits:
         """:data:`ENV_GIT_COMMITS`'s content: ``repo`` is the ``owner/repo`` of the repository record
         the row resolved to (``qualified``, in :attr:`rows` order); unresolved, the row's own identity.
         Given ``targets`` (one per row), each entry also carries its own record's target: ``forge_url``,
-        ``owner``, ``base_branch`` and the ``record`` name."""
+        ``owner``, ``base_branch`` and the ``record`` id."""
         entries: list[dict[str, str | None]] = []
         for index, row in enumerate(self.rows):
             entry: dict[str, str | None] = {
@@ -510,7 +510,7 @@ class HubNodeExecutor:
         :class:`AmbiguousMarkerRepository` — before anything is written — when a landed marker names
         an ``owner/repo`` the visit holds for two repository records."""
         if name.startswith(_MARKER_PREFIX) and is_landed_revision(content):
-            self._marker_authority.repository_name(
+            self._marker_authority.repository_id(
                 chunk_id, node_id=node_id, epoch=epoch, repo=name.removeprefix(_MARKER_PREFIX)
             )
         wrote = self._artifacts.record_hub_artifact(
@@ -530,9 +530,7 @@ class HubNodeExecutor:
                 chunk_id,
                 repo=repo,
                 commit_hash=content,
-                repository_name=self._marker_authority.repository_name(
-                    chunk_id, node_id=node_id, epoch=epoch, repo=repo
-                ),
+                repository_id=self._marker_authority.repository_id(chunk_id, node_id=node_id, epoch=epoch, repo=repo),
                 at=self._clock.now(),
             )
         return wrote
@@ -633,7 +631,7 @@ class HubNodeExecutor:
                                 SecretName.parse(target.secret_name)
                             ).expose()
                     except (SecretNotFound, SecretRetired) as exc:
-                        refusal = ("repository-secret-unavailable", f"repository {target.record}: {exc}")
+                        refusal = ("repository-secret-unavailable", f"repository {target.slug}: {exc}")
                         break
                     tokens[target.record] = revealed[target.secret_name]
             if refusal is not None:
@@ -646,7 +644,10 @@ class HubNodeExecutor:
                 chunk.chunk_id,
                 node_id=node.node_id,
                 epoch=epoch,
-                names=list(zip(resolution.qualified, resolution.names, strict=True)),
+                records=[
+                    (repo, target.record, target.slug)
+                    for repo, target in zip(resolution.qualified, resolution.targets, strict=True)
+                ],
             )
             env = HubEnv(
                 chunk=chunk,
@@ -741,7 +742,7 @@ class HubNodeExecutor:
         return LandingProject(
             project_id=chunk.project_id,
             slug=project.slug if project is not None else chunk.project_id,
-            linked=frozenset(link.repository_name for link in self._links.repositories_of(chunk.project_id)),
+            linked=frozenset(link.repository_id for link in self._links.repositories_of(chunk.project_id)),
         )
 
     @staticmethod

@@ -111,8 +111,10 @@ class ConfigAuthoring:
 
     # --- Repositories ------------------------------------------------------------
 
-    def create_repository(self, name: str, fields: RepositoryFields, ctx: ChangeContext) -> ConfiguredRepository:
-        record, change = ConfiguredRepository.new(name, fields, ctx, at=self._clock.now())
+    def create_repository(
+        self, slug: str, name: str | None, fields: RepositoryFields, ctx: ChangeContext
+    ) -> ConfiguredRepository:
+        record, change = ConfiguredRepository.new(slug, name, fields, ctx, at=self._clock.now())
         return self._repositories.create(record, change=change)
 
     def edit_repository(
@@ -122,7 +124,9 @@ class ConfigAuthoring:
         if decided is None:
             return record
         edited, change = decided
-        return self._repositories.update(edited, from_revision=record.revision, change=change)
+        return self._repositories.update(
+            edited, from_revision=record.revision, left_slug=record.slug_left_for(edited), change=change
+        )
 
     def retire_repository(
         self, record: ConfiguredRepository, ctx: ChangeContext, *, if_match: int | None = None
@@ -179,7 +183,10 @@ class ConfigAuthoring:
             return ImportResult(ImportStatus.NOTHING_TO_IMPORT)
         at = self._clock.now()
         plan = plan_import(legacy, values, commits, existing, ctx=MIGRATION_CONTEXT, at=at)
-        created = ([source.name for source, _ in plan.work_sources], [repo.name for repo, _ in plan.repositories])
+        created = (
+            [source.name for source, _ in plan.work_sources],
+            [repo.repository_id for repo, _ in plan.repositories],
+        )
         linked = links.links(*created, MIGRATION_CONTEXT, at=at) if any(created) else ()
         sealed = tuple(
             SealedSecretWrite(

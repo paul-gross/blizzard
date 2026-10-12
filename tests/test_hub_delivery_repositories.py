@@ -105,6 +105,12 @@ def _seed_at_deliver(
     report_lease(hub, chunk_id, epoch=1, seq=1)
 
 
+def _ids(hub: HubHarness) -> dict[str, str]:
+    """Each repository's id by slug."""
+    listed = hub.client.get("/api/repositories").json()["repositories"]
+    return {r["slug"]: r["repository_id"] for r in listed}
+
+
 def _visit(hub: HubHarness, chunk_id: str, nodes: dict[str, str], node_name: str = "deliver"):  # type: ignore[no-untyped-def]
     chunk = hub.services.chunks.record.get(chunk_id)
     assert chunk is not None
@@ -230,14 +236,15 @@ def test_records_differing_in_base_branch_each_get_their_own_target(tmp_path: Pa
     _visit(hub, chunk_id, nodes, node_name)
 
     env = runner.calls[0][2]
+    ids = _ids(hub)
     assert [
         (c["repo"], c["record"], c["base_branch"], c["forge_url"], c["owner"])
         for c in json.loads(env["BZ_HUB_GIT_COMMITS"])
     ] == [
-        ("acme/widget", "widget", "main", _FORGE, "acme"),
-        ("acme/gadget", "gadget", "develop", _FORGE, "acme"),
+        ("acme/widget", ids["widget"], "main", _FORGE, "acme"),
+        ("acme/gadget", ids["gadget"], "develop", _FORGE, "acme"),
     ]
-    assert json.loads(env["BZ_FORGE_TOKENS"]) == {"widget": "fixture-token", "gadget": "fixture-token"}
+    assert json.loads(env["BZ_FORGE_TOKENS"]) == {ids["widget"]: "fixture-token", ids["gadget"]: "fixture-token"}
     assert not set(_SINGLE_VALUED) & env.keys()
     assert "repositories-disagree" not in _event_kinds(hub)
 
@@ -259,7 +266,10 @@ def test_records_differing_in_secret_each_get_their_own_token(tmp_path: Path, no
     _visit(hub, chunk_id, nodes, node_name)
 
     env = runner.calls[0][2]
-    assert json.loads(env["BZ_FORGE_TOKENS"]) == {"widget": "fixture-token", "gadget": "other-token"}
+    assert json.loads(env["BZ_FORGE_TOKENS"]) == {
+        _ids(hub)["widget"]: "fixture-token",
+        _ids(hub)["gadget"]: "other-token",
+    }
     assert not set(_SINGLE_VALUED) & env.keys()
     assert "other-token" not in env["BZ_HUB_GIT_COMMITS"]
 
@@ -280,7 +290,10 @@ def test_agreeing_records_keep_the_single_valued_variables_and_also_get_tokens(t
     assert env["BZ_FORGE_URL"] == _FORGE
     assert env["BZ_FORGE_OWNER"] == "acme"
     assert env["BZ_FORGE_TOKEN"] == "fixture-token"
-    assert json.loads(env["BZ_FORGE_TOKENS"]) == {"widget": "fixture-token", "gadget": "fixture-token"}
+    assert json.loads(env["BZ_FORGE_TOKENS"]) == {
+        _ids(hub)["widget"]: "fixture-token",
+        _ids(hub)["gadget"]: "fixture-token",
+    }
 
 
 def test_an_unavailable_secret_of_any_record_refuses_the_visit_naming_the_repository(
@@ -340,11 +353,12 @@ def test_one_owner_and_name_on_two_forge_hosts_runs_with_each_entry_on_its_own_r
     _visit(hub, chunk_id, nodes, "record-findings")
 
     env = runner.calls[0][2]
+    ids = _ids(hub)
     assert [(c["repo"], c["record"], c["base_branch"]) for c in json.loads(env["BZ_HUB_GIT_COMMITS"])] == [
-        ("acme/widget", "widget", "main"),
-        ("acme/widget", "widget-mirror", "develop"),
+        ("acme/widget", ids["widget"], "main"),
+        ("acme/widget", ids["widget-mirror"], "develop"),
     ]
-    assert set(json.loads(env["BZ_FORGE_TOKENS"])) == {"widget", "widget-mirror"}
+    assert set(json.loads(env["BZ_FORGE_TOKENS"])) == {ids["widget"], ids["widget-mirror"]}
 
 
 def test_a_merged_marker_naming_a_repo_held_for_two_records_is_refused_naming_both(tmp_path: Path) -> None:
@@ -390,7 +404,7 @@ def test_a_chunk_with_no_commits_runs_with_no_forge_variables(tmp_path: Path) ->
 def test_a_name_ambiguous_across_the_tenant_lands_in_the_record_its_project_links(tmp_path: Path) -> None:
     hub, runner = _hub(tmp_path)
     create_repositories(hub.client, [fixture_repository("widget", _FORGE, owner="acme")], project=None)
-    fork = fixture_repository("widget", _FORGE, owner="other") | {"name": "widget-fork"}
+    fork = fixture_repository("widget", _FORGE, owner="other") | {"slug": "widget-fork"}
     create_repositories(hub.client, [fork])
     chunk_id, nodes = _mint_and_claim(hub)
     _seed_at_deliver(hub, chunk_id, nodes, [("widget", None)])
@@ -463,14 +477,14 @@ def test_a_landing_names_the_record_its_visit_started_against_though_unlinked_mi
     with hub.engine.connect() as conn:
         rows = dict(
             conn.execute(
-                sa.select(landed.c.repo, landed.c.repository_name).where(
+                sa.select(landed.c.repo, landed.c.repository_id).where(
                     landed.c.tenant_id == default_tenant(hub.engine), landed.c.chunk_id == chunk_id
                 )
             )
             .tuples()
             .all()
         )
-    assert rows == {"acme/widget": "widget", "acme/gadget": None}
+    assert rows == {"acme/widget": _ids(hub)["widget"], "acme/gadget": None}
 
 
 def test_the_env_names_the_chunks_project_by_its_id_and_its_slug_as_the_visit_starts(tmp_path: Path) -> None:
@@ -530,11 +544,11 @@ def test_two_projects_linking_one_repository_land_onto_its_one_base_branch_and_r
     with hub.engine.connect() as conn:
         rows = (
             conn.execute(
-                sa.select(landed.c.chunk_id, landed.c.repo, landed.c.repository_name).where(
+                sa.select(landed.c.chunk_id, landed.c.repo, landed.c.repository_id).where(
                     landed.c.tenant_id == default_tenant(hub.engine)
                 )
             )
             .tuples()
             .all()
         )
-    assert sorted(rows) == sorted((chunk_id, "acme/widget", "widget") for chunk_id, _ in chunks)
+    assert sorted(rows) == sorted((chunk_id, "acme/widget", _ids(hub)["widget"]) for chunk_id, _ in chunks)

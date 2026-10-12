@@ -50,7 +50,7 @@ def secret_view(record: SecretMetadata, *, retired: bool, references: list[Recor
         replaced_by=record.replaced_by,
         created_at=iso_utc(record.created_at),
         retired=retired,
-        references=[RecordRefView(kind=r.kind.value, key=r.key) for r in references or []],
+        references=[RecordRefView(kind=r.kind.value, key=r.key, label=r.label) for r in references or []],
     )
 
 

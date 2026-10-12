@@ -20,10 +20,11 @@ from blizzard.hub.store.schema import (
 )
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
 
-#: Each referring kind: its record table and its lifecycle-fact table.
-_REFERRING: tuple[tuple[RecordKind, Table, Table], ...] = (
-    (RecordKind.REPOSITORY, repositories, repository_lifecycle_facts),
-    (RecordKind.WORK_SOURCE, work_sources, work_source_lifecycle_facts),
+#: Each referring kind: its record table, its lifecycle-fact table, the column keying both, and the column labelling
+#: a record keyed by an id (``None`` for a kind keyed by its name).
+_REFERRING: tuple[tuple[RecordKind, Table, Table, str, str | None], ...] = (
+    (RecordKind.REPOSITORY, repositories, repository_lifecycle_facts, "repository_id", "slug"),
+    (RecordKind.WORK_SOURCE, work_sources, work_source_lifecycle_facts, "name", None),
 )
 
 
@@ -33,22 +34,23 @@ def active_referrers(conn: Connection, secret_names: list[str]) -> dict[str, lis
     if not secret_names:
         return found
     stmts = statements_of(conn)
-    for kind, table, facts in _REFERRING:
+    for kind, table, facts, key, label in _REFERRING:
+        order = table.c[label or key]
         rows = []
         for batch in id_batches(secret_names):
             rows.extend(
                 conn.execute(
-                    stmts.select(table, table.c.secret_name, table.c.name)
+                    stmts.select(table, table.c.secret_name, table.c[key], order.label("label"))
                     .where(
                         table.c.secret_name.in_(batch),
-                        table.c.name.not_in(newest_retired_select(stmts, facts, facts.c.name)),
+                        table.c[key].not_in(newest_retired_select(stmts, facts, facts.c[key])),
                     )
-                    .order_by(table.c.name)
+                    .order_by(order)
                 ).all()
             )
-        rows.sort(key=lambda row: row.name)
+        rows.sort(key=lambda row: row.label)
         for row in rows:
-            found[row.secret_name].append(RecordRef(kind, row.name))
+            found[row.secret_name].append(RecordRef(kind, row[1], row.label if kind is RecordKind.REPOSITORY else None))
     return found
 
 

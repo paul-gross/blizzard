@@ -458,13 +458,14 @@ def test_build_hub_env_carries_no_model_credential_and_the_documented_keys() -> 
                     owner="acme",
                     base_branch="main",
                     secret_name="forge-token",
-                    record="widget",
+                    record="repo_widget",
+                    slug="widget",
                 ),
             ),
             qualified=("acme/widget",),
-            names=("widget",),
+            records=("repo_widget",),
         ),
-        forge_tokens={"widget": "tok"},
+        forge_tokens={"repo_widget": "tok"},
     ).vars
     assert env["BZ_HUB_CHUNK_ID"] == "ch_x"
     assert env["BZ_HUB_WORKDIR"] == "/tmp/ch_x"
@@ -475,7 +476,7 @@ def test_build_hub_env_carries_no_model_credential_and_the_documented_keys() -> 
     assert env["BZ_HUB_MARKER_CALLBACK_URL"] == "http://hub/api/chunks/ch_x/hub-markers"
     assert env["BZ_FORGE_URL"] == "http://forge"
     assert env["BZ_FORGE_TOKEN"] == "tok"
-    assert json.loads(env["BZ_FORGE_TOKENS"]) == {"widget": "tok"}
+    assert json.loads(env["BZ_FORGE_TOKENS"]) == {"repo_widget": "tok"}
     assert "BZ_HUB_FEATURE_TITLE" not in env  # no feature_title given
     # Structurally agentless (`bzh:deterministic-shell`) — no key here ever names a
     # model/agent credential.

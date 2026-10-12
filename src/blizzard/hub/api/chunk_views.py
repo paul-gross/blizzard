@@ -488,7 +488,7 @@ class ChunkView:
             return lambda _row, _commit: None
         project_id = self.chunk.project_id
         linked = (
-            frozenset(link.repository_name for link in self.services.project_links.repositories_of(project_id))
+            frozenset(link.repository_id for link in self.services.project_links.repositories_of(project_id))
             if project_id is not None
             else frozenset[str]()
         )

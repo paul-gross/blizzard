@@ -1347,27 +1347,82 @@ class ProposalCitesOwnProject(HubQueryCheck):
 
 class SlugNotCurrentAndFormer(HubQueryCheck):
     """``hub:slug-not-current-and-former`` — taking a slug removes its former-slug row in the same write, so within a
-    tenant no slug is both some project's current slug and a former one."""
+    tenant no slug is both some record's current slug and a former one, for every slugged kind."""
+
+    #: Each slugged kind: its noun, record table, former-slug table, and the id column both carry.
+    KINDS: ClassVar[tuple[tuple[str, Table, Table, str], ...]] = (
+        ("project", hub.projects, hub.project_former_slugs, "project_id"),
+        ("repository", hub.repositories, hub.repository_former_slugs, "repository_id"),
+    )
 
     def run(self) -> list[Violation]:
-        projects, former = hub.projects, hub.project_former_slugs
-        holder = {
-            (row.tenant_id, row.slug): row.project_id
-            for row in self.rows(select(projects.c.tenant_id, projects.c.slug, projects.c.project_id))
-        }
-        return [
-            Violation(
-                "hub:slug-not-current-and-former",
-                f"tenant {row.tenant_id}: slug {row.slug} is project {holder[(row.tenant_id, row.slug)]}'s and "
-                f"project {row.project_id}'s former slug",
-            )
-            for row in self.rows(
-                select(former.c.tenant_id, former.c.slug, former.c.project_id).order_by(
-                    former.c.tenant_id, former.c.slug
+        violations: list[Violation] = []
+        for noun, records, former, id_column in self.KINDS:
+            holder = {
+                (row.tenant_id, row.slug): row[2]
+                for row in self.rows(select(records.c.tenant_id, records.c.slug, records.c[id_column]))
+            }
+            violations.extend(
+                Violation(
+                    "hub:slug-not-current-and-former",
+                    f"tenant {row.tenant_id}: slug {row.slug} is {noun} {holder[(row.tenant_id, row.slug)]}'s and "
+                    f"{noun} {row[2]}'s former slug",
                 )
+                for row in self.rows(
+                    select(former.c.tenant_id, former.c.slug, former.c[id_column]).order_by(
+                        former.c.tenant_id, former.c.slug
+                    )
+                )
+                if (row.tenant_id, row.slug) in holder
             )
-            if (row.tenant_id, row.slug) in holder
-        ]
+        return violations
+
+
+class RepositoryReferencesInTenant(HubQueryCheck):
+    """``hub:repository-references-in-tenant`` — every stored reference to a repository names one of the reference's
+    own tenant: its lifecycle facts, its links and their facts, the landings that name one, and the change rows keyed
+    by a repository id (a repository's and a project link's). The foreign keys say only that the repository exists,
+    not whose it is, so only a read can show a row filed under another tenant's repository."""
+
+    #: Each referring table, its key column for a message, and its column naming the repository.
+    REFERRING: ClassVar[tuple[tuple[Table, str, str], ...]] = (
+        (hub.repository_lifecycle_facts, "id", "repository_id"),
+        (hub.project_repository_links, "project_id", "repository_id"),
+        (hub.project_repository_link_facts, "id", "repository_id"),
+        (hub.delivery_repo_landed, "id", "repository_id"),
+    )
+
+    def run(self) -> list[Violation]:
+        repositories = hub.repositories
+        tenant_of = {
+            row.repository_id: row.tenant_id
+            for row in self.rows(select(repositories.c.repository_id, repositories.c.tenant_id))
+        }
+        violations: list[Violation] = []
+        for table, key, column in self.REFERRING:
+            query = select(table.c[key], table.c.tenant_id, table.c[column]).where(table.c[column].is_not(None))
+            violations.extend(
+                self._violation(table.name, row[0], row.tenant_id, row[2])
+                for row in self.rows(query.order_by(table.c[key]))
+                if tenant_of.get(row[2]) != row.tenant_id
+            )
+        changes = hub.config_changes
+        keyed = select(changes.c.id, changes.c.tenant_id, changes.c.record_key).where(
+            changes.c.record_kind.in_(("repository", "project_repository_link"))
+        )
+        violations.extend(
+            self._violation("config_changes", row.id, row.tenant_id, row.record_key)
+            for row in self.rows(keyed.order_by(changes.c.id))
+            if tenant_of.get(row.record_key) != row.tenant_id
+        )
+        return violations
+
+    @staticmethod
+    def _violation(table: str, key: object, tenant: str, repository_id: str) -> Violation:
+        return Violation(
+            "hub:repository-references-in-tenant",
+            f"{table} row {key} of tenant {tenant} names repository {repository_id}, not a repository of its tenant",
+        )
 
 
 def _earliest_links(check: HubQueryCheck, facts: Table, name: str) -> dict[tuple[str, str], datetime]:
@@ -1432,26 +1487,26 @@ class LandedRepositoryLinked(HubQueryCheck):
     """``hub:landed-repository-linked`` — every per-repository landing that names its repository record names one
     the chunk's project had linked when the landing was written, as the link's facts answer. A link unlinked while
     the landing step ran still answers: the step resolved its repositories while linked. A landing naming no
-    repository was written before the name was recorded and is not judged."""
+    repository was written before the record was recorded and is not judged."""
 
     def run(self) -> list[Violation]:
         chunks, landed = hub.chunks, hub.delivery_repo_landed
         project_of = {row.chunk_id: row.project_id for row in self.rows(select(chunks.c.chunk_id, chunks.c.project_id))}
-        linked = _earliest_links(self, hub.project_repository_link_facts, "repository_name")
+        linked = _earliest_links(self, hub.project_repository_link_facts, "repository_id")
         violations: list[Violation] = []
         for row in self.rows(
-            select(landed.c.id, landed.c.chunk_id, landed.c.repo, landed.c.repository_name, landed.c.landed_at)
-            .where(landed.c.repository_name.is_not(None))
+            select(landed.c.id, landed.c.chunk_id, landed.c.repo, landed.c.repository_id, landed.c.landed_at)
+            .where(landed.c.repository_id.is_not(None))
             .order_by(landed.c.id)
         ):
             project_id = project_of.get(row.chunk_id)
-            since = linked.get((project_id, row.repository_name)) if project_id is not None else None
+            since = linked.get((project_id, row.repository_id)) if project_id is not None else None
             if since is None or since > row.landed_at:
                 violations.append(
                     Violation(
                         "hub:landed-repository-linked",
                         f"chunk {row.chunk_id} of {_project_label(project_id)} landed {row.repo} in repository "
-                        f"{row.repository_name}, which its project had not linked by then",
+                        f"{row.repository_id}, which its project had not linked by then",
                     )
                 )
         return violations
@@ -1493,6 +1548,7 @@ class HubInvariants:
                 ProposalCitesOwnProject(conn),
                 WorkItemProjectInTenant(conn),
                 SlugNotCurrentAndFormer(conn),
+                RepositoryReferencesInTenant(conn),
                 ChunkSourcesLinked(conn),
                 LandedRepositoryLinked(conn),
             )

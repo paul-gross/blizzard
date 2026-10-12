@@ -16,6 +16,16 @@ SLUG_MAX = 64
 NAME_MAX = 128
 
 
+_RUN_OUTSIDE_ALPHABET = re.compile(r"[^a-z0-9]+")
+
+
+def derive_slug(raw: str, *, fallback: str) -> str:
+    """The slug closest to ``raw``: lowercased, each run outside ``[a-z0-9]`` collapsed to one hyphen, trimmed of
+    hyphens and cut to :data:`SLUG_MAX`; ``fallback`` when nothing is left."""
+    derived = _RUN_OUTSIDE_ALPHABET.sub("-", raw.lower()).strip("-")[:SLUG_MAX].strip("-")
+    return derived or fallback
+
+
 @domain_model
 @dataclass(frozen=True)
 class Slug:

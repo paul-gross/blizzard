@@ -21,7 +21,7 @@ from blizzard.hub.domain.config.changes import ChangeOp, ConfigChange
 from blizzard.hub.domain.config.repositories import (
     ConfiguredRepository,
     RepositoryCoordinateTaken,
-    RepositoryNameTaken,
+    RepositorySlugTaken,
 )
 from blizzard.hub.domain.config.work_sources import (
     ConfigFieldError,
@@ -48,7 +48,7 @@ _REFUSALS = (
     ConfigRevisionConflict,
     WorkSourceNameTaken,
     WorkSourceLocatorTaken,
-    RepositoryNameTaken,
+    RepositorySlugTaken,
     RepositoryCoordinateTaken,
     RoutineNameTakenError,
     ScopeSlugTakenError,
@@ -69,7 +69,7 @@ def _taken(record: object) -> Exception:
     if isinstance(record, SourceLink | RepositoryLink):
         return ConfigRevisionConflict(record.LABEL, f"{record.project_id}/{record.target()}", current=record.revision)
     assert isinstance(record, ConfiguredRepository)
-    return RepositoryNameTaken(record.name)
+    return RepositorySlugTaken(record.slug)
 
 
 class _DryRunRollback(Exception):
@@ -149,7 +149,7 @@ class ConfigApplyStore:
                 change=change,
             )
         else:
-            repository_writes.update_record(conn, record, from_revision, change)
+            repository_writes.update_record(conn, record, from_revision, None, change)
 
 
 def _run_scope(

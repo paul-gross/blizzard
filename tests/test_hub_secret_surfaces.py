@@ -146,7 +146,7 @@ def test_an_active_repository_refuses_its_secret_s_retire_and_shows_under_used_b
     created = client.post(
         "/api/repositories",
         json={
-            "name": "blizzard",
+            "slug": "blizzard",
             "forge_api_url": "https://api.github.com",
             "owner": "acme",
             "repo": "blizzard",

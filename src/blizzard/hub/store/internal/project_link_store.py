@@ -18,6 +18,7 @@ from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.config.changes import ConfigChange
+from blizzard.hub.domain.config.repositories import RepositoryId
 from blizzard.hub.domain.config.work_sources import ConfigRevisionConflict, is_built_in
 from blizzard.hub.domain.projects.links import IWriteProjectLinks, RepositoryLink, SourceLink
 from blizzard.hub.domain.projects.model import ProjectId
@@ -46,7 +47,7 @@ class _Kind:
 
 
 _SOURCES = _Kind(project_source_links, project_source_link_facts, "source_name", "source link")
-_REPOSITORIES = _Kind(project_repository_links, project_repository_link_facts, "repository_name", "repository link")
+_REPOSITORIES = _Kind(project_repository_links, project_repository_link_facts, "repository_id", "repository link")
 
 #: The ``keyed_locks`` namespace of one project's source links, keyed by the project's id. Every source link or
 #: unlink takes its project's key, and an ingest takes the key of the project it mints into before its pointers'
@@ -193,7 +194,7 @@ class ProjectLinkStore:
         return link
 
     def create_repository_link(self, link: RepositoryLink, *, change: ConfigChange) -> RepositoryLink:
-        self._create("create_repository_link", _REPOSITORIES, link.project_id, link.repository_name, change)
+        self._create("create_repository_link", _REPOSITORIES, link.project_id, link.repository_id, change)
         return link
 
     def record_repository_link(
@@ -203,7 +204,7 @@ class ProjectLinkStore:
             "record_repository_link",
             _REPOSITORIES,
             link.project_id,
-            link.repository_name,
+            link.repository_id,
             link.linked,
             link.revision,
             from_revision,
@@ -250,12 +251,12 @@ class ProjectLinkStore:
         revision, linked = found
         return SourceLink(project_id=project_id, source_name=source_name, revision=revision, linked=linked)
 
-    def repository_link(self, project_id: ProjectId, repository_name: str) -> RepositoryLink | None:
-        found = self._stored("repository_link", _REPOSITORIES, project_id, repository_name)
+    def repository_link(self, project_id: ProjectId, repository_id: RepositoryId) -> RepositoryLink | None:
+        found = self._stored("repository_link", _REPOSITORIES, project_id, repository_id)
         if found is None:
             return None
         revision, linked = found
-        return RepositoryLink(project_id=project_id, repository_name=repository_name, revision=revision, linked=linked)
+        return RepositoryLink(project_id=project_id, repository_id=repository_id, revision=revision, linked=linked)
 
     def sources_of(self, project_id: ProjectId) -> list[SourceLink]:
         return [
@@ -265,7 +266,7 @@ class ProjectLinkStore:
 
     def repositories_of(self, project_id: ProjectId) -> list[RepositoryLink]:
         return [
-            RepositoryLink(project_id=project_id, repository_name=name, revision=revision)
+            RepositoryLink(project_id=project_id, repository_id=RepositoryId(name), revision=revision)
             for name, revision in self._standing_of("repositories_of", _REPOSITORIES, project_id)
         ]
 

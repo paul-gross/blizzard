@@ -27,13 +27,16 @@ class RepoListing(Listing):
     empty = "no repositories yet"
 
     def line(self, row: Any) -> str:
-        return f"{row['name']}  r{row['revision']}  {_state(row)}  {row['owner']}/{row['repo']}  {row['base_branch']}"
+        return (
+            f"{row['slug']}  {row['name']}  {row['repository_id']}  r{row['revision']}  {_state(row)}  "
+            f"{row['owner']}/{row['repo']}  {row['base_branch']}"
+        )
 
 
-def _refusals(name: str) -> dict[int, str]:
+def _refusals(repository: str) -> dict[int, str]:
     return {
-        404: f"unknown repository {name}",
-        409: f"repository {name} cannot be changed",
+        404: f"unknown repository {repository}",
+        409: f"repository {repository} cannot be changed",
         422: "invalid repository",
     }
 
@@ -44,30 +47,40 @@ def repo_group() -> None:
 
 
 @repo_group.command("create", cls=FleetCommand)
-@click.argument("name")
+@click.argument("slug")
+@click.option("--name", default=None, help="The repository's display name (default: SLUG).")
 @click.option("--forge-api-url", "forge_api_url", required=True, help="The forge's API origin, an http(s) URL.")
 @click.option("--owner", required=True, help="The repository's owner on the forge.")
 @click.option("--repo", "repo", required=True, help="The repository's name on the forge.")
 @click.option("--base-branch", "base_branch", required=True, help="The branch work lands on.")
 @click.option("--secret", "secret", required=True, help="The stored secret holding the forge token.")
 def repo_create(
-    cli: CliContext, name: str, forge_api_url: str, owner: str, repo: str, base_branch: str, secret: str
+    cli: CliContext,
+    slug: str,
+    name: str | None,
+    forge_api_url: str,
+    owner: str,
+    repo: str,
+    base_branch: str,
+    secret: str,
 ) -> None:
-    """Add repository NAME at revision 1.
+    """Add repository SLUG at revision 1, named NAME (default: SLUG).
 
-    Refused when the name or the forge, owner and repo are already taken — a retired repository keeps its
-    claim — or when the secret is missing or retired. The hub resolves a chunk's commits against the record
-    on its next deliver."""
+    Refused when SLUG is another repository's current slug, when the forge, owner and repo are already taken — a
+    retired repository keeps its claim — or when the secret is missing or retired. The hub resolves a chunk's
+    commits against the record on its next deliver."""
     body = {
-        "name": name,
+        "slug": slug,
+        "name": name if name is not None else slug,
         "forge_api_url": forge_api_url,
         "owner": owner,
         "repo": repo,
         "base_branch": base_branch,
         "secret_name": secret,
     }
-    resp = cli.post("/api/repositories", "POST /repositories", json_body=body, on_status=_refusals(name), door=True)
-    cli.show_lines(resp.json(), f"repository {name} created at revision 1")
+    resp = cli.post("/api/repositories", "POST /repositories", json_body=body, on_status=_refusals(slug), door=True)
+    out = resp.json()
+    cli.show_lines(out, f"repository {out['slug']} created at revision 1 — id {out['repository_id']}")
 
 
 @repo_group.command("list", cls=FleetCommand)
@@ -75,22 +88,26 @@ def repo_create(
     "--include-retired", "include_retired", is_flag=True, default=False, help="Also list retired repositories."
 )
 def repo_list(cli: CliContext, include_retired: bool) -> None:
-    """List every repository — name, revision, state, owner/repo, base branch."""
+    """List every repository — slug, name, id, revision, state, owner/repo, base branch."""
     params = {"include_retired": "true"} if include_retired else None
     rows = cli.get("/api/repositories", "GET /repositories", params=params).json()["repositories"]
     cli.show(rows, RepoListing(rows))
 
 
 @repo_group.command("show", cls=FleetCommand)
-@click.argument("name")
-def repo_show(cli: CliContext, name: str) -> None:
-    """Show NAME's fields, revision, and who created it and when."""
+@click.argument("repository")
+def repo_show(cli: CliContext, repository: str) -> None:
+    """Show REPOSITORY — named by its id, its slug, or a slug it has left — with its fields, revision, and who created
+    it and when."""
     body = cli.get(
-        f"/api/repositories/{name}", "GET /repositories/{name}", on_status={404: f"unknown repository {name}"}
+        f"/api/repositories/{repository}",
+        "GET /repositories/{repository}",
+        on_status={404: f"unknown repository {repository}"},
     ).json()
     cli.show_lines(
         body,
-        f"{name}  revision {body['revision']}  {_state(body)}",
+        f"{body['slug']}  {body['name']}  revision {body['revision']}  {_state(body)}",
+        f"id {body['repository_id']}",
         f"forge_api_url {body['forge_api_url']}  {body['owner']}/{body['repo']}",
         f"base_branch {body['base_branch']}  secret {body['secret_name']}",
         f"created {body['created_at']} by {body['created_by']}",
@@ -98,7 +115,9 @@ def repo_show(cli: CliContext, name: str) -> None:
 
 
 @repo_group.command("edit", cls=FleetCommand)
-@click.argument("name")
+@click.argument("repository")
+@click.option("--slug", default=None, help="The new slug; the one it leaves keeps naming the repository.")
+@click.option("--name", default=None, help="The new display name.")
 @click.option("--forge-api-url", "forge_api_url", default=None, help="The new forge API origin.")
 @click.option("--owner", default=None, help="The new owner.")
 @click.option("--repo", "repo", default=None, help="The new repository name on the forge.")
@@ -107,7 +126,9 @@ def repo_show(cli: CliContext, name: str) -> None:
 @_IF_MATCH
 def repo_edit(
     cli: CliContext,
-    name: str,
+    repository: str,
+    slug: str | None,
+    name: str | None,
     forge_api_url: str | None,
     owner: str | None,
     repo: str | None,
@@ -115,11 +136,14 @@ def repo_edit(
     secret: str | None,
     if_match: int | None,
 ) -> None:
-    """Change only the fields given on NAME; every other field keeps its value.
+    """Change only the fields given on REPOSITORY; every other field keeps its value.
 
-    A change that leaves every field as it is writes nothing and keeps the revision. Refused when
-    --if-match names a stale revision."""
+    A slug the repository leaves keeps naming it until another repository takes it. A change that leaves every field
+    as it is writes nothing and keeps the revision. Refused when the new slug is another repository's, or --if-match
+    names a stale revision."""
     given = {
+        "slug": slug,
+        "name": name,
         "forge_api_url": forge_api_url,
         "owner": owner,
         "repo": repo,
@@ -130,40 +154,40 @@ def repo_edit(
     if not body:
         raise click.UsageError("nothing to change — give a field to set")
     resp = cli.patch(
-        f"/api/repositories/{name}",
-        "PATCH /repositories/{name}",
+        f"/api/repositories/{repository}",
+        "PATCH /repositories/{repository}",
         json_body=body,
-        on_status=_refusals(name),
+        on_status=_refusals(repository),
         if_match=if_match,
         door=True,
     )
     out = resp.json()
-    cli.show_lines(out, f"repository {name} is at revision {out['revision']}")
+    cli.show_lines(out, f"repository {out['slug']} is at revision {out['revision']}")
 
 
 @repo_group.command("retire", cls=FleetCommand)
-@click.argument("name")
+@click.argument("repository")
 @_IF_MATCH
-def repo_retire(cli: CliContext, name: str, if_match: int | None) -> None:
-    """Retire NAME: it leaves the default list and keeps its coordinate, so no other repository takes it."""
-    _set_lifecycle(cli, name, "retire", if_match)
+def repo_retire(cli: CliContext, repository: str, if_match: int | None) -> None:
+    """Retire REPOSITORY: it leaves the default list and keeps its coordinate, so no other repository takes it."""
+    _set_lifecycle(cli, repository, "retire", if_match)
 
 
 @repo_group.command("enable", cls=FleetCommand)
-@click.argument("name")
+@click.argument("repository")
 @_IF_MATCH
-def repo_enable(cli: CliContext, name: str, if_match: int | None) -> None:
-    """Re-enable a retired NAME. Refused while its secret is retired."""
-    _set_lifecycle(cli, name, "enable", if_match)
+def repo_enable(cli: CliContext, repository: str, if_match: int | None) -> None:
+    """Re-enable a retired REPOSITORY. Refused while its secret is retired."""
+    _set_lifecycle(cli, repository, "enable", if_match)
 
 
-def _set_lifecycle(cli: CliContext, name: str, verb: str, if_match: int | None) -> None:
+def _set_lifecycle(cli: CliContext, repository: str, verb: str, if_match: int | None) -> None:
     resp = cli.post(
-        f"/api/repositories/{name}/{verb}",
-        f"POST /repositories/{{name}}/{verb}",
-        on_status=_refusals(name),
+        f"/api/repositories/{repository}/{verb}",
+        f"POST /repositories/{{repository}}/{verb}",
+        on_status=_refusals(repository),
         if_match=if_match,
         door=True,
     )
     body = resp.json()
-    cli.show_lines(body, f"repository {name} is now {_state(body)} at revision {body['revision']}")
+    cli.show_lines(body, f"repository {body['slug']} is now {_state(body)} at revision {body['revision']}")

@@ -34,9 +34,9 @@ class Door(StrEnum):
 
 
 class RecordKind(StrEnum):
-    """The kind of configured record a change row names. A project's ``record_key`` is its id, never its slug; a
-    project link's is the linked source's or repository's name. Linking, unlinking and re-linking are ``create``,
-    ``retire`` and ``enable``."""
+    """The kind of configured record a change row names. A project's and a repository's ``record_key`` is its id,
+    never its slug; a project link's is the linked source's name or repository's id. Linking, unlinking and re-linking
+    are ``create``, ``retire`` and ``enable``."""
 
     WORK_SOURCE = "work_source"
     SECRET = "secret"
@@ -176,13 +176,15 @@ class ConfigChange:
 @domain_model
 @dataclass(frozen=True)
 class RecordRef:
-    """A configured record named by kind and key."""
+    """A configured record named by kind and key; ``label`` is its current slug for a slugged kind, whose key is its
+    id, and ``None`` for a kind keyed by its name."""
 
     kind: RecordKind
     key: str
+    label: str | None = None
 
     def __str__(self) -> str:
-        return f"{self.kind.value} {self.key}"
+        return f"{self.kind.value} {self.label or self.key}"
 
 
 class IReadConfigChanges(Protocol):

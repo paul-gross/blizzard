@@ -1,16 +1,19 @@
 """Repository records: the stored shape, validation, sparse merge, and the seams.
 
-Every field is required, so an edit carrying ``None`` on any field is refused naming it."""
+A repository has the shape a project has: an immutable id every stored reference holds, a tenant-unique renameable slug
+whose former values keep resolving until another record claims them, and a free display name. Every field is required,
+so an edit carrying ``None`` on any field is refused naming it."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime
 from enum import StrEnum
-from typing import ClassVar, Protocol
+from typing import ClassVar, NewType, Protocol
 from urllib.parse import urlparse
 
+from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.repo_ref import RepoRef
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.config.changes import (
@@ -25,16 +28,23 @@ from blizzard.hub.domain.config.changes import (
     Verdict,
 )
 from blizzard.hub.domain.config.work_sources import ConfigFieldError, ConfigRevisionConflict
+from blizzard.hub.domain.kernel.id_or_slug import IIdOrSlugLookup, SluggedKind
+from blizzard.hub.domain.kernel.id_or_slug import resolve as resolve_reference
+from blizzard.hub.domain.kernel.slugs import NAME_MAX, SLUG_MAX, DisplayName, Slug
 from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
 
-#: The mutable fields, in the order a diff lists them.
+RepositoryId = NewType("RepositoryId", str)
+
+#: The mutable forge fields, in the order a diff lists them.
 _FIELDS = ("forge_api_url", "owner", "repo", "base_branch", "secret_name")
+#: Every field a diff lists: the record's own handle and label, then the forge fields.
+_DIFF_FIELDS = ("slug", "name", *_FIELDS)
 
 
-class RepositoryNameTaken(Exception):
-    def __init__(self, name: str) -> None:
-        super().__init__(f"repository {name} already exists")
-        self.name = name
+class RepositorySlugTaken(Exception):
+    def __init__(self, slug: str) -> None:
+        super().__init__(f"repository {slug} already exists")
+        self.slug = slug
 
 
 class RepositoryCoordinateTaken(Exception):
@@ -54,6 +64,46 @@ class RepositorySecretUnavailable(ConfigFieldError):
 
 @domain_model
 @dataclass(frozen=True)
+class RepositorySlug(Slug):
+    """A repository's slug, in the shared slug grammar."""
+
+    @classmethod
+    def parse(cls, raw: str) -> RepositorySlug:
+        """:class:`ConfigFieldError` on ``slug`` when ``raw`` is outside the slug alphabet or length."""
+        slug = cls.of(raw)
+        if slug is None:
+            raise ConfigFieldError(
+                "slug",
+                f"must be 1-{SLUG_MAX} lowercase letters, digits and single inner hyphens, got {raw!r}",
+            )
+        return slug
+
+
+@domain_model
+@dataclass(frozen=True)
+class RepositoryName(DisplayName):
+    """A repository's display name, in the shared display-name grammar."""
+
+    @classmethod
+    def parse(cls, raw: str) -> RepositoryName:
+        """:class:`ConfigFieldError` on ``name`` when ``raw`` is blank, too long, or padded."""
+        name = cls.of(raw)
+        if name is None:
+            raise ConfigFieldError(
+                "name", f"must be 1-{NAME_MAX} characters with no leading or trailing whitespace, got {raw!r}"
+            )
+        return name
+
+
+#: Repositories as the shared id-or-slug resolution sees them.
+REPOSITORY_KIND = SluggedKind(IdPrefix.REPOSITORY, RepositoryId, RepositorySlug.of)
+
+#: The reads a resolution needs; :class:`IReadRepositoryRecordRepository` is one.
+type IRepositoryLookup = IIdOrSlugLookup[RepositoryId, RepositorySlug, ConfiguredRepository]
+
+
+@domain_model
+@dataclass(frozen=True)
 class RepositoryFields:
     """The mutable fields of a repository, by wire name."""
 
@@ -67,13 +117,16 @@ class RepositoryFields:
 @domain_model
 @dataclass(frozen=True)
 class ConfiguredRepository:
-    """A stored repository. ``retired`` derives from the newest lifecycle fact.
+    """A stored repository. ``retired`` derives from the newest lifecycle fact. Nothing references a repository by its
+    ``slug`` or ``name``; a repository's change rows are keyed by its id.
 
     Each verb returns the record to write with the :class:`ConfigChange` committed beside it,
     or ``None`` when the verb changes nothing and so writes nothing."""
 
     TRANSITIONS: ClassVar[Mapping[RecordState, Mapping[ChangeOp, Verdict]]] = FIELDED_RECORD_TRANSITIONS
 
+    repository_id: RepositoryId
+    slug: str
     name: str
     fields: RepositoryFields
     revision: int
@@ -85,17 +138,35 @@ class ConfiguredRepository:
 
     @classmethod
     def new(
-        cls, name: str, fields: RepositoryFields, ctx: ChangeContext, *, at: datetime
+        cls,
+        slug: str,
+        name: str | None,
+        fields: RepositoryFields,
+        ctx: ChangeContext,
+        *,
+        at: datetime,
+        repository_id: RepositoryId | None = None,
     ) -> tuple[ConfiguredRepository, ConfigChange]:
-        validate_name(name)
+        """A new record at revision 1; a ``name`` of ``None`` is the slug. ``repository_id`` is minted when not given —
+        a document apply mints the id of a record it creates before it plans the links to it."""
+        parsed = RepositorySlug.parse(slug)
+        label = parsed.value if name is None else RepositoryName.parse(name).value
         validate_fields(fields)
-        record = cls(name=name, fields=fields, revision=1, created_at=at, created_by=ctx.actor)
-        return record, ConfigChange.of(ctx, RecordKind.REPOSITORY, name, 1, ChangeOp.CREATE, diff(None, fields), at)
+        record = cls(
+            repository_id=repository_id or RepositoryId(Id.mint_at(IdPrefix.REPOSITORY, at).value),
+            slug=parsed.value,
+            name=label,
+            fields=fields,
+            revision=1,
+            created_at=at,
+            created_by=ctx.actor,
+        )
+        return record, record._change(ctx, ChangeOp.CREATE, diff(None, record), at)
 
     def require_revision(self, if_match: int | None) -> None:
         """:class:`ConfigRevisionConflict` when ``if_match`` names a revision other than the stored one."""
         if if_match is not None and if_match != self.revision:
-            raise ConfigRevisionConflict("repository", self.name, current=self.revision)
+            raise ConfigRevisionConflict("repository", self.repository_id, current=self.revision)
 
     def edit(
         self, edit: RepositoryEdit, ctx: ChangeContext, *, if_match: int | None, at: datetime
@@ -103,15 +174,21 @@ class ConfiguredRepository:
         """Apply a sparse edit, legal from either state. The revision check comes first, even
         for an edit that changes nothing; an empty diff never re-validates the stored fields."""
         self.require_revision(if_match)
-        merged = merge(self.fields, edit)
-        changes = diff(self.fields, merged)
+        slug, name = merge_labels(self, edit)
+        edited = replace(self, slug=slug, name=name, fields=merge(self.fields, edit))
+        changes = diff(self, edited)
         if not changes:
             return None
-        validate_fields(merged)
-        edited = replace(self, fields=merged, revision=self.revision + 1)
-        return edited, ConfigChange.of(
-            ctx, RecordKind.REPOSITORY, self.name, edited.revision, ChangeOp.EDIT, changes, at
-        )
+        validate_fields(edited.fields)
+        edited = replace(edited, revision=self.revision + 1)
+        return edited, edited._change(ctx, ChangeOp.EDIT, changes, at)
+
+    def ref(self) -> RepositoryRef:
+        return RepositoryRef(self.repository_id, self.slug)
+
+    def slug_left_for(self, edited: ConfiguredRepository) -> str | None:
+        """The slug this record leaves when ``edited`` replaces it — ``None`` when the slug stays."""
+        return self.slug if edited.slug != self.slug else None
 
     def set_retired(
         self, retired: bool, ctx: ChangeContext, *, if_match: int | None, at: datetime
@@ -123,7 +200,19 @@ class ConfiguredRepository:
             return None
         moved = replace(self, revision=self.revision + 1, retired=retired)
         flip = (FieldChange(RETIRED_FIELD, self.retired, retired),)
-        return moved, ConfigChange.of(ctx, RecordKind.REPOSITORY, self.name, moved.revision, op, flip, at)
+        return moved, moved._change(ctx, op, flip, at)
+
+    def _change(self, ctx: ChangeContext, op: ChangeOp, changes: tuple[FieldChange, ...], at: datetime) -> ConfigChange:
+        return ConfigChange.of(ctx, RecordKind.REPOSITORY, self.repository_id, self.revision, op, changes, at)
+
+
+@domain_model
+@dataclass(frozen=True)
+class RepositoryRef:
+    """A repository as a reference resolves it: its id, and the slug it currently answers to."""
+
+    repository_id: RepositoryId
+    slug: str
 
 
 @domain_model
@@ -131,6 +220,8 @@ class ConfiguredRepository:
 class RepositoryEdit:
     """A sparse edit: :data:`UNSET` leaves a field; ``None`` is refused on every field."""
 
+    slug: str | None | UnsetType = UNSET
+    name: str | None | UnsetType = UNSET
     forge_api_url: str | None | UnsetType = UNSET
     owner: str | None | UnsetType = UNSET
     repo: str | None | UnsetType = UNSET
@@ -142,13 +233,14 @@ class RepositoryEdit:
 @dataclass(frozen=True)
 class ResolvedRepository:
     """The repository record one commit pointer resolved to — its forge, owner, base branch and
-    secret, and the record's own ``name``."""
+    secret, and the record's own id and current slug."""
 
     forge_api_url: str
     owner: str
     base_branch: str
     secret_name: str
     record: str = ""
+    slug: str = ""
 
     @property
     def target(self) -> tuple[str, str, str, str]:
@@ -188,13 +280,13 @@ class RepositoryOutcome(StrEnum):
 class RepositoryResolution:
     """The outcome of resolving a chunk's commit pointers. ``targets`` holds one resolved record per
     pointer, in origin order, exactly when ``outcome`` is :attr:`RepositoryOutcome.RESOLVED`;
-    ``qualified`` maps each origin's index to the ``owner/repo`` it resolved to, and ``names`` to
-    its repository record's name."""
+    ``qualified`` maps each origin's index to the ``owner/repo`` it resolved to, and ``records`` to
+    its repository record's id."""
 
     outcome: RepositoryOutcome
     targets: tuple[ResolvedRepository, ...] = ()
     qualified: tuple[str, ...] = ()
-    names: tuple[str, ...] = ()
+    records: tuple[str, ...] = ()
     detail: str = ""
 
     def agreed(self) -> ResolvedRepository | None:
@@ -228,8 +320,8 @@ def _standing(rows: list[ConfiguredRepository], minted_at: datetime) -> list[Con
 
 
 def _linked(rows: list[ConfiguredRepository], linked: frozenset[str] | None) -> list[ConfiguredRepository]:
-    """``rows`` narrowed to the record names in ``linked``; every row when ``linked`` is ``None``."""
-    return rows if linked is None else [row for row in rows if row.name in linked]
+    """``rows`` narrowed to the record ids in ``linked``; every row when ``linked`` is ``None``."""
+    return rows if linked is None else [row for row in rows if row.repository_id in linked]
 
 
 def _label(origin: CommitOrigin) -> str:
@@ -249,21 +341,21 @@ def _refusal(
     unresolved, an ambiguity naming the records it is between."""
     label = _label(origin)
     if found:
-        names = ", ".join(sorted(row.name for row in found))
+        slugs = ", ".join(sorted(row.slug for row in found))
         return RepositoryResolution(
-            RepositoryOutcome.UNRESOLVED, detail=f"{label} is ambiguous between repository records {names}"
+            RepositoryOutcome.UNRESOLVED, detail=f"{label} is ambiguous between repository records {slugs}"
         )
     tenant_wide = [] if linked is None else _candidates(origin, standing)
     if len(tenant_wide) == 1:
         return RepositoryResolution(
             RepositoryOutcome.NOT_LINKED,
-            detail=f"{label} resolves to repository record {tenant_wide[0].name}, which project {project} doesn't link",
+            detail=f"{label} resolves to repository record {tenant_wide[0].slug}, which project {project} doesn't link",
         )
     if tenant_wide:
-        names = ", ".join(sorted(row.name for row in tenant_wide))
+        slugs = ", ".join(sorted(row.slug for row in tenant_wide))
         return RepositoryResolution(
             RepositoryOutcome.UNRESOLVED,
-            detail=f"{label} is ambiguous between repository records {names}, none of which project {project} links",
+            detail=f"{label} is ambiguous between repository records {slugs}, none of which project {project} links",
         )
     return RepositoryResolution(RepositoryOutcome.UNRESOLVED, detail=f"no repository record stands for {label}")
 
@@ -298,12 +390,17 @@ def resolve_chunk_repositories(
         RepositoryOutcome.RESOLVED,
         targets=tuple(
             ResolvedRepository(
-                row.fields.forge_api_url, row.fields.owner, row.fields.base_branch, row.fields.secret_name, row.name
+                row.fields.forge_api_url,
+                row.fields.owner,
+                row.fields.base_branch,
+                row.fields.secret_name,
+                row.repository_id,
+                row.slug,
             )
             for row in picked
         ),
         qualified=tuple(f"{row.fields.owner}/{row.fields.repo}" for row in picked),
-        names=tuple(row.name for row in picked),
+        records=tuple(row.repository_id for row in picked),
     )
 
 
@@ -325,11 +422,6 @@ def resolve_repository(
     to date it by, so retired records never match."""
     found = _candidates(origin, _linked([row for row in rows if row.retired_at is None], linked))
     return found[0] if len(found) == 1 else None
-
-
-def validate_name(name: str) -> None:
-    if not name or not name.strip():
-        raise ConfigFieldError("name", "must not be blank")
 
 
 def validate_fields(fields: RepositoryFields) -> None:
@@ -355,30 +447,70 @@ def merge(current: RepositoryFields, edit: RepositoryEdit) -> RepositoryFields:
     return replace(current, **changes)  # type: ignore[arg-type]
 
 
-def diff(old: RepositoryFields | None, new: RepositoryFields) -> tuple[FieldChange, ...]:
+def merge_labels(current: ConfiguredRepository, edit: RepositoryEdit) -> tuple[str, str]:
+    """The slug and name ``current`` holds once ``edit`` applies; a set one is validated whether or not it differs,
+    and ``None`` is refused naming the field."""
+    return (
+        _merged_label("slug", current.slug, edit.slug, RepositorySlug.parse),
+        _merged_label("name", current.name, edit.name, RepositoryName.parse),
+    )
+
+
+def _merged_label(
+    field: str, held: str, value: str | None | UnsetType, parse: Callable[[str], Slug | DisplayName]
+) -> str:
+    if value is UNSET:
+        return held
+    if value is None:
+        raise ConfigFieldError(field, "must not be null")
+    return parse(value).value
+
+
+def diff(old: ConfiguredRepository | None, new: ConfiguredRepository) -> tuple[FieldChange, ...]:
     """The fields that differ, by wire name. With no ``old`` (a create), every field is
     listed against ``None``."""
     changes: list[FieldChange] = []
-    for name in _FIELDS:
-        new_value = getattr(new, name)
-        old_value = None if old is None else getattr(old, name)
+    for name in _DIFF_FIELDS:
+        new_value = _field(new, name)
+        old_value = None if old is None else _field(old, name)
         if old_value != new_value:
             changes.append(FieldChange(name, old_value, new_value))
     return tuple(changes)
 
 
+def _field(record: ConfiguredRepository, name: str) -> str:
+    return getattr(record if name in ("slug", "name") else record.fields, name)
+
+
 class IReadRepositoryRecordRepository(Protocol):
     """Read-only repository-record operations."""
 
-    def get(self, name: str) -> ConfiguredRepository | None: ...
+    def get(self, repository_id: RepositoryId) -> ConfiguredRepository | None: ...
 
-    def get_many(self, names: list[str]) -> dict[str, ConfiguredRepository]:
-        """Every named repository that exists, keyed by name (``bzh:bulk-reconstitution``)."""
+    def get_many(self, repository_ids: list[RepositoryId]) -> dict[RepositoryId, ConfiguredRepository]:
+        """Every named repository that exists, keyed by id (``bzh:bulk-reconstitution``)."""
         ...
 
     def list_all(self, *, include_retired: bool) -> list[ConfiguredRepository]:
-        """Ordered by name; retired repositories only when ``include_retired``."""
+        """Ordered by slug; retired repositories only when ``include_retired``."""
         ...
+
+    def get_by_slug(self, slug: RepositorySlug) -> ConfiguredRepository | None:
+        """The repository whose current slug is ``slug``."""
+        ...
+
+    def get_by_former_slug(self, slug: RepositorySlug) -> ConfiguredRepository | None:
+        """The repository that left ``slug``, while no repository holds it again."""
+        ...
+
+    def resolve(self, value: str) -> ConfiguredRepository | None:
+        """The repository an id or slug names (:func:`resolve_repository_reference`)."""
+        ...
+
+
+def resolve_repository_reference(value: str, repositories: IRepositoryLookup) -> ConfiguredRepository | None:
+    """The repository ``value`` names — an id, a current slug, or a slug it left — or ``None``."""
+    return resolve_reference(value, REPOSITORY_KIND, repositories)
 
 
 class IWriteRepositoryRecordRepository(IReadRepositoryRecordRepository, Protocol):
@@ -386,13 +518,19 @@ class IWriteRepositoryRecordRepository(IReadRepositoryRecordRepository, Protocol
     transaction as the record write."""
 
     def create(self, record: ConfiguredRepository, *, change: ConfigChange) -> ConfiguredRepository:
-        """Insert. :class:`RepositoryNameTaken` / :class:`RepositoryCoordinateTaken` on a
-        collision; :class:`RepositorySecretUnavailable` when the secret is missing or retired."""
+        """Insert, taking ``record.slug`` from any repository that left it. :class:`RepositorySlugTaken` /
+        :class:`RepositoryCoordinateTaken` on a collision; :class:`RepositorySecretUnavailable` when the secret is
+        missing or retired."""
         ...
 
-    def update(self, record: ConfiguredRepository, *, from_revision: int, change: ConfigChange) -> ConfiguredRepository:
+    def update(
+        self, record: ConfiguredRepository, *, from_revision: int, left_slug: str | None, change: ConfigChange
+    ) -> ConfiguredRepository:
         """Compare-and-set ``from_revision``, writing ``record``'s fields and revision;
-        :class:`ConfigRevisionConflict` when the stored revision has moved."""
+        :class:`ConfigRevisionConflict` when the stored revision has moved. When ``left_slug`` is set the slug moves in
+        the same transaction: the former-slug row holding the new slug is removed and ``left_slug`` becomes this
+        repository's former slug at ``change.recorded_at``. :class:`RepositorySlugTaken` when another repository holds
+        the new slug as its current one."""
         ...
 
     def record_lifecycle(

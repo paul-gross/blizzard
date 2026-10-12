@@ -13,6 +13,7 @@ import pytest
 from sqlalchemy import Boolean, Column, Engine, Integer, MetaData, String, Table, create_engine, insert
 from structlog import get_logger
 
+from blizzard.hub.domain.config.repositories import RepositoryId
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreErrorFactory
 from blizzard.hub.store.internal.chunk_queue_store import ChunkQueueStore
@@ -148,7 +149,9 @@ def _retirement_reads(engine: Engine) -> dict[str, object]:
         "scope": lambda: ScopeStore(store).retired_slugs(default_project(engine)),
         "graph": lambda: GraphStore(store).retired_graph_ids(),
         "repository": lambda: _read(store, lambda conn: _retirements(conn)),
-        "repository_bounded": lambda: _read(store, lambda conn: _retirements(conn, ["k1", "k2"])),
+        "repository_bounded": lambda: _read(
+            store, lambda conn: _retirements(conn, [RepositoryId("k1"), RepositoryId("k2")])
+        ),
         "work_source": lambda: _read(store, lambda conn: _retired_names(conn)),
         "work_source_bounded": lambda: _read(store, lambda conn: _retired_names(conn, ["k1", "k2"])),
     }

@@ -65,10 +65,11 @@ work is ingested from it, or when work lands in it.
   the one project every pointer's source is linked to; a source linked to several projects, or pointers whose sources
   are linked to different ones, answer `422 project_required`. A pointer whose source is not linked to the chunk's
   project answers `422 source_not_linked`, naming the source ([work-sources.md](./work-sources.md#ingesting-work-items)).
-- **A repository link** lets a project's chunks land in a repository. A `deliver` step resolves a chunk's commits only
-  against the repositories its project links; one that would resolve to a repository the project does not link refuses
-  the step as `repository-not-linked` ([repositories.md](./repositories.md#how-delivery-uses-a-record)). A repository
-  no project links receives nothing.
+- **A repository link** lets a project's chunks land in a repository, named by its id or its slug; the link holds the
+  repository's id, so it survives the slug changing ([repositories.md](./repositories.md#naming-a-repository)). A
+  `deliver` step resolves a chunk's commits only against the repositories its project links; one that would resolve to
+  a repository the project does not link refuses the step as `repository-not-linked`
+  ([repositories.md](./repositories.md#how-delivery-uses-a-record)). A repository no project links receives nothing.
 
 Unlinking retires the link: no new work is ingested through it, and the next `deliver` step no longer lands there. A
 step already running finishes. `link` relinks a link unlinked earlier.

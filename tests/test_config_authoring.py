@@ -35,8 +35,9 @@ from blizzard.hub.domain.config.repositories import (
     RepositoryCoordinateTaken,
     RepositoryEdit,
     RepositoryFields,
-    RepositoryNameTaken,
+    RepositoryId,
     RepositorySecretUnavailable,
+    RepositorySlugTaken,
 )
 from blizzard.hub.domain.config.secrets import SecretName, SecretReferenced
 from blizzard.hub.domain.config.work_sources import (
@@ -105,7 +106,7 @@ class _World:
         return record
 
     def repo(self, name: str = "demo") -> ConfiguredRepository:
-        record = self.repos.get(name)
+        record = self.repos.resolve(name)
         assert record is not None
         return record
 
@@ -319,19 +320,21 @@ def test_the_log_pages_newest_first_and_filters_by_record(world: _World) -> None
 
 
 def test_a_repository_create_records_the_diff_and_revision_one(world: _World) -> None:
-    created = world.authoring.create_repository("demo", _REPO, _CLI)
+    created = world.authoring.create_repository("demo", None, _REPO, _CLI)
 
     assert (created.revision, created.created_by, created.retired) == (1, "alice", False)
     assert world.repo() == created
     row = world.changes()[-1]
     assert (row.record_kind, row.record_key, row.op, row.revision, row.door) == (
         RecordKind.REPOSITORY,
-        "demo",
+        created.repository_id,
         ChangeOp.CREATE,
         1,
         Door.CLI,
     )
     assert {d.field: (d.old, d.new) for d in row.diff} == {
+        "slug": (None, "demo"),
+        "name": (None, "demo"),
         "forge_api_url": (None, "https://api.github.com"),
         "owner": (None, "acme"),
         "repo": (None, "demo"),
@@ -341,7 +344,7 @@ def test_a_repository_create_records_the_diff_and_revision_one(world: _World) ->
 
 
 def test_repository_edit_retire_and_enable_each_move_the_revision_and_append_one_row(world: _World) -> None:
-    record = world.authoring.create_repository("demo", _REPO, OP)
+    record = world.authoring.create_repository("demo", None, _REPO, OP)
     edited = world.authoring.edit_repository(record, RepositoryEdit(base_branch="main"), _CLI, if_match=1)
     retired = world.authoring.retire_repository(edited, _CLI)
     enabled = world.authoring.enable_repository(retired, _CLI)
@@ -359,7 +362,7 @@ def test_repository_edit_retire_and_enable_each_move_the_revision_and_append_one
 
 
 def test_a_retired_repository_reads_the_time_of_its_newest_retirement_and_an_enabled_one_none(world: _World) -> None:
-    record = world.authoring.create_repository("demo", _REPO, OP)
+    record = world.authoring.create_repository("demo", None, _REPO, OP)
     assert world.repo().retired_at is None
 
     retired = world.authoring.retire_repository(record, OP)
@@ -371,7 +374,7 @@ def test_a_retired_repository_reads_the_time_of_its_newest_retirement_and_an_ena
 
 
 def test_a_repository_write_that_changes_nothing_writes_nothing(world: _World) -> None:
-    record = world.authoring.create_repository("demo", _REPO, OP)
+    record = world.authoring.create_repository("demo", None, _REPO, OP)
     before = world.count()
 
     assert world.authoring.edit_repository(record, RepositoryEdit(owner="acme"), OP) == record
@@ -380,30 +383,32 @@ def test_a_repository_write_that_changes_nothing_writes_nothing(world: _World) -
 
 
 def test_a_stale_repository_revision_conflicts_and_writes_nothing(world: _World) -> None:
-    record = world.authoring.create_repository("demo", _REPO, OP)
+    record = world.authoring.create_repository("demo", None, _REPO, OP)
     world.authoring.edit_repository(record, RepositoryEdit(base_branch="main"), OP)
     before = world.count()
 
     with pytest.raises(ConfigRevisionConflict) as caught:
         world.authoring.edit_repository(record, RepositoryEdit(base_branch="dev"), OP)
     assert caught.value.current == 2
-    assert "repository demo" in str(caught.value)
+    assert f"repository {record.repository_id}" in str(caught.value)
     with pytest.raises(ConfigRevisionConflict):
         world.authoring.retire_repository(world.repo(), OP, if_match=1)
     assert world.count() == before
 
 
 def test_a_taken_repository_name_or_coordinate_is_refused_naming_the_holder(world: _World) -> None:
-    record = world.authoring.create_repository("demo", _REPO, OP)
+    record = world.authoring.create_repository("demo", None, _REPO, OP)
     world.authoring.retire_repository(record, OP)
     before = world.count()
 
-    with pytest.raises(RepositoryNameTaken):
-        world.authoring.create_repository("demo", _REPO, OP)
+    with pytest.raises(RepositorySlugTaken):
+        world.authoring.create_repository("demo", None, _REPO, OP)
     with pytest.raises(RepositoryCoordinateTaken) as caught:
-        world.authoring.create_repository("demo2", _REPO, OP)
+        world.authoring.create_repository("demo2", None, _REPO, OP)
     assert caught.value.holder == "demo"
-    other = world.authoring.create_repository("other", RepositoryFields(**{**_REPO.__dict__, "repo": "other"}), OP)
+    other = world.authoring.create_repository(
+        "other", None, RepositoryFields(**{**_REPO.__dict__, "repo": "other"}), OP
+    )
     with pytest.raises(RepositoryCoordinateTaken):
         world.authoring.edit_repository(other, RepositoryEdit(repo="demo"), OP)
     assert world.count() == before + 1
@@ -412,9 +417,11 @@ def test_a_taken_repository_name_or_coordinate_is_refused_naming_the_holder(worl
 def test_a_repository_with_a_missing_or_retired_secret_is_refused(world: _World) -> None:
     before = world.count()
     with pytest.raises(RepositorySecretUnavailable, match="unknown") as caught:
-        world.authoring.create_repository("demo", RepositoryFields(**{**_REPO.__dict__, "secret_name": "nope"}), OP)
+        world.authoring.create_repository(
+            "demo", None, RepositoryFields(**{**_REPO.__dict__, "secret_name": "nope"}), OP
+        )
     assert caught.value.field == "secret_name"
-    record = world.authoring.create_repository("demo", _REPO, OP)
+    record = world.authoring.create_repository("demo", None, _REPO, OP)
     retired = world.authoring.retire_repository(record, OP)
     secret = world.secrets.get("gh")
     assert secret is not None
@@ -430,14 +437,15 @@ def test_a_repository_with_a_missing_or_retired_secret_is_refused(world: _World)
 def test_an_active_repository_blocks_retiring_its_secret_until_it_is_retired(world: _World) -> None:
     source = world.authoring.create_work_source("demo", _FIELDS, OP)
     world.authoring.retire_work_source(source, OP)
-    record = world.authoring.create_repository("demo", _REPO, OP)
+    record = world.authoring.create_repository("demo", None, _REPO, OP)
     secret = world.secrets.get("gh")
     assert secret is not None
 
-    assert world.referrers.referrers_of(["gh"]) == {"gh": [RecordRef(RecordKind.REPOSITORY, "demo")]}
+    ref = RecordRef(RecordKind.REPOSITORY, record.repository_id, "demo")
+    assert world.referrers.referrers_of(["gh"]) == {"gh": [ref]}
     with pytest.raises(SecretReferenced) as caught:
         world.authoring.retire_secret(secret, OP)
-    assert caught.value.referrers == [RecordRef(RecordKind.REPOSITORY, "demo")]
+    assert caught.value.referrers == [ref]
 
     world.authoring.retire_repository(record, OP)
     assert world.referrers.referrers_of(["gh"]) == {"gh": []}
@@ -446,10 +454,13 @@ def test_an_active_repository_blocks_retiring_its_secret_until_it_is_retired(wor
 
 def test_referrers_union_every_kind_ordered_by_kind_then_key(world: _World) -> None:
     world.authoring.create_work_source("demo", _FIELDS, OP)
-    world.authoring.create_repository("demo", _REPO, OP)
+    repository = world.authoring.create_repository("demo", None, _REPO, OP)
 
     assert world.referrers.referrers_of(["gh"]) == {
-        "gh": [RecordRef(RecordKind.REPOSITORY, "demo"), RecordRef(RecordKind.WORK_SOURCE, "demo")]
+        "gh": [
+            RecordRef(RecordKind.REPOSITORY, repository.repository_id, "demo"),
+            RecordRef(RecordKind.WORK_SOURCE, "demo"),
+        ]
     }
 
 
@@ -466,14 +477,24 @@ def _source_declaration(name: str, locator: str, **stated: object) -> WorkSource
     )
 
 
-def _repo_declaration(name: str, **stated: object) -> RepositoryDeclaration:
-    return RepositoryDeclaration(name=name, fields=_REPO, edit=RepositoryEdit(**stated))  # type: ignore[arg-type]
+def _repo_declaration(slug: str, **stated: object) -> RepositoryDeclaration:
+    return RepositoryDeclaration(
+        slug=slug,
+        name=None,
+        fields=_REPO,
+        edit=RepositoryEdit(**stated),  # type: ignore[arg-type]
+        repository_id=RepositoryId(f"repo_{slug}"),
+    )
 
 
 def _apply(world: _World, declaration: ConfigDeclaration, ctx: ChangeContext = _APPLY, *, dry_run: bool = False):  # type: ignore[no-untyped-def]
     stored = StoredConfig(
         work_sources=world.sources.get_many([d.name for d in declaration.work_sources]),
-        repositories=world.repos.get_many([d.name for d in declaration.repositories]),
+        repositories={
+            r.slug: r
+            for r in world.repos.list_all(include_retired=True)
+            if r.slug in {d.slug for d in declaration.repositories}
+        },
         secrets=dict.fromkeys(declaration.secrets, RecordState.ACTIVE),
     )
     return world.authoring.apply(declaration, stored, ctx, dry_run=dry_run)
@@ -516,7 +537,7 @@ def test_a_dry_run_writes_nothing_and_returns_the_outcomes_of_the_real_apply(wor
     before = world.count()
     dry = _apply(world, _DECLARATION, replace(_APPLY, apply_id=None), dry_run=True)
     assert world.count() == before
-    assert world.sources.get("demo") is None and world.repos.get("demo") is None
+    assert world.sources.get("demo") is None and world.repos.resolve("demo") is None
     assert _apply(world, _DECLARATION) == dry
 
 

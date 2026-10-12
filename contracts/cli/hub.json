@@ -2095,7 +2095,7 @@
               "type": "choice"
             },
             {
-              "help": "Only changes to the record with this name.",
+              "help": "Only changes to the record with this name; a project or repository, by its id or slug.",
               "hidden": false,
               "kind": "option",
               "name": "key",
@@ -5863,16 +5863,28 @@
     "repo": {
       "commands": {
         "create": {
-          "help": "Add repository NAME at revision 1.\n\nRefused when the name or the forge, owner and repo are already taken \u2014 a retired repository keeps its\nclaim \u2014 or when the secret is missing or retired. The hub resolves a chunk's commits against the record\non its next deliver.",
+          "help": "Add repository SLUG at revision 1, named NAME (default: SLUG).\n\nRefused when SLUG is another repository's current slug, when the forge, owner and repo are already taken \u2014 a\nretired repository keeps its claim \u2014 or when the secret is missing or retired. The hub resolves a chunk's\ncommits against the record on its next deliver.",
           "params": [
             {
               "hidden": false,
               "kind": "argument",
-              "name": "name",
+              "name": "slug",
               "opts": [
-                "name"
+                "slug"
               ],
               "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The repository's display name (default: SLUG).",
+              "hidden": false,
+              "kind": "option",
+              "name": "name",
+              "opts": [
+                "--name"
+              ],
+              "required": false,
               "secondary_opts": [],
               "type": "text"
             },
@@ -5974,19 +5986,43 @@
             }
           ],
           "path": "hub repo create",
-          "short_help": "Add repository NAME at revision 1."
+          "short_help": "Add repository SLUG at revision 1, named NAME (default: SLUG)."
         },
         "edit": {
-          "help": "Change only the fields given on NAME; every other field keeps its value.\n\nA change that leaves every field as it is writes nothing and keeps the revision. Refused when\n--if-match names a stale revision.",
+          "help": "Change only the fields given on REPOSITORY; every other field keeps its value.\n\nA slug the repository leaves keeps naming it until another repository takes it. A change that leaves every field\nas it is writes nothing and keeps the revision. Refused when the new slug is another repository's, or --if-match\nnames a stale revision.",
           "params": [
             {
               "hidden": false,
               "kind": "argument",
-              "name": "name",
+              "name": "repository",
               "opts": [
-                "name"
+                "repository"
               ],
               "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The new slug; the one it leaves keeps naming the repository.",
+              "hidden": false,
+              "kind": "option",
+              "name": "slug",
+              "opts": [
+                "--slug"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The new display name.",
+              "hidden": false,
+              "kind": "option",
+              "name": "name",
+              "opts": [
+                "--name"
+              ],
+              "required": false,
               "secondary_opts": [],
               "type": "text"
             },
@@ -6100,17 +6136,17 @@
             }
           ],
           "path": "hub repo edit",
-          "short_help": "Change only the fields given on NAME; every other field keeps its value."
+          "short_help": "Change only the fields given on REPOSITORY; every other field keeps its value."
         },
         "enable": {
-          "help": "Re-enable a retired NAME. Refused while its secret is retired.",
+          "help": "Re-enable a retired REPOSITORY. Refused while its secret is retired.",
           "params": [
             {
               "hidden": false,
               "kind": "argument",
-              "name": "name",
+              "name": "repository",
               "opts": [
-                "name"
+                "repository"
               ],
               "required": true,
               "secondary_opts": [],
@@ -6166,10 +6202,10 @@
             }
           ],
           "path": "hub repo enable",
-          "short_help": "Re-enable a retired NAME."
+          "short_help": "Re-enable a retired REPOSITORY."
         },
         "list": {
-          "help": "List every repository \u2014 name, revision, state, owner/repo, base branch.",
+          "help": "List every repository \u2014 slug, name, id, revision, state, owner/repo, base branch.",
           "params": [
             {
               "help": "Also list retired repositories.",
@@ -6221,17 +6257,17 @@
             }
           ],
           "path": "hub repo list",
-          "short_help": "List every repository \u2014 name, revision, state, owner/repo, base branch."
+          "short_help": "List every repository \u2014 slug, name, id, revision, state, owner/repo, base branch."
         },
         "retire": {
-          "help": "Retire NAME: it leaves the default list and keeps its coordinate, so no other repository takes it.",
+          "help": "Retire REPOSITORY: it leaves the default list and keeps its coordinate, so no other repository takes it.",
           "params": [
             {
               "hidden": false,
               "kind": "argument",
-              "name": "name",
+              "name": "repository",
               "opts": [
-                "name"
+                "repository"
               ],
               "required": true,
               "secondary_opts": [],
@@ -6287,17 +6323,17 @@
             }
           ],
           "path": "hub repo retire",
-          "short_help": "Retire NAME: it leaves the default list and keeps its coordinate, so no other repository takes it."
+          "short_help": "Retire REPOSITORY: it leaves the default list and keeps its coordinate, so no other repository takes it."
         },
         "show": {
-          "help": "Show NAME's fields, revision, and who created it and when.",
+          "help": "Show REPOSITORY \u2014 named by its id, its slug, or a slug it has left \u2014 with its fields, revision, and who created\nit and when.",
           "params": [
             {
               "hidden": false,
               "kind": "argument",
-              "name": "name",
+              "name": "repository",
               "opts": [
-                "name"
+                "repository"
               ],
               "required": true,
               "secondary_opts": [],
@@ -6341,7 +6377,7 @@
             }
           ],
           "path": "hub repo show",
-          "short_help": "Show NAME's fields, revision, and who created it and when."
+          "short_help": "Show REPOSITORY \u2014 named by its id, its slug, or a slug it has left \u2014 with its fields, revision, and who created it and when."
         }
       },
       "help": "Operator verbs over repository records: create, list, show, edit, retire, enable.",

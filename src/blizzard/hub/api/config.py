@@ -7,6 +7,7 @@ always as ``Door.APPLY`` — the door is never read from the request (``bzh:conf
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -37,20 +38,28 @@ from blizzard.hub.domain.config.apply import (
     WorkSourceDeclaration,
 )
 from blizzard.hub.domain.config.changes import ChangeContext, ConfigChange, Door, RecordKind, RecordState
-from blizzard.hub.domain.config.repositories import RepositoryEdit, RepositoryFields
+from blizzard.hub.domain.config.repositories import (
+    ConfiguredRepository,
+    RepositoryEdit,
+    RepositoryFields,
+    RepositoryId,
+    RepositoryRef,
+    RepositorySlug,
+)
 from blizzard.hub.domain.config.work_sources import ConfigFieldError, WorkSourceEdit, WorkSourceFields
 from blizzard.hub.domain.garden.declarations import RoutineDeclaration, ScopeDeclaration
 from blizzard.hub.domain.garden.routines import Routine, RoutineEdit
 from blizzard.hub.domain.garden.scopes import ScopeEdit
 from blizzard.hub.domain.projects.declarations import (
     EntryProjectRequired,
+    PlannedRepositories,
     ProjectDeclaration,
     ProjectsPlan,
     StoredProjects,
     plan_projects,
 )
 from blizzard.hub.domain.projects.links import RepositoryLink, SourceLink
-from blizzard.hub.domain.projects.model import Project, ProjectEdit, ProjectSlug
+from blizzard.hub.domain.projects.model import Project, ProjectEdit, ProjectId, ProjectSlug
 from blizzard.wire.config import (
     ConfigApplyOutcome,
     ConfigApplyResponse,
@@ -91,7 +100,24 @@ _SCHEMAS = {
 }
 
 
-def _view(change: ConfigChange) -> ConfigChangeView:
+#: The kinds whose ``record_key`` is a repository's id, and the kind whose is a project's.
+_REPOSITORY_KEYED = (RecordKind.REPOSITORY, RecordKind.PROJECT_REPOSITORY_LINK)
+
+
+def _labels(changes: list[ConfigChange], services: TenantServices) -> dict[tuple[RecordKind, str], str]:
+    """The current slug of each slugged record a page of changes names: one read of the repositories and one of the
+    projects it keys (``bzh:bulk-reconstitution``)."""
+    repository_ids = list({RepositoryId(c.record_key) for c in changes if c.record_kind in _REPOSITORY_KEYED})
+    project_ids = list({ProjectId(c.record_key) for c in changes if c.record_kind is RecordKind.PROJECT})
+    labels: dict[tuple[RecordKind, str], str] = {}
+    for repository_id, repository in services.repository_records.get_many(repository_ids).items():
+        labels.update({(kind, repository_id): repository.slug for kind in _REPOSITORY_KEYED})
+    for project_id, project in services.projects.get_many(project_ids).items():
+        labels[(RecordKind.PROJECT, project_id)] = project.slug
+    return labels
+
+
+def _view(change: ConfigChange, labels: dict[tuple[RecordKind, str], str]) -> ConfigChangeView:
     assert change.id is not None
     return ConfigChangeView(
         id=change.id,
@@ -100,6 +126,7 @@ def _view(change: ConfigChange) -> ConfigChangeView:
         door=change.door.value,
         record_kind=change.record_kind.value,
         record_key=change.record_key,
+        record_label=labels.get((change.record_kind, change.record_key)),
         revision=change.revision,
         op=change.op.value,
         diff=[FieldChangeView(field=d.field, old=d.old, new=d.new) for d in change.diff],
@@ -127,16 +154,40 @@ def list_changes(
     project: QueryProject = None,
 ) -> ConfigChangesPage:
     """The change log newest-first, keyset-paged on `id`: pass the page's `next_before` as
-    `before` for the next. Optionally narrowed to one `record_kind` and `record_key`, and to the
-    changes concerning one `project` (its id or slug; 422 when the tenant holds no such project)."""
+    `before` for the next. Optionally narrowed to one `record_kind` and `record_key` — for a project or a repository
+    the record's id or slug — and to the changes concerning one `project` (its id or slug; 422 when the tenant holds
+    no such project)."""
     rows = services.config_changes.page(
-        before=before, limit=limit + 1, record_kind=record_kind, record_key=record_key, project_id=project
+        before=before,
+        limit=limit + 1,
+        record_kind=record_kind,
+        record_key=_key_of(record_kind, record_key, services),
+        project_id=project,
     )
     page = rows[:limit]
-    return ConfigChangesPage(changes=[_view(c) for c in page], next_before=page[-1].id if len(rows) > limit else None)
+    labels = _labels(page, services)
+    return ConfigChangesPage(
+        changes=[_view(c, labels) for c in page], next_before=page[-1].id if len(rows) > limit else None
+    )
 
 
-def _declaration(document: ConfigDocument, clock: IClock, projects: ProjectsPlan) -> ConfigDeclaration:
+def _key_of(kind: RecordKind | None, key: str | None, services: TenantServices) -> str | None:
+    """The stored key a change-log filter names: the id of the project or repository an id or slug resolves to; the
+    value as given when it resolves to none (so the page is empty) or the kind is keyed by its name."""
+    if key is None:
+        return None
+    if kind is RecordKind.PROJECT:
+        found = services.projects.resolve(key)
+        return key if found is None else found.project_id
+    if kind in _REPOSITORY_KEYED:
+        repository = services.repository_records.resolve(key)
+        return key if repository is None else repository.repository_id
+    return key
+
+
+def _declaration(
+    document: ConfigDocument, clock: IClock, projects: ProjectsPlan, held: _Repositories
+) -> ConfigDeclaration:
     """The domain's declarations from a validated document: each entry's create fields, and a sparse edit
     of only the fields the entry states (``model_fields_set``); the planned ``projects`` section, and each
     scope and routine within the project it names, as the apply leaves the projects."""
@@ -159,10 +210,12 @@ def _declaration(document: ConfigDocument, clock: IClock, projects: ProjectsPlan
         )
     repositories = []
     for repo in document.repositories:
-        stated = {name: getattr(repo, name) for name in repo.model_fields_set if name != "name"}
+        stated = {name: getattr(repo, name) for name in repo.model_fields_set if name != "slug"}
         repositories.append(
             RepositoryDeclaration(
+                slug=repo.slug,
                 name=repo.name,
+                repository_id=held.ids[repo.slug],
                 fields=RepositoryFields(
                     forge_api_url=repo.forge_api_url,
                     owner=repo.owner,
@@ -223,8 +276,9 @@ def _garden_declarations(
     return tuple(scopes), tuple(routines)
 
 
-def _stored(declaration: ConfigDeclaration, services: TenantServices) -> StoredConfig:
+def _stored(declaration: ConfigDeclaration, services: TenantServices, held: _Repositories) -> StoredConfig:
     secrets = services.secret_catalog.get_many(list(declaration.secrets))
+    declared_slugs = {d.slug for d in declaration.repositories if isinstance(d, RepositoryDeclaration)}
     retired = services.secret_catalog.retired_names()
     scopes: dict[tuple[str, str], DeclarableRecord] = {
         (scope.project_id, scope.slug): scope for scope in services.scopes.list_all()
@@ -246,7 +300,8 @@ def _stored(declaration: ConfigDeclaration, services: TenantServices) -> StoredC
     declared_scopes = [d for d in declaration.scopes if isinstance(d, ScopeDeclaration)]
     return StoredConfig(
         work_sources=services.work_source_records.get_many([d.name for d in declaration.work_sources]),
-        repositories=services.repository_records.get_many([d.name for d in declaration.repositories]),
+        repositories={slug: held.stored[slug] for slug in declared_slugs if slug in held.stored},
+        former_repositories={slug: held.former[slug] for slug in declared_slugs if slug in held.former},
         secrets={name: RecordState.of(name in retired) for name in secrets},
         scopes={d.key: scopes[d.key] for d in declared_scopes if d.key in scopes},
         routines=routines,
@@ -258,7 +313,49 @@ def _stored(declaration: ConfigDeclaration, services: TenantServices) -> StoredC
     )
 
 
-def _projects(document: ConfigDocument, services: TenantServices, ctx: ChangeContext) -> ProjectsPlan:
+@dataclass(frozen=True)
+class _Repositories:
+    """The repositories a document's apply meets: every stored one by current slug (retired included); the one that
+    left each slug the document declares or a project lists that none holds; and the id each declared slug takes —
+    the stored record's, or one minted for a record the document creates, so the projects section can link to it."""
+
+    stored: dict[str, ConfiguredRepository]
+    former: dict[str, ConfiguredRepository]
+    ids: dict[str, RepositoryId] = field(default_factory=dict)
+
+    @classmethod
+    def of(cls, document: ConfigDocument, services: TenantServices) -> _Repositories:
+        stored = {r.slug: r for r in services.repository_records.list_all(include_retired=True)}
+        named = {entry.slug for entry in document.repositories} | {
+            reference for entry in document.projects for reference in entry.repositories
+        }
+        former: dict[str, ConfiguredRepository] = {}
+        for value in sorted(named - stored.keys()):
+            slug = RepositorySlug.of(value)
+            left = services.repository_records.get_by_former_slug(slug) if slug is not None else None
+            if left is not None:
+                former[value] = left
+        ids = {
+            entry.slug: stored[entry.slug].repository_id
+            if entry.slug in stored
+            else RepositoryId(Id.mint(IdPrefix.REPOSITORY, services.clock).value)
+            for entry in document.repositories
+        }
+        return cls(stored, former, ids)
+
+    def planned(self) -> PlannedRepositories:
+        """The repositories as the apply leaves them: those stored, and those the document creates."""
+        created = tuple(
+            RepositoryRef(repository_id, slug) for slug, repository_id in self.ids.items() if slug not in self.stored
+        )
+        return PlannedRepositories(
+            (*(r.ref() for r in self.stored.values()), *created), {slug: r.ref() for slug, r in self.former.items()}
+        )
+
+
+def _projects(
+    document: ConfigDocument, services: TenantServices, ctx: ChangeContext, held_repositories: _Repositories
+) -> ProjectsPlan:
     """The planned ``projects`` section, from what the store holds for the projects and links the document names."""
     projects = services.projects.list_all()
     current = {project.slug: project for project in projects}
@@ -274,6 +371,7 @@ def _projects(document: ConfigDocument, services: TenantServices, ctx: ChangeCon
     links = services.project_links
     source_links: dict[tuple[str, str], SourceLink] = {}
     repository_links: dict[tuple[str, str], RepositoryLink] = {}
+    planned = held_repositories.planned()
     for entry in document.projects:
         project = current.get(entry.slug)
         if project is None:
@@ -285,24 +383,25 @@ def _projects(document: ConfigDocument, services: TenantServices, ctx: ChangeCon
             source_links.update({(held, link.source_name): link for link in [*links.sources_of(held), *listed]})
         if "repositories" in entry.model_fields_set:
             named_repos = [
-                link for name in entry.repositories if (link := links.repository_link(held, name)) is not None
+                link
+                for reference in entry.repositories
+                if (ref := planned.resolve(reference)) is not None
+                and (link := links.repository_link(held, ref.repository_id)) is not None
             ]
             repository_links.update(
-                {(held, link.repository_name): link for link in [*links.repositories_of(held), *named_repos]}
+                {(held, link.repository_id): link for link in [*links.repositories_of(held), *named_repos]}
             )
     sources = {entry.name for entry in document.work_sources}
     if any("sources" in entry.model_fields_set for entry in document.projects):
         sources |= {record.name for record in services.work_source_records.list_all(include_retired=True)}
-    repositories = {entry.name for entry in document.repositories}
-    if any("repositories" in entry.model_fields_set for entry in document.projects):
-        repositories |= {record.name for record in services.repository_records.list_all(include_retired=True)}
     stored = StoredProjects(
         projects=tuple(projects),
         former=former,
         source_links=source_links,
         repository_links=repository_links,
         sources=frozenset(sources),
-        repositories=frozenset(repositories),
+        repositories=planned.repositories,
+        former_repositories=dict(planned.former),
     )
     declared = [_project_declaration(entry) for entry in document.projects]
     return plan_projects(declared, stored, ctx, at=services.clock.now())
@@ -390,8 +489,11 @@ def _apply(
     apply_id = None if dry_run else Id.mint(IdPrefix.CONFIG_APPLY, services.clock).value
     ctx = ChangeContext(actor=identity.user_id, door=Door.APPLY, apply_id=apply_id)
     try:
-        declaration = _declaration(document, services.clock, _projects(document, services, ctx))
-        outcomes = services.config_authoring.apply(declaration, _stored(declaration, services), ctx, dry_run=dry_run)
+        held = _Repositories.of(document, services)
+        declaration = _declaration(document, services.clock, _projects(document, services, ctx, held), held)
+        outcomes = services.config_authoring.apply(
+            declaration, _stored(declaration, services, held), ctx, dry_run=dry_run
+        )
     except ApplyEntryRefused as exc:
         raise _refusal(exc) from exc
     return ConfigApplyResponse(dry_run=dry_run, apply_id=apply_id, outcomes=[_outcome(o) for o in outcomes])
@@ -436,6 +538,7 @@ def export_config(services: Services) -> ConfigDocument:
     scope_links = services.routine_scopes.list_scopes_for([r.routine_id for r in live_routines])
     sources = services.work_source_records.list_all(include_retired=False)
     repositories = services.repository_records.list_all(include_retired=False)
+    repository_slugs = {r.repository_id: r.slug for r in services.repository_records.list_all(include_retired=True)}
     return ConfigDocument(
         version=1,
         projects=[
@@ -445,14 +548,15 @@ def export_config(services: Services) -> ConfigDocument:
                 description=project.description,
                 sources=sorted(link.source_name for link in services.project_links.sources_of(project.project_id)),
                 repositories=sorted(
-                    link.repository_name for link in services.project_links.repositories_of(project.project_id)
+                    repository_slugs[link.repository_id]
+                    for link in services.project_links.repositories_of(project.project_id)
                 ),
             )
             for project in projects
         ],
         secrets=[s.name for s in services.secret_catalog.list_all() if s.name not in retired],
         work_sources=[WorkSourceDocument(name=r.name, **vars(r.fields)) for r in sources],
-        repositories=[RepositoryDocument(name=r.name, **vars(r.fields)) for r in repositories],
+        repositories=[RepositoryDocument(slug=r.slug, name=r.name, **vars(r.fields)) for r in repositories],
         scopes=[
             ScopeEntry(slug=s.slug, description=s.description, project=slug_of[s.project_id])
             for s in sorted(services.scopes.list_all(), key=lambda s: (slug_of[s.project_id], s.slug))

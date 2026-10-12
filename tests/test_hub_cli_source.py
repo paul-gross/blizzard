@@ -96,7 +96,7 @@ def test_retire_and_enable_and_the_secret_reference_guard(client: TestClient) ->
     assert "work_source demo" in refused.output
     assert "work_source demo" in _cli("secret", ["show", "gh-demo"]).output
     assert json.loads(_cli("secret", ["show", "gh-demo", "--json"]).stdout)["references"] == [
-        {"kind": "work_source", "key": "demo"}
+        {"kind": "work_source", "key": "demo", "label": None}
     ]
 
     assert "retired" in _source(["retire", "demo"]).output
@@ -134,7 +134,7 @@ secrets: [gh-demo]
 work_sources:
   - {name: demo, provider: github, locator: acme/demo, secret: gh-demo}
 repositories:
-  - {name: blizzard, forge_api_url: "https://api.github.com", owner: acme, repo: blizzard, base_branch: master, secret_name: gh-demo}
+  - {slug: blizzard, forge_api_url: "https://api.github.com", owner: acme, repo: blizzard, base_branch: master, secret_name: gh-demo}
 """
 
 

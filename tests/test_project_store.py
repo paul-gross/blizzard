@@ -95,7 +95,7 @@ class _World:
             base_branch="main",
             secret_name="forge-token",
         )
-        return self.config().create_repository(name, fields, OP)
+        return self.config().create_repository(name, None, fields, OP)
 
 
 @pytest.fixture
@@ -291,7 +291,9 @@ def test_an_unlink_from_a_moved_revision_is_refused(world: _World) -> None:
     world.authoring().unlink_repository(link, OP)
     with pytest.raises(ConfigRevisionConflict):
         world.links().record_repository_link(
-            link, from_revision=1, change=world.changes(RecordKind.PROJECT_REPOSITORY_LINK, "winter")[-1]
+            link,
+            from_revision=1,
+            change=world.changes(RecordKind.PROJECT_REPOSITORY_LINK, repository.repository_id)[-1],
         )
 
 
@@ -303,8 +305,10 @@ def test_one_source_and_one_repository_may_be_linked_by_two_projects(world: _Wor
         world.authoring().link_source(project, source, OP)
         world.authoring().link_repository(project, repository, OP)
     assert world.links().projects_linking_source("gh-shared") == sorted([world.default.project_id, second.project_id])
-    assert [r.repository_name for r in world.links().repositories_of(second.project_id)] == ["shared"]
-    assert [r.repository_name for r in world.links().repositories_of(world.default.project_id)] == ["shared"]
+    assert [r.repository_id for r in world.links().repositories_of(second.project_id)] == [repository.repository_id]
+    assert [r.repository_id for r in world.links().repositories_of(world.default.project_id)] == [
+        repository.repository_id
+    ]
 
 
 def test_only_standing_links_count_as_linking_a_source(world: _World) -> None:
@@ -351,11 +355,11 @@ def test_the_links_of_one_tenant_are_invisible_to_another(world: _World) -> None
 
 def test_the_harness_seeds_and_links_a_project_through_authoring(world: _World) -> None:
     world.source("gh-winter")
-    world.repository("winter")
+    repository = world.repository("winter")
     project = seed_project(world.engine, "winter")
     link_project(world.engine, project=project, source="gh-winter", repository="winter")
     assert [s.source_name for s in world.links().sources_of(project)] == ["gh-winter"]
-    assert [r.repository_name for r in world.links().repositories_of(project)] == ["winter"]
+    assert [r.repository_id for r in world.links().repositories_of(project)] == [repository.repository_id]
     assert len(world.changes(RecordKind.PROJECT, project)) == 1
 
 

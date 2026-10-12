@@ -22,10 +22,12 @@ class SecretReplaceRequest(BaseModel):
 
 
 class RecordRefView(BaseModel):
-    """A configured record named by kind and key."""
+    """A configured record named by kind and key. ``label`` is the record's current slug for a slugged kind, whose
+    key is its id; ``None`` for a kind keyed by its name."""
 
     kind: str
     key: str
+    label: str | None = None
 
 
 class SecretView(BaseModel):

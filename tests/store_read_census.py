@@ -70,7 +70,13 @@ from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsReposito
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.carry_over import IReadConfigImports
 from blizzard.hub.domain.config.changes import ChangeContext, Door, IReadConfigChanges, RecordKind
-from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository, RepositoryFields
+from blizzard.hub.domain.config.repositories import (
+    IReadRepositoryRecordRepository,
+    RepositoryEdit,
+    RepositoryFields,
+    RepositoryId,
+    RepositorySlug,
+)
 from blizzard.hub.domain.config.revisions import IReadConfigRevisions
 from blizzard.hub.domain.config.secrets import ISecretCatalog, SecretName
 from blizzard.hub.domain.config.work_sources import IReadWorkSourceRepository, WorkSourceFields
@@ -1091,8 +1097,9 @@ class HubWorld:
     transcript_chunk: str
     transcript_segment_id: str
     #: The tenant's one project, renamed ``default`` -> ``census``, linked to ``census-source`` (unlinked, then
-    #: relinked) and to ``census-repo``.
+    #: relinked) and to the repository ``census-repo``, renamed to ``census-repository``.
     project_id: ProjectId
+    repository_id: RepositoryId
 
 
 def build_hub_world(tmp_path: Path) -> HubWorld:
@@ -1253,6 +1260,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     )
     config.create_repository(
         "census-repo",
+        None,
         RepositoryFields(
             forge_api_url="https://api.github.com",
             owner="acme",
@@ -1697,13 +1705,13 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     _mint(chunk_delivery_a, "1015", at=_ht(69))
     _mint(chunk_delivery_b, "1016", at=_ht(70))
     write.delivery.record_delivery_repo_landed(
-        chunk_delivery_a, repo="acme/widget", commit_hash="c1", repository_name=None, at=_ht(71)
+        chunk_delivery_a, repo="acme/widget", commit_hash="c1", repository_id=None, at=_ht(71)
     )
     write.delivery.record_delivery_repo_landed(
-        chunk_delivery_a, repo="acme/other", commit_hash="c2", repository_name=None, at=_ht(72)
+        chunk_delivery_a, repo="acme/other", commit_hash="c2", repository_id=None, at=_ht(72)
     )
     write.delivery.record_delivery_repo_landed(
-        chunk_delivery_b, repo="acme/widget", commit_hash="c3", repository_name=None, at=_ht(73)
+        chunk_delivery_b, repo="acme/widget", commit_hash="c3", repository_id=None, at=_ht(73)
     )
     write.delivery.record_delivery_landed(chunk_delivery_a, at=_ht(74))
     write.artifacts.record_hub_artifact(
@@ -1885,12 +1893,13 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     # --- projects and their links: last, so every write above lands in the tenant's one project ----
     [project] = hub.services.projects.list_all()
     census_source = hub.services.work_source_records.get("census-source")
-    census_repo = hub.services.repository_records.get("census-repo")
+    census_repo = hub.services.repository_records.resolve("census-repo")
     assert census_source is not None and census_repo is not None
     source_link = hub.services.project_authoring.link_source(project, census_source, operator)
     hub.services.project_authoring.unlink_source(source_link, operator)
     hub.services.project_authoring.link_source(project, census_source, operator)
     hub.services.project_authoring.link_repository(project, census_repo, operator)
+    hub.services.config_authoring.edit_repository(census_repo, RepositoryEdit(slug="census-repository"), operator)
     project = hub.services.project_authoring.edit(project, ProjectEdit(slug="census"), operator)
 
     return HubWorld(
@@ -1957,6 +1966,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         transcript_chunk=transcript_chunk,
         transcript_segment_id=transcript_segment_id,
         project_id=project.project_id,
+        repository_id=census_repo.repository_id,
     )
 
 
@@ -2343,14 +2353,21 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadWorkSourceRepository, "list_all"): lambda w: w.hub.services.work_source_records.list_all(
         include_retired=True
     ),
-    (IReadRepositoryRecordRepository, "get"): lambda w: w.hub.services.repository_records.get("census-repo"),
+    (IReadRepositoryRecordRepository, "get"): lambda w: w.hub.services.repository_records.get(w.repository_id),
     (IReadRepositoryRecordRepository, "get_many"): lambda w: w.hub.services.repository_records.get_many(
-        ["census-repo"]
+        [w.repository_id]
     ),
+    (IReadRepositoryRecordRepository, "get_by_slug"): lambda w: w.hub.services.repository_records.get_by_slug(
+        RepositorySlug.parse("census-repository")
+    ),
+    (IReadRepositoryRecordRepository, "get_by_former_slug"): lambda w: (
+        w.hub.services.repository_records.get_by_former_slug(RepositorySlug.parse("census-repo"))
+    ),
+    (IReadRepositoryRecordRepository, "resolve"): lambda w: w.hub.services.repository_records.resolve("census-repo"),
     (IReadRepositoryRecordRepository, "list_all"): lambda w: w.hub.services.repository_records.list_all(
         include_retired=True
     ),
-    (IReadConfigRevisions, "revisions"): lambda w: w.config_revisions.revisions(RecordKind.REPOSITORY, "census-repo"),
+    (IReadConfigRevisions, "revisions"): lambda w: w.config_revisions.revisions(RecordKind.REPOSITORY, w.repository_id),
     (IReadConfigImports, "recorded"): lambda w: w.config_imports.recorded(),
     (IReadProjectRepository, "get"): lambda w: w.hub.services.projects.get(w.project_id),
     (IReadProjectRepository, "get_many"): lambda w: w.hub.services.projects.get_many([w.project_id]),
@@ -2364,7 +2381,7 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
         w.project_id, "census-source"
     ),
     (IReadProjectLinks, "repository_link"): lambda w: w.hub.services.project_links.repository_link(
-        w.project_id, "census-repo"
+        w.project_id, w.repository_id
     ),
     (IReadProjectLinks, "sources_of"): lambda w: w.hub.services.project_links.sources_of(w.project_id),
     (IReadProjectLinks, "repositories_of"): lambda w: w.hub.services.project_links.repositories_of(w.project_id),

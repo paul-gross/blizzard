@@ -357,14 +357,27 @@ def test_a_delete_removes_the_tenants_projects_their_former_slugs_and_their_link
         ),
         (
             schema.repositories,
-            {**t, **made, "name": "blizzard", "forge_api_url": "u", "owner": "o", "repo": "r", "base_branch": "main"}
+            {
+                **t,
+                **made,
+                "repository_id": "repo_01KXCCC100ZG1665XA1SDASTE4",
+                "slug": "blizzard",
+                "name": "blizzard",
+                "forge_api_url": "u",
+                "owner": "o",
+                "repo": "r",
+                "base_branch": "main",
+            }
             | {"secret_name": "token"},
         ),
         (schema.project_former_slugs, {**linked, "slug": "old", "left_at": at}),
         (schema.project_source_links, {**linked, "source_name": "github", "revision": 1}),
         (schema.project_source_link_facts, {**linked, **fact, "source_name": "github"}),
-        (schema.project_repository_links, {**linked, "repository_name": "blizzard", "revision": 1}),
-        (schema.project_repository_link_facts, {**linked, **fact, "repository_name": "blizzard"}),
+        (
+            schema.project_repository_links,
+            {**linked, "repository_id": "repo_01KXCCC100ZG1665XA1SDASTE4", "revision": 1},
+        ),
+        (schema.project_repository_link_facts, {**linked, **fact, "repository_id": "repo_01KXCCC100ZG1665XA1SDASTE4"}),
     ]
     with hub.engine.begin() as conn:
         for table, values in rows:

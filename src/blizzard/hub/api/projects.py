@@ -20,6 +20,7 @@ from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.door import RequestDoor, change_context
 from blizzard.hub.api.project_params import PathProject
+from blizzard.hub.api.repository_params import PathRepository
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.config.repositories import ConfiguredRepository
@@ -72,9 +73,14 @@ def _built_in_view(project: Project) -> SourceLinkView:
     return SourceLinkView(project_id=project.project_id, name=RESERVED_HUB_SOURCE_NAME, linked=True, built_in=True)
 
 
-def _repository_view(link: RepositoryLink) -> RepositoryLinkView:
+def _repository_view(link: RepositoryLink, repository: ConfiguredRepository) -> RepositoryLinkView:
     return RepositoryLinkView(
-        project_id=link.project_id, name=link.repository_name, linked=link.linked, revision=link.revision
+        project_id=link.project_id,
+        repository_id=link.repository_id,
+        slug=repository.slug,
+        name=repository.name,
+        linked=link.linked,
+        revision=link.revision,
     )
 
 
@@ -233,25 +239,19 @@ def unlink_source(
 # --- Repository links --------------------------------------------------------------------------------------------
 
 
-def _repository(name: str, services: TenantServices) -> ConfiguredRepository:
-    record = services.repository_records.get(name)
-    if record is None:
-        raise _not_found(f"unknown repository {name!r}")
-    return record
-
-
 @router.get("/projects/{project}/repository-links", response_model=RepositoryLinksView, dependencies=[_VIEW])
 def list_repository_links(project: PathProject, services: Services) -> RepositoryLinksView:
-    """The project's standing repository links by repository name. 404 when the project is unknown."""
+    """The project's standing repository links by repository id. 404 when the project is unknown."""
     links = services.project_links.repositories_of(project.project_id)
-    return RepositoryLinksView(repository_links=[_repository_view(link) for link in links])
+    held = services.repository_records.get_many([link.repository_id for link in links])
+    return RepositoryLinksView(repository_links=[_repository_view(link, held[link.repository_id]) for link in links])
 
 
 @router.put("/projects/{project}/repository-links/{repository}", response_model=RepositoryLinkView)
 def link_repository(
-    project: PathProject,
-    repository: str,
     identity: Editor,
+    project: PathProject,
+    repository: PathRepository,
     door: RequestDoor,
     services: Services,
     if_match: IfMatch = None,
@@ -259,32 +259,31 @@ def link_repository(
     """Link the project to a stored repository, retired or not — a first link, or a relink of one it unlinked; a
     standing link is left as it is. 404 for an unknown project or repository; 409 for a stale `If-Match` on a stored
     link."""
-    record = _repository(repository, services)
     try:
         link = services.project_authoring.link_repository(
-            project, record, change_context(identity, door), if_match=if_match
+            project, repository, change_context(identity, door), if_match=if_match
         )
     except ConfigRevisionConflict as exc:
         raise _conflict(exc) from exc
-    return _repository_view(link)
+    return _repository_view(link, repository)
 
 
 @router.post("/projects/{project}/repository-links/{repository}/retire", response_model=RepositoryLinkView)
 def unlink_repository(
-    project: PathProject,
-    repository: str,
     identity: Editor,
+    project: PathProject,
+    repository: PathRepository,
     door: RequestDoor,
     services: Services,
     if_match: IfMatch = None,
 ) -> RepositoryLinkView:
     """Unlink the project from a repository by retiring the link; unlinking an unlinked link changes nothing. 404 for
     an unknown project or a repository it never linked; 409 for a stale `If-Match`."""
-    link = services.project_links.repository_link(project.project_id, repository)
+    link = services.project_links.repository_link(project.project_id, repository.repository_id)
     if link is None:
-        raise _not_found(f"project {project.slug} has no link to repository {repository!r}")
+        raise _not_found(f"project {project.slug} has no link to repository {repository.slug!r}")
     try:
         unlinked = services.project_authoring.unlink_repository(link, change_context(identity, door), if_match=if_match)
     except ConfigRevisionConflict as exc:
         raise _conflict(exc) from exc
-    return _repository_view(unlinked)
+    return _repository_view(unlinked, repository)

@@ -168,7 +168,7 @@ def test_the_built_in_hub_is_never_written(hub: HubHarness) -> None:
 def test_a_referenced_secret_cannot_be_retired_and_shows_its_references(hub: HubHarness) -> None:
     _create(hub)
     shown = hub.client.get("/api/secrets/gh").json()
-    assert shown["references"] == [{"kind": "work_source", "key": "demo"}]
+    assert shown["references"] == [{"kind": "work_source", "key": "demo", "label": None}]
     assert hub.client.get("/api/secrets").json()[0]["references"] == shown["references"]
     refused = hub.client.post("/api/secrets/gh/retire")
     assert refused.status_code == 409
@@ -234,7 +234,7 @@ def test_the_schema_endpoint_describes_the_document_model(hub: HubHarness) -> No
     repositories = hub.client.get("/api/config/schema/repositories")
     assert repositories.status_code == 200
     assert repositories.json()["required"] == [
-        "name",
+        "slug",
         "forge_api_url",
         "owner",
         "repo",
@@ -290,7 +290,7 @@ def test_writes_need_config_edit_and_reads_need_fleet_view(tmp_path: Path) -> No
 # --- Repositories ------------------------------------------------------------------
 
 _REPO = {
-    "name": "blizzard",
+    "slug": "blizzard",
     "forge_api_url": "https://api.github.com",
     "owner": "acme",
     "repo": "blizzard",
@@ -309,7 +309,10 @@ def test_a_repository_creates_shows_and_lists(hub: HubHarness) -> None:
     body = created.json()
     assert {k: body[k] for k in _REPO} == _REPO
     assert (body["revision"], body["retired"], body["created_by"]) == (1, False, "operator")
+    assert body["repository_id"].startswith("repo_")
+    assert body["name"] == "blizzard"
     assert hub.client.get("/api/repositories/blizzard").json() == body
+    assert hub.client.get(f"/api/repositories/{body['repository_id']}").json() == body
     assert hub.client.get("/api/repositories").json()["repositories"] == [body]
     assert hub.client.get("/api/repositories/missing").status_code == 404
 
@@ -317,6 +320,7 @@ def test_a_repository_creates_shows_and_lists(hub: HubHarness) -> None:
 def test_the_repository_create_422s_name_the_offending_field(hub: HubHarness) -> None:
     for overrides, field in (
         ({"name": " "}, "name"),
+        ({"slug": "Not A Slug"}, "slug"),
         ({"owner": ""}, "owner"),
         ({"forge_api_url": "ftp://forge"}, "forge_api_url"),
         ({"forge_api_url": "api.github.com"}, "forge_api_url"),
@@ -330,14 +334,14 @@ def test_the_repository_create_422s_name_the_offending_field(hub: HubHarness) ->
     assert _changes(hub, record_kind="repository") == []
 
 
-def test_a_taken_repository_name_or_coordinate_is_a_409(hub: HubHarness) -> None:
+def test_a_taken_repository_slug_or_coordinate_is_a_409(hub: HubHarness) -> None:
     assert _create_repo(hub).status_code == 201
     assert _create_repo(hub).status_code == 409
     hub.client.post("/api/repositories/blizzard/retire")
-    held = _create_repo(hub, name="other")
+    held = _create_repo(hub, slug="other")
     assert held.status_code == 409
     assert "repository blizzard" in held.json()["detail"]
-    assert _create_repo(hub, name="other", forge_api_url="https://ghe.example/api/v3").status_code == 201
+    assert _create_repo(hub, slug="other", forge_api_url="https://ghe.example/api/v3").status_code == 201
 
 
 def test_a_repository_patch_is_sparse_and_refuses_every_null(hub: HubHarness) -> None:
@@ -350,7 +354,9 @@ def test_a_repository_patch_is_sparse_and_refuses_every_null(hub: HubHarness) ->
         resp = hub.client.patch("/api/repositories/blizzard", json={field: None})
         assert resp.status_code == 422, field
         assert resp.json()["detail"][0]["loc"][-1] == field
-    assert hub.client.patch("/api/repositories/blizzard", json={"name": "other"}).status_code == 422
+    assert hub.client.patch("/api/repositories/blizzard", json={"slug": "Not A Slug"}).status_code == 422
+    assert hub.client.patch("/api/repositories/blizzard", json={"slug": None}).status_code == 422
+    assert hub.client.patch("/api/repositories/blizzard", json={"name": None}).status_code == 422
     assert hub.client.patch("/api/repositories/blizzard", json={"secret_name": "absent"}).status_code == 422
     assert hub.client.patch("/api/repositories/nope", json={}).status_code == 404
     for call in (
@@ -365,7 +371,10 @@ def test_a_repository_patch_is_sparse_and_refuses_every_null(hub: HubHarness) ->
 
 def test_repository_retire_and_enable_move_the_revision_and_guard_the_secret(hub: HubHarness) -> None:
     _create_repo(hub)
-    assert hub.client.get("/api/secrets/gh").json()["references"] == [{"kind": "repository", "key": "blizzard"}]
+    repository_id = hub.client.get("/api/repositories/blizzard").json()["repository_id"]
+    assert hub.client.get("/api/secrets/gh").json()["references"] == [
+        {"kind": "repository", "key": repository_id, "label": "blizzard"}
+    ]
     refused = hub.client.post("/api/secrets/gh/retire")
     assert refused.status_code == 409
     assert "repository blizzard" in refused.json()["detail"]
@@ -411,7 +420,7 @@ def test_repository_writes_need_config_edit_and_reads_need_fleet_view(tmp_path: 
 
 _YAML = "application/yaml"
 _APPLY_REPO = {
-    "name": "blizzard",
+    "slug": "blizzard",
     "forge_api_url": "https://api.github.com",
     "owner": "acme",
     "repo": "blizzard",
@@ -424,7 +433,7 @@ secrets: [gh]
 work_sources:
   - {name: demo, provider: github, locator: acme/demo, secret: gh, annotate: true}
 repositories:
-  - {name: blizzard, forge_api_url: "https://api.github.com", owner: acme, repo: blizzard, base_branch: master, secret_name: gh}
+  - {slug: blizzard, forge_api_url: "https://api.github.com", owner: acme, repo: blizzard, base_branch: master, secret_name: gh}
 """
 
 
@@ -569,7 +578,7 @@ def test_applying_an_export_writes_nothing(hub: HubHarness) -> None:
     ]
     assert document["secrets"] == ["gh"]
     assert [w["name"] for w in document["work_sources"]] == ["demo"]
-    assert [r["name"] for r in document["repositories"]] == ["blizzard"]
+    assert [r["slug"] for r in document["repositories"]] == ["blizzard"]
     assert set(document["work_sources"][0]) == {
         "name",
         "provider",

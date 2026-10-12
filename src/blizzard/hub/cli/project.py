@@ -38,7 +38,7 @@ def _refusals(project: str) -> dict[int, str]:
 
 def _linked(source_links: list[Any], repository_links: list[Any]) -> list[str]:
     sources = [f"{row['name']} (built in)" if row.get("built_in") else row["name"] for row in source_links]
-    repositories = [row["name"] for row in repository_links]
+    repositories = [row["slug"] for row in repository_links]
     return [f"sources {', '.join(sources) or '-'}", f"repositories {', '.join(repositories) or '-'}"]
 
 

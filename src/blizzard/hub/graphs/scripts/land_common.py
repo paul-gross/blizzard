@@ -208,7 +208,7 @@ class LandRun:
     """One ``deliver`` node visit: the env the executor injected, and the two channels out
     of it — the forge and :attr:`markers`.
 
-    Each commit names its own target (forge URL, owner, base branch, and a token by record), so a
+    Each commit names its own target (forge URL, owner, base branch, and a token by record id), so a
     run is *bound* to one commit by :meth:`at` before any forge call: the unbound run carries no
     forge target of its own."""
 
@@ -269,7 +269,10 @@ class LandRun:
             fields[name] = value
         token = self.tokens.get(fields["record"])
         if not isinstance(token, str) or not token:
-            print(f"no token for repository record {fields['record']!r} in {_ENV_FORGE_TOKENS}", file=sys.stderr)
+            print(
+                f"no token for repository record {fields['record']!r} (repo {repo!r}) in {_ENV_FORGE_TOKENS}",
+                file=sys.stderr,
+            )
             raise SystemExit(1)
         return replace(
             self,

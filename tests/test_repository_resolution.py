@@ -11,6 +11,7 @@ from blizzard.hub.domain.config.repositories import (
     CommitOrigin,
     ConfiguredRepository,
     RepositoryFields,
+    RepositoryId,
     RepositoryOutcome,
     resolve_chunk_repositories,
     resolve_origin_record,
@@ -21,6 +22,10 @@ pytestmark = pytest.mark.unit
 
 _MINTED = datetime(2026, 3, 1, tzinfo=UTC)
 _API = "https://api.github.com"
+
+
+def _id(slug: str) -> RepositoryId:
+    return RepositoryId(f"repo_{slug}")
 
 
 def _row(
@@ -34,6 +39,8 @@ def _row(
     retired_at: datetime | None = None,
 ) -> ConfiguredRepository:
     return ConfiguredRepository(
+        repository_id=_id(name),
+        slug=name,
         name=name,
         fields=RepositoryFields(
             forge_api_url=forge, owner=owner, repo=repo or name, base_branch=base, secret_name=secret
@@ -51,7 +58,9 @@ def _resolve(origins: list[CommitOrigin], rows: list[ConfiguredRepository]):  # 
 
 
 def _in_project(origins: list[CommitOrigin], rows: list[ConfiguredRepository], *linked: str):  # type: ignore[no-untyped-def]
-    return resolve_chunk_repositories(origins, rows, minted_at=_MINTED, linked=frozenset(linked), project="widgets")
+    return resolve_chunk_repositories(
+        origins, rows, minted_at=_MINTED, linked=frozenset(_id(n) for n in linked), project="widgets"
+    )
 
 
 def test_an_exact_origin_resolves_by_host_owner_and_name() -> None:
@@ -135,7 +144,7 @@ def test_records_that_disagree_on_a_landing_field_each_resolve_to_their_own_targ
     result = _resolve(origins, rows)
 
     assert result.outcome is RepositoryOutcome.RESOLVED
-    assert [t.record for t in result.targets] == ["widget", "gadget"]
+    assert [t.record for t in result.targets] == [_id("widget"), _id("gadget")]
     assert result.targets[0] != result.targets[1]
     assert result.agreed() is None
 
@@ -148,7 +157,7 @@ def test_records_that_agree_resolve_to_one_target_qualifying_each_commit() -> No
 
     assert result.outcome is RepositoryOutcome.RESOLVED
     assert result.qualified == ("acme/widget", "acme/gadget")
-    assert result.names == ("widget", "gadget")
+    assert result.records == (_id("widget"), _id("gadget"))
     agreed = result.agreed()
     assert agreed is not None and agreed.base_branch == "main"
 
@@ -165,8 +174,8 @@ def test_a_point_in_time_lookup_matches_only_what_the_project_links() -> None:
     origin = CommitOrigin.of(None, "widget")
 
     assert resolve_repository(origin, rows, linked=None) is None
-    assert resolve_repository(origin, rows, linked=frozenset({"gadget"})) is None
-    found = resolve_repository(origin, rows, linked=frozenset({"b-widget"}))
+    assert resolve_repository(origin, rows, linked=frozenset({_id("gadget")})) is None
+    found = resolve_repository(origin, rows, linked=frozenset({_id("b-widget")}))
     assert found is not None and found.name == "b-widget"
 
 
@@ -177,7 +186,7 @@ def test_narrowing_to_the_project_resolves_a_name_ambiguous_across_the_tenant() 
 
     assert result.outcome is RepositoryOutcome.RESOLVED
     assert result.qualified == ("other/widget",)
-    assert result.names == ("b-widget",)
+    assert result.records == (_id("b-widget"),)
 
 
 def test_a_pointer_whose_one_tenant_record_the_project_does_not_link_is_not_linked() -> None:
@@ -186,7 +195,7 @@ def test_a_pointer_whose_one_tenant_record_the_project_does_not_link_is_not_link
     result = _in_project([CommitOrigin.of(None, "widget")], rows, "gadget")
 
     assert result.outcome is RepositoryOutcome.NOT_LINKED
-    assert result.targets == () and result.names == () and result.agreed() is None
+    assert result.targets == () and result.records == () and result.agreed() is None
     assert "the-widget" in result.detail and "widgets" in result.detail
 
 
@@ -236,7 +245,7 @@ def test_with_no_project_narrowing_a_pointer_is_never_refused_as_not_linked() ->
     result = _resolve([CommitOrigin.of(None, "widget")], [_row("the-widget", repo="widget")])
 
     assert result.outcome is RepositoryOutcome.RESOLVED
-    assert result.names == ("the-widget",)
+    assert result.records == (_id("the-widget"),)
 
 
 def test_an_origin_record_is_the_one_the_chunks_project_links_and_that_stands_for_it() -> None:
@@ -247,7 +256,9 @@ def test_an_origin_record_is_the_one_the_chunks_project_links_and_that_stands_fo
     ]
 
     def record(name: str, *linked: str) -> str | None:
-        found = resolve_origin_record(CommitOrigin.of(None, name), rows, minted_at=_MINTED, linked=frozenset(linked))
+        found = resolve_origin_record(
+            CommitOrigin.of(None, name), rows, minted_at=_MINTED, linked=frozenset(_id(n) for n in linked)
+        )
         return None if found is None else found.name
 
     assert record("widget", "b-widget") == "b-widget"

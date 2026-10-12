@@ -16,7 +16,7 @@ pytestmark = pytest.mark.component
 _SOURCE = {"name": "demo", "provider": "github", "locator": "acme/demo", "secret": "gh", "annotate": True}
 _OTHER_SOURCE = {**_SOURCE, "name": "infra", "locator": "acme/infra"}
 _REPO = {
-    "name": "blizzard",
+    "slug": "blizzard",
     "forge_api_url": "https://api.github.com",
     "owner": "acme",
     "repo": "blizzard",
@@ -66,12 +66,20 @@ def _project_id(hub: HubHarness, slug: str) -> str:
     return project.project_id
 
 
+def _repository_slug(hub: HubHarness, repository_id: str) -> str:
+    return next(
+        r.slug
+        for r in hub.services.repository_records.list_all(include_retired=True)
+        if r.repository_id == repository_id
+    )
+
+
 def _linked(hub: HubHarness, slug: str) -> tuple[list[str], list[str]]:
     project_id = _project_id(hub, slug)
     links = hub.services.project_links
     return (
         sorted(link.source_name for link in links.sources_of(project_id)),  # type: ignore[arg-type]
-        sorted(link.repository_name for link in links.repositories_of(project_id)),  # type: ignore[arg-type]
+        sorted(_repository_slug(hub, link.repository_id) for link in links.repositories_of(project_id)),  # type: ignore[arg-type]
     )
 
 

@@ -2426,7 +2426,7 @@ def _repository_fact(
             stamp(
                 hub.project_repository_link_facts,
                 project_id=project_id,
-                repository_name=repository,
+                repository_id=repository,
                 linked=linked,
                 set_at=at,
                 set_by="op",
@@ -2500,7 +2500,7 @@ def test_a_landing_in_a_repository_its_project_had_not_linked_is_a_violation(tmp
                         repo=repo,
                         commit_hash="c0ffee",
                         landed_at=at,
-                        repository_name=name,
+                        repository_id=name,
                     )
                 )
             )
