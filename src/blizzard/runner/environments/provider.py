@@ -97,3 +97,8 @@ class IWorkspaceProvider(Protocol):
     def pool(self) -> tuple[str, ...]:
         """The standing environment ids, or ``()`` when environments are minted on acquire."""
         ...
+
+    def environment_workdirs(self) -> dict[str, str]:
+        """Each environment this provider lists now, mapped to its workdir — the workspace root
+        joined with the environment."""
+        ...

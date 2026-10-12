@@ -147,6 +147,9 @@ class RunnerStatusSummary:
     #: The projects the runner serves, as its hub last answered, then each configured entry it has not
     #: answered yet; ``None`` when neither the configuration nor an answer names any.
     served_projects: tuple[ServedProjectStatus, ...] | None = None
+    #: Each held binding no workspace has claimed — its workdir matched none the provider lists. It
+    #: keeps its lease and still counts against ``max_agents``.
+    unmatched_bindings: tuple[EnvBinding, ...] = ()
 
 
 @domain_model
@@ -315,6 +318,7 @@ class RunnerStatusService:
                 self._projects,
                 self._served_projects.served_projects_answer() if self._served_projects is not None else None,
             ),
+            unmatched_bindings=tuple(b for b in self._environments.held_bindings() if b.workspace_id is None),
         )
 
     def environments(self) -> list[EnvironmentSlot]:

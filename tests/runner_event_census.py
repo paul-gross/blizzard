@@ -220,6 +220,10 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
     "record_binding": Published(
         RunnerEventType.ENVIRONMENT_CHANGED, "ReadyQueue._bind (runner/lifecycle/claim.py) — cause='bound'"
     ),
+    "complete_bindings": Silent(
+        "CompleteHeldBindings.run (runner/loop/steps.py) fills a held binding's workspace and project, which "
+        "no panel read renders; no kind in the vocabulary represents it."
+    ),
     "record_release": Published(
         RunnerEventType.ENVIRONMENT_CHANGED,
         "EnvironmentRelease.release_chunk/release_binding (runner/lifecycle/env_release.py) — cause='released'",

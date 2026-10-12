@@ -19,7 +19,12 @@ from blizzard.foundation.leases import LeaseClosureReason
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.foundation.usage_windows import admit_usage_window
-from blizzard.runner.environments.repository import EnvBinding, group_bindings_by_chunk
+from blizzard.runner.environments.repository import (
+    BindingCompletion,
+    EnvBinding,
+    binding_completion,
+    group_bindings_by_chunk,
+)
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.hub.client import ChunkNotFoundError, HubClientError
@@ -74,6 +79,7 @@ from blizzard.runner.usage.repository import ContextSampleState, external_usage_
 #: This module's public API — the loop steps it owns, in tick order.
 __all__ = [
     "Advance",
+    "CompleteHeldBindings",
     "ContextSample",
     "ExternalUsageSample",
     "Fill",
@@ -414,6 +420,44 @@ class Pull(Step):
             TakeoverCloser(ctx.stores.takeover, ctx.clock, ctx.events).close(
                 TakeoverCloseScope(chunk_id=takeover.chunk_id, open_takeover=takeover), takeover.takeover_id
             )
+
+
+class CompleteHeldBindings(Step):
+    def run(self) -> None:
+        """Give each held binding lacking them its workspace and its chunk's project — ahead of FILL.
+
+        One read finds the incomplete held rows; with none, nothing else runs. A row takes the
+        configured workspace when its workdir matches one the provider lists, and its project from
+        the chunk-status batch read. A row the hub cannot answer, or whose workdir matches no
+        workspace, keeps its gap and its lease — it is retried next tick and named in status.
+        Each completion fills only an empty column in one transaction, so a crash re-runs it
+        harmlessly."""
+        ctx = self.ctx
+        rows = ctx.stores.environments.incomplete_held_bindings()
+        if not rows:
+            return
+        listed = ctx.provider.environment_workdirs()
+        lacking_project = {row.chunk_id for row in rows if row.project_id is None}
+        ctx.chunk_views.prime(lacking_project)
+        projects = {chunk_id: self._project(chunk_id) for chunk_id in lacking_project}
+        completions: list[BindingCompletion] = []
+        for row in rows:
+            completion = binding_completion(
+                row,
+                workspace_id=ctx.config.workspace_id,
+                listed_workdirs=listed,
+                project_id=projects.get(row.chunk_id),
+            )
+            if completion is not None:
+                completions.append(completion)
+        ctx.stores.environments.complete_bindings(completions)
+
+    def _project(self, chunk_id: str) -> str | None:
+        """The chunk's project from the tick's primed batch read; ``None`` when the hub cannot say yet."""
+        try:
+            return self.ctx.chunk_views.get(chunk_id).project_id
+        except HubClientError:  # covers ChunkNotFoundError: an unknown chunk names no project
+            return None
 
 
 class Fill(Step):

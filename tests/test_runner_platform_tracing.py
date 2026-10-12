@@ -358,6 +358,7 @@ def test_a_tick_is_a_root_with_one_child_per_step_and_hub_calls_under_their_step
         "Reap",
         "Resume",
         "Pull",
+        "CompleteHeldBindings",
         "Fill",
         "Advance",
         "TranscriptDrain",

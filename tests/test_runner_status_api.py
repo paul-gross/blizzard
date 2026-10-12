@@ -972,3 +972,23 @@ def test_an_escalation_carries_the_parked_sessions_own_configuration(tmp_path: P
 
     assert (item["session_name"], item["model"], item["effort"]) == ("code", "opus", "high")
     assert item["resume_command"] == "cd /ws/e1 && claude --resume sess-a --model opus --effort high"
+
+
+@pytest.mark.component
+def test_summary_names_each_held_binding_matching_no_workspace(tmp_path: Path) -> None:
+    app, store = _app_with_status(tmp_path)
+    store.record_binding(
+        chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1", project_id="pr_1"
+    )
+    store.record_binding(chunk_id="ch_2", environment_id="e9", workdir="/elsewhere/e9", bound_at=_NOW)
+    with TestClient(app) as client:
+        body = client.get("/api/runner").json()
+
+    assert body["unmatched_bindings"] == [
+        {
+            "chunk_id": "ch_2",
+            "environment_id": "e9",
+            "workdir": "/elsewhere/e9",
+            "held_since": "2026-07-16T12:00:00+00:00",
+        }
+    ]

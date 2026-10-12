@@ -252,6 +252,10 @@ def test_backing_off_facts_statement_count_is_flat_across_1_and_10_open_facts(tm
 # --- the tick itself ----------------------------------------------------------------------
 
 
+#: A binding as FILL writes it — named by workspace and project, so no tick completes it.
+_COMPLETE = {"workspace_id": "ws1", "project_id": "pr_1"}
+
+
 def _seed_steady_state_lease(store: SqlAlchemyRunnerStore, i: int, *, at: datetime, sampled_at: datetime) -> None:
     """One active, spawned, beating, bound lease, sampled at ``sampled_at`` — sampled at ``at``
     nothing about it is due for any per-tick action, so a flat tick issues the same
@@ -272,7 +276,7 @@ def _seed_steady_state_lease(store: SqlAlchemyRunnerStore, i: int, *, at: dateti
     )
     store.record_spawn(lease_id, pid=1000 + i, process_start_time=f"t{i}", session=session, spawned_at=at)
     store.record_heartbeat(lease_id=lease_id, beat_at=at)
-    store.record_binding(chunk_id=chunk_id, environment_id=f"e{i}", workdir=f"/ws/e{i}", bound_at=at)
+    store.record_binding(chunk_id=chunk_id, environment_id=f"e{i}", workdir=f"/ws/e{i}", bound_at=at, **_COMPLETE)
     store.record_context_sample(
         lease_id=lease_id, chunk_id=chunk_id, context_tokens=100, sampled_at=sampled_at, session=session
     )
@@ -288,7 +292,9 @@ def _tick_statement_count(
         sampled_at = _NOW - timedelta(hours=1) if due else _NOW
         _seed_steady_state_lease(store, i, at=_NOW, sampled_at=sampled_at)
     for j in range(held_without_lease):
-        store.record_binding(chunk_id=f"ch_held_{j}", environment_id=f"eh{j}", workdir=f"/ws/eh{j}", bound_at=_NOW)
+        store.record_binding(
+            chunk_id=f"ch_held_{j}", environment_id=f"eh{j}", workdir=f"/ws/eh{j}", bound_at=_NOW, **_COMPLETE
+        )
     # Every session is unscripted (`FakeTranscriptSource.turns_since` reads that as
     # `available=False`), so turning shipping on still ships nothing this tick — the pump
     # runs its own bulk reads but writes nothing, keeping the count flat either way.
@@ -410,7 +416,7 @@ def _seed_escalated_lease(store: SqlAlchemyRunnerStore, i: int, *, at: datetime)
         session=SessionReference(CLAUDE_CODE_HARNESS_ID, session_id),
         spawned_at=at,
     )
-    store.record_binding(chunk_id=chunk_id, environment_id=f"e{i}", workdir=f"/ws/e{i}", bound_at=at)
+    store.record_binding(chunk_id=chunk_id, environment_id=f"e{i}", workdir=f"/ws/e{i}", bound_at=at, **_COMPLETE)
     store.record_closure(
         lease_id=lease_id,
         chunk_id=chunk_id,

@@ -563,3 +563,17 @@ def test_status_reads_no_harness_health_without_a_no_acceptable_harness_escalati
     assert "/api/harness-health" not in paths
     assert "    harness " not in result.output
     assert "cause:" not in result.output
+
+
+@pytest.mark.component
+def test_status_names_a_held_binding_matching_no_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = _init_runner(tmp_path)
+    _no_hub(monkeypatch)
+    store = _registered_store(root)
+    store.record_binding(chunk_id="ch_9", environment_id="e9", workdir="/elsewhere/e9", bound_at=_NOW)
+    with _serve_local_api(root):
+        result = CliRunner().invoke(runner_group, ["status", "--dir", str(root)])
+
+    assert result.exit_code == 0, result.output
+    assert "held bindings matching no workspace (1):" in result.output
+    assert "e9  chunk=ch_9  workdir=/elsewhere/e9" in result.output

@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import func
+from sqlalchemy import bindparam, func, or_
 
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.environments.repository import EnvBinding, IWriteEnvironmentRepository
+from blizzard.runner.environments.repository import (
+    BindingCompletion,
+    EnvBinding,
+    IncompleteBinding,
+    IWriteEnvironmentRepository,
+)
 from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.internal.base import HELD_BINDING
 from blizzard.runner.store.schema import binding_releases, env_bindings, leases
@@ -50,14 +56,75 @@ class EnvironmentStore:
         )
         return [self._row_to_binding(r) for r in self._store.all(stmt)]
 
-    def record_binding(self, *, chunk_id: str, environment_id: str, workdir: str, bound_at: datetime) -> None:
+    def record_binding(
+        self,
+        *,
+        chunk_id: str,
+        environment_id: str,
+        workdir: str,
+        bound_at: datetime,
+        workspace_id: str | None = None,
+        project_id: str | None = None,
+    ) -> None:
         with self._store.begin() as conn:
             conn.execute(
                 self._store.insert(env_bindings).values(
-                    chunk_id=chunk_id, environment_id=environment_id, workdir=workdir, bound_at=bound_at
+                    chunk_id=chunk_id,
+                    environment_id=environment_id,
+                    workdir=workdir,
+                    bound_at=bound_at,
+                    workspace_id=workspace_id,
+                    project_id=project_id,
                 )
             )
         _log.info("env bound", chunk_id=chunk_id, environment_id=environment_id, workdir=workdir)
+
+    def incomplete_held_bindings(self) -> list[IncompleteBinding]:
+        stmt = (
+            self._store.select(
+                env_bindings,
+                env_bindings.c.id,
+                env_bindings.c.chunk_id,
+                env_bindings.c.workdir,
+                env_bindings.c.workspace_id,
+                env_bindings.c.project_id,
+            )
+            .where(HELD_BINDING.clause(self._store))
+            .where(or_(env_bindings.c.workspace_id.is_(None), env_bindings.c.project_id.is_(None)))
+            .order_by(env_bindings.c.id)
+        )
+        return [
+            IncompleteBinding(
+                binding_id=int(r.id),
+                chunk_id=str(r.chunk_id),
+                workdir=str(r.workdir),
+                workspace_id=r.workspace_id,
+                project_id=r.project_id,
+            )
+            for r in self._store.all(stmt)
+        ]
+
+    def complete_bindings(self, completions: Sequence[BindingCompletion]) -> None:
+        if not completions:
+            return
+        # One executemany over every row; COALESCE keeps a column already set — completion only fills a gap.
+        stmt = (
+            self._store.update(env_bindings)
+            .where(env_bindings.c.id == bindparam("b_id"))
+            .values(
+                workspace_id=func.coalesce(env_bindings.c.workspace_id, bindparam("b_workspace_id")),
+                project_id=func.coalesce(env_bindings.c.project_id, bindparam("b_project_id")),
+            )
+        )
+        with self._store.begin() as conn:
+            conn.execute(
+                stmt,
+                [
+                    {"b_id": c.binding_id, "b_workspace_id": c.workspace_id, "b_project_id": c.project_id}
+                    for c in completions
+                ],
+            )
+        _log.info("held bindings completed", count=len(completions))
 
     def record_release(self, *, chunk_id: str, environment_id: str, released_at: datetime) -> None:
         with self._store.begin() as conn:
@@ -81,6 +148,8 @@ class EnvironmentStore:
             environment_id=str(r.environment_id),
             workdir=str(r.workdir),
             bound_at=r.bound_at,
+            workspace_id=r.workspace_id,
+            project_id=r.project_id,
         )
 
 

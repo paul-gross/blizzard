@@ -1,4 +1,4 @@
-"""The tick driver — CEILING → REAP → RESUME → PULL → FILL → ADVANCE → TRANSCRIPT DRAIN →
+"""The tick driver — CEILING → REAP → RESUME → PULL → COMPLETE → FILL → ADVANCE → TRANSCRIPT DRAIN →
 RETENTION → CONTEXT → SAMPLE.
 
 ``tick`` composes the steps in order — the single synchronous pass both the CLI verb and
@@ -19,6 +19,7 @@ from blizzard.runner.lifecycle.registration import Registration
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.steps import (
     Advance,
+    CompleteHeldBindings,
     ContextSample,
     ExternalUsageSample,
     Fill,
@@ -90,6 +91,9 @@ def _tick(ctx: LoopContext) -> None:
         _traced(ctx, Reap)  # startup recovery IS reap running early
         _traced(ctx, Resume)  # before ADVANCE — else a killed-mid-work worker reads as done
         _traced(ctx, Pull)
+        # Before FILL: a held row still lacking its workspace or project is completed first, so the
+        # store FILL adds to holds every binding fully named that can be.
+        _traced(ctx, CompleteHeldBindings)
         _traced(ctx, Fill)
         _traced(ctx, Advance)
         # After every fact-lane-draining step — bounded (the real bound is in

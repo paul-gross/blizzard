@@ -21,6 +21,7 @@ from blizzard.wire.runner_status import (
     PauseStateView,
     RunnerStatusView,
     ServedProjectStatusView,
+    UnmatchedBindingView,
 )
 
 router = APIRouter(prefix="/api", tags=["runner"])
@@ -119,6 +120,15 @@ def _runner_status_view(service: RunnerStatusService) -> RunnerStatusView:
             if summary.served_projects is not None
             else None
         ),
+        unmatched_bindings=[
+            UnmatchedBindingView(
+                chunk_id=b.chunk_id,
+                environment_id=b.environment_id,
+                workdir=b.workdir,
+                held_since=iso_utc(b.bound_at),
+            )
+            for b in summary.unmatched_bindings
+        ],
     )
 
 

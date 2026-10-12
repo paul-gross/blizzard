@@ -577,6 +577,7 @@ def _queue(wire: QueuePeekResponse) -> list[QueueEntry]:
             blocked=QueueBlock(prerequisite_chunk_id=e.blocked.prerequisite_chunk_id, unmet_count=e.blocked.unmet_count)
             if e.blocked is not None
             else None,
+            project_id=e.project_id,
         )
         for e in wire.entries
     ]
@@ -610,6 +611,7 @@ def _chunk_state(wire: ChunkStatusView) -> ChunkState:
         )
         if decision is not None
         else None,
+        project_id=wire.project_id,
     )
 
 

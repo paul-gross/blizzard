@@ -73,6 +73,16 @@ class ServedProjectStatusView(BaseModel):
     answered: bool = True
 
 
+class UnmatchedBindingView(BaseModel):
+    """One held binding whose workdir matches no workspace the runner's provider lists. It keeps its
+    lease and still counts against ``max_agents``."""
+
+    chunk_id: str
+    environment_id: str
+    workdir: str
+    held_since: str
+
+
 class RunnerStatusView(BaseModel):
     """``GET /api/runner`` — identity, pause states, capacities, hub connectivity, last tick."""
 
@@ -96,6 +106,8 @@ class RunnerStatusView(BaseModel):
     #: The projects the runner serves, read from its store with no hub call; ``None`` when neither its
     #: configuration nor its hub has named any.
     served_projects: list[ServedProjectStatusView] | None = None
+    #: Each held binding no workspace has claimed; empty when every held binding names one.
+    unmatched_bindings: list[UnmatchedBindingView] = []
 
 
 class EnvironmentView(BaseModel):

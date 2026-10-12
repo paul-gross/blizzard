@@ -778,6 +778,9 @@ class FakeProvider:
     def pool(self) -> tuple[str, ...]:
         return tuple(self._pool)
 
+    def environment_workdirs(self) -> dict[str, str]:
+        return dict(self._pool)
+
     def acquire(self, chunk_id: str, count: int, held_ids: list[str]) -> list[AcquiredEnvironment]:
         if self.refuse:
             raise WorkspaceAcquisitionError("refused (scripted)")

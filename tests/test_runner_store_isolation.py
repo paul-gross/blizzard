@@ -28,7 +28,7 @@ import sqlalchemy as sa
 import blizzard.runner as runner_pkg
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.auth.tokens import IWriteTokenRepository
-from blizzard.runner.environments.repository import IWriteEnvironmentRepository
+from blizzard.runner.environments.repository import BindingCompletion, IWriteEnvironmentRepository
 from blizzard.runner.harness.fingerprint import PreambleFingerprint
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.selftest_result import IWriteSelfTestResultRepository
@@ -259,6 +259,12 @@ WRITE_CENSUS: dict[tuple[type, str], WriteRecipe] = {
     ),
     (IWriteEnvironmentRepository, "record_binding"): lambda w: w.stores.environments.record_binding(
         chunk_id=w.chunk_3, environment_id="env-1", workdir="/ws/env-1", bound_at=_at(12)
+    ),
+    (IWriteEnvironmentRepository, "complete_bindings"): lambda w: w.stores.environments.complete_bindings(
+        [
+            BindingCompletion(binding_id=b.binding_id, workspace_id="ws-a", project_id="pr-a")
+            for b in w.stores.environments.incomplete_held_bindings()
+        ]
     ),
     (IWriteEnvironmentRepository, "record_release"): lambda w: w.stores.environments.record_release(
         chunk_id=w.chunk_1, environment_id="env-1", released_at=_at(13)

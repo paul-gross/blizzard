@@ -128,7 +128,7 @@ class ReadyQueue:
             return False
         chunk_id = entry.chunk_id
         try:
-            self._bind(chunk_id, acquired)
+            self._bind(entry, acquired)
         except EnvironmentHeldError as exc:
             self._refuse_held(entry, acquired, exc)
             return False
@@ -196,15 +196,22 @@ class ReadyQueue:
             _log.info("acquire refused — env-bound this tick", chunk_id=entry.chunk_id)
             return None  # env capacity exhausted; the chunk waits
 
-    def _bind(self, chunk_id: str, acquired: list[AcquiredEnvironment]) -> None:
+    def _bind(self, entry: QueueEntry, acquired: list[AcquiredEnvironment]) -> None:
         """Bind locally BEFORE claiming at the hub: without a local trace, a crash after a won
-        claim would strand the chunk with nothing on this side to drive or reap."""
+        claim would strand the chunk with nothing on this side to drive or reap. Each binding
+        names the configured workspace and the entry's project (``None`` when the hub sent none)."""
+        chunk_id = entry.chunk_id
         _CP_AFTER_ACQUIRE.reached()
         require_unheld(chunk_id, [env.environment_id for env in acquired], self.ctx.stores.environments.held_bindings())
         now = self.ctx.clock.now()
         for env in acquired:
             self.ctx.stores.environments.record_binding(
-                chunk_id=chunk_id, environment_id=env.environment_id, workdir=env.workdir, bound_at=now
+                chunk_id=chunk_id,
+                environment_id=env.environment_id,
+                workdir=env.workdir,
+                bound_at=now,
+                workspace_id=self.ctx.config.workspace_id,
+                project_id=entry.project_id,
             )
             if self.ctx.events is not None:
                 self.ctx.events.publish_environment_changed(chunk_id, env.environment_id, cause="bound")
