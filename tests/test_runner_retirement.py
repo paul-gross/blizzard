@@ -255,14 +255,22 @@ def _store_rows(hub) -> dict[str, list[str]]:  # type: ignore[no-untyped-def]
 
 def test_every_fleet_route_is_gated_or_a_named_exception(tmp_path: Path) -> None:
     """A route a new fleet router mounts without the gate fails here: the only `/api/fleet` routes
-    outside the retirement gate are the identity read (which answers `retired` itself) and the claim."""
+    outside the retirement gate are the identity read (which answers `retired` itself), the claim, and the host's own
+    routes, which a host credential gates instead."""
     ungated = {
         (method, route.path)
         for route in _api_routes(build_hub(tmp_path).client.app)
         if route.path.startswith("/api/fleet/") and _GATE not in _dependency_names(route)
         for method in (route.methods or set()) - {"HEAD"}
     }
-    assert ungated == {("GET", "/api/fleet/identity"), ("POST", "/api/fleet/routes")}
+    assert ungated == {
+        ("GET", "/api/fleet/identity"),
+        ("POST", "/api/fleet/routes"),
+        ("GET", "/api/fleet/host"),
+        ("POST", "/api/fleet/host"),
+        ("POST", "/api/fleet/host/runners"),
+        ("POST", "/api/fleet/host/runners/{runner_id}/retire"),
+    }
 
 
 def test_a_retired_runner_whose_token_still_resolves_is_refused_on_every_gated_fleet_route(
