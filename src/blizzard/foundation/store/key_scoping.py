@@ -46,12 +46,15 @@ class KeyScoping:
 
     ``owns`` decides, of a table that has ``key_column``, whether it is keyed by it (a table lacking the column never
     is). ``owner`` names a keyed table in a refusal (``"tenant-owned"``). ``key_supplied`` builds the error raised,
-    given a table's name, when a caller supplies the key a builder stamps."""
+    given a table's name, when a caller supplies the key a builder stamps. ``key_equality`` builds the
+    ``<key> = <value>`` predicate from the key column and value; it must stay an ``=`` binary expression, which the
+    statement guard reads."""
 
     key_column: str
     owns: Callable[[TableClause], bool]
     owner: str
     key_supplied: Callable[[str], Exception]
+    key_equality: Callable[[ColumnElement[Any], Any], ColumnElement[bool]] = lambda column, key: column == key
 
     def is_keyed(self, from_: FromClause) -> bool:
         """Whether ``from_`` (or the table an alias of it names) is keyed. A join or a subquery owns nothing itself."""
@@ -123,8 +126,8 @@ class KeyedStatements:
     def key_predicates(self, from_: FromClause) -> list[ColumnElement[bool]]:
         """``<key> = <value>`` for each keyed table a read of ``from_`` returns rows of unconditionally — empty for an
         unkeyed table or a derived FROM."""
-        column = self._scoping.key_column
-        return [t.c[column] == self._key for t in _preserved(from_) if self._scoping.is_keyed(t)]
+        column, equality = self._scoping.key_column, self._scoping.key_equality
+        return [equality(t.c[column], self._key) for t in _preserved(from_) if self._scoping.is_keyed(t)]
 
     def select(self, from_: FromClause, *cols: Any) -> Select[Any]:
         """``SELECT cols`` (every column of ``from_`` when none are named) ``FROM from_``, confined to the key.
@@ -180,14 +183,16 @@ class KeyedStatements:
     def update(self, table: TableClause) -> Update:
         """``UPDATE table`` confined to the key's rows."""
         stmt = sa.update(table)
-        column = self._scoping.key_column
-        return stmt.where(table.c[column] == self._key) if self._scoping.is_keyed(table) else stmt
+        if not self._scoping.is_keyed(table):
+            return stmt
+        return stmt.where(self._scoping.key_equality(table.c[self._scoping.key_column], self._key))
 
     def delete(self, table: TableClause) -> Delete:
         """``DELETE FROM table`` confined to the key's rows."""
         stmt = sa.delete(table)
-        column = self._scoping.key_column
-        return stmt.where(table.c[column] == self._key) if self._scoping.is_keyed(table) else stmt
+        if not self._scoping.is_keyed(table):
+            return stmt
+        return stmt.where(self._scoping.key_equality(table.c[self._scoping.key_column], self._key))
 
     def _check_rows(self, table: TableClause, rows: Sequence[Mapping[str, Any]]) -> None:
         """Refuse ``insert_rows``' ``rows`` (keyed by column name) into keyed ``table``; none refused here."""

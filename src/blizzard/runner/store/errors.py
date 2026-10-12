@@ -22,7 +22,10 @@ import sqlalchemy as sa
 import structlog
 from sqlalchemy import ColumnElement, Connection, Engine, Exists, Row, Select
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.sql import Delete, FromClause, Insert, Join, TableClause, Update
+from sqlalchemy.sql.compiler import SQLCompiler
+from sqlalchemy.sql.elements import BinaryExpression
 
 from blizzard.foundation.store.key_scoping import KeyedStatements, KeyScoping
 from blizzard.runner.store.schema import runner_identity
@@ -72,10 +75,36 @@ def _runner_scoped(table: TableClause) -> bool:
     return isinstance(info, Mapping) and info.get("scope") == "runner"
 
 
+class _LikelyRunnerEquality(BinaryExpression[bool]):
+    """``runner_id = <bound>``, which SQLite plans as ``likely(...)``.
+
+    No index leads with ``runner_id`` yet and every row a store holds is its one runner's, so the equality filters
+    nothing; left as a plain term, SQLite's planner counts it as selective and trades an ordered index walk for a scan
+    and a sort. ``likely`` keeps each read's plan the one it had before the key existed. Other dialects render the plain
+    equality, and the statement guard reads it as one."""
+
+    inherit_cache = True
+
+
+@compiles(_LikelyRunnerEquality, "sqlite")
+def _compile_likely_runner_equality(element: _LikelyRunnerEquality, compiler: SQLCompiler, **kw: Any) -> str:
+    return f"likely({compiler.visit_binary(element, **kw)})"
+
+
+def _runner_equality(column: ColumnElement[Any], key: Any) -> ColumnElement[bool]:
+    equality = column == key
+    assert isinstance(equality, BinaryExpression)
+    return _LikelyRunnerEquality(equality.left, equality.right, equality.operator, type_=equality.type)
+
+
 #: The runner store's partition of its tables by runner: keyed by ``runner_id``, every table declared
 #: ``info={"scope": "runner"}``.
 RUNNER_SCOPING = KeyScoping(
-    key_column=RUNNER_COLUMN, owns=_runner_scoped, owner="runner-scoped", key_supplied=RunnerKeySupplied
+    key_column=RUNNER_COLUMN,
+    owns=_runner_scoped,
+    owner="runner-scoped",
+    key_supplied=RunnerKeySupplied,
+    key_equality=_runner_equality,
 )
 
 
