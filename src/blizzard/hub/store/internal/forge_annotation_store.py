@@ -22,15 +22,15 @@ class ForgeAnnotationStore:
 
     def annotated_sources(self) -> frozenset[str]:
         table = forge_annotation_facts
-        query = newest_fact_select(self._store, table, table.c.source_name, None, table.c.source_name).where(
+        query = newest_fact_select(self._store, table, table.c.work_source_id, None, table.c.work_source_id).where(
             table.c.annotating
         )
         with self._store.read("annotated_sources") as conn:
             return frozenset(conn.execute(query).scalars().all())
 
     def record_annotated_sources(self, *, entered: Sequence[str], left: Sequence[str], at: datetime) -> None:
-        rows = [{"source_name": name, "annotating": True, "recorded_at": at} for name in entered]
-        rows += [{"source_name": name, "annotating": False, "recorded_at": at} for name in left]
+        rows = [{"work_source_id": key, "annotating": True, "recorded_at": at} for key in entered]
+        rows += [{"work_source_id": key, "annotating": False, "recorded_at": at} for key in left]
         if not rows:
             return
         with self._store.write("record_annotated_sources") as conn:

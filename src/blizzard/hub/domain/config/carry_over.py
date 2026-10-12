@@ -33,7 +33,12 @@ from blizzard.hub.domain.config.repositories import (
     RepositoryName,
 )
 from blizzard.hub.domain.config.secrets import SealedValue, SecretName, SecretNameError
-from blizzard.hub.domain.config.work_sources import ConfigFieldError, ConfiguredWorkSource, WorkSourceFields
+from blizzard.hub.domain.config.work_sources import (
+    ConfigFieldError,
+    ConfiguredWorkSource,
+    WorkSourceFields,
+    WorkSourceId,
+)
 from blizzard.hub.domain.kernel.slugs import derive_slug
 
 #: Every row the import writes is attributed to this actor, through this door.
@@ -172,7 +177,12 @@ class IImportLinks(Protocol):
     """Links the records an import creates to the project they land in."""
 
     def links(
-        self, work_sources: Sequence[str], repositories: Sequence[RepositoryId], ctx: ChangeContext, *, at: datetime
+        self,
+        work_sources: Sequence[WorkSourceId],
+        repositories: Sequence[RepositoryId],
+        ctx: ChangeContext,
+        *,
+        at: datetime,
     ) -> tuple[tuple[object, ConfigChange], ...]:
         """Each link record with its change. :class:`LegacyImportRefused` when no project can be chosen."""
         ...
@@ -195,7 +205,7 @@ def _value(values: Mapping[str, str], variable: str) -> str:
 def _work_sources(
     legacy: LegacyKeys, existing: ExistingConfig, ctx: ChangeContext, at: datetime, outcomes: list[ImportOutcome]
 ) -> tuple[tuple[ConfiguredWorkSource, ConfigChange], ...]:
-    names = {record.name for record in existing.work_sources}
+    names = {record.slug for record in existing.work_sources}
     locators = {(record.fields.provider, record.fields.locator) for record in existing.work_sources}
     planned: list[tuple[ConfiguredWorkSource, ConfigChange]] = []
     for source in legacy.sources:
@@ -211,7 +221,7 @@ def _work_sources(
             secret=secret_name_of(source.token_env),
         )
         try:
-            planned.append(ConfiguredWorkSource.new(source.name, fields, ctx, at=at))
+            planned.append(ConfiguredWorkSource.new(source.name, None, fields, ctx, at=at))
         except ConfigFieldError as exc:
             raise LegacyImportRefused(f'[[work_source]] "{source.name}": {exc}') from exc
         outcomes.append(ImportOutcome(RecordKind.WORK_SOURCE, source.name, created=True))

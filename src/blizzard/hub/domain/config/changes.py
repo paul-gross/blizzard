@@ -34,9 +34,9 @@ class Door(StrEnum):
 
 
 class RecordKind(StrEnum):
-    """The kind of configured record a change row names. A project's and a repository's ``record_key`` is its id,
-    never its slug; a project link's is the linked source's name or repository's id. Linking, unlinking and re-linking
-    are ``create``, ``retire`` and ``enable``."""
+    """The kind of configured record a change row names. A project's, a repository's and a work source's
+    ``record_key`` is its id, never its slug; a project link's is the linked source's or repository's id. Linking,
+    unlinking and re-linking are ``create``, ``retire`` and ``enable``."""
 
     WORK_SOURCE = "work_source"
     SECRET = "secret"

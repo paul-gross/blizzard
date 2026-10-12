@@ -30,8 +30,8 @@ from blizzard.hub.domain.config.repositories import (
 )
 from blizzard.hub.domain.config.work_sources import (
     WorkSourceLocatorTaken,
-    WorkSourceNameTaken,
     WorkSourceSecretUnavailable,
+    WorkSourceSlugTaken,
 )
 from blizzard.hub.domain.projects.links import RepositoryLink, SourceLink
 from blizzard.hub.store.internal import project_link_store as link_writes
@@ -43,7 +43,7 @@ from blizzard.hub.store.scoped import ScopedConnections
 
 #: What a create body's in-transaction checks raise when a concurrent write took its claim first.
 _REFUSALS = (
-    WorkSourceNameTaken,
+    WorkSourceSlugTaken,
     WorkSourceLocatorTaken,
     WorkSourceSecretUnavailable,
     RepositorySlugTaken,
@@ -124,7 +124,7 @@ class ConfigImportStore:
 
 def _insert_link(conn: Connection, link: object, change: ConfigChange) -> None:
     if isinstance(link, SourceLink):
-        link_writes.insert_link(conn, link_writes._SOURCES, link.project_id, link.source_name, change)
+        link_writes.insert_link(conn, link_writes._SOURCES, link.project_id, link.work_source_id, change)
     else:
         assert isinstance(link, RepositoryLink)
         link_writes.insert_link(conn, link_writes._REPOSITORIES, link.project_id, link.repository_id, change)

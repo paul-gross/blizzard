@@ -9,7 +9,7 @@ import pytest
 
 from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, Door, FieldChange, RecordKind
 from blizzard.hub.domain.config.repositories import RepositoryId
-from blizzard.hub.domain.config.work_sources import BuiltInWorkSource, ConfigRevisionConflict
+from blizzard.hub.domain.config.work_sources import BuiltInWorkSource, ConfigRevisionConflict, WorkSourceId
 from blizzard.hub.domain.projects.links import RepositoryLink, SourceLink
 from blizzard.hub.domain.projects.model import Project
 
@@ -18,20 +18,21 @@ pytestmark = pytest.mark.unit
 _AT = datetime(2026, 10, 9, 12, 0, tzinfo=UTC)
 _CTX = ChangeContext(actor="usr_alice", door=Door.CLI)
 _PROJECT = Project.new("winter", "Winter", _CTX, at=_AT)[0]
+_SOURCE = WorkSourceId("wsrc_gh_winter")
 _REPOSITORY = RepositoryId("repo_blizzard")
 
 
 def test_a_first_source_link_is_created_linked_and_keyed_by_the_source() -> None:
-    link, change = SourceLink.new(_PROJECT, "gh-winter", _CTX, at=_AT)
-    assert (link.project_id, link.source_name, link.revision, link.linked) == (
+    link, change = SourceLink.new(_PROJECT, _SOURCE, _CTX, at=_AT)
+    assert (link.project_id, link.work_source_id, link.revision, link.linked) == (
         _PROJECT.project_id,
-        "gh-winter",
+        _SOURCE,
         1,
         True,
     )
     assert (change.record_kind, change.record_key, change.project_id) == (
         RecordKind.PROJECT_SOURCE_LINK,
-        "gh-winter",
+        _SOURCE,
         _PROJECT.project_id,
     )
     assert (change.op, change.revision, change.actor, change.door) == (ChangeOp.CREATE, 1, "usr_alice", Door.CLI)
@@ -40,7 +41,7 @@ def test_a_first_source_link_is_created_linked_and_keyed_by_the_source() -> None
 
 def test_the_built_in_hub_source_is_never_linked() -> None:
     with pytest.raises(BuiltInWorkSource):
-        SourceLink.new(_PROJECT, "hub", _CTX, at=_AT)
+        SourceLink.new(_PROJECT, WorkSourceId("hub"), _CTX, at=_AT)
 
 
 def test_a_first_repository_link_is_created_linked_and_keyed_by_the_repository() -> None:
@@ -62,7 +63,7 @@ def test_a_first_repository_link_is_created_linked_and_keyed_by_the_repository()
 @pytest.mark.parametrize(
     "link",
     [
-        SourceLink.new(_PROJECT, "gh-winter", _CTX, at=_AT)[0],
+        SourceLink.new(_PROJECT, _SOURCE, _CTX, at=_AT)[0],
         RepositoryLink.new(_PROJECT, _REPOSITORY, _CTX, at=_AT)[0],
     ],
     ids=["source", "repository"],
@@ -84,12 +85,12 @@ def test_unlinking_retires_the_link_and_relinking_enables_it(link: SourceLink | 
 
 
 def test_relinking_a_standing_link_writes_nothing() -> None:
-    link = SourceLink.new(_PROJECT, "gh-winter", _CTX, at=_AT)[0]
+    link = SourceLink.new(_PROJECT, _SOURCE, _CTX, at=_AT)[0]
     assert link.relink(_CTX, if_match=None, at=_AT) is None
 
 
 def test_a_stale_revision_is_refused_even_for_a_no_op() -> None:
-    link = SourceLink.new(_PROJECT, "gh-winter", _CTX, at=_AT)[0]
+    link = SourceLink.new(_PROJECT, _SOURCE, _CTX, at=_AT)[0]
     with pytest.raises(ConfigRevisionConflict) as caught:
         link.relink(_CTX, if_match=4, at=_AT)
     assert caught.value.current == 1
@@ -97,8 +98,8 @@ def test_a_stale_revision_is_refused_even_for_a_no_op() -> None:
 
 def test_links_of_one_record_from_two_projects_are_separate_records() -> None:
     other = Project.new("frost", "Frost", _CTX, at=_AT)[0]
-    first = SourceLink.new(_PROJECT, "gh-winter", _CTX, at=_AT)[0]
-    second = SourceLink.new(other, "gh-winter", _CTX, at=_AT)[0]
+    first = SourceLink.new(_PROJECT, _SOURCE, _CTX, at=_AT)[0]
+    second = SourceLink.new(other, _SOURCE, _CTX, at=_AT)[0]
     assert first != second
     assert first.unlink(_CTX, if_match=None, at=_AT) is not None
     assert second.linked

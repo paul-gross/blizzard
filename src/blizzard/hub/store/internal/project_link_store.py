@@ -3,7 +3,7 @@
 Whether a link stands derives from its newest fact in ``project_source_link_facts`` /
 ``project_repository_link_facts`` (``bzh:facts-not-status``). Every write appends a fact and its change row in the
 transaction that writes the link. Source links and repository links share every statement; :class:`_Kind` names the
-tables and the name column one kind uses."""
+tables and the id column one kind uses."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ from sqlalchemy.exc import IntegrityError
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.config.changes import ConfigChange
 from blizzard.hub.domain.config.repositories import RepositoryId
-from blizzard.hub.domain.config.work_sources import ConfigRevisionConflict, is_built_in
+from blizzard.hub.domain.config.work_sources import ConfigRevisionConflict, WorkSourceId, is_built_in
 from blizzard.hub.domain.projects.links import IWriteProjectLinks, RepositoryLink, SourceLink
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store.internal.chunk_rows import lock_keys
@@ -46,7 +46,7 @@ class _Kind:
         return table.c[self.column]
 
 
-_SOURCES = _Kind(project_source_links, project_source_link_facts, "source_name", "source link")
+_SOURCES = _Kind(project_source_links, project_source_link_facts, "work_source_id", "source link")
 _REPOSITORIES = _Kind(project_repository_links, project_repository_link_facts, "repository_id", "repository link")
 
 #: The ``keyed_locks`` namespace of one project's source links, keyed by the project's id. Every source link or
@@ -158,13 +158,15 @@ def _standing(
     return standing
 
 
-def projects_linking_source_conn(conn: Connection, source_name: str) -> list[ProjectId]:
-    """The projects whose standing link draws from ``source_name``, ordered by id, read on the caller's ``conn`` —
+def projects_linking_source_conn(conn: Connection, work_source_id: str) -> list[ProjectId]:
+    """The projects whose standing link draws from ``work_source_id``, ordered by id, read on the caller's ``conn`` —
     the locked ingest's read, and :meth:`ProjectLinkStore.projects_linking_source`'s body."""
     stmts = statements_of(conn)
     links = _SOURCES.links
-    linking = conn.execute(stmts.select(links, links.c.project_id).where(links.c.source_name == source_name)).scalars()
-    standing = _standing(stmts, conn, _SOURCES, list(linking), source_name)
+    linking = conn.execute(
+        stmts.select(links, links.c.project_id).where(links.c.work_source_id == work_source_id)
+    ).scalars()
+    standing = _standing(stmts, conn, _SOURCES, list(linking), work_source_id)
     return sorted(ProjectId(project_id) for project_id, _ in standing)
 
 
@@ -177,7 +179,7 @@ class ProjectLinkStore:
     # --- writes ---
 
     def create_source_link(self, link: SourceLink, *, change: ConfigChange) -> SourceLink:
-        self._create("create_source_link", _SOURCES, link.project_id, link.source_name, change)
+        self._create("create_source_link", _SOURCES, link.project_id, link.work_source_id, change)
         return link
 
     def record_source_link(self, link: SourceLink, *, from_revision: int, change: ConfigChange) -> SourceLink:
@@ -185,7 +187,7 @@ class ProjectLinkStore:
             "record_source_link",
             _SOURCES,
             link.project_id,
-            link.source_name,
+            link.work_source_id,
             link.linked,
             link.revision,
             from_revision,
@@ -244,12 +246,12 @@ class ProjectLinkStore:
 
     # --- reads ---
 
-    def source_link(self, project_id: ProjectId, source_name: str) -> SourceLink | None:
-        found = self._stored("source_link", _SOURCES, project_id, source_name)
+    def source_link(self, project_id: ProjectId, work_source_id: WorkSourceId) -> SourceLink | None:
+        found = self._stored("source_link", _SOURCES, project_id, work_source_id)
         if found is None:
             return None
         revision, linked = found
-        return SourceLink(project_id=project_id, source_name=source_name, revision=revision, linked=linked)
+        return SourceLink(project_id=project_id, work_source_id=work_source_id, revision=revision, linked=linked)
 
     def repository_link(self, project_id: ProjectId, repository_id: RepositoryId) -> RepositoryLink | None:
         found = self._stored("repository_link", _REPOSITORIES, project_id, repository_id)
@@ -260,7 +262,7 @@ class ProjectLinkStore:
 
     def sources_of(self, project_id: ProjectId) -> list[SourceLink]:
         return [
-            SourceLink(project_id=project_id, source_name=name, revision=revision)
+            SourceLink(project_id=project_id, work_source_id=WorkSourceId(name), revision=revision)
             for name, revision in self._standing_of("sources_of", _SOURCES, project_id)
         ]
 
@@ -270,15 +272,15 @@ class ProjectLinkStore:
             for name, revision in self._standing_of("repositories_of", _REPOSITORIES, project_id)
         ]
 
-    def projects_linking_source(self, source_name: str) -> list[ProjectId]:
+    def projects_linking_source(self, work_source_id: WorkSourceId) -> list[ProjectId]:
         with self._store.read("projects_linking_source") as conn:
-            return projects_linking_source_conn(conn, source_name)
+            return projects_linking_source_conn(conn, work_source_id)
 
-    def linked_at(self, project_id: ProjectId, source_name: str, at: datetime) -> bool:
-        if is_built_in(source_name):
+    def linked_at(self, project_id: ProjectId, source: str, at: datetime) -> bool:
+        if is_built_in(source):
             return True
         with self._store.read("linked_at") as conn:
-            return _newest_linked(self._store, conn, _SOURCES, project_id, source_name, at=at)
+            return _newest_linked(self._store, conn, _SOURCES, project_id, source, at=at)
 
     def _stored(self, operation: str, kind: _Kind, project_id: str, name: str) -> tuple[int, bool] | None:
         """The stored link's revision and whether it stands, or ``None`` when the project never linked ``name``."""

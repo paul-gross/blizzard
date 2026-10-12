@@ -57,6 +57,7 @@ class IdPrefix(StrEnum):
     INVITATION = "inv"  # an invitation into one tenant
     PROJECT = "proj"  # a project — its slug and name never stand in for it
     REPOSITORY = "repo"  # a repository — its slug and name never stand in for it
+    WORK_SOURCE = "wsrc"  # a configured work source — its slug and name never stand in for it
 
 
 @domain_model

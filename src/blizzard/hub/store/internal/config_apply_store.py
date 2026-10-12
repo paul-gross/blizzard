@@ -28,7 +28,7 @@ from blizzard.hub.domain.config.work_sources import (
     ConfigRevisionConflict,
     ConfiguredWorkSource,
     WorkSourceLocatorTaken,
-    WorkSourceNameTaken,
+    WorkSourceSlugTaken,
 )
 from blizzard.hub.domain.garden.routines import SCOPES_FIELD, Routine, RoutineNameTakenError
 from blizzard.hub.domain.garden.scopes import Scope, ScopeSlugTakenError
@@ -46,7 +46,7 @@ from blizzard.hub.store.scoped import ScopedConnections
 _REFUSALS = (
     ConfigFieldError,
     ConfigRevisionConflict,
-    WorkSourceNameTaken,
+    WorkSourceSlugTaken,
     WorkSourceLocatorTaken,
     RepositorySlugTaken,
     RepositoryCoordinateTaken,
@@ -59,7 +59,7 @@ _REFUSALS = (
 def _taken(record: object) -> Exception:
     """The refusal a create that lost its name to a concurrent one reads as."""
     if isinstance(record, ConfiguredWorkSource):
-        return WorkSourceNameTaken(record.name)
+        return WorkSourceSlugTaken(record.slug)
     if isinstance(record, Routine):
         return RoutineNameTakenError(record.name)
     if isinstance(record, Scope):
@@ -121,7 +121,7 @@ class ConfigApplyStore:
                     change=change,
                 )
             else:
-                work_source_writes.update_record(conn, record, from_revision, change)
+                work_source_writes.update_record(conn, record, from_revision, None, change)
         else:
             assert isinstance(record, ConfiguredRepository)
             ConfigApplyStore._run_repository(conn, record, from_revision, change, lifecycle=lifecycle, retired=retired)

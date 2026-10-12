@@ -20,7 +20,12 @@ from blizzard.hub.domain.config.apply import PROJECTS_SECTION, ApplyEntryRefused
 from blizzard.hub.domain.config.carry_over import LegacyImportRefused
 from blizzard.hub.domain.config.changes import ChangeContext, ConfigChange, RecordKind
 from blizzard.hub.domain.config.repositories import REPOSITORY_KIND, RepositoryId, RepositoryRef
-from blizzard.hub.domain.config.work_sources import BuiltInWorkSource, ConfigFieldError, require_configurable
+from blizzard.hub.domain.config.work_sources import (
+    BuiltInWorkSource,
+    ConfigFieldError,
+    WorkSourceId,
+    require_configurable,
+)
 from blizzard.hub.domain.kernel import id_or_slug
 from blizzard.hub.domain.kernel.slugs import Slug
 from blizzard.hub.domain.kernel.unset import UNSET
@@ -309,7 +314,12 @@ class ImportLinks:
         self._projects = projects
 
     def links(
-        self, work_sources: Sequence[str], repositories: Sequence[RepositoryId], ctx: ChangeContext, *, at: datetime
+        self,
+        work_sources: Sequence[WorkSourceId],
+        repositories: Sequence[RepositoryId],
+        ctx: ChangeContext,
+        *,
+        at: datetime,
     ) -> tuple[tuple[object, ConfigChange], ...]:
         try:
             project = sole_project(self._projects.list_all())
@@ -319,6 +329,6 @@ class ImportLinks:
                 f"the import links what it creates to the tenant's only project, and this tenant holds {slugs}"
             ) from exc
         return (
-            *(SourceLink.new(project, name, ctx, at=at) for name in work_sources),
+            *(SourceLink.new(project, work_source_id, ctx, at=at) for work_source_id in work_sources),
             *(RepositoryLink.new(project, name, ctx, at=at) for name in repositories),
         )

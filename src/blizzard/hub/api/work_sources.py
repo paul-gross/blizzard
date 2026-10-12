@@ -37,7 +37,7 @@ from blizzard.hub.domain.config.work_sources import (
     WorkSourceEdit,
     WorkSourceFields,
     WorkSourceLocatorTaken,
-    WorkSourceNameTaken,
+    WorkSourceSlugTaken,
     is_built_in,
     require_configurable,
 )
@@ -208,10 +208,12 @@ def create_work_source(
         secret=request.secret,
     )
     try:
-        record = services.config_authoring.create_work_source(request.name, fields, change_context(identity, door))
+        record = services.config_authoring.create_work_source(
+            request.name, None, fields, change_context(identity, door)
+        )
     except ConfigFieldError as exc:
         raise _unprocessable(exc) from exc
-    except (WorkSourceNameTaken, WorkSourceLocatorTaken) as exc:
+    except (WorkSourceSlugTaken, WorkSourceLocatorTaken) as exc:
         raise _conflict(exc) from exc
     return _summary(record, services)
 

@@ -66,7 +66,9 @@ def _view(record: Project) -> ProjectView:
 
 
 def _source_view(link: SourceLink) -> SourceLinkView:
-    return SourceLinkView(project_id=link.project_id, name=link.source_name, linked=link.linked, revision=link.revision)
+    return SourceLinkView(
+        project_id=link.project_id, name=link.work_source_id, linked=link.linked, revision=link.revision
+    )
 
 
 def _built_in_view(project: Project) -> SourceLinkView:

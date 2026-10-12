@@ -2409,7 +2409,7 @@ def _source_fact(conn: sa.Connection, source: str, *, linked: bool, at: datetime
             stamp(
                 hub.project_source_link_facts,
                 project_id=project_id,
-                source_name=source,
+                work_source_id=source,
                 linked=linked,
                 set_at=at,
                 set_by="op",

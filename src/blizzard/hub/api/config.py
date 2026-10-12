@@ -382,7 +382,7 @@ def _projects(
         # Every standing link may be unlinked, and a listed one in any state relinked.
         if "sources" in entry.model_fields_set:
             listed = [link for name in entry.sources if (link := links.source_link(held, name)) is not None]
-            source_links.update({(held, link.source_name): link for link in [*links.sources_of(held), *listed]})
+            source_links.update({(held, link.work_source_id): link for link in [*links.sources_of(held), *listed]})
         if "repositories" in entry.model_fields_set:
             named_repos = [
                 link
@@ -548,7 +548,7 @@ def export_config(services: Services) -> ConfigDocument:
                 slug=project.slug,
                 name=project.name,
                 description=project.description,
-                sources=sorted(link.source_name for link in services.project_links.sources_of(project.project_id)),
+                sources=sorted(link.work_source_id for link in services.project_links.sources_of(project.project_id)),
                 repositories=sorted(
                     repository_slugs[link.repository_id]
                     for link in services.project_links.repositories_of(project.project_id)

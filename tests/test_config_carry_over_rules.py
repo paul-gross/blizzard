@@ -22,7 +22,7 @@ from blizzard.hub.domain.config.carry_over import (
 from blizzard.hub.domain.config.changes import Door, RecordKind
 from blizzard.hub.domain.config.legacy_keys import LegacyKeys, WorkSourceConfig
 from blizzard.hub.domain.config.repositories import ConfiguredRepository, RepositoryFields, RepositoryId
-from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, WorkSourceFields
+from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, WorkSourceFields, WorkSourceId
 
 pytestmark = pytest.mark.unit
 
@@ -114,6 +114,8 @@ def test_coordinates_sharing_a_bare_name_each_take_owner_dash_repo() -> None:
 
 def test_records_the_store_already_holds_are_skipped() -> None:
     held_source = ConfiguredWorkSource(
+        work_source_id=WorkSourceId("wsrc_other"),
+        slug="other",
         name="other",
         fields=WorkSourceFields(
             provider="github", locator="acme/a", api_base=None, web_base=None, annotate=False, secret="x"

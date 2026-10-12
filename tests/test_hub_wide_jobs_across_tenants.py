@@ -296,7 +296,7 @@ def test_a_work_source_cannot_name_a_secret_only_another_tenant_holds(hub: _Hub)
     hub.authoring(hub.first).create_secret(SecretName.parse("gh"), "tok-first", OP)
 
     with pytest.raises(WorkSourceSecretUnavailable):
-        hub.authoring(hub.second).create_work_source("demo", _SOURCE, OP)
+        hub.authoring(hub.second).create_work_source("demo", None, _SOURCE, OP)
 
     assert hub.stores(hub.second).work_source_records.list_all(include_retired=True) == []
 

@@ -16,7 +16,12 @@ from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.changes import ChangeOp, ConfigChange, RecordKind
 from blizzard.hub.domain.config.repositories import ConfiguredRepository, RepositoryFields
 from blizzard.hub.domain.config.secrets import SecretName
-from blizzard.hub.domain.config.work_sources import ConfigRevisionConflict, ConfiguredWorkSource, WorkSourceFields
+from blizzard.hub.domain.config.work_sources import (
+    ConfigRevisionConflict,
+    ConfiguredWorkSource,
+    WorkSourceFields,
+    WorkSourceId,
+)
 from blizzard.hub.domain.projects.authoring import ProjectAuthoring
 from blizzard.hub.domain.projects.model import Project, ProjectEdit, ProjectId, ProjectSlug, ProjectSlugTaken
 from blizzard.hub.secrets import hub_key_provider
@@ -85,7 +90,7 @@ class _World:
             annotate=False,
             secret="forge-token",
         )
-        return self.config().create_work_source(name, fields, OP)
+        return self.config().create_work_source(name, None, fields, OP)
 
     def repository(self, name: str) -> ConfiguredRepository:
         fields = RepositoryFields(
@@ -241,9 +246,9 @@ def _source_facts(world: _World) -> list[tuple[str, str, bool]]:
     facts = project_source_link_facts
     with world.engine.connect() as conn:
         rows = conn.execute(
-            world.conns().select(facts, facts.c.project_id, facts.c.source_name, facts.c.linked).order_by(facts.c.id)
+            world.conns().select(facts, facts.c.project_id, facts.c.work_source_id, facts.c.linked).order_by(facts.c.id)
         )
-        return [(row.project_id, row.source_name, row.linked) for row in rows]
+        return [(row.project_id, row.work_source_id, row.linked) for row in rows]
 
 
 def test_a_first_source_link_writes_the_link_its_fact_and_its_change(world: _World) -> None:
@@ -251,9 +256,9 @@ def test_a_first_source_link_writes_the_link_its_fact_and_its_change(world: _Wor
     assert world.default is not None
     link = world.authoring().link_source(world.default, source, OP)
     assert world.links().sources_of(world.default.project_id) == [link]
-    assert world.links().source_link(world.default.project_id, "gh-winter") == link
-    assert _source_facts(world) == [(world.default.project_id, "gh-winter", True)]
-    [change] = world.changes(RecordKind.PROJECT_SOURCE_LINK, "gh-winter")
+    assert world.links().source_link(world.default.project_id, source.work_source_id) == link
+    assert _source_facts(world) == [(world.default.project_id, source.work_source_id, True)]
+    [change] = world.changes(RecordKind.PROJECT_SOURCE_LINK, source.work_source_id)
     assert (change.op, change.revision, change.project_id) == (ChangeOp.CREATE, 1, world.default.project_id)
 
 
@@ -265,11 +270,11 @@ def test_unlinking_and_relinking_move_the_revision_and_append_a_fact_each(world:
     unlinked = world.authoring().unlink_source(link, OP, if_match=1)
     assert (unlinked.revision, unlinked.linked) == (2, False)
     assert world.links().sources_of(project.project_id) == []
-    assert world.links().source_link(project.project_id, "gh-winter") == unlinked
+    assert world.links().source_link(project.project_id, source.work_source_id) == unlinked
     relinked = world.authoring().link_source(project, source, OP, if_match=2)
     assert (relinked.revision, relinked.linked) == (3, True)
     assert [linked for _, _, linked in _source_facts(world)] == [True, False, True]
-    ops = [(c.op, c.revision) for c in world.changes(RecordKind.PROJECT_SOURCE_LINK, "gh-winter")]
+    ops = [(c.op, c.revision) for c in world.changes(RecordKind.PROJECT_SOURCE_LINK, source.work_source_id)]
     assert ops == [(ChangeOp.CREATE, 1), (ChangeOp.RETIRE, 2), (ChangeOp.ENABLE, 3)]
 
 
@@ -281,7 +286,7 @@ def test_a_standing_link_or_a_repeated_unlink_writes_nothing(world: _World) -> N
     unlinked = world.authoring().unlink_source(link, OP)
     assert world.authoring().unlink_source(unlinked, OP) == unlinked
     assert len(_source_facts(world)) == 2
-    assert len(world.changes(RecordKind.PROJECT_SOURCE_LINK, "gh-winter")) == 2
+    assert len(world.changes(RecordKind.PROJECT_SOURCE_LINK, source.work_source_id)) == 2
 
 
 def test_an_unlink_from_a_moved_revision_is_refused(world: _World) -> None:
@@ -304,7 +309,9 @@ def test_one_source_and_one_repository_may_be_linked_by_two_projects(world: _Wor
     for project in (world.default, second):
         world.authoring().link_source(project, source, OP)
         world.authoring().link_repository(project, repository, OP)
-    assert world.links().projects_linking_source("gh-shared") == sorted([world.default.project_id, second.project_id])
+    assert world.links().projects_linking_source(source.work_source_id) == sorted(
+        [world.default.project_id, second.project_id]
+    )
     assert [r.repository_id for r in world.links().repositories_of(second.project_id)] == [repository.repository_id]
     assert [r.repository_id for r in world.links().repositories_of(world.default.project_id)] == [
         repository.repository_id
@@ -318,8 +325,8 @@ def test_only_standing_links_count_as_linking_a_source(world: _World) -> None:
     world.authoring().link_source(world.default, source, OP)
     link = world.authoring().link_source(second, source, OP)
     world.authoring().unlink_source(link, OP)
-    assert world.links().projects_linking_source("gh-shared") == [world.default.project_id]
-    assert world.links().projects_linking_source("gh-never") == []
+    assert world.links().projects_linking_source(source.work_source_id) == [world.default.project_id]
+    assert world.links().projects_linking_source(WorkSourceId("wsrc_never")) == []
 
 
 def test_linked_at_reads_the_newest_fact_set_by_then_and_the_hub_source_is_always_linked(world: _World) -> None:
@@ -330,9 +337,9 @@ def test_linked_at_reads_the_newest_fact_set_by_then_and_the_hub_source_is_alway
     link = world.authoring().link_source(world.default, source, OP)
     world.clock.advance(timedelta(hours=1))
     world.authoring().unlink_source(link, OP)
-    assert not world.links().linked_at(project, "gh-winter", _T0)
-    assert world.links().linked_at(project, "gh-winter", _T0 + timedelta(hours=1, minutes=30))
-    assert not world.links().linked_at(project, "gh-winter", _T0 + timedelta(hours=3))
+    assert not world.links().linked_at(project, source.work_source_id, _T0)
+    assert world.links().linked_at(project, source.work_source_id, _T0 + timedelta(hours=1, minutes=30))
+    assert not world.links().linked_at(project, source.work_source_id, _T0 + timedelta(hours=3))
     assert world.links().linked_at(project, "hub", _T0)
 
 
@@ -349,16 +356,16 @@ def test_the_links_of_one_tenant_are_invisible_to_another(world: _World) -> None
     assert world.default is not None
     world.authoring().link_source(world.default, source, OP)
     other = add_tenant(world.engine, "other")
-    assert world.links(other).projects_linking_source("gh-winter") == []
-    assert world.links(other).source_link(world.default.project_id, "gh-winter") is None
+    assert world.links(other).projects_linking_source(source.work_source_id) == []
+    assert world.links(other).source_link(world.default.project_id, source.work_source_id) is None
 
 
 def test_the_harness_seeds_and_links_a_project_through_authoring(world: _World) -> None:
-    world.source("gh-winter")
+    source = world.source("gh-winter")
     repository = world.repository("winter")
     project = seed_project(world.engine, "winter")
     link_project(world.engine, project=project, source="gh-winter", repository="winter")
-    assert [s.source_name for s in world.links().sources_of(project)] == ["gh-winter"]
+    assert [s.work_source_id for s in world.links().sources_of(project)] == [source.work_source_id]
     assert [r.repository_id for r in world.links().repositories_of(project)] == [repository.repository_id]
     assert len(world.changes(RecordKind.PROJECT, project)) == 1
 

@@ -247,7 +247,7 @@ def reconcile(declaration: ConfigDeclaration, stored: StoredConfig, ctx: ChangeC
         writes,
         outcomes,
         guard=lambda d, _: require_configurable(d.name),
-        create=lambda d: ConfiguredWorkSource.new(d.name, d.fields, ctx, at=at),
+        create=lambda d: ConfiguredWorkSource.new(d.name, None, d.fields, ctx, at=at),
     )
     _reconcile_section(
         REPOSITORIES_SECTION,

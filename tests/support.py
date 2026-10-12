@@ -347,7 +347,7 @@ def link_project(
     assert record is not None, f"link_project needs {project} among {tenant}'s projects"
     conns = scoped_connections(engine, tenant)
     if source is not None:
-        work_source = WorkSourceRecordStore(conns).get(source)
+        work_source = WorkSourceRecordStore(conns).resolve(source)
         assert work_source is not None, f"link_project needs the work source {source} stored in {tenant}"
         authoring.link_source(record, work_source, _SEEDER)
     if repository is not None:
@@ -1213,7 +1213,7 @@ def seed_fake_work_sources(engine: Engine, names: Iterable[str], *, tmp_path: Pa
         engine, keys=hub_key_provider({}, data_dir=tmp_path), clock=FixedClock(datetime(2026, 7, 12, tzinfo=UTC))
     )
     for name in names:
-        if stores.get(name) is not None:
+        if stores.resolve(name) is not None:
             continue
         with contextlib.suppress(SecretAlreadyExists):
             authoring.create_secret(SecretName.parse(FIXTURE_FORGE_SECRET), "fixture-token", OP)
@@ -1225,7 +1225,7 @@ def seed_fake_work_sources(engine: Engine, names: Iterable[str], *, tmp_path: Pa
             annotate=False,
             secret=FIXTURE_FORGE_SECRET,
         )
-        authoring.create_work_source(name, fields, OP)
+        authoring.create_work_source(name, None, fields, OP)
         if link:
             link_project(engine, source=name)
 
@@ -2236,7 +2236,7 @@ def seed_drainable_history(
     project_id = conn.execute(
         hub_scoped(sa.select(projects.project_id).where(projects.tenant_id == tenant))
     ).scalar_one()
-    link = {"tenant_id": tenant, "project_id": project_id, "source_name": "github"}
+    link = {"tenant_id": tenant, "project_id": project_id, "work_source_id": "github"}
     conn.execute(hub_scoped(sa.insert(schema.project_source_links)).values(**link, revision=1))
     conn.execute(
         hub_scoped(sa.insert(schema.project_source_link_facts)).values(**link, linked=True, set_at=at, set_by="seed")

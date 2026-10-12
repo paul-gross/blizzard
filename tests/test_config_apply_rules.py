@@ -29,6 +29,7 @@ from blizzard.hub.domain.config.work_sources import (
     ConfiguredWorkSource,
     WorkSourceEdit,
     WorkSourceFields,
+    WorkSourceId,
 )
 from blizzard.hub.domain.garden.declarations import RoutineDeclaration, ScopeDeclaration
 from blizzard.hub.domain.garden.routines import Routine, RoutineEdit
@@ -50,7 +51,16 @@ _ACTIVE_GH = {"gh": RecordState.ACTIVE}
 
 
 def _source(name: str = "demo", *, retired: bool = False, fields: WorkSourceFields = _SOURCE) -> ConfiguredWorkSource:
-    return ConfiguredWorkSource(name=name, fields=fields, revision=3, created_at=_AT, created_by="bob", retired=retired)
+    return ConfiguredWorkSource(
+        work_source_id=WorkSourceId(f"wsrc_{name}"),
+        slug=name,
+        name=name,
+        fields=fields,
+        revision=3,
+        created_at=_AT,
+        created_by="bob",
+        retired=retired,
+    )
 
 
 def _repo(name: str = "blizzard", *, retired: bool = False) -> ConfiguredRepository:

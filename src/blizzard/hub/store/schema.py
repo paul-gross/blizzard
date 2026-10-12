@@ -328,10 +328,14 @@ secret_lifecycle_facts = Table(
 Index("ix_secret_lifecycle_facts_tenant_id", secret_lifecycle_facts.c.tenant_id)
 
 # --- Work sources (configured records; secret_name references a secret, never a value) ---
+# A work source is named by its id everywhere; ``slug`` is the handle people type, unique within the tenant, editable,
+# and never ``hub``, and ``name`` a display label, unique nowhere and never resolved.
 
 work_sources = Table(
     "work_sources",
     metadata,
+    Column("work_source_id", String, nullable=False, info={"hub_unique": True}),  # wsrc_<ulid>
+    Column("slug", String, nullable=False),
     Column("name", String, nullable=False),
     Column("provider", String, nullable=False),
     Column("locator", String, nullable=False),
@@ -343,11 +347,33 @@ work_sources = Table(
     Column("created_at", UtcDateTime, nullable=False),
     Column("created_by", String, nullable=False),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_work_sources_tenant_id"), nullable=False),
-    PrimaryKeyConstraint("tenant_id", "name", name="pk_work_sources"),
+    PrimaryKeyConstraint("work_source_id", name="pk_work_sources"),
+    UniqueConstraint("tenant_id", "slug", name="uq_work_sources_tenant_slug"),
     UniqueConstraint("tenant_id", "provider", "locator", name="uq_work_sources_tenant_provider_locator"),
     ForeignKeyConstraint(
         ["tenant_id", "secret_name"], ["secrets.tenant_id", "secrets.name"], name="fk_work_sources_secrets"
     ),
+)
+
+# A slug a work source moved away from; at most one work source holds a given former slug.
+work_source_former_slugs = Table(
+    "work_source_former_slugs",
+    metadata,
+    Column("slug", String, nullable=False),
+    Column(
+        "work_source_id",
+        String,
+        ForeignKey("work_sources.work_source_id", name="fk_work_source_former_slugs_work_sources"),
+        nullable=False,
+    ),
+    Column("left_at", UtcDateTime, nullable=False),
+    Column(
+        "tenant_id",
+        String,
+        ForeignKey("tenants.tenant_id", name="fk_work_source_former_slugs_tenant_id"),
+        nullable=False,
+    ),
+    PrimaryKeyConstraint("tenant_id", "slug", name="pk_work_source_former_slugs"),
 )
 
 # Work source retire/enable facts: append-only, newest wins.
@@ -355,7 +381,7 @@ work_source_lifecycle_facts = Table(
     "work_source_lifecycle_facts",
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
-    Column("name", String, nullable=False),
+    Column("work_source_id", String, nullable=False),
     Column("retired", Boolean, nullable=False),
     Column("set_at", UtcDateTime, nullable=False),
     Column("set_by", String, nullable=False),
@@ -366,8 +392,8 @@ work_source_lifecycle_facts = Table(
         nullable=False,
     ),
     ForeignKeyConstraint(
-        ["tenant_id", "name"],
-        ["work_sources.tenant_id", "work_sources.name"],
+        ["work_source_id"],
+        ["work_sources.work_source_id"],
         name="fk_work_source_lifecycle_facts_work_sources",
     ),
 )
@@ -454,27 +480,27 @@ project_source_links = Table(
     Column(
         "project_id", String, ForeignKey("projects.project_id", name="fk_project_source_links_projects"), nullable=False
     ),
-    Column("source_name", String, nullable=False),
+    Column("work_source_id", String, nullable=False),
     Column("revision", Integer, nullable=False),
     Column(
         "tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_project_source_links_tenant_id"), nullable=False
     ),
-    PrimaryKeyConstraint("project_id", "source_name", name="pk_project_source_links"),
+    PrimaryKeyConstraint("project_id", "work_source_id", name="pk_project_source_links"),
     ForeignKeyConstraint(
-        ["tenant_id", "source_name"],
-        ["work_sources.tenant_id", "work_sources.name"],
+        ["work_source_id"],
+        ["work_sources.work_source_id"],
         name="fk_project_source_links_work_sources",
     ),
 )
 # Which projects link source X.
-Index("ix_project_source_links_tenant_source", project_source_links.c.tenant_id, project_source_links.c.source_name)
+Index("ix_project_source_links_tenant_source", project_source_links.c.tenant_id, project_source_links.c.work_source_id)
 
 project_source_link_facts = Table(
     "project_source_link_facts",
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("project_id", String, nullable=False),
-    Column("source_name", String, nullable=False),
+    Column("work_source_id", String, nullable=False),
     Column("linked", Boolean, nullable=False),
     Column("set_at", UtcDateTime, nullable=False),
     Column("set_by", String, nullable=False),
@@ -485,8 +511,8 @@ project_source_link_facts = Table(
         nullable=False,
     ),
     ForeignKeyConstraint(
-        ["project_id", "source_name"],
-        ["project_source_links.project_id", "project_source_links.source_name"],
+        ["project_id", "work_source_id"],
+        ["project_source_links.project_id", "project_source_links.work_source_id"],
         name="fk_project_source_link_facts_links",
     ),
 )
@@ -495,7 +521,7 @@ Index(
     "ix_project_source_link_facts_tenant_link",
     project_source_link_facts.c.tenant_id,
     project_source_link_facts.c.project_id,
-    project_source_link_facts.c.source_name,
+    project_source_link_facts.c.work_source_id,
     project_source_link_facts.c.id,
 )
 
@@ -693,7 +719,7 @@ chunk_work_refs = Table(
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
-    Column("source", String, nullable=False),
+    Column("source", String, nullable=False),  # ``hub``, or the work source's id
     Column("ref", String, nullable=False),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_chunk_work_refs_tenant_id"), nullable=False),
 )
@@ -1052,7 +1078,7 @@ garden_proposal_closures = Table(
     Column("closed_by", String, nullable=False),
     Column("closed_at", UtcDateTime, nullable=False),
     Column("item_outcome", String, nullable=True),  # minted | declined; null on a pass
-    Column("source", String, nullable=True),  # the minted item's pointer; null when none
+    Column("source", String, nullable=True),  # the minted item's ``hub`` or source id; null when none
     Column("ref", String, nullable=True),
     Column(
         "tenant_id",
@@ -1239,7 +1265,7 @@ work_item_closures = Table(
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
-    Column("source", String, nullable=False),
+    Column("source", String, nullable=False),  # ``hub``, or the work source's id
     Column("ref", String, nullable=False),
     Column("outcome", String, nullable=False),
     Column("reason", String, nullable=True),
@@ -1259,7 +1285,7 @@ close_intents = Table(
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
-    Column("source", String, nullable=False),
+    Column("source", String, nullable=False),  # ``hub``, or the work source's id
     Column("ref", String, nullable=False),
     Column("enqueued_at", UtcDateTime, nullable=False),
     Column("retired_at", UtcDateTime, nullable=True),  # null = pending; set when the drainer retires it
@@ -2566,7 +2592,7 @@ forge_annotation_facts = Table(
     "forge_annotation_facts",
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
-    Column("source_name", String, nullable=False),
+    Column("work_source_id", String, nullable=False),
     Column("annotating", Boolean, nullable=False),
     Column("recorded_at", UtcDateTime, nullable=False),
     Column(
@@ -2575,8 +2601,8 @@ forge_annotation_facts = Table(
 )
 
 Index(
-    "ix_forge_annotation_facts_tenant_source_name_id",
+    "ix_forge_annotation_facts_tenant_work_source_id_id",
     forge_annotation_facts.c.tenant_id,
-    forge_annotation_facts.c.source_name,
+    forge_annotation_facts.c.work_source_id,
     forge_annotation_facts.c.id,
 )

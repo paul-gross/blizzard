@@ -1353,6 +1353,7 @@ class SlugNotCurrentAndFormer(HubQueryCheck):
     KINDS: ClassVar[tuple[tuple[str, Table, Table, str], ...]] = (
         ("project", hub.projects, hub.project_former_slugs, "project_id"),
         ("repository", hub.repositories, hub.repository_former_slugs, "repository_id"),
+        ("work source", hub.work_sources, hub.work_source_former_slugs, "work_source_id"),
     )
 
     def run(self) -> list[Violation]:
@@ -1452,7 +1453,7 @@ class ChunkSourcesLinked(HubQueryCheck):
             row.chunk_id: (row.project_id, row.minted_at)
             for row in self.rows(select(chunks.c.chunk_id, chunks.c.project_id, chunks.c.minted_at))
         }
-        linked = _earliest_links(self, hub.project_source_link_facts, "source_name")
+        linked = _earliest_links(self, hub.project_source_link_facts, "work_source_id")
         violations: list[Violation] = []
         judged: set[str] = set()
         for row in self.rows(select(refs.c.chunk_id, refs.c.source, refs.c.ref).order_by(refs.c.chunk_id, refs.c.id)):

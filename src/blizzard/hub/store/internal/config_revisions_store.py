@@ -11,9 +11,9 @@ from blizzard.hub.domain.config.revisions import ConfigRevisions, IReadConfigRev
 from blizzard.hub.store.schema import repositories, secrets, work_sources
 from blizzard.hub.store.scoped import ScopedConnections
 
-#: Each referring kind's table and the column keying it: a work source by its name, a repository by its id.
+#: Each referring kind's table and the column keying it: its id.
 _REFERRING: dict[RecordKind, tuple[Table, str]] = {
-    RecordKind.WORK_SOURCE: (work_sources, "name"),
+    RecordKind.WORK_SOURCE: (work_sources, "work_source_id"),
     RecordKind.REPOSITORY: (repositories, "repository_id"),
 }
 

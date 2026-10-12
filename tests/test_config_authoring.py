@@ -46,8 +46,8 @@ from blizzard.hub.domain.config.work_sources import (
     WorkSourceEdit,
     WorkSourceFields,
     WorkSourceLocatorTaken,
-    WorkSourceNameTaken,
     WorkSourceSecretUnavailable,
+    WorkSourceSlugTaken,
 )
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.secrets import hub_key_provider
@@ -101,7 +101,7 @@ class _World:
             ).scalar_one()
 
     def source(self, name: str = "demo") -> ConfiguredWorkSource:
-        record = self.sources.get(name)
+        record = self.sources.resolve(name)
         assert record is not None
         return record
 
@@ -156,18 +156,20 @@ def test_a_secret_retire_or_enable_that_changes_nothing_appends_nothing(world: _
 
 
 def test_a_work_source_create_records_the_diff_and_revision_one(world: _World) -> None:
-    created = world.authoring.create_work_source("demo", _FIELDS, _CLI)
+    created = world.authoring.create_work_source("demo", None, _FIELDS, _CLI)
 
     assert (created.revision, created.created_by, created.retired) == (1, "alice", False)
     row = world.changes()[-1]
     assert (row.record_kind, row.record_key, row.op, row.revision, row.door) == (
         RecordKind.WORK_SOURCE,
-        "demo",
+        created.work_source_id,
         ChangeOp.CREATE,
         1,
         Door.CLI,
     )
     assert {d.field: (d.old, d.new) for d in row.diff} == {
+        "slug": (None, "demo"),
+        "name": (None, "demo"),
         "provider": (None, "github"),
         "locator": (None, "acme/demo"),
         "annotate": (None, False),
@@ -176,7 +178,7 @@ def test_a_work_source_create_records_the_diff_and_revision_one(world: _World) -
 
 
 def test_edit_retire_and_enable_each_move_the_revision_and_append_one_row(world: _World) -> None:
-    record = world.authoring.create_work_source("demo", _FIELDS, OP)
+    record = world.authoring.create_work_source("demo", None, _FIELDS, OP)
     edited = world.authoring.edit_work_source(record, WorkSourceEdit(annotate=True), _CLI)
     retired = world.authoring.retire_work_source(edited, _CLI)
     enabled = world.authoring.enable_work_source(retired, _CLI)
@@ -191,7 +193,7 @@ def test_edit_retire_and_enable_each_move_the_revision_and_append_one_row(world:
 
 
 def test_a_write_that_changes_nothing_writes_nothing(world: _World) -> None:
-    record = world.authoring.create_work_source("demo", _FIELDS, OP)
+    record = world.authoring.create_work_source("demo", None, _FIELDS, OP)
     before = world.count()
 
     assert world.authoring.edit_work_source(record, WorkSourceEdit(), OP) == record
@@ -205,7 +207,7 @@ def test_a_write_that_changes_nothing_writes_nothing(world: _World) -> None:
 
 
 def test_a_stale_revision_conflicts_and_writes_nothing(world: _World) -> None:
-    record = world.authoring.create_work_source("demo", _FIELDS, OP)
+    record = world.authoring.create_work_source("demo", None, _FIELDS, OP)
     world.authoring.edit_work_source(record, WorkSourceEdit(annotate=True), OP)
     before = world.count()
 
@@ -219,48 +221,50 @@ def test_a_stale_revision_conflicts_and_writes_nothing(world: _World) -> None:
 
 def test_a_cleared_field_reads_back_null(world: _World) -> None:
     fields = WorkSourceFields("github", "acme/demo", "https://api.x", "https://web.x", False, "gh")
-    record = world.authoring.create_work_source("demo", fields, OP)
+    record = world.authoring.create_work_source("demo", None, fields, OP)
     world.authoring.edit_work_source(record, WorkSourceEdit(api_base=None), OP)
     assert world.source().fields.api_base is None
     assert world.source().fields.web_base == "https://web.x"
 
 
 def test_a_taken_name_or_locator_is_refused_and_names_the_holder(world: _World) -> None:
-    world.authoring.create_work_source("demo", _FIELDS, OP)
+    world.authoring.create_work_source("demo", None, _FIELDS, OP)
     before = world.count()
 
-    with pytest.raises(WorkSourceNameTaken):
-        world.authoring.create_work_source("demo", _FIELDS, OP)
+    with pytest.raises(WorkSourceSlugTaken):
+        world.authoring.create_work_source("demo", None, _FIELDS, OP)
     with pytest.raises(WorkSourceLocatorTaken) as caught:
-        world.authoring.create_work_source("demo2", _FIELDS, OP)
+        world.authoring.create_work_source("demo2", None, _FIELDS, OP)
     assert caught.value.holder == "demo"
     assert world.count() == before
 
 
 def test_a_retired_source_keeps_its_locator_claim(world: _World) -> None:
-    record = world.authoring.create_work_source("demo", _FIELDS, OP)
+    record = world.authoring.create_work_source("demo", None, _FIELDS, OP)
     world.authoring.retire_work_source(record, OP)
 
     with pytest.raises(WorkSourceLocatorTaken) as caught:
-        world.authoring.create_work_source("demo2", _FIELDS, OP)
+        world.authoring.create_work_source("demo2", None, _FIELDS, OP)
     assert caught.value.holder == "demo"
 
 
 def test_a_missing_or_retired_secret_is_refused_and_nothing_is_written(world: _World) -> None:
     before = world.count()
     with pytest.raises(WorkSourceSecretUnavailable, match="unknown"):
-        world.authoring.create_work_source("demo", WorkSourceFields("github", "a/b", None, None, False, "nope"), OP)
+        world.authoring.create_work_source(
+            "demo", None, WorkSourceFields("github", "a/b", None, None, False, "nope"), OP
+        )
     secret = world.secrets.get("gh")
     assert secret is not None
     world.authoring.retire_secret(secret, OP)
     with pytest.raises(WorkSourceSecretUnavailable, match="retired"):
-        world.authoring.create_work_source("demo", _FIELDS, OP)
+        world.authoring.create_work_source("demo", None, _FIELDS, OP)
     assert world.count() == before + 1
-    assert world.sources.get("demo") is None
+    assert world.sources.resolve("demo") is None
 
 
 def test_enabling_a_source_whose_secret_was_retired_is_refused(world: _World) -> None:
-    record = world.authoring.create_work_source("demo", _FIELDS, OP)
+    record = world.authoring.create_work_source("demo", None, _FIELDS, OP)
     retired = world.authoring.retire_work_source(record, OP)
     secret = world.secrets.get("gh")
     assert secret is not None
@@ -274,25 +278,25 @@ def test_enabling_a_source_whose_secret_was_retired_is_refused(world: _World) ->
 
 
 def test_retiring_a_referenced_secret_is_refused_and_nothing_is_written(world: _World) -> None:
-    world.authoring.create_work_source("demo", _FIELDS, OP)
+    record = world.authoring.create_work_source("demo", None, _FIELDS, OP)
     secret = world.secrets.get("gh")
     assert secret is not None
     before = world.count()
 
     with pytest.raises(SecretReferenced) as caught:
         world.authoring.retire_secret(secret, OP)
-    assert caught.value.referrers == [RecordRef(RecordKind.WORK_SOURCE, "demo")]
+    assert caught.value.referrers == [RecordRef(RecordKind.WORK_SOURCE, record.work_source_id, "demo")]
     assert "work_source demo" in str(caught.value)
     assert not world.secrets.is_retired("gh")
     assert world.count() == before
 
 
 def test_a_retired_referrer_no_longer_blocks_the_secret(world: _World) -> None:
-    record = world.authoring.create_work_source("demo", _FIELDS, OP)
+    record = world.authoring.create_work_source("demo", None, _FIELDS, OP)
     secret = world.secrets.get("gh")
     assert secret is not None
     assert world.referrers.referrers_of(["gh", "other"]) == {
-        "gh": [RecordRef(RecordKind.WORK_SOURCE, "demo")],
+        "gh": [RecordRef(RecordKind.WORK_SOURCE, record.work_source_id, "demo")],
         "other": [],
     }
 
@@ -303,7 +307,7 @@ def test_a_retired_referrer_no_longer_blocks_the_secret(world: _World) -> None:
 
 
 def test_the_log_pages_newest_first_and_filters_by_record(world: _World) -> None:
-    world.authoring.create_work_source("demo", _FIELDS, OP)
+    world.authoring.create_work_source("demo", None, _FIELDS, OP)
     world.authoring.edit_work_source(world.source(), WorkSourceEdit(annotate=True), OP)
 
     everything = world.log.page(before=None, limit=100, record_kind=None, record_key=None)
@@ -312,7 +316,9 @@ def test_the_log_pages_newest_first_and_filters_by_record(world: _World) -> None
     assert len(everything) == 3 + 1  # and the store's default project's, which the migration wrote
     older = world.log.page(before=ids[0], limit=1, record_kind=None, record_key=None)
     assert [c.id for c in older] == [ids[1]]
-    only = world.log.page(before=None, limit=100, record_kind=RecordKind.WORK_SOURCE, record_key="demo")
+    only = world.log.page(
+        before=None, limit=100, record_kind=RecordKind.WORK_SOURCE, record_key=world.source().work_source_id
+    )
     assert [c.op for c in only] == [ChangeOp.EDIT, ChangeOp.CREATE]
 
 
@@ -435,7 +441,7 @@ def test_a_repository_with_a_missing_or_retired_secret_is_refused(world: _World)
 
 
 def test_an_active_repository_blocks_retiring_its_secret_until_it_is_retired(world: _World) -> None:
-    source = world.authoring.create_work_source("demo", _FIELDS, OP)
+    source = world.authoring.create_work_source("demo", None, _FIELDS, OP)
     world.authoring.retire_work_source(source, OP)
     record = world.authoring.create_repository("demo", None, _REPO, OP)
     secret = world.secrets.get("gh")
@@ -453,13 +459,13 @@ def test_an_active_repository_blocks_retiring_its_secret_until_it_is_retired(wor
 
 
 def test_referrers_union_every_kind_ordered_by_kind_then_key(world: _World) -> None:
-    world.authoring.create_work_source("demo", _FIELDS, OP)
+    source = world.authoring.create_work_source("demo", None, _FIELDS, OP)
     repository = world.authoring.create_repository("demo", None, _REPO, OP)
 
     assert world.referrers.referrers_of(["gh"]) == {
         "gh": [
             RecordRef(RecordKind.REPOSITORY, repository.repository_id, "demo"),
-            RecordRef(RecordKind.WORK_SOURCE, "demo"),
+            RecordRef(RecordKind.WORK_SOURCE, source.work_source_id, "demo"),
         ]
     }
 
@@ -489,7 +495,11 @@ def _repo_declaration(slug: str, **stated: object) -> RepositoryDeclaration:
 
 def _apply(world: _World, declaration: ConfigDeclaration, ctx: ChangeContext = _APPLY, *, dry_run: bool = False):  # type: ignore[no-untyped-def]
     stored = StoredConfig(
-        work_sources=world.sources.get_many([d.name for d in declaration.work_sources]),
+        work_sources={
+            s.slug: s
+            for s in world.sources.list_all(include_retired=True)
+            if s.slug in {d.name for d in declaration.work_sources}
+        },
         repositories={
             r.slug: r
             for r in world.repos.list_all(include_retired=True)
@@ -537,7 +547,7 @@ def test_a_dry_run_writes_nothing_and_returns_the_outcomes_of_the_real_apply(wor
     before = world.count()
     dry = _apply(world, _DECLARATION, replace(_APPLY, apply_id=None), dry_run=True)
     assert world.count() == before
-    assert world.sources.get("demo") is None and world.repos.resolve("demo") is None
+    assert world.sources.resolve("demo") is None and world.repos.resolve("demo") is None
     assert _apply(world, _DECLARATION) == dry
 
 
@@ -565,7 +575,7 @@ def test_a_refusal_on_a_later_entry_leaves_the_earlier_creates_unwritten(world: 
     assert (caught.value.section, caught.value.index) == ("work_sources", 2)
     assert isinstance(caught.value.cause, WorkSourceLocatorTaken)
     assert world.count() == before
-    assert world.sources.get("first") is None and world.sources.get("second") is None
+    assert world.sources.resolve("first") is None and world.sources.resolve("second") is None
 
 
 def test_an_edit_and_an_enable_commit_in_one_transaction_at_consecutive_revisions(world: _World) -> None:
