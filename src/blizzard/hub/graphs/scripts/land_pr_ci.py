@@ -397,6 +397,10 @@ def main() -> int:
 
 def _land() -> int:
     run = LandRun.from_env()
+    if (clash := run.duplicate_repo()) is not None:
+        print(clash, file=sys.stderr)
+        print("failure")
+        return 0
     pending = run.pending()
     if not pending:
         print(_LANDED)
@@ -432,7 +436,7 @@ def _land() -> int:
             continue
         if pull.head_sha and not pull.merged:
             try:
-                gate = gate_head(run, commit["repo"], commit["commit"], pull.head_sha)
+                gate = gate_head(pull.run, commit["repo"], commit["commit"], pull.head_sha)
             except ForgeReadDegraded as exc:
                 print(f"{pull}: {exc}; re-polling", file=sys.stderr)
                 wait = True
@@ -473,7 +477,7 @@ def _land() -> int:
             state = pull.mergeable_state
             # A verdict is only ever worth reading for the states merge eligibility itself
             # turns on — fetched once here and reused below, never re-read.
-            verdict = Verdict.of(run, pull.repo, head_sha) if state in _CI_WATCH_STATES else None
+            verdict = Verdict.of(pull.run, pull.repo, head_sha) if state in _CI_WATCH_STATES else None
             decision = Route.of(pull, verdict).decision
             if decision == _BOUNCE:
                 raise _Conflict(f"{pull} is dirty (a real merge conflict)")
@@ -490,7 +494,7 @@ def _land() -> int:
                 if verdict is not None:
                     # A degraded CI read falls through to the plain wait below.
                     if verdict.decision == _FAILED:
-                        base = Verdict.of(run, pull.repo, run.base_branch)
+                        base = Verdict.of(pull.run, pull.repo, pull.run.base_branch)
                         checks = verdict.failure_rows(base)
                         if any(_inheritance(check["base_red"]) == _OWN for check in checks):
                             # Any owned failure charges this chunk; inherited failures on
@@ -517,7 +521,7 @@ def _land() -> int:
                         ]
                         if unsigned:
                             for check in unsigned:
-                                _rerequest_once(run, pull.repo, check, head_sha)
+                                _rerequest_once(pull.run, pull.repo, check, head_sha)
                             print(
                                 f"{pull}'s failing checks are inherited from the base — re-requested once; re-polling",
                                 file=sys.stderr,
@@ -530,7 +534,7 @@ def _land() -> int:
                                 "number": pull.number,
                                 "url": pull.url,
                                 "decision": _INHERITED_FAILURE,
-                                "base_branch": run.base_branch,
+                                "base_branch": pull.run.base_branch,
                                 "checks": [
                                     {
                                         "name": check.get("name"),

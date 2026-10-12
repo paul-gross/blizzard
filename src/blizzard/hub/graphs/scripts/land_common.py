@@ -28,10 +28,7 @@ _ENV_EXPECT_GIT_COMMITS = "BZ_HUB_EXPECT_GIT_COMMITS"
 _MARKER_PREFIX = "merged/"
 _PR_MARKER_PREFIX = "delivery-pr/"
 
-_ENV_FORGE_URL = "BZ_FORGE_URL"
-_ENV_FORGE_TOKEN = "BZ_FORGE_TOKEN"
-_ENV_FORGE_OWNER = "BZ_FORGE_OWNER"
-_ENV_BASE_BRANCH = "BZ_HUB_BASE_BRANCH"
+_ENV_FORGE_TOKENS = "BZ_FORGE_TOKENS"
 _ENV_GIT_COMMITS = "BZ_HUB_GIT_COMMITS"
 _ENV_ARTIFACT_NAMES = "BZ_HUB_ARTIFACT_NAMES"
 _ENV_MARKER_CALLBACK_URL = "BZ_HUB_MARKER_CALLBACK_URL"
@@ -209,13 +206,18 @@ def deliver_and_report(
 @dataclass(frozen=True)
 class LandRun:
     """One ``deliver`` node visit: the env the executor injected, and the two channels out
-    of it — the forge and :attr:`markers`."""
+    of it — the forge and :attr:`markers`.
 
-    forge_url: str
-    base_branch: str
+    Each commit names its own target (forge URL, owner, base branch, and a token by record), so a
+    run is *bound* to one commit by :meth:`at` before any forge call: the unbound run carries no
+    forge target of its own."""
+
     commits: list[dict[str, str]]
     already: set[str]
     markers: MarkerWriter
+    forge_url: str = ""
+    base_branch: str = ""
+    tokens: Mapping[str, str] = field(default_factory=dict)
     owner: str = ""
     token: str | None = None
     feature_title: str = ""
@@ -233,12 +235,10 @@ class LandRun:
         env = env or ScriptEnv()
         # Required vars are read in table order, so the first one missing is the one named.
         commits: list[dict[str, str]] = env.require_json(_ENV_GIT_COMMITS)
-        # No commits, nothing to land; forge vars are not required (``bzh:hub-node-env-contract``).
-        forge_url = env.require(_ENV_FORGE_URL).rstrip("/") if commits else ""
-        base_branch = env.require(_ENV_BASE_BRANCH) if commits else ""
-        return cls(
-            forge_url=forge_url,
-            base_branch=base_branch,
+        # No commits, nothing to land; no target is required (``bzh:hub-node-env-contract``).
+        tokens: dict[str, str] = env.require_json(_ENV_FORGE_TOKENS) if commits else {}
+        run = cls(
+            tokens=tokens,
             commits=commits,
             already=set(json.loads(env.get(_ENV_ARTIFACT_NAMES, "[]"))),
             markers=MarkerWriter(
@@ -246,14 +246,51 @@ class LandRun:
                 token=env.get(_ENV_MARKER_TOKEN),
                 request=forge_request,
             ),
-            owner=env.get(_ENV_FORGE_OWNER),
-            token=env.get(_ENV_FORGE_TOKEN),
             feature_title=env.get(_ENV_FEATURE_TITLE),
             chunk_id=env.get(_ENV_CHUNK_ID),
             work_items=cls._work_items(env.get(_ENV_WORK_ITEMS, "[]")),
             chunk_url=env.get(_ENV_CHUNK_URL),
             env=env,
         )
+        for commit in commits:
+            run.at(commit)  # every entry's target is checked before anything reaches a forge
+        return run
+
+    def at(self, commit: dict[str, str]) -> LandRun:
+        """This run bound to ``commit``'s own target. A missing or malformed per-entry field, or a
+        record with no token, exits non-zero naming it (``bzh:hub-node-run-shape``)."""
+        repo = commit.get("repo", "?")
+        fields: dict[str, str] = {}
+        for name in ("forge_url", "owner", "base_branch", "record"):
+            value = commit.get(name)
+            if not isinstance(value, str) or not value:
+                print(f"missing required field {name!r} in a {_ENV_GIT_COMMITS} entry (repo {repo!r})", file=sys.stderr)
+                raise SystemExit(1)
+            fields[name] = value
+        token = self.tokens.get(fields["record"])
+        if not isinstance(token, str) or not token:
+            print(f"no token for repository record {fields['record']!r} in {_ENV_FORGE_TOKENS}", file=sys.stderr)
+            raise SystemExit(1)
+        return replace(
+            self,
+            forge_url=fields["forge_url"].rstrip("/"),
+            base_branch=fields["base_branch"],
+            owner=fields["owner"],
+            token=token,
+        )
+
+    def duplicate_repo(self) -> str | None:
+        """Why two entries cannot land — they share a ``repo`` and so a ``merged/<repo>`` marker name — or ``None``."""
+        seen: dict[str, dict[str, str]] = {}
+        for commit in self.commits:
+            first = seen.setdefault(commit["repo"], commit)
+            if first is not commit:
+                return (
+                    f"two commit entries share the repo {commit['repo']!r} and so one marker name: "
+                    f"record {first.get('record')!r} ({first.get('forge_url')}) and "
+                    f"record {commit.get('record')!r} ({commit.get('forge_url')})"
+                )
+        return None
 
     @staticmethod
     def _work_items(raw: str) -> tuple[dict[str, Any], ...]:
@@ -445,6 +482,7 @@ class PullRequest:
         (``bzh:hub-node-step-idempotence``) — then the open one,
         opening one first when neither exists, then read live. Raises
         :class:`PullRequestOpenError` or :class:`PullRequestLookupError` on a forge hiccup."""
+        run = run.at(commit)
         repo = run.repo(commit["repo"])
         branch = commit["branch"]
         merged = cls._merged_for_branch(run, repo, branch, commit["commit"])

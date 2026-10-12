@@ -190,16 +190,18 @@ def test_confirm_ok_names_repo_identity() -> None:
 # --- converging pointers ------------------------------------------------------------------
 
 
-def _pointer(branch: str, commit: str, *, name: str = "acme/toy-api") -> CompletionArtifact:
+def _pointer(
+    branch: str, commit: str, *, name: str = "acme/toy-api", forge: str = _ORIGIN, repo: str = "toy-api"
+) -> CompletionArtifact:
     return CompletionArtifact(
-        name=name, kind=ArtifactKind.GIT_COMMIT, forge=_ORIGIN, repo="toy-api", branch_name=branch, commit_hash=commit
+        name=name, kind=ArtifactKind.GIT_COMMIT, forge=forge, repo=repo, branch_name=branch, commit_hash=commit
     )
 
 
 def test_converge_dedupes() -> None:
     same = _pointer("feat/x", "abc123")
     groups = converge_pointers({("e1", "toy-api"): same, ("e2", "toy-api"): _pointer("feat/x", "abc123")})
-    assert groups == [PointerGroup(identity="acme/toy-api", pointers=(same,), disagreement=None)]
+    assert groups == [PointerGroup(identity="github.com/acme/toy-api", pointers=(same,), disagreement=None)]
 
 
 def test_converge_disagreement_submits_all() -> None:
@@ -207,10 +209,10 @@ def test_converge_disagreement_submits_all() -> None:
     groups = converge_pointers({("e1", "toy-api"): a, ("e2", "toy-api"): b})
     assert groups == [
         PointerGroup(
-            identity="acme/toy-api",
+            identity="github.com/acme/toy-api",
             pointers=(a, b),
             disagreement=CommandFailure(
-                command="converge commit pointers for repository 'acme/toy-api'",
+                command="converge commit pointers for repository 'github.com/acme/toy-api'",
                 stderr_tail="environments declare different pointers: 'e1' -> feat/x@abc123; 'e2' -> feat/y@def456",
             ),
         )
@@ -218,9 +220,20 @@ def test_converge_disagreement_submits_all() -> None:
 
 
 def test_converge_keeps_repositories_apart() -> None:
-    a, b = _pointer("feat/x", "abc123"), _pointer("feat/x", "abc123", name="acme/web")
+    a = _pointer("feat/x", "abc123")
+    b = _pointer("feat/x", "abc123", name="acme/web", forge="git@github.com:acme/web.git", repo="web")
     groups = converge_pointers({("e1", "toy-api"): a, ("e1", "web"): b})
     assert [(g.identity, g.pointers, g.disagreement) for g in groups] == [
-        ("acme/toy-api", (a,), None),
-        ("acme/web", (b,), None),
+        ("github.com/acme/toy-api", (a,), None),
+        ("github.com/acme/web", (b,), None),
+    ]
+
+
+def test_converge_keeps_one_name_on_two_forge_hosts_apart() -> None:
+    a = _pointer("feat/x", "abc123")
+    b = _pointer("feat/x", "abc123", forge="git@git.example.test:acme/toy-api.git")
+    groups = converge_pointers({("e1", "toy-api"): a, ("e2", "toy-api"): b})
+    assert [(g.identity, g.pointers, g.disagreement) for g in groups] == [
+        ("github.com/acme/toy-api", (a,), None),
+        ("git.example.test/acme/toy-api", (b,), None),
     ]

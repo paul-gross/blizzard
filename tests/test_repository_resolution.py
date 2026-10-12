@@ -60,7 +60,8 @@ def test_an_exact_origin_resolves_by_host_owner_and_name() -> None:
     result = _resolve([CommitOrigin.of("https://github.com/other/widget.git", "widget")], rows)
 
     assert result.outcome is RepositoryOutcome.RESOLVED
-    assert result.target is not None and result.target.owner == "other"
+    agreed = result.agreed()
+    assert agreed is not None and agreed.owner == "other"
     assert result.qualified == ("other/widget",)
 
 
@@ -125,14 +126,18 @@ def test_a_repository_retired_after_the_chunk_was_minted_still_resolves() -> Non
         ("secret_name", {"secret": "other-tok"}),
     ],
 )
-def test_records_that_disagree_on_a_landing_field_are_refused(field: str, other: dict[str, Any]) -> None:
+def test_records_that_disagree_on_a_landing_field_each_resolve_to_their_own_target(
+    field: str, other: dict[str, Any]
+) -> None:
     rows = [_row("widget"), _row("gadget", **other)]
     origins = [CommitOrigin.of(None, "widget"), CommitOrigin.of(None, "gadget")]
 
     result = _resolve(origins, rows)
 
-    assert result.outcome is RepositoryOutcome.DISAGREE
-    assert "widget" in result.detail and "gadget" in result.detail
+    assert result.outcome is RepositoryOutcome.RESOLVED
+    assert [t.record for t in result.targets] == ["widget", "gadget"]
+    assert result.targets[0] != result.targets[1]
+    assert result.agreed() is None
 
 
 def test_records_that_agree_resolve_to_one_target_qualifying_each_commit() -> None:
@@ -144,6 +149,8 @@ def test_records_that_agree_resolve_to_one_target_qualifying_each_commit() -> No
     assert result.outcome is RepositoryOutcome.RESOLVED
     assert result.qualified == ("acme/widget", "acme/gadget")
     assert result.names == ("widget", "gadget")
+    agreed = result.agreed()
+    assert agreed is not None and agreed.base_branch == "main"
 
 
 def test_a_point_in_time_lookup_never_matches_a_retired_record() -> None:
@@ -179,7 +186,7 @@ def test_a_pointer_whose_one_tenant_record_the_project_does_not_link_is_not_link
     result = _in_project([CommitOrigin.of(None, "widget")], rows, "gadget")
 
     assert result.outcome is RepositoryOutcome.NOT_LINKED
-    assert result.target is None and result.names == ()
+    assert result.targets == () and result.names == () and result.agreed() is None
     assert "the-widget" in result.detail and "widgets" in result.detail
 
 

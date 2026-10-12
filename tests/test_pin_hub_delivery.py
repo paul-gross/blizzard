@@ -105,7 +105,17 @@ def test_a_terminal_failure_findings_write_failure_exits_non_zero_instead_of_rou
     non-zero rather than printing the `failure` edge over it."""
     monkeypatch.setenv("BZ_FORGE_URL", "http://forge")
     monkeypatch.setenv("BZ_HUB_BASE_BRANCH", "main")
-    monkeypatch.setenv("BZ_HUB_GIT_COMMITS", json.dumps([{"repo": _REPO, "branch": _BRANCH, "commit": _COMMIT}]))
+    entry = {
+        "repo": _REPO,
+        "branch": _BRANCH,
+        "commit": _COMMIT,
+        "forge_url": "http://forge",
+        "owner": "acme",
+        "base_branch": "main",
+        "record": "widget",
+    }
+    monkeypatch.setenv("BZ_HUB_GIT_COMMITS", json.dumps([entry]))
+    monkeypatch.setenv("BZ_FORGE_TOKENS", json.dumps({"widget": "tok"}))
     monkeypatch.setenv("BZ_HUB_MARKER_CALLBACK_URL", _CALLBACK_URL)
     monkeypatch.setenv("BZ_HUB_MARKER_TOKEN", "test-marker-token")
     monkeypatch.delenv("BZ_HUB_ARTIFACT_NAMES", raising=False)

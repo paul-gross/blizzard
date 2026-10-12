@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.fact_kinds import EVENT_RECORDED
-from blizzard.foundation.repo_ref import repo_identity
+from blizzard.foundation.repo_ref import pointer_key
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.judgement.git_commits import DeclaredCommits
@@ -100,7 +100,7 @@ def _lease(tmp_path: Path) -> _Lease:
 def _disagreement(*members: tuple[str, str]) -> dict[str, str]:
     """The report naming each ``(env, commit)`` in confirmation order."""
     return {
-        "command": f"converge commit pointers for repository {repo_identity(_ORIGIN, 'widget')!r}",
+        "command": f"converge commit pointers for repository {pointer_key(_ORIGIN, 'widget')!r}",
         "stderr_tail": "environments declare different pointers: "
         + "; ".join(f"{env!r} -> feat/x@{commit}" for env, commit in members),
     }

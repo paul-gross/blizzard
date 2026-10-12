@@ -26,14 +26,14 @@ def _asset(name: str = "notes") -> StoredArtifact:
     )
 
 
-def _commit(branch: str, *, epoch: int = 1, repo: str = "acme/widget") -> StoredArtifact:
+def _commit(branch: str, *, epoch: int = 1, repo: str = "acme/widget", forge: str | None = None) -> StoredArtifact:
     return StoredArtifact(
         kind=ArtifactKind.GIT_COMMIT,
         name=f"w-{branch}",
         data=f"{branch}:{'a' * 40}",
         repo=repo,
-        forge=None,
-        artifact_id=f"art_{branch}_{epoch}",
+        forge=forge,
+        artifact_id=f"art_{branch}_{epoch}_{forge}",
         chunk_id="ch1",
         node_id="n1",
         node_name="build",
@@ -56,3 +56,10 @@ def test_assets_between_commits_do_not_hide_the_later_one() -> None:
 def test_two_branches_at_one_epoch_still_raise_past_a_leading_asset() -> None:
     with pytest.raises(UnconvergedDeliveryError):
         GitCommits.of([_asset(), _commit("feat/x"), _commit("feat/y")])
+
+
+def test_the_same_owner_and_name_on_two_forge_hosts_stays_two_repositories() -> None:
+    on_github = _commit("feat/x", repo="widget", forge="git@github.com:acme/widget.git")
+    on_example = _commit("feat/x", repo="widget", forge="git@git.example.test:acme/widget.git")
+
+    assert GitCommits.of([on_github, on_example]).rows == [on_github, on_example]

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pytest
 
-from blizzard.foundation.repo_ref import RepoRef, repo_identity
+from blizzard.foundation.repo_ref import RepoRef, pointer_key, repo_identity
 
 pytestmark = pytest.mark.unit
 
@@ -78,3 +78,20 @@ def test_returns_none_when_the_origin_names_no_owner(origin_url: str) -> None:
 )
 def test_repo_identity(origin_url: str | None, name: str, expected: str) -> None:
     assert repo_identity(origin_url, name) == expected
+
+
+@pytest.mark.parametrize(
+    ("origin_url", "name", "expected"),
+    [
+        ("git@github.com:owner-a/widget.git", "widget", "github.com/owner-a/widget"),
+        ("https://github.com/owner-a/widget", "widget", "github.com/owner-a/widget"),
+        ("https://GitHub.com/owner-a/widget", "widget", "github.com/owner-a/widget"),
+        ("https://user:tok@github.com:8443/owner-a/widget.git", "widget", "github.com/owner-a/widget"),
+        ("ssh://git@github.com:2222/owner-a/widget.git", "widget", "github.com/owner-a/widget"),
+        ("https://git.example.test/owner-a/widget", "widget", "git.example.test/owner-a/widget"),
+        ("file:///srv/repos/widget.git", "widget", "widget"),
+        (None, "owner-a/widget", "owner-a/widget"),
+    ],
+)
+def test_pointer_key(origin_url: str | None, name: str, expected: str) -> None:
+    assert pointer_key(origin_url, name) == expected
