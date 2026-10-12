@@ -13,7 +13,6 @@ from pathlib import Path
 
 import httpx
 import pytest
-from sqlalchemy import select
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.config import RunnerConfig
@@ -21,6 +20,7 @@ from blizzard.runner.harness.wiring import publish_harness_bundle
 from blizzard.runner.loop_wiring import LoopWiring
 from blizzard.runner.store.schema import leases, usage_facts
 from tests.e2e.test_acceptance_loop import REPO_NAME, _free_port, _git_bare, _runner_api, _runner_config
+from tests.runner_fakes import daemon_store
 from tests.runner_join import fleet_headers
 from tests.service.support import (
     JUDGEMENT_SCRIPT,
@@ -428,7 +428,12 @@ def _leases_for_chunk(config: RunnerConfig, chunk_id: str) -> list[dict]:
     engine = create_engine_from_url(config.db_url)
     try:
         with engine.connect() as conn:
-            return [dict(row) for row in conn.execute(select(leases).where(leases.c.chunk_id == chunk_id)).mappings()]
+            return [
+                dict(row)
+                for row in conn.execute(
+                    daemon_store(engine).connections.select(leases).where(leases.c.chunk_id == chunk_id)
+                ).mappings()
+            ]
     finally:
         engine.dispose()
 
@@ -437,7 +442,7 @@ def _usage_facts_for_chunk(config: RunnerConfig, chunk_id: str) -> list[dict]:
     engine = create_engine_from_url(config.db_url)
     try:
         with engine.connect() as conn:
-            query = select(usage_facts).where(usage_facts.c.chunk_id == chunk_id)
+            query = daemon_store(engine).connections.select(usage_facts).where(usage_facts.c.chunk_id == chunk_id)
             return [dict(row) for row in conn.execute(query).mappings()]
     finally:
         engine.dispose()

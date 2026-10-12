@@ -227,6 +227,23 @@ def runner_store_errors() -> RunnerStoreErrorFactory:
     return RunnerStoreErrorFactory(structlog.get_logger("test"))
 
 
+def daemon_store(engine: Engine) -> SqlAlchemyRunnerStore:
+    """A store over a running daemon's own file, bound to the runner its registration stored there — not the fixture
+    runner, which the hub that daemon registered with never minted. Unbound while nothing has registered yet: reads
+    answer empty until the identity row lands, and a write refuses."""
+    store = SqlAlchemyRunnerStore(engine, runner_store_errors(), None)
+    store.connections.bind_to_stored()
+    return store
+
+
+def registered_fixture_store(engine: Engine) -> SqlAlchemyRunnerStore:
+    """A store bound to the fixture runner, with that runner's identity row recorded — so an API served over the same
+    file, never registered by a tick of its own, adopts the fixture runner and reads what this store seeds."""
+    store = SqlAlchemyRunnerStore(engine, runner_store_errors())
+    store.record_runner_identity(RunnerIdentity(FIXTURE_RUNNER_ID, "runner-local", REGISTERED_AT))
+    return store
+
+
 def record_usage(usage, **kwargs):  # type: ignore[no-untyped-def]
     """``record_usage`` as ``UsageRecorder`` drives it: the session's banked basis, then the
     domain cost policy, then the store's verbatim write."""

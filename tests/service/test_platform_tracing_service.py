@@ -194,7 +194,8 @@ def test_a_worker_span_posted_over_tcp_and_the_socket_reaches_the_real_exporter(
         try:
             _await_http(proc, tcp, "/api/health", log=log)
             assert poll_until(lambda: '"tick end"' in read_daemon_log(log), timeout=30.0)
-            store = make_store(config.db_url)
+            store = make_store(config.db_url, runner_id=None)
+            store.connections.bind_to_stored()
             now = datetime.now(UTC)
             store.record_lease(
                 NewLease(
@@ -248,7 +249,8 @@ def test_claude_code_metrics_and_logs_posted_over_tcp_and_the_socket_reach_the_r
         try:
             _await_http(proc, tcp, "/api/health", log=log)
             assert poll_until(lambda: '"tick end"' in read_daemon_log(log), timeout=30.0)
-            store = make_store(config.db_url)
+            store = make_store(config.db_url, runner_id=None)
+            store.connections.bind_to_stored()
             # The first tick registered: the identity every forwarded item is stamped with.
             identity = store.runner_identity()
             assert identity is not None, read_daemon_log(log)

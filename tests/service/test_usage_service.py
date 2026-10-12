@@ -20,7 +20,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.loop_wiring import LoopWiring
 from tests.e2e.test_acceptance_loop import REPO, REPO_NAME, _forge, _free_port, _hub, _runner_config
-from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
+from tests.runner_fakes import daemon_store
 from tests.runner_join import fleet_headers
 from tests.service.support import (
     mint_fixture,
@@ -64,13 +64,7 @@ def _pending_usage(config: RunnerConfig) -> int:
     """The count of buffered, not-yet-flushed ``usage.recorded`` outbound facts."""
     engine = create_engine_from_url(config.db_url)
     try:
-        return len(
-            [
-                b
-                for b in SqlAlchemyRunnerStore(engine, runner_store_errors()).pending_outbound()
-                if b.kind == USAGE_RECORDED
-            ]
-        )
+        return len([b for b in daemon_store(engine).pending_outbound() if b.kind == USAGE_RECORDED])
     finally:
         engine.dispose()
 
@@ -79,11 +73,7 @@ def _pending_usage_payloads(config: RunnerConfig) -> list[dict]:
     """Every buffered ``usage.recorded`` fact's own JSON payload, oldest first."""
     engine = create_engine_from_url(config.db_url)
     try:
-        return [
-            json.loads(b.payload)
-            for b in SqlAlchemyRunnerStore(engine, runner_store_errors()).pending_outbound()
-            if b.kind == USAGE_RECORDED
-        ]
+        return [json.loads(b.payload) for b in daemon_store(engine).pending_outbound() if b.kind == USAGE_RECORDED]
     finally:
         engine.dispose()
 
@@ -91,7 +81,7 @@ def _pending_usage_payloads(config: RunnerConfig) -> list[dict]:
 def _pending_total(config: RunnerConfig) -> int:
     engine = create_engine_from_url(config.db_url)
     try:
-        return len(SqlAlchemyRunnerStore(engine, runner_store_errors()).pending_outbound())
+        return len(daemon_store(engine).pending_outbound())
     finally:
         engine.dispose()
 

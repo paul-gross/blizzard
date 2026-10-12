@@ -16,7 +16,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.leases.model import NewLease
 from tests.e2e.test_acceptance_loop import _free_port, _runner_api, _runner_config
-from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
+from tests.runner_fakes import SqlAlchemyRunnerStore, registered_fixture_store
 from tests.service.support import mint_fixture, mock_hub, require_mock_fleet, require_winter_source, service_gate
 
 pytestmark = [pytest.mark.service, service_gate]
@@ -102,7 +102,7 @@ def test_dashboard_matches_the_individual_reads_over_a_real_running_daemon(tmp_p
 
         engine = create_engine_from_url(config.db_url)
         try:
-            _seed_all_local_sections(SqlAlchemyRunnerStore(engine, runner_store_errors()))
+            _seed_all_local_sections(registered_fixture_store(engine))
         finally:
             engine.dispose()
 

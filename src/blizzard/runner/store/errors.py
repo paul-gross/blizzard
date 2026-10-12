@@ -172,7 +172,11 @@ class RunnerStoreConnections:
 
     def _reading(self) -> KeyedStatements:
         """Builders for a read: bound to the runner, or — unbound — to a ``NULL`` parameter no row equals, so a
-        runner-scoped read answers as an empty store."""
+        runner-scoped read answers as an empty store. An unbound store first adopts an identity row another process
+        has since registered, so a read-only view of a registered store sees it; once bound, the binding never
+        changes and no re-check runs."""
+        if self._runner_id is None:
+            self.bind_to_stored()
         key: Any = self._runner_id
         if key is None:
             key = sa.bindparam(None, None, type_=sa.String(), unique=True)

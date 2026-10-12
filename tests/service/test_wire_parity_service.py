@@ -20,7 +20,7 @@ from blizzard.runner.harness.capability_snapshot import HarnessCapability
 from blizzard.runner.hub.client import ClaimRequest, PushedFact
 from blizzard.runner.loop_wiring import LoopWiring
 from tests.e2e.test_acceptance_loop import REPO, _free_port, _runner_config
-from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
+from tests.runner_fakes import daemon_store
 from tests.runner_join import fleet_headers
 from tests.service.support import (
     http_hub_client,
@@ -188,7 +188,7 @@ def _drive(config: RunnerConfig, fenced: dict[str, str], *, ticks: int, pause: f
 def _pending_outbound(config: RunnerConfig) -> int:
     engine = create_engine_from_url(config.db_url)
     try:
-        return len(SqlAlchemyRunnerStore(engine, runner_store_errors()).pending_outbound())
+        return len(daemon_store(engine).pending_outbound())
     finally:
         engine.dispose()
 
@@ -196,7 +196,7 @@ def _pending_outbound(config: RunnerConfig) -> int:
 def _bindings(config: RunnerConfig, chunk_id: str) -> list:
     engine = create_engine_from_url(config.db_url)
     try:
-        return SqlAlchemyRunnerStore(engine, runner_store_errors()).bindings_for_chunk(chunk_id)
+        return daemon_store(engine).bindings_for_chunk(chunk_id)
     finally:
         engine.dispose()
 
