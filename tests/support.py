@@ -1194,7 +1194,7 @@ def seed_repositories(
         if existing is not None and existing.fields.forge_api_url == fields.forge_api_url:
             continue
         if existing is not None:  # the same owner/repo on another forge is a record of its own
-            name = f"{name}-{urlparse(fields.forge_api_url).netloc}"
+            name = f"{name}-{re.sub('[^a-z0-9]+', '-', urlparse(fields.forge_api_url).netloc.lower()).strip('-')}"
             if RepositoryRecordStore(hub_store_connections(engine)).resolve(name) is not None:
                 continue
         with contextlib.suppress(SecretAlreadyExists):

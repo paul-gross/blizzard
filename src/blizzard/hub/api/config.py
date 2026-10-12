@@ -17,6 +17,7 @@ from starlette.concurrency import run_in_threadpool
 from blizzard.auth_core import Permission
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id, IdPrefix
+from blizzard.foundation.roles import dto
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
@@ -313,6 +314,7 @@ def _stored(declaration: ConfigDeclaration, services: TenantServices, held: _Rep
     )
 
 
+@dto
 @dataclass(frozen=True)
 class _Repositories:
     """The repositories a document's apply meets: every stored one by current slug (retired included); the one that

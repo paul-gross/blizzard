@@ -128,7 +128,9 @@ def _retirement_engine(tmp_path: Path, *, depth: int) -> Engine:
                 )
                 conn.execute(insert(s.scope_lifecycle_facts).values(stamp(s.scope_lifecycle_facts, slug=key, **common)))
                 conn.execute(
-                    insert(s.repository_lifecycle_facts).values(stamp(s.repository_lifecycle_facts, name=key, **common))
+                    insert(s.repository_lifecycle_facts).values(
+                        stamp(s.repository_lifecycle_facts, repository_id=key, **common)
+                    )
                 )
                 conn.execute(
                     insert(s.work_source_lifecycle_facts).values(
