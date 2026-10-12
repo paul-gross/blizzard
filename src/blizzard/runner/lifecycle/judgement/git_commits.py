@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from typing import Protocol
 
 from blizzard.foundation.artifacts import ArtifactKind
-from blizzard.foundation.repo_ref import repo_identity
+from blizzard.foundation.repo_ref import pointer_key, repo_identity
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.environments.provider import IWorkspaceProvider
 from blizzard.runner.environments.repository import EnvBinding
@@ -99,7 +99,7 @@ def converge_pointers(confirmed: Mapping[Key, CompletionArtifact]) -> list[Point
     report naming each environment's pointer."""
     groups: dict[str, list[tuple[Key, CompletionArtifact]]] = {}
     for key, artifact in confirmed.items():
-        groups.setdefault(artifact.name, []).append((key, artifact))
+        groups.setdefault(pointer_key(artifact.forge, artifact.repo or artifact.name), []).append((key, artifact))
     converged: list[PointerGroup] = []
     for identity, members in groups.items():
         pointers = tuple({(a.branch_name, a.commit_hash): a for _, a in members}.values())

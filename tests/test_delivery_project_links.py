@@ -13,7 +13,7 @@ from blizzard.hub.tenancy import TenantId
 
 pytestmark = pytest.mark.unit
 
-_REFUSED = (RepositoryOutcome.UNRESOLVED, RepositoryOutcome.NOT_LINKED, RepositoryOutcome.DISAGREE)
+_REFUSED = (RepositoryOutcome.UNRESOLVED, RepositoryOutcome.NOT_LINKED)
 
 
 @pytest.mark.parametrize("outcome", list(RepositoryOutcome))
@@ -33,7 +33,7 @@ def test_every_refused_outcome_records_a_critical_event(outcome: RepositoryOutco
 
 def _held(authority: MarkerAuthority) -> MarkerAuthority:
     authority.issue("ch_1", node_id="n_deliver", epoch=2, tenant=TenantId("t_1"))
-    authority.hold_repositories("ch_1", node_id="n_deliver", epoch=2, names={"acme/widget": "widget"})
+    authority.hold_repositories("ch_1", node_id="n_deliver", epoch=2, names=[("acme/widget", "widget")])
     return authority
 
 

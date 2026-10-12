@@ -53,7 +53,7 @@ from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsReposi
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.hub_exec import IWriteChunkHubExecRepository
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
-from blizzard.hub.domain.config.repositories import ResolvedRepository
+from blizzard.hub.domain.config.repositories import RepositoryOutcome, RepositoryResolution, ResolvedRepository
 from blizzard.hub.domain.graph.authoring import Reification
 from blizzard.hub.domain.graph.model import HUB_PENDING_CHOICE, GraphDoc, RunStep
 from blizzard.hub.domain.graph.validation import Validator
@@ -450,10 +450,21 @@ def test_build_hub_env_carries_no_model_credential_and_the_documented_keys() -> 
         epoch=1,
         artifacts=[artifact],
         marker_callback_url="http://hub/api/chunks/ch_x/hub-markers",
-        repository=ResolvedRepository(
-            forge_api_url="http://forge", owner="acme", base_branch="main", secret_name="forge-token"
+        resolution=RepositoryResolution(
+            RepositoryOutcome.RESOLVED,
+            targets=(
+                ResolvedRepository(
+                    forge_api_url="http://forge",
+                    owner="acme",
+                    base_branch="main",
+                    secret_name="forge-token",
+                    record="widget",
+                ),
+            ),
+            qualified=("acme/widget",),
+            names=("widget",),
         ),
-        forge_token="tok",
+        forge_tokens={"widget": "tok"},
     ).vars
     assert env["BZ_HUB_CHUNK_ID"] == "ch_x"
     assert env["BZ_HUB_WORKDIR"] == "/tmp/ch_x"
@@ -464,6 +475,7 @@ def test_build_hub_env_carries_no_model_credential_and_the_documented_keys() -> 
     assert env["BZ_HUB_MARKER_CALLBACK_URL"] == "http://hub/api/chunks/ch_x/hub-markers"
     assert env["BZ_FORGE_URL"] == "http://forge"
     assert env["BZ_FORGE_TOKEN"] == "tok"
+    assert json.loads(env["BZ_FORGE_TOKENS"]) == {"widget": "tok"}
     assert "BZ_HUB_FEATURE_TITLE" not in env  # no feature_title given
     # Structurally agentless (`bzh:deterministic-shell`) — no key here ever names a
     # model/agent credential.

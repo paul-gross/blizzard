@@ -51,10 +51,12 @@ saves. On a phone the page is read-only and names the `blizzard hub repo` comman
 
 ## How delivery uses a record
 
-A `deliver` step resolves its chunk's commit pointers to repository records before any command runs, and fills the forge
-variables of its environment from the record: `BZ_FORGE_URL` from `forge_api_url`, `BZ_FORGE_OWNER` from `owner`,
-`BZ_HUB_BASE_BRANCH` from `base_branch`, and `BZ_FORGE_TOKEN` from the secret, revealed for that step. Each commit's
-`repo` is qualified to the record's `owner/repo`.
+A `deliver` step resolves each of its chunk's commit pointers to its own repository record before any command runs. Each
+commit's `repo` is qualified to the record's `owner/repo`, and its entry carries that record's target: `forge_url` from
+`forge_api_url`, `owner`, `base_branch`, and the `record` name. `BZ_FORGE_TOKENS` maps each record name to its secret,
+revealed once per distinct secret for that step. When every pointer's record agrees on forge, owner, base branch and
+secret, the step also gets the single-valued `BZ_FORGE_URL`, `BZ_FORGE_OWNER`, `BZ_HUB_BASE_BRANCH` and
+`BZ_FORGE_TOKEN`; when they differ, those four are unset and whether the mix is acceptable is the land script's call.
 
 A pointer matches a record by repo name, narrowed by the origin's owner and forge host when its URL names them; a
 `file://` origin names neither and matches by bare name. A record counts for a chunk when it is enabled, or was retired
@@ -64,14 +66,18 @@ nothing to resolve and lands as a no-op.
 Only the repositories the chunk's project links are candidates, so a new repository receives nothing until a project
 links it ([projects.md](./projects.md#links)).
 
-Three outcomes refuse the step before it runs, route its failure choice, and record an event
+Three outcomes refuse the step before it runs and route its failure choice; the first two also record an event
 ([observability.md](./observability.md)):
 
 - `repository-unresolved` — no record stands for a pointer, or its name matches several records.
 - `repository-not-linked` — a pointer resolves to a repository of the tenant that the chunk's project does not link:
   link it to the project, or decide the chunk's work strayed.
-- `repositories-disagree` — the pointers resolve to records that differ on forge, owner, base branch or secret, so there
-  is no single landing target.
+- `repository-secret-unavailable` — a record's secret is missing or retired; the log names the repository. Replace or
+  enable the secret.
+
+Records that differ on forge, owner, base branch or secret do not refuse the step. The shipped land scripts land each
+repository against its own record, and refuse two commit entries that share one `owner/repo`, such as the same name on
+two forge hosts, because they would share one `merged/<repo>` marker.
 
 The hub reads records on every step, so an edit or a secret replace reaches the next step with no restart. A hub whose
 environment still sets `BZ_FORGE_URL`, `BZ_FORGE_TOKEN`, `BZ_FORGE_OWNER` or `BZ_FORGE_BASE_BRANCH` refuses to start;

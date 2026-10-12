@@ -25,6 +25,7 @@ from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import IO, Any
+from urllib.parse import urlparse
 
 import httpx
 import sqlalchemy as sa
@@ -1189,8 +1190,13 @@ def seed_repositories(
     )
     for fields in repositories:
         name = f"{fields.owner}-{fields.repo}"
-        if RepositoryRecordStore(hub_store_connections(engine)).get(name) is not None:
+        existing = RepositoryRecordStore(hub_store_connections(engine)).get(name)
+        if existing is not None and existing.fields.forge_api_url == fields.forge_api_url:
             continue
+        if existing is not None:  # the same owner/repo on another forge is a record of its own
+            name = f"{name}-{urlparse(fields.forge_api_url).netloc}"
+            if RepositoryRecordStore(hub_store_connections(engine)).get(name) is not None:
+                continue
         with contextlib.suppress(SecretAlreadyExists):
             authoring.create_secret(SecretName.parse(fields.secret_name), "fixture-token", OP)
         authoring.create_repository(name, fields, OP)

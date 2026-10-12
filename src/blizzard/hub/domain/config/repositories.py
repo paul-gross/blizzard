@@ -141,13 +141,19 @@ class RepositoryEdit:
 @domain_model
 @dataclass(frozen=True)
 class ResolvedRepository:
-    """The one repository record a chunk's commits resolved to — its forge, owner, base branch
-    and secret."""
+    """The repository record one commit pointer resolved to — its forge, owner, base branch and
+    secret, and the record's own ``name``."""
 
     forge_api_url: str
     owner: str
     base_branch: str
     secret_name: str
+    record: str = ""
+
+    @property
+    def target(self) -> tuple[str, str, str, str]:
+        """What a chunk's records must share for one target to stand for all of them."""
+        return (self.forge_api_url, self.owner, self.base_branch, self.secret_name)
 
 
 @domain_model
@@ -175,21 +181,29 @@ class RepositoryOutcome(StrEnum):
     NOTHING_TO_RESOLVE = "nothing-to-resolve"
     UNRESOLVED = "repository-unresolved"
     NOT_LINKED = "repository-not-linked"
-    DISAGREE = "repositories-disagree"
 
 
 @domain_model
 @dataclass(frozen=True)
 class RepositoryResolution:
-    """The outcome of resolving a chunk's commit pointers. ``target`` is set exactly when
-    ``outcome`` is :attr:`RepositoryOutcome.RESOLVED`; ``qualified`` maps each origin's
-    index to the ``owner/repo`` it resolved to, and ``names`` to its repository record's name."""
+    """The outcome of resolving a chunk's commit pointers. ``targets`` holds one resolved record per
+    pointer, in origin order, exactly when ``outcome`` is :attr:`RepositoryOutcome.RESOLVED`;
+    ``qualified`` maps each origin's index to the ``owner/repo`` it resolved to, and ``names`` to
+    its repository record's name."""
 
     outcome: RepositoryOutcome
-    target: ResolvedRepository | None = None
+    targets: tuple[ResolvedRepository, ...] = ()
     qualified: tuple[str, ...] = ()
     names: tuple[str, ...] = ()
     detail: str = ""
+
+    @property
+    def agreed(self) -> ResolvedRepository | None:
+        """The one target every pointer shares — forge, owner, base branch and secret alike — or
+        ``None`` when they differ or there is nothing resolved."""
+        if not self.targets or any(t.target != self.targets[0].target for t in self.targets):
+            return None
+        return self.targets[0]
 
 
 def _forge_host(forge_api_url: str) -> str:
@@ -263,15 +277,14 @@ def resolve_chunk_repositories(
     linked: frozenset[str] | None,
     project: str = "",
 ) -> RepositoryResolution:
-    """Resolve each commit pointer to a repository record, then require they all agree.
+    """Resolve each commit pointer to its own repository record.
 
     A pointer matches a record by its bare name, narrowed by the origin's owner and forge host
     when it encodes them. Only records standing for the chunk count: an enabled one, or one
     retired after the chunk was minted — and of those, only the ones ``linked`` names, the
-    chunk's project's links; ``None`` narrows nothing. Each pointer narrows before the records
-    are compared, so a name ambiguous across the tenant resolves when its project links one of
-    them. ``project`` is the label a not-linked refusal names. No pointers is not a refusal —
-    there is nothing to land."""
+    chunk's project's links; ``None`` narrows nothing. Each pointer narrows on its own, so a name
+    ambiguous across the tenant resolves when its project links one of them. ``project`` is the
+    label a not-linked refusal names. No pointers is not a refusal — there is nothing to land."""
     if not origins:
         return RepositoryResolution(RepositoryOutcome.NOTHING_TO_RESOLVE)
     standing = _standing(rows, minted_at)
@@ -282,23 +295,14 @@ def resolve_chunk_repositories(
         if len(found) != 1:
             return _refusal(origin, found, standing, linked=linked, project=project)
         picked.append(found[0])
-    first = picked[0].fields
-    for row in picked[1:]:
-        f = row.fields
-        for label, mine, theirs in (
-            ("forge_api_url", first.forge_api_url, f.forge_api_url),
-            ("owner", first.owner, f.owner),
-            ("base_branch", first.base_branch, f.base_branch),
-            ("secret_name", first.secret_name, f.secret_name),
-        ):
-            if mine != theirs:
-                return RepositoryResolution(
-                    RepositoryOutcome.DISAGREE,
-                    detail=f"repositories {picked[0].name} and {row.name} disagree on {label}: {mine!r} vs {theirs!r}",
-                )
     return RepositoryResolution(
         RepositoryOutcome.RESOLVED,
-        target=ResolvedRepository(first.forge_api_url, first.owner, first.base_branch, first.secret_name),
+        targets=tuple(
+            ResolvedRepository(
+                row.fields.forge_api_url, row.fields.owner, row.fields.base_branch, row.fields.secret_name, row.name
+            )
+            for row in picked
+        ),
         qualified=tuple(f"{row.fields.owner}/{row.fields.repo}" for row in picked),
         names=tuple(row.name for row in picked),
     )

@@ -7,6 +7,7 @@ command-runner seams."""
 
 from __future__ import annotations
 
+import itertools
 import json
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -75,7 +76,12 @@ def _submit(tmp_path: Path, *, origins: dict[str, str], commits: dict[str, str])
     return DeclaredCommits(ctx, lease, store.bindings_for_chunk("ch_1")).verify()
 
 
-def _deliver_payload(tmp_path: Path, submitted: list[CompletionArtifact], *owners: str) -> list[list[dict[str, str]]]:
+def _deliver_payload(
+    tmp_path: Path,
+    submitted: list[CompletionArtifact],
+    *owners: str,
+    forges: tuple[str, ...] = (),
+) -> list[list[dict[str, str]]]:
     """Record ``submitted`` as the chunk's build artifacts, run ``deliver``, and return the
     ``BZ_HUB_GIT_COMMITS`` list each land-script run received."""
     runner = FakeHubCommandRunner()
@@ -85,8 +91,8 @@ def _deliver_payload(tmp_path: Path, submitted: list[CompletionArtifact], *owner
         hub_command_runner=runner,
         hub_workdir=FakeHubWorkdir(),
         repositories=[
-            replace(DEFAULT_FIXTURE_REPOSITORIES[0], owner=owner, forge_api_url="https://api.github.com")
-            for owner in owners
+            replace(DEFAULT_FIXTURE_REPOSITORIES[0], owner=owner, forge_api_url=forge)
+            for owner, forge in itertools.product(owners, forges or ("https://api.github.com",))
         ],
     )
     chunk_id, nodes = _mint_and_claim(hub)
@@ -137,10 +143,15 @@ def test_two_envs_on_one_origin_deliver_one_entry(tmp_path: Path) -> None:
 
     runs = _deliver_payload(tmp_path, submitted, "acme")
 
-    assert runs == [[{"repo": "acme/widget", "branch": "feat/x", "commit": "a" * 40}]]
+    assert len(runs) == 1 and len(runs[0]) == 1
+    assert {k: runs[0][0][k] for k in ("repo", "branch", "commit")} == {
+        "repo": "acme/widget",
+        "branch": "feat/x",
+        "commit": "a" * 40,
+    }
 
 
-def test_one_name_at_two_owners_is_refused_since_delivery_lands_under_one_owner(tmp_path: Path) -> None:
+def test_one_name_at_two_owners_runs_with_each_entry_on_its_own_record(tmp_path: Path) -> None:
     submitted = _submit(
         tmp_path,
         origins={"e1": "https://github.com/owner-a/widget", "e2": "https://github.com/owner-b/widget"},
@@ -149,4 +160,22 @@ def test_one_name_at_two_owners_is_refused_since_delivery_lands_under_one_owner(
 
     runs = _deliver_payload(tmp_path, submitted, "owner-a", "owner-b")
 
-    assert runs == [], "a chunk spanning two owners has no single landing target; no land script may run"
+    assert len(runs) == 1
+    assert [(c["repo"], c["owner"]) for c in runs[0]] == [("owner-a/widget", "owner-a"), ("owner-b/widget", "owner-b")]
+
+
+def test_one_owner_and_name_on_two_forge_hosts_runs_with_each_entry_on_its_own_record(tmp_path: Path) -> None:
+    submitted = _submit(
+        tmp_path,
+        origins={"e1": "https://github.com/acme/widget", "e2": "https://git.example.test/acme/widget"},
+        commits={"e1": "a" * 40, "e2": "b" * 40},
+    )
+
+    assert len(submitted) == 2, "the runner keeps one name on two hosts as two pointers"
+    runs = _deliver_payload(tmp_path, submitted, "acme", forges=("https://api.github.com", "https://git.example.test"))
+
+    assert len(runs) == 1
+    assert [(c["repo"], c["forge_url"], c["commit"]) for c in runs[0]] == [
+        ("acme/widget", "https://api.github.com", "a" * 40),
+        ("acme/widget", "https://git.example.test", "b" * 40),
+    ]

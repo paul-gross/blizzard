@@ -36,6 +36,10 @@ def main() -> int:
 
 def _land() -> int:
     run = LandRun.from_env()
+    if (clash := run.duplicate_repo()) is not None:
+        print(clash, file=sys.stderr)
+        print("failure")
+        return 0
     pending = run.pending()
     if not pending:
         print("landed")

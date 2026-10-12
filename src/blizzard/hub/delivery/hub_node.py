@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import timedelta
 
 from blizzard.foundation.artifacts import ArtifactKind
@@ -20,7 +20,7 @@ from blizzard.foundation.event_log import EventLogKind
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.platform_tracing.attributes import annotate
 from blizzard.foundation.platform_tracing.tracer import IPlatformTracer, NoopPlatformTracer
-from blizzard.foundation.repo_ref import repo_identity
+from blizzard.foundation.repo_ref import pointer_key, repo_identity
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.trace_ids import DerivedContext, SpanRole, StepKey
@@ -104,7 +104,6 @@ REFUSAL_EVENT: Mapping[RepositoryOutcome, EventLogKind | None] = {
     RepositoryOutcome.NOTHING_TO_RESOLVE: None,
     RepositoryOutcome.UNRESOLVED: "repository-unresolved",
     RepositoryOutcome.NOT_LINKED: "repository-not-linked",
-    RepositoryOutcome.DISAGREE: "repositories-disagree",
 }
 # Bound on the step output a bounce envelope carries; the full text is the `hub-log.<step>` asset.
 BOUNCE_OUTPUT_TAIL_CHARS = 2000
@@ -212,7 +211,7 @@ ENV_NODE_ID = "BZ_HUB_NODE_ID"
 ENV_NODE_NAME = "BZ_HUB_NODE_NAME"
 ENV_EPOCH = "BZ_HUB_EPOCH"
 ENV_BASE_BRANCH = "BZ_HUB_BASE_BRANCH"
-ENV_GIT_COMMITS = "BZ_HUB_GIT_COMMITS"  # JSON list of {repo, branch, commit}
+ENV_GIT_COMMITS = "BZ_HUB_GIT_COMMITS"  # JSON list of {repo, branch, commit, forge_url, owner, base_branch, record}
 ENV_ARTIFACT_NAMES = "BZ_HUB_ARTIFACT_NAMES"  # JSON list of already-recorded artifact names for this node
 ENV_MARKER_CALLBACK_URL = "BZ_HUB_MARKER_CALLBACK_URL"  # POST {name, content} records a marker mid-run
 ENV_MARKER_TOKEN = "BZ_HUB_MARKER_TOKEN"  # the capability token authorizing that POST
@@ -222,6 +221,7 @@ ENV_GARDEN_DELIVERY_URL = "BZ_HUB_GARDEN_DELIVERY_URL"
 ENV_REVIEW_FINDINGS_URL = "BZ_HUB_REVIEW_FINDINGS_URL"
 ENV_FORGE_URL = "BZ_FORGE_URL"
 ENV_FORGE_TOKEN = "BZ_FORGE_TOKEN"
+ENV_FORGE_TOKENS = "BZ_FORGE_TOKENS"  # JSON object {repository record name: token}, one per record in the chunk
 ENV_FORGE_OWNER = "BZ_FORGE_OWNER"  # qualifies a bare (owner-less) repo, mirroring land_common.LandRun.repo
 # PR/merge title resolved from the primary work item, absent when unresolved.
 ENV_FEATURE_TITLE = "BZ_HUB_FEATURE_TITLE"
@@ -258,7 +258,7 @@ class GitCommits:
     """A chunk's ``git_commit`` artifacts resolved to one row per repository **identity**.
 
     A rewritten branch supersedes its orphaned pointer, but the same name under two owners
-    stays two repositories."""
+    or on two forge hosts stays two repositories."""
 
     rows: list[StoredArtifact]
 
@@ -288,20 +288,38 @@ class GitCommits:
         """Each row's repository as its origin names it, in :attr:`rows` order."""
         return [CommitOrigin.of(row.forge, row.repo or row.name) for row in self.rows]
 
-    def payload(self, qualified: tuple[str, ...] = ()) -> list[dict[str, str | None]]:
+    def payload(
+        self, qualified: tuple[str, ...] = (), targets: tuple[ResolvedRepository, ...] = ()
+    ) -> list[dict[str, str | None]]:
         """:data:`ENV_GIT_COMMITS`'s content: ``repo`` is the ``owner/repo`` of the repository record
-        the row resolved to (``qualified``, in :attr:`rows` order); unresolved, the row's own identity."""
-        return [
-            {
-                "repo": qualified[index] if qualified else self._identity(row),
+        the row resolved to (``qualified``, in :attr:`rows` order); unresolved, the row's own identity.
+        Given ``targets`` (one per row), each entry also carries its own record's target: ``forge_url``,
+        ``owner``, ``base_branch`` and the ``record`` name."""
+        entries: list[dict[str, str | None]] = []
+        for index, row in enumerate(self.rows):
+            entry: dict[str, str | None] = {
+                "repo": qualified[index] if qualified else self._qualified(row),
                 "branch": row.data.partition(":")[0],
                 "commit": row.data.partition(":")[2],
             }
-            for index, row in enumerate(self.rows)
-        ]
+            if targets:
+                target = targets[index]
+                entry |= {
+                    "forge_url": target.forge_api_url,
+                    "owner": target.owner,
+                    "base_branch": target.base_branch,
+                    "record": target.record,
+                }
+            entries.append(entry)
+        return entries
 
     @staticmethod
     def _identity(row: StoredArtifact) -> str:
+        """The host-qualified grouping key, from the stored ``forge`` + ``repo``, never the runner-sent name."""
+        return pointer_key(row.forge, row.repo or row.name)
+
+    @staticmethod
+    def _qualified(row: StoredArtifact) -> str:
         return repo_identity(row.forge, row.repo or row.name)
 
 
@@ -318,12 +336,12 @@ class HubEnv:
     marker_callback_url: str
     garden_delivery_url: str = ""
     review_findings_url: str = ""
-    #: The repository record the chunk's commits resolved to; ``None`` when there are no commits to land.
-    repository: ResolvedRepository | None = None
-    #: The repository's revealed secret, placed in the step's env — the one place a value leaves the hub.
-    forge_token: str | None = None
-    #: ``owner/repo`` per commit row, in row order, filling each pointer's ``repo``.
-    qualified_repos: tuple[str, ...] = ()
+    #: Each commit pointer's resolved repository record, in row order; empty when there are no commits to land.
+    resolution: RepositoryResolution = field(
+        default_factory=lambda: RepositoryResolution(RepositoryOutcome.NOTHING_TO_RESOLVE)
+    )
+    #: Each record's revealed secret by record name, placed in the step's env — the one place a value leaves the hub.
+    forge_tokens: Mapping[str, str] = field(default_factory=dict)
     feature_title: str | None = None
     expects_git_commits: bool = True
     marker_token: str = ""
@@ -345,7 +363,9 @@ class HubEnv:
             ENV_NODE_ID: self.node.node_id,
             ENV_NODE_NAME: self.node.name,
             ENV_EPOCH: str(self.epoch),
-            ENV_GIT_COMMITS: json.dumps(GitCommits.of(self.artifacts).payload(self.qualified_repos)),
+            ENV_GIT_COMMITS: json.dumps(
+                GitCommits.of(self.artifacts).payload(self.resolution.qualified, self.resolution.targets)
+            ),
             ENV_ARTIFACT_NAMES: json.dumps(names),
             ENV_MARKER_CALLBACK_URL: self.marker_callback_url,
             ENV_EXPECT_GIT_COMMITS: "1" if self.expects_git_commits else "0",
@@ -357,12 +377,14 @@ class HubEnv:
             env[ENV_GARDEN_DELIVERY_URL] = self.garden_delivery_url
         if self.review_findings_url:
             env[ENV_REVIEW_FINDINGS_URL] = self.review_findings_url
-        if self.repository is not None:
-            env[ENV_BASE_BRANCH] = self.repository.base_branch
-            env[ENV_FORGE_URL] = self.repository.forge_api_url
-            env[ENV_FORGE_OWNER] = self.repository.owner
-        if self.forge_token:
-            env[ENV_FORGE_TOKEN] = self.forge_token
+        if (agreed := self.resolution.agreed) is not None:
+            env[ENV_BASE_BRANCH] = agreed.base_branch
+            env[ENV_FORGE_URL] = agreed.forge_api_url
+            env[ENV_FORGE_OWNER] = agreed.owner
+            if token := self.forge_tokens.get(agreed.record):
+                env[ENV_FORGE_TOKEN] = token
+        if self.forge_tokens:
+            env[ENV_FORGE_TOKENS] = json.dumps(dict(self.forge_tokens))
         if self.feature_title:
             env[ENV_FEATURE_TITLE] = self.feature_title
         if self.marker_token:
@@ -484,7 +506,13 @@ class HubNodeExecutor:
     ) -> bool:
         """Record a ``run:`` step's marker ahead of its exit, idempotently per
         ``(chunk, node, name, epoch)``. A superseded epoch writes nothing, preventing
-        its marker from landing a repo or enqueuing a close (``bzh:epoch-fencing``)."""
+        its marker from landing a repo or enqueuing a close (``bzh:epoch-fencing``).
+        :class:`AmbiguousMarkerRepository` — before anything is written — when a landed marker names
+        an ``owner/repo`` the visit holds for two repository records."""
+        if name.startswith(_MARKER_PREFIX) and is_landed_revision(content):
+            self._marker_authority.repository_name(
+                chunk_id, node_id=node_id, epoch=epoch, repo=name.removeprefix(_MARKER_PREFIX)
+            )
         wrote = self._artifacts.record_hub_artifact(
             chunk_id,
             node_id=node_id,
@@ -595,12 +623,19 @@ class HubNodeExecutor:
                 project=project.slug,
             )
             refusal = self._resolution_refusal(resolution)
-            token: str | None = None
-            if resolution.target is not None and refusal is None:
-                try:
-                    token = self._secrets.reveal(SecretName.parse(resolution.target.secret_name)).expose()
-                except (SecretNotFound, SecretRetired) as exc:
-                    refusal = ("repository-secret-unavailable", str(exc))
+            tokens: dict[str, str] = {}
+            if refusal is None:
+                revealed: dict[str, str] = {}
+                for target in resolution.targets:
+                    try:
+                        if target.secret_name not in revealed:
+                            revealed[target.secret_name] = self._secrets.reveal(
+                                SecretName.parse(target.secret_name)
+                            ).expose()
+                    except (SecretNotFound, SecretRetired) as exc:
+                        refusal = ("repository-secret-unavailable", f"repository {target.record}: {exc}")
+                        break
+                    tokens[target.record] = revealed[target.secret_name]
             if refusal is not None:
                 step, detail = refusal
                 self._record_refusal_event(chunk, node, resolution, epoch=epoch)
@@ -611,7 +646,7 @@ class HubNodeExecutor:
                 chunk.chunk_id,
                 node_id=node.node_id,
                 epoch=epoch,
-                names=dict(zip(resolution.qualified, resolution.names, strict=True)),
+                names=list(zip(resolution.qualified, resolution.names, strict=True)),
             )
             env = HubEnv(
                 chunk=chunk,
@@ -622,9 +657,8 @@ class HubNodeExecutor:
                 marker_callback_url=self._marker_callback_url(chunk.chunk_id, node.node_id, epoch),
                 garden_delivery_url=self._garden_delivery_url(chunk.chunk_id, node.node_id, epoch),
                 review_findings_url=self._review_findings_url(chunk.chunk_id, node.node_id, epoch),
-                repository=resolution.target,
-                forge_token=token,
-                qualified_repos=resolution.qualified,
+                resolution=resolution,
+                forge_tokens=tokens,
                 feature_title=self._resolve_feature_title(chunk),
                 expects_git_commits=graph.declares_git_commit,
                 marker_token=marker_token,

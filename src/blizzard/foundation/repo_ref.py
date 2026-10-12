@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 from blizzard.foundation.roles import domain_model
 
-__all__ = ["RepoRef", "repo_identity"]
+__all__ = ["RepoRef", "pointer_key", "repo_identity"]
 
 # `scp`-style ssh remotes lack the `//` a URL parser needs.
 _SCP_LIKE = re.compile(r"^(?:[^@/]+@)?(?P<host>[^:/]+):(?P<path>.+)$")
@@ -74,3 +74,17 @@ def repo_identity(origin_url: str | None, name: str) -> str:
     as given, so a name already qualified (a stored row with no origin) passes through unchanged."""
     ref = RepoRef.parse(origin_url) if origin_url else None
     return ref.qualified if ref else name
+
+
+def pointer_key(origin_url: str | None, name: str) -> str:
+    """The key commit pointers group by: ``repo_identity`` qualified by the origin's host.
+
+    The host is lowercased with its port and userinfo dropped, so one repository's scp-style and
+    https origins give one key; the same ``owner/name`` on two forge hosts gives two. An origin
+    that names no host falls back to :func:`repo_identity`."""
+    ref = RepoRef.parse(origin_url) if origin_url else None
+    if ref is None:
+        return name
+    host = ref.host.lower().rpartition("@")[2]
+    host = host.rpartition(":")[0] if re.search(r":\d*$", host) and not host.endswith("]") else host
+    return f"{host}/{ref.qualified}" if host else ref.qualified

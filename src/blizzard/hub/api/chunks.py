@@ -30,6 +30,7 @@ from blizzard.hub.api.graph_names import GraphNames, graph_by_ref
 from blizzard.hub.api.marker_auth import require_marker_authority
 from blizzard.hub.api.project_params import QueryProject, body_project, project_of_call, project_ref
 from blizzard.hub.composition import TenantServices
+from blizzard.hub.delivery.marker_auth import AmbiguousMarkerRepository
 from blizzard.hub.domain.chunk.delivery_read import DeliveryRead, DeliverySources
 from blizzard.hub.domain.chunk.dependencies import (
     ChunkNeighbor,
@@ -438,14 +439,17 @@ def record_hub_marker(
     graph = services.graphs.get(chunk.graph_id)
     node = graph.node_by_id(node_id) if graph is not None else None
     node_name = node.name if node is not None else node_id
-    recorded = services.hub_node.record_marker(
-        chunk_id,
-        node_id=node_id,
-        node_name=node_name,
-        epoch=epoch,
-        name=request_body.name,
-        content=request_body.content,
-    )
+    try:
+        recorded = services.hub_node.record_marker(
+            chunk_id,
+            node_id=node_id,
+            node_name=node_name,
+            epoch=epoch,
+            name=request_body.name,
+            content=request_body.content,
+        )
+    except AmbiguousMarkerRepository as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     return HubMarkerResponse(recorded=recorded, chunk_id=chunk_id, name=request_body.name)
 
 

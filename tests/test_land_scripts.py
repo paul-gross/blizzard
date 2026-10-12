@@ -15,7 +15,34 @@ pytestmark = pytest.mark.unit
 _REPO = "acme/widget"
 _BRANCH = "feature-branch"
 _COMMIT = "sha1"
-_COMMITS = [{"repo": _REPO, "branch": _BRANCH, "commit": _COMMIT}]
+_FORGE_TOKEN = "forge-token"
+
+
+def _targeted(
+    commits: list[dict[str, str]], *, forge: str = "http://forge", base: str = "main"
+) -> list[dict[str, str]]:
+    """``commits`` with the per-entry target the hub injects: the forge, owner, base branch, and the
+    repository record (named after the bare repo)."""
+    return [
+        {
+            "forge_url": forge,
+            "owner": c["repo"].partition("/")[0],
+            "base_branch": base,
+            "record": c["repo"].rpartition("/")[2],
+            **c,
+        }
+        for c in commits
+    ]
+
+
+_COMMITS = _targeted([{"repo": _REPO, "branch": _BRANCH, "commit": _COMMIT}])
+
+
+@pytest.fixture(autouse=True)
+def _forge_tokens(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every record the tests name holds the same token unless a test sets its own map."""
+    monkeypatch.setenv("BZ_FORGE_TOKENS", json.dumps(dict.fromkeys(("widget", "gadget", "web"), _FORGE_TOKEN)))
+
 
 # Every scripted forge double needs a marker callback response.
 _CALLBACK_URL = "http://callback/hub-markers"
@@ -573,10 +600,12 @@ def test_a_foreign_head_in_one_repo_fires_nothing_in_a_sibling_that_is_behind(
 ) -> None:
     other_repo = "acme/gadget"
     other = f"http://forge/repos/{other_repo}"
-    commits = [
-        {"repo": _REPO, "branch": _BRANCH, "commit": _COMMIT},
-        {"repo": other_repo, "branch": "feat/x", "commit": "osha"},
-    ]
+    commits = _targeted(
+        [
+            {"repo": _REPO, "branch": _BRANCH, "commit": _COMMIT},
+            {"repo": other_repo, "branch": "feat/x", "commit": "osha"},
+        ]
+    )
     _set_base_env(monkeypatch, feature_title="t")
     monkeypatch.setenv("BZ_HUB_GIT_COMMITS", json.dumps(commits))
     calls: list[tuple[str, str, dict[str, Any] | None]] = []
@@ -914,10 +943,12 @@ def test_two_pending_repos_one_failing_names_only_the_failing_repo_and_merges_ne
 ) -> None:
     other_repo = "acme/gadget"
     other_branch = "other-branch"
-    commits = [
-        {"repo": _REPO, "branch": _BRANCH, "commit": _COMMIT},
-        {"repo": other_repo, "branch": other_branch, "commit": "sha2"},
-    ]
+    commits = _targeted(
+        [
+            {"repo": _REPO, "branch": _BRANCH, "commit": _COMMIT},
+            {"repo": other_repo, "branch": other_branch, "commit": "sha2"},
+        ]
+    )
     monkeypatch.setenv("BZ_FORGE_URL", "http://forge")
     monkeypatch.setenv("BZ_HUB_BASE_BRANCH", "main")
     monkeypatch.setenv("BZ_HUB_GIT_COMMITS", json.dumps(commits))
@@ -1196,12 +1227,12 @@ def test_a_503_then_200_on_the_marker_write_retries_exactly_once_then_lands(
 
 
 @pytest.mark.parametrize("module", [land_default, land_pr_ci], ids=["default", "pr-ci"])
-def test_an_unset_forge_url_names_it_and_exits_non_zero(
-    monkeypatch: pytest.MonkeyPatch, module: Any, capsys: pytest.CaptureFixture[str]
+@pytest.mark.parametrize("field", ["forge_url", "owner", "base_branch", "record"])
+def test_a_missing_per_entry_field_names_it_and_exits_non_zero(
+    monkeypatch: pytest.MonkeyPatch, module: Any, capsys: pytest.CaptureFixture[str], field: str
 ) -> None:
-    monkeypatch.delenv("BZ_FORGE_URL", raising=False)
-    monkeypatch.setenv("BZ_HUB_BASE_BRANCH", "main")
-    monkeypatch.setenv("BZ_HUB_GIT_COMMITS", json.dumps(_COMMITS))
+    entry = {k: v for k, v in _COMMITS[0].items() if k != field}
+    monkeypatch.setenv("BZ_HUB_GIT_COMMITS", json.dumps([entry]))
     monkeypatch.delenv("BZ_HUB_ARTIFACT_NAMES", raising=False)
     monkeypatch.setattr(
         module, "forge_request", lambda *a, **k: pytest.fail("must not contact the forge"), raising=False
@@ -1211,7 +1242,7 @@ def test_an_unset_forge_url_names_it_and_exits_non_zero(
         module.main()
 
     assert exc.value.code != 0
-    assert "BZ_FORGE_URL" in capsys.readouterr().err
+    assert repr(field) in capsys.readouterr().err
 
 
 @pytest.mark.parametrize("module", [land_default, land_pr_ci], ids=["default", "pr-ci"])
@@ -1503,10 +1534,12 @@ def _marker_posts(calls: list[tuple[str, str, dict[str, Any] | None]]) -> dict[s
 
 
 def _two_repo_env(monkeypatch: pytest.MonkeyPatch, *, other_repo: str, other_branch: str) -> None:
-    commits = [
-        {"repo": _REPO, "branch": _BRANCH, "commit": _COMMIT},
-        {"repo": other_repo, "branch": other_branch, "commit": "basesha"},
-    ]
+    commits = _targeted(
+        [
+            {"repo": _REPO, "branch": _BRANCH, "commit": _COMMIT},
+            {"repo": other_repo, "branch": other_branch, "commit": "basesha"},
+        ]
+    )
     _set_base_env(monkeypatch, feature_title="t")
     monkeypatch.setenv("BZ_HUB_GIT_COMMITS", json.dumps(commits))
 
@@ -1696,8 +1729,7 @@ def _pull_request_run(fake: Any) -> land_common.LandRun:
     """A minimal :class:`LandRun` for exercising :meth:`PullRequest.of` directly, with no
     markers or commits of its own — the tests below only drive the forge reads."""
     return land_common.LandRun(
-        forge_url="http://forge",
-        base_branch="main",
+        tokens={"widget": _FORGE_TOKEN},
         commits=[],
         already=set(),
         markers=land_common.MarkerWriter(
@@ -1744,7 +1776,9 @@ def test_a_stale_merged_pr_on_a_reused_branch_name_is_never_mistaken_for_a_landi
         return responses[(method, url)]
 
     run = _pull_request_run(fake)
-    pr = land_common.PullRequest.of(run, {"repo": _REPO, "branch": _BRANCH, "commit": "current-head-sha"})
+    pr = land_common.PullRequest.of(
+        run, _targeted([{"repo": _REPO, "branch": _BRANCH, "commit": "current-head-sha"}])[0]
+    )
 
     assert pr.number == 2, "the stale merged PR (#1) must be ignored — a fresh PR opens instead"
     assert ("POST", f"{base}/pulls") in [(m, u) for m, u, _ in calls]
@@ -1773,7 +1807,9 @@ def test_a_merged_pr_on_the_same_branch_retargeted_to_a_different_base_is_never_
         return responses[(method, url)]
 
     run = _pull_request_run(fake)
-    pr = land_common.PullRequest.of(run, {"repo": _REPO, "branch": _BRANCH, "commit": "current-head-sha"})
+    pr = land_common.PullRequest.of(
+        run, _targeted([{"repo": _REPO, "branch": _BRANCH, "commit": "current-head-sha"}])[0]
+    )
 
     assert pr.number == 2, "a PR merged into a different base must be ignored — a fresh PR opens instead"
     assert ("POST", f"{base}/pulls") in [(m, u) for m, u, _ in calls]
@@ -1828,7 +1864,7 @@ def test_a_merged_candidate_past_the_first_page_of_closed_pulls_is_still_recogni
         return responses[(method, url)]
 
     run = _pull_request_run(fake)
-    pr = land_common.PullRequest.of(run, {"repo": _REPO, "branch": _BRANCH, "commit": "the-head-sha"})
+    pr = land_common.PullRequest.of(run, _targeted([{"repo": _REPO, "branch": _BRANCH, "commit": "the-head-sha"}])[0])
 
     assert pr.number == 101
     assert pr.merged
@@ -1875,7 +1911,7 @@ def test_an_already_merged_pr_matching_the_live_branch_tip_is_recognized_without
         return responses[(method, url)]
 
     run = _pull_request_run(fake)
-    pr = land_common.PullRequest.of(run, {"repo": _REPO, "branch": _BRANCH, "commit": "the-head-sha"})
+    pr = land_common.PullRequest.of(run, _targeted([{"repo": _REPO, "branch": _BRANCH, "commit": "the-head-sha"}])[0])
 
     assert pr.number == 1
     assert pr.merged
@@ -1920,7 +1956,7 @@ def test_an_already_merged_pr_is_recognized_after_the_forge_deleted_its_head_bra
         return responses[(method, url)]
 
     run = _pull_request_run(fake)
-    pr = land_common.PullRequest.of(run, {"repo": _REPO, "branch": _BRANCH, "commit": "the-head-sha"})
+    pr = land_common.PullRequest.of(run, _targeted([{"repo": _REPO, "branch": _BRANCH, "commit": "the-head-sha"}])[0])
 
     assert pr.number == 1
     assert pr.merged
@@ -1949,7 +1985,7 @@ def test_a_merged_pr_with_another_sha_and_a_deleted_branch_is_not_a_match() -> N
     def fake(method: str, url: str, *, token: str | None, body: dict[str, Any] | None, **_: Any) -> tuple[int, Any]:
         return responses[(method, url)]
 
-    run = _pull_request_run(fake)
+    run = _pull_request_run(fake).at(_COMMITS[0])
     assert land_common.PullRequest._merged_for_branch(run, _REPO, _BRANCH, "the-head-sha") is None
 
 
@@ -1970,7 +2006,9 @@ def test_merged_for_branch_raises_lookup_error_on_a_non_200_closed_pulls_read(
 
     run = _pull_request_run(fake)
     with pytest.raises(land_common.PullRequestLookupError):
-        land_common.PullRequest.of(run, {"repo": _REPO, "branch": _BRANCH, "commit": "current-head-sha"})
+        land_common.PullRequest.of(
+            run, _targeted([{"repo": _REPO, "branch": _BRANCH, "commit": "current-head-sha"}])[0]
+        )
 
 
 def test_merged_for_branch_raises_lookup_error_on_a_non_200_branch_tip_read(
@@ -2001,7 +2039,9 @@ def test_merged_for_branch_raises_lookup_error_on_a_non_200_branch_tip_read(
 
     run = _pull_request_run(fake)
     with pytest.raises(land_common.PullRequestLookupError):
-        land_common.PullRequest.of(run, {"repo": _REPO, "branch": _BRANCH, "commit": "current-head-sha"})
+        land_common.PullRequest.of(
+            run, _targeted([{"repo": _REPO, "branch": _BRANCH, "commit": "current-head-sha"}])[0]
+        )
 
 
 def test_land_pr_ci_polls_rather_than_reopening_a_duplicate_on_a_degraded_merged_pr_lookup(
@@ -2526,3 +2566,132 @@ def test_a_merge_adding_content_beyond_the_base_change_is_named() -> None:
     assert _gate_offenders(_base_merge(merged_files=merged, base_files=base_side)) == [
         "merge1 (adds content beyond the base branch's change)"
     ]
+
+
+# --- per-repository targets ---------------------------------------------------------------------
+
+
+def _mixed_target_commits() -> list[dict[str, str]]:
+    return [
+        {
+            "repo": "acme/widget",
+            "branch": "feat/x",
+            "commit": "wsha",
+            "forge_url": "http://forge-a",
+            "owner": "acme",
+            "base_branch": "main",
+            "record": "widget",
+        },
+        {
+            "repo": "other/gadget",
+            "branch": "feat/x",
+            "commit": "gsha",
+            "forge_url": "http://forge-b/api/v3/",
+            "owner": "other",
+            "base_branch": "develop",
+            "record": "gadget",
+        },
+    ]
+
+
+def _clean_merge_forge(
+    calls: list[tuple[str, str, str | None, dict[str, Any] | None]],
+):  # type: ignore[no-untyped-def]
+    """A forge double answering any repo on any host with a clean open PR, recording the token each call carried."""
+
+    def fake(
+        method: str, url: str, *, token: str | None, body: dict[str, Any] | None, headers: dict[str, str] | None = None
+    ) -> tuple[int, Any]:
+        calls.append((method, url, token, body))
+        if url == _CALLBACK_URL:
+            return 200, {}
+        if "pulls?state=closed" in url or url.endswith("pulls?state=open"):
+            return 200, []
+        if method == "POST" and url.endswith("/pulls"):
+            return 201, {"number": 1, "head": {"ref": "feat/x"}}
+        if method == "GET" and url.endswith("/pulls/1"):
+            sha = "wsha" if url.startswith("http://forge-a/") else "gsha"
+            return 200, {
+                "number": 1,
+                "merged": False,
+                "mergeable_state": "clean",
+                "head": {"ref": "feat/x", "sha": sha},
+            }
+        if "check-runs" in url:
+            return 200, {"total_count": 1, "check_runs": [_check_run("completed", "success")]}
+        if method == "PUT" and url.endswith("/merge"):
+            return 200, {"sha": "merged", "merged": True}
+        raise AssertionError(f"unscripted forge call {method} {url}")
+
+    return fake
+
+
+def _set_mixed_env(monkeypatch: pytest.MonkeyPatch, commits: list[dict[str, str]]) -> None:
+    monkeypatch.setenv("BZ_HUB_GIT_COMMITS", json.dumps(commits))
+    monkeypatch.setenv("BZ_FORGE_TOKENS", json.dumps({"widget": "tok-a", "gadget": "tok-b"}))
+    monkeypatch.setenv("BZ_HUB_MARKER_CALLBACK_URL", _CALLBACK_URL)
+    monkeypatch.setenv("BZ_HUB_MARKER_TOKEN", _MARKER_TOKEN)
+    monkeypatch.delenv("BZ_HUB_ARTIFACT_NAMES", raising=False)
+    monkeypatch.setenv("BZ_HUB_FEATURE_TITLE", "t")
+
+
+@pytest.mark.parametrize("module", [land_default, land_pr_ci], ids=["default", "pr-ci"])
+def test_each_repository_lands_against_its_own_forge_base_branch_and_token(
+    monkeypatch: pytest.MonkeyPatch, module: Any, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _set_mixed_env(monkeypatch, _mixed_target_commits())
+    calls: list[tuple[str, str, str | None, dict[str, Any] | None]] = []
+    monkeypatch.setattr(land_common, "forge_request", _clean_merge_forge(calls))
+
+    assert module.main() == 0
+
+    assert _last_line(capsys) == "landed"
+    forge_calls = [c for c in calls if c[1] != _CALLBACK_URL]
+    assert forge_calls, "the forge was never reached"
+    for _, url, token, _ in forge_calls:
+        if url.startswith("http://forge-a/"):
+            assert token == "tok-a", url
+            assert "/repos/acme/widget/" in url
+        else:
+            assert url.startswith("http://forge-b/api/v3/repos/other/gadget/"), url
+            assert token == "tok-b", url
+    created = {url: body or {} for method, url, _, body in calls if method == "POST" and url.endswith("/pulls")}
+    assert created["http://forge-a/repos/acme/widget/pulls"]["base"] == "main"
+    assert created["http://forge-b/api/v3/repos/other/gadget/pulls"]["base"] == "develop"
+    assert any("pulls?state=closed&base=develop" in url for _, url, _, _ in forge_calls)
+    merges = [url for method, url, _, _ in calls if method == "PUT" and url.endswith("/merge")]
+    assert merges == [
+        "http://forge-a/repos/acme/widget/pulls/1/merge",
+        "http://forge-b/api/v3/repos/other/gadget/pulls/1/merge",
+    ]
+
+
+@pytest.mark.parametrize("module", [land_default, land_pr_ci], ids=["default", "pr-ci"])
+def test_two_entries_sharing_a_repo_fail_before_any_forge_write_naming_both(
+    monkeypatch: pytest.MonkeyPatch, module: Any, capsys: pytest.CaptureFixture[str]
+) -> None:
+    first, second = _mixed_target_commits()
+    second = {**second, "repo": first["repo"]}
+    _set_mixed_env(monkeypatch, [first, second])
+    monkeypatch.setattr(
+        land_common, "forge_request", lambda *a, **k: pytest.fail("a refused delivery must not reach any forge")
+    )
+
+    assert module.main() == 0
+
+    captured = capsys.readouterr()
+    assert captured.out.strip().splitlines()[-1] == "failure"
+    assert "widget" in captured.err and "gadget" in captured.err and "acme/widget" in captured.err
+
+
+def test_a_record_with_no_token_names_it_and_exits_non_zero(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _set_mixed_env(monkeypatch, _mixed_target_commits())
+    monkeypatch.setenv("BZ_FORGE_TOKENS", json.dumps({"widget": "tok-a"}))
+
+    with pytest.raises(SystemExit) as exc:
+        land_default.main()
+
+    assert exc.value.code != 0
+    assert "'gadget'" in capsys.readouterr().err

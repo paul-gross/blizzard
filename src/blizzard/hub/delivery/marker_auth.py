@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import hmac
 import secrets
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 
 from blizzard.foundation.roles import domain_model
@@ -30,6 +30,17 @@ class MarkerPrincipal:
     tenant_id: TenantId
 
 
+class AmbiguousMarkerRepository(Exception):
+    """A landed marker names an ``owner/repo`` the visit holds for two different repository records —
+    the marker name cannot say which one landed."""
+
+    def __init__(self, repo: str, records: Iterable[str]) -> None:
+        self.records = tuple(sorted(records))
+        super().__init__(
+            f"{repo} resolves to repository records {' and '.join(self.records)}; the marker cannot say which landed"
+        )
+
+
 class MarkerAuthority:
     """Mints, verifies, and revokes short-lived marker-write tokens, keyed by the
     ``(chunk_id, node_id, epoch)`` triple a hub node visit identifies, each recorded with the
@@ -43,7 +54,7 @@ class MarkerAuthority:
     def __init__(self, *, token_factory: Callable[[], str] = secrets.token_urlsafe) -> None:
         self._token_factory = token_factory
         self._tokens: dict[_Key, tuple[str, TenantId]] = {}
-        self._repositories: dict[_Key, dict[str, str]] = {}
+        self._repositories: dict[_Key, dict[str, set[str]]] = {}
 
     def issue(self, chunk_id: str, *, node_id: str, epoch: int, tenant: TenantId) -> str:
         """Mint and store a fresh token for this ``(chunk_id, node_id, epoch)`` in ``tenant``,
@@ -64,15 +75,24 @@ class MarkerAuthority:
             return None
         return MarkerPrincipal(chunk_id=chunk_id, node_id=node_id, epoch=epoch, tenant_id=tenant)
 
-    def hold_repositories(self, chunk_id: str, *, node_id: str, epoch: int, names: Mapping[str, str]) -> None:
-        """Hold ``names`` — ``owner/repo`` to repository record name — for this visit, until
-        :meth:`revoke`."""
-        self._repositories[(chunk_id, node_id, epoch)] = dict(names)
+    def hold_repositories(self, chunk_id: str, *, node_id: str, epoch: int, names: Iterable[tuple[str, str]]) -> None:
+        """Hold ``names`` — ``(owner/repo, repository record name)`` pairs — for this visit, until
+        :meth:`revoke`. One ``owner/repo`` may be held for two records (the same name on two forge
+        hosts); :meth:`repository_name` refuses to pick between them."""
+        held: dict[str, set[str]] = {}
+        for repo, record in names:
+            held.setdefault(repo, set()).add(record)
+        self._repositories[(chunk_id, node_id, epoch)] = held
 
     def repository_name(self, chunk_id: str, *, node_id: str, epoch: int, repo: str) -> str | None:
         """The record name this visit holds for ``repo`` (``owner/repo``); ``None`` when the
-        visit holds none for it."""
-        return self._repositories.get((chunk_id, node_id, epoch), {}).get(repo)
+        visit holds none for it. :class:`AmbiguousMarkerRepository` when it holds two."""
+        records = self._repositories.get((chunk_id, node_id, epoch), {}).get(repo)
+        if not records:
+            return None
+        if len(records) > 1:
+            raise AmbiguousMarkerRepository(repo, records)
+        return next(iter(records))
 
     def revoke(self, chunk_id: str, *, node_id: str, epoch: int) -> None:
         """Remove the stored token and held landing names for this key, if any — safe to

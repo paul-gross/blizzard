@@ -14,10 +14,10 @@ routes and the chunk re-polls it forever; announced once per node visit, not per
 missing edge then requeuing, not retrying. The work-item closure events are also the hub's —
 [work-sources.md](./work-sources.md) owns them.
 
-`repository-unresolved` and `repositories-disagree` (both critical): a `deliver` step's chunk commits resolve to no
-single [repository](./repositories.md) record — none stands for one of them or several match it, or the records they
-resolve to differ on forge, owner, base branch or secret. The step is refused before any command runs and routes its
-failure choice; the remedy is creating or editing the repository records, then requeuing.
+`repository-unresolved` (critical): a `deliver` step's chunk commits resolve to no single
+[repository](./repositories.md) record — none stands for one of them, or several match it. The step is refused before
+any command runs and routes its failure choice; the remedy is creating or editing the repository records, then
+requeuing.
 
 `repository-not-linked` (critical): a `deliver` step's chunk commits resolve to a repository record of the tenant that
 the chunk's project does not link. The step is refused before any command runs and routes its failure choice; the remedy
