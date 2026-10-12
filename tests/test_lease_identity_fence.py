@@ -34,6 +34,7 @@ from tests.runner_fakes import (
     FakeProvider,
     FakeWorktreeGit,
     fixed_hub_token,
+    make_host_stores,
     make_session_resolver,
     make_store,
     make_stores,
@@ -124,6 +125,7 @@ class _RealRunner:
         )
         self.ctx = LoopContext(
             stores=make_stores(self.store),
+            host_stores=make_host_stores(self.store),
             clock=hub.clock,
             hub=hub_client,
             token_identity=hub_client,

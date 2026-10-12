@@ -37,7 +37,7 @@ class WorkspacePromptReplacement(BaseModel):
 def read_workspace_prompt(request: Request) -> WorkspacePromptResponse:
     """The effective spawn preamble prompt: the runtime override if set, else static config."""
     wiring = RunnerWiring.of(request)
-    stores, config = wiring.maybe_read_stores(), wiring.maybe_config()
+    stores, config = wiring.maybe_host_read_stores(), wiring.maybe_config()
     override = (
         stores.workspace_prompt.workspace_prompt_override(config.workspace_id)
         if stores is not None and config is not None

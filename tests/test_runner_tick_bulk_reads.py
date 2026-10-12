@@ -359,6 +359,7 @@ def _status_service(spawn_executor: Executor, store: SqlAlchemyRunnerStore) -> R
     return RunnerStatusService(
         FixedClock(_NOW),
         pause=store,
+        daemon_liveness=store,
         lease_record=store,
         outbound=store,
         environments=store,

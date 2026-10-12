@@ -1,4 +1,4 @@
-"""The hub-mirrored/local pause brake and daemon-liveness repository seam.
+"""The hub-mirrored/local pause brake and its repository seam.
 
 The brake's rules live on :class:`LocalBrake` (which verbs are legal from which state is
 :data:`BRAKE_TRANSITIONS`) and :class:`RunnerBrakes` (what the two brakes stop between them);
@@ -212,7 +212,7 @@ class PausePark:
 
 
 class IReadPauseRepository(Protocol):
-    """Read-only pause-brake and daemon-liveness queries."""
+    """Read-only pause-brake queries."""
 
     def hub_contact_at(self) -> datetime | None:
         """The instant of the last successful hub contact, or ``None`` if never.
@@ -238,13 +238,6 @@ class IReadPauseRepository(Protocol):
         :meth:`local_paused` so a caller decides for itself whether to consult it."""
         ...
 
-    def last_daemon_liveness(self) -> datetime | None:
-        """When the runner was last known alive, or ``None`` if it never ticked.
-
-        Stamped once per liveness beat, so after a crash the newest value is when the daemon
-        died, to within one beat."""
-        ...
-
     def pause_parked_lease_ids(self) -> set[str]:
         """Leases dormant on an operator pause — a pause-park fact with no later
         pause-resume at or after it and no closure of its lease.
@@ -262,14 +255,7 @@ class IReadPauseRepository(Protocol):
 
 
 class IWritePauseRepository(IReadPauseRepository, Protocol):
-    """Read-write pause-brake and daemon-liveness store — held only by the domain."""
-
-    def record_daemon_liveness(self, *, alive_at: datetime) -> None:
-        """Stamp the runner as alive at ``alive_at`` — the tick's liveness beat.
-
-        Upserted, one row: only the newest instant matters, and it is the crash-time
-        reference startup recovery reads back via :meth:`last_daemon_liveness`."""
-        ...
+    """Read-write pause-brake store — held only by the domain."""
 
     def set_hub_paused(self, *, paused: bool, at: datetime) -> None:
         """Mirror the hub's pause brake locally (upsert), stamped ``at``."""

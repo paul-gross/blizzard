@@ -29,6 +29,7 @@ from blizzard.runner.leases.model import Lease
 from blizzard.runner.leases.overload import backing_off_facts
 from blizzard.runner.lifecycle.attempt import Attempt
 from blizzard.runner.lifecycle.claim import InterruptedClaims, ReadyQueue
+from blizzard.runner.lifecycle.daemon_liveness import IReadDaemonLivenessRepository
 from blizzard.runner.lifecycle.dormant import DormantSession
 from blizzard.runner.lifecycle.drain import OutboundDrain
 from blizzard.runner.lifecycle.held_chunk import HeldChunk
@@ -229,14 +230,14 @@ class ResumeIntents:
             _log.info("marked in-flight leases for restart-resume", count=marked)
         return marked
 
-    def mark_crashed(self, *, process: IProcessProbe, now: datetime) -> int:
+    def mark_crashed(self, *, process: IProcessProbe, liveness: IReadDaemonLivenessRepository, now: datetime) -> int:
         """Mark the leases a crash orphaned mid-session, and return the count.
 
-        Staleness is measured against :meth:`last_daemon_liveness`, not the clock at recovery,
+        Staleness is measured against ``liveness``'s last beat, not the clock at recovery,
         which at startup is ``downtime + idle-at-crash``."""
         ended = self.stores.session.session_ended_lease_ids()
         # as_utc: this instant is about to be subtracted from, and a naive one compares wrong.
-        last_alive = self.stores.pause.last_daemon_liveness()
+        last_alive = liveness.last_daemon_liveness()
         crashed_at = as_utc(last_alive) if last_alive is not None else now
         marked = self._mark(self._crash_orphaned(ended, process, crashed_at), now=now)
         if marked:
@@ -588,8 +589,8 @@ class Retention(Step):
         lanes: tuple[tuple[str, Callable[[], int]], ...] = (
             ("outbound buffer", lambda: ctx.stores.outbound.prune_outbound(now=now)),
             ("heartbeat", lambda: ctx.stores.liveness.prune_heartbeats(now=now)),
-            ("external usage sample", lambda: ctx.stores.usage.prune_external_usage_samples(now=now)),
-            ("credential renewal", lambda: ctx.stores.usage.prune_credential_renewals(now=now)),
+            ("external usage sample", lambda: ctx.host_stores.external_usage.prune_external_usage_samples(now=now)),
+            ("credential renewal", lambda: ctx.host_stores.external_usage.prune_credential_renewals(now=now)),
             (
                 "worker stdout",
                 lambda: ctx.worker_files.sweep(
@@ -731,7 +732,7 @@ class ExternalUsageSample(Step):
 
     def _sample_one(self, resolved: ResolvedSubscription) -> None:
         ctx = self.ctx
-        anchor = ctx.stores.usage.last_external_usage_attempt_at(resolved.slug)
+        anchor = ctx.host_stores.external_usage.last_external_usage_attempt_at(resolved.slug)
         if not sample_due(anchor, ctx.clock.now(), resolved.sample_interval_seconds):
             return
         sampler = resolved.sampler
@@ -746,7 +747,7 @@ class ExternalUsageSample(Step):
             report_payload = json.dumps(self._miss_payload(resolved, result, missed_at=attempt.sampled_at))
         else:
             payload = report_payload = json.dumps(self._payload(resolved, result))
-        seq = ctx.stores.usage.record_external_usage_attempt(
+        seq = ctx.host_stores.external_usage.record_external_usage_attempt(
             slug=attempt.slug,
             sampled_at=attempt.sampled_at,
             payload=payload,

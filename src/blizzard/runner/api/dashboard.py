@@ -47,7 +47,7 @@ def get_dashboard(request: Request) -> DashboardView:
         takeovers=_open_takeover_list(service),
         facts=_fact_list(service, DEFAULT_FACT_LIMIT),
         harness_health=_harness_health_list(wiring.harnesses(), wiring.harness_health()),
-        subscriptions=_subscription_list(wiring.config(), wiring.read_stores().usage),
+        subscriptions=_subscription_list(wiring.config(), wiring.host_read_stores().external_usage),
         fleet_summary=_maybe_fleet_summary(request),
     )
 

@@ -165,7 +165,7 @@ def test_a_mismatched_tick_drives_no_lease_and_delivers_nothing_until_the_right_
     assert hub.peek_queue_calls == 0
     assert hub.claims == []
     assert hub.chunk_statuses_calls == []
-    assert ctx.stores.pause.last_daemon_liveness() == _NOW  # liveness keeps running
+    assert ctx.host_stores.daemon_liveness.last_daemon_liveness() == _NOW  # liveness keeps running
     warnings = [e for e in logs if e["log_level"] == "warning" and e["event"].startswith("runner refuses")]
     assert len(warnings) == 1  # once per transition, not once per tick
     assert (warnings[0]["store_runner_id"], warnings[0]["token_runner_id"]) == ("r1", "rn_other")

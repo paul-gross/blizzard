@@ -25,7 +25,7 @@ from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionRefe
 from blizzard.runner.leases.model import NewLease
 from blizzard.wire.chunk import BounceView, MigrationView, TransitionView
 from blizzard.wire.history import ChunkHistoryView
-from tests.runner_fakes import make_store, make_stores, no_retry_clock
+from tests.runner_fakes import make_host_stores, make_store, make_stores, no_retry_clock
 from tests.support import build_hub, make_ready, pointer_token, report_lease
 
 _NOW = datetime(2026, 7, 21, 12, 0, 0, tzinfo=UTC)
@@ -209,6 +209,7 @@ def _app_with_store(tmp_path: Path, *, hub_url: str = _HUB_URL):  # type: ignore
     app = create_app(
         config,
         runner_stores=make_stores(store),
+        host_stores=make_host_stores(store),
         hub_proxy_client=httpx.Client(transport=httpx.MockTransport(router)),
         hub_retry_clock=no_retry_clock(),
     )
@@ -354,7 +355,14 @@ def test_forwards_the_runner_bearer_when_a_token_is_configured(tmp_path: Path) -
         return httpx.Response(200, json=_DETAIL)
 
     hub_proxy_client = httpx.Client(transport=httpx.MockTransport(handler))
-    with TestClient(create_app(config, runner_stores=make_stores(store), hub_proxy_client=hub_proxy_client)) as client:
+    with TestClient(
+        create_app(
+            config,
+            runner_stores=make_stores(store),
+            host_stores=make_host_stores(store),
+            hub_proxy_client=hub_proxy_client,
+        )
+    ) as client:
         resp = client.get("/api/leases/lease_1/history", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 200, resp.text
     assert seen_headers[0]["Authorization"] == "Bearer hub-tok"
@@ -492,7 +500,12 @@ def test_a_workers_history_read_matches_the_transitions_the_hub_recorded(tmp_pat
     runner_store.record_lease_token("lease_1", TokenHash(_TOKEN).hex, _NOW)
     runner_config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}", hub_url=_HUB_URL)
     with TestClient(
-        create_app(runner_config, runner_stores=make_stores(runner_store), hub_proxy_client=hub_proxy_client)
+        create_app(
+            runner_config,
+            runner_stores=make_stores(runner_store),
+            host_stores=make_host_stores(runner_store),
+            hub_proxy_client=hub_proxy_client,
+        )
     ) as client:
         resp = client.get("/api/leases/lease_1/history", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 200, resp.text

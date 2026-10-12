@@ -55,6 +55,7 @@ def _status_name(ctx: LoopContext) -> tuple[str | None, str]:
     summary = RunnerStatusService(
         SystemClock(),
         pause=store,
+        daemon_liveness=ctx.host_stores.daemon_liveness,
         lease_record=ctx.stores.lease_record,
         outbound=ctx.stores.outbound,
         environments=ctx.stores.environments,

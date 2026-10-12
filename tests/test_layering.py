@@ -457,6 +457,175 @@ def test_hub_scoped_seam_check_refuses_a_member_taken_apart(tmp_path: Path, text
     assert bool(_hub_scoped_member_imports(src)) is taken_apart
 
 
+_RUNNER_SCOPED_NAMES = frozenset({"RUNNER_SCOPED_OPTION", "blizzard_runner_unscoped"})
+#: ``HostStores``' two guard-exempt members, each in its own module: the start-up stamp and the invariant audit.
+_HOST_EXEMPT_MEMBER_MODULES = frozenset({"host_unowned_row_stamp.py", "host_runner_audit.py"})
+#: The single cross-kind write: a host-scoped sample and its runner-scoped outbound report in one transaction —
+#: (host module, method, the runner table it may name there).
+_CROSS_KIND_WRITE = ("host_external_usage_store.py", "record_external_usage_attempt", "outbound_buffer")
+
+
+def _declared_table_scopes(schema_file: Path) -> dict[str, str]:
+    """Each table ``schema_file`` declares, by its module-level name, mapped to its ``info={"scope": ...}`` — read
+    statically, so a planted tree needs no importable schema."""
+    scopes: dict[str, str] = {}
+    for node in ast.parse(schema_file.read_text(), filename=str(schema_file)).body:
+        if not (isinstance(node, ast.Assign) and isinstance(node.value, ast.Call)):
+            continue
+        if _terminal(node.value.func) != "Table" or not isinstance(node.targets[0], ast.Name):
+            continue
+        for keyword in node.value.keywords:
+            if keyword.arg == "info" and isinstance(keyword.value, ast.Dict):
+                for key, value in zip(keyword.value.keys, keyword.value.values, strict=True):
+                    if isinstance(key, ast.Constant) and key.value == "scope" and isinstance(value, ast.Constant):
+                        scopes[node.targets[0].id] = str(value.value)
+    return scopes
+
+
+def _table_names_in(tree: ast.AST) -> Iterator[tuple[ast.AST, str, str | None]]:
+    """Every identifier ``tree`` spells (an imported name, a bare name, an attribute), with the function it sits in."""
+
+    def walk(node: ast.AST, function: str | None) -> Iterator[tuple[ast.AST, str, str | None]]:
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+            function = node.name
+        if isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                yield node, alias.name, function
+        elif isinstance(node, ast.Name):
+            yield node, node.id, function
+        elif isinstance(node, ast.Attribute):
+            yield node, node.attr, function
+        for child in ast.iter_child_nodes(node):
+            yield from walk(child, function)
+
+    yield from walk(tree, None)
+
+
+def _host_store_breaches(src_root: Path) -> list[str]:
+    """Each place under ``src_root`` (a ``blizzard`` package root) that reaches across the runner store's two kinds:
+    a runner adapter module (``runner/store/internal/`` but not ``host_*``) naming a host-scoped table; a host adapter
+    module naming a runner-scoped table, bar :data:`_CROSS_KIND_WRITE`'s outbound report (the exempt members, which
+    stamp or audit runner rows by design, are confined by :func:`_runner_seam_breaches` instead); and the runner-scoped
+    exemption named anywhere but the seam that declares it, the guard that honours it, the exempt members' modules, and
+    runner migrations."""
+    store = src_root / "runner" / "store"
+    internal = store / "internal"
+    scopes = _declared_table_scopes(store / "schema.py")
+    breaches: list[str] = []
+    for path in sorted(internal.glob("*.py")) if internal.is_dir() else []:
+        host_module = path.name.startswith("host_")
+        if path.name in _HOST_EXEMPT_MEMBER_MODULES:
+            continue
+        foreign = "runner" if host_module else "host"
+        where = path.relative_to(src_root.parent)
+        seen: set[tuple[int, str]] = set()
+        for node, name, function in _table_names_in(ast.parse(path.read_text(), filename=str(path))):
+            if scopes.get(name) != foreign:
+                continue
+            module, method, table = _CROSS_KIND_WRITE
+            if host_module and (path.name, name) == (module, table) and function in (method, None):
+                continue
+            line = getattr(node, "lineno", 0)
+            if (line, name) not in seen:
+                seen.add((line, name))
+                kind = "host adapter" if host_module else "runner adapter"
+                breaches.append(f"{where}:{line} — a {kind} names the {foreign}-scoped table {name}")
+    breaches += _runner_seam_breaches(src_root)
+    return breaches
+
+
+def _runner_seam_breaches(src_root: Path) -> list[str]:
+    """Each place under ``src_root`` that names the runner-scoped exemption outside its own holders: the seam that
+    declares it (``runner/store/errors.py``), the guard (``runner/store/runner_guard.py``), ``HostStores``' exempt
+    members' modules, and runner migrations — mirroring :func:`_tenant_seam_breaches`."""
+    store = src_root / "runner" / "store"
+    holders = {store / "errors.py", store / "runner_guard.py"} | {
+        store / "internal" / name for name in _HOST_EXEMPT_MEMBER_MODULES
+    }
+    breaches: list[str] = []
+    for path in sorted(src_root.rglob("*.py")):
+        if path in holders or path.is_relative_to(store / "migrations"):
+            continue
+        where = path.relative_to(src_root.parent)
+        for node in ast.walk(ast.parse(path.read_text(), filename=str(path))):
+            if _RUNNER_SCOPED_NAMES.intersection(_names_spelled(node)):
+                breaches.append(f"{where}:{getattr(node, 'lineno', '?')} names the runner-scoped exemption")
+    return breaches
+
+
+def test_host_tables_are_reached_only_through_the_host_stores() -> None:
+    """``bzh:host-stores-confined``: a runner adapter names no host-scoped table and a host adapter no runner-scoped
+    one, bar the single cross-kind write (``record_external_usage_attempt``'s outbound report); the exemption from the
+    runner statement guard is named only by its seam, the guard, ``HostStores``' two exempt members, and runner
+    migrations — the invariant checker reaches the store through the audit member, never spelling it."""
+    breaches = _host_store_breaches(_SRC_DIR)
+    assert not breaches, f"host stores — a store kind reached from outside its own doors: {breaches}"
+
+
+_PLANTED_SCHEMA = (
+    'leases = Table("leases", metadata, info={"scope": "runner"})\n'
+    'outbound_buffer = Table("outbound_buffer", metadata, info={"scope": "runner"})\n'
+    'daemon_liveness = Table("daemon_liveness", metadata, info={"scope": "host"})\n'
+    'external_usage_samples = Table("external_usage_samples", metadata, info={"scope": "host"})\n'
+)
+
+
+def _plant_host_store(tmp_path: Path, rel: str, text: str) -> list[str]:
+    src = tmp_path / "blizzard"
+    (src / "runner" / "store").mkdir(parents=True)
+    (src / "runner" / "store" / "schema.py").write_text(_PLANTED_SCHEMA)
+    (src / rel).parent.mkdir(parents=True, exist_ok=True)
+    (src / rel).write_text(text)
+    return _host_store_breaches(src)
+
+
+@pytest.mark.parametrize(
+    ("rel", "text"),
+    [
+        ("runner/store/internal/pause_store.py", "from blizzard.runner.store.schema import daemon_liveness\n"),
+        ("runner/store/internal/usage_store.py", "rows = schema.external_usage_samples.select()\n"),
+        ("runner/store/internal/host_daemon_liveness_store.py", "from blizzard.runner.store.schema import leases\n"),
+        (
+            "runner/store/internal/host_external_usage_store.py",
+            "def prune_external_usage_samples(self):\n    return outbound_buffer.delete()\n",
+        ),
+        ("tools/invariants.py", "from blizzard.runner.store.errors import RUNNER_SCOPED_OPTION\n"),
+        ("runner/store/internal/pause_store.py", 'OPTIONS = {"blizzard_runner_unscoped": True}\n'),
+        (
+            "runner/store/internal/host_daemon_liveness_store.py",
+            "conn.execution_options(**{RUNNER_SCOPED_OPTION: 1})\n",
+        ),
+        ("runner/composition.py", "from blizzard.runner.store.errors import RUNNER_SCOPED_OPTION\n"),
+    ],
+)
+def test_host_store_check_catches_every_breach(tmp_path: Path, rel: str, text: str) -> None:
+    assert _plant_host_store(tmp_path, rel, text)
+
+
+@pytest.mark.parametrize(
+    ("rel", "text"),
+    [
+        ("runner/store/internal/pause_store.py", "from blizzard.runner.store.schema import leases\n"),
+        ("runner/store/internal/host_daemon_liveness_store.py", "rows = daemon_liveness.select()\n"),
+        (
+            "runner/store/internal/host_external_usage_store.py",
+            "from blizzard.runner.store.schema import outbound_buffer\n"
+            "def record_external_usage_attempt(self):\n    return outbound_buffer.insert()\n",
+        ),
+        ("runner/store/internal/host_unowned_row_stamp.py", "OPTIONS = {RUNNER_SCOPED_OPTION: True}\nleases\n"),
+        (
+            "runner/store/internal/host_runner_audit.py",
+            "from blizzard.runner.store.errors import RUNNER_SCOPED_OPTION\n",
+        ),
+        ("runner/store/runner_guard.py", "from blizzard.runner.store.errors import RUNNER_SCOPED_OPTION\n"),
+        ("runner/store/errors.py", 'RUNNER_SCOPED_OPTION = "blizzard_runner_unscoped"\n'),
+        ("runner/store/migrations/versions/x.py", "from blizzard.runner.store.errors import RUNNER_SCOPED_OPTION\n"),
+    ],
+)
+def test_host_store_check_admits_its_own_doors(tmp_path: Path, rel: str, text: str) -> None:
+    assert _plant_host_store(tmp_path, rel, text) == []
+
+
 _EVENT_LOG_SERVICE_FILE = _HUB_DIR / "domain" / "chunk" / "event_log.py"
 _CHUNK_EVENTS_STORE_FILE = _HUB_DIR / "store" / "internal" / "chunk_events_store.py"
 
@@ -542,7 +711,7 @@ _SQLALCHEMY_EXCEPTIONS: dict[Path, tuple[str, ...] | None] = {
     _RUNNER_APP_FILE: ("Engine",),
     # IntegrityError only, for the replay-check catch: the collision itself IS the
     # business-logic check, so this one name stays local instead of the table-bound form.
-    _RUNNER_DIR / "store" / "internal" / "jti_cache_store.py": ("IntegrityError",),
+    _RUNNER_DIR / "store" / "internal" / "host_jti_cache_store.py": ("IntegrityError",),
 }
 
 

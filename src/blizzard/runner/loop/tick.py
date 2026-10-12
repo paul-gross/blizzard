@@ -57,7 +57,7 @@ def _tick(ctx: LoopContext) -> None:
     _log.debug("tick start", runner_name=ctx.config.runner_name)
     # Stamp liveness first, so a pass that dies mid-step still leaves the beat
     # proving the daemon reached it — the reference the next startup's scan ages against.
-    ctx.stores.pause.record_daemon_liveness(alive_at=ctx.clock.now())
+    ctx.host_stores.daemon_liveness.record_daemon_liveness(alive_at=ctx.clock.now())
     # This tick's own memoized chunk-status cache — every step below shares
     # it via the rebound `ctx`, so a chunk read at more than one site this tick costs the
     # hub at most one round-trip. Primed with the ids every reconcile sweep below is about

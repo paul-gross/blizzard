@@ -27,7 +27,15 @@ from blizzard.runner.lifecycle.judgement.git_commit_declaration import (
     GitCommitDeclarationService,
 )
 from blizzard.runner.loop_wiring import LoopWiring
-from tests.runner_fakes import FIXTURE_RUNNER_ID, FakeHub, FakeProvider, make_store, make_stores, migrated_store_at
+from tests.runner_fakes import (
+    FIXTURE_RUNNER_ID,
+    FakeHub,
+    FakeProvider,
+    make_host_stores,
+    make_store,
+    make_stores,
+    migrated_store_at,
+)
 from tests.test_runner_winter_provider import _FakeGit, _FakeWinter
 
 _NOW = datetime(2026, 7, 22, 12, 0, 0, tzinfo=UTC)
@@ -40,7 +48,9 @@ def _app_with_declarations(tmp_path: Path):  # type: ignore[no-untyped-def]
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
     service = GitCommitDeclarationService(store, FixedClock(_NOW), _PROVIDER, environments=store, outbound=store)
-    return create_app(config, runner_stores=make_stores(store), git_commit_declarations=service), store
+    return create_app(
+        config, runner_stores=make_stores(store), host_stores=make_host_stores(store), git_commit_declarations=service
+    ), store
 
 
 def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-def]
@@ -239,7 +249,9 @@ def test_400_when_several_environments_are_held_and_none_is_named(tmp_path: Path
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
     service = GitCommitDeclarationService(store, FixedClock(_NOW), provider, environments=store, outbound=store)
-    app = create_app(config, runner_stores=make_stores(store), git_commit_declarations=service)
+    app = create_app(
+        config, runner_stores=make_stores(store), host_stores=make_host_stores(store), git_commit_declarations=service
+    )
     _seed_lease(store)
     store.record_binding(chunk_id="ch_1", environment_id="e2", workdir="/ws/e2", bound_at=_NOW)
 
@@ -266,7 +278,9 @@ def test_the_same_repo_in_two_environments_is_two_declarations(tmp_path: Path) -
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
     service = GitCommitDeclarationService(store, FixedClock(_NOW), provider, environments=store, outbound=store)
-    app = create_app(config, runner_stores=make_stores(store), git_commit_declarations=service)
+    app = create_app(
+        config, runner_stores=make_stores(store), host_stores=make_host_stores(store), git_commit_declarations=service
+    )
     _seed_lease(store)
     store.record_binding(chunk_id="ch_1", environment_id="e2", workdir="/ws/e2", bound_at=_NOW)
 

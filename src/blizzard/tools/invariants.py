@@ -32,10 +32,11 @@ from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
 from blizzard.hub.store.internal.chunk_rows import DEFAULT_MODEL
 from blizzard.hub.store.scoped import TENANT_COLUMN, is_tenant_owned
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION, StoreScope, TenantId
+from blizzard.runner.composition import build_host_stores
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from blizzard.runner.process.probe import IProcessProbe
 from blizzard.runner.store import schema as runner
-from blizzard.runner.store.errors import RUNNER_SCOPED_OPTION
+from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.transcripts.invocation_boundaries import WORKER_STARTING_KINDS
 
 # The ``lease_facts.runner_id`` a hub mint records — its own lease row, never a runner's.
@@ -985,6 +986,7 @@ class RunnerInvariants:
 
     engine: Engine
     process: IProcessProbe = field(default_factory=LinuxProcessProbe)
+    clock: IClock = field(default_factory=SystemClock)
 
     def run(self, *, after_recovery: bool = False) -> list[Violation]:
         """``after_recovery=True`` additionally runs :class:`ActiveLeaseProcessIsLive`.
@@ -993,8 +995,11 @@ class RunnerInvariants:
         violation, before REAP/RESUME ever reconciles it. A live-system or post-convergence
         caller passes ``True``; right after a raw kill -9 leaves it ``False``."""
         violations: list[Violation] = []
-        # The audit reads every runner's rows at once, deliberately unscoped by runner.
-        with self.engine.connect().execution_options(**{RUNNER_SCOPED_OPTION: True}) as conn:
+        # The audit reads every runner's rows at once, through the host stores' runner audit.
+        audit = build_host_stores(
+            self.engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.tools.invariants")), clock=self.clock
+        ).runner_audit
+        with audit.connect() as conn:
             checks: tuple[QueryCheck, ...] = (
                 OneLiveLeasePerChunk(conn),
                 NoUnownedLiveLeaseProcess(conn),

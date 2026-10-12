@@ -4,15 +4,18 @@ Introspects :class:`~blizzard.runner.stores.IWriteRunnerStore` at runtime for it
 write-only members — declared on its own class body or inherited from a concept Protocol
 such as :class:`~blizzard.runner.leases.record.IWriteLeaseRecordRepository`, but
 never a member also reachable through :class:`~blizzard.runner.stores.IReadRunnerStore`
-— and asserts ``tests/runner_event_census.py`` names exactly that set — exhaustiveness by
-test, not review."""
+— and likewise each ``IWrite*`` Protocol a :class:`~blizzard.runner.stores.HostStores` field is typed to, and
+asserts ``tests/runner_event_census.py`` names exactly that set — exhaustiveness by test, not review."""
 
 from __future__ import annotations
+
+import typing
 
 import pytest
 
 from blizzard.runner.events.broker import EVENT_TYPES
 from blizzard.runner.stores import (
+    HostStores,
     IReadRunnerStore,
     IWriteRunnerStore,
 )
@@ -32,11 +35,23 @@ def _reachable_members(protocol: type) -> set[str]:
     }
 
 
+def _host_write_only_members() -> set[str]:
+    """The write-only members of every ``IWrite*`` Protocol a ``HostStores`` field is typed to — each less the members
+    its own read surface (every ``IRead*`` base it composes) already requires."""
+    members: set[str] = set()
+    for protocol in typing.get_type_hints(HostStores).values():
+        if not protocol.__name__.startswith("IWrite"):
+            continue
+        reads = set().union(*(_reachable_members(b) for b in protocol.__mro__ if b.__name__.startswith("IRead")))
+        members |= _reachable_members(protocol) - reads
+    return members
+
+
 def test_census_names_exactly_the_write_protocols_own_members() -> None:
-    """The exhaustiveness gate: fails the instant ``IWriteRunnerStore`` grows (or loses) a
-    write-only member this census does not account for."""
+    """The exhaustiveness gate: fails the instant ``IWriteRunnerStore`` or a host-store write Protocol grows (or
+    loses) a write-only member this census does not account for."""
     write_only_members = _reachable_members(IWriteRunnerStore) - _reachable_members(IReadRunnerStore)
-    assert set(WRITE_PROTOCOL_CENSUS) == write_only_members
+    assert set(WRITE_PROTOCOL_CENSUS) == write_only_members | _host_write_only_members()
 
 
 def test_the_write_protocols_own_members_exclude_the_inherited_read_surface() -> None:

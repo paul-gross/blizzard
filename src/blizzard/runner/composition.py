@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from sqlalchemy import Engine
 
 from blizzard import __version__
-from blizzard.foundation.clock import SystemClock
+from blizzard.foundation.clock import IClock, SystemClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.handle import (
     DisabledPlatformTracing,
@@ -59,7 +59,13 @@ from blizzard.runner.store.internal.elicitation_store import ElicitationStore
 from blizzard.runner.store.internal.environment_store import EnvironmentStore
 from blizzard.runner.store.internal.escalation_store import EscalationStore
 from blizzard.runner.store.internal.git_commit_declaration_store import GitCommitDeclarationStore
-from blizzard.runner.store.internal.graph_artifact_store import GraphArtifactStore
+from blizzard.runner.store.internal.host_daemon_liveness_store import DaemonLivenessStore
+from blizzard.runner.store.internal.host_external_usage_store import ExternalUsageStore
+from blizzard.runner.store.internal.host_graph_artifact_store import GraphArtifactStore
+from blizzard.runner.store.internal.host_jti_cache_store import JtiCacheRepository
+from blizzard.runner.store.internal.host_runner_audit import RunnerAudit
+from blizzard.runner.store.internal.host_unowned_row_stamp import UnownedRowStamp
+from blizzard.runner.store.internal.host_workspace_prompt_store import WorkspacePromptStore
 from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
 from blizzard.runner.store.internal.invocation_boundary_store import InvocationBoundaryStore
 from blizzard.runner.store.internal.lease_liveness_store import LeaseLivenessStore
@@ -76,11 +82,9 @@ from blizzard.runner.store.internal.selftest_result_store import SelfTestResultS
 from blizzard.runner.store.internal.takeover_store import TakeoverStore
 from blizzard.runner.store.internal.token_store import TokenStore
 from blizzard.runner.store.internal.transcript_ledger_store import TranscriptLedgerStore
-from blizzard.runner.store.internal.unowned_row_stamp import UnownedRowStamp
 from blizzard.runner.store.internal.usage_store import UsageStore
-from blizzard.runner.store.internal.workspace_prompt_store import WorkspacePromptStore
 from blizzard.runner.store.runner_guard import install_runner_guard
-from blizzard.runner.stores import RunnerReadStores, RunnerStores
+from blizzard.runner.stores import HostReadStores, HostStores, RunnerReadStores, RunnerStores
 from blizzard.runner.subscriptions.internal.credential_renewer_factory import select_renewer
 from blizzard.runner.subscriptions.internal.subprocess_one_shot_process import SubprocessOneShotProcess
 from blizzard.runner.tracing.attributes import (
@@ -115,6 +119,8 @@ class RunnerProcess:
 
     engine: Engine
     stores: RunnerStores
+    #: The host-scoped stores, built once beside ``stores`` over the same connections.
+    host_stores: HostStores
     connections: RunnerStoreConnections
     provider: IWorkspaceProvider
     harnesses: HarnessRegistry
@@ -171,7 +177,7 @@ class RunnerProcess:
 
 
 def _credential_renewal_pass(
-    config: RunnerConfig, stores: RunnerStores, clock: SystemClock
+    config: RunnerConfig, host_stores: HostStores, clock: SystemClock
 ) -> CredentialRenewalPass | None:
     """Every declared subscription paired with its provider's renewer binding, sharing one
     one-shot subprocess seam; ``None`` when no provider binds one."""
@@ -185,7 +191,7 @@ def _credential_renewal_pass(
     ]
     if not renewable:
         return None
-    return CredentialRenewalPass(subscriptions=renewable, renewals=stores.usage, clock=clock)
+    return CredentialRenewalPass(subscriptions=renewable, renewals=host_stores.external_usage, clock=clock)
 
 
 #: How long the runner's shutdown waits for buffered platform spans to leave.
@@ -255,17 +261,17 @@ def build_runner_process(
         # boot, and binds when registration adopts an id.
         ready = readiness.evaluate().ready
         connections = RunnerStoreConnections(engine, RunnerStoreErrorFactory(get_logger("blizzard.runner.store")))
-        if ready:
-            bound = connections.bind_to_stored()
-            if bound is not None:
-                # The start-up stamp: rows the store holds that name no runner are the bound runner's, stamped before
-                # the process serves or ticks.
-                UnownedRowStamp(connections).stamp(bound)
+        bound = connections.bind_to_stored() if ready else None
         stores = _build_stores(connections)
+        clock = SystemClock()
+        host_stores = _build_host_stores(connections, clock)
+        if bound is not None:
+            # The start-up stamp: rows the store holds that name no runner are the bound runner's, stamped before
+            # the process serves or ticks.
+            host_stores.unowned_row_stamp.stamp(bound)
         registered = stores.identity.runner_identity() if ready else None
         if registered is not None:
             identity.hold(registered)
-        clock = SystemClock()
         process = LinuxProcessProbe()
         provider = build_workspace_provider(
             config.workspace_settings, held_ids=stores.environments.held_environment_ids
@@ -310,7 +316,7 @@ def build_runner_process(
             if exporter is not None
             else None
         )
-        credential_renewal = _credential_renewal_pass(config, stores, clock)
+        credential_renewal = _credential_renewal_pass(config, host_stores, clock)
         trace_replay = LeaseTraceReplay(
             leases=stores.lease_traces, exporter=exporter, identity=identity, clock=clock, config=config.tracing
         )
@@ -339,6 +345,7 @@ def build_runner_process(
         return RunnerProcess(
             engine,
             stores,
+            host_stores,
             connections,
             provider,
             harnesses,
@@ -396,7 +403,6 @@ def _build_stores(connections: RunnerStoreConnections) -> RunnerStores:
         environments=EnvironmentStore(connections),
         transcript_ledger=TranscriptLedgerStore(connections),
         tokens=TokenStore(connections),
-        workspace_prompt=WorkspacePromptStore(connections),
         outbound=OutboundStore(connections),
         overload=OverloadStore(connections),
         asks=AskStore(connections),
@@ -410,7 +416,6 @@ def _build_stores(connections: RunnerStoreConnections) -> RunnerStores:
         attachments=AttachmentStore(connections),
         git_commit_declarations=GitCommitDeclarationStore(connections),
         checks=CheckStore(connections),
-        graph_artifacts=GraphArtifactStore(connections),
         elicitations=ElicitationStore(connections),
         invocation_boundaries=InvocationBoundaryStore(connections),
         selftest_results=SelfTestResultStore(connections),
@@ -425,3 +430,29 @@ def build_read_stores(engine: Engine, *, errors: RunnerStoreErrorFactory) -> Run
     connections = RunnerStoreConnections(engine, errors)
     connections.bind_to_stored()
     return RunnerReadStores.of(_build_stores(connections))
+
+
+def build_host_stores(
+    engine: Engine, *, errors: RunnerStoreErrorFactory, clock: IClock, runner_id: str | None = None
+) -> HostStores:
+    """The host-scoped stores over a migrated engine, for a collaborator outside a runner process — the invariant
+    checker's audit. Host statements carry no runner equality; ``runner_id`` binds the connections only for the
+    cross-kind write's runner-scoped outbound report, and is left unbound otherwise."""
+    return _build_host_stores(RunnerStoreConnections(engine, errors, runner_id), clock)
+
+
+def build_host_read_stores(engine: Engine, *, errors: RunnerStoreErrorFactory) -> HostReadStores:
+    """The read-only host-store bundle a short-lived CLI verb takes."""
+    return HostReadStores.of(_build_host_stores(RunnerStoreConnections(engine, errors), SystemClock()))
+
+
+def _build_host_stores(connections: RunnerStoreConnections, clock: IClock) -> HostStores:
+    return HostStores(
+        workspace_prompt=WorkspacePromptStore(connections),
+        graph_artifacts=GraphArtifactStore(connections),
+        jti_cache=JtiCacheRepository(connections, clock),
+        daemon_liveness=DaemonLivenessStore(connections),
+        external_usage=ExternalUsageStore(connections),
+        unowned_row_stamp=UnownedRowStamp(connections),
+        runner_audit=RunnerAudit(connections),
+    )

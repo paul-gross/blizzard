@@ -29,6 +29,7 @@ from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.cli.store import refuse_while_held
 from blizzard.runner.composition import (
     RunnerProcess,
+    build_host_read_stores,
     build_read_stores,
     build_runner_platform_tracing,
     build_runner_process,
@@ -70,7 +71,7 @@ from blizzard.runner.runtime import (
     reset_command,
 )
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
-from blizzard.runner.stores import RunnerReadStores
+from blizzard.runner.stores import HostReadStores, RunnerReadStores
 from blizzard.runner.tracing.sweep import PendingTracingRejection
 from blizzard.runner.usage.periodic_pass_driver import PeriodicPassDriver
 
@@ -623,5 +624,15 @@ def read_stores(config: RunnerConfig) -> Iterator[RunnerReadStores]:
     engine = create_engine_from_url(config.db_url)
     try:
         yield build_read_stores(engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")))
+    finally:
+        engine.dispose()
+
+
+@contextmanager
+def read_host_stores(config: RunnerConfig) -> Iterator[HostReadStores]:
+    """:func:`read_stores`'s host-scoped twin, for a short-lived CLI verb reading a host table."""
+    engine = create_engine_from_url(config.db_url)
+    try:
+        yield build_host_read_stores(engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")))
     finally:
         engine.dispose()

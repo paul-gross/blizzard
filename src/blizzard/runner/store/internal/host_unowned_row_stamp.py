@@ -2,9 +2,10 @@
 
 Rows written before the store knew its runner — by the previous release's statements, or migrated from a store that
 held no identity — carry a NULL ``runner_id`` and are invisible to the bound runner's scoped reads. The stamp runs when
-the runner binds: at start, once the store names its runner, and at registration's first adoption, in the identity
-write's own transaction. It is one of the two statements deliberately unscoped by runner — its update matches rows by
-the absence of a runner, so it cannot carry a runner equality — and marks itself exempt from the runner statement guard.
+the runner binds: at start, before the process serves or ticks, and at registration's first adoption, in the identity
+write's own transaction. Its update matches rows by the absence of a runner, so it cannot carry a runner equality: it
+is one of the two host-store members exempt from the runner statement guard, the other being the invariant checker's
+audit.
 
 It is idempotent and batched: each table is stamped along its primary key, at most :data:`_BATCH_ROWS` rows per
 statement, and a crash part-way leaves rows the next start stamps (a no-window write)."""

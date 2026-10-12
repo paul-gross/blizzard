@@ -62,6 +62,7 @@ from tests.runner_fakes import (
     FakeProbe,
     loop_context,
     loop_graph,
+    make_host_stores,
     make_store,
     make_stores,
     migrated_store_at,
@@ -247,7 +248,9 @@ def test_a_tick_with_an_openai_subscription_never_invokes_a_renewer(
             tick(ctx)
         finally:
             ctx.usage_http_client.close()
-        assert graph.stores.usage.last_external_usage_attempt_at("codex") is not None  # the tick sampled it
+        assert (
+            graph.host_stores.external_usage.last_external_usage_attempt_at("codex") is not None
+        )  # the tick sampled it
         assert graph.credential_renewal is not None  # composed for `runner host` alone
 
     assert calls == []
@@ -651,7 +654,7 @@ def test_resume_marking_on_shutdown_marks_via_its_injected_clock(tmp_path: Path)
     """No real process and no wall clock: the marking hook is driven entirely off a
     virtual clock and a scripted probe, both supplied as constructor dependencies."""
     store = _seeded_running_lease_store(tmp_path)
-    marking = ResumeMarking(make_stores(store), FixedClock(_NOW), FakeProbe())
+    marking = ResumeMarking(make_stores(store), make_host_stores(store), FixedClock(_NOW), FakeProbe())
 
     marked = marking.on_shutdown()
 
@@ -679,7 +682,7 @@ def test_resume_marking_on_shutdown_drains_the_marked_leases_recorded_group(tmp_
         sleeps.append(seconds)
         probe.groups_alive.discard(100)  # the worker exits on the SIGINT this drain just sent
 
-    marking = ResumeMarking(make_stores(store), FixedClock(_NOW), probe, sleep)
+    marking = ResumeMarking(make_stores(store), make_host_stores(store), FixedClock(_NOW), probe, sleep)
 
     marked = marking.on_shutdown()
 
@@ -693,7 +696,9 @@ def test_resume_marking_on_shutdown_drains_the_marked_leases_recorded_group(tmp_
 def test_resume_marking_on_startup_marks_via_its_injected_clock_and_probe(tmp_path: Path) -> None:
     store = _seeded_running_lease_store(tmp_path)
     store.record_heartbeat(lease_id="lease_1", beat_at=_NOW)  # was actively working when killed
-    marking = ResumeMarking(make_stores(store), FixedClock(_NOW), FakeProbe(alive=set()))  # the pid is dead
+    marking = ResumeMarking(
+        make_stores(store), make_host_stores(store), FixedClock(_NOW), FakeProbe(alive=set())
+    )  # the pid is dead
 
     marked = marking.on_startup()
 

@@ -24,7 +24,7 @@ from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.store import schema
 from blizzard.runner.store.errors import RUNNER_SCOPED_OPTION
-from blizzard.runner.store.internal.unowned_row_stamp import UnownedRowStamp
+from blizzard.runner.store.internal.host_unowned_row_stamp import UnownedRowStamp
 from blizzard.runner.tracing.sweep import PendingTracingRejection
 from tests.runner_fakes import FakeHarness, SqlAlchemyRunnerStore, make_store
 

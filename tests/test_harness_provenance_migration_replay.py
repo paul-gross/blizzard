@@ -26,7 +26,7 @@ from blizzard.runner.lifecycle.dormant import DormantSession
 from blizzard.runner.lifecycle.takeover import TakeoverOpenScope, TakeoverService
 from blizzard.runner.loop.steps import Advance
 from blizzard.runner.store import MIGRATIONS_DIR
-from blizzard.runner.store.internal.unowned_row_stamp import UnownedRowStamp
+from blizzard.runner.store.internal.host_unowned_row_stamp import UnownedRowStamp
 from blizzard.runner.transcripts.internal.harness_transcript_repositories import HarnessTranscriptRepositories
 from blizzard.runner.transcripts.service import TranscriptService
 from tests.runner_fakes import (

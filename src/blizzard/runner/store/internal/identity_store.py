@@ -5,7 +5,7 @@ from __future__ import annotations
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.hub.identity import IWriteRunnerIdentityRepository, RunnerIdentity
 from blizzard.runner.store.errors import RunnerStoreConnections
-from blizzard.runner.store.internal.unowned_row_stamp import stamp_unowned_rows
+from blizzard.runner.store.internal.host_unowned_row_stamp import stamp_unowned_rows
 from blizzard.runner.store.schema import runner_identity
 
 _log = get_logger("blizzard.runner.store")

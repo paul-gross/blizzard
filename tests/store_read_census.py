@@ -145,7 +145,7 @@ from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecor
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.tenancy import TenantId
 from blizzard.runner.auth.tokens import IReadTokenRepository
-from blizzard.runner.composition import build_stores
+from blizzard.runner.composition import build_host_stores, build_stores
 from blizzard.runner.environments.repository import IReadEnvironmentRepository
 from blizzard.runner.harness.fingerprint import PreambleFingerprint
 from blizzard.runner.harness.health_cache import IReadHarnessHealth
@@ -166,12 +166,13 @@ from blizzard.runner.leases.overload import IReadOverloadRepository
 from blizzard.runner.leases.record import IReadLeaseRecordRepository
 from blizzard.runner.leases.resume_intent import IReadLeaseResumeIntentRepository
 from blizzard.runner.leases.session import IReadLeaseSessionRepository
+from blizzard.runner.lifecycle.daemon_liveness import IReadDaemonLivenessRepository
 from blizzard.runner.lifecycle.judgement.artifacts import IReadGraphArtifactRepository, PinnedGraphArtifact
 from blizzard.runner.lifecycle.judgement.checks import ExecutedCheck, IReadCheckRepository
 from blizzard.runner.lifecycle.judgement.git_commit_declaration import IReadGitCommitDeclarationRepository
 from blizzard.runner.lifecycle.takeover import IReadTakeoverRepository
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
-from blizzard.runner.stores import RunnerReadStores, RunnerStores
+from blizzard.runner.stores import HostReadStores, HostStores, RunnerReadStores, RunnerStores
 from blizzard.runner.throttle.pause import IReadPauseRepository
 from blizzard.runner.tracing.cursor import LeaseCursorKey
 from blizzard.runner.tracing.repository import IReadLeaseTraceCursor, IReadLeaseTraceFacts, LeaseTraceCheckpoint
@@ -179,7 +180,11 @@ from blizzard.runner.transcripts.archived_repository import IReadArchivedTranscr
 from blizzard.runner.transcripts.invocation_boundaries import IReadInvocationBoundaryRepository
 from blizzard.runner.transcripts.ledger import IReadTranscriptLedgerRepository
 from blizzard.runner.transcripts.repository import IReadTranscriptRepository
-from blizzard.runner.usage.repository import IReadCredentialRenewalRepository, IReadUsageRepository
+from blizzard.runner.usage.repository import (
+    IReadCredentialRenewalRepository,
+    IReadExternalUsageRepository,
+    IReadUsageRepository,
+)
 from tests.runner_fakes import record_usage
 from tests.support import (
     HubHarness,
@@ -218,6 +223,8 @@ class RunnerWorld:
     engine: Engine
     stores: RunnerStores
     read: RunnerReadStores
+    host: HostStores
+    host_read: HostReadStores
     chunk_1: str
     chunk_2: str
     chunk_3: str
@@ -244,6 +251,9 @@ def build_runner_world(engine: Engine, runner_id: str = RUNNER_ID) -> RunnerWorl
     bundle comes from :func:`~blizzard.runner.composition.build_stores`, the production
     wiring, never a hand-rolled adapter or ``tests/runner_fakes.py``'s flat fake."""
     stores = build_stores(engine, errors=RunnerStoreErrorFactory(get_logger("test")), runner_id=runner_id)
+    host = build_host_stores(
+        engine, errors=RunnerStoreErrorFactory(get_logger("test")), clock=FixedClock(_BASE), runner_id=runner_id
+    )
 
     chunk_1, chunk_2, chunk_3 = "ch_1", "ch_2", "ch_3"
     chunk_4, chunk_5, chunk_6, chunk_7 = "ch_4", "ch_5", "ch_6", "ch_7"
@@ -589,7 +599,7 @@ def build_runner_world(engine: Engine, runner_id: str = RUNNER_ID) -> RunnerWorl
     stores.pause.record_pause_park(lease_id=lease_8, chunk_id=chunk_7, parked_at=_t(71))
 
     # --- runner-wide facts, not chunk-keyed ----------------------------------------------
-    stores.pause.record_daemon_liveness(alive_at=_t(80))
+    host.daemon_liveness.record_daemon_liveness(alive_at=_t(80))
     stores.pause.set_hub_paused(paused=False, at=_t(81))
     stores.pause.record_local_pause(
         paused=False, at=_t(82), by="operator", report_kind="runner.locally_resumed", report_payload="{}"
@@ -598,8 +608,8 @@ def build_runner_world(engine: Engine, runner_id: str = RUNNER_ID) -> RunnerWorl
     stores.served_projects.record_served_projects((ServedProject("default", "prj_1", "default", "Default"),), at=_t(82))
     stores.resume_intent.record_resume_intent(lease_id=lease_8, marked_at=_t(83))
     workspace_id = "ws_1"
-    stores.workspace_prompt.set_workspace_prompt(workspace_id, prompt="hello", at=_t(84))
-    stores.graph_artifacts.record_graph_artifacts(
+    host.workspace_prompt.set_workspace_prompt(workspace_id, prompt="hello", at=_t(84))
+    host.graph_artifacts.record_graph_artifacts(
         graph_id=GRAPH_ID,
         artifacts=[
             PinnedGraphArtifact(name="a1", ordinal=0, kind=ArtifactKind.ASSET, content="c1"),
@@ -608,7 +618,7 @@ def build_runner_world(engine: Engine, runner_id: str = RUNNER_ID) -> RunnerWorl
         recorded_at=_t(85),
     )
     usage_slug = "anthropic"
-    stores.usage.record_external_usage_attempt(
+    host.external_usage.record_external_usage_attempt(
         slug=usage_slug, sampled_at=_t(86), payload="{}", report_kind="", report_payload=""
     )
     stores.selftest_results.record_selftest_result(
@@ -647,6 +657,8 @@ def build_runner_world(engine: Engine, runner_id: str = RUNNER_ID) -> RunnerWorl
         engine=engine,
         stores=stores,
         read=read,
+        host=host,
+        host_read=HostReadStores.of(host),
         chunk_1=chunk_1,
         chunk_2=chunk_2,
         chunk_3=chunk_3,
@@ -752,7 +764,7 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     (IReadTokenRepository, "lease_token_hash"): lambda w: w.read.tokens.lease_token_hash(w.lease_2),
     (IReadTokenRepository, "lease_for_token_hash"): lambda w: w.read.tokens.lease_for_token_hash("absent"),
     (IReadWorkspacePromptRepository, "workspace_prompt_override"): lambda w: (
-        w.read.workspace_prompt.workspace_prompt_override(w.workspace_id)
+        w.host_read.workspace_prompt.workspace_prompt_override(w.workspace_id)
     ),
     (IReadOutboundRepository, "pending_submission_lease_ids"): lambda w: w.read.outbound.pending_submission_lease_ids(),
     (IReadOutboundRepository, "pending_outbound"): lambda w: w.read.outbound.pending_outbound(),
@@ -771,7 +783,9 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     (IReadServedProjectsRepository, "served_projects_answer"): lambda w: (
         w.read.served_projects.served_projects_answer()
     ),
-    (IReadPauseRepository, "last_daemon_liveness"): lambda w: w.read.pause.last_daemon_liveness(),
+    (IReadDaemonLivenessRepository, "last_daemon_liveness"): lambda w: (
+        w.host_read.daemon_liveness.last_daemon_liveness()
+    ),
     (IReadPauseRepository, "pause_parked_lease_ids"): lambda w: w.read.pause.pause_parked_lease_ids(),
     (IReadPauseRepository, "open_pause_parks"): lambda w: w.read.pause.open_pause_parks(),
     (IReadTakeoverRepository, "lease_for_open_takeover"): lambda w: w.read.takeover.lease_for_open_takeover(w.lease_5),
@@ -787,26 +801,26 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     (IReadUsageRepository, "usage_since"): lambda w: w.read.usage.usage_since(_BASE),
     (IReadUsageRepository, "context_sample_state"): lambda w: w.read.usage.context_sample_state(w.lease_1),
     (IReadUsageRepository, "context_sample_states"): lambda w: w.read.usage.context_sample_states([w.lease_1]),
-    (IReadUsageRepository, "last_external_usage_attempt_at"): lambda w: w.read.usage.last_external_usage_attempt_at(
-        w.usage_slug
+    (IReadExternalUsageRepository, "last_external_usage_attempt_at"): lambda w: (
+        w.host_read.external_usage.last_external_usage_attempt_at(w.usage_slug)
     ),
-    (IReadUsageRepository, "latest_external_usage_attempt"): lambda w: w.read.usage.latest_external_usage_attempt(
-        w.usage_slug
+    (IReadExternalUsageRepository, "latest_external_usage_attempt"): lambda w: (
+        w.host_read.external_usage.latest_external_usage_attempt(w.usage_slug)
     ),
-    (IReadUsageRepository, "latest_external_usage_windows"): lambda w: w.read.usage.latest_external_usage_windows(
-        w.usage_slug
+    (IReadExternalUsageRepository, "latest_external_usage_windows"): lambda w: (
+        w.host_read.external_usage.latest_external_usage_windows(w.usage_slug)
     ),
-    (IReadUsageRepository, "latest_external_usage_windows_by_slug"): lambda w: (
-        w.read.usage.latest_external_usage_windows_by_slug([w.usage_slug])
+    (IReadExternalUsageRepository, "latest_external_usage_windows_by_slug"): lambda w: (
+        w.host_read.external_usage.latest_external_usage_windows_by_slug([w.usage_slug])
     ),
-    (IReadUsageRepository, "latest_external_usage_attempts_by_slug"): lambda w: (
-        w.read.usage.latest_external_usage_attempts_by_slug([w.usage_slug])
+    (IReadExternalUsageRepository, "latest_external_usage_attempts_by_slug"): lambda w: (
+        w.host_read.external_usage.latest_external_usage_attempts_by_slug([w.usage_slug])
     ),
     (IReadCredentialRenewalRepository, "last_credential_renewal_claim_at"): lambda w: (
-        w.read.usage.last_credential_renewal_claim_at(w.usage_slug)
+        w.host_read.external_usage.last_credential_renewal_claim_at(w.usage_slug)
     ),
     (IReadCredentialRenewalRepository, "latest_credential_renewals_by_slug"): lambda w: (
-        w.read.usage.latest_credential_renewals_by_slug([w.usage_slug])
+        w.host_read.external_usage.latest_credential_renewals_by_slug([w.usage_slug])
     ),
     (IReadAttachmentRepository, "attachments_for_lease"): lambda w: w.read.attachments.attachments_for_lease(w.lease_2),
     (IReadAttachmentRepository, "attachment_names_for_lease"): lambda w: w.read.attachments.attachment_names_for_lease(
@@ -819,7 +833,7 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     (IReadCheckRepository, "checks_ran"): lambda w: w.read.checks.checks_ran(w.lease_2, 2),
     (IReadCheckRepository, "check_results_for_lease"): lambda w: w.read.checks.check_results_for_lease(w.lease_2, 2),
     (IReadGraphArtifactRepository, "graph_artifacts_for_graph"): lambda w: (
-        w.read.graph_artifacts.graph_artifacts_for_graph(GRAPH_ID)
+        w.host_read.graph_artifacts.graph_artifacts_for_graph(GRAPH_ID)
     ),
     (IReadElicitationRepository, "in_flight_elicitation"): lambda w: w.read.elicitations.in_flight_elicitation(
         w.lease_7, 1

@@ -20,7 +20,7 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.operator.attachments import AttachmentService
-from tests.runner_fakes import make_store, make_stores
+from tests.runner_fakes import make_host_stores, make_store, make_stores
 
 _NOW = datetime(2026, 7, 19, 12, 0, 0, tzinfo=UTC)
 _TOKEN = "the-lease-token"
@@ -30,7 +30,9 @@ def _app_with_attachments(tmp_path: Path):  # type: ignore[no-untyped-def]
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
     service = AttachmentService(store, FixedClock(_NOW))
-    return create_app(config, runner_stores=make_stores(store), attachments=service), store
+    return create_app(
+        config, runner_stores=make_stores(store), host_stores=make_host_stores(store), attachments=service
+    ), store
 
 
 def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-def]

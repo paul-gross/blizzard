@@ -47,6 +47,7 @@ from blizzard.runner.leases.overload import IWriteOverloadRepository
 from blizzard.runner.leases.record import IWriteLeaseRecordRepository
 from blizzard.runner.leases.resume_intent import IWriteLeaseResumeIntentRepository
 from blizzard.runner.leases.session import IWriteLeaseSessionRepository
+from blizzard.runner.lifecycle.daemon_liveness import IWriteDaemonLivenessRepository
 from blizzard.runner.lifecycle.judgement.artifacts import IWriteGraphArtifactRepository
 from blizzard.runner.lifecycle.judgement.checks import ExecutedCheck, IWriteCheckRepository
 from blizzard.runner.lifecycle.judgement.git_commit_declaration import IWriteGitCommitDeclarationRepository
@@ -58,7 +59,11 @@ from blizzard.runner.tracing.cursor import LeaseCursorKey
 from blizzard.runner.tracing.repository import IWriteLeaseTraces, LeaseTraceCheckpoint
 from blizzard.runner.transcripts.invocation_boundaries import IWriteInvocationBoundaryRepository
 from blizzard.runner.transcripts.ledger import IWriteTranscriptLedgerRepository
-from blizzard.runner.usage.repository import IWriteCredentialRenewalRepository, IWriteUsageRepository
+from blizzard.runner.usage.repository import (
+    IWriteCredentialRenewalRepository,
+    IWriteExternalUsageRepository,
+    IWriteUsageRepository,
+)
 from tests.runner_fakes import record_usage, runner_migration_prototype
 from tests.store_read_census import GRAPH_ID, RUNNER_CENSUS, RunnerWorld, build_runner_world
 
@@ -470,8 +475,10 @@ WRITE_CENSUS: dict[tuple[type, str], WriteRecipe] = {
         report_kind="context.sampled",
         report_payload="{}",
     ),
-    (IWriteUsageRepository, "record_external_usage_attempt"): lambda w: w.stores.usage.record_external_usage_attempt(
-        slug=w.usage_slug, sampled_at=_at(51), payload="{}", report_kind="usage.sampled", report_payload="{}"
+    (IWriteExternalUsageRepository, "record_external_usage_attempt"): lambda w: (
+        w.host.external_usage.record_external_usage_attempt(
+            slug=w.usage_slug, sampled_at=_at(51), payload="{}", report_kind="usage.sampled", report_payload="{}"
+        )
     ),
     (IWriteSelfTestResultRepository, "record_selftest_result"): lambda w: (
         w.stores.selftest_results.record_selftest_result(
@@ -484,11 +491,11 @@ _HOST_ONLY = "writes only host-scoped tables, which carry no runner"
 
 #: Runner ``IWrite*`` methods that write no runner-scoped row, each reasoned.
 WRITE_EXEMPTIONS: dict[tuple[type, str], str] = {
-    (IWritePauseRepository, "record_daemon_liveness"): _HOST_ONLY + " (daemon_liveness)",
+    (IWriteDaemonLivenessRepository, "record_daemon_liveness"): _HOST_ONLY + " (daemon_liveness)",
     (IWriteGraphArtifactRepository, "record_graph_artifacts"): _HOST_ONLY + " (graph_artifacts)",
     (IWriteWorkspacePromptRepository, "set_workspace_prompt"): _HOST_ONLY + " (workspace_prompt)",
     (IWriteWorkspacePromptRepository, "clear_workspace_prompt"): _HOST_ONLY + " (workspace_prompt)",
-    (IWriteUsageRepository, "prune_external_usage_samples"): _HOST_ONLY + " (external_usage_samples)",
+    (IWriteExternalUsageRepository, "prune_external_usage_samples"): _HOST_ONLY + " (external_usage_samples)",
     (IWriteCredentialRenewalRepository, "claim_credential_renewal"): _HOST_ONLY + " (credential_renewal_claims)",
     (IWriteCredentialRenewalRepository, "record_credential_renewal_outcome"): _HOST_ONLY
     + " (credential_renewal_outcomes)",

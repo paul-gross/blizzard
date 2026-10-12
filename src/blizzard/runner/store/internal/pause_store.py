@@ -1,17 +1,16 @@
-"""SQLAlchemy adapter for the pause-brake/daemon-liveness repository seam (package-private)."""
+"""SQLAlchemy adapter for the pause-brake repository seam (package-private)."""
 
 from __future__ import annotations
 
 from datetime import datetime
 
 import sqlalchemy as sa
-from sqlalchemy import func, select
+from sqlalchemy import func
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.internal.base import open_pause_park, pause_parked_lease_ids
 from blizzard.runner.store.schema import (
-    daemon_liveness,
     hub_control,
     local_pause_facts,
     outbound_buffer,
@@ -24,7 +23,7 @@ _log = get_logger("blizzard.runner.store")
 
 
 class PauseStore:
-    """Read-write pause-brake and daemon-liveness adapter over the runner store engine."""
+    """Read-write pause-brake adapter over the runner store engine."""
 
     def __init__(self, store: RunnerStoreConnections) -> None:
         self._store = store
@@ -56,10 +55,6 @@ class PauseStore:
             .limit(1)
         )
         return rows[0].reason if rows else None
-
-    def last_daemon_liveness(self) -> datetime | None:
-        rows = self._store.all(select(func.max(daemon_liveness.c.alive_at).label("alive_at")))
-        return rows[0].alive_at if rows and rows[0].alive_at is not None else None
 
     def pause_parked_lease_ids(self) -> set[str]:
         return {str(r.lease_id) for r in self._store.all(pause_parked_lease_ids(self._store))}
@@ -93,17 +88,6 @@ class PauseStore:
                 ),
             )
         return parks
-
-    def record_daemon_liveness(self, *, alive_at: datetime) -> None:
-        with self._store.begin() as conn:
-            existing = conn.execute(select(daemon_liveness.c.id).limit(1)).one_or_none()
-            if existing is None:
-                conn.execute(daemon_liveness.insert().values(alive_at=alive_at))
-            else:
-                conn.execute(
-                    daemon_liveness.update().where(daemon_liveness.c.id == existing.id).values(alive_at=alive_at)
-                )
-        _log.debug("daemon liveness stamped")
 
     def set_hub_paused(self, *, paused: bool, at: datetime) -> None:
         with self._store.begin() as conn:

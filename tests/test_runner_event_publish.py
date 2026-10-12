@@ -57,6 +57,7 @@ from tests.runner_fakes import (
     claimed_outcome,
     make_context,
     make_envelope,
+    make_host_stores,
     make_store,
     make_stores,
     record_usage,
@@ -277,7 +278,7 @@ def test_asks_api_route_publishes_ask_asked(tmp_path: Path) -> None:
     token = "the-lease-token"
     store.record_lease_token("lease_1", TokenHash(token).hex, _NOW)
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
-    app = create_app(config, runner_stores=make_stores(store), events=events)
+    app = create_app(config, runner_stores=make_stores(store), host_stores=make_host_stores(store), events=events)
 
     with TestClient(app) as client:
         resp = client.post(
@@ -695,6 +696,7 @@ def test_patch_runner_route_publishes_fact_changed(tmp_path: Path) -> None:
     status = RunnerStatusService(
         FixedClock(_NOW),
         pause=store,
+        daemon_liveness=store,
         lease_record=store,
         outbound=store,
         environments=store,
@@ -710,7 +712,13 @@ def test_patch_runner_route_publishes_fact_changed(tmp_path: Path) -> None:
         workspace_root="",
         harnesses=HarnessRegistry({}),
     )
-    app = create_app(config, runner_stores=make_stores(store), runner_status=status, events=events)
+    app = create_app(
+        config,
+        runner_stores=make_stores(store),
+        host_stores=make_host_stores(store),
+        runner_status=status,
+        events=events,
+    )
 
     with TestClient(app) as client:
         resp = client.patch("/api/runner", json={"paused": True, "by": "operator"})

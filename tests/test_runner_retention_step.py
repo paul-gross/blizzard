@@ -223,10 +223,14 @@ class _CountingLanes:
         stores = ctx.stores
         stores = dataclasses.replace(stores, outbound=_Counting(stores.outbound, "outbound", "prune_outbound"))
         stores = dataclasses.replace(stores, liveness=_Counting(stores.liveness, "heartbeat", "prune_heartbeats"))
-        stores = dataclasses.replace(stores, usage=_Counting(stores.usage, "usage", "prune_external_usage_samples"))
+        host_stores = dataclasses.replace(
+            ctx.host_stores,
+            external_usage=_Counting(ctx.host_stores.external_usage, "usage", "prune_external_usage_samples"),
+        )
         self.ctx = dataclasses.replace(
             ctx,
             stores=stores,
+            host_stores=host_stores,
             worker_files=_Counting(ctx.worker_files, "stdout", "sweep"),
             retention_passes=RetentionPasses(),
         )

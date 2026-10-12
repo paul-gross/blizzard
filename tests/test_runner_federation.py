@@ -27,9 +27,15 @@ from blizzard.runner.harness.registry import HarnessRegistry
 from blizzard.runner.hub.identity import RunnerIdentityHolder
 from blizzard.runner.status.view import RunnerStatusService
 from blizzard.runner.store.errors import RunnerStoreConnections
-from blizzard.runner.store.internal.jti_cache_store import JtiCacheRepository
+from blizzard.runner.store.internal.host_jti_cache_store import JtiCacheRepository
 from blizzard.runner.store.schema import metadata
-from tests.runner_fakes import SqlAlchemyRunnerStore, make_stores, registered_identity, runner_store_errors
+from tests.runner_fakes import (
+    SqlAlchemyRunnerStore,
+    make_host_stores,
+    make_stores,
+    registered_identity,
+    runner_store_errors,
+)
 
 pytestmark = pytest.mark.component
 
@@ -103,6 +109,7 @@ def _build_app(
     runner_status = RunnerStatusService(
         clock=SystemClock(),
         pause=store,
+        daemon_liveness=store,
         lease_record=store,
         outbound=store,
         environments=store,
@@ -121,6 +128,7 @@ def _build_app(
     app = create_app(
         config,
         runner_stores=make_stores(store),
+        host_stores=make_host_stores(store),
         runner_status=runner_status,
         identity=identity,
         hub_http_client=_hub_client(oauth_enabled=oauth_enabled, jwk=jwk),

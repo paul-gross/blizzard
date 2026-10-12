@@ -22,9 +22,9 @@ from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHar
 from blizzard.runner.harness.usage import UsageLimit
 from blizzard.runner.leases.model import Lease
 from blizzard.runner.lifecycle.attempt import Attempt, AttemptContext
-from blizzard.runner.lifecycle.spawn import SpawnStores
+from blizzard.runner.lifecycle.spawn import SpawnHostStores, SpawnStores
 from blizzard.runner.throttle.pause import PauseService, usage_limit_reason
-from blizzard.runner.usage.repository import IReadUsageRepository, soonest_exhausted_reset
+from blizzard.runner.usage.repository import IReadExternalUsageRepository, soonest_exhausted_reset
 
 _log = get_logger("blizzard.runner.loop")
 
@@ -47,14 +47,19 @@ class DeclaredSubscription(Protocol):
     def slug(self) -> str: ...
 
 
-class UsageLimitStores(SpawnStores, Protocol):
+class UsageLimitStores(SpawnStores, Protocol): ...
+
+
+class UsageLimitHostStores(SpawnHostStores, Protocol):
     @property
-    def usage(self) -> IReadUsageRepository: ...
+    def external_usage(self) -> IReadExternalUsageRepository: ...
 
 
 class UsageLimitContext(AttemptContext, Protocol):
     @property
     def stores(self) -> UsageLimitStores: ...
+    @property
+    def host_stores(self) -> UsageLimitHostStores: ...
     @property
     def subscriptions(self) -> Sequence[DeclaredSubscription]: ...
 
@@ -138,7 +143,8 @@ def _fallback_reset(ctx: UsageLimitContext) -> datetime | None:
     """The soonest pending reset every declared subscription itself last reported
     (:func:`~blizzard.runner.usage.repository.soonest_exhausted_reset`) — no
     harness-to-subscription mapping."""
-    windows_by_slug = ctx.stores.usage.latest_external_usage_windows_by_slug([r.slug for r in ctx.subscriptions])
+    usage = ctx.host_stores.external_usage
+    windows_by_slug = usage.latest_external_usage_windows_by_slug([r.slug for r in ctx.subscriptions])
     return soonest_exhausted_reset(windows_by_slug, ctx.clock.now())
 
 

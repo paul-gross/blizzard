@@ -91,6 +91,7 @@ from tests.runner_fakes import (
     FakeProvider,
     make_context,
     make_envelope,
+    make_host_stores,
     make_store,
     make_stores,
     no_retry_clock,
@@ -220,6 +221,7 @@ def _app(  # type: ignore[no-untyped-def]
     app = create_app(
         config,
         runner_stores=make_stores(store),
+        host_stores=make_host_stores(store),
         hub_proxy_client=proxy,
         hub_retry_clock=no_retry_clock(),
         platform_tracing=handle,
@@ -477,7 +479,9 @@ def test_an_app_built_without_a_receiver_refuses_a_valid_token_503_naming_it(tmp
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     _seed_lease(store)
     app = create_app(
-        RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}"), runner_stores=make_stores(store)
+        RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}"),
+        runner_stores=make_stores(store),
+        host_stores=make_host_stores(store),
     )
     with TestClient(app) as client:
         refused = _post_json(client, _export(_own_trace()))
