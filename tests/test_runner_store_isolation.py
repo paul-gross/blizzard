@@ -5,7 +5,7 @@ runner-scoped row is copied as runner B's — the same shapes, the same chunk id
 renamed. Through A's adapters:
 
 - every read in ``RUNNER_CENSUS`` answers exactly what it answered before B's rows existed — so no B row is returned,
-  the ``base.py`` predicates (held bindings, open intents, pause parks, escalations) included;
+  the ``src/blizzard/runner/store/internal/base.py`` predicates (held bindings, open intents, pause parks, escalations) included;
 - every write in :data:`WRITE_CENSUS` leaves each of B's rows as it was.
 
 Coverage is held by reflection: every runner ``IWrite*`` Protocol method is in :data:`WRITE_CENSUS` or

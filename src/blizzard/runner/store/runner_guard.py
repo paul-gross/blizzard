@@ -2,7 +2,7 @@
 without naming its runner.
 
 It is the key-scoping core's walker (:class:`~blizzard.foundation.store.statement_guard.KeyedStatementGuard`) over
-``runner/store/schema.py``'s metadata, configured for ``runner_id``
+``src/blizzard/runner/store/schema.py``'s metadata, configured for ``runner_id``
 (:data:`~blizzard.runner.store.errors.RUNNER_SCOPING`): every compiled ``Select``, ``Update`` and ``Delete``, nested
 ones included, must scope each runner-scoped table it renders by a ``runner_id`` equality, and every ``Insert`` into
 one must name ``runner_id``. Host-scoped tables carry no ``runner_id`` and pass. A statement carrying

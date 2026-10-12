@@ -542,7 +542,7 @@ def _host_store_breaches(src_root: Path) -> list[str]:
 
 def _runner_seam_breaches(src_root: Path) -> list[str]:
     """Each place under ``src_root`` that names the runner-scoped exemption outside its own holders: the seam that
-    declares it (``runner/store/errors.py``), the guard (``runner/store/runner_guard.py``), ``HostStores``' exempt
+    declares it (``src/blizzard/runner/store/errors.py``), the guard (``src/blizzard/runner/store/runner_guard.py``), ``HostStores``' exempt
     members' modules, and runner migrations — mirroring :func:`_tenant_seam_breaches`."""
     store = src_root / "runner" / "store"
     holders = {store / "errors.py", store / "runner_guard.py"} | {
