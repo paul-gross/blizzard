@@ -9,6 +9,7 @@ import {
   type DecisionOpenedPayload,
   type DecisionResolvedPayload,
   type EventLoggedPayload,
+  type HostChangedPayload,
   HubEventType,
   type QuestionAnsweredPayload,
   type QuestionAskedPayload,
@@ -71,6 +72,7 @@ export interface HubEventPayloads {
   [HubEventType.DECISION_RESOLVED]: DecisionResolvedPayload;
   [HubEventType.QUEUE_CHANGED]: QueueChangedPayload;
   [HubEventType.RUNNER_CHANGED]: RunnerChangedPayload;
+  [HubEventType.HOST_CHANGED]: HostChangedPayload;
   [HubEventType.EVENT_LOGGED]: EventLoggedPayload;
 }
 
@@ -85,6 +87,8 @@ export type QuestionEvent = QuestionAskedPayload | QuestionAnsweredPayload;
 export type DecisionEvent = DecisionOpenedPayload | DecisionResolvedPayload;
 /** A `runner-changed` frame's payload. */
 export type RunnerEvent = RunnerChangedPayload;
+/** A `host-changed` frame's payload. */
+export type HostEvent = HostChangedPayload;
 /** An `event-logged` frame's payload. */
 export type EventLoggedEvent = EventLoggedPayload;
 /** The fact-identity stamp every keyed frame carries ({@link HubEventPayloads}). */
@@ -113,7 +117,11 @@ export type LoggedEventData = Omit<ActivityView, 'at' | 'type' | 'key'> & { read
  * Dropping is scoped to the feed either way: {@link LiveInvalidationSpine.dispatch}
  * still invalidates on every dropped frame, keyed off `type` alone.
  */
-const NO_DURABLE_FACT_TYPES: ReadonlySet<string> = new Set<HubEventType>([HubEventType.QUEUE_CHANGED]);
+const NO_DURABLE_FACT_TYPES: ReadonlySet<string> = new Set<HubEventType>([
+  HubEventType.QUEUE_CHANGED,
+  // Nothing renders a host yet, so its frame stales no query and joins no feed.
+  HubEventType.HOST_CHANGED,
+]);
 
 /**
  * The `runner-changed` kinds the Activity feed drops — {@link
@@ -223,6 +231,7 @@ const EVENT_INVALIDATION_REGISTRY: Record<HubEventType, (data: HubEventPayload) 
   // payload key, `bzh:ranking-is-per-list`), so both cached orders invalidate.
   [HubEventType.QUEUE_CHANGED]: () => [hubQueueKey, hubBacklogKey],
   [HubEventType.RUNNER_CHANGED]: () => [hubRunnersKey],
+  [HubEventType.HOST_CHANGED]: () => [],
   [HubEventType.EVENT_LOGGED]: (data) => [hubEventsKey, ...chunkDetailKeys(data)],
 };
 

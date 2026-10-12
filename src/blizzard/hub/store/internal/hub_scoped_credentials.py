@@ -15,7 +15,7 @@ from typing import Any
 from sqlalchemy import Connection, Row, select
 
 from blizzard.foundation.roles import domain_model
-from blizzard.hub.store.schema import runner_registrations, runner_token_revocations
+from blizzard.hub.store.schema import host_token_revocations, hosts, runner_registrations, runner_token_revocations
 from blizzard.hub.tenancy import TenantId
 
 #: Opens a read, named by its operation, whose every statement is marked hub-scoped — the aggregate's
@@ -32,9 +32,18 @@ class TenantRunner:
     runner_id: str
 
 
+@domain_model
+@dataclass(frozen=True)
+class TenantHost:
+    """A host a credential resolved to, and the tenant its row belongs to."""
+
+    tenant: TenantId
+    host_id: str
+
+
 class CredentialReads:
-    """Resolving a runner's credential — its bearer token's hash, a revoked hash, or its id at
-    sign-in — to the runner and its tenant."""
+    """Resolving a runner's or a host's credential — its bearer token's hash, a revoked hash, or a
+    runner's id at sign-in — to the runner or host and its tenant."""
 
     def __init__(self, read: MarkedRead) -> None:
         self._read = read
@@ -72,6 +81,33 @@ class CredentialReads:
                 )
             ).one_or_none()
         return _tenant_runner(row)
+
+    def host_for_token_hash(self, token_hash: str) -> TenantHost | None:
+        """The host whose current token hashes to ``token_hash``, or ``None`` when none does."""
+        with self._read("resolve a host token") as conn:
+            row = conn.execute(
+                select(hosts.c.tenant_id, hosts.c.host_id).where(hosts.c.token_hash == token_hash)
+            ).one_or_none()
+        return _tenant_host(row)
+
+    def revoked_token_host(self, token_hash: str) -> TenantHost | None:
+        """The host a revoked ``token_hash`` was issued to — the one its newest revocation names — or
+        ``None`` when the hash was never revoked, whether revoked outright or rotated away from."""
+        with self._read("resolve a revoked host token") as conn:
+            row = conn.execute(
+                select(host_token_revocations.c.tenant_id, host_token_revocations.c.host_id)
+                .where(host_token_revocations.c.token_hash == token_hash)
+                .order_by(host_token_revocations.c.id.desc())
+                .limit(1)
+            ).one_or_none()
+        return _tenant_host(row)
+
+
+def _tenant_host(row: Row[Any] | None) -> TenantHost | None:
+    # A row no scoped write stamped belongs to no tenant, so it resolves to nothing.
+    if row is None or row.tenant_id is None:
+        return None
+    return TenantHost(tenant=TenantId(row.tenant_id), host_id=row.host_id)
 
 
 def _tenant_runner(row: Row[Any] | None) -> TenantRunner | None:

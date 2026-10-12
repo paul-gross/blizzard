@@ -77,6 +77,7 @@ from blizzard.hub.domain.execution.decisions import DecisionService, RequeueServ
 from blizzard.hub.domain.execution.detach import DetachService
 from blizzard.hub.domain.execution.facts import FactIngestService
 from blizzard.hub.domain.execution.fleet import FleetService
+from blizzard.hub.domain.execution.host_retirement import HostRetirementService
 from blizzard.hub.domain.execution.questions import QuestionService
 from blizzard.hub.domain.garden.delivery.materialize import GardenDelivery
 from blizzard.hub.domain.garden.delivery.service import GardenDeliveryRecorder
@@ -157,6 +158,9 @@ from blizzard.hub.domain.projects.bulk_resolve import BulkProjectResolver
 from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import IReadProjectRepository, ProjectId
 from blizzard.hub.domain.runners.enrollment import RunnerEnrollmentService
+from blizzard.hub.domain.runners.host import IReadHostRegistry
+from blizzard.hub.domain.runners.host_enrollment import HostEnrollmentService
+from blizzard.hub.domain.runners.host_report import HostReportService
 from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, RetiredRunnerGuard
 from blizzard.hub.domain.tenancy.administration import TenantAdministration
 from blizzard.hub.domain.tenancy.teardown import TenantTeardown, TenantTeardownSweep
@@ -192,6 +196,7 @@ from blizzard.hub.store.internal.garden_run_store import GardenRunStore
 from blizzard.hub.store.internal.garden_sweeps_store import GardenSweepsStore
 from blizzard.hub.store.internal.garden_trend_store import GardenTrendStore
 from blizzard.hub.store.internal.graph_store import GraphStore
+from blizzard.hub.store.internal.host_registry_store import HostRegistryStore
 from blizzard.hub.store.internal.hub_event_log_store import HubEventLogStore
 from blizzard.hub.store.internal.hub_scoped_reads import HubScopedReads, build_hub_scoped_reads
 from blizzard.hub.store.internal.invitation_store import InvitationStore
@@ -263,6 +268,11 @@ class TenantServices:
     enrollment: RunnerEnrollmentService
     #: The fleet registry's read Protocol — the same store instance as ``fleet``'s writes.
     registry: IReadRunnerRegistry
+    #: The host registry's read Protocol — the same store instance as the three host services' writes.
+    hosts: IReadHostRegistry
+    host_enrollment: HostEnrollmentService
+    host_report: HostReportService
+    host_retirement: HostRetirementService
     hub_node: HubNodeExecutor
     events: EventBroker
     #: The one event-log recorder every hub-side authoring site shares.
@@ -387,6 +397,8 @@ class HubServices:
     #: The read registry of the tenant a runner credential resolved to; raises ``UnknownTenant`` or
     #: ``TenantClosed`` for a tenant there are no stores to open for.
     tenant_registry: Callable[[TenantId], IReadRunnerRegistry]
+    #: The read host registry of the tenant a host credential resolved to; raises as ``tenant_registry`` does.
+    tenant_hosts: Callable[[TenantId], IReadHostRegistry]
     #: The mid-run marker-write capability authority — one shared instance,
     #: so every reader agrees on the one live token per (chunk, node, epoch).
     marker_authority: MarkerAuthority
@@ -464,6 +476,7 @@ class TenantStores:
 
     connections: ScopedConnections
     registry: RunnerRegistryStore
+    hosts: HostRegistryStore
     work_item_store: WorkItemStore
     chunk_stores: ChunkStores
     #: The tenant's cycle-check lock — dependencies never cross tenants.
@@ -501,6 +514,7 @@ class TenantStores:
 def build_tenant_stores(connections: ScopedConnections, *, clock: IClock) -> TenantStores:
     """Build the :class:`TenantStores` of the tenant ``connections`` is scoped to."""
     registry = RunnerRegistryStore(connections)
+    hosts = HostRegistryStore(connections)
     work_item_store = WorkItemStore(connections)
     chunk_stores = build_chunk_stores(connections, clock, registry=registry)
     cycle_lock = threading.Lock()
@@ -517,6 +531,7 @@ def build_tenant_stores(connections: ScopedConnections, *, clock: IClock) -> Ten
     return TenantStores(
         connections=connections,
         registry=registry,
+        hosts=hosts,
         work_item_store=work_item_store,
         chunk_stores=chunk_stores,
         cycle_lock=cycle_lock,
@@ -923,6 +938,12 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         clock=clock,
     )
     enrollment = RunnerEnrollmentService(registry=registry_store, served_projects=served_projects, clock=clock)
+    host_store = stores.hosts
+    host_enrollment = HostEnrollmentService(
+        hosts=host_store, runners=registry_store, runner_enrollment=enrollment, clock=clock
+    )
+    host_report = HostReportService(hosts=host_store, clock=clock)
+    host_retirement = HostRetirementService(hosts=host_store, runners=registry_store, fleet=fleet, clock=clock)
     graph_mint = GraphMintService(graphs=graph_store, clock=clock)
     scope_store = ScopeStore(tenant_connections)
     scope_registry = ScopeRegistry(scopes=scope_store, clock=clock)
@@ -1050,6 +1071,10 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         fleet=fleet,
         enrollment=enrollment,
         registry=registry_store,
+        hosts=host_store,
+        host_enrollment=host_enrollment,
+        host_report=host_report,
+        host_retirement=host_retirement,
         hub_node=hub_node,
         events=events,
         event_log=event_log,
@@ -1404,6 +1429,7 @@ def build_services(
         ),
         hub_scoped_reads=core.hub_scoped_reads,
         tenant_registry=lambda tenant: core.open(scope_of(tenant)).registry,
+        tenant_hosts=lambda tenant: core.open(scope_of(tenant)).hosts,
         marker_authority=marker_authority,
         hub_event_log=hub_event_log,
         hub_events=hub_events,

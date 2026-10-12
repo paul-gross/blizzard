@@ -1,0 +1,264 @@
+"""SQLAlchemy adapter for the host-registry seam (package-private).
+
+All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). Facts only, status derived
+(``bzh:facts-not-status``): retirement derives from the newest row of ``host_lifecycle_facts``; ``name``,
+``last_seen_at`` and ``token_hash`` are the refreshed-in-place columns."""
+
+from __future__ import annotations
+
+import json
+from collections.abc import Sequence
+from datetime import datetime
+
+from sqlalchemy import Connection
+
+from blizzard.foundation.store.batching import id_batches
+from blizzard.foundation.store.utc import as_utc
+from blizzard.hub.domain.runners.host import (
+    Host,
+    HostAddition,
+    HostLifecycleFact,
+    HostNameTaken,
+    HostReport,
+    HostTokenRotation,
+    HostWorkspace,
+    IWriteHostRegistry,
+    RunnerAlreadyHosted,
+)
+from blizzard.hub.domain.runners.registration import DeclaredSubscription
+from blizzard.hub.store import schema as s
+from blizzard.hub.store.internal.newest_fact import newest_fact_select, newest_retired_select
+from blizzard.hub.store.scoped import ScopedConnections, statements_of
+
+_Lifecycle = tuple[bool, datetime | None, str | None]
+
+
+def _locked_token_hash(conn: Connection, host_id: str) -> str | None:
+    """The host's current token hash, read under its row's write lock — a no-op ``UPDATE`` as the transaction's first
+    statement, then the read (``bzh:store-exclusive-write``; ``FOR UPDATE`` renders nothing on SQLite)."""
+    stmts = statements_of(conn)
+    hosts = s.hosts
+    conn.execute(stmts.update(hosts).where(hosts.c.host_id == host_id).values(host_id=hosts.c.host_id))
+    return conn.execute(stmts.select(hosts, hosts.c.token_hash).where(hosts.c.host_id == host_id)).scalar_one_or_none()
+
+
+class HostRegistryStore:
+    """Read-write host-registry adapter over the hub store engine."""
+
+    def __init__(self, store: ScopedConnections) -> None:
+        self._store = store
+
+    # --- reads --------------------------------------------------------------
+
+    def get_host(self, host_id: str) -> Host | None:
+        with self._store.read("get_host") as conn:
+            row = conn.execute(self._store.select(s.hosts).where(s.hosts.c.host_id == host_id)).one_or_none()
+            if row is None:
+                return None
+            return self._host(row, self._lifecycle_many(conn, [host_id])[host_id])
+
+    def list_hosts(self, *, include_retired: bool = False) -> list[Host]:
+        with self._store.read("list_hosts") as conn:
+            rows = conn.execute(self._store.select(s.hosts).order_by(s.hosts.c.added_at, s.hosts.c.host_id)).all()
+            lifecycle = self._lifecycle_many(conn, [row.host_id for row in rows])
+            return [
+                self._host(row, lifecycle[row.host_id])
+                for row in rows
+                if include_retired or not lifecycle[row.host_id][0]
+            ]
+
+    def live_names(self, *, excluding: str | None = None) -> frozenset[str]:
+        with self._store.read("live_names") as conn:
+            return frozenset(self._live_names(conn, excluding))
+
+    # --- writes -------------------------------------------------------------
+
+    def add(self, addition: HostAddition) -> None:
+        with self._store.write("add_host") as conn:
+            # The tenant-row lock the scoped write takes serializes two adds of one name.
+            if addition.name in self._live_names(conn, None):
+                raise HostNameTaken(addition.name)
+            conn.execute(
+                self._store.insert(s.hosts).values(
+                    host_id=addition.host_id,
+                    name=addition.name,
+                    token_hash=addition.token_hash,
+                    added_at=addition.at,
+                    added_by=addition.by,
+                )
+            )
+            self._place(conn, addition.host_id, addition.adopt)
+
+    def record_report(self, host_id: str, report: HostReport, *, name: str | None, at: datetime) -> bool:
+        refreshed: dict[str, object] = {
+            "last_seen_at": at,
+            "url": report.url,
+            "redirect_uris": json.dumps(list(report.redirect_uris)),
+            "workspaces": json.dumps(
+                [{"workspace_id": w.workspace_id, "env_capacity": w.env_capacity} for w in report.workspaces]
+            ),
+            "subscriptions": json.dumps(
+                [{"slug": d.slug, "name": d.name, "provider": d.provider} for d in report.subscriptions]
+            ),
+        }
+        if name is not None:
+            refreshed["name"] = name
+        match = s.hosts.c.host_id == host_id
+        with self._store.write("record_host_report") as conn:
+            if not conn.execute(self._store.update(s.hosts).where(match).values(refreshed)).rowcount:
+                raise LookupError(f"host {host_id!r} was never added")
+            # Stamped only while unset, so of two racing first reports exactly one reads as first.
+            first = conn.execute(
+                self._store.update(s.hosts).where(match, s.hosts.c.registered_at.is_(None)).values(registered_at=at)
+            )
+            return bool(first.rowcount)
+
+    def adopt(self, host_id: str, runner_ids: Sequence[str]) -> None:
+        with self._store.write("adopt_runners") as conn:
+            self._place(conn, host_id, runner_ids)
+
+    def release(self, host_id: str, runner_ids: Sequence[str]) -> None:
+        runners = s.runner_registrations
+        with self._store.write("release_runners") as conn:
+            for batch in id_batches(list(runner_ids)):
+                conn.execute(
+                    self._store.update(runners)
+                    .where(runners.c.host_id == host_id, runners.c.runner_id.in_(batch))
+                    .values(host_id=None)
+                )
+
+    def record_retirement(
+        self, host_id: str, *, fact: HostLifecycleFact | None, at: datetime, by: str
+    ) -> tuple[int | None, int | None]:
+        with self._store.write("record_host_retirement") as conn:
+            fact_id = None
+            if fact is not None:
+                result = conn.execute(
+                    self._store.insert(s.host_lifecycle_facts).values(
+                        host_id=host_id, retired=fact.retired, set_at=fact.at, set_by=fact.by
+                    )
+                )
+                fact_id = _inserted_id(result)
+            return fact_id, self._revoke(conn, host_id, at=at, by=by)
+
+    def revoke_token(self, host_id: str, *, at: datetime, by: str) -> int | None:
+        # The revocation fact and the nulled hash land in one transaction, so a token always resolves or reads as
+        # revoked; the row lock orders it against a concurrent rotation.
+        with self._store.write("revoke_host_token") as conn:
+            return self._revoke(conn, host_id, at=at, by=by)
+
+    def rotate_token(self, rotation: HostTokenRotation) -> int | None:
+        # The replaced hash's revocation and the new hash land in one transaction, and the row lock makes a
+        # concurrent rotation read the hash this one stored, so every replaced hash is revoked.
+        with self._store.write("rotate_host_token") as conn:
+            replaced = _locked_token_hash(conn, rotation.host_id)
+            revocation_id: int | None = None
+            if replaced is not None:
+                revocation_id = _inserted_id(
+                    conn.execute(
+                        self._store.insert(s.host_token_revocations).values(
+                            host_id=rotation.host_id,
+                            token_hash=replaced,
+                            revoked_at=rotation.at,
+                            revoked_by=rotation.by,
+                        )
+                    )
+                )
+            conn.execute(
+                self._store.update(s.hosts)
+                .where(s.hosts.c.host_id == rotation.host_id)
+                .values(token_hash=rotation.token_hash)
+            )
+            return revocation_id
+
+    # --- helpers ------------------------------------------------------------
+
+    def _revoke(self, conn: Connection, host_id: str, *, at: datetime, by: str) -> int | None:
+        token_hash = _locked_token_hash(conn, host_id)
+        if token_hash is None:
+            return None
+        revocation_id = _inserted_id(
+            conn.execute(
+                self._store.insert(s.host_token_revocations).values(
+                    host_id=host_id, token_hash=token_hash, revoked_at=at, revoked_by=by
+                )
+            )
+        )
+        conn.execute(self._store.update(s.hosts).where(s.hosts.c.host_id == host_id).values(token_hash=None))
+        return revocation_id
+
+    def _place(self, conn: Connection, host_id: str, runner_ids: Sequence[str]) -> None:
+        """Place each runner under ``host_id`` iff it still stands alone; one that does not rolls the write back."""
+        runners = s.runner_registrations
+        for runner_id in runner_ids:
+            placed = conn.execute(
+                self._store.update(runners)
+                .where(runners.c.runner_id == runner_id, runners.c.host_id.is_(None))
+                .values(host_id=host_id)
+            )
+            if not placed.rowcount:
+                raise RunnerAlreadyHosted(runner_id)
+
+    def _live_names(self, conn: Connection, excluding: str | None) -> set[str]:
+        hosts = s.hosts
+        retired = newest_retired_select(statements_of(conn), s.host_lifecycle_facts, s.host_lifecycle_facts.c.host_id)
+        query = self._store.select(hosts, hosts.c.name).where(hosts.c.host_id.not_in(retired))
+        if excluding is not None:
+            query = query.where(hosts.c.host_id != excluding)
+        return set(conn.execute(query).scalars().all())
+
+    @staticmethod
+    def _lifecycle_many(conn: Connection, host_ids: Sequence[str]) -> dict[str, _Lifecycle]:
+        """Every listed host's ``(retired, at, by)`` off its newest lifecycle fact, one query per id batch."""
+        result: dict[str, _Lifecycle] = dict.fromkeys(host_ids, (False, None, None))
+        for batch in id_batches(list(host_ids)):
+            rows = conn.execute(
+                newest_fact_select(
+                    statements_of(conn),
+                    s.host_lifecycle_facts,
+                    s.host_lifecycle_facts.c.host_id,
+                    batch,
+                    s.host_lifecycle_facts.c.host_id,
+                    s.host_lifecycle_facts.c.retired,
+                    s.host_lifecycle_facts.c.set_at,
+                    s.host_lifecycle_facts.c.set_by,
+                )
+            ).all()
+            for row in rows:
+                result[row.host_id] = (True, row.set_at, row.set_by) if row.retired else (False, None, None)
+        return result
+
+    @staticmethod
+    def _host(row, lifecycle: _Lifecycle) -> Host:  # type: ignore[no-untyped-def]
+        retired, retired_at, retired_by = lifecycle
+        return Host(
+            host_id=row.host_id,
+            name=row.name,
+            added_at=row.added_at,
+            added_by=row.added_by,
+            registered_at=row.registered_at,
+            last_seen_at=row.last_seen_at,
+            url=row.url,
+            redirect_uris=tuple(json.loads(row.redirect_uris)) if row.redirect_uris else (),
+            workspaces=tuple(
+                HostWorkspace(workspace_id=w["workspace_id"], env_capacity=w.get("env_capacity"))
+                for w in (json.loads(row.workspaces) if row.workspaces else [])
+            ),
+            subscriptions=tuple(
+                DeclaredSubscription(slug=d["slug"], name=d["name"], provider=d["provider"])
+                for d in (json.loads(row.subscriptions) if row.subscriptions else [])
+            ),
+            token_hash=row.token_hash,
+            retired=retired,
+            retired_at=as_utc(retired_at) if retired_at is not None else None,
+            retired_by=retired_by,
+        )
+
+
+def _inserted_id(result) -> int:  # type: ignore[no-untyped-def]
+    key = result.inserted_primary_key
+    return int(key[0]) if key is not None else 0
+
+
+def _conforms_registry(x: HostRegistryStore) -> IWriteHostRegistry:
+    return x

@@ -84,12 +84,13 @@ class RunnerRegistryStore:
             self._lifecycle(conn, runner_id),
         )
 
-    def list_runners(self, *, include_retired: bool = False) -> list[RunnerRegistration]:
+    def list_runners(self, *, include_retired: bool = False, host_id: str | None = None) -> list[RunnerRegistration]:
         with self._store.read("list_runners") as conn:
+            query = self._store.select(s.runner_registrations)
+            if host_id is not None:
+                query = query.where(s.runner_registrations.c.host_id == host_id)
             rows = conn.execute(
-                self._store.select(s.runner_registrations).order_by(
-                    s.runner_registrations.c.added_at, s.runner_registrations.c.runner_id
-                )
+                query.order_by(s.runner_registrations.c.added_at, s.runner_registrations.c.runner_id)
             ).all()
             runner_ids = [row.runner_id for row in rows]
             lifecycle = self._lifecycle_many(conn, runner_ids)
@@ -180,6 +181,7 @@ class RunnerRegistryStore:
                     added_at=addition.at,
                     added_by=addition.by,
                     projects=_served_json(addition.served),
+                    host_id=addition.host_id,
                 )
             )
 
@@ -646,6 +648,7 @@ class RunnerRegistryStore:
             retired_at=as_utc(retired_at) if retired_at is not None else None,
             retired_by=retired_by,
             gates=tuple(json.loads(row.gates)) if row.gates else (),
+            host_id=row.host_id,
             served=tuple(
                 ServedEntry(entry=e["entry"], project_id=e.get("project_id"))
                 for e in (json.loads(row.projects) if row.projects else [])

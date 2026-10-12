@@ -52,6 +52,7 @@ class IdPrefix(StrEnum):
     DEPENDENCY_EDGE = "dep"  # a chunk_dependencies row
     CONFIG_APPLY = "apl"  # one declarative config apply — groups the change rows it writes
     RUNNER = "rn"  # a runner — minted with its bearer token when the runner is added; never changes
+    HOST = "hs"  # a host — minted with its bearer token when the host is added; never changes
     TENANT = "ten"  # a tenant — minted once, never reused; its name never stands in for it
     INVITATION = "inv"  # an invitation into one tenant
     PROJECT = "proj"  # a project — its slug and name never stand in for it

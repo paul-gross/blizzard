@@ -114,6 +114,9 @@ class RunnerAddRequest(BaseModel):
     #: The projects the runner serves, each by id or slug — ``None`` serves the tenant's project when it holds exactly
     #: one, and none otherwise; ``[]`` serves none. An entry naming no project is refused (422).
     projects: list[str] | None = None
+    #: The host the runner is added under — it stands under that host for good, until released. ``None`` adds a
+    #: runner that stands alone. An unknown or retired host is refused.
+    host_id: str | None = None
 
 
 class RunnerAddResponse(BaseModel):
@@ -249,6 +252,8 @@ class RunnerRegistryView(BaseModel):
     gates: list[str] = []
     # The projects the runner serves, as declared and resolved; empty when it serves none.
     projects: list[ServedProjectView] = []
+    # The host the runner stands under; `None` for a runner that stands alone.
+    host_id: str | None = None
 
 
 class RunnerRegistryListResponse(BaseModel):

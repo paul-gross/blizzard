@@ -191,6 +191,14 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     ("POST", "/api/runners/{runner_id}/retire"): Permission.RUNNER_RETIRE,
     ("POST", "/api/runners/{runner_id}/reinstate"): Permission.RUNNER_RETIRE,
     ("POST", "/api/runners/{runner_id}/token-revocations"): Permission.RUNNER_RETIRE,
+    ("POST", "/api/hosts"): Permission.RUNNER_RETIRE,
+    ("GET", "/api/hosts"): Permission.FLEET_VIEW,
+    ("GET", "/api/hosts/{host_id}"): Permission.FLEET_VIEW,
+    ("POST", "/api/hosts/{host_id}/adoptions"): Permission.RUNNER_RETIRE,
+    ("POST", "/api/hosts/{host_id}/releases"): Permission.RUNNER_RETIRE,
+    ("POST", "/api/hosts/{host_id}/enrollments"): Permission.RUNNER_RETIRE,
+    ("POST", "/api/hosts/{host_id}/token-revocations"): Permission.RUNNER_RETIRE,
+    ("POST", "/api/hosts/{host_id}/retire"): Permission.RUNNER_RETIRE,
     ("GET", "/api/spend"): Permission.FLEET_VIEW,
     ("GET", "/api/users"): Permission.USER_MANAGE,
     ("POST", "/api/users/{user_id}/role"): Permission.USER_MANAGE,
@@ -359,6 +367,15 @@ _ADMITTING: dict[tuple[str, str], Permission] = {
 #: refused in-domain with the paused-denial body older runners parse.
 _FLEET_CLAIM: tuple[str, str] = ("POST", "/api/fleet/routes")
 
+#: Host plane — the four ``/api/fleet/host*`` routes a host's bearer token reaches, and nothing else. Mounted on a
+#: router of their own, because the fleet router's runner-principal gate cannot be lifted per route.
+_HOST: set[tuple[str, str]] = {
+    ("POST", "/api/fleet/host"),
+    ("GET", "/api/fleet/host"),
+    ("POST", "/api/fleet/host/runners"),
+    ("POST", "/api/fleet/host/runners/{runner_id}/retire"),
+}
+
 
 def _api_routes(app: FastAPI) -> list[APIRoute]:
     """Every mounted :class:`APIRoute`, recursively unwrapped.
@@ -488,7 +505,7 @@ def test_every_live_route_is_classified(tmp_path: Path) -> None:
     app = build_hub(tmp_path).client.app
     assert isinstance(app, FastAPI)
     live = _live_routes(app)
-    classified = _PUBLIC | set(_HUMAN) | _FLEET | {_FLEET_CLAIM}
+    classified = _PUBLIC | set(_HUMAN) | _FLEET | _HOST | {_FLEET_CLAIM}
     unclassified = live - classified
     assert not unclassified, f"unclassified route(s): {sorted(unclassified)}"
 
@@ -499,7 +516,7 @@ def test_every_classified_route_is_still_live(tmp_path: Path) -> None:
     app = build_hub(tmp_path).client.app
     assert isinstance(app, FastAPI)
     live = _live_routes(app)
-    classified = _PUBLIC | set(_HUMAN) | _FLEET | {_FLEET_CLAIM}
+    classified = _PUBLIC | set(_HUMAN) | _FLEET | _HOST | {_FLEET_CLAIM}
     stale = classified - live
     assert not stale, f"table entry(ies) naming a route no longer mounted: {sorted(stale)}"
 
@@ -535,6 +552,25 @@ def test_fleet_routes_carry_the_runner_principal_gate_not_a_permission(tmp_path:
     assert "require_runner_principal_even_if_retired" in _dependency_names(claim)
     assert "require_runner_principal" not in _dependency_names(claim)
     assert _required_permission(claim) is None
+
+
+def test_host_routes_carry_the_host_principal_gate_and_never_the_runner_one(tmp_path: Path) -> None:
+    """Every route named **host** is gated by ``require_host_principal`` and by no runner principal or human
+    permission, so a runner's token resolves no host and a host's token resolves no runner."""
+    by_key = _routes_by_key(build_hub(tmp_path).client.app)
+    for key in _HOST:
+        route = by_key[key]
+        names = _dependency_names(route)
+        assert "require_host_principal" in names, key
+        assert "require_runner_principal" not in names, key
+        assert "require_runner_principal_even_if_retired" not in names, key
+        assert _required_permission(route) is None, key
+
+
+def test_no_other_fleet_route_accepts_the_host_principal(tmp_path: Path) -> None:
+    by_key = _routes_by_key(build_hub(tmp_path).client.app)
+    for key in _FLEET | {_FLEET_CLAIM}:
+        assert "require_host_principal" not in _dependency_names(by_key[key]), key
 
 
 def test_human_routes_resolve_their_tenant_unless_hub_level(tmp_path: Path) -> None:
@@ -586,7 +622,7 @@ def test_fleet_routes_resolve_their_tenant_and_public_routes_none(tmp_path: Path
     """A fleet route's tenant is its credential's, resolved at router level; a public route
     serves no tenant."""
     by_key = _routes_by_key(build_hub(tmp_path).client.app)
-    for key in _FLEET | {_FLEET_CLAIM}:
+    for key in _FLEET | _HOST | {_FLEET_CLAIM}:
         assert "tenant_bound" in _dependency_names(by_key[key]), key
     for key in _PUBLIC:
         assert "tenant_bound" not in _dependency_names(by_key[key]), key

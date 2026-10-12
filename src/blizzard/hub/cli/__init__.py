@@ -24,6 +24,7 @@ _COMMANDS = {
     "chunk": f"{_CLI}.chunk:chunk_group",
     "item": f"{_CLI}.item:item_group",
     "runner": f"{_CLI}.runner:runner_group",
+    "runner-host": f"{_CLI}.runner_host:runner_host_group",
     "graph": f"{_CLI}.graph:graph_group",
     "scope": f"{_CLI}.scope:scope_group",
     "secret": f"{_CLI}.secret:secret_group",

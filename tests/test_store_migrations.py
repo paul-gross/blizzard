@@ -1539,6 +1539,7 @@ _HISTORICAL_RESHAPES: list[tuple[str, str, str, tuple[str, ...]] | tuple[str, st
     ("hub", "20261008_1810_project_read_indexes", "runner_registrations", ("projects",)),
     ("hub", "20261011_1300_chunk_recorded_at_indexes", "delivery_repo_landed", ("repository_name",), "removed"),
     ("hub", "20261011_1300_chunk_recorded_at_indexes", "delivery_repo_landed", ("repository_id",)),
+    ("hub", "20261011_1300_chunk_recorded_at_indexes", "runner_registrations", ("host_id",)),
     # runner tree — instance 6
     (
         "runner",

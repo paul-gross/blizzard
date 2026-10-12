@@ -65,7 +65,15 @@ def runner_group() -> None:
     help="A project the runner serves, by id or slug (repeatable). Without it, the runner serves the tenant's "
     "project when the tenant holds one, and none when it holds several.",
 )
-def runner_add(cli: CliContext, name: str, projects: tuple[str, ...]) -> None:
+@click.option(
+    "--host",
+    "host_id",
+    default=None,
+    metavar="HOST_ID",
+    help="Add the runner under this host (an `hs_` id from `blizzard hub runner-host list`); refused when it is "
+    "unknown or retired.",
+)
+def runner_add(cli: CliContext, name: str, projects: tuple[str, ...], host_id: str | None) -> None:
     """Add a runner under NAME; prints its hub-minted id and bearer token exactly once.
 
     The runner stays never connected until it first registers with that token; from then on its
@@ -74,10 +82,20 @@ def runner_add(cli: CliContext, name: str, projects: tuple[str, ...]) -> None:
     request: dict[str, object] = {"name": name}
     if projects:
         request["projects"] = list(projects)
+    if host_id is not None:
+        request["host_id"] = host_id
     resp = cli.send("post", "/api/runners", json_body=request)
-    if resp.status_code in _PREDATES_ADD:
+    if resp.status_code in _PREDATES_ADD and host_id is None:
         raise click.ClickException(f"this hub ({cli.hub_url}) predates `hub runner add`")
-    cli.check(resp, "POST /runners", on_status={422: "a runner's name must not be blank"})
+    cli.check(
+        resp,
+        "POST /runners",
+        on_status={
+            404: f"unknown host {host_id}",
+            409: f"host {host_id} is retired",
+            422: "a runner's name must not be blank",
+        },
+    )
     body = resp.json()
     cli.show_lines(
         body,

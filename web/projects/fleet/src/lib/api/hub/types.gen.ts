@@ -4143,6 +4143,358 @@ export type HttpValidationError = {
 };
 
 /**
+ * HostAddRequest
+ *
+ * Add a host under a name unique among the tenant's live hosts. The hub mints the host's id and bearer token
+ * together; ``adopt`` places existing runners under it in the same write.
+ */
+export type HostAddRequest = {
+    /**
+     * Adopt
+     */
+    adopt?: Array<string>;
+    /**
+     * Name
+     */
+    name: string;
+};
+
+/**
+ * HostAddResponse
+ *
+ * The added host — its hub-minted id, its name, and its plaintext bearer token.
+ *
+ * ``token`` is visible only here, once — only its sha256 hash is kept. The host is added but never connected until
+ * it first reports with this token.
+ */
+export type HostAddResponse = {
+    /**
+     * Adopted
+     */
+    adopted?: Array<string>;
+    /**
+     * Host Id
+     */
+    host_id: string;
+    /**
+     * Host Name
+     */
+    host_name: string;
+    /**
+     * Token
+     */
+    token: string;
+};
+
+/**
+ * HostChangedPayload
+ */
+export type HostChangedPayload = {
+    /**
+     * By
+     */
+    by?: string | null;
+    /**
+     * Host Id
+     */
+    host_id: string;
+    /**
+     * Host Name
+     */
+    host_name?: string | null;
+    /**
+     * Key
+     */
+    key?: string | null;
+    /**
+     * Kind
+     */
+    kind: 'added' | 'reported' | 'adopted' | 'released' | 'token-enrolled' | 'token-revoked' | 'retired';
+};
+
+/**
+ * HostEnrollmentResponse
+ *
+ * A rotated bearer token for an existing host id.
+ *
+ * ``token`` is the plaintext, visible only here — only its sha256 hash is kept. The old token stops resolving the
+ * moment this response lands.
+ */
+export type HostEnrollmentResponse = {
+    /**
+     * Host Id
+     */
+    host_id: string;
+    /**
+     * Token
+     */
+    token: string;
+};
+
+/**
+ * HostLifecycleRequest
+ *
+ * Revoke a host's token — records who did it.
+ */
+export type HostLifecycleRequest = {
+    /**
+     * By
+     */
+    by?: string;
+};
+
+/**
+ * HostRecordResponse
+ *
+ * A host's own record: its id, tenant, held name, and the runners the hub holds under it that are not retired —
+ * a runner retired or released is one the host should halt.
+ */
+export type HostRecordResponse = {
+    /**
+     * Host Id
+     */
+    host_id: string;
+    /**
+     * Host Name
+     */
+    host_name: string;
+    /**
+     * Last Seen At
+     */
+    last_seen_at?: string | null;
+    /**
+     * Registered At
+     */
+    registered_at?: string | null;
+    /**
+     * Runners
+     */
+    runners?: Array<HostRunnerView>;
+    /**
+     * Tenant Id
+     */
+    tenant_id: string;
+};
+
+/**
+ * HostRegistryListResponse
+ *
+ * The host registry as operators list it — every added host, oldest first.
+ */
+export type HostRegistryListResponse = {
+    /**
+     * Hosts
+     */
+    hosts?: Array<HostRegistryView>;
+};
+
+/**
+ * HostRegistryView
+ *
+ * One host as an operator sees the registry — including one that has never connected.
+ */
+export type HostRegistryView = {
+    /**
+     * Added At
+     */
+    added_at: string;
+    /**
+     * Added By
+     */
+    added_by?: string | null;
+    connection: RunnerConnection;
+    /**
+     * Enrolled
+     */
+    enrolled: boolean;
+    /**
+     * Host Id
+     */
+    host_id: string;
+    /**
+     * Host Name
+     */
+    host_name: string;
+    /**
+     * Last Seen At
+     */
+    last_seen_at?: string | null;
+    /**
+     * Online
+     */
+    online: boolean;
+    /**
+     * Redirect Uris
+     */
+    redirect_uris?: Array<string>;
+    /**
+     * Registered At
+     */
+    registered_at?: string | null;
+    /**
+     * Retired
+     */
+    retired?: boolean;
+    /**
+     * Retired At
+     */
+    retired_at?: string | null;
+    /**
+     * Retired By
+     */
+    retired_by?: string | null;
+    /**
+     * Runner Ids
+     */
+    runner_ids?: Array<string>;
+    /**
+     * Subscriptions
+     */
+    subscriptions?: Array<RunnerSubscriptionDeclaration>;
+    /**
+     * Url
+     */
+    url?: string | null;
+    /**
+     * Workspaces
+     */
+    workspaces?: Array<HostWorkspace>;
+};
+
+/**
+ * HostReportRequest
+ *
+ * What the calling host reports about itself on every tick — the host its bearer token was issued to. The
+ * ``workspaces`` and ``subscriptions`` replace what the hub holds, whole. A report is never refused over its
+ * content: a ``name`` that is blank, or that another live host holds, leaves the held name.
+ */
+export type HostReportRequest = {
+    /**
+     * Name
+     */
+    name?: string | null;
+    /**
+     * Redirect Uris
+     */
+    redirect_uris?: Array<string>;
+    /**
+     * Subscriptions
+     */
+    subscriptions?: Array<RunnerSubscriptionDeclaration>;
+    /**
+     * Url
+     */
+    url?: string | null;
+    /**
+     * Workspaces
+     */
+    workspaces?: Array<HostWorkspace>;
+};
+
+/**
+ * HostRetireRequest
+ *
+ * Retire a host and every runner under it — ``force`` releases every chunk they still hold.
+ */
+export type HostRetireRequest = {
+    /**
+     * By
+     */
+    by?: string;
+    /**
+     * Force
+     */
+    force?: boolean;
+};
+
+/**
+ * HostRetireResponse
+ *
+ * The retired host, plus every chunk the retire released from the runners under it.
+ */
+export type HostRetireResponse = {
+    host: HostRegistryView;
+    /**
+     * Released Chunk Ids
+     */
+    released_chunk_ids?: Array<string>;
+};
+
+/**
+ * HostRunnerAddRequest
+ *
+ * Add a runner under the calling host, under an initial display name — as ``RunnerAddRequest`` adds one, with the
+ * host fixed to the caller. ``projects`` is what the runner serves until a registration declares otherwise.
+ */
+export type HostRunnerAddRequest = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Projects
+     */
+    projects?: Array<string> | null;
+};
+
+/**
+ * HostRunnerView
+ *
+ * One runner standing under a host.
+ */
+export type HostRunnerView = {
+    /**
+     * Runner Id
+     */
+    runner_id: string;
+    /**
+     * Runner Name
+     */
+    runner_name: string;
+};
+
+/**
+ * HostRunnersRequest
+ *
+ * Place runners under a host, or return them to standing alone — records who did it.
+ */
+export type HostRunnersRequest = {
+    /**
+     * By
+     */
+    by?: string;
+    /**
+     * Runner Ids
+     */
+    runner_ids: Array<string>;
+};
+
+/**
+ * HostTokenRevocationResponse
+ *
+ * The host after its token was revoked — still added, now unenrolled.
+ */
+export type HostTokenRevocationResponse = {
+    host: HostRegistryView;
+};
+
+/**
+ * HostWorkspace
+ *
+ * One workspace a host reports: its id and how many environments it holds, ``None`` when it reports none.
+ */
+export type HostWorkspace = {
+    /**
+     * Env Capacity
+     */
+    env_capacity?: number | null;
+    /**
+     * Workspace Id
+     */
+    workspace_id: string;
+};
+
+/**
  * HubAdminView
  *
  * One hub administrator.
@@ -4211,6 +4563,7 @@ export const HubEventType = {
     DECISION_RESOLVED: 'decision-resolved',
     QUEUE_CHANGED: 'queue-changed',
     RUNNER_CHANGED: 'runner-changed',
+    HOST_CHANGED: 'host-changed',
     EVENT_LOGGED: 'event-logged'
 } as const;
 
@@ -4321,6 +4674,7 @@ export const IdPrefix = {
     DEP: 'dep',
     APL: 'apl',
     RN: 'rn',
+    HS: 'hs',
     TEN: 'ten',
     INV: 'inv',
     PROJ: 'proj',
@@ -6477,6 +6831,10 @@ export type RunRowView = {
  */
 export type RunnerAddRequest = {
     /**
+     * Host Id
+     */
+    host_id?: string | null;
+    /**
      * Name
      */
     name: string;
@@ -6891,6 +7249,10 @@ export type RunnerRegistryView = {
      * Gates
      */
     gates?: Array<string>;
+    /**
+     * Host Id
+     */
+    host_id?: string | null;
     /**
      * Hub Paused
      */
@@ -12438,6 +12800,102 @@ export type IngestRunnerFactsApiFleetEventsPostResponses = {
 
 export type IngestRunnerFactsApiFleetEventsPostResponse = IngestRunnerFactsApiFleetEventsPostResponses[keyof IngestRunnerFactsApiFleetEventsPostResponses];
 
+export type GetHostRecordApiFleetHostGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/fleet/host';
+};
+
+export type GetHostRecordApiFleetHostGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: HostRecordResponse;
+};
+
+export type GetHostRecordApiFleetHostGetResponse = GetHostRecordApiFleetHostGetResponses[keyof GetHostRecordApiFleetHostGetResponses];
+
+export type ReportHostApiFleetHostPostData = {
+    body: HostReportRequest;
+    path?: never;
+    query?: never;
+    url: '/api/fleet/host';
+};
+
+export type ReportHostApiFleetHostPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReportHostApiFleetHostPostError = ReportHostApiFleetHostPostErrors[keyof ReportHostApiFleetHostPostErrors];
+
+export type ReportHostApiFleetHostPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: HostRecordResponse;
+};
+
+export type ReportHostApiFleetHostPostResponse = ReportHostApiFleetHostPostResponses[keyof ReportHostApiFleetHostPostResponses];
+
+export type AddHostRunnerApiFleetHostRunnersPostData = {
+    body: HostRunnerAddRequest;
+    path?: never;
+    query?: never;
+    url: '/api/fleet/host/runners';
+};
+
+export type AddHostRunnerApiFleetHostRunnersPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AddHostRunnerApiFleetHostRunnersPostError = AddHostRunnerApiFleetHostRunnersPostErrors[keyof AddHostRunnerApiFleetHostRunnersPostErrors];
+
+export type AddHostRunnerApiFleetHostRunnersPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: RunnerAddResponse;
+};
+
+export type AddHostRunnerApiFleetHostRunnersPostResponse = AddHostRunnerApiFleetHostRunnersPostResponses[keyof AddHostRunnerApiFleetHostRunnersPostResponses];
+
+export type RetireHostRunnerApiFleetHostRunnersRunnerIdRetirePostData = {
+    body: RunnerRetireRequest;
+    path: {
+        /**
+         * Runner Id
+         */
+        runner_id: string;
+    };
+    query?: never;
+    url: '/api/fleet/host/runners/{runner_id}/retire';
+};
+
+export type RetireHostRunnerApiFleetHostRunnersRunnerIdRetirePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RetireHostRunnerApiFleetHostRunnersRunnerIdRetirePostError = RetireHostRunnerApiFleetHostRunnersRunnerIdRetirePostErrors[keyof RetireHostRunnerApiFleetHostRunnersRunnerIdRetirePostErrors];
+
+export type RetireHostRunnerApiFleetHostRunnersRunnerIdRetirePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: RunnerRetireResponse;
+};
+
+export type RetireHostRunnerApiFleetHostRunnersRunnerIdRetirePostResponse = RetireHostRunnerApiFleetHostRunnersRunnerIdRetirePostResponses[keyof RetireHostRunnerApiFleetHostRunnersRunnerIdRetirePostResponses];
+
 export type GetRunnerIdentityApiFleetIdentityGetData = {
     body?: never;
     path?: never;
@@ -13254,6 +13712,241 @@ export type HealthApiHealthGetResponses = {
 };
 
 export type HealthApiHealthGetResponse = HealthApiHealthGetResponses[keyof HealthApiHealthGetResponses];
+
+export type ListHostsApiHostsGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Include Retired
+         */
+        include_retired?: boolean;
+    };
+    url: '/api/hosts';
+};
+
+export type ListHostsApiHostsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListHostsApiHostsGetError = ListHostsApiHostsGetErrors[keyof ListHostsApiHostsGetErrors];
+
+export type ListHostsApiHostsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: HostRegistryListResponse;
+};
+
+export type ListHostsApiHostsGetResponse = ListHostsApiHostsGetResponses[keyof ListHostsApiHostsGetResponses];
+
+export type AddHostApiHostsPostData = {
+    body: HostAddRequest;
+    path?: never;
+    query?: never;
+    url: '/api/hosts';
+};
+
+export type AddHostApiHostsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AddHostApiHostsPostError = AddHostApiHostsPostErrors[keyof AddHostApiHostsPostErrors];
+
+export type AddHostApiHostsPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: HostAddResponse;
+};
+
+export type AddHostApiHostsPostResponse = AddHostApiHostsPostResponses[keyof AddHostApiHostsPostResponses];
+
+export type GetHostApiHostsHostIdGetData = {
+    body?: never;
+    path: {
+        /**
+         * Host Id
+         */
+        host_id: string;
+    };
+    query?: never;
+    url: '/api/hosts/{host_id}';
+};
+
+export type GetHostApiHostsHostIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetHostApiHostsHostIdGetError = GetHostApiHostsHostIdGetErrors[keyof GetHostApiHostsHostIdGetErrors];
+
+export type GetHostApiHostsHostIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: HostRegistryView;
+};
+
+export type GetHostApiHostsHostIdGetResponse = GetHostApiHostsHostIdGetResponses[keyof GetHostApiHostsHostIdGetResponses];
+
+export type AdoptRunnersApiHostsHostIdAdoptionsPostData = {
+    body: HostRunnersRequest;
+    path: {
+        /**
+         * Host Id
+         */
+        host_id: string;
+    };
+    query?: never;
+    url: '/api/hosts/{host_id}/adoptions';
+};
+
+export type AdoptRunnersApiHostsHostIdAdoptionsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AdoptRunnersApiHostsHostIdAdoptionsPostError = AdoptRunnersApiHostsHostIdAdoptionsPostErrors[keyof AdoptRunnersApiHostsHostIdAdoptionsPostErrors];
+
+export type AdoptRunnersApiHostsHostIdAdoptionsPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: HostRegistryView;
+};
+
+export type AdoptRunnersApiHostsHostIdAdoptionsPostResponse = AdoptRunnersApiHostsHostIdAdoptionsPostResponses[keyof AdoptRunnersApiHostsHostIdAdoptionsPostResponses];
+
+export type EnrollHostApiHostsHostIdEnrollmentsPostData = {
+    body?: never;
+    path: {
+        /**
+         * Host Id
+         */
+        host_id: string;
+    };
+    query?: never;
+    url: '/api/hosts/{host_id}/enrollments';
+};
+
+export type EnrollHostApiHostsHostIdEnrollmentsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type EnrollHostApiHostsHostIdEnrollmentsPostError = EnrollHostApiHostsHostIdEnrollmentsPostErrors[keyof EnrollHostApiHostsHostIdEnrollmentsPostErrors];
+
+export type EnrollHostApiHostsHostIdEnrollmentsPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: HostEnrollmentResponse;
+};
+
+export type EnrollHostApiHostsHostIdEnrollmentsPostResponse = EnrollHostApiHostsHostIdEnrollmentsPostResponses[keyof EnrollHostApiHostsHostIdEnrollmentsPostResponses];
+
+export type ReleaseRunnersApiHostsHostIdReleasesPostData = {
+    body: HostRunnersRequest;
+    path: {
+        /**
+         * Host Id
+         */
+        host_id: string;
+    };
+    query?: never;
+    url: '/api/hosts/{host_id}/releases';
+};
+
+export type ReleaseRunnersApiHostsHostIdReleasesPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReleaseRunnersApiHostsHostIdReleasesPostError = ReleaseRunnersApiHostsHostIdReleasesPostErrors[keyof ReleaseRunnersApiHostsHostIdReleasesPostErrors];
+
+export type ReleaseRunnersApiHostsHostIdReleasesPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: HostRegistryView;
+};
+
+export type ReleaseRunnersApiHostsHostIdReleasesPostResponse = ReleaseRunnersApiHostsHostIdReleasesPostResponses[keyof ReleaseRunnersApiHostsHostIdReleasesPostResponses];
+
+export type RetireHostApiHostsHostIdRetirePostData = {
+    body: HostRetireRequest;
+    path: {
+        /**
+         * Host Id
+         */
+        host_id: string;
+    };
+    query?: never;
+    url: '/api/hosts/{host_id}/retire';
+};
+
+export type RetireHostApiHostsHostIdRetirePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RetireHostApiHostsHostIdRetirePostError = RetireHostApiHostsHostIdRetirePostErrors[keyof RetireHostApiHostsHostIdRetirePostErrors];
+
+export type RetireHostApiHostsHostIdRetirePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: HostRetireResponse;
+};
+
+export type RetireHostApiHostsHostIdRetirePostResponse = RetireHostApiHostsHostIdRetirePostResponses[keyof RetireHostApiHostsHostIdRetirePostResponses];
+
+export type RevokeHostTokenApiHostsHostIdTokenRevocationsPostData = {
+    body: HostLifecycleRequest;
+    path: {
+        /**
+         * Host Id
+         */
+        host_id: string;
+    };
+    query?: never;
+    url: '/api/hosts/{host_id}/token-revocations';
+};
+
+export type RevokeHostTokenApiHostsHostIdTokenRevocationsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RevokeHostTokenApiHostsHostIdTokenRevocationsPostError = RevokeHostTokenApiHostsHostIdTokenRevocationsPostErrors[keyof RevokeHostTokenApiHostsHostIdTokenRevocationsPostErrors];
+
+export type RevokeHostTokenApiHostsHostIdTokenRevocationsPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: HostTokenRevocationResponse;
+};
+
+export type RevokeHostTokenApiHostsHostIdTokenRevocationsPostResponse = RevokeHostTokenApiHostsHostIdTokenRevocationsPostResponses[keyof RevokeHostTokenApiHostsHostIdTokenRevocationsPostResponses];
 
 export type ListInvitationsApiInvitationsGetData = {
     body?: never;
