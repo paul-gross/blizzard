@@ -11,7 +11,13 @@ from datetime import UTC, datetime
 import httpx
 import pytest
 
-from blizzard.hub.domain.config.repositories import ConfiguredRepository, RepositoryFields
+from blizzard.hub.domain.config.repositories import (
+    ConfiguredRepository,
+    RepositoryFields,
+    RepositoryId,
+    RepositorySlug,
+    resolve_repository_reference,
+)
 from blizzard.hub.domain.config.secrets import SecretName, SecretNotFound, SecretValue
 from blizzard.hub.domain.garden.delivery.validation import CommitResolution, CommitResolver
 from blizzard.hub.domain.projects.links import RepositoryLink
@@ -97,11 +103,20 @@ class _Records:
     def __init__(self, rows: list[ConfiguredRepository]) -> None:
         self.rows = rows
 
-    def get(self, name: str) -> ConfiguredRepository | None:
-        return next((row for row in self.rows if row.name == name), None)
+    def get(self, repository_id: RepositoryId) -> ConfiguredRepository | None:
+        return next((row for row in self.rows if row.repository_id == repository_id), None)
 
-    def get_many(self, names: list[str]) -> dict[str, ConfiguredRepository]:
-        return {row.name: row for row in self.rows if row.name in names}
+    def get_many(self, repository_ids: list[RepositoryId]) -> dict[RepositoryId, ConfiguredRepository]:
+        return {row.repository_id: row for row in self.rows if row.repository_id in repository_ids}
+
+    def get_by_slug(self, slug: RepositorySlug) -> ConfiguredRepository | None:
+        return next((row for row in self.rows if row.slug == slug.value), None)
+
+    def get_by_former_slug(self, slug: RepositorySlug) -> ConfiguredRepository | None:
+        return None
+
+    def resolve(self, value: str) -> ConfiguredRepository | None:
+        return resolve_repository_reference(value, self)
 
     def list_all(self, *, include_retired: bool) -> list[ConfiguredRepository]:
         return [row for row in self.rows if include_retired or not row.retired]
@@ -119,6 +134,8 @@ class _Secrets:
 
 def _row(name: str, *, owner: str = _OWNER, forge: str = _FORGE_URL, secret: str = "tok", retired: bool = False):  # type: ignore[no-untyped-def]
     return ConfiguredRepository(
+        repository_id=RepositoryId(f"repo_{name}"),
+        slug=name,
         name=name,
         fields=RepositoryFields(forge_api_url=forge, owner=owner, repo=name, base_branch="master", secret_name=secret),
         revision=1,
@@ -137,7 +154,10 @@ class _Links:
 
     def repositories_of(self, project_id: ProjectId) -> list[RepositoryLink]:
         names = sorted(self.linked.get(project_id, set()))
-        return [RepositoryLink(project_id=project_id, repository_name=name, revision=1) for name in names]
+        return [
+            RepositoryLink(project_id=project_id, repository_id=RepositoryId(f"repo_{name}"), revision=1)
+            for name in names
+        ]
 
 
 _PROJECT = ProjectId("widgets")
@@ -149,7 +169,7 @@ def _bound(rows, values, handler, *, linked: set[str] | None = None) -> CommitRe
         repositories=_Records(rows),
         secrets=_Secrets(values),
         forge=GitHubCommitResolver(_client(handler)),
-        links=_Links({_PROJECT: linked if linked is not None else {row.name for row in rows}}),  # type: ignore[arg-type]
+        links=_Links({_PROJECT: linked if linked is not None else {row.slug for row in rows}}),  # type: ignore[arg-type]
     ).for_project(_PROJECT)
 
 

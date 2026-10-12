@@ -1,6 +1,6 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import {
   asyncState,
   errorMessage,
@@ -12,13 +12,14 @@ import {
 import { map } from 'rxjs';
 
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
+import { ProjectLens } from '../../core/project-lens';
 import { injectRepositoryLifecycleMutation, injectEditRepositoryMutation } from './repositories.mutations';
 import { type ConfigFailure, configActions, failureFor } from '../config-actions.model';
 import { type ConfigFormValues, configEdit, shownFormValues } from '../config-edit.model';
 import { injectActorName } from '../actor-names';
 import { ConfigFormDialog } from '../config-form-dialog';
 import { detailCliCommand } from '../config-cli.model';
-import { historyRecordKey, lastChange, revisionRows } from '../config-history.model';
+import { lastChange, revisionRows } from '../config-history.model';
 import { injectConfigHistoryQuery } from '../config-history.query';
 import { ConfigRecordPanel } from '../config-record-panel';
 import { REPOSITORY_FIELDS, repositoryRecordVm } from './repositories.model';
@@ -38,6 +39,8 @@ import { injectRepositoryQuery } from './repositories.query';
 })
 export class RepositoryDetail {
   private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
+  private readonly lens = inject(ProjectLens);
   private readonly viewport = inject(ViewportService);
 
   private readonly key = toSignal(this.route.paramMap.pipe(map((params) => params.get('key'))), {
@@ -45,7 +48,7 @@ export class RepositoryDetail {
   });
   private readonly repositoryQuery = injectRepositoryQuery(() => this.key());
   private readonly historyQuery = injectConfigHistoryQuery(RecordKind.REPOSITORY, () =>
-    historyRecordKey(this.repositoryQuery.data()),
+    this.repositoryQuery.data()?.repository_id ?? null,
   );
 
   protected readonly vm = computed(() => repositoryRecordVm(this.repositoryQuery.data()));
@@ -59,7 +62,7 @@ export class RepositoryDetail {
     asyncState(this.historyQuery, this.revisions().length === 0),
   );
   protected readonly cliCommand = computed(() =>
-    detailCliCommand(this.viewport.mode(), RecordKind.REPOSITORY, this.repositoryQuery.data()),
+    detailCliCommand(this.viewport.mode(), RecordKind.REPOSITORY, this.repositoryQuery.data()?.slug),
   );
 
   private readonly meQuery = injectMeQuery();
@@ -79,6 +82,20 @@ export class RepositoryDetail {
   protected readonly busy = computed(() => this.pendingKey() !== null && this.pendingKey() === this.key());
   protected readonly actionError = computed(() => failureFor(this.failure(), this.key()));
 
+  constructor() {
+    // A slug or former slug in the URL opens the repository; the URL then names it by id.
+    effect(() => {
+      const repository = this.repositoryQuery.data();
+      const key = this.key();
+      if (repository && key !== null && key !== repository.repository_id) {
+        void this.router.navigate(this.lens.link(['/admin', 'repositories', repository.repository_id]), {
+          replaceUrl: true,
+          queryParamsHandling: 'preserve',
+        });
+      }
+    });
+  }
+
   protected onEdit(): void {
     this.editError.set(null);
     this.editOpen.set(true);
@@ -91,7 +108,7 @@ export class RepositoryDetail {
     this.editError.set(null);
     this.editMutation.mutate(
       {
-        name: record.name,
+        repositoryId: record.repository_id,
         revision: record.revision,
         body: configEdit(this.fields, shown, values).body,
       },
@@ -105,18 +122,18 @@ export class RepositoryDetail {
   protected onLifecycle(verb: 'retire' | 'enable'): void {
     const record = this.repositoryQuery.data();
     if (!record || record.revision == null) return;
-    this.pendingKey.set(record.name);
+    this.pendingKey.set(record.repository_id);
     this.failure.set(null);
     this.lifecycleMutation.mutate(
       {
-        name: record.name,
+        repositoryId: record.repository_id,
         revision: record.revision,
         retired: verb === 'retire',
       },
       {
         onError: (error) =>
           this.failure.set({
-            key: record.name,
+            key: record.repository_id,
             message: errorMessage(error, `${verb} failed.`),
           }),
         onSettled: () => this.pendingKey.set(null),

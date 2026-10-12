@@ -78,16 +78,19 @@ class SourceLinksView(BaseModel):
 
 
 class RepositoryLinkView(BaseModel):
-    """A project's link to a repository, named ``name``. ``linked`` is false once the link is retired (unlinked)."""
+    """A project's link to a repository, by the repository's ``repository_id``, with its current ``slug`` and ``name``.
+    ``linked`` is false once the link is retired (unlinked)."""
 
     project_id: str
+    repository_id: str
+    slug: str
     name: str
     linked: bool
     revision: int
 
 
 class RepositoryLinksView(BaseModel):
-    """A project's standing repository links by repository name — ``GET /api/projects/{project}/repository-links``."""
+    """A project's standing repository links by repository id — ``GET /api/projects/{project}/repository-links``."""
 
     repository_links: list[RepositoryLinkView] = []
 

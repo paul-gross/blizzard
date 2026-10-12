@@ -36,7 +36,7 @@ describe('repository mutations', () => {
     const mutation = TestBed.runInInjectionContext(() => injectEditRepositoryMutation());
 
     await mutation.mutateAsync({
-      name: 'a',
+      repositoryId: 'a',
       revision: 3,
       body: { owner: null },
     });
@@ -51,8 +51,8 @@ describe('repository mutations', () => {
   it('routes retire and enable by the desired state, each sending If-Match', async () => {
     const mutation = TestBed.runInInjectionContext(() => injectRepositoryLifecycleMutation());
 
-    await mutation.mutateAsync({ name: 'a', revision: 2, retired: true });
-    await mutation.mutateAsync({ name: 'a', revision: 3, retired: false });
+    await mutation.mutateAsync({ repositoryId: 'a', revision: 2, retired: true });
+    await mutation.mutateAsync({ repositoryId: 'a', revision: 3, retired: false });
 
     expect(stub.forRoute('/api/repositories/a/retire', 'POST')[0].headers['if-match']).toBe('2');
     expect(stub.forRoute('/api/repositories/a/enable', 'POST')[0].headers['if-match']).toBe('3');
@@ -63,7 +63,7 @@ describe('repository mutations', () => {
     const mutation = TestBed.runInInjectionContext(() => injectCreateRepositoryMutation());
 
     await mutation.mutateAsync({
-      name: 'a',
+      slug: 'a',
       owner: 'o',
       repo: 'r',
       base_branch: 'main',

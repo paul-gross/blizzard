@@ -3246,6 +3246,17 @@
             "title": "Record Kind",
             "type": "string"
           },
+          "record_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Record Label"
+          },
           "recorded_at": {
             "title": "Recorded At",
             "type": "string"
@@ -6905,7 +6916,8 @@
           "rn",
           "ten",
           "inv",
-          "proj"
+          "proj",
+          "repo"
         ],
         "title": "IdPrefix",
         "type": "string"
@@ -7991,7 +8003,7 @@
       },
       "ProjectDocument": {
         "additionalProperties": false,
-        "description": "A project as a document entry, named by its slug. A ``name`` or ``description`` the entry omits is left as\nstored; a project the document creates needs a ``name``. A ``sources`` or ``repositories`` list the entry states\nis the project's whole set of links of that kind \u2014 a name it leaves out is unlinked; a list it omits is left\nas stored. A slug a project left is refused: name that project by its current slug.",
+        "description": "A project as a document entry, named by its slug. A ``name`` or ``description`` the entry omits is left as\nstored; a project the document creates needs a ``name``. A ``sources`` or ``repositories`` list the entry states\nis the project's whole set of links of that kind \u2014 a source it leaves out is unlinked; a list it omits is left\nas stored. A repository is named by its id or its slug, a slug it left included. A slug a project left is refused:\nname that project by its current slug.",
         "properties": {
           "description": {
             "default": "",
@@ -8790,7 +8802,7 @@
         "type": "object"
       },
       "RecordKind": {
-        "description": "The kind of configured record a change row names. A project's ``record_key`` is its id, never its slug; a\nproject link's is the linked source's or repository's name. Linking, unlinking and re-linking are ``create``,\n``retire`` and ``enable``.",
+        "description": "The kind of configured record a change row names. A project's and a repository's ``record_key`` is its id,\nnever its slug; a project link's is the linked source's name or repository's id. Linking, unlinking and re-linking\nare ``create``, ``retire`` and ``enable``.",
         "enum": [
           "work_source",
           "secret",
@@ -8805,7 +8817,7 @@
         "type": "string"
       },
       "RecordRefView": {
-        "description": "A configured record named by kind and key.",
+        "description": "A configured record named by kind and key. ``label`` is the record's current slug for a slugged kind, whose\nkey is its id; ``None`` for a kind keyed by its name.",
         "properties": {
           "key": {
             "title": "Key",
@@ -8814,6 +8826,17 @@
           "kind": {
             "title": "Kind",
             "type": "string"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
           }
         },
         "required": [
@@ -8840,7 +8863,7 @@
       },
       "RepositoryDocument": {
         "additionalProperties": false,
-        "description": "A repository as a document \u2014 the create body, and the model whose JSON Schema\n``GET /api/config/schema/repositories`` serves. ``secret_name`` names a stored secret.",
+        "description": "A repository as a document \u2014 the create body, and the model whose JSON Schema\n``GET /api/config/schema/repositories`` serves. ``slug`` names the repository and ``name`` is its display label \u2014\nthe slug when omitted on create, left as stored on an edit. ``secret_name`` names a stored secret.",
         "properties": {
           "base_branch": {
             "title": "Base Branch",
@@ -8851,8 +8874,15 @@
             "type": "string"
           },
           "name": {
-            "title": "Name",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
           },
           "owner": {
             "title": "Owner",
@@ -8865,10 +8895,14 @@
           "secret_name": {
             "title": "Secret Name",
             "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
           }
         },
         "required": [
-          "name",
+          "slug",
           "forge_api_url",
           "owner",
           "repo",
@@ -8879,7 +8913,7 @@
         "type": "object"
       },
       "RepositoryLinkView": {
-        "description": "A project's link to a repository, named ``name``. ``linked`` is false once the link is retired (unlinked).",
+        "description": "A project's link to a repository, by the repository's ``repository_id``, with its current ``slug`` and ``name``.\n``linked`` is false once the link is retired (unlinked).",
         "properties": {
           "linked": {
             "title": "Linked",
@@ -8893,13 +8927,23 @@
             "title": "Project Id",
             "type": "string"
           },
+          "repository_id": {
+            "title": "Repository Id",
+            "type": "string"
+          },
           "revision": {
             "title": "Revision",
             "type": "integer"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
           }
         },
         "required": [
           "project_id",
+          "repository_id",
+          "slug",
           "name",
           "linked",
           "revision"
@@ -8908,7 +8952,7 @@
         "type": "object"
       },
       "RepositoryLinksView": {
-        "description": "A project's standing repository links by repository name \u2014 ``GET /api/projects/{project}/repository-links``.",
+        "description": "A project's standing repository links by repository id \u2014 ``GET /api/projects/{project}/repository-links``.",
         "properties": {
           "repository_links": {
             "default": [],
@@ -8924,7 +8968,7 @@
       },
       "RepositoryPatchRequest": {
         "additionalProperties": false,
-        "description": "A sparse edit: an absent field is unchanged, a present one is set, and an explicit\n``null`` is refused on every field. ``name`` is immutable, so a body carrying it is refused.",
+        "description": "A sparse edit: an absent field is unchanged, a present one is set, and an explicit\n``null`` is refused on every field. A slug that changes keeps resolving to the repository until another claims\nit.",
         "properties": {
           "base_branch": {
             "anyOf": [
@@ -8947,6 +8991,17 @@
               }
             ],
             "title": "Forge Api Url"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
           },
           "owner": {
             "anyOf": [
@@ -8980,13 +9035,24 @@
               }
             ],
             "title": "Secret Name"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug"
           }
         },
         "title": "RepositoryPatchRequest",
         "type": "object"
       },
       "RepositorySummary": {
-        "description": "One repository \u2014 the ``GET /api/repositories`` listing row and every record verb's view.",
+        "description": "One repository \u2014 the ``GET /api/repositories`` listing row and every record verb's view. ``repository_id`` is\nwhat every stored reference holds; ``slug`` is the handle people type, and ``name`` a display label.",
         "properties": {
           "base_branch": {
             "title": "Base Branch",
@@ -9016,6 +9082,10 @@
             "title": "Repo",
             "type": "string"
           },
+          "repository_id": {
+            "title": "Repository Id",
+            "type": "string"
+          },
           "retired": {
             "default": false,
             "title": "Retired",
@@ -9028,9 +9098,15 @@
           "secret_name": {
             "title": "Secret Name",
             "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
           }
         },
         "required": [
+          "repository_id",
+          "slug",
           "name",
           "forge_api_url",
           "owner",
@@ -18642,7 +18718,7 @@
     },
     "/api/config/changes": {
       "get": {
-        "description": "The change log newest-first, keyset-paged on `id`: pass the page's `next_before` as\n`before` for the next. Optionally narrowed to one `record_kind` and `record_key`, and to the\nchanges concerning one `project` (its id or slug; 422 when the tenant holds no such project).",
+        "description": "The change log newest-first, keyset-paged on `id`: pass the page's `next_before` as\n`before` for the next. Optionally narrowed to one `record_kind` and `record_key` \u2014 for a project or a repository\nthe record's id or slug \u2014 and to the changes concerning one `project` (its id or slug; 422 when the tenant holds\nno such project).",
         "operationId": "list_changes_api_config_changes_get",
         "parameters": [
           {
@@ -22946,7 +23022,7 @@
     },
     "/api/projects/{project}/repository-links": {
       "get": {
-        "description": "The project's standing repository links by repository name. 404 when the project is unknown.",
+        "description": "The project's standing repository links by repository id. 404 when the project is unknown.",
         "operationId": "list_repository_links_api_projects__project__repository_links_get",
         "parameters": [
           {
@@ -22994,19 +23070,19 @@
         "parameters": [
           {
             "in": "path",
-            "name": "repository",
+            "name": "project",
             "required": true,
             "schema": {
-              "title": "Repository",
+              "title": "Project",
               "type": "string"
             }
           },
           {
             "in": "path",
-            "name": "project",
+            "name": "repository",
             "required": true,
             "schema": {
-              "title": "Project",
+              "title": "Repository",
               "type": "string"
             }
           },
@@ -23078,19 +23154,19 @@
         "parameters": [
           {
             "in": "path",
-            "name": "repository",
+            "name": "project",
             "required": true,
             "schema": {
-              "title": "Repository",
+              "title": "Project",
               "type": "string"
             }
           },
           {
             "in": "path",
-            "name": "project",
+            "name": "repository",
             "required": true,
             "schema": {
-              "title": "Project",
+              "title": "Repository",
               "type": "string"
             }
           },
@@ -24429,7 +24505,7 @@
     },
     "/api/repositories": {
       "get": {
-        "description": "Every stored repository by name, retired ones hidden unless `include_retired`.",
+        "description": "Every stored repository by slug, retired ones hidden unless `include_retired`.",
         "operationId": "list_repositories_api_repositories_get",
         "parameters": [
           {
@@ -24471,7 +24547,7 @@
         ]
       },
       "post": {
-        "description": "Store a new repository at revision 1. 422 naming the field for a blank field, a\nnon-http(s) `forge_api_url`, or a missing or retired secret; 409 for a taken name or a\ntaken `(forge_api_url, owner, repo)`, naming the holder.",
+        "description": "Store a new repository at revision 1; its `name` is its `slug` when omitted. 422 naming the field for a\nmalformed `slug` or `name`, a blank field, a non-http(s) `forge_api_url`, or a missing or retired secret; 409 for\na slug some repository holds or a taken `(forge_api_url, owner, repo)`, naming the holder.",
         "operationId": "create_repository_api_repositories_post",
         "parameters": [
           {
@@ -24529,17 +24605,17 @@
         ]
       }
     },
-    "/api/repositories/{name}": {
+    "/api/repositories/{repository}": {
       "get": {
-        "description": "One repository, retired or not. 404 on an unknown name.",
-        "operationId": "get_repository_api_repositories__name__get",
+        "description": "One repository by id or slug \u2014 a slug it left included \u2014 retired or not. 404 on an unknown repository.",
+        "operationId": "get_repository_api_repositories__repository__get",
         "parameters": [
           {
             "in": "path",
-            "name": "name",
+            "name": "repository",
             "required": true,
             "schema": {
-              "title": "Name",
+              "title": "Repository",
               "type": "string"
             }
           }
@@ -24572,15 +24648,15 @@
         ]
       },
       "patch": {
-        "description": "Apply only the fields present; an explicit `null` is refused naming the field. A patch\nthat changes nothing writes nothing. 404 unknown; 409 for a stale `If-Match` (naming the\ncurrent revision) or a taken `(forge_api_url, owner, repo)`; 422 naming the field.",
-        "operationId": "patch_repository_api_repositories__name__patch",
+        "description": "Apply only the fields present; an explicit `null` is refused naming the field. A patch\nthat changes nothing writes nothing. A slug that changes keeps resolving to the repository until another claims\nit. 404 unknown; 409 for a stale `If-Match` (naming the current revision), a slug some repository holds, or a\ntaken `(forge_api_url, owner, repo)`; 422 naming the field.",
+        "operationId": "patch_repository_api_repositories__repository__patch",
         "parameters": [
           {
             "in": "path",
-            "name": "name",
+            "name": "repository",
             "required": true,
             "schema": {
-              "title": "Name",
+              "title": "Repository",
               "type": "string"
             }
           },
@@ -24655,17 +24731,17 @@
         ]
       }
     },
-    "/api/repositories/{name}/enable": {
+    "/api/repositories/{repository}/enable": {
       "post": {
         "description": "Re-enable a retired repository; enabling an active one changes nothing. 404 unknown,\n409 for a stale `If-Match`, 422 when its secret has since been retired.",
-        "operationId": "enable_repository_api_repositories__name__enable_post",
+        "operationId": "enable_repository_api_repositories__repository__enable_post",
         "parameters": [
           {
             "in": "path",
-            "name": "name",
+            "name": "repository",
             "required": true,
             "schema": {
-              "title": "Name",
+              "title": "Repository",
               "type": "string"
             }
           },
@@ -24730,17 +24806,17 @@
         ]
       }
     },
-    "/api/repositories/{name}/retire": {
+    "/api/repositories/{repository}/retire": {
       "post": {
         "description": "Retire a repository \u2014 a reversible brake that keeps its coordinate claim. Retiring a\nretired repository changes nothing. 404 unknown, 409 for a stale `If-Match`.",
-        "operationId": "retire_repository_api_repositories__name__retire_post",
+        "operationId": "retire_repository_api_repositories__repository__retire_post",
         "parameters": [
           {
             "in": "path",
-            "name": "name",
+            "name": "repository",
             "required": true,
             "schema": {
-              "title": "Name",
+              "title": "Repository",
               "type": "string"
             }
           },

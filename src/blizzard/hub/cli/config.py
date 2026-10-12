@@ -16,7 +16,7 @@ from blizzard.hub.cli.project_option import project_option, project_query
 from blizzard.hub.cli.views import Listing
 from blizzard.hub.documents.codec import accepted_extensions, codec_for_path
 
-_KINDS = click.Choice(["work_source", "repository", "secret", "scope", "routine"])
+_KINDS = click.Choice(["work_source", "repository", "secret", "scope", "routine", "project"])
 
 
 class ChangeListing(Listing):
@@ -25,9 +25,10 @@ class ChangeListing(Listing):
     def line(self, row: Any) -> str:
         fields = ",".join(d["field"] for d in row["diff"])
         tail = f"  {fields}" if fields else ""
+        record = row.get("record_label") or row["record_key"]
         return (
             f"#{row['id']}  {row['recorded_at']}  {row['actor']}  {row['door']}  "
-            f"{row['record_kind']} {row['record_key']}  r{row['revision']}  {row['op']}{tail}"
+            f"{row['record_kind']} {record}  r{row['revision']}  {row['op']}{tail}"
         )
 
 
@@ -68,7 +69,12 @@ def config_group() -> None:
 
 @config_group.command("changes", cls=FleetCommand)
 @click.option("--kind", "kind", type=_KINDS, default=None, help="Only changes to this kind of record.")
-@click.option("--key", "key", default=None, help="Only changes to the record with this name.")
+@click.option(
+    "--key",
+    "key",
+    default=None,
+    help="Only changes to the record with this name; a project or repository, by its id or slug.",
+)
 @click.option(
     "--all", "everything", is_flag=True, default=False, help="Print every change rather than the newest page."
 )

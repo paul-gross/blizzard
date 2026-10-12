@@ -22,7 +22,7 @@ from blizzard.hub.domain.config.apply import (
     reconcile,
 )
 from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, Door, RecordKind, RecordState
-from blizzard.hub.domain.config.repositories import ConfiguredRepository, RepositoryEdit, RepositoryFields
+from blizzard.hub.domain.config.repositories import ConfiguredRepository, RepositoryEdit, RepositoryFields, RepositoryId
 from blizzard.hub.domain.config.work_sources import (
     BuiltInWorkSource,
     ConfigFieldError,
@@ -54,7 +54,26 @@ def _source(name: str = "demo", *, retired: bool = False, fields: WorkSourceFiel
 
 
 def _repo(name: str = "blizzard", *, retired: bool = False) -> ConfiguredRepository:
-    return ConfiguredRepository(name=name, fields=_REPO, revision=2, created_at=_AT, created_by="bob", retired=retired)
+    return ConfiguredRepository(
+        repository_id=RepositoryId(f"repo_{name}"),
+        slug=name,
+        name=name,
+        fields=_REPO,
+        revision=2,
+        created_at=_AT,
+        created_by="bob",
+        retired=retired,
+    )
+
+
+def _declared_repo(slug: str = "blizzard", **stated: object) -> RepositoryDeclaration:
+    return RepositoryDeclaration(
+        slug=slug,
+        name=None,
+        fields=_REPO,
+        edit=RepositoryEdit(**stated),  # type: ignore[arg-type]
+        repository_id=RepositoryId(f"repo_{slug}"),
+    )
 
 
 def _declared_source(name: str = "demo", fields: WorkSourceFields = _SOURCE, **stated: object) -> WorkSourceDeclaration:
@@ -68,7 +87,7 @@ def _stored(
 ) -> StoredConfig:
     return StoredConfig(
         work_sources={s.name: s for s in sources},
-        repositories={r.name: r for r in repos},
+        repositories={r.slug: r for r in repos},
         secrets=_ACTIVE_GH if secrets is None else secrets,
     )
 
@@ -128,8 +147,8 @@ def test_a_record_the_document_omits_is_never_touched() -> None:
 
 
 def test_repositories_reconcile_the_same_way() -> None:
-    created = RepositoryDeclaration(name="blizzard", fields=_REPO, edit=RepositoryEdit())
-    edited = RepositoryDeclaration(name="blizzard", fields=_REPO, edit=RepositoryEdit(base_branch="main"))
+    created = _declared_repo()
+    edited = _declared_repo(base_branch="main")
     assert [o.op for o in _plan(ConfigDeclaration(repositories=(created,)), _stored()).outcomes] == [ChangeOp.CREATE]
     plan = _plan(ConfigDeclaration(repositories=(edited,)), _stored(repos=(_repo(),)))
     assert [(d.field, d.new) for d in plan.writes[0].change.diff] == [("base_branch", "main")]
@@ -140,7 +159,7 @@ def test_repositories_reconcile_the_same_way() -> None:
 def test_writes_follow_the_document_order_work_sources_first() -> None:
     declaration = ConfigDeclaration(
         work_sources=(_declared_source("a"), _declared_source("b", replace(_SOURCE, locator="acme/b"))),
-        repositories=(RepositoryDeclaration(name="r", fields=_REPO, edit=RepositoryEdit()),),
+        repositories=(_declared_repo("r"),),
     )
     plan = _plan(declaration, _stored())
     assert [(w.section, w.index) for w in plan.writes] == [
@@ -336,7 +355,7 @@ def test_a_routine_may_name_only_a_scope_of_its_own_project() -> None:
 
 
 def test_a_planned_section_commits_after_the_repositories_and_before_the_scopes() -> None:
-    repository = RepositoryDeclaration(name="r", fields=_REPO, edit=RepositoryEdit())
+    repository = _declared_repo("r")
     change = _plan(ConfigDeclaration(repositories=(repository,)), _stored()).writes[0].change
     planned = ApplyPlan(
         (PlannedWrite("projects", 0, object(), None, change),),

@@ -25,9 +25,16 @@ from blizzard.hub.domain.config.legacy_keys import (
     ENV_FORGE_URL,
     LegacyKeys,
 )
-from blizzard.hub.domain.config.repositories import CommitOrigin, ConfiguredRepository, RepositoryFields
+from blizzard.hub.domain.config.repositories import (
+    CommitOrigin,
+    ConfiguredRepository,
+    RepositoryFields,
+    RepositoryId,
+    RepositoryName,
+)
 from blizzard.hub.domain.config.secrets import SealedValue, SecretName, SecretNameError
 from blizzard.hub.domain.config.work_sources import ConfigFieldError, ConfiguredWorkSource, WorkSourceFields
+from blizzard.hub.domain.kernel.slugs import derive_slug
 
 #: Every row the import writes is attributed to this actor, through this door.
 MIGRATION_CONTEXT = ChangeContext(actor="migration", door=Door.MIGRATION)
@@ -165,7 +172,7 @@ class IImportLinks(Protocol):
     """Links the records an import creates to the project they land in."""
 
     def links(
-        self, work_sources: Sequence[str], repositories: Sequence[str], ctx: ChangeContext, *, at: datetime
+        self, work_sources: Sequence[str], repositories: Sequence[RepositoryId], ctx: ChangeContext, *, at: datetime
     ) -> tuple[tuple[object, ConfigChange], ...]:
         """Each link record with its change. :class:`LegacyImportRefused` when no project can be chosen."""
         ...
@@ -250,8 +257,8 @@ def _repositories(
     if not commits:
         return ()
     derived = _coordinates(commits, values)
-    held = {(r.fields.forge_api_url, r.fields.owner, r.fields.repo): r.name for r in existing.repositories}
-    taken = {record.name for record in existing.repositories}
+    held = {(r.fields.forge_api_url, r.fields.owner, r.fields.repo): r.slug for r in existing.repositories}
+    taken = {record.slug for record in existing.repositories}
     bare_counts: dict[str, int] = {}
     for fields in derived:
         bare_counts[fields.repo] = bare_counts.get(fields.repo, 0) + 1
@@ -261,16 +268,20 @@ def _repositories(
         if holder is not None:
             outcomes.append(ImportOutcome(RecordKind.REPOSITORY, holder, created=False))
             continue
-        qualified = f"{fields.owner}-{fields.repo}"
-        name = qualified if bare_counts[fields.repo] > 1 or fields.repo in taken else fields.repo
-        if name in taken:
-            raise LegacyImportRefused(f"repository name {name} is already taken by another repository record")
-        taken.add(name)
+        bare = derive_slug(fields.repo, fallback="repository")
+        qualified = derive_slug(f"{fields.owner}-{fields.repo}", fallback="repository")
+        slug = qualified if bare_counts[fields.repo] > 1 or bare in taken else bare
+        if slug in taken:
+            raise LegacyImportRefused(f"repository slug {slug} is already taken by another repository record")
+        taken.add(slug)
+        label = fields.repo if slug == bare else f"{fields.owner}-{fields.repo}"
         try:
-            planned.append(ConfiguredRepository.new(name, fields, ctx, at=at))
+            planned.append(
+                ConfiguredRepository.new(slug, label if RepositoryName.of(label) else None, fields, ctx, at=at)
+            )
         except ConfigFieldError as exc:
-            raise LegacyImportRefused(f"repository {name}: {exc}") from exc
-        outcomes.append(ImportOutcome(RecordKind.REPOSITORY, name, created=True))
+            raise LegacyImportRefused(f"repository {slug}: {exc}") from exc
+        outcomes.append(ImportOutcome(RecordKind.REPOSITORY, slug, created=True))
     return tuple(planned)
 
 

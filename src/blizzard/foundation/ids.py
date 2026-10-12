@@ -55,6 +55,7 @@ class IdPrefix(StrEnum):
     TENANT = "ten"  # a tenant — minted once, never reused; its name never stands in for it
     INVITATION = "inv"  # an invitation into one tenant
     PROJECT = "proj"  # a project — its slug and name never stand in for it
+    REPOSITORY = "repo"  # a repository — its slug and name never stand in for it
 
 
 @domain_model

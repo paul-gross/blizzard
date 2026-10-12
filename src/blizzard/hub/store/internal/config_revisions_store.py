@@ -11,9 +11,10 @@ from blizzard.hub.domain.config.revisions import ConfigRevisions, IReadConfigRev
 from blizzard.hub.store.schema import repositories, secrets, work_sources
 from blizzard.hub.store.scoped import ScopedConnections
 
-_REFERRING: dict[RecordKind, Table] = {
-    RecordKind.WORK_SOURCE: work_sources,
-    RecordKind.REPOSITORY: repositories,
+#: Each referring kind's table and the column keying it: a work source by its name, a repository by its id.
+_REFERRING: dict[RecordKind, tuple[Table, str]] = {
+    RecordKind.WORK_SOURCE: (work_sources, "name"),
+    RecordKind.REPOSITORY: (repositories, "repository_id"),
 }
 
 
@@ -28,7 +29,7 @@ class ConfigRevisionsStore:
             )
             query = query.where(secrets.c.name == key)
         else:
-            table = _REFERRING[kind]
+            table, key_column = _REFERRING[kind]
             query = self._store.select(
                 self._store.scope_join(
                     table,
@@ -39,7 +40,7 @@ class ConfigRevisionsStore:
                 table.c.revision,
                 table.c.secret_name,
                 secrets.c.revision.label("sr"),
-            ).where(table.c.name == key)
+            ).where(table.c[key_column] == key)
         with self._store.read("revisions") as conn:
             row = conn.execute(query).one_or_none()
         if row is None:

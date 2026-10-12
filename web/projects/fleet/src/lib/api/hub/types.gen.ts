@@ -2001,6 +2001,10 @@ export type ConfigChangeView = {
      */
     record_kind: string;
     /**
+     * Record Label
+     */
+    record_label?: string | null;
+    /**
      * Recorded At
      */
     recorded_at: string;
@@ -4319,7 +4323,8 @@ export const IdPrefix = {
     RN: 'rn',
     TEN: 'ten',
     INV: 'inv',
-    PROJ: 'proj'
+    PROJ: 'proj',
+    REPO: 'repo'
 } as const;
 
 /**
@@ -5067,8 +5072,9 @@ export type ProjectCreateRequest = {
  *
  * A project as a document entry, named by its slug. A ``name`` or ``description`` the entry omits is left as
  * stored; a project the document creates needs a ``name``. A ``sources`` or ``repositories`` list the entry states
- * is the project's whole set of links of that kind — a name it leaves out is unlinked; a list it omits is left
- * as stored. A slug a project left is refused: name that project by its current slug.
+ * is the project's whole set of links of that kind — a source it leaves out is unlinked; a list it omits is left
+ * as stored. A repository is named by its id or its slug, a slug it left included. A slug a project left is refused:
+ * name that project by its current slug.
  */
 export type ProjectDocument = {
     /**
@@ -5575,9 +5581,9 @@ export type ReceiverStatus = {
 /**
  * RecordKind
  *
- * The kind of configured record a change row names. A project's ``record_key`` is its id, never its slug; a
- * project link's is the linked source's or repository's name. Linking, unlinking and re-linking are ``create``,
- * ``retire`` and ``enable``.
+ * The kind of configured record a change row names. A project's and a repository's ``record_key`` is its id,
+ * never its slug; a project link's is the linked source's name or repository's id. Linking, unlinking and re-linking
+ * are ``create``, ``retire`` and ``enable``.
  */
 export const RecordKind = {
     WORK_SOURCE: 'work_source',
@@ -5593,16 +5599,17 @@ export const RecordKind = {
 /**
  * RecordKind
  *
- * The kind of configured record a change row names. A project's ``record_key`` is its id, never its slug; a
- * project link's is the linked source's or repository's name. Linking, unlinking and re-linking are ``create``,
- * ``retire`` and ``enable``.
+ * The kind of configured record a change row names. A project's and a repository's ``record_key`` is its id,
+ * never its slug; a project link's is the linked source's name or repository's id. Linking, unlinking and re-linking
+ * are ``create``, ``retire`` and ``enable``.
  */
 export type RecordKind = typeof RecordKind[keyof typeof RecordKind];
 
 /**
  * RecordRefView
  *
- * A configured record named by kind and key.
+ * A configured record named by kind and key. ``label`` is the record's current slug for a slugged kind, whose
+ * key is its id; ``None`` for a kind keyed by its name.
  */
 export type RecordRefView = {
     /**
@@ -5613,6 +5620,10 @@ export type RecordRefView = {
      * Kind
      */
     kind: string;
+    /**
+     * Label
+     */
+    label?: string | null;
 };
 
 /**
@@ -5631,7 +5642,8 @@ export type RepositoriesListView = {
  * RepositoryDocument
  *
  * A repository as a document — the create body, and the model whose JSON Schema
- * ``GET /api/config/schema/repositories`` serves. ``secret_name`` names a stored secret.
+ * ``GET /api/config/schema/repositories`` serves. ``slug`` names the repository and ``name`` is its display label —
+ * the slug when omitted on create, left as stored on an edit. ``secret_name`` names a stored secret.
  */
 export type RepositoryDocument = {
     /**
@@ -5645,7 +5657,7 @@ export type RepositoryDocument = {
     /**
      * Name
      */
-    name: string;
+    name?: string | null;
     /**
      * Owner
      */
@@ -5658,12 +5670,17 @@ export type RepositoryDocument = {
      * Secret Name
      */
     secret_name: string;
+    /**
+     * Slug
+     */
+    slug: string;
 };
 
 /**
  * RepositoryLinkView
  *
- * A project's link to a repository, named ``name``. ``linked`` is false once the link is retired (unlinked).
+ * A project's link to a repository, by the repository's ``repository_id``, with its current ``slug`` and ``name``.
+ * ``linked`` is false once the link is retired (unlinked).
  */
 export type RepositoryLinkView = {
     /**
@@ -5679,15 +5696,23 @@ export type RepositoryLinkView = {
      */
     project_id: string;
     /**
+     * Repository Id
+     */
+    repository_id: string;
+    /**
      * Revision
      */
     revision: number;
+    /**
+     * Slug
+     */
+    slug: string;
 };
 
 /**
  * RepositoryLinksView
  *
- * A project's standing repository links by repository name — ``GET /api/projects/{project}/repository-links``.
+ * A project's standing repository links by repository id — ``GET /api/projects/{project}/repository-links``.
  */
 export type RepositoryLinksView = {
     /**
@@ -5700,7 +5725,8 @@ export type RepositoryLinksView = {
  * RepositoryPatchRequest
  *
  * A sparse edit: an absent field is unchanged, a present one is set, and an explicit
- * ``null`` is refused on every field. ``name`` is immutable, so a body carrying it is refused.
+ * ``null`` is refused on every field. A slug that changes keeps resolving to the repository until another claims
+ * it.
  */
 export type RepositoryPatchRequest = {
     /**
@@ -5711,6 +5737,10 @@ export type RepositoryPatchRequest = {
      * Forge Api Url
      */
     forge_api_url?: string | null;
+    /**
+     * Name
+     */
+    name?: string | null;
     /**
      * Owner
      */
@@ -5723,12 +5753,17 @@ export type RepositoryPatchRequest = {
      * Secret Name
      */
     secret_name?: string | null;
+    /**
+     * Slug
+     */
+    slug?: string | null;
 };
 
 /**
  * RepositorySummary
  *
- * One repository — the ``GET /api/repositories`` listing row and every record verb's view.
+ * One repository — the ``GET /api/repositories`` listing row and every record verb's view. ``repository_id`` is
+ * what every stored reference holds; ``slug`` is the handle people type, and ``name`` a display label.
  */
 export type RepositorySummary = {
     /**
@@ -5760,6 +5795,10 @@ export type RepositorySummary = {
      */
     repo: string;
     /**
+     * Repository Id
+     */
+    repository_id: string;
+    /**
      * Retired
      */
     retired?: boolean;
@@ -5771,6 +5810,10 @@ export type RepositorySummary = {
      * Secret Name
      */
     secret_name: string;
+    /**
+     * Slug
+     */
+    slug: string;
 };
 
 /**
@@ -13666,13 +13709,13 @@ export type LinkRepositoryApiProjectsProjectRepositoryLinksRepositoryPutData = {
     };
     path: {
         /**
-         * Repository
-         */
-        repository: string;
-        /**
          * Project
          */
         project: string;
+        /**
+         * Repository
+         */
+        repository: string;
     };
     query?: never;
     url: '/api/projects/{project}/repository-links/{repository}';
@@ -13710,13 +13753,13 @@ export type UnlinkRepositoryApiProjectsProjectRepositoryLinksRepositoryRetirePos
     };
     path: {
         /**
-         * Repository
-         */
-        repository: string;
-        /**
          * Project
          */
         project: string;
+        /**
+         * Repository
+         */
+        repository: string;
     };
     query?: never;
     url: '/api/projects/{project}/repository-links/{repository}/retire';
@@ -14518,37 +14561,37 @@ export type CreateRepositoryApiRepositoriesPostResponses = {
 
 export type CreateRepositoryApiRepositoriesPostResponse = CreateRepositoryApiRepositoriesPostResponses[keyof CreateRepositoryApiRepositoriesPostResponses];
 
-export type GetRepositoryApiRepositoriesNameGetData = {
+export type GetRepositoryApiRepositoriesRepositoryGetData = {
     body?: never;
     path: {
         /**
-         * Name
+         * Repository
          */
-        name: string;
+        repository: string;
     };
     query?: never;
-    url: '/api/repositories/{name}';
+    url: '/api/repositories/{repository}';
 };
 
-export type GetRepositoryApiRepositoriesNameGetErrors = {
+export type GetRepositoryApiRepositoriesRepositoryGetErrors = {
     /**
      * Validation Error
      */
     422: HttpValidationError;
 };
 
-export type GetRepositoryApiRepositoriesNameGetError = GetRepositoryApiRepositoriesNameGetErrors[keyof GetRepositoryApiRepositoriesNameGetErrors];
+export type GetRepositoryApiRepositoriesRepositoryGetError = GetRepositoryApiRepositoriesRepositoryGetErrors[keyof GetRepositoryApiRepositoriesRepositoryGetErrors];
 
-export type GetRepositoryApiRepositoriesNameGetResponses = {
+export type GetRepositoryApiRepositoriesRepositoryGetResponses = {
     /**
      * Successful Response
      */
     200: RepositorySummary;
 };
 
-export type GetRepositoryApiRepositoriesNameGetResponse = GetRepositoryApiRepositoriesNameGetResponses[keyof GetRepositoryApiRepositoriesNameGetResponses];
+export type GetRepositoryApiRepositoriesRepositoryGetResponse = GetRepositoryApiRepositoriesRepositoryGetResponses[keyof GetRepositoryApiRepositoriesRepositoryGetResponses];
 
-export type PatchRepositoryApiRepositoriesNamePatchData = {
+export type PatchRepositoryApiRepositoriesRepositoryPatchData = {
     body: RepositoryPatchRequest;
     headers?: {
         /**
@@ -14562,33 +14605,33 @@ export type PatchRepositoryApiRepositoriesNamePatchData = {
     };
     path: {
         /**
-         * Name
+         * Repository
          */
-        name: string;
+        repository: string;
     };
     query?: never;
-    url: '/api/repositories/{name}';
+    url: '/api/repositories/{repository}';
 };
 
-export type PatchRepositoryApiRepositoriesNamePatchErrors = {
+export type PatchRepositoryApiRepositoriesRepositoryPatchErrors = {
     /**
      * Validation Error
      */
     422: HttpValidationError;
 };
 
-export type PatchRepositoryApiRepositoriesNamePatchError = PatchRepositoryApiRepositoriesNamePatchErrors[keyof PatchRepositoryApiRepositoriesNamePatchErrors];
+export type PatchRepositoryApiRepositoriesRepositoryPatchError = PatchRepositoryApiRepositoriesRepositoryPatchErrors[keyof PatchRepositoryApiRepositoriesRepositoryPatchErrors];
 
-export type PatchRepositoryApiRepositoriesNamePatchResponses = {
+export type PatchRepositoryApiRepositoriesRepositoryPatchResponses = {
     /**
      * Successful Response
      */
     200: RepositorySummary;
 };
 
-export type PatchRepositoryApiRepositoriesNamePatchResponse = PatchRepositoryApiRepositoriesNamePatchResponses[keyof PatchRepositoryApiRepositoriesNamePatchResponses];
+export type PatchRepositoryApiRepositoriesRepositoryPatchResponse = PatchRepositoryApiRepositoriesRepositoryPatchResponses[keyof PatchRepositoryApiRepositoriesRepositoryPatchResponses];
 
-export type EnableRepositoryApiRepositoriesNameEnablePostData = {
+export type EnableRepositoryApiRepositoriesRepositoryEnablePostData = {
     body?: never;
     headers?: {
         /**
@@ -14602,33 +14645,33 @@ export type EnableRepositoryApiRepositoriesNameEnablePostData = {
     };
     path: {
         /**
-         * Name
+         * Repository
          */
-        name: string;
+        repository: string;
     };
     query?: never;
-    url: '/api/repositories/{name}/enable';
+    url: '/api/repositories/{repository}/enable';
 };
 
-export type EnableRepositoryApiRepositoriesNameEnablePostErrors = {
+export type EnableRepositoryApiRepositoriesRepositoryEnablePostErrors = {
     /**
      * Validation Error
      */
     422: HttpValidationError;
 };
 
-export type EnableRepositoryApiRepositoriesNameEnablePostError = EnableRepositoryApiRepositoriesNameEnablePostErrors[keyof EnableRepositoryApiRepositoriesNameEnablePostErrors];
+export type EnableRepositoryApiRepositoriesRepositoryEnablePostError = EnableRepositoryApiRepositoriesRepositoryEnablePostErrors[keyof EnableRepositoryApiRepositoriesRepositoryEnablePostErrors];
 
-export type EnableRepositoryApiRepositoriesNameEnablePostResponses = {
+export type EnableRepositoryApiRepositoriesRepositoryEnablePostResponses = {
     /**
      * Successful Response
      */
     200: RepositorySummary;
 };
 
-export type EnableRepositoryApiRepositoriesNameEnablePostResponse = EnableRepositoryApiRepositoriesNameEnablePostResponses[keyof EnableRepositoryApiRepositoriesNameEnablePostResponses];
+export type EnableRepositoryApiRepositoriesRepositoryEnablePostResponse = EnableRepositoryApiRepositoriesRepositoryEnablePostResponses[keyof EnableRepositoryApiRepositoriesRepositoryEnablePostResponses];
 
-export type RetireRepositoryApiRepositoriesNameRetirePostData = {
+export type RetireRepositoryApiRepositoriesRepositoryRetirePostData = {
     body?: never;
     headers?: {
         /**
@@ -14642,31 +14685,31 @@ export type RetireRepositoryApiRepositoriesNameRetirePostData = {
     };
     path: {
         /**
-         * Name
+         * Repository
          */
-        name: string;
+        repository: string;
     };
     query?: never;
-    url: '/api/repositories/{name}/retire';
+    url: '/api/repositories/{repository}/retire';
 };
 
-export type RetireRepositoryApiRepositoriesNameRetirePostErrors = {
+export type RetireRepositoryApiRepositoriesRepositoryRetirePostErrors = {
     /**
      * Validation Error
      */
     422: HttpValidationError;
 };
 
-export type RetireRepositoryApiRepositoriesNameRetirePostError = RetireRepositoryApiRepositoriesNameRetirePostErrors[keyof RetireRepositoryApiRepositoriesNameRetirePostErrors];
+export type RetireRepositoryApiRepositoriesRepositoryRetirePostError = RetireRepositoryApiRepositoriesRepositoryRetirePostErrors[keyof RetireRepositoryApiRepositoriesRepositoryRetirePostErrors];
 
-export type RetireRepositoryApiRepositoriesNameRetirePostResponses = {
+export type RetireRepositoryApiRepositoriesRepositoryRetirePostResponses = {
     /**
      * Successful Response
      */
     200: RepositorySummary;
 };
 
-export type RetireRepositoryApiRepositoriesNameRetirePostResponse = RetireRepositoryApiRepositoriesNameRetirePostResponses[keyof RetireRepositoryApiRepositoriesNameRetirePostResponses];
+export type RetireRepositoryApiRepositoriesRepositoryRetirePostResponse = RetireRepositoryApiRepositoriesRepositoryRetirePostResponses[keyof RetireRepositoryApiRepositoriesRepositoryRetirePostResponses];
 
 export type ListRoutinesApiRoutinesGetData = {
     body?: never;

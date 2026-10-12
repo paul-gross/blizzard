@@ -50,7 +50,7 @@ export class WorkSourcesPage {
 
   protected readonly selectedKey = injectChildRouteParam('key');
   protected readonly rows = computed<readonly ConfigRowVm[]>(() =>
-    workSourceRows(withinLens(this.sourcesQuery.data() ?? [], this.lensLinks.names()), this.lifecycle()),
+    workSourceRows(withinLens(this.sourcesQuery.data() ?? [], (source) => source.name, this.lensLinks.names()), this.lifecycle()),
   );
   protected readonly state = computed<KitAsyncStateValue>(() =>
     lensedListState(

@@ -6,7 +6,7 @@ import {
   lensedListState,
   listedProjects,
   linkChoices,
-  linkedNames,
+  linkedKeys,
   missingWiring,
   projectCreate,
   projectPatch,
@@ -69,7 +69,14 @@ function counts(ready: number, running: number, done: number): ChunkCountsView {
 
 const JIRA_LINK = { project_id: 'proj_b', name: 'jira', linked: true, revision: 1 };
 const HUB_LINK = { project_id: 'proj_b', name: 'hub', linked: true, built_in: true };
-const REPO_LINK = { project_id: 'proj_b', name: 'blizzard', linked: true, revision: 1 };
+const REPO_LINK = {
+  project_id: 'proj_b',
+  repository_id: 'repo_b',
+  slug: 'blizzard',
+  name: 'Blizzard',
+  linked: true,
+  revision: 1,
+};
 const GONE_LINK = { project_id: 'proj_b', name: 'old', linked: false, revision: 2 };
 
 describe('projects model', () => {
@@ -185,19 +192,31 @@ describe('projects model', () => {
       ['hub', true, 'built-in · linked to every project'],
       ['jira', false, 'jira · acme.atlassian.net'],
     ]);
-    const repositories = [{ name: 'blizzard', owner: 'acme', repo: 'blizzard', base_branch: 'main' }] as RepositorySummary[];
+    const repositories = [
+      { repository_id: 'repo_b', slug: 'blizzard', name: 'Blizzard', owner: 'acme', repo: 'blizzard', base_branch: 'main' },
+    ] as RepositorySummary[];
     expect(
-      repositoryLinkRows([{ project_id: 'proj_b', name: 'blizzard', linked: true, revision: 3 }], repositories),
-    ).toEqual([{ name: 'blizzard', detail: 'acme/blizzard · main', builtIn: false, revision: 3 }]);
+      repositoryLinkRows(
+        [{ project_id: 'proj_b', repository_id: 'repo_b', slug: 'blizzard', name: 'Blizzard', linked: true, revision: 3 }],
+        repositories,
+      ),
+    ).toEqual([
+      { key: 'repo_b', name: 'blizzard', detail: 'Blizzard · acme/blizzard · main', builtIn: false, revision: 3 },
+    ]);
   });
 
   it('offers only the live records the project does not link yet', () => {
-    const linked = linkedNames([
+    const linked = linkedKeys([
       { project_id: 'proj_b', name: 'jira', linked: true, revision: 1 },
       { project_id: 'proj_b', name: 'gh', linked: false, revision: 2 },
     ]);
     const choices = linkChoices(
-      [{ name: 'jira' }, { name: 'gh' }, { name: 'retired', retired: true }, { name: 'hub', built_in: true }],
+      [
+        { key: 'jira', name: 'jira' },
+        { key: 'gh', name: 'gh' },
+        { key: 'retired', name: 'retired', retired: true },
+        { key: 'hub', name: 'hub', built_in: true },
+      ],
       linked,
       (name) => (name === 'gh' ? 'github' : ''),
     );
@@ -233,7 +252,7 @@ describe('projects model', () => {
     expect(wiringCallout(['repository'], 4)).toBe('This project has no repository yet.');
     const wired = missingWiring(
       [{ project_id: 'proj_b', name: 'jira', linked: true, revision: 1 }],
-      [{ project_id: 'proj_b', name: 'blizzard', linked: true, revision: 1 }],
+      [{ project_id: 'proj_b', repository_id: 'repo_b', slug: 'blizzard', name: 'Blizzard', linked: true, revision: 1 }],
       true,
     );
     expect(wiringCallout(wired)).toBeNull();

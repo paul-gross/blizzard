@@ -42,7 +42,7 @@ def _seed_records(client: TestClient) -> None:
         )
     )
     repository = {
-        "name": "acme-repo",
+        "slug": "acme-repo",
         "forge_api_url": "https://forge.example",
         "owner": "acme",
         "repo": "widgets",

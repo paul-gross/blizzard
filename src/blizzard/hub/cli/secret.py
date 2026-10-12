@@ -111,7 +111,7 @@ def secret_show(cli: CliContext, name: str) -> None:
     """Show NAME's metadata — revision, who replaced it and when. Never its value."""
     body = cli.get(f"/api/secrets/{name}", "GET /secrets/{name}", on_status={404: f"unknown secret {name}"}).json()
     state = "retired" if body["retired"] else "enabled"
-    used_by = ", ".join(f"{r['kind']} {r['key']}" for r in body["references"]) or "-"
+    used_by = ", ".join(f"{r['kind']} {r.get('label') or r['key']}" for r in body["references"]) or "-"
     cli.show_lines(
         body,
         f"{body['name']}  revision {body['revision']}  {state}",

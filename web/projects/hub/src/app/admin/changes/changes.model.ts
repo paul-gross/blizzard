@@ -71,7 +71,7 @@ export function changeEntries(changes: readonly ConfigChangeView[], name: ActorN
 }
 
 function changeTitle(change: ConfigChangeView): string {
-  return `${recordKindLabel(change.record_kind)} ${change.record_key} · ${change.op}`;
+  return `${recordKindLabel(change.record_kind)} ${change.record_label ?? change.record_key} · ${change.op}`;
 }
 
 /** An entry's title — its one change, or how many changes its apply wrote. */

@@ -5,7 +5,6 @@ id is its identity; the slug is an editable handle unique within the tenant, and
 
 from __future__ import annotations
 
-import re
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime
@@ -15,13 +14,10 @@ from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, ConfigChange, FieldChange, RecordKind
 from blizzard.hub.domain.config.work_sources import ConfigFieldError, ConfigRevisionConflict
+from blizzard.hub.domain.kernel.slugs import NAME_MAX, SLUG_MAX, DisplayName, Slug
 from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
 
 ProjectId = NewType("ProjectId", str)
-
-_SLUG_PATTERN = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
-_SLUG_MAX = 64
-_NAME_MAX = 128
 
 #: The mutable fields, in the order a diff lists them.
 _FIELDS = ("slug", "name", "description")
@@ -46,10 +42,8 @@ class ProjectRequired(Exception):
 
 @domain_model
 @dataclass(frozen=True)
-class ProjectSlug:
-    """A well-formed slug: 1-64 lowercase letters, digits and single inner hyphens."""
-
-    value: str
+class ProjectSlug(Slug):
+    """A project's slug, in the shared slug grammar."""
 
     @classmethod
     def parse(cls, raw: str) -> ProjectSlug:
@@ -58,33 +52,25 @@ class ProjectSlug:
         if slug is None:
             raise ConfigFieldError(
                 "slug",
-                f"must be 1-{_SLUG_MAX} lowercase letters, digits and single inner hyphens, got {raw!r}",
+                f"must be 1-{SLUG_MAX} lowercase letters, digits and single inner hyphens, got {raw!r}",
             )
         return slug
-
-    @classmethod
-    def of(cls, raw: str) -> ProjectSlug | None:
-        """The slug ``raw`` spells, or ``None`` when it is outside the slug alphabet or length."""
-        if len(raw) > _SLUG_MAX or not _SLUG_PATTERN.match(raw):
-            return None
-        return cls(raw)
 
 
 @domain_model
 @dataclass(frozen=True)
-class ProjectName:
-    """A display name: 1-128 characters with no leading or trailing whitespace. Nothing resolves a name."""
-
-    value: str
+class ProjectName(DisplayName):
+    """A project's display name, in the shared display-name grammar."""
 
     @classmethod
     def parse(cls, raw: str) -> ProjectName:
         """:class:`ConfigFieldError` on ``name`` when ``raw`` is blank, too long, or padded."""
-        if not raw or len(raw) > _NAME_MAX or raw != raw.strip():
+        name = cls.of(raw)
+        if name is None:
             raise ConfigFieldError(
-                "name", f"must be 1-{_NAME_MAX} characters with no leading or trailing whitespace, got {raw!r}"
+                "name", f"must be 1-{NAME_MAX} characters with no leading or trailing whitespace, got {raw!r}"
             )
-        return cls(raw)
+        return name
 
 
 @domain_model

@@ -36,7 +36,7 @@ def _seed_records(client: TestClient) -> None:
     source = {"name": "acme", "provider": "github", "locator": "acme/widgets", "secret": "token"}
     _ok(client.post("/api/work-sources", json=source), 201)
     repository = {
-        "name": "acme-repo",
+        "slug": "acme-repo",
         "forge_api_url": "https://forge.example",
         "owner": "acme",
         "repo": "widgets",
@@ -292,7 +292,15 @@ def test_a_repository_link_is_linked_listed_unlinked_and_relinked(hub: HubHarnes
     relinked = _ok(hub.client.put("/api/projects/widgets/repository-links/acme-repo"))
 
     assert listed == [linked]
-    assert linked == {"project_id": project_id, "name": "acme-repo", "linked": True, "revision": 1}
+    repository_id = hub.client.get("/api/repositories/acme-repo").json()["repository_id"]
+    assert linked == {
+        "project_id": project_id,
+        "repository_id": repository_id,
+        "slug": "acme-repo",
+        "name": "acme-repo",
+        "linked": True,
+        "revision": 1,
+    }
     assert (unlinked["linked"], unlinked["revision"]) == (False, 2)
     assert after == []
     assert (relinked["linked"], relinked["revision"]) == (True, 3)
@@ -302,6 +310,7 @@ def test_a_repository_link_is_linked_listed_unlinked_and_relinked(hub: HubHarnes
         ("retire", project_id),
         ("create", project_id),
     ]
+    assert {(c["record_key"], c["record_label"]) for c in changes} == {(repository_id, "acme-repo")}
 
 
 def test_a_stale_revision_on_a_link_answers_409(hub: HubHarness) -> None:

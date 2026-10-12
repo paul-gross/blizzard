@@ -68,9 +68,9 @@ class ProjectAuthoring:
         """Link ``project`` to ``repository`` — a first link, or a relink of one it unlinked; a standing link is left
         as it is. A retired repository may be linked, and a linked repository may be retired."""
         now = self._clock.now()
-        stored = self._links.repository_link(project.project_id, repository.name)
+        stored = self._links.repository_link(project.project_id, repository.repository_id)
         if stored is None:
-            link, change = RepositoryLink.new(project, repository.name, ctx, at=now)
+            link, change = RepositoryLink.new(project, repository.repository_id, ctx, at=now)
             return self._links.create_repository_link(link, change=change)
         decided = stored.relink(ctx, if_match=if_match, at=now)
         if decided is None:

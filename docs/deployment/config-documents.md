@@ -1,8 +1,8 @@
 # Configuration documents
 
-A configuration document declares work sources, repositories, scopes, and routines in one YAML or JSON file. `blizzard hub config apply`
-reconciles the hub's stored records to it in a single transaction, and `blizzard hub config export` writes the current
-records back out as a document.
+A configuration document declares work sources, repositories, scopes, and routines in one YAML or JSON file.
+`blizzard hub config apply` reconciles the hub's stored records to it in a single transaction, and
+`blizzard hub config export` writes the current records back out as a document.
 
 ```bash
 blizzard hub config apply config.yaml --dry-run
@@ -22,7 +22,8 @@ work_sources:
     secret: gh-token
     annotate: true
 repositories:
-  - name: blizzard
+  - slug: blizzard
+    name: Blizzard
     forge_api_url: https://api.github.com
     owner: paul-gross
     repo: blizzard
@@ -49,21 +50,27 @@ routines:
 `version` must be `1`. Each entry carries the fields its own record takes, so [work sources](./work-sources.md),
 [repositories](./repositories.md), and [scopes and routines](./routines-and-scopes.md) own the field meanings, and
 `GET /api/config/schema/work-sources`, `/repositories`, `/scopes`, and `/routines` serve each entry's JSON Schema. An
-unknown field is refused. `secrets` lists secret names that must already exist and be active; a document never carries
-a secret's value, so set one first with `blizzard hub secret create`.
+unknown field is refused. `secrets` lists secret names that must already exist and be active; a document never carries a
+secret's value, so set one first with `blizzard hub secret create`.
 
 A scope entry is keyed by its `slug`, a routine entry by its `name`. A routine's `scopes` states its linked scope set,
 its default scope always among it; an entry that leaves `scopes` out keeps the stored set. Every scope a routine entry
 names, as its `default_scope_slug` or in `scopes`, must be stored already or declared in the same document's `scopes`
-section, and its `graph_name` must name an enabled graph when the entry creates the routine or moves it to another graph;
-otherwise the entry is refused. An apply never creates a scope
-the document does not declare.
+section, and its `graph_name` must name an enabled graph when the entry creates the routine or moves it to another
+graph; otherwise the entry is refused. An apply never creates a scope the document does not declare.
+
+A repository entry is keyed by its `slug`; its `name` is the display name, the slug when a new record's entry leaves it
+out and as stored when an existing record's does. An entry without a `slug` is refused `422` naming the field: the key
+that was a repository's `name` is its `slug` now. A slug a repository has left is refused `422`, naming that repository:
+name it by its current slug ([repositories.md](./repositories.md#naming-a-repository)).
 
 A project entry is keyed by its `slug`; one the document creates needs a `name`. A `sources` or `repositories` list the
 entry states is the project's whole set of links of that kind, so a name it leaves out is unlinked; a list it leaves out
-keeps the stored links ([projects.md](./projects.md#links)). A slug a project has left is refused `422`, naming that
-project: name it by its current slug. A scope or routine entry names its project with `project`, an id or a slug; an
-entry without one belongs to the tenant's only project, and is refused `project_required` when the tenant holds several.
+keeps the stored links ([projects.md](./projects.md#links)). A project names a repository by its id, its slug, or a slug
+the repository left, among the repositories the apply leaves — those stored and those the document declares. A slug a
+project has left is refused `422`, naming that project: name it by its current slug. A scope or routine entry names its
+project with `project`, an id or a slug; an entry without one belongs to the tenant's only project, and is refused
+`project_required` when the tenant holds several.
 
 The file's extension picks the format: `.yaml` and `.yml` read as YAML, `.json` as JSON. Over HTTP the `Content-Type`
 does: `POST /api/config/apply` takes `application/yaml` or `application/json`, and any other type is refused with 415.
@@ -101,9 +108,10 @@ The response lists `outcomes`, each with a `kind`, `key`, `op` and the changed f
 
 ## Export
 
-`config export` prints every active work source, repository, scope, and routine with every field, and every active secret name, as a
-document that applies back as a no-op. `--format` is `yaml` (the default) or `json`. Retired records are left out,
-because applying one would enable it again. The built-in `hub` work source is never exported.
+`config export` prints every active work source, repository, scope, and routine with every field, and every active
+secret name, as a document that applies back as a no-op. `--format` is `yaml` (the default) or `json`. Retired records
+are left out, because applying one would enable it again. Each repository is written with its `slug` and `name`, and
+each project's `repositories` as slugs. The built-in `hub` work source is never exported.
 
 ## Recording
 

@@ -374,10 +374,14 @@ work_source_lifecycle_facts = Table(
 Index("ix_work_source_lifecycle_facts_tenant_id", work_source_lifecycle_facts.c.tenant_id)
 
 # --- Repositories (configured records; secret_name references a secret, never a value) ---
+# A repository is named by its id everywhere; ``slug`` is the handle people type, unique within the tenant and
+# editable, and ``name`` a display label, unique nowhere and never resolved.
 
 repositories = Table(
     "repositories",
     metadata,
+    Column("repository_id", String, nullable=False, info={"hub_unique": True}),  # repo_<ulid>
+    Column("slug", String, nullable=False),
     Column("name", String, nullable=False),
     Column("forge_api_url", String, nullable=False),
     Column("owner", String, nullable=False),
@@ -388,11 +392,33 @@ repositories = Table(
     Column("created_at", UtcDateTime, nullable=False),
     Column("created_by", String, nullable=False),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_repositories_tenant_id"), nullable=False),
-    PrimaryKeyConstraint("tenant_id", "name", name="pk_repositories"),
+    PrimaryKeyConstraint("repository_id", name="pk_repositories"),
+    UniqueConstraint("tenant_id", "slug", name="uq_repositories_tenant_slug"),
     UniqueConstraint("tenant_id", "forge_api_url", "owner", "repo", name="uq_repositories_tenant_coordinate"),
     ForeignKeyConstraint(
         ["tenant_id", "secret_name"], ["secrets.tenant_id", "secrets.name"], name="fk_repositories_secrets"
     ),
+)
+
+# A slug a repository moved away from; at most one repository holds a given former slug.
+repository_former_slugs = Table(
+    "repository_former_slugs",
+    metadata,
+    Column("slug", String, nullable=False),
+    Column(
+        "repository_id",
+        String,
+        ForeignKey("repositories.repository_id", name="fk_repository_former_slugs_repositories"),
+        nullable=False,
+    ),
+    Column("left_at", UtcDateTime, nullable=False),
+    Column(
+        "tenant_id",
+        String,
+        ForeignKey("tenants.tenant_id", name="fk_repository_former_slugs_tenant_id"),
+        nullable=False,
+    ),
+    PrimaryKeyConstraint("tenant_id", "slug", name="pk_repository_former_slugs"),
 )
 
 # Repository retire/enable facts: append-only, newest wins.
@@ -400,7 +426,7 @@ repository_lifecycle_facts = Table(
     "repository_lifecycle_facts",
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
-    Column("name", String, nullable=False),
+    Column("repository_id", String, nullable=False),
     Column("retired", Boolean, nullable=False),
     Column("set_at", UtcDateTime, nullable=False),
     Column("set_by", String, nullable=False),
@@ -411,8 +437,8 @@ repository_lifecycle_facts = Table(
         nullable=False,
     ),
     ForeignKeyConstraint(
-        ["tenant_id", "name"],
-        ["repositories.tenant_id", "repositories.name"],
+        ["repository_id"],
+        ["repositories.repository_id"],
         name="fk_repository_lifecycle_facts_repositories",
     ),
 )
@@ -484,7 +510,7 @@ project_repository_links = Table(
         ForeignKey("projects.project_id", name="fk_project_repository_links_projects"),
         nullable=False,
     ),
-    Column("repository_name", String, nullable=False),
+    Column("repository_id", String, nullable=False),
     Column("revision", Integer, nullable=False),
     Column(
         "tenant_id",
@@ -492,18 +518,16 @@ project_repository_links = Table(
         ForeignKey("tenants.tenant_id", name="fk_project_repository_links_tenant_id"),
         nullable=False,
     ),
-    PrimaryKeyConstraint("project_id", "repository_name", name="pk_project_repository_links"),
+    PrimaryKeyConstraint("project_id", "repository_id", name="pk_project_repository_links"),
     ForeignKeyConstraint(
-        ["tenant_id", "repository_name"],
-        ["repositories.tenant_id", "repositories.name"],
-        name="fk_project_repository_links_repositories",
+        ["repository_id"], ["repositories.repository_id"], name="fk_project_repository_links_repositories"
     ),
 )
 # Which projects link repository X.
 Index(
     "ix_project_repository_links_tenant_repository",
     project_repository_links.c.tenant_id,
-    project_repository_links.c.repository_name,
+    project_repository_links.c.repository_id,
 )
 
 project_repository_link_facts = Table(
@@ -511,7 +535,7 @@ project_repository_link_facts = Table(
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("project_id", String, nullable=False),
-    Column("repository_name", String, nullable=False),
+    Column("repository_id", String, nullable=False),
     Column("linked", Boolean, nullable=False),
     Column("set_at", UtcDateTime, nullable=False),
     Column("set_by", String, nullable=False),
@@ -522,8 +546,8 @@ project_repository_link_facts = Table(
         nullable=False,
     ),
     ForeignKeyConstraint(
-        ["project_id", "repository_name"],
-        ["project_repository_links.project_id", "project_repository_links.repository_name"],
+        ["project_id", "repository_id"],
+        ["project_repository_links.project_id", "project_repository_links.repository_id"],
         name="fk_project_repository_link_facts_links",
     ),
 )
@@ -532,7 +556,7 @@ Index(
     "ix_project_repository_link_facts_tenant_link",
     project_repository_link_facts.c.tenant_id,
     project_repository_link_facts.c.project_id,
-    project_repository_link_facts.c.repository_name,
+    project_repository_link_facts.c.repository_id,
     project_repository_link_facts.c.id,
 )
 
@@ -1189,8 +1213,8 @@ delivery_repo_landed = Table(
     Column("repo", String, nullable=False),
     Column("commit_hash", String, nullable=False),
     Column("landed_at", UtcDateTime, nullable=False),
-    # The name of the repository record the landing resolved to — null on a row landed before it was recorded.
-    Column("repository_name", String, nullable=True),
+    # The id of the repository record the landing resolved to — null on a row landed before it was recorded.
+    Column("repository_id", String, nullable=True),
     Column(
         "tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_delivery_repo_landed_tenant_id"), nullable=False
     ),

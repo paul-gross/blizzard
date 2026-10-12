@@ -25,8 +25,8 @@ from blizzard.hub.domain.config.carry_over import (
 from blizzard.hub.domain.config.changes import ConfigChange
 from blizzard.hub.domain.config.repositories import (
     RepositoryCoordinateTaken,
-    RepositoryNameTaken,
     RepositorySecretUnavailable,
+    RepositorySlugTaken,
 )
 from blizzard.hub.domain.config.work_sources import (
     WorkSourceLocatorTaken,
@@ -46,7 +46,7 @@ _REFUSALS = (
     WorkSourceNameTaken,
     WorkSourceLocatorTaken,
     WorkSourceSecretUnavailable,
-    RepositoryNameTaken,
+    RepositorySlugTaken,
     RepositoryCoordinateTaken,
     RepositorySecretUnavailable,
 )
@@ -127,7 +127,7 @@ def _insert_link(conn: Connection, link: object, change: ConfigChange) -> None:
         link_writes.insert_link(conn, link_writes._SOURCES, link.project_id, link.source_name, change)
     else:
         assert isinstance(link, RepositoryLink)
-        link_writes.insert_link(conn, link_writes._REPOSITORIES, link.project_id, link.repository_name, change)
+        link_writes.insert_link(conn, link_writes._REPOSITORIES, link.project_id, link.repository_id, change)
 
 
 def _conforms_config_import_reader(x: ConfigImportStore) -> IReadConfigImports:

@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 import pytest
 
 from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, Door, FieldChange, RecordKind
+from blizzard.hub.domain.config.repositories import RepositoryId
 from blizzard.hub.domain.config.work_sources import BuiltInWorkSource, ConfigRevisionConflict
 from blizzard.hub.domain.projects.links import RepositoryLink, SourceLink
 from blizzard.hub.domain.projects.model import Project
@@ -17,6 +18,7 @@ pytestmark = pytest.mark.unit
 _AT = datetime(2026, 10, 9, 12, 0, tzinfo=UTC)
 _CTX = ChangeContext(actor="usr_alice", door=Door.CLI)
 _PROJECT = Project.new("winter", "Winter", _CTX, at=_AT)[0]
+_REPOSITORY = RepositoryId("repo_blizzard")
 
 
 def test_a_first_source_link_is_created_linked_and_keyed_by_the_source() -> None:
@@ -42,16 +44,16 @@ def test_the_built_in_hub_source_is_never_linked() -> None:
 
 
 def test_a_first_repository_link_is_created_linked_and_keyed_by_the_repository() -> None:
-    link, change = RepositoryLink.new(_PROJECT, "blizzard", _CTX, at=_AT)
-    assert (link.project_id, link.repository_name, link.revision, link.linked) == (
+    link, change = RepositoryLink.new(_PROJECT, _REPOSITORY, _CTX, at=_AT)
+    assert (link.project_id, link.repository_id, link.revision, link.linked) == (
         _PROJECT.project_id,
-        "blizzard",
+        _REPOSITORY,
         1,
         True,
     )
     assert (change.record_kind, change.record_key, change.project_id, change.op) == (
         RecordKind.PROJECT_REPOSITORY_LINK,
-        "blizzard",
+        _REPOSITORY,
         _PROJECT.project_id,
         ChangeOp.CREATE,
     )
@@ -61,7 +63,7 @@ def test_a_first_repository_link_is_created_linked_and_keyed_by_the_repository()
     "link",
     [
         SourceLink.new(_PROJECT, "gh-winter", _CTX, at=_AT)[0],
-        RepositoryLink.new(_PROJECT, "blizzard", _CTX, at=_AT)[0],
+        RepositoryLink.new(_PROJECT, _REPOSITORY, _CTX, at=_AT)[0],
     ],
     ids=["source", "repository"],
 )

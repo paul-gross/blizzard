@@ -351,7 +351,7 @@ def link_project(
         assert work_source is not None, f"link_project needs the work source {source} stored in {tenant}"
         authoring.link_source(record, work_source, _SEEDER)
     if repository is not None:
-        stored = RepositoryRecordStore(conns).get(repository)
+        stored = RepositoryRecordStore(conns).resolve(repository)
         assert stored is not None, f"link_project needs the repository {repository} stored in {tenant}"
         authoring.link_repository(record, stored, _SEEDER)
 
@@ -1190,16 +1190,16 @@ def seed_repositories(
     )
     for fields in repositories:
         name = f"{fields.owner}-{fields.repo}"
-        existing = RepositoryRecordStore(hub_store_connections(engine)).get(name)
+        existing = RepositoryRecordStore(hub_store_connections(engine)).resolve(name)
         if existing is not None and existing.fields.forge_api_url == fields.forge_api_url:
             continue
         if existing is not None:  # the same owner/repo on another forge is a record of its own
-            name = f"{name}-{urlparse(fields.forge_api_url).netloc}"
-            if RepositoryRecordStore(hub_store_connections(engine)).get(name) is not None:
+            name = f"{name}-{re.sub('[^a-z0-9]+', '-', urlparse(fields.forge_api_url).netloc.lower()).strip('-')}"
+            if RepositoryRecordStore(hub_store_connections(engine)).resolve(name) is not None:
                 continue
         with contextlib.suppress(SecretAlreadyExists):
             authoring.create_secret(SecretName.parse(fields.secret_name), "fixture-token", OP)
-        authoring.create_repository(name, fields, OP)
+        authoring.create_repository(name, None, fields, OP)
         if link:
             link_project(engine, repository=name)
 
@@ -1384,7 +1384,7 @@ def ensure_fixture_secret(hub: httpx.Client) -> None:
 def fixture_repository(name: str, forge_api_url: str, *, owner: str, base_branch: str = "main") -> dict[str, str]:
     """A repository record body on a fixture forge, naming :data:`FIXTURE_FORGE_SECRET`."""
     return {
-        "name": name,
+        "slug": name,
         "forge_api_url": forge_api_url,
         "owner": owner,
         "repo": name,
@@ -1412,7 +1412,7 @@ def create_repositories(
         created = hub.post("/api/repositories", json=repository)
         assert created.status_code == 201, created.text
         if project is not None:
-            linked = hub.put(f"/api/projects/{project}/repository-links/{repository['name']}")
+            linked = hub.put(f"/api/projects/{project}/repository-links/{repository['slug']}")
             assert linked.status_code == 200, linked.text
 
 

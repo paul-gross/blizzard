@@ -15,14 +15,14 @@ from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.door import RequestDoor, change_context
+from blizzard.hub.api.repository_params import PathRepository
 from blizzard.hub.auth.models import ResolvedIdentity
-from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.config.repositories import (
     ConfiguredRepository,
     RepositoryCoordinateTaken,
     RepositoryEdit,
     RepositoryFields,
-    RepositoryNameTaken,
+    RepositorySlugTaken,
 )
 from blizzard.hub.domain.config.work_sources import ConfigFieldError, ConfigRevisionConflict
 from blizzard.wire.repository import (
@@ -40,6 +40,8 @@ router = APIRouter(
 def _summary(record: ConfiguredRepository) -> RepositorySummary:
     fields = record.fields
     return RepositorySummary(
+        repository_id=record.repository_id,
+        slug=record.slug,
         name=record.name,
         forge_api_url=fields.forge_api_url,
         owner=fields.owner,
@@ -64,18 +66,11 @@ def _conflict(exc: Exception) -> HTTPException:
     return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
 
 
-def _stored(name: str, services: TenantServices) -> ConfiguredRepository:
-    record = services.repository_records.get(name)
-    if record is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown repository {name!r}")
-    return record
-
-
 @router.get(
     "/repositories", response_model=RepositoriesListView, dependencies=[Depends(require(Permission.FLEET_VIEW))]
 )
 def list_repositories(services: Services, include_retired: bool = False) -> RepositoriesListView:
-    """Every stored repository by name, retired ones hidden unless `include_retired`."""
+    """Every stored repository by slug, retired ones hidden unless `include_retired`."""
     records = services.repository_records.list_all(include_retired=include_retired)
     return RepositoriesListView(repositories=[_summary(r) for r in records])
 
@@ -87,9 +82,9 @@ def create_repository(
     door: RequestDoor,
     services: Services,
 ) -> RepositorySummary:
-    """Store a new repository at revision 1. 422 naming the field for a blank field, a
-    non-http(s) `forge_api_url`, or a missing or retired secret; 409 for a taken name or a
-    taken `(forge_api_url, owner, repo)`, naming the holder."""
+    """Store a new repository at revision 1; its `name` is its `slug` when omitted. 422 naming the field for a
+    malformed `slug` or `name`, a blank field, a non-http(s) `forge_api_url`, or a missing or retired secret; 409 for
+    a slug some repository holds or a taken `(forge_api_url, owner, repo)`, naming the holder."""
     fields = RepositoryFields(
         forge_api_url=request.forge_api_url,
         owner=request.owner,
@@ -98,35 +93,39 @@ def create_repository(
         secret_name=request.secret_name,
     )
     try:
-        record = services.config_authoring.create_repository(request.name, fields, change_context(identity, door))
+        record = services.config_authoring.create_repository(
+            request.slug, request.name, fields, change_context(identity, door)
+        )
     except ConfigFieldError as exc:
         raise _unprocessable(exc) from exc
-    except (RepositoryNameTaken, RepositoryCoordinateTaken) as exc:
+    except (RepositorySlugTaken, RepositoryCoordinateTaken) as exc:
         raise _conflict(exc) from exc
     return _summary(record)
 
 
 @router.get(
-    "/repositories/{name}", response_model=RepositorySummary, dependencies=[Depends(require(Permission.FLEET_VIEW))]
+    "/repositories/{repository}",
+    response_model=RepositorySummary,
+    dependencies=[Depends(require(Permission.FLEET_VIEW))],
 )
-def get_repository(name: str, services: Services) -> RepositorySummary:
-    """One repository, retired or not. 404 on an unknown name."""
-    return _summary(_stored(name, services))
+def get_repository(repository: PathRepository) -> RepositorySummary:
+    """One repository by id or slug — a slug it left included — retired or not. 404 on an unknown repository."""
+    return _summary(repository)
 
 
-@router.patch("/repositories/{name}", response_model=RepositorySummary)
+@router.patch("/repositories/{repository}", response_model=RepositorySummary)
 def patch_repository(
-    name: str,
-    request: RepositoryPatchRequest,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
+    record: PathRepository,
+    request: RepositoryPatchRequest,
     door: RequestDoor,
     services: Services,
     if_match: Annotated[int | None, Header()] = None,
 ) -> RepositorySummary:
     """Apply only the fields present; an explicit `null` is refused naming the field. A patch
-    that changes nothing writes nothing. 404 unknown; 409 for a stale `If-Match` (naming the
-    current revision) or a taken `(forge_api_url, owner, repo)`; 422 naming the field."""
-    record = _stored(name, services)
+    that changes nothing writes nothing. A slug that changes keeps resolving to the repository until another claims
+    it. 404 unknown; 409 for a stale `If-Match` (naming the current revision), a slug some repository holds, or a
+    taken `(forge_api_url, owner, repo)`; 422 naming the field."""
     present = request.model_fields_set
     edit = RepositoryEdit(**{field: getattr(request, field) for field in present})
     try:
@@ -135,22 +134,21 @@ def patch_repository(
         )
     except ConfigFieldError as exc:
         raise _unprocessable(exc) from exc
-    except (ConfigRevisionConflict, RepositoryCoordinateTaken) as exc:
+    except (ConfigRevisionConflict, RepositoryCoordinateTaken, RepositorySlugTaken) as exc:
         raise _conflict(exc) from exc
     return _summary(edited)
 
 
-@router.post("/repositories/{name}/retire", response_model=RepositorySummary)
+@router.post("/repositories/{repository}/retire", response_model=RepositorySummary)
 def retire_repository(
-    name: str,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
+    record: PathRepository,
     door: RequestDoor,
     services: Services,
     if_match: Annotated[int | None, Header()] = None,
 ) -> RepositorySummary:
     """Retire a repository — a reversible brake that keeps its coordinate claim. Retiring a
     retired repository changes nothing. 404 unknown, 409 for a stale `If-Match`."""
-    record = _stored(name, services)
     try:
         retired = services.config_authoring.retire_repository(record, change_context(identity, door), if_match=if_match)
     except ConfigRevisionConflict as exc:
@@ -158,17 +156,16 @@ def retire_repository(
     return _summary(retired)
 
 
-@router.post("/repositories/{name}/enable", response_model=RepositorySummary)
+@router.post("/repositories/{repository}/enable", response_model=RepositorySummary)
 def enable_repository(
-    name: str,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
+    record: PathRepository,
     door: RequestDoor,
     services: Services,
     if_match: Annotated[int | None, Header()] = None,
 ) -> RepositorySummary:
     """Re-enable a retired repository; enabling an active one changes nothing. 404 unknown,
     409 for a stale `If-Match`, 422 when its secret has since been retired."""
-    record = _stored(name, services)
     try:
         enabled = services.config_authoring.enable_repository(record, change_context(identity, door), if_match=if_match)
     except ConfigFieldError as exc:

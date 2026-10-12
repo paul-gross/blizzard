@@ -26,7 +26,7 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.changes import ChangeContext, Door
-from blizzard.hub.domain.config.repositories import RepositoryCoordinateTaken, RepositoryFields, RepositoryNameTaken
+from blizzard.hub.domain.config.repositories import RepositoryCoordinateTaken, RepositoryFields, RepositorySlugTaken
 from blizzard.hub.domain.config.secrets import SecretAlreadyExists, SecretName
 from blizzard.hub.domain.config.work_sources import WorkSourceFields, WorkSourceLocatorTaken, WorkSourceNameTaken
 from blizzard.hub.runtime import migration_runner
@@ -124,7 +124,7 @@ _KEYS: list[tuple[str, dict[str, object]]] = [
     ("secrets", {"name": "gh"}),
     ("work_sources", {"name": "acme"}),
     ("work_sources", {"provider": "github", "locator": "acme/demo"}),
-    ("repositories", {"name": "demo"}),
+    ("repositories", {"slug": "demo"}),
     ("repositories", {"forge_api_url": "https://api.github.com", "owner": "acme", "repo": "demo"}),
     ("keyed_locks", {"namespace": "graph_name", "key": "release"}),
     ("routines", {"name": "nightly"}),
@@ -186,7 +186,7 @@ def test_two_tenants_each_configure_a_same_named_secret_source_and_repository_on
         authoring = _authoring(tenants, tenant)
         authoring.create_secret(SecretName.parse("gh"), f"token-of-{tenant}", _CLI)
         authoring.create_work_source("acme", _SOURCE, _CLI)
-        authoring.create_repository("demo", _REPO, _CLI)
+        authoring.create_repository("demo", None, _REPO, _CLI)
 
     first = _authoring(tenants, tenants.first)
     with pytest.raises(SecretAlreadyExists):
@@ -195,10 +195,10 @@ def test_two_tenants_each_configure_a_same_named_secret_source_and_repository_on
         first.create_work_source("acme", _SOURCE, _CLI)
     with pytest.raises(WorkSourceLocatorTaken):
         first.create_work_source("acme-again", _SOURCE, _CLI)
-    with pytest.raises(RepositoryNameTaken):
-        first.create_repository("demo", _REPO, _CLI)
+    with pytest.raises(RepositorySlugTaken):
+        first.create_repository("demo", None, _REPO, _CLI)
     with pytest.raises(RepositoryCoordinateTaken):
-        first.create_repository("demo-again", _REPO, _CLI)
+        first.create_repository("demo-again", None, _REPO, _CLI)
 
 
 def test_each_tenants_hub_source_numbers_its_work_items_from_one(tenants: _Tenants) -> None:

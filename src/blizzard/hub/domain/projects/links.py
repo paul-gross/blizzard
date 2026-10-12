@@ -1,9 +1,9 @@
 """A project's links to the tenant's work sources and repositories: the link records, their verbs, and the seams.
 
-A link is a configured record of its own, keyed by the linked record's name within its project: it carries a revision
-and change facts, and unlinking is its retirement. Whether a link stands derives from its newest fact
-(``bzh:facts-not-status``). The built-in ``hub`` source is linked to every project without a stored link, and cannot be
-linked or unlinked."""
+A link is a configured record of its own, keyed by the linked record within its project — a source's name, a
+repository's id: it carries a revision and change facts, and unlinking is its retirement. Whether a link stands derives
+from its newest fact (``bzh:facts-not-status``). The built-in ``hub`` source is linked to every project without a stored
+link, and cannot be linked or unlinked."""
 
 from __future__ import annotations
 
@@ -23,6 +23,7 @@ from blizzard.hub.domain.config.changes import (
     RecordState,
     Verdict,
 )
+from blizzard.hub.domain.config.repositories import RepositoryId
 from blizzard.hub.domain.config.work_sources import ConfigRevisionConflict, require_configurable
 from blizzard.hub.domain.projects.model import Project, ProjectId
 
@@ -36,7 +37,7 @@ _TRANSITIONS: Mapping[RecordState, Mapping[ChangeOp, Verdict]] = FIELDED_RECORD_
 @domain_model
 @dataclass(frozen=True, kw_only=True)
 class _Link:
-    """What a source link and a repository link share; ``target`` is the linked record's name."""
+    """What a source link and a repository link share; ``target`` is the linked record's name or id."""
 
     KIND: ClassVar[RecordKind]
     LABEL: ClassVar[str]
@@ -105,22 +106,22 @@ class SourceLink(_Link):
 @domain_model
 @dataclass(frozen=True, kw_only=True)
 class RepositoryLink(_Link):
-    """A project's chunks may land in ``repository_name``; it grants nothing else."""
+    """A project's chunks may land in ``repository_id``; it grants nothing else."""
 
     KIND: ClassVar[RecordKind] = RecordKind.PROJECT_REPOSITORY_LINK
     LABEL: ClassVar[str] = "repository link"
 
-    repository_name: str
+    repository_id: RepositoryId
 
     def target(self) -> str:
-        return self.repository_name
+        return self.repository_id
 
     @classmethod
     def new(
-        cls, project: Project, repository_name: str, ctx: ChangeContext, *, at: datetime
+        cls, project: Project, repository_id: RepositoryId, ctx: ChangeContext, *, at: datetime
     ) -> tuple[Self, ConfigChange]:
-        """The first link of ``project`` to ``repository_name``."""
-        link = cls(project_id=project.project_id, repository_name=repository_name, revision=1)
+        """The first link of ``project`` to ``repository_id``."""
+        link = cls(project_id=project.project_id, repository_id=repository_id, revision=1)
         return link, link._change(ctx, ChangeOp.CREATE, _CREATED, at)
 
 
@@ -131,7 +132,7 @@ class IReadProjectLinks(Protocol):
         """The stored link, linked or not; ``None`` when the project never linked the source."""
         ...
 
-    def repository_link(self, project_id: ProjectId, repository_name: str) -> RepositoryLink | None:
+    def repository_link(self, project_id: ProjectId, repository_id: RepositoryId) -> RepositoryLink | None:
         """The stored link, linked or not; ``None`` when the project never linked the repository."""
         ...
 
@@ -140,7 +141,7 @@ class IReadProjectLinks(Protocol):
         ...
 
     def repositories_of(self, project_id: ProjectId) -> list[RepositoryLink]:
-        """The project's standing repository links, ordered by repository name."""
+        """The project's standing repository links, ordered by repository id."""
         ...
 
     def projects_linking_source(self, source_name: str) -> list[ProjectId]:

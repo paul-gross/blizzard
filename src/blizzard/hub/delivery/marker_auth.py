@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import hmac
 import secrets
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 
 from blizzard.foundation.roles import domain_model
@@ -32,12 +32,13 @@ class MarkerPrincipal:
 
 class AmbiguousMarkerRepository(Exception):
     """A landed marker names an ``owner/repo`` the visit holds for two different repository records —
-    the marker name cannot say which one landed."""
+    the marker name cannot say which one landed. ``records`` are their ids; the message names their slugs."""
 
-    def __init__(self, repo: str, records: Iterable[str]) -> None:
-        self.records = tuple(sorted(records))
+    def __init__(self, repo: str, held: Mapping[str, str]) -> None:
+        self.records = tuple(sorted(held))
+        slugs = sorted(held.values())
         super().__init__(
-            f"{repo} resolves to repository records {' and '.join(self.records)}; the marker cannot say which landed"
+            f"{repo} resolves to repository records {' and '.join(slugs)}; the marker cannot say which landed"
         )
 
 
@@ -47,14 +48,14 @@ class MarkerAuthority:
     tenant the visit runs in.
 
     Instance-scoped, never a module global; backed by a plain in-memory dict. Beside each live
-    token it holds the visit's landing names — each ``owner/repo`` the visit's commits resolved to,
-    mapped to its repository record's name — so a landed marker names the record its step started
+    token it holds the visit's landing records — each ``owner/repo`` the visit's commits resolved to,
+    mapped to its repository record's id and slug — so a landed marker names the record its step started
     against, however the project's links change while the step runs."""
 
     def __init__(self, *, token_factory: Callable[[], str] = secrets.token_urlsafe) -> None:
         self._token_factory = token_factory
         self._tokens: dict[_Key, tuple[str, TenantId]] = {}
-        self._repositories: dict[_Key, dict[str, set[str]]] = {}
+        self._repositories: dict[_Key, dict[str, dict[str, str]]] = {}
 
     def issue(self, chunk_id: str, *, node_id: str, epoch: int, tenant: TenantId) -> str:
         """Mint and store a fresh token for this ``(chunk_id, node_id, epoch)`` in ``tenant``,
@@ -75,17 +76,19 @@ class MarkerAuthority:
             return None
         return MarkerPrincipal(chunk_id=chunk_id, node_id=node_id, epoch=epoch, tenant_id=tenant)
 
-    def hold_repositories(self, chunk_id: str, *, node_id: str, epoch: int, names: Iterable[tuple[str, str]]) -> None:
-        """Hold ``names`` — ``(owner/repo, repository record name)`` pairs — for this visit, until
-        :meth:`revoke`. One ``owner/repo`` may be held for two records (the same name on two forge
-        hosts); :meth:`repository_name` refuses to pick between them."""
-        held: dict[str, set[str]] = {}
-        for repo, record in names:
-            held.setdefault(repo, set()).add(record)
+    def hold_repositories(
+        self, chunk_id: str, *, node_id: str, epoch: int, records: Iterable[tuple[str, str, str]]
+    ) -> None:
+        """Hold ``records`` — ``(owner/repo, repository record id, repository record slug)`` triples — for this
+        visit, until :meth:`revoke`. One ``owner/repo`` may be held for two records (the same name on two forge
+        hosts); :meth:`repository_id` refuses to pick between them."""
+        held: dict[str, dict[str, str]] = {}
+        for repo, record_id, slug in records:
+            held.setdefault(repo, {})[record_id] = slug
         self._repositories[(chunk_id, node_id, epoch)] = held
 
-    def repository_name(self, chunk_id: str, *, node_id: str, epoch: int, repo: str) -> str | None:
-        """The record name this visit holds for ``repo`` (``owner/repo``); ``None`` when the
+    def repository_id(self, chunk_id: str, *, node_id: str, epoch: int, repo: str) -> str | None:
+        """The record id this visit holds for ``repo`` (``owner/repo``); ``None`` when the
         visit holds none for it. :class:`AmbiguousMarkerRepository` when it holds two."""
         records = self._repositories.get((chunk_id, node_id, epoch), {}).get(repo)
         if not records:

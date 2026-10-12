@@ -28,6 +28,7 @@ from blizzard.hub.domain.config.repositories import (
     ConfiguredRepository,
     RepositoryEdit,
     RepositoryFields,
+    RepositoryId,
 )
 from blizzard.hub.domain.config.work_sources import (
     BuiltInWorkSource,
@@ -80,15 +81,19 @@ class WorkSourceDeclaration:
 @domain_model
 @dataclass(frozen=True)
 class RepositoryDeclaration:
-    """A repository the document names: its create fields, and the sparse edit of only the fields it states."""
+    """A repository the document names by slug: its create fields, the display name it states (``None`` leaves a stored
+    record's, and a new one's is the slug), the sparse edit of only the fields it states, and the id a record the
+    document creates takes — minted at the edge, so the projects section can link to it."""
 
-    name: str
+    slug: str
+    name: str | None
     fields: RepositoryFields
     edit: RepositoryEdit
+    repository_id: RepositoryId
 
     @property
     def key(self) -> str:
-        return self.name
+        return self.slug
 
 
 class DeclarableRecord(Protocol):
@@ -201,9 +206,12 @@ class StoredConfig:
     """What the edge loaded for the names the document mentions — retired records included."""
 
     work_sources: Mapping[str, ConfiguredWorkSource]
+    #: Stored repositories by their current slug.
     repositories: Mapping[str, ConfiguredRepository]
     #: The lifecycle state of each listed secret that exists; an absent name is unknown.
     secrets: Mapping[str, RecordState]
+    #: For each declared repository slug no repository holds, the repository that left it.
+    former_repositories: Mapping[str, ConfiguredRepository] = field(default_factory=dict)
     #: Stored scopes and routines, by their entries' ``key``.
     scopes: Mapping[tuple[str, str], DeclarableRecord] = field(default_factory=dict)
     routines: Mapping[tuple[str, str], DeclarableRecord] = field(default_factory=dict)
@@ -250,8 +258,10 @@ def reconcile(declaration: ConfigDeclaration, stored: StoredConfig, ctx: ChangeC
         at,
         writes,
         outcomes,
-        guard=lambda d, _: None,
-        create=lambda d: ConfiguredRepository.new(d.name, d.fields, ctx, at=at),
+        guard=lambda d, record: _require_unclaimed(d, record, stored.former_repositories),
+        create=lambda d: ConfiguredRepository.new(d.slug, d.name, d.fields, ctx, at=at, repository_id=d.repository_id),
+        label=lambda d: d.slug,
+        handle_field="slug",
     )
     writes.extend(declaration.projects.writes)
     outcomes.extend(declaration.projects.outcomes)
@@ -289,12 +299,14 @@ def _reconcile_section(
     guard: Callable[[Any, Any], None],
     create: Callable[[Any], tuple[Any, ConfigChange]],
     settle: Callable[[Any, Any], tuple[Any, ConfigChange] | None] = lambda d, record: None,
+    label: Callable[[Any], str] = lambda d: d.name,
+    handle_field: str = "name",
 ) -> None:
     seen: set[Hashable] = set()
     for index, entry in enumerate(declared):
         try:
             if entry.key in seen:
-                raise ConfigFieldError("name", f"{entry.name!r} is named twice in this document")
+                raise ConfigFieldError(handle_field, f"{label(entry)!r} is named twice in this document")
             seen.add(entry.key)
             record = stored.get(entry.key)
             guard(entry, record)
@@ -318,9 +330,23 @@ def _reconcile_section(
                 written = True
             written = _settle(section, index, kind, settle(entry, record), writes, outcomes) or written
             if not written:
-                outcomes.append(EntryOutcome(kind, entry.name, None))
+                outcomes.append(EntryOutcome(kind, label(entry), None))
         except (ConfigFieldError, BuiltInWorkSource) as exc:
             raise ApplyEntryRefused(section, index, exc) from exc
+
+
+def _require_unclaimed(
+    declared: RepositoryDeclaration, record: ConfiguredRepository | None, former: Mapping[str, ConfiguredRepository]
+) -> None:
+    """:class:`ConfigFieldError` when ``declared`` names a slug no repository holds but one left: name that repository
+    by its current slug, or choose another."""
+    left = former.get(declared.slug) if record is None else None
+    if left is not None:
+        raise ConfigFieldError(
+            "slug",
+            f"{declared.slug!r} is a slug repository {left.slug!r} ({left.repository_id}) left; "
+            f"name that repository by its current slug, or choose another",
+        )
 
 
 def _settle(
@@ -350,4 +376,5 @@ def _write(
     outcomes: list[EntryOutcome],
 ) -> None:
     writes.append(PlannedWrite(section, index, record, from_revision, change))
-    outcomes.append(EntryOutcome(kind, record.name, change.op, change.diff))
+    handle = record.slug if isinstance(record, ConfiguredRepository) else record.name
+    outcomes.append(EntryOutcome(kind, handle, change.op, change.diff))

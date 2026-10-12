@@ -1,25 +1,24 @@
 """Resolving a project reference — an id or a slug — to the project it names, within one tenant.
 
 Every boundary that accepts a project resolves it here, and nothing past the boundary holds a slug
-(``blizzard-product:/plans/projects/hub/spec/surfaces.md`` §Resolving a project). A display name never resolves."""
+(``blizzard-product:/plans/projects/hub/spec/surfaces.md`` §Resolving a project). The rules are the shared id-or-slug
+resolution's (:mod:`blizzard.hub.domain.kernel.id_or_slug`); a display name never resolves."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import StrEnum
-from typing import Protocol
 
-from blizzard.foundation.ids import Id, IdPrefix
+from blizzard.foundation.ids import IdPrefix
 from blizzard.foundation.roles import domain_model
+from blizzard.hub.domain.kernel import id_or_slug
+from blizzard.hub.domain.kernel.id_or_slug import IIdOrSlugLookup, MatchedBy, SluggedKind
 from blizzard.hub.domain.projects.model import Project, ProjectId, ProjectSlug
 
+#: Projects as the shared resolution sees them.
+PROJECT_KIND = SluggedKind(IdPrefix.PROJECT, ProjectId, ProjectSlug.of)
 
-class MatchedBy(StrEnum):
-    """Which rule a reference resolved by."""
-
-    ID = "id"
-    SLUG = "slug"
-    FORMER_SLUG = "former_slug"
+#: The reads a resolution needs; :class:`~blizzard.hub.domain.projects.model.IReadProjectRepository` is one.
+type IProjectLookup = IIdOrSlugLookup[ProjectId, ProjectSlug, Project]
 
 
 @domain_model
@@ -31,39 +30,12 @@ class ProjectMatch:
     by: MatchedBy
 
 
-class IProjectLookup(Protocol):
-    """The reads a resolution needs; :class:`~blizzard.hub.domain.projects.model.IReadProjectRepository` is one."""
-
-    def get(self, project_id: ProjectId) -> Project | None: ...
-
-    def get_by_slug(self, slug: ProjectSlug) -> Project | None: ...
-
-    def get_by_former_slug(self, slug: ProjectSlug) -> Project | None: ...
-
-
-def is_project_id(value: str) -> bool:
-    """Whether ``value`` has the ``proj_<ulid>`` form, which always resolves as an id."""
-    parsed = Id.parse(value)
-    return parsed is not None and parsed.has_prefix(IdPrefix.PROJECT)
-
-
 def locate(value: str, projects: IProjectLookup) -> ProjectMatch | None:
-    """The project ``value`` names, and how: a ``proj_<ulid>`` value by id whatever its slug; otherwise a current slug,
-    then a former slug. A value outside the slug alphabet — a display name among them — matches nothing."""
-    if is_project_id(value):
-        found = projects.get(ProjectId(value))
-        return None if found is None else ProjectMatch(found, MatchedBy.ID)
-    slug = ProjectSlug.of(value)
-    if slug is None:
-        return None
-    current = projects.get_by_slug(slug)
-    if current is not None:
-        return ProjectMatch(current, MatchedBy.SLUG)
-    former = projects.get_by_former_slug(slug)
-    return None if former is None else ProjectMatch(former, MatchedBy.FORMER_SLUG)
+    """The project ``value`` names, and how (:func:`~blizzard.hub.domain.kernel.id_or_slug.locate`)."""
+    match = id_or_slug.locate(value, PROJECT_KIND, projects)
+    return None if match is None else ProjectMatch(match.record, match.by)
 
 
 def resolve(value: str, projects: IProjectLookup) -> Project | None:
     """The project ``value`` names (:func:`locate`), or ``None`` when it names none."""
-    match = locate(value, projects)
-    return None if match is None else match.project
+    return id_or_slug.resolve(value, PROJECT_KIND, projects)

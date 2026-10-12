@@ -1,7 +1,7 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
 import {
-  getRepositoryApiRepositoriesNameGet,
+  getRepositoryApiRepositoriesRepositoryGet,
   hubConfigListKey,
   hubConfigRecordKey,
   listRepositoriesApiRepositoriesGet,
@@ -29,16 +29,16 @@ export function injectRepositoriesQuery(includeRetired: () => boolean) {
   });
 }
 
-/** `GET /api/repositories/{name}` — one repository, at rest while `name()` is `null`. */
-export function injectRepositoryQuery(name: () => string | null) {
+/** `GET /api/repositories/{repository}` — one repository by its id or slug, at rest while `key()` is `null`. */
+export function injectRepositoryQuery(key: () => string | null) {
   return injectQuery(() => {
-    const recordName = name();
+    const recordName = key();
     return {
       queryKey: hubConfigRecordKey(NOUN, recordName),
       enabled: recordName !== null,
       queryFn: async (): Promise<RepositorySummary> => {
-        const { data, error } = await getRepositoryApiRepositoriesNameGet({
-          path: { name: recordName! },
+        const { data, error } = await getRepositoryApiRepositoriesRepositoryGet({
+          path: { repository: recordName! },
           throwOnError: false,
         });
         if (error) throw error;

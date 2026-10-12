@@ -49,7 +49,7 @@ class RepositoryCommitResolver:
             row = resolve_repository(
                 CommitOrigin.of(None, repo),
                 self._repositories.list_all(include_retired=False),
-                linked=frozenset(link.repository_name for link in self._links.repositories_of(project_id)),
+                linked=frozenset(link.repository_id for link in self._links.repositories_of(project_id)),
             )
             if row is None:
                 return None

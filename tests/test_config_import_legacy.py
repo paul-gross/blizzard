@@ -147,22 +147,25 @@ def test_the_import_writes_the_expected_records_change_rows_and_one_fact(hub: Hu
         ("infra", "paul-gross/blizzard-infra", "bz-shared-token", False),
     }
     assert {
-        (r["name"], r["forge_api_url"], r["owner"], r["repo"], r["base_branch"], r["secret_name"])
+        (r["slug"], r["forge_api_url"], r["owner"], r["repo"], r["base_branch"], r["secret_name"])
         for r in rows["repositories"]
     } == {
         ("widget", "https://api.github.com", "acme", "widget", "master", "bz-forge-token"),
         ("gadget", "https://api.github.com", "paul-gross", "gadget", "master", "bz-forge-token"),
     }
+    ids = {str(r["slug"]): str(r["repository_id"]) for r in rows["repositories"]}
     changes = rows["config_changes"]
     assert len(changes) == 10
     assert {(r["actor"], r["door"], r["op"]) for r in changes} == {("migration", "migration", "create")}
     links = sorted((str(r["record_kind"]), str(r["record_key"])) for r in changes if r["project_id"] is not None)
-    assert links == [
-        ("project_repository_link", "gadget"),
-        ("project_repository_link", "widget"),
-        ("project_source_link", "blizzard"),
-        ("project_source_link", "infra"),
-    ]
+    assert links == sorted(
+        [
+            ("project_repository_link", ids["gadget"]),
+            ("project_repository_link", ids["widget"]),
+            ("project_source_link", "blizzard"),
+            ("project_source_link", "infra"),
+        ]
+    )
     engine = create_engine_from_url(hub.db_url)
     try:
         project = default_project(engine)
@@ -170,7 +173,7 @@ def test_the_import_writes_the_expected_records_change_rows_and_one_fact(hub: Hu
         engine.dispose()
     assert {r["project_id"] for r in changes if r["project_id"] is not None} == {project}
     assert sorted(str(r["source_name"]) for r in rows["project_source_links"]) == ["blizzard", "infra"]
-    assert sorted(str(r["repository_name"]) for r in rows["project_repository_links"]) == ["gadget", "widget"]
+    assert sorted(str(r["repository_id"]) for r in rows["project_repository_links"]) == sorted(ids.values())
     (fact,) = rows["config_import_facts"]
     assert fact["actor"] == "migration"
     read = json.loads(str(fact["read"]))

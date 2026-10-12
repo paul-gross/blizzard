@@ -19,7 +19,12 @@ from blizzard.hub.domain.config.changes import (
     RecordState,
     Verdict,
 )
-from blizzard.hub.domain.config.repositories import ConfiguredRepository, RepositoryEdit, RepositoryFields
+from blizzard.hub.domain.config.repositories import (
+    ConfiguredRepository,
+    RepositoryEdit,
+    RepositoryFields,
+    RepositoryId,
+)
 from blizzard.hub.domain.config.secrets import SecretMetadata, SecretName, SecretRetired, SecretRevisionConflict
 from blizzard.hub.domain.config.work_sources import (
     BuiltInWorkSource,
@@ -39,6 +44,7 @@ _CTX = ChangeContext(actor="ops", door=Door.CLI)
 _WS_FIELDS = WorkSourceFields(
     provider="github", locator="acme/demo", api_base=None, web_base=None, annotate=False, secret="gh"
 )
+_REPO_ID = RepositoryId("repo_demo")
 _REPO_FIELDS = RepositoryFields(
     forge_api_url="https://api.github.com", owner="acme", repo="demo", base_branch="master", secret_name="gh"
 )
@@ -52,7 +58,14 @@ def _source(*, revision: int = 3, retired: bool = False) -> ConfiguredWorkSource
 
 def _repo(*, revision: int = 3, retired: bool = False) -> ConfiguredRepository:
     return ConfiguredRepository(
-        name="demo", fields=_REPO_FIELDS, revision=revision, created_at=_AT, created_by="ops", retired=retired
+        repository_id=_REPO_ID,
+        slug="demo",
+        name="demo",
+        fields=_REPO_FIELDS,
+        revision=revision,
+        created_at=_AT,
+        created_by="ops",
+        retired=retired,
     )
 
 
@@ -218,7 +231,7 @@ def test_only_the_built_in_hub_source_is_built_in() -> None:
 
 
 def test_a_new_repository_starts_at_revision_one_with_a_create_change() -> None:
-    record, change = ConfiguredRepository.new("demo", _REPO_FIELDS, _CTX, at=_AT)
+    record, change = ConfiguredRepository.new("demo", None, _REPO_FIELDS, _CTX, at=_AT)
 
     assert record.revision == 1 and record.created_by == "ops" and not record.retired
     assert (change.record_kind, change.revision, change.op) == (RecordKind.REPOSITORY, 1, ChangeOp.CREATE)
@@ -230,7 +243,7 @@ def test_a_repository_edit_moves_the_revision_and_an_empty_one_writes_nothing() 
     assert decided is not None
     assert decided[0].revision == 4 and decided[0].fields.base_branch == "main"
     assert decided[1] == _change(
-        RecordKind.REPOSITORY, "demo", 4, ChangeOp.EDIT, (FieldChange("base_branch", "master", "main"),)
+        RecordKind.REPOSITORY, _REPO_ID, 4, ChangeOp.EDIT, (FieldChange("base_branch", "master", "main"),)
     )
     assert _repo().edit(RepositoryEdit(), _CTX, if_match=3, at=_AT) is None
 
@@ -238,7 +251,7 @@ def test_a_repository_edit_moves_the_revision_and_an_empty_one_writes_nothing() 
 def test_a_stale_if_match_on_a_repository_names_the_repository_kind() -> None:
     with pytest.raises(ConfigRevisionConflict) as caught:
         _repo().set_retired(True, _CTX, if_match=9, at=_AT)
-    assert str(caught.value) == str(ConfigRevisionConflict("repository", "demo", current=3))
+    assert str(caught.value) == str(ConfigRevisionConflict("repository", _REPO_ID, current=3))
 
 
 def test_a_repository_retires_once_and_a_redundant_retire_writes_nothing() -> None:
@@ -246,7 +259,7 @@ def test_a_repository_retires_once_and_a_redundant_retire_writes_nothing() -> No
 
     assert decided == (
         _repo(revision=4, retired=True),
-        _change(RecordKind.REPOSITORY, "demo", 4, ChangeOp.RETIRE, (FieldChange("retired", False, True),)),
+        _change(RecordKind.REPOSITORY, _REPO_ID, 4, ChangeOp.RETIRE, (FieldChange("retired", False, True),)),
     )
     assert _repo(retired=True).set_retired(True, _CTX, if_match=None, at=_AT) is None
 

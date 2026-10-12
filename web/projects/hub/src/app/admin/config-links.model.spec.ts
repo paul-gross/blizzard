@@ -37,6 +37,16 @@ describe('recordLink', () => {
   });
 });
 
+describe('recordLink by label', () => {
+  it('shows a labelled reference by its label and routes it by its key', () => {
+    expect(recordLink({ kind: RecordKind.REPOSITORY, key: 'repo_1', label: 'blizzard' })).toEqual({
+      kind: 'repository',
+      name: 'blizzard',
+      route: ['/admin', 'repositories', 'repo_1'],
+    });
+  });
+});
+
 describe('secretLinks', () => {
   it('links a named secret, and nothing for none', () => {
     expect(secretLinks('gh')).toEqual([{ kind: 'secret', name: 'gh', route: ['/admin', 'secrets', 'gh'] }]);

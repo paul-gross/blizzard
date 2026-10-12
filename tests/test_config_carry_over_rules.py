@@ -21,7 +21,7 @@ from blizzard.hub.domain.config.carry_over import (
 )
 from blizzard.hub.domain.config.changes import Door, RecordKind
 from blizzard.hub.domain.config.legacy_keys import LegacyKeys, WorkSourceConfig
-from blizzard.hub.domain.config.repositories import ConfiguredRepository, RepositoryFields
+from blizzard.hub.domain.config.repositories import ConfiguredRepository, RepositoryFields, RepositoryId
 from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, WorkSourceFields
 
 pytestmark = pytest.mark.unit
@@ -124,6 +124,8 @@ def test_records_the_store_already_holds_are_skipped() -> None:
         retired=True,
     )
     held_repo = ConfiguredRepository(
+        repository_id=RepositoryId("repo_mine"),
+        slug="mine",
         name="mine",
         fields=RepositoryFields("https://api.github.com", "blizzard", "widget", "main", "x"),
         revision=1,

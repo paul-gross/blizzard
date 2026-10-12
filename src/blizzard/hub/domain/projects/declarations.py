@@ -19,7 +19,10 @@ from blizzard.foundation.roles import collaborator, domain_model
 from blizzard.hub.domain.config.apply import PROJECTS_SECTION, ApplyEntryRefused, ApplyPlan, EntryOutcome, PlannedWrite
 from blizzard.hub.domain.config.carry_over import LegacyImportRefused
 from blizzard.hub.domain.config.changes import ChangeContext, ConfigChange, RecordKind
+from blizzard.hub.domain.config.repositories import REPOSITORY_KIND, RepositoryId, RepositoryRef
 from blizzard.hub.domain.config.work_sources import BuiltInWorkSource, ConfigFieldError, require_configurable
+from blizzard.hub.domain.kernel import id_or_slug
+from blizzard.hub.domain.kernel.slugs import Slug
 from blizzard.hub.domain.kernel.unset import UNSET
 from blizzard.hub.domain.projects.links import RepositoryLink, SourceLink
 from blizzard.hub.domain.projects.model import (
@@ -52,8 +55,9 @@ class EntryProjectRequired(ConfigFieldError):
 @domain_model
 @dataclass(frozen=True)
 class ProjectDeclaration:
-    """A project the document names by slug: the sparse edit of the name and description it states, and the source
-    and repository names it links (``None`` leaves the stored links)."""
+    """A project the document names by slug: the sparse edit of the name and description it states, the source names
+    it links, and the repositories it links — each an id, a slug or a slug the repository left (``None`` leaves the
+    stored links)."""
 
     slug: str
     edit: ProjectEdit
@@ -65,15 +69,17 @@ class ProjectDeclaration:
 @dataclass(frozen=True)
 class StoredProjects:
     """What the edge loaded: every project of the tenant; the project that left each slug the document names that no
-    project holds; every stored link of a declared project, unlinked ones included, by ``(project id, name)``; and the
-    work source and repository names stored or declared in the document."""
+    project holds; every stored link of a declared project, unlinked ones included, by ``(project id, linked source name
+    or repository id)``; the work source names stored or declared in the document; and the repositories stored or
+    declared in it — retired ones included — with the one that left each referenced slug no repository holds."""
 
     projects: tuple[Project, ...]
     former: Mapping[str, Project] = field(default_factory=dict)
     source_links: Mapping[tuple[str, str], SourceLink] = field(default_factory=dict)
     repository_links: Mapping[tuple[str, str], RepositoryLink] = field(default_factory=dict)
     sources: frozenset[str] = frozenset()
-    repositories: frozenset[str] = frozenset()
+    repositories: tuple[RepositoryRef, ...] = ()
+    former_repositories: Mapping[str, RepositoryRef] = field(default_factory=dict)
 
 
 @domain_model
@@ -105,6 +111,28 @@ class ProjectsPlan:
 
 @collaborator
 @dataclass(frozen=True)
+class PlannedRepositories:
+    """Resolves a repository reference — an id, a current slug, or a slug the repository left — against the
+    repositories as the apply leaves them: those stored plus those the document declares."""
+
+    repositories: tuple[RepositoryRef, ...]
+    former: Mapping[str, RepositoryRef] = field(default_factory=dict)
+
+    def get(self, repository_id: RepositoryId) -> RepositoryRef | None:
+        return next((r for r in self.repositories if r.repository_id == repository_id), None)
+
+    def get_by_slug(self, slug: Slug) -> RepositoryRef | None:
+        return next((r for r in self.repositories if r.slug == slug.value), None)
+
+    def get_by_former_slug(self, slug: Slug) -> RepositoryRef | None:
+        return self.former.get(slug.value)
+
+    def resolve(self, reference: str) -> RepositoryRef | None:
+        return id_or_slug.resolve(reference, REPOSITORY_KIND, self)
+
+
+@collaborator
+@dataclass(frozen=True)
 class _PlannedLookup:
     """Resolves a reference against the projects as the apply leaves them."""
 
@@ -126,6 +154,7 @@ def plan_projects(
     """The writes and outcome rows that bring the stored projects and their links to ``declared``, and the projects
     the tenant then holds. :class:`ApplyEntryRefused` at the first entry that cannot be applied."""
     current = {project.slug: project for project in stored.projects}
+    repositories = PlannedRepositories(stored.repositories, stored.former_repositories)
     writes: list[PlannedWrite] = []
     outcomes: list[EntryOutcome] = []
     seen: set[str] = set()
@@ -138,13 +167,16 @@ def plan_projects(
             record = planned.project(entry, current.get(ProjectSlug.parse(entry.slug).value), stored, ctx, at)
             current[record.slug] = record
             planned.links(
-                record, SOURCES_FIELD, entry.sources, stored.sources, stored.source_links, SourceLink.new, ctx, at
+                record,
+                _source_targets(entry.sources, stored.sources),
+                stored.source_links,
+                SourceLink.new,
+                ctx,
+                at,
             )
             planned.links(
                 record,
-                REPOSITORIES_FIELD,
-                entry.repositories,
-                stored.repositories,
+                _repository_targets(entry.repositories, repositories),
                 stored.repository_links,
                 RepositoryLink.new,
                 ctx,
@@ -204,43 +236,32 @@ class _Entry:
     def links(
         self,
         project: Project,
-        label: str,
-        names: tuple[str, ...] | None,
-        known: frozenset[str],
+        targets: Mapping[str, str] | None,
         stored: Mapping[tuple[str, str], _Link],
         new: Callable[..., tuple[_Link, ConfigChange]],
         ctx: ChangeContext,
         at: datetime,
     ) -> None:
-        """Link every name listed, and unlink every standing link the list leaves out; nothing for an unstated list.
-        Every listed name is checked before any link is planned: the built-in hub source links every project already,
-        and a name must be stored or declared in the document."""
-        if names is None:
+        """Link every target listed, and unlink every standing link the list leaves out; nothing for an unstated list.
+        ``targets`` maps each listed link target — a source's name, a repository's id — to the name the outcome row
+        shows."""
+        if targets is None:
             return
-        listed = dict.fromkeys(names)
-        for name in listed:
-            if label == SOURCES_FIELD:
-                try:
-                    require_configurable(name)
-                except BuiltInWorkSource as exc:
-                    raise ConfigFieldError(label, str(exc)) from exc
-            if name not in known:
-                raise ConfigFieldError(label, f"{name!r} is neither stored nor declared in this document")
-        for name in listed:
-            link = stored.get((project.project_id, name))
+        for target, shown in targets.items():
+            link = stored.get((project.project_id, target))
             if link is None:
-                created, change = new(project, name, ctx, at=at)
-                self._write(created.KIND, f"{project.slug}/{name}", created, None, change)
+                created, change = new(project, target, ctx, at=at)
+                self._write(created.KIND, f"{project.slug}/{shown}", created, None, change)
                 continue
-            self._move(project, link, link.relink(ctx, if_match=None, at=at))
-        for (project_id, name), link in sorted(stored.items()):
-            if project_id == project.project_id and name not in listed:
-                self._move(project, link, link.unlink(ctx, if_match=None, at=at))
+            self._move(project, link, link.relink(ctx, if_match=None, at=at), shown)
+        for (project_id, target), link in sorted(stored.items()):
+            if project_id == project.project_id and target not in targets:
+                self._move(project, link, link.unlink(ctx, if_match=None, at=at), targets.get(target, target))
 
-    def _move(self, project: Project, link: _Link, decided: tuple[_Link, ConfigChange] | None) -> None:
+    def _move(self, project: Project, link: _Link, decided: tuple[_Link, ConfigChange] | None, shown: str) -> None:
         if decided is not None:
             moved, change = decided
-            self._write(moved.KIND, f"{project.slug}/{moved.target()}", moved, link.revision, change)
+            self._write(moved.KIND, f"{project.slug}/{shown}", moved, link.revision, change)
 
     def _write(
         self, kind: RecordKind, key: str, record: object, from_revision: int | None, change: ConfigChange
@@ -248,6 +269,36 @@ class _Entry:
         self.writes.append(PlannedWrite(PROJECTS_SECTION, self.index, record, from_revision, change))
         self.outcomes.append(EntryOutcome(kind, key, change.op, change.diff))
         self.written = True
+
+
+def _source_targets(names: tuple[str, ...] | None, known: frozenset[str]) -> dict[str, str] | None:
+    """The sources a project entry lists, each its own shown name. Every name is checked before any link is planned:
+    the built-in hub source links every project already, and a name must be stored or declared in the document."""
+    if names is None:
+        return None
+    listed = dict.fromkeys(names)
+    for name in listed:
+        try:
+            require_configurable(name)
+        except BuiltInWorkSource as exc:
+            raise ConfigFieldError(SOURCES_FIELD, str(exc)) from exc
+        if name not in known:
+            raise ConfigFieldError(SOURCES_FIELD, f"{name!r} is neither stored nor declared in this document")
+    return {name: name for name in listed}
+
+
+def _repository_targets(references: tuple[str, ...] | None, repositories: PlannedRepositories) -> dict[str, str] | None:
+    """The repositories a project entry lists — each reference resolved to the repository's id, shown as its current
+    slug. A reference must name a repository stored or declared in the document."""
+    if references is None:
+        return None
+    targets: dict[str, str] = {}
+    for reference in references:
+        found = repositories.resolve(reference)
+        if found is None:
+            raise ConfigFieldError(REPOSITORIES_FIELD, f"{reference!r} is neither stored nor declared in this document")
+        targets[found.repository_id] = found.slug
+    return targets
 
 
 class ImportLinks:
@@ -258,7 +309,7 @@ class ImportLinks:
         self._projects = projects
 
     def links(
-        self, work_sources: Sequence[str], repositories: Sequence[str], ctx: ChangeContext, *, at: datetime
+        self, work_sources: Sequence[str], repositories: Sequence[RepositoryId], ctx: ChangeContext, *, at: datetime
     ) -> tuple[tuple[object, ConfigChange], ...]:
         try:
             project = sole_project(self._projects.list_all())

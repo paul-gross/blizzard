@@ -58,8 +58,13 @@ def _seed() -> None:
 def test_create_list_and_show_with_and_without_json(client: TestClient) -> None:
     _seed()
 
-    assert "blizzard  r1  enabled  paul-gross/blizzard  master" in _repo(["list"]).output
-    assert [r["name"] for r in json.loads(_repo(["list", "--json"]).output)] == ["blizzard"]
+    listed = json.loads(_repo(["list", "--json"]).output)
+    assert [(r["slug"], r["name"]) for r in listed] == [("blizzard", "blizzard")]
+    assert (
+        f"blizzard  blizzard  {listed[0]['repository_id']}  r1  enabled  paul-gross/blizzard  master"
+        in _repo(["list"]).output
+    )
+    assert _repo(["show", listed[0]["repository_id"]]).exit_code == 0
     shown = _repo(["show", "blizzard"])
     assert "revision 1" in shown.output
     assert "secret gh-test" in shown.output
