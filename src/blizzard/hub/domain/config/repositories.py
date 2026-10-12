@@ -197,7 +197,6 @@ class RepositoryResolution:
     names: tuple[str, ...] = ()
     detail: str = ""
 
-    @property
     def agreed(self) -> ResolvedRepository | None:
         """The one target every pointer shares — forge, owner, base branch and secret alike — or
         ``None`` when they differ or there is nothing resolved."""

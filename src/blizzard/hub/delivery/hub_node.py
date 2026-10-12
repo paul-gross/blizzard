@@ -377,7 +377,7 @@ class HubEnv:
             env[ENV_GARDEN_DELIVERY_URL] = self.garden_delivery_url
         if self.review_findings_url:
             env[ENV_REVIEW_FINDINGS_URL] = self.review_findings_url
-        if (agreed := self.resolution.agreed) is not None:
+        if (agreed := self.resolution.agreed()) is not None:
             env[ENV_BASE_BRANCH] = agreed.base_branch
             env[ENV_FORGE_URL] = agreed.forge_api_url
             env[ENV_FORGE_OWNER] = agreed.owner
