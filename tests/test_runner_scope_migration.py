@@ -17,9 +17,12 @@ import sqlalchemy as sa
 from click.testing import CliRunner
 
 from blizzard.cli.main import blizzard
+from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.runner import runtime as runner_runtime
+from blizzard.runner.composition import build_host_stores
+from tests.runner_fakes import runner_store_errors
 from tests.runner_scope_seeding import KEYED, T0, reflect, seed_every_keyed_table
 
 pytestmark = pytest.mark.component
@@ -238,3 +241,75 @@ def test_the_cli_migrates_a_copied_store_down_to_the_parent_and_back(tmp_path: P
         assert _schema(original_engine) == parent_schema
     finally:
         original_engine.dispose()
+
+
+def _copy_with_db_url(original: Path, config_db_url: str, copy: Path) -> None:
+    """Copy a runtime dir and repoint its config at the copy's own store, as a rehearsal on a store copy must."""
+    shutil.copytree(original, copy)
+    config_path = copy / "blizzard-runner.toml"
+    copy_url = f"sqlite:///{copy / 'data' / 'runner.db'}"
+    config_path.write_text(config_path.read_text().replace(f'db_url = "{config_db_url}"', f'db_url = "{copy_url}"'))
+
+
+def _check_invariants(runtime_dir: Path):  # type: ignore[no-untyped-def]
+    return CliRunner().invoke(blizzard, ["dev", "check-invariants", "--runner-dir", str(runtime_dir)])
+
+
+def _fixture_at_parent(root: Path, *, registered: bool, seeded: bool) -> str:
+    """A runner runtime dir whose store the previous release wrote: at the parent revision, with or without an identity,
+    and with a row in every runner-scoped table or none. Each table is shaped as live, an open transcript segment
+    included; answers the dir's store url."""
+    config = runner_runtime.init_environment(root)
+    runner_runtime.migration_runner(config).downgrade(_PARENT)
+    engine = create_engine_from_url(config.db_url)
+    try:
+        if registered:
+            _seed_identity(engine)
+        if seeded:
+            seed_every_keyed_table(engine, reflect(engine), omit=frozenset({"finalized_at"}))
+    finally:
+        engine.dispose()
+    return config.db_url
+
+
+@pytest.mark.parametrize(
+    ("registered", "seeded"), [(True, True), (True, False), (False, False)], ids=["registered", "idle", "fresh"]
+)
+def test_a_migrated_copy_of_a_previous_release_store_holds_every_invariant(
+    tmp_path: Path, registered: bool, seeded: bool
+) -> None:
+    original = tmp_path / "original"
+    db_url = _fixture_at_parent(original, registered=registered, seeded=seeded)
+    copy = tmp_path / "copy"
+    _copy_with_db_url(original, db_url, copy)
+
+    migrated = CliRunner().invoke(blizzard, ["runner", "migrate", "--dir", str(copy)])
+    assert migrated.exit_code == 0, migrated.output
+    checked = _check_invariants(copy)
+    assert checked.exit_code == 0, checked.output
+    assert "invariants hold" in checked.output
+
+
+def test_a_never_registered_store_with_rows_fails_the_check_until_its_runner_binds(tmp_path: Path) -> None:
+    """A store with rows but no identity keeps every ``runner_id`` NULL through the migration, so the strict invariant
+    names them; the stamp its runner's bind runs leaves the store holding every invariant."""
+    original = tmp_path / "original"
+    db_url = _fixture_at_parent(original, registered=False, seeded=True)
+    copy = tmp_path / "copy"
+    _copy_with_db_url(original, db_url, copy)
+    assert CliRunner().invoke(blizzard, ["runner", "migrate", "--dir", str(copy)]).exit_code == 0
+
+    unbound = _check_invariants(copy)
+    assert unbound.exit_code != 0
+    assert "runner:rows-name-registered-runner" in unbound.output
+
+    engine = create_engine_from_url(f"sqlite:///{copy / 'data' / 'runner.db'}")
+    try:
+        _seed_identity(engine)
+        build_host_stores(engine, errors=runner_store_errors(), clock=FixedClock(T0)).unowned_row_stamp.stamp(
+            _RUNNER_ID
+        )
+    finally:
+        engine.dispose()
+    bound = _check_invariants(copy)
+    assert bound.exit_code == 0, bound.output

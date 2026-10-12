@@ -30,7 +30,13 @@ _NOW = datetime(2026, 7, 14, tzinfo=UTC)
 
 
 def _runner_engine(tmp_path: Path):  # type: ignore[no-untyped-def]
-    return create_engine_from_url(init_runner(tmp_path / "runner").db_url)
+    """A head-migrated runner store whose identity names the fixture runner, as a registered runner's does."""
+    engine = create_engine_from_url(init_runner(tmp_path / "runner").db_url)
+    with engine.begin() as conn:
+        conn.execute(
+            insert(runner.runner_identity).values(runner_id=FIXTURE_RUNNER_ID, runner_name="r", registered_at=_NOW)
+        )
+    return engine
 
 
 def _hub_engine(tmp_path: Path):  # type: ignore[no-untyped-def]

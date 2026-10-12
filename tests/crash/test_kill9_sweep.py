@@ -15,13 +15,16 @@ import signal
 import subprocess
 import sys
 import time
+from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
 from sqlalchemy import Engine, Row, insert, select
 
+from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.node_steps import Executor
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.tokens import TokenHash
@@ -31,6 +34,7 @@ from blizzard.hub.domain.tenancy.teardown import DRAIN_BATCH_ROWS
 from blizzard.hub.store import schema as hub_schema
 from blizzard.hub.store.scoped import is_tenant_owned
 from blizzard.hub.tenancy import TenantId
+from blizzard.runner.composition import build_host_stores
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.internal.winter_cli import SubprocessWinterCli
 from blizzard.runner.harness.identity import OPENCODE_HARNESS_ID
@@ -71,7 +75,13 @@ from tests.crash.support import (
 )
 from tests.crash_points import discover_crash_points
 from tests.otlp_sink import OtlpSink, otlp_sink
-from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
+from tests.runner_fakes import (
+    FIXTURE_RUNNER_ID,
+    SqlAlchemyRunnerStore,
+    daemon_store,
+    registered_fixture_store,
+    runner_store_errors,
+)
 from tests.support import create_repositories, fixture_repository, free_port, hub_scoped, seed_drainable_history
 
 pytestmark = pytest.mark.crash_sweep
@@ -727,7 +737,7 @@ def test_kill9_at_attach_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
     # Seed a lease + its capability token, then park it, through a store the daemon does not
     # yet hold; dispose so the hosted daemon opens the sqlite file with no concurrent writer.
     engine = create_engine_from_url(db_url)
-    store = SqlAlchemyRunnerStore(engine, runner_store_errors())
+    store = registered_fixture_store(engine)
     store.record_lease(
         NewLease(
             lease_id="lease_attach",
@@ -778,7 +788,10 @@ def test_kill9_at_attach_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
             }
             with engine2.connect() as conn:
                 rows = conn.execute(
-                    select(runner_schema.attachments).where(runner_schema.attachments.c.lease_id == "lease_attach")
+                    select(runner_schema.attachments).where(
+                        runner_schema.attachments.c.runner_id == FIXTURE_RUNNER_ID,
+                        runner_schema.attachments.c.lease_id == "lease_attach",
+                    )
                 ).all()
             assert len(rows) == 1, "the attachment was not durably recorded before the crash"
             row = rows[0]._mapping
@@ -846,7 +859,7 @@ def test_kill9_at_declare_commit_crash_point(crash_env: CrashEnv, tmp_path: Path
     # Seed a lease + its capability token, then park it, through a store the daemon does not
     # yet hold; dispose so the hosted daemon opens the sqlite file with no concurrent writer.
     engine = create_engine_from_url(db_url)
-    store = SqlAlchemyRunnerStore(engine, runner_store_errors())
+    store = registered_fixture_store(engine)
     store.record_lease(
         NewLease(
             lease_id="lease_declare_commit",
@@ -923,7 +936,8 @@ def test_kill9_at_declare_commit_crash_point(crash_env: CrashEnv, tmp_path: Path
             with engine2.connect() as conn:
                 rows = conn.execute(
                     select(runner_schema.git_commit_declarations).where(
-                        runner_schema.git_commit_declarations.c.lease_id == "lease_declare_commit"
+                        runner_schema.git_commit_declarations.c.runner_id == FIXTURE_RUNNER_ID,
+                        runner_schema.git_commit_declarations.c.lease_id == "lease_declare_commit",
                     )
                 ).all()
             assert len(rows) == 1, "the declaration was not durably recorded before the crash"
@@ -1374,43 +1388,48 @@ def _ingest_sigint_drain_chunk(hub: httpx.Client, forge: httpx.Client, landed_fi
 def _usage_fact_cost(runner_dir: Path, lease_id: str, generation: int) -> float | None:
     """The recorded ``cost_usd`` for ``lease_id``'s ``generation``-th spawn/resume usage
     fact — asserts exactly one such fact exists."""
-    engine = create_engine_from_url(RunnerConfig.load(runner_dir).db_url)
-    try:
-        with engine.connect() as conn:
-            rows = conn.execute(
-                select(runner_schema.usage_facts.c.cost_usd)
-                .where(runner_schema.usage_facts.c.lease_id == lease_id)
-                .where(runner_schema.usage_facts.c.generation == generation)
-                .where(runner_schema.usage_facts.c.kind.in_(("spawn", "resume")))
-            ).all()
-        assert len(rows) == 1, f"expected exactly one spawn/resume usage fact for {lease_id} gen {generation}: {rows}"
-        return rows[0][0]
-    finally:
-        engine.dispose()
+    with _audit_connection(runner_dir) as conn:
+        rows = conn.execute(
+            select(runner_schema.usage_facts.c.cost_usd)
+            .where(runner_schema.usage_facts.c.lease_id == lease_id)
+            .where(runner_schema.usage_facts.c.generation == generation)
+            .where(runner_schema.usage_facts.c.kind.in_(("spawn", "resume")))
+        ).all()
+    assert len(rows) == 1, f"expected exactly one spawn/resume usage fact for {lease_id} gen {generation}: {rows}"
+    return rows[0][0]
 
 
 def _runner_store(runner_dir: Path) -> tuple[SqlAlchemyRunnerStore, Engine]:
-    """A read store over the runner's sqlite plus its engine (dispose after use)."""
+    """A read store over the runner's sqlite, bound to the runner its registration stored, plus its engine (dispose
+    after use)."""
     engine = create_engine_from_url(RunnerConfig.load(runner_dir).db_url)
-    return SqlAlchemyRunnerStore(engine, runner_store_errors()), engine
+    return daemon_store(engine), engine
+
+
+@contextlib.contextmanager
+def _audit_connection(runner_dir: Path) -> Iterator[Any]:
+    """A read connection over every runner's rows in the runner's sqlite, as the invariant checker's audit opens one."""
+    engine = create_engine_from_url(RunnerConfig.load(runner_dir).db_url)
+    try:
+        audit = build_host_stores(engine, errors=runner_store_errors(), clock=SystemClock()).runner_audit
+        with audit.connect() as conn:
+            yield conn
+    finally:
+        engine.dispose()
 
 
 def _leases_for_chunk(runner_dir: Path, chunk_id: str) -> list[tuple[str, int, str | None, int | None]]:
     """Every lease row (active or closed) for a chunk: (lease_id, epoch, session_id, pid)."""
-    engine = create_engine_from_url(RunnerConfig.load(runner_dir).db_url)
-    try:
-        with engine.connect() as conn:
-            rows = conn.execute(
-                select(
-                    runner_schema.leases.c.lease_id,
-                    runner_schema.leases.c.epoch,
-                    runner_schema.leases.c.session_id,
-                    runner_schema.leases.c.pid,
-                ).where(runner_schema.leases.c.chunk_id == chunk_id)
-            ).all()
-        return [(str(r[0]), int(r[1]), r[2], r[3]) for r in rows]
-    finally:
-        engine.dispose()
+    with _audit_connection(runner_dir) as conn:
+        rows = conn.execute(
+            select(
+                runner_schema.leases.c.lease_id,
+                runner_schema.leases.c.epoch,
+                runner_schema.leases.c.session_id,
+                runner_schema.leases.c.pid,
+            ).where(runner_schema.leases.c.chunk_id == chunk_id)
+        ).all()
+    return [(str(r[0]), int(r[1]), r[2], r[3]) for r in rows]
 
 
 def _open_resume_intents(runner_dir: Path) -> set[str]:
@@ -1707,16 +1726,12 @@ def _lease_harness_ids_for_chunk(runner_dir: Path, chunk_id: str) -> set[str | N
     convergence landed under the lineage a scenario armed, not a silent fallback to
     another harness, regardless of whether the point's own recovery path re-mints a fresh
     lease (a generic point's retry) or resumes the same one (a resume point)."""
-    engine = create_engine_from_url(RunnerConfig.load(runner_dir).db_url)
-    try:
-        with engine.connect() as conn:
-            rows = conn.execute(
-                select(runner_schema.leases.c.harness_id).where(runner_schema.leases.c.chunk_id == chunk_id)
-            ).all()
-        assert rows, f"no leases recorded for chunk {chunk_id}"
-        return {row[0] for row in rows}
-    finally:
-        engine.dispose()
+    with _audit_connection(runner_dir) as conn:
+        rows = conn.execute(
+            select(runner_schema.leases.c.harness_id).where(runner_schema.leases.c.chunk_id == chunk_id)
+        ).all()
+    assert rows, f"no leases recorded for chunk {chunk_id}"
+    return {row[0] for row in rows}
 
 
 @pytest.mark.parametrize("point", _OPENCODE_GENERIC_SWEEP)
@@ -2004,15 +2019,11 @@ def _await_marker(marker: Path, *, timeout: float = 30.0) -> None:
 
 def _closure_reason(runner_dir: Path, lease_id: str) -> str | None:
     """The closure reason recorded for ``lease_id``, or ``None`` if it is still active."""
-    engine = create_engine_from_url(RunnerConfig.load(runner_dir).db_url)
-    try:
-        with engine.connect() as conn:
-            row = conn.execute(
-                select(runner_schema.lease_closures.c.reason).where(runner_schema.lease_closures.c.lease_id == lease_id)
-            ).first()
-        return str(row[0]) if row is not None else None
-    finally:
-        engine.dispose()
+    with _audit_connection(runner_dir) as conn:
+        row = conn.execute(
+            select(runner_schema.lease_closures.c.reason).where(runner_schema.lease_closures.c.lease_id == lease_id)
+        ).first()
+    return str(row[0]) if row is not None else None
 
 
 def _wait_for_closure(runner_dir: Path, lease_id: str, *, timeout: float = 30.0) -> str | None:
@@ -3528,16 +3539,12 @@ def _trace_runner_config(runner_dir: Path) -> None:
 
 def _lease_cursor_rows(runner_dir: Path) -> list[tuple[int, int]]:
     """Every runner ``trace_cursor`` row as ``(id, span_count)``, oldest first."""
-    engine = create_engine_from_url(RunnerConfig.load(runner_dir).db_url)
-    try:
-        with engine.connect() as conn:
-            rows = conn.execute(
-                select(runner_schema.trace_cursor.c.id, runner_schema.trace_cursor.c.span_count).order_by(
-                    runner_schema.trace_cursor.c.id
-                )
-            ).all()
-    finally:
-        engine.dispose()
+    with _audit_connection(runner_dir) as conn:
+        rows = conn.execute(
+            select(runner_schema.trace_cursor.c.id, runner_schema.trace_cursor.c.span_count).order_by(
+                runner_schema.trace_cursor.c.id
+            )
+        ).all()
     return [(row.id, row.span_count) for row in rows]
 
 

@@ -36,7 +36,7 @@ from blizzard.runner.composition import build_host_stores
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from blizzard.runner.process.probe import IProcessProbe
 from blizzard.runner.store import schema as runner
-from blizzard.runner.store.errors import RunnerStoreErrorFactory
+from blizzard.runner.store.errors import RUNNER_COLUMN, RUNNER_SCOPING, RunnerStoreErrorFactory
 from blizzard.runner.transcripts.invocation_boundaries import WORKER_STARTING_KINDS
 
 # The ``lease_facts.runner_id`` a hub mint records — its own lease row, never a runner's.
@@ -256,6 +256,33 @@ class UniqueEnvBinding(QueryCheck):
             if (chunk_id, env_id) not in releases:
                 held.append((chunk_id, env_id))
         return held
+
+
+class RowsNameRegisteredRunner(QueryCheck):
+    """Every runner-scoped row names a runner the store's ``runner_identity`` records — a row naming no runner (NULL)
+    included. A row the bound runner's scoped reads cannot see is lost to it: a lease never reaped, a binding never
+    released, an outbound fact never flushed. Rows a previous release wrote are stamped at the runner's start, before
+    any recovery this checker runs after; ``runner_identity`` keys itself by its own id, so it is not judged."""
+
+    _TABLES: ClassVar[tuple[Table, ...]] = tuple(
+        table
+        for table in runner.metadata.sorted_tables
+        if RUNNER_SCOPING.is_keyed(table) and table is not runner.runner_identity
+    )
+
+    def run(self) -> list[Violation]:
+        registered = select(runner.runner_identity.c.runner_id)
+        violations: list[Violation] = []
+        for table in self._TABLES:
+            key = table.c[RUNNER_COLUMN]
+            for row in self.conn.execute(
+                select(key, func.count()).where(key.is_(None) | key.not_in(registered)).group_by(key).order_by(key)
+            ):
+                named = "no runner" if row[0] is None else f"unregistered runner {row[0]}"
+                violations.append(
+                    Violation("runner:rows-name-registered-runner", f"{row[1]} {table.name} row(s) name {named}")
+                )
+        return violations
 
 
 class GaplessOutboundSeq(QueryCheck):
@@ -1004,6 +1031,7 @@ class RunnerInvariants:
                 OneLiveLeasePerChunk(conn),
                 NoUnownedLiveLeaseProcess(conn),
                 UniqueEnvBinding(conn),
+                RowsNameRegisteredRunner(conn),
                 GaplessOutboundSeq(conn),
                 GaplessTranscriptOutboundSeq(conn),
                 TranscriptSegmentFinalizedExactlyOnce(conn),

@@ -56,7 +56,13 @@ def insert(table: sa.Table) -> sa.Insert:
 
 
 def _runner_engine(tmp_path: Path):
-    return create_engine_from_url(init_runner(tmp_path / "runner").db_url)
+    """A head-migrated runner store whose identity names the fixture runner, as a registered runner's does."""
+    engine = create_engine_from_url(init_runner(tmp_path / "runner").db_url)
+    with engine.begin() as conn:
+        conn.execute(
+            sa.insert(runner.runner_identity).values(runner_id=FIXTURE_RUNNER_ID, runner_name="r", registered_at=_NOW)
+        )
+    return engine
 
 
 def _hub_engine(tmp_path: Path):
@@ -66,6 +72,31 @@ def _hub_engine(tmp_path: Path):
 def test_clean_stores_have_no_violations(tmp_path: Path) -> None:
     assert RunnerInvariants(_runner_engine(tmp_path)).run() == []
     assert HubInvariants(_hub_engine(tmp_path)).run() == []
+
+
+def test_a_runner_scoped_row_naming_no_runner_or_an_unregistered_one_is_a_violation(tmp_path: Path) -> None:
+    engine = _runner_engine(tmp_path)
+    with engine.begin() as conn:
+        # A NULL key, as a previous release's statement leaves it, named outright for the statement guard.
+        conn.execute(
+            sa.insert(runner.leases).values(
+                runner_id=None, lease_id="lease_a", chunk_id="ch_1", epoch=1, created_at=_NOW
+            )
+        )
+        conn.execute(
+            sa.insert(runner.leases).values(
+                runner_id="rn_other", lease_id="lease_b", chunk_id="ch_2", epoch=1, created_at=_NOW
+            )
+        )
+    details = {v.detail for v in RunnerInvariants(engine).run() if v.invariant == "runner:rows-name-registered-runner"}
+    assert details == {"1 leases row(s) name no runner", "1 leases row(s) name unregistered runner rn_other"}
+
+
+def test_runner_scoped_rows_naming_the_registered_runner_are_not_a_violation(tmp_path: Path) -> None:
+    engine = _runner_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(insert(runner.leases).values(lease_id="lease_a", chunk_id="ch_1", epoch=1, created_at=_NOW))
+    assert RunnerInvariants(engine).run() == []
 
 
 def test_two_live_leases_for_one_chunk_is_a_violation(tmp_path: Path) -> None:
