@@ -251,6 +251,9 @@ WHERE copy_rank = 1
 
 <!-- egress-dictionary:end -->
 
+A row's `work_refs` and `sources` render each work source under its slug when the row is written, as `project_slug`
+does, so a row written after a source's slug changes carries the new slug.
+
 ## The directory
 
 ```text

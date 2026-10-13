@@ -60,11 +60,13 @@ On the board the same lives under Admin → Projects. A configuration document m
 draws from it only once you link the two. Linking is never implicit: nothing links a record when it is created, when
 work is ingested from it, or when work lands in it.
 
-- **A source link** lets a project ingest from a work source. Every project draws from the built-in `hub` source
-  without a link, and that link cannot be removed. When `blizzard hub chunk ingest` names no `--project`, the hub uses
-  the one project every pointer's source is linked to; a source linked to several projects, or pointers whose sources
-  are linked to different ones, answer `422 project_required`. A pointer whose source is not linked to the chunk's
-  project answers `422 source_not_linked`, naming the source ([work-sources.md](./work-sources.md#ingesting-work-items)).
+- **A source link** lets a project ingest from a work source, named by its id or its slug; the link holds the source's
+  id, so it survives the slug changing ([work-sources.md](./work-sources.md#naming-a-work-source)). Every project draws
+  from the built-in `hub` source without a link, and that link cannot be removed. When `blizzard hub chunk ingest` names
+  no `--project`, the hub uses the one project every pointer's source is linked to; a source linked to several
+  projects, or pointers whose sources are linked to different ones, answer `422 project_required`. A pointer whose
+  source is not linked to the chunk's project answers `422 source_not_linked`, naming the source
+  ([work-sources.md](./work-sources.md#ingesting-work-items)).
 - **A repository link** lets a project's chunks land in a repository, named by its id or its slug; the link holds the
   repository's id, so it survives the slug changing ([repositories.md](./repositories.md#naming-a-repository)). A
   `deliver` step resolves a chunk's commits only against the repositories its project links; one that would resolve to
