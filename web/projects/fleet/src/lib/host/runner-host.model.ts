@@ -1,6 +1,45 @@
-import { ageMs, formatAge, type runnerApi } from 'fleet';
+import type * as runnerApi from '../api/runner';
+import { compactRef } from '../core/compact-ref';
+import { ageMs, formatAge, formatHeldFor } from '../core/when';
+import type { SubscriptionPace } from './subscription-pace.model';
+import type { EnvironmentRow, WorkspaceRow } from './workspace-table';
 
-import type { SubscriptionRow } from './app-subscriptions-view';
+/**
+ * `42m` since the binding fact — browser-clock decoration only
+ * (`bzh:utc-instants` via `ageMs`): a skew-broken timestamp renders `—`, and an
+ * unheld environment (no `held_since`) renders blank rather than `—`.
+ */
+export function heldForLabel(heldSince: string | null | undefined, now: number): string {
+  if (heldSince == null) return '';
+  const age = ageMs(heldSince, now);
+  return age === null ? '—' : formatHeldFor(age);
+}
+
+/** One {@link EnvironmentRow} per pool environment, in wire order, aged against `now`. */
+export function runnerEnvironmentRows(envs: readonly runnerApi.EnvironmentView[], now: number): readonly EnvironmentRow[] {
+  return envs.map((env) => ({
+    environmentId: env.environment_id,
+    isHeld: env.chunk_id != null,
+    chunkRef: env.chunk_id == null ? '' : compactRef(env.chunk_id),
+    heldFor: heldForLabel(env.held_since, now),
+    holder: null,
+  }));
+}
+
+/** The runner dashboard's pool as the shared workspace table's one workspace — the
+ * dashboard names no workspace, so the pool renders as its environments alone. */
+export function runnerWorkspaceRows(envs: readonly runnerApi.EnvironmentView[], now: number): readonly WorkspaceRow[] {
+  const environments = runnerEnvironmentRows(envs, now);
+  return [
+    {
+      workspaceId: null,
+      capacity: environments.length,
+      inUse: environments.filter((env) => env.isHeld).length,
+      flag: null,
+      environments,
+    },
+  ];
+}
 
 /** Operator-facing text per closed-set miss reason — what to do about it, not the machine word. */
 export const MISS_REASON_TEXT: Readonly<Record<runnerApi.SampleMissReason, string>> = {
@@ -52,23 +91,33 @@ export function renewalLabel(
   }
 }
 
-/** One {@link SubscriptionRow} per declared subscription, in wire order, aged against `now`. */
-export function subscriptionRows(
+/** One shared subscription row per declared subscription, in wire order, aged against
+ * `now`. The dashboard reports the newest sampling attempt rather than usage windows, so
+ * each row carries its {@link SubscriptionPace.sample} line and no pace bars. */
+export function runnerSubscriptionPaces(
   subs: readonly runnerApi.SubscriptionView[],
   now: number,
-): readonly SubscriptionRow[] {
+): readonly SubscriptionPace[] {
   return subs.map((sub) => ({
     slug: sub.slug,
     name: sub.name,
     provider: sub.provider,
-    conditionLabel: conditionLabel(sub.ok ?? null, sub.miss_reason ?? null),
-    sampledAgo: sampledAgoLabel(sub.sampled_at ?? null, now),
+    paceBars: [],
+    condition: null,
+    sampledAt: null,
+    refreshedLabel: null,
+    freshness: null,
+    missReason: null,
+    sample: {
+      conditionLabel: conditionLabel(sub.ok ?? null, sub.miss_reason ?? null),
+      sampledAgo: sampledAgoLabel(sub.sampled_at ?? null, now),
+      ok: sub.ok ?? null,
+    },
     renewalLabel: renewalLabel(
       sub.renewal_result ?? null,
       sub.renewal_failure_reason ?? null,
       sub.renewal_attempted_at ?? null,
       now,
     ),
-    ok: sub.ok ?? null,
   }));
 }

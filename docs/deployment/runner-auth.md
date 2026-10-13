@@ -148,6 +148,11 @@ retirement and its last runner's, a runner is still held but its host is gone. `
 
 The writes require the `runner:retire` permission and the reads `fleet:view`.
 
+The board shows each host as a card over the runners it holds. To an identity holding `runner:retire`, the card carries
+retire, revoke-token and enroll, and each runner row on it carries release. Release, retire and revoke-token each ask
+for confirmation first. A retire the hub refuses shows the refusal and asks again before forcing it. Enroll shows the new
+token once.
+
 ## A token that names another runner
 
 At the head of every tick the runner asks the hub which runner its token belongs to (`GET /api/fleet/identity`) and

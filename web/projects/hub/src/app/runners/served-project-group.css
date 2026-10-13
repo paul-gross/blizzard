@@ -23,3 +23,28 @@
   padding: 0;
   min-width: 0;
 }
+.bindings {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+.binding {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+.b-ws,
+.b-sub {
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.b-agents {
+  color: var(--label);
+  font-size: var(--fs-xs);
+}

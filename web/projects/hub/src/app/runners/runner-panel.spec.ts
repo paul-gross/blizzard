@@ -534,3 +534,73 @@ describe('RunnerPanel subscription pace groups (issue #218)', () => {
     expect(el.querySelector('[data-runner="rn_no_subscriptions"] [data-testid="runner-pace-bar"]')).toBeNull();
   });
 });
+
+describe('RunnerPanel host cards', () => {
+  let stub: RequestClientStub;
+
+  const HOSTED = {
+    runners: [
+      runner('rA', {
+        runner_name: 'alpha',
+        host_id: 'h1',
+        subscription: 'anthropic',
+        projects: [{ entry: 'default', project_id: 'pj_default', slug: 'default', name: 'Default' }],
+        bindings: [
+          { project: 'default', workspace_id: 'ws-1', agents: 2 },
+          { project: 'default', workspace_id: 'ws-9', agents: 1, workspace_unreported: true },
+        ],
+      }),
+      runner('rB', { runner_name: 'bravo', host_id: 'h1', subscription: 'zzz', subscription_unrostered: true }),
+      runner('rC', { runner_name: 'charlie' }),
+    ],
+  };
+  const HOSTS = {
+    hosts: [
+      {
+        host_id: 'h1',
+        host_name: 'build-box',
+        connection: 'online',
+        online: true,
+        last_seen_at: NOW,
+        workspaces: [{ workspace_id: 'ws-1', env_capacity: 3 }, { workspace_id: 'ws-2' }],
+        subscriptions: [{ slug: 'anthropic', name: 'Anthropic Max', provider: 'claude' }],
+        subscription_usage: [{ slug: 'anthropic', name: 'Anthropic Max', windows: [], runners: ['rA'] }],
+      },
+    ],
+  };
+  const LIVE = [{ chunk_id: 'ch_live', graph_id: 'gr_1', status: 'running', runner_id: 'rA', project_id: 'pj_default', environment_count: 2 }];
+
+  beforeEach(async () => {
+    stub = stubRequestClient(hubClient, (method, path) => {
+      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
+      if (method === 'GET' && path === '/api/runners') return HOSTED;
+      if (method === 'GET' && path === '/api/hosts') return HOSTS;
+      if (method === 'GET' && path === '/api/chunks') return { chunks: LIVE, next_cursor: null };
+      return {};
+    });
+    await TestBed.configureTestingModule({
+      imports: [RunnerPanel],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+      ],
+    }).compileComponents();
+  });
+
+  afterEach(() => stub.restore());
+
+  it('groups the hosts, runners and live chunks reads into one card per host, the host-less runner apart', async () => {
+    const fixture = TestBed.createComponent(RunnerPanel);
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+
+    const card = el.querySelector('[data-testid="host-card"][data-host="h1"]');
+    expect([...(card?.querySelectorAll('[data-testid="runner"]') ?? [])].map((li) => li.getAttribute('data-runner'))).toEqual(['rA', 'rB']);
+    expect(card?.querySelector('[data-workspace-id="ws-1"] [data-testid="workspace-in-use"]')?.textContent?.trim()).toBe('2 / 3 in use');
+    expect(card?.querySelector('[data-runner="rA"] [data-testid="runner-subscription-name"]')?.textContent?.trim()).toBe('Anthropic Max');
+    expect(card?.querySelector('[data-runner="rA"] [data-testid="runner-binding-unreported"]')).not.toBeNull();
+    expect(card?.querySelector('[data-runner="rB"] [data-testid="runner-subscription-unrostered"]')).not.toBeNull();
+    expect(card?.querySelector('[data-testid="host-subscriptions"]')?.textContent).toContain('alpha');
+    expect(el.querySelector('[data-testid="runner-list"] [data-runner="rC"]')).not.toBeNull();
+  });
+});

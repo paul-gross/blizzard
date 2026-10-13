@@ -1,6 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, signal } from '@angular/core';
 import { errorMessage, injectPendingMutationVariables } from 'fleet';
 import { hasPermission, injectMeQuery } from '../core/auth/me.query';
+import { injectHostVerbs } from './host-verbs';
+import type { HostVerbEvent } from './host-verbs.model';
 import { injectRunnerPauseMutation, type RunnerPauseVars } from './runners.mutations';
 import { injectRunnerRows, type RunnerRow } from './runner-rows';
 import { pendingRunnerIds, withPendingRunnerPauses } from './runner-pause-override.model';
@@ -44,6 +46,7 @@ export class RunnersPage {
   /** The registry rows and their async state, from the shared {@link injectRunnerRows} fold. */
   private readonly runnerRows = injectRunnerRows(() => this.showRetired());
   protected readonly state = this.runnerRows.state;
+  protected readonly cards = this.runnerRows.cards;
 
   /** Every runner id the shared `pauseMutation` is currently in flight for — one
    * mutation instance fires once per toggled row, so this is scoped by `mutationKey`
@@ -74,6 +77,15 @@ export class RunnersPage {
   /** The page's last pause/resume failure, or `null` ("report, don't
    * swallow") — reset at the start of every new attempt. */
   protected readonly actionError = signal<string | null>(null);
+
+  /** The host verbs on each card — release, retire, revoke-token, enroll — behind
+   * `runner:retire`, their failures reported through {@link actionError}. */
+  private readonly hostVerbs = injectHostVerbs((message) => this.actionError.set(message));
+  protected readonly hostVerbsVm = this.hostVerbs.vm;
+
+  protected runHostVerb(event: HostVerbEvent): void {
+    this.hostVerbs.run(event);
+  }
 
   protected toggleShowRetired(): void {
     this.showRetired.update((shown) => !shown);

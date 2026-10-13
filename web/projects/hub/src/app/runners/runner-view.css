@@ -132,3 +132,13 @@
   flex-wrap: wrap;
   gap: 3px;
 }
+/* The host-less runners' heading, below every host card. */
+.hostless {
+  margin: 4px 0 0;
+  padding: 4px 8px;
+  color: var(--label-dim);
+  font-size: var(--fs-xs);
+  font-weight: normal;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}

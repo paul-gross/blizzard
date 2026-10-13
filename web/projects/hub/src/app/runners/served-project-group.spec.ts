@@ -46,4 +46,43 @@ describe('ServedProjectGroup', () => {
     expect(texts(el, 'runner-unresolved')).toEqual(['UNRESOLVED celestial', 'UNRESOLVED proj_gone']);
     expect(el.querySelector('[data-entry="celestial"]')?.getAttribute('title')).toContain('celestial');
   });
+
+  it("renders a hosted runner's bindings — project, workspace, agents in use of declared — and marks an unreported workspace", async () => {
+    const fixture = TestBed.createComponent(ServedProjectGroup);
+    fixture.componentRef.setInput('served', ['Default']);
+    fixture.componentRef.setInput('unassigned', false);
+    fixture.componentRef.setInput('unresolved', []);
+    fixture.componentRef.setInput('bindings', [
+      { project: 'Default', workspaceId: 'ws-1', agents: 3, agentsInUse: 1, unreported: false },
+      { project: 'Glacier', workspaceId: 'ws-9', agents: 1, agentsInUse: 0, unreported: true },
+    ]);
+    fixture.componentRef.setInput('subscription', 'Anthropic Max');
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="runner-served"]')).toBeNull();
+    expect(texts(el, 'runner-binding-project')).toEqual(['Default', 'Glacier']);
+    expect(texts(el, 'runner-binding-workspace')).toEqual(['ws-1', 'ws-9']);
+    expect(texts(el, 'runner-binding-agents')).toEqual(['1 / 3 agents', '0 / 1 agents']);
+    const unreported = el.querySelectorAll('[data-testid="runner-binding-unreported"]');
+    expect(unreported).toHaveLength(1);
+    expect(unreported[0].closest('[data-workspace-id]')?.getAttribute('data-workspace-id')).toBe('ws-9');
+    expect(texts(el, 'runner-subscription-name')).toEqual(['Anthropic Max']);
+    expect(el.querySelector('[data-testid="runner-subscription-unrostered"]')).toBeNull();
+  });
+
+  it("flags a hosted runner's subscription its host's roster does not carry", async () => {
+    const fixture = TestBed.createComponent(ServedProjectGroup);
+    fixture.componentRef.setInput('served', []);
+    fixture.componentRef.setInput('unassigned', false);
+    fixture.componentRef.setInput('unresolved', []);
+    fixture.componentRef.setInput('bindings', []);
+    fixture.componentRef.setInput('subscription', 'zzz');
+    fixture.componentRef.setInput('subscriptionUnrostered', true);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(texts(el, 'runner-subscription-name')).toEqual(['zzz']);
+    expect(texts(el, 'runner-subscription-unrostered')).toEqual(['UNROSTERED']);
+  });
 });

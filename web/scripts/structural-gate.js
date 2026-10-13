@@ -690,6 +690,7 @@ const FLEET_LAYERS = {
   sse: ['api', 'core'],
   transcripts: ['api', 'core', 'kit'],
   chunk: ['api', 'core', 'kit', 'transcripts'],
+  host: ['api', 'core', 'kit'],
   shell: ['api', 'core', 'kit'],
   testing: ['api'],
 };

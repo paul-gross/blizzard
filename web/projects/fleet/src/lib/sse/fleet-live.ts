@@ -27,6 +27,7 @@ import {
   hubQuestionsKey,
   hubDecisionsKey,
   hubQueueKey,
+  hubHostsKey,
   hubRunnersKey,
 } from '../core/query-keys';
 import { FLEET_CLOCK } from '../core/now-signal';
@@ -119,7 +120,7 @@ export type LoggedEventData = Omit<ActivityView, 'at' | 'type' | 'key'> & { read
  */
 const NO_DURABLE_FACT_TYPES: ReadonlySet<string> = new Set<HubEventType>([
   HubEventType.QUEUE_CHANGED,
-  // Nothing renders a host yet, so its frame stales no query and joins no feed.
+  // A host's frame re-reads the host cards it changes, but carries no news the Activity feed shows.
   HubEventType.HOST_CHANGED,
 ]);
 
@@ -230,8 +231,10 @@ const EVENT_INVALIDATION_REGISTRY: Record<HubEventType, (data: HubEventPayload) 
   // A backlog reorder fires the same event as a ready-queue one (no distinct
   // payload key, `bzh:ranking-is-per-list`), so both cached orders invalidate.
   [HubEventType.QUEUE_CHANGED]: () => [hubQueueKey, hubBacklogKey],
-  [HubEventType.RUNNER_CHANGED]: () => [hubRunnersKey],
-  [HubEventType.HOST_CHANGED]: () => [],
+  // A host's usage samples arrive only as its spenders' frames, so a runner frame re-reads the hosts too.
+  [HubEventType.RUNNER_CHANGED]: () => [hubRunnersKey, hubHostsKey],
+  // Adopt, release and retire move runners between hosts, so a host frame re-reads both registries.
+  [HubEventType.HOST_CHANGED]: () => [hubHostsKey, hubRunnersKey],
   [HubEventType.EVENT_LOGGED]: (data) => [hubEventsKey, ...chunkDetailKeys(data)],
 };
 

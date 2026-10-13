@@ -1,0 +1,62 @@
+:host {
+  display: block;
+  min-width: 0;
+}
+.host {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 0 8px;
+  padding: 6px 0 0;
+  border: 1px solid var(--line);
+  min-width: 0;
+}
+.head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 6px;
+  padding: 0 8px;
+  min-width: 0;
+}
+.name {
+  color: var(--text);
+  letter-spacing: 0.08em;
+  overflow-wrap: anywhere;
+}
+.report {
+  color: var(--label);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+.dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  background: var(--label-dim);
+}
+.dot.online {
+  background: var(--green);
+}
+.dot.offline {
+  background: var(--red);
+}
+fleet-subscription-pace-group {
+  padding: 0 8px;
+}
+.verbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 8px;
+}
+.token-note {
+  color: var(--label);
+  font-size: var(--fs-xs);
+}
+.token {
+  display: block;
+  overflow-wrap: anywhere;
+  user-select: all;
+}

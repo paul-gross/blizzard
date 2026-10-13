@@ -1,0 +1,24 @@
+@for (ws of workspaces(); track $index) {
+  @if (ws.workspaceId !== null) {
+    <div class="ws" data-testid="workspace-row" [attr.data-workspace-id]="ws.workspaceId">
+      <span class="ws-id">{{ ws.workspaceId }}</span>
+      <span class="ws-use" data-testid="workspace-in-use">
+        {{ ws.capacity === null ? ws.inUse + ' in use' : ws.inUse + ' / ' + ws.capacity + ' in use' }}
+      </span>
+      @if (ws.flag) {
+        <span class="ws-flag" data-testid="workspace-flag">{{ ws.flag }}</span>
+      }
+    </div>
+  }
+  @for (row of ws.environments; track row.environmentId) {
+    <div class="row" data-testid="env-row" [attr.data-env-id]="row.environmentId" [attr.data-held]="row.isHeld">
+      <fleet-kit-beacon data-testid="env-beacon" [active]="row.isHeld" tone="amber" />
+      <span class="env">{{ row.environmentId }}</span>
+      <span class="chunk">{{ row.chunkRef }}</span>
+      <span class="held" data-testid="env-held-for">{{ row.heldFor }}</span>
+      @if (row.holder) {
+        <span class="holder" data-testid="env-holder">{{ row.holder }}</span>
+      }
+    </div>
+  }
+}

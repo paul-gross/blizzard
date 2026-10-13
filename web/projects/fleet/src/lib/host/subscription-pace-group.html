@@ -1,6 +1,11 @@
 @for (group of subscriptionPaces(); track group.slug) {
   <div class="sub-group" data-testid="subscription-pace-group" [attr.data-subscription-slug]="group.slug">
-    <div class="sub-name" data-testid="subscription-pace-group-name">{{ group.name }}</div>
+    <div class="sub-hdr">
+      <div class="sub-name" data-testid="subscription-pace-group-name">{{ group.name }}</div>
+      @if (group.provider) {
+        <span class="sub-provider" data-testid="subscription-pace-group-provider">{{ group.provider }}</span>
+      }
+    </div>
     @if (group.refreshedLabel) {
       <div
         class="sub-refreshed"
@@ -10,7 +15,12 @@
         {{ group.refreshedLabel }}
       </div>
     }
-    @if (group.condition === SampleMissReason.CREDENTIAL_LAPSED) {
+    @if (group.sample; as sample) {
+      <div class="sub-condition" data-testid="subscription-pace-group-condition" [class.miss]="sample.ok === false">
+        {{ sample.conditionLabel }}
+      </div>
+      <div class="sub-sampled" data-testid="subscription-pace-group-sampled">sampled {{ sample.sampledAgo }}</div>
+    } @else if (group.condition === SampleMissReason.CREDENTIAL_LAPSED) {
       <div
         class="sub-lapsed"
         data-testid="subscription-pace-group-lapsed"
@@ -48,6 +58,14 @@
       >
         NO SAMPLE YET{{ group.missReason ? ' — ' + group.missReason : '' }}
       </div>
+    }
+    @if (group.spenders; as spenders) {
+      @if (spenders.length > 0) {
+        <div class="sub-spenders" data-testid="subscription-pace-group-spenders">spent by {{ spenders.join(', ') }}</div>
+      }
+    }
+    @if (group.renewalLabel) {
+      <div class="sub-renewal" data-testid="subscription-pace-group-renewal">renewal: {{ group.renewalLabel }}</div>
     }
   </div>
 }

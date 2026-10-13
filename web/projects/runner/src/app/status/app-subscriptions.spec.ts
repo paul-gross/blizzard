@@ -96,9 +96,9 @@ describe('LocalSubscriptions', () => {
   it('renders a never-sampled subscription', async () => {
     const { el } = await render([NEVER_SAMPLED]);
 
-    const row = el.querySelector('[data-testid="subscription-row"]');
-    expect(row?.getAttribute('data-slug')).toBe('anthropic');
-    expect(row?.querySelector('.condition')?.textContent).toBe('never sampled');
+    const row = el.querySelector('[data-testid="subscription-pace-group"]');
+    expect(row?.getAttribute('data-subscription-slug')).toBe('anthropic');
+    expect(row?.querySelector('[data-testid="subscription-pace-group-condition"]')?.textContent?.trim()).toBe('never sampled');
   });
 
   it('renders the empty state when there are no declared subscriptions', async () => {
@@ -110,25 +110,25 @@ describe('LocalSubscriptions', () => {
   it('renders a miss subscription with its reason, distinctly from an ok one', async () => {
     const { el } = await render([OK, MISS]);
 
-    const rows = el.querySelectorAll('[data-testid="subscription-row"]');
+    const rows = el.querySelectorAll('[data-testid="subscription-pace-group"]');
     expect(rows).toHaveLength(2);
-    const missRow = Array.from(rows).find((row) => row.getAttribute('data-slug') === 'codex');
-    expect(missRow?.querySelector('.condition')?.textContent).toBe('miss: credential lapsed: log in again');
-    expect(missRow?.classList.contains('miss')).toBe(true);
+    const missRow = Array.from(rows).find((row) => row.getAttribute('data-subscription-slug') === 'codex');
+    expect(missRow?.querySelector('[data-testid="subscription-pace-group-condition"]')?.textContent?.trim()).toBe('miss: credential lapsed: log in again');
+    expect(missRow?.querySelector('[data-testid="subscription-pace-group-condition"]')?.classList.contains('miss')).toBe(true);
   });
 
   it('renders a recorded renewal outcome alongside the attempt', async () => {
     const { el } = await render([RENEWED]);
 
-    const row = el.querySelector('[data-testid="subscription-row"]');
-    expect(row?.querySelector('[data-testid="subscription-renewal"]')?.textContent).toMatch(/^renewal: renewed /);
+    const row = el.querySelector('[data-testid="subscription-pace-group"]');
+    expect(row?.querySelector('[data-testid="subscription-pace-group-renewal"]')?.textContent).toMatch(/^renewal: renewed /);
   });
 
   it('renders no renewal line for a subscription never renewed', async () => {
     const { el } = await render([OK]);
 
-    const row = el.querySelector('[data-testid="subscription-row"]');
-    expect(row?.querySelector('[data-testid="subscription-renewal"]')).toBeNull();
+    const row = el.querySelector('[data-testid="subscription-pace-group"]');
+    expect(row?.querySelector('[data-testid="subscription-pace-group-renewal"]')).toBeNull();
   });
 
   describe('sampled-ago ticking', () => {
@@ -140,13 +140,13 @@ describe('LocalSubscriptions', () => {
         const dateNow = vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-07-16T12:00:00.000Z'));
         const { fixture } = await render([OK]);
         const el = fixture.nativeElement as HTMLElement;
-        expect(el.querySelector('.sampled')?.textContent).toContain('30s');
+        expect(el.querySelector('[data-testid="subscription-pace-group-sampled"]')?.textContent).toContain('30s');
 
         dateNow.mockReturnValue(Date.parse('2026-07-16T12:01:00.000Z'));
         await vi.advanceTimersByTimeAsync(1_100);
         fixture.detectChanges();
 
-        expect(el.querySelector('.sampled')?.textContent).toContain('1m');
+        expect(el.querySelector('[data-testid="subscription-pace-group-sampled"]')?.textContent).toContain('1m');
       } finally {
         vi.useRealTimers();
       }

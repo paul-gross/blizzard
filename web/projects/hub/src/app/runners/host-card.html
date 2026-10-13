@@ -1,0 +1,87 @@
+<section
+  class="host"
+  data-testid="host-card"
+  [attr.data-host]="card().hostId"
+  [attr.data-connection]="card().connection"
+  [attr.aria-label]="'Host ' + card().hostName"
+>
+  <div class="head">
+    <span class="name" data-testid="host-name">
+      <span
+        class="dot"
+        [class.online]="card().online"
+        [class.offline]="card().connection === connection.OFFLINE"
+        aria-hidden="true"
+      ></span>
+      {{ card().hostName }}
+    </span>
+    <span class="report" data-testid="host-report">{{ card().reportLabel }}</span>
+  </div>
+  @if (card().workspaces.length > 0) {
+    <fleet-workspace-table data-testid="host-workspaces" [workspaces]="card().workspaces" />
+  }
+  @if (card().subscriptionPaces.length > 0) {
+    <fleet-subscription-pace-group data-testid="host-subscriptions" [subscriptionPaces]="card().subscriptionPaces" />
+  }
+  @if (verbs().canRetire) {
+    <div class="verbs" data-testid="host-verbs">
+      <fleet-kit-button
+        testid="host-enroll"
+        [ariaLabel]="'Enroll host ' + card().hostName"
+        [disabled]="hostPending()"
+        (click)="enroll()"
+      >Enroll</fleet-kit-button>
+      <fleet-kit-button
+        testid="host-revoke-token"
+        [ariaLabel]="'Revoke the token of host ' + card().hostName"
+        [disabled]="hostPending()"
+        (click)="askRevokeToken()"
+      >Revoke token</fleet-kit-button>
+      <fleet-kit-button
+        testid="host-retire"
+        variant="danger"
+        [ariaLabel]="'Retire host ' + card().hostName"
+        [disabled]="hostPending()"
+        (click)="askRetire()"
+      >Retire</fleet-kit-button>
+    </div>
+  }
+  <ng-content />
+</section>
+@if (pendingConfirm(); as confirm) {
+  <fleet-kit-confirm-dialog
+    [open]="true"
+    [heading]="confirm.heading"
+    [message]="confirm.message"
+    [confirmLabel]="confirm.confirmLabel"
+    variant="danger"
+    testid="host-confirm"
+    (confirmed)="onConfirmed()"
+    (cancelled)="onCancelled()"
+  />
+}
+@if (refusal(); as message) {
+  <fleet-kit-confirm-dialog
+    [open]="true"
+    [heading]="'Force retire host ' + card().hostName"
+    [message]="message + ' Retiring anyway releases those chunks.'"
+    confirmLabel="Retire anyway"
+    variant="danger"
+    testid="host-force-retire"
+    (confirmed)="forceRetire()"
+    (cancelled)="dismiss()"
+  />
+}
+<fleet-kit-dialog
+  [open]="enrolledToken() !== null"
+  [ariaLabel]="'Token for host ' + card().hostName"
+  testid="host-token-dialog"
+  (closed)="dismiss()"
+>
+  <h2 fleetKitDialogHeader>Token for host {{ card().hostName }}</h2>
+  <p class="token-note">Shown once — copy it to the host now.</p>
+  <code class="token" data-testid="host-token">{{ enrolledToken() }}</code>
+  <div fleetKitDialogFooter>
+    <fleet-kit-button testid="host-token-done" (click)="dismiss()">Done</fleet-kit-button>
+  </div>
+</fleet-kit-dialog>

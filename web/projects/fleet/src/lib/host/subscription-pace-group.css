@@ -9,6 +9,12 @@
   flex-direction: column;
   gap: 2px;
 }
+.sub-hdr {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
 .sub-name {
   color: var(--label-dim);
   font-size: var(--fs-label);
@@ -45,4 +51,21 @@
 }
 .sub-refreshed[data-freshness='stale'] {
   color: var(--red);
+}
+.sub-provider {
+  color: var(--label);
+  font-size: var(--fs-label);
+}
+.sub-condition {
+  color: var(--text);
+  font-size: var(--fs-sm);
+}
+.sub-condition.miss {
+  color: var(--red);
+}
+.sub-sampled,
+.sub-spenders,
+.sub-renewal {
+  color: var(--label-dim);
+  font-size: var(--fs-label);
 }

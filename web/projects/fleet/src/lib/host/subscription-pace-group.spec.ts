@@ -1,7 +1,7 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
-import type { SubscriptionPace } from './runner-rows';
+import type { SubscriptionPace } from './subscription-pace.model';
 import { SubscriptionPaceGroup } from './subscription-pace-group';
 
 /** A fully-shaped {@link SubscriptionPace}, defaulting to "never sampled, no miss" —
@@ -90,7 +90,7 @@ describe('SubscriptionPaceGroup', () => {
     expect(unsampled?.getAttribute('aria-label')).toBe('Anthropic (default) sample reported no usage windows');
   });
 
-  it('renders a lapsed credential in place of the empty-windows message (blizzard#504)', async () => {
+  it('renders a lapsed credential in place of the empty-windows message', async () => {
     const el = await render([pace({ slug: 'openai', name: 'OpenAI', condition: 'credential_lapsed' })]);
 
     const group = el.querySelector('[data-subscription-slug="openai"]');
@@ -168,5 +168,48 @@ describe('SubscriptionPaceGroup', () => {
     const el = await render([]);
 
     expect(el.querySelector('[data-testid="subscription-pace-group"]')).toBeNull();
+  });
+
+  it('renders a sample line with its provider in place of the pace branch', async () => {
+    const el = await render([
+      pace({
+        slug: 'codex',
+        name: 'Codex',
+        provider: 'openai',
+        sample: { conditionLabel: 'miss: endpoint unreachable', sampledAgo: '2m ago', ok: false },
+      }),
+    ]);
+
+    const group = el.querySelector('[data-subscription-slug="codex"]');
+    expect(group?.querySelector('[data-testid="subscription-pace-group-provider"]')?.textContent).toBe('openai');
+    const condition = group?.querySelector('[data-testid="subscription-pace-group-condition"]');
+    expect(condition?.textContent?.trim()).toBe('miss: endpoint unreachable');
+    expect(condition?.classList.contains('miss')).toBe(true);
+    expect(group?.querySelector('[data-testid="subscription-pace-group-sampled"]')?.textContent).toBe('sampled 2m ago');
+    expect(group?.querySelector('[data-testid="subscription-pace-group-no-sample"]')).toBeNull();
+  });
+
+  it('does not tone an ok sample line as a miss', async () => {
+    const el = await render([pace({ slug: 'codex', name: 'Codex', sample: { conditionLabel: 'ok', sampledAgo: '1s ago', ok: true } })]);
+
+    const condition = el.querySelector('[data-testid="subscription-pace-group-condition"]');
+    expect(condition?.classList.contains('miss')).toBe(false);
+  });
+
+  it('names the spenders and the renewal only when the row carries them', async () => {
+    const el = await render([
+      pace({ slug: 'anthropic', name: 'Anthropic', spenders: ['rA', 'rB'], renewalLabel: 'renewed 1m ago' }),
+      pace({ slug: 'openai', name: 'OpenAI', spenders: [] }),
+    ]);
+
+    const spent = el.querySelector('[data-subscription-slug="anthropic"]');
+    expect(spent?.querySelector('[data-testid="subscription-pace-group-spenders"]')?.textContent).toBe('spent by rA, rB');
+    expect(spent?.querySelector('[data-testid="subscription-pace-group-renewal"]')?.textContent).toBe(
+      'renewal: renewed 1m ago',
+    );
+    const unspent = el.querySelector('[data-subscription-slug="openai"]');
+    expect(unspent?.querySelector('[data-testid="subscription-pace-group-spenders"]')).toBeNull();
+    expect(unspent?.querySelector('[data-testid="subscription-pace-group-renewal"]')).toBeNull();
+    expect(unspent?.querySelector('[data-testid="subscription-pace-group-provider"]')).toBeNull();
   });
 });

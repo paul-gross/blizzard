@@ -30,6 +30,7 @@ export * from './lib/chunk/chunk-issue-list';
 export * from './lib/sse';
 export * from './lib/core/mutation-pending';
 export * from './lib/transcripts';
+export * from './lib/host';
 export * from './lib/core/url-selection';
 export * from './lib/core/viewport';
 export * from './lib/core/query-state';
@@ -42,6 +43,7 @@ export {
   hubQueueKey,
   hubBacklogKey,
   hubRunnersKey,
+  hubHostsKey,
   hubQuestionsKey,
   hubDecisionsKey,
   hubGardenProposalsKey,
@@ -160,6 +162,7 @@ export type {
   ProjectView,
   ProjectsListView,
   RunnerRegistryView,
+  HostRegistryView,
   ServedProjectView,
   RunnerView,
   ScopeView,
@@ -230,6 +233,11 @@ export {
   listRoutineScopesApiRoutinesRoutineIdScopesGet,
   listRoutinesApiRoutinesGet,
   listRunnersApiRunnersGet,
+  listHostsApiHostsGet,
+  enrollHostApiHostsHostIdEnrollmentsPost,
+  releaseRunnersApiHostsHostIdReleasesPost,
+  retireHostApiHostsHostIdRetirePost,
+  revokeHostTokenApiHostsHostIdTokenRevocationsPost,
   listRunsApiRunsGet,
   listScopesApiScopesGet,
   listMembersApiMembersGet,
