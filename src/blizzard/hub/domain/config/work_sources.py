@@ -1,13 +1,18 @@
-"""Work-source records: the stored shape, validation, sparse merge, and the seams."""
+"""Work-source records: the stored shape, validation, sparse merge, and the seams.
+
+A work source has the shape a repository has: an immutable id every stored reference holds, a tenant-unique renameable
+slug whose former values keep resolving until another record claims them, and a free display name. ``hub`` is never a
+work source's slug, current or former: the built-in source holds that key."""
 
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime
-from typing import ClassVar, Protocol
+from typing import ClassVar, NewType, Protocol
 
+from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.config.changes import (
     FIELDED_RECORD_TRANSITIONS,
@@ -21,7 +26,12 @@ from blizzard.hub.domain.config.changes import (
     Verdict,
 )
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
+from blizzard.hub.domain.kernel.id_or_slug import IIdOrSlugLookup, SluggedKind
+from blizzard.hub.domain.kernel.id_or_slug import resolve as resolve_reference
+from blizzard.hub.domain.kernel.slugs import NAME_MAX, SLUG_MAX, DisplayName, Slug
 from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
+
+WorkSourceId = NewType("WorkSourceId", str)
 
 # The only work-source provider grammar a source may declare; an unknown provider fails
 # at config load, not at first use.
@@ -35,6 +45,8 @@ _GITHUB_LOCATOR = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 #: The mutable fields, in the order a diff lists them.
 _FIELDS = ("provider", "locator", "api_base", "web_base", "annotate", "secret")
 _NULLABLE = frozenset({"api_base", "web_base", "secret"})
+#: Every field a diff lists: the record's own handle and label, then the mutable fields.
+_DIFF_FIELDS = ("slug", "name", *_FIELDS)
 
 
 class ConfigFieldError(ValueError):
@@ -54,10 +66,10 @@ class ConfigRevisionConflict(Exception):
         self.current = current
 
 
-class WorkSourceNameTaken(Exception):
-    def __init__(self, name: str) -> None:
-        super().__init__(f"work source {name} already exists")
-        self.name = name
+class WorkSourceSlugTaken(Exception):
+    def __init__(self, slug: str) -> None:
+        super().__init__(f"work source {slug} already exists")
+        self.slug = slug
 
 
 class WorkSourceLocatorTaken(Exception):
@@ -84,6 +96,54 @@ class BuiltInWorkSource(Exception):
 
 @domain_model
 @dataclass(frozen=True)
+class WorkSourceSlug(Slug):
+    """A work source's slug, in the shared slug grammar; ``hub`` is the built-in source's and never one."""
+
+    @classmethod
+    def parse(cls, raw: str) -> WorkSourceSlug:
+        """:class:`ConfigFieldError` on ``slug`` when ``raw`` is outside the slug alphabet or length, or is ``hub``."""
+        slug = cls.of(raw)
+        if slug is None:
+            raise ConfigFieldError(
+                "slug",
+                f"must be 1-{SLUG_MAX} lowercase letters, digits and single inner hyphens, got {raw!r}",
+            )
+        if is_built_in(slug.value):
+            raise ConfigFieldError("slug", f"{raw!r} is reserved for the built-in hub source")
+        return slug
+
+
+@domain_model
+@dataclass(frozen=True)
+class WorkSourceName(DisplayName):
+    """A work source's display name, in the shared display-name grammar."""
+
+    @classmethod
+    def parse(cls, raw: str) -> WorkSourceName:
+        """:class:`ConfigFieldError` on ``name`` when ``raw`` is blank, too long, or padded."""
+        name = cls.of(raw)
+        if name is None:
+            raise ConfigFieldError(
+                "name", f"must be 1-{NAME_MAX} characters with no leading or trailing whitespace, got {raw!r}"
+            )
+        return name
+
+
+def _work_source_slug(raw: str) -> WorkSourceSlug | None:
+    """The slug ``raw`` spells, or ``None`` — ``hub`` among them, which resolves to no configured source."""
+    slug = WorkSourceSlug.of(raw)
+    return None if slug is None or is_built_in(slug.value) else slug
+
+
+#: Work sources as the shared id-or-slug resolution sees them.
+WORK_SOURCE_KIND = SluggedKind(IdPrefix.WORK_SOURCE, WorkSourceId, _work_source_slug)
+
+#: The reads a resolution needs; :class:`IReadWorkSourceRepository` is one.
+type IWorkSourceLookup = IIdOrSlugLookup[WorkSourceId, WorkSourceSlug, ConfiguredWorkSource]
+
+
+@domain_model
+@dataclass(frozen=True)
 class WorkSourceFields:
     """The mutable fields of a work source, by wire name."""
 
@@ -98,13 +158,16 @@ class WorkSourceFields:
 @domain_model
 @dataclass(frozen=True)
 class ConfiguredWorkSource:
-    """A stored work source. ``retired`` derives from the newest lifecycle fact.
+    """A stored work source. ``retired`` derives from the newest lifecycle fact. Nothing references a work source by
+    its ``slug`` or ``name``; a work source's change rows are keyed by its id.
 
     Each verb returns the record to write with the :class:`ConfigChange` committed beside it,
     or ``None`` when the verb changes nothing and so writes nothing."""
 
     TRANSITIONS: ClassVar[Mapping[RecordState, Mapping[ChangeOp, Verdict]]] = FIELDED_RECORD_TRANSITIONS
 
+    work_source_id: WorkSourceId
+    slug: str
     name: str
     fields: WorkSourceFields
     revision: int
@@ -114,17 +177,35 @@ class ConfiguredWorkSource:
 
     @classmethod
     def new(
-        cls, name: str, fields: WorkSourceFields, ctx: ChangeContext, *, at: datetime
+        cls,
+        slug: str,
+        name: str | None,
+        fields: WorkSourceFields,
+        ctx: ChangeContext,
+        *,
+        at: datetime,
+        work_source_id: WorkSourceId | None = None,
     ) -> tuple[ConfiguredWorkSource, ConfigChange]:
-        validate_name(name)
+        """A new record at revision 1; a ``name`` of ``None`` is the slug. ``work_source_id`` is minted when not given —
+        a document apply mints the id of a record it creates before it plans the links to it."""
+        parsed = WorkSourceSlug.parse(slug)
+        label = parsed.value if name is None else WorkSourceName.parse(name).value
         validate_fields(fields)
-        record = cls(name=name, fields=fields, revision=1, created_at=at, created_by=ctx.actor)
-        return record, ConfigChange.of(ctx, RecordKind.WORK_SOURCE, name, 1, ChangeOp.CREATE, diff(None, fields), at)
+        record = cls(
+            work_source_id=work_source_id or WorkSourceId(Id.mint_at(IdPrefix.WORK_SOURCE, at).value),
+            slug=parsed.value,
+            name=label,
+            fields=fields,
+            revision=1,
+            created_at=at,
+            created_by=ctx.actor,
+        )
+        return record, record._change(ctx, ChangeOp.CREATE, diff(None, record), at)
 
     def require_revision(self, if_match: int | None) -> None:
         """:class:`ConfigRevisionConflict` when ``if_match`` names a revision other than the stored one."""
         if if_match is not None and if_match != self.revision:
-            raise ConfigRevisionConflict("work source", self.name, current=self.revision)
+            raise ConfigRevisionConflict("work source", self.work_source_id, current=self.revision)
 
     def edit(
         self, edit: WorkSourceEdit, ctx: ChangeContext, *, if_match: int | None, at: datetime
@@ -132,15 +213,21 @@ class ConfiguredWorkSource:
         """Apply a sparse edit, legal from either state. The revision check comes first, even
         for an edit that changes nothing; an empty diff never re-validates the stored fields."""
         self.require_revision(if_match)
-        merged = merge(self.fields, edit)
-        changes = diff(self.fields, merged)
+        slug, name = merge_labels(self, edit)
+        edited = replace(self, slug=slug, name=name, fields=merge(self.fields, edit))
+        changes = diff(self, edited)
         if not changes:
             return None
-        validate_fields(merged)
-        edited = replace(self, fields=merged, revision=self.revision + 1)
-        return edited, ConfigChange.of(
-            ctx, RecordKind.WORK_SOURCE, self.name, edited.revision, ChangeOp.EDIT, changes, at
-        )
+        validate_fields(edited.fields)
+        edited = replace(edited, revision=self.revision + 1)
+        return edited, edited._change(ctx, ChangeOp.EDIT, changes, at)
+
+    def ref(self) -> WorkSourceRef:
+        return WorkSourceRef(self.work_source_id, self.slug)
+
+    def slug_left_for(self, edited: ConfiguredWorkSource) -> str | None:
+        """The slug this record leaves when ``edited`` replaces it — ``None`` when the slug stays."""
+        return self.slug if edited.slug != self.slug else None
 
     def set_retired(
         self, retired: bool, ctx: ChangeContext, *, if_match: int | None, at: datetime
@@ -152,14 +239,28 @@ class ConfiguredWorkSource:
             return None
         moved = replace(self, revision=self.revision + 1, retired=retired)
         flip = (FieldChange(RETIRED_FIELD, self.retired, retired),)
-        return moved, ConfigChange.of(ctx, RecordKind.WORK_SOURCE, self.name, moved.revision, op, flip, at)
+        return moved, moved._change(ctx, op, flip, at)
+
+    def _change(self, ctx: ChangeContext, op: ChangeOp, changes: tuple[FieldChange, ...], at: datetime) -> ConfigChange:
+        return ConfigChange.of(ctx, RecordKind.WORK_SOURCE, self.work_source_id, self.revision, op, changes, at)
+
+
+@domain_model
+@dataclass(frozen=True)
+class WorkSourceRef:
+    """A work source as a reference resolves it: its id, and the slug it currently answers to."""
+
+    work_source_id: WorkSourceId
+    slug: str
 
 
 @domain_model
 @dataclass(frozen=True)
 class WorkSourceEdit:
-    """A sparse edit: :data:`UNSET` leaves a field, ``None`` clears a nullable one."""
+    """A sparse edit: :data:`UNSET` leaves a field, ``None`` clears a nullable one and is refused on any other."""
 
+    slug: str | None | UnsetType = UNSET
+    name: str | None | UnsetType = UNSET
     provider: str | UnsetType = UNSET
     locator: str | UnsetType = UNSET
     api_base: str | None | UnsetType = UNSET
@@ -168,25 +269,15 @@ class WorkSourceEdit:
     secret: str | None | UnsetType = UNSET
 
 
-def is_built_in(name: str) -> bool:
-    """Whether ``name`` is the built-in hub source, which no configured record may claim or change."""
-    return name == RESERVED_HUB_SOURCE_NAME
+def is_built_in(key: str) -> bool:
+    """Whether ``key`` is the built-in hub source's, which no configured record may claim or change."""
+    return key == RESERVED_HUB_SOURCE_NAME
 
 
-def require_configurable(name: str) -> None:
-    """:class:`BuiltInWorkSource` when ``name`` is the built-in hub source."""
-    if is_built_in(name):
+def require_configurable(key: str) -> None:
+    """:class:`BuiltInWorkSource` when ``key`` is the built-in hub source's."""
+    if is_built_in(key):
         raise BuiltInWorkSource()
-
-
-def validate_name(name: str) -> None:
-    if not name or not name.strip():
-        raise ConfigFieldError("name", "must not be blank")
-    if ":" in name:
-        # A colon breaks the ingest-token grammar's first-colon split.
-        raise ConfigFieldError("name", f"{name!r} must not contain ':'")
-    if is_built_in(name):
-        raise ConfigFieldError("name", f"{name!r} is reserved for the built-in hub source")
 
 
 def validate_fields(fields: WorkSourceFields) -> None:
@@ -214,32 +305,70 @@ def merge(current: WorkSourceFields, edit: WorkSourceEdit) -> WorkSourceFields:
     return replace(current, **changes)  # type: ignore[arg-type]
 
 
-def diff(old: WorkSourceFields | None, new: WorkSourceFields) -> tuple[FieldChange, ...]:
+def merge_labels(current: ConfiguredWorkSource, edit: WorkSourceEdit) -> tuple[str, str]:
+    """The slug and name ``current`` holds once ``edit`` applies; a set one is validated whether or not it differs,
+    and ``None`` is refused naming the field."""
+    return (
+        _merged_label("slug", current.slug, edit.slug, WorkSourceSlug.parse),
+        _merged_label("name", current.name, edit.name, WorkSourceName.parse),
+    )
+
+
+def _merged_label(
+    field: str, held: str, value: str | None | UnsetType, parse: Callable[[str], Slug | DisplayName]
+) -> str:
+    if value is UNSET:
+        return held
+    if value is None:
+        raise ConfigFieldError(field, "must not be null")
+    return parse(value).value
+
+
+def diff(old: ConfiguredWorkSource | None, new: ConfiguredWorkSource) -> tuple[FieldChange, ...]:
     """The fields that differ, by wire name. With no ``old`` (a create), every set field
     is listed against ``None``."""
     changes: list[FieldChange] = []
-    for name in _FIELDS:
-        new_value = getattr(new, name)
-        if old is None:
-            if new_value is not None:
-                changes.append(FieldChange(name, None, new_value))
-        elif getattr(old, name) != new_value:
-            changes.append(FieldChange(name, getattr(old, name), new_value))
+    for name in _DIFF_FIELDS:
+        new_value = _field(new, name)
+        old_value = None if old is None else _field(old, name)
+        if old_value != new_value:
+            changes.append(FieldChange(name, old_value, new_value))
     return tuple(changes)
+
+
+def _field(record: ConfiguredWorkSource, name: str) -> object:
+    return getattr(record if name in ("slug", "name") else record.fields, name)
 
 
 class IReadWorkSourceRepository(Protocol):
     """Read-only work-source operations."""
 
-    def get(self, name: str) -> ConfiguredWorkSource | None: ...
+    def get(self, work_source_id: WorkSourceId) -> ConfiguredWorkSource | None: ...
 
-    def get_many(self, names: list[str]) -> dict[str, ConfiguredWorkSource]:
-        """Every named source that exists, keyed by name (``bzh:bulk-reconstitution``)."""
+    def get_many(self, work_source_ids: list[WorkSourceId]) -> dict[WorkSourceId, ConfiguredWorkSource]:
+        """Every named source that exists, keyed by id (``bzh:bulk-reconstitution``)."""
         ...
 
     def list_all(self, *, include_retired: bool) -> list[ConfiguredWorkSource]:
-        """Ordered by name; retired sources only when ``include_retired``."""
+        """Ordered by slug; retired sources only when ``include_retired``."""
         ...
+
+    def get_by_slug(self, slug: WorkSourceSlug) -> ConfiguredWorkSource | None:
+        """The work source whose current slug is ``slug``."""
+        ...
+
+    def get_by_former_slug(self, slug: WorkSourceSlug) -> ConfiguredWorkSource | None:
+        """The work source that left ``slug``, while no work source holds it again."""
+        ...
+
+    def resolve(self, value: str) -> ConfiguredWorkSource | None:
+        """The work source an id or slug names (:func:`resolve_work_source_reference`)."""
+        ...
+
+
+def resolve_work_source_reference(value: str, sources: IWorkSourceLookup) -> ConfiguredWorkSource | None:
+    """The work source ``value`` names — an id, a current slug, or a slug it left — or ``None``. ``hub`` names none."""
+    return resolve_reference(value, WORK_SOURCE_KIND, sources)
 
 
 class IWriteWorkSourceRepository(IReadWorkSourceRepository, Protocol):
@@ -247,13 +376,19 @@ class IWriteWorkSourceRepository(IReadWorkSourceRepository, Protocol):
     the record write."""
 
     def create(self, record: ConfiguredWorkSource, *, change: ConfigChange) -> ConfiguredWorkSource:
-        """Insert. :class:`WorkSourceNameTaken` / :class:`WorkSourceLocatorTaken` on a
-        collision; :class:`WorkSourceSecretUnavailable` when the secret is missing or retired."""
+        """Insert, taking ``record.slug`` from any work source that left it. :class:`WorkSourceSlugTaken` /
+        :class:`WorkSourceLocatorTaken` on a collision; :class:`WorkSourceSecretUnavailable` when the secret is missing
+        or retired."""
         ...
 
-    def update(self, record: ConfiguredWorkSource, *, from_revision: int, change: ConfigChange) -> ConfiguredWorkSource:
+    def update(
+        self, record: ConfiguredWorkSource, *, from_revision: int, left_slug: str | None, change: ConfigChange
+    ) -> ConfiguredWorkSource:
         """Compare-and-set ``from_revision``, writing ``record``'s fields and revision;
-        :class:`ConfigRevisionConflict` when the stored revision has moved."""
+        :class:`ConfigRevisionConflict` when the stored revision has moved. When ``left_slug`` is set the slug moves in
+        the same transaction: the former-slug row holding the new slug is removed and ``left_slug`` becomes this work
+        source's former slug at ``change.recorded_at``. :class:`WorkSourceSlugTaken` when another work source holds the
+        new slug as its current one."""
         ...
 
     def record_lifecycle(

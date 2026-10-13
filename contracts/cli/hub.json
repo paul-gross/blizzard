@@ -141,7 +141,7 @@
               "type": "text"
             },
             {
-              "help": "Scope to one work source.",
+              "help": "Scope to one work source, by id or slug, or hub.",
               "hidden": false,
               "kind": "option",
               "name": "source",
@@ -478,7 +478,7 @@
               "type": "text"
             },
             {
-              "help": "Scope to one work source.",
+              "help": "Scope to one work source, by id or slug, or hub.",
               "hidden": false,
               "kind": "option",
               "name": "source",
@@ -2095,7 +2095,7 @@
               "type": "choice"
             },
             {
-              "help": "Only changes to the record with this name; a project or repository, by its id or slug.",
+              "help": "Only changes to the record with this name; a project, repository or work source, by its id or slug.",
               "hidden": false,
               "kind": "option",
               "name": "key",
@@ -4556,7 +4556,7 @@
               "type": "choice"
             },
             {
-              "help": "Work source to author at (default 'hub', the one source with an editor).",
+              "help": "Work source to author at, by id or slug (default 'hub', the one source with an editor).",
               "hidden": false,
               "kind": "option",
               "name": "source",
@@ -5253,7 +5253,7 @@
               "type": "text"
             },
             {
-              "help": "A work source, by name.",
+              "help": "A work source, by id or slug.",
               "hidden": false,
               "kind": "option",
               "name": "source",
@@ -5440,7 +5440,7 @@
               "type": "text"
             },
             {
-              "help": "A work source, by name.",
+              "help": "A work source, by id or slug.",
               "hidden": false,
               "kind": "option",
               "name": "source",
@@ -9548,16 +9548,28 @@
     "source": {
       "commands": {
         "create": {
-          "help": "Add work source NAME at revision 1.\n\nRefused when the name or the provider and locator are already taken \u2014 a retired source keeps its claim \u2014\nor when the secret is missing or retired. The hub reads the record on its next use of the source.",
+          "help": "Add work source SLUG at revision 1, named NAME (default: SLUG).\n\nRefused when SLUG is another source's current slug or ``hub`` (the built-in source's), when the provider and\nlocator are already taken \u2014 a retired source keeps its claim \u2014 or when the secret is missing or retired. The hub\nreads the record on its next use of the source.",
           "params": [
             {
               "hidden": false,
               "kind": "argument",
-              "name": "name",
+              "name": "slug",
               "opts": [
-                "name"
+                "slug"
               ],
               "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The source's display name (default: SLUG).",
+              "hidden": false,
+              "kind": "option",
+              "name": "name",
+              "opts": [
+                "--name"
+              ],
+              "required": false,
               "secondary_opts": [],
               "type": "text"
             },
@@ -9673,19 +9685,43 @@
             }
           ],
           "path": "hub source create",
-          "short_help": "Add work source NAME at revision 1."
+          "short_help": "Add work source SLUG at revision 1, named NAME (default: SLUG)."
         },
         "edit": {
-          "help": "Change only the fields given on NAME; every other field keeps its value.\n\nA change that leaves every field as it is writes nothing and keeps the revision. Refused when\n--if-match names a stale revision, and for the built-in hub source.",
+          "help": "Change only the fields given on SOURCE; every other field keeps its value.\n\nA slug the source leaves keeps naming it until another source takes it. A change that leaves every field as it is\nwrites nothing and keeps the revision. Refused when the new slug is another source's or ``hub``, when --if-match\nnames a stale revision, and for the built-in hub source.",
           "params": [
             {
               "hidden": false,
               "kind": "argument",
-              "name": "name",
+              "name": "source",
               "opts": [
-                "name"
+                "source"
               ],
               "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The new slug; the one it leaves keeps naming the source.",
+              "hidden": false,
+              "kind": "option",
+              "name": "slug",
+              "opts": [
+                "--slug"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The new display name.",
+              "hidden": false,
+              "kind": "option",
+              "name": "name",
+              "opts": [
+                "--name"
+              ],
+              "required": false,
               "secondary_opts": [],
               "type": "text"
             },
@@ -9825,17 +9861,17 @@
             }
           ],
           "path": "hub source edit",
-          "short_help": "Change only the fields given on NAME; every other field keeps its value."
+          "short_help": "Change only the fields given on SOURCE; every other field keeps its value."
         },
         "enable": {
-          "help": "Re-enable a retired NAME. Refused while its secret is retired.",
+          "help": "Re-enable a retired SOURCE. Refused while its secret is retired.",
           "params": [
             {
               "hidden": false,
               "kind": "argument",
-              "name": "name",
+              "name": "source",
               "opts": [
-                "name"
+                "source"
               ],
               "required": true,
               "secondary_opts": [],
@@ -9891,10 +9927,10 @@
             }
           ],
           "path": "hub source enable",
-          "short_help": "Re-enable a retired NAME."
+          "short_help": "Re-enable a retired SOURCE."
         },
         "list": {
-          "help": "List the built-in hub source and every work source \u2014 name, revision, state, provider, locator.",
+          "help": "List the built-in hub source and every work source \u2014 slug, name, id, revision, state, provider, locator.",
           "params": [
             {
               "help": "Also list retired sources.",
@@ -9946,17 +9982,17 @@
             }
           ],
           "path": "hub source list",
-          "short_help": "List the built-in hub source and every work source \u2014 name, revision, state, provider, locator."
+          "short_help": "List the built-in hub source and every work source \u2014 slug, name, id, revision, state, provider, locator."
         },
         "retire": {
-          "help": "Retire NAME: it leaves the default list and keeps its provider and locator, so no other source takes them.",
+          "help": "Retire SOURCE: it leaves the default list and keeps its provider and locator, so no other source takes them.",
           "params": [
             {
               "hidden": false,
               "kind": "argument",
-              "name": "name",
+              "name": "source",
               "opts": [
-                "name"
+                "source"
               ],
               "required": true,
               "secondary_opts": [],
@@ -10012,17 +10048,17 @@
             }
           ],
           "path": "hub source retire",
-          "short_help": "Retire NAME: it leaves the default list and keeps its provider and locator, so no other source takes them."
+          "short_help": "Retire SOURCE: it leaves the default list and keeps its provider and locator, so no other source takes them."
         },
         "show": {
-          "help": "Show NAME's fields, revision, and who created it and when.",
+          "help": "Show SOURCE \u2014 named by its id, its slug, or a slug it has left \u2014 with its fields, revision, and who created it\nand when.",
           "params": [
             {
               "hidden": false,
               "kind": "argument",
-              "name": "name",
+              "name": "source",
               "opts": [
-                "name"
+                "source"
               ],
               "required": true,
               "secondary_opts": [],
@@ -10066,7 +10102,7 @@
             }
           ],
           "path": "hub source show",
-          "short_help": "Show NAME's fields, revision, and who created it and when."
+          "short_help": "Show SOURCE \u2014 named by its id, its slug, or a slug it has left \u2014 with its fields, revision, and who created it and when."
         }
       },
       "help": "Operator verbs over work-source records: create, list, show, edit, retire, enable.",

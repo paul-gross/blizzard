@@ -13,7 +13,6 @@ from collections.abc import Iterable, Mapping
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
-from fastapi.responses import JSONResponse
 
 from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import iso_utc
@@ -21,25 +20,25 @@ from blizzard.foundation.work_items import WorkItemPriority
 from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
+from blizzard.hub.api.chunk_views import ingest_conflict_response
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.door import RequestDoor, change_context
 from blizzard.hub.api.project_params import QueryProject, project_of_call
+from blizzard.hub.api.work_source_params import PathSourceKey, PathWorkSource, resolved_work_source
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.ingest import IngestConflict
 from blizzard.hub.domain.chunk.model import HubWorkItem, WorkItemAuthor, WorkItemAuthorKind, WorkRef
 from blizzard.hub.domain.config.work_sources import (
-    BuiltInWorkSource,
     ConfigFieldError,
     ConfigRevisionConflict,
     ConfiguredWorkSource,
     WorkSourceEdit,
     WorkSourceFields,
     WorkSourceLocatorTaken,
-    WorkSourceNameTaken,
+    WorkSourceSlugTaken,
     is_built_in,
-    require_configurable,
 )
 from blizzard.hub.domain.graph.authoring import DefaultGraphRetired
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
@@ -53,7 +52,6 @@ from blizzard.hub.domain.work_items.editing import (
 from blizzard.hub.domain.work_items.model import WorkItemEdit, WorkItemFieldBlank, WorkItemNotEditable, WorkItemText
 from blizzard.hub.work_sources.editor import IWorkEditor, WorkItemRefUnknownError
 from blizzard.hub.work_sources.source import AuthorView, IWorkSource, resolve_author_view
-from blizzard.wire.chunk import ChunkIngestConflict
 from blizzard.wire.work_source import (
     WorkItemAuthorView,
     WorkItemCreateRequest,
@@ -73,7 +71,7 @@ router = APIRouter(
 
 
 def _require_editor(source: str, services: TenantServices) -> tuple[IWorkSource, IWorkEditor]:
-    """The named source and its editor, or the refusal: 404 for an unknown source,
+    """The source keyed ``source`` and its editor, or the refusal: 404 for an unknown source,
     409 for a known one with no editor — a structural refusal for every source but
     ``hub``, since no work-source record field could ever opt a configured source into
     editing (``blizzard-context:/architecture/system-shape.md``), not merely "not opted
@@ -83,7 +81,10 @@ def _require_editor(source: str, services: TenantServices) -> tuple[IWorkSource,
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown work source {source!r}")
     editor = services.work_sources.editor(source)
     if editor is None:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"work source {source!r} has no editor")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"work source {services.work_sources.source_label(source)!r} has no editor",
+        )
     return source_obj, editor
 
 
@@ -102,14 +103,16 @@ def _view(
     source_obj: IWorkSource,
     author: AuthorView,
     *,
+    slug: str,
     live_holder: str | None,
     runner_names: Mapping[str, str],
 ) -> WorkItemView:
     pointer = WorkRef(source=item.source, ref=item.ref)
     return WorkItemView(
         source=item.source,
+        slug=slug,
         ref=item.ref,
-        label=source_obj.label(pointer),
+        label=source_obj.label(pointer) or f"{slug}#{item.ref}",
         web_url=source_obj.web_url(pointer, live_holder=live_holder),
         title=item.title,
         body=item.body,
@@ -133,9 +136,11 @@ def _view(
 def _summary(record: ConfiguredWorkSource, services: TenantServices) -> WorkSourceSummary:
     fields = record.fields
     return WorkSourceSummary(
+        work_source_id=record.work_source_id,
+        slug=record.slug,
         name=record.name,
         annotate=fields.annotate,
-        edit=services.work_sources.editor(record.name) is not None,
+        edit=services.work_sources.editor(record.work_source_id) is not None,
         provider=fields.provider,
         locator=fields.locator,
         api_base=fields.api_base,
@@ -150,6 +155,7 @@ def _summary(record: ConfiguredWorkSource, services: TenantServices) -> WorkSour
 
 def _built_in_summary(services: TenantServices) -> WorkSourceSummary:
     return WorkSourceSummary(
+        slug=RESERVED_HUB_SOURCE_NAME,
         name=RESERVED_HUB_SOURCE_NAME,
         annotate=services.work_sources.annotator(RESERVED_HUB_SOURCE_NAME) is not None,
         edit=services.work_sources.editor(RESERVED_HUB_SOURCE_NAME) is not None,
@@ -168,18 +174,6 @@ def _conflict(exc: Exception) -> HTTPException:
     return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
 
 
-def _writable(source: str, services: TenantServices) -> ConfiguredWorkSource:
-    """The stored record for a write: 409 for the built-in ``hub``, 404 for an unknown name."""
-    try:
-        require_configurable(source)
-    except BuiltInWorkSource as exc:
-        raise _conflict(exc) from exc
-    record = services.work_source_records.get(source)
-    if record is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown work source {source!r}")
-    return record
-
-
 @router.get("/work-sources", response_model=WorkSourcesListView, dependencies=[Depends(require(Permission.FLEET_VIEW))])
 def list_work_sources(services: Services, include_retired: bool = False) -> WorkSourcesListView:
     """The built-in ``hub`` source and every stored work source, retired ones hidden unless
@@ -196,9 +190,9 @@ def create_work_source(
     door: RequestDoor,
     services: Services,
 ) -> WorkSourceSummary:
-    """Store a new work source at revision 1. 422 naming the field for a bad name, provider,
-    locator, or a missing or retired secret; 409 for a taken name or a taken
-    `(provider, locator)`, naming the holder."""
+    """Store a new work source at revision 1; its `name` is its `slug` when omitted. 422 naming the field for a
+    malformed `slug` or `name` (`hub` among them, the built-in source's), a bad provider or locator, or a missing or
+    retired secret; 409 for a slug some work source holds or a taken `(provider, locator)`, naming the holder."""
     fields = WorkSourceFields(
         provider=request.provider,
         locator=request.locator,
@@ -208,10 +202,12 @@ def create_work_source(
         secret=request.secret,
     )
     try:
-        record = services.config_authoring.create_work_source(request.name, fields, change_context(identity, door))
+        record = services.config_authoring.create_work_source(
+            request.slug, request.name, fields, change_context(identity, door)
+        )
     except ConfigFieldError as exc:
         raise _unprocessable(exc) from exc
-    except (WorkSourceNameTaken, WorkSourceLocatorTaken) as exc:
+    except (WorkSourceSlugTaken, WorkSourceLocatorTaken) as exc:
         raise _conflict(exc) from exc
     return _summary(record, services)
 
@@ -220,29 +216,27 @@ def create_work_source(
     "/work-sources/{source}", response_model=WorkSourceSummary, dependencies=[Depends(require(Permission.FLEET_VIEW))]
 )
 def get_work_source(source: str, services: Services) -> WorkSourceSummary:
-    """One work source, retired or not; the built-in `hub` shows as `built_in`. 404 on an unknown name."""
+    """One work source by id or slug — a slug it left included — retired or not; the built-in `hub` shows as
+    `built_in`. 404 on an unknown source."""
     if is_built_in(source):
         return _built_in_summary(services)
-    record = services.work_source_records.get(source)
-    if record is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown work source {source!r}")
-    return _summary(record, services)
+    return _summary(resolved_work_source(source, services), services)
 
 
 @router.patch("/work-sources/{source}", response_model=WorkSourceSummary)
 def patch_work_source(
-    source: str,
-    request: WorkSourcePatchRequest,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
+    record: PathWorkSource,
+    request: WorkSourcePatchRequest,
     door: RequestDoor,
     services: Services,
     if_match: Annotated[int | None, Header()] = None,
 ) -> WorkSourceSummary:
     """Apply only the fields present; an explicit `null` clears `api_base`, `web_base`, or
     `secret` (the last only where the provider needs no credential). A patch that changes
-    nothing writes nothing. 404 unknown, 409 for `hub`, a stale `If-Match` (naming the current
-    revision), or a taken `(provider, locator)`; 422 naming the field."""
-    record = _writable(source, services)
+    nothing writes nothing. A slug that changes keeps resolving to the source until another claims it. 404 unknown,
+    409 for `hub`, a stale `If-Match` (naming the current revision), a slug some work source holds, or a taken
+    `(provider, locator)`; 422 naming the field (`hub` refused as a slug)."""
     present = request.model_fields_set
     edit = WorkSourceEdit(**{name: getattr(request, name) for name in present})
     try:
@@ -251,22 +245,21 @@ def patch_work_source(
         )
     except ConfigFieldError as exc:
         raise _unprocessable(exc) from exc
-    except (ConfigRevisionConflict, WorkSourceLocatorTaken) as exc:
+    except (ConfigRevisionConflict, WorkSourceLocatorTaken, WorkSourceSlugTaken) as exc:
         raise _conflict(exc) from exc
     return _summary(edited, services)
 
 
 @router.post("/work-sources/{source}/retire", response_model=WorkSourceSummary)
 def retire_work_source(
-    source: str,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
+    record: PathWorkSource,
     door: RequestDoor,
     services: Services,
     if_match: Annotated[int | None, Header()] = None,
 ) -> WorkSourceSummary:
     """Retire a work source — a reversible brake that keeps its locator claim. Retiring a
     retired source changes nothing. 404 unknown, 409 for `hub` or a stale `If-Match`."""
-    record = _writable(source, services)
     try:
         retired = services.config_authoring.retire_work_source(
             record, change_context(identity, door), if_match=if_match
@@ -278,15 +271,14 @@ def retire_work_source(
 
 @router.post("/work-sources/{source}/enable", response_model=WorkSourceSummary)
 def enable_work_source(
-    source: str,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
+    record: PathWorkSource,
     door: RequestDoor,
     services: Services,
     if_match: Annotated[int | None, Header()] = None,
 ) -> WorkSourceSummary:
     """Re-enable a retired work source; enabling an active one changes nothing. 404 unknown,
     409 for `hub` or a stale `If-Match`, 422 when its secret has since been retired."""
-    record = _writable(source, services)
     try:
         enabled = services.config_authoring.enable_work_source(
             record, change_context(identity, door), if_match=if_match
@@ -304,7 +296,7 @@ def enable_work_source(
     dependencies=[Depends(require(Permission.FLEET_VIEW))],
 )
 def list_work_items(
-    source: str,
+    source: PathSourceKey,
     services: Services,
     limit: Annotated[int, Query(ge=1, le=1000)] = 200,
 ) -> WorkItemsListView:
@@ -325,6 +317,7 @@ def list_work_items(
                 item,
                 source_obj,
                 resolve_author_view(item.author, users_by_id),
+                slug=services.work_sources.source_label(source),
                 live_holder=holders.get(WorkRef(source=item.source, ref=item.ref)),
                 runner_names=runner_names,
             )
@@ -339,10 +332,10 @@ def list_work_items(
     status_code=status.HTTP_201_CREATED,
 )
 def create_work_item(
-    source: str,
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
+    source: PathSourceKey,
     request: WorkItemCreateRequest,
     services: Services,
-    identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
     project: QueryProject = None,
 ) -> object:
     """Allocate a fresh item at SOURCE, open, authored by the caller, and mint its
@@ -376,10 +369,7 @@ def create_work_item(
             project_id=project_id,
         )
     except IngestConflict as exc:
-        conflict = ChunkIngestConflict(
-            existing_chunk_id=exc.existing_chunk_id, source=exc.pointer.source, ref=exc.pointer.ref
-        )
-        return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=conflict.model_dump())
+        return ingest_conflict_response(services, exc)
     # A freshly minted chunk rests `not_ready`, exactly as a `POST /chunks` ingest does.
     chunk_events.ChunkChanged.of(services, created.chunk_id, prev_status=None).publish(
         cause="minted", key=f"chunks:{created.chunk_id}"
@@ -391,6 +381,7 @@ def create_work_item(
             created.item,
             source_obj,
             resolve_author_view(created.item.author, services.users),
+            slug=services.work_sources.source_label(source),
             live_holder=created.chunk_id,
             runner_names=_runner_names(services, [created.item.author]),
         ).model_dump(),
@@ -403,7 +394,7 @@ def create_work_item(
     response_model=WorkItemView,
     dependencies=[Depends(require(Permission.FLEET_VIEW))],
 )
-def get_work_item(source: str, ref: str, services: Services) -> WorkItemView:
+def get_work_item(source: PathSourceKey, ref: str, services: Services) -> WorkItemView:
     """One item at SOURCE by REF, open or closed. 404 for an unknown source, an
     unallocated ref, or a known source with no editor answered as 409."""
     source_obj, editor = _require_editor(source, services)
@@ -416,6 +407,7 @@ def get_work_item(source: str, ref: str, services: Services) -> WorkItemView:
         item,
         source_obj,
         resolve_author_view(item.author, services.users),
+        slug=services.work_sources.source_label(source),
         live_holder=services.chunks.work_refs.find_live_holder(pointer),
         runner_names=_runner_names(services, [item.author]),
     )
@@ -427,7 +419,7 @@ def get_work_item(source: str, ref: str, services: Services) -> WorkItemView:
     dependencies=[Depends(require(Permission.CHUNK_CONTROL))],
 )
 def patch_work_item(
-    source: str,
+    source: PathSourceKey,
     ref: str,
     request: WorkItemPatchRequest,
     services: Services,
@@ -457,6 +449,7 @@ def patch_work_item(
         updated,
         source_obj,
         resolve_author_view(updated.author, services.users),
+        slug=services.work_sources.source_label(source),
         live_holder=services.chunks.work_refs.find_live_holder(pointer),
         runner_names=_runner_names(services, [updated.author]),
     )
@@ -467,10 +460,10 @@ def patch_work_item(
     response_model=WorkItemView,
 )
 def withdraw_work_item(
-    source: str,
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
+    source: PathSourceKey,
     ref: str,
     services: Services,
-    identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
 ) -> WorkItemView:
     """Withdraw the item at SOURCE/REF. 404 for an unknown source, an unallocated ref,
     or a chunk a race deletes between resolving it and this write; 409 for a known
@@ -496,6 +489,7 @@ def withdraw_work_item(
         withdrawn.item,
         source_obj,
         resolve_author_view(withdrawn.item.author, services.users),
+        slug=services.work_sources.source_label(source),
         live_holder=holder,
         runner_names=_runner_names(services, [withdrawn.item.author]),
     )

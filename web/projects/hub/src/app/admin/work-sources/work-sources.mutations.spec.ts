@@ -36,7 +36,7 @@ describe('work source mutations', () => {
     const mutation = TestBed.runInInjectionContext(() => injectEditWorkSourceMutation());
 
     await mutation.mutateAsync({
-      name: 'a',
+      workSourceId: 'a',
       revision: 3,
       body: { locator: null },
     });
@@ -51,8 +51,8 @@ describe('work source mutations', () => {
   it('routes retire and enable by the desired state, each sending If-Match', async () => {
     const mutation = TestBed.runInInjectionContext(() => injectWorkSourceLifecycleMutation());
 
-    await mutation.mutateAsync({ name: 'a', revision: 2, retired: true });
-    await mutation.mutateAsync({ name: 'a', revision: 3, retired: false });
+    await mutation.mutateAsync({ workSourceId: 'a', revision: 2, retired: true });
+    await mutation.mutateAsync({ workSourceId: 'a', revision: 3, retired: false });
 
     expect(stub.forRoute('/api/work-sources/a/retire', 'POST')[0].headers['if-match']).toBe('2');
     expect(stub.forRoute('/api/work-sources/a/enable', 'POST')[0].headers['if-match']).toBe('3');
@@ -63,7 +63,7 @@ describe('work source mutations', () => {
     const mutation = TestBed.runInInjectionContext(() => injectCreateWorkSourceMutation());
 
     await mutation.mutateAsync({
-      name: 'a',
+      slug: 'a',
       provider: 'github',
       locator: 'o/r',
     });

@@ -14,6 +14,7 @@ from sqlalchemy import Boolean, Column, Engine, Integer, MetaData, String, Table
 from structlog import get_logger
 
 from blizzard.hub.domain.config.repositories import RepositoryId
+from blizzard.hub.domain.config.work_sources import WorkSourceId
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreErrorFactory
 from blizzard.hub.store.internal.chunk_queue_store import ChunkQueueStore
@@ -27,7 +28,7 @@ from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStor
 from blizzard.hub.store.internal.scope_store import ScopeStore
 from blizzard.hub.store.internal.secret_store import SecretStore
 from blizzard.hub.store.internal.trace_store import TraceStore
-from blizzard.hub.store.internal.work_source_record_store import _retired_names
+from blizzard.hub.store.internal.work_source_record_store import _retired_ids
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.tenancy import StoreScope, TenantId
 from tests.hub_event_rows import hub_events_of
@@ -134,7 +135,7 @@ def _retirement_engine(tmp_path: Path, *, depth: int) -> Engine:
                 )
                 conn.execute(
                     insert(s.work_source_lifecycle_facts).values(
-                        stamp(s.work_source_lifecycle_facts, name=key, **common)
+                        stamp(s.work_source_lifecycle_facts, work_source_id=key, **common)
                     )
                 )
                 conn.execute(
@@ -154,8 +155,10 @@ def _retirement_reads(engine: Engine) -> dict[str, object]:
         "repository_bounded": lambda: _read(
             store, lambda conn: _retirements(conn, [RepositoryId("k1"), RepositoryId("k2")])
         ),
-        "work_source": lambda: _read(store, lambda conn: _retired_names(conn)),
-        "work_source_bounded": lambda: _read(store, lambda conn: _retired_names(conn, ["k1", "k2"])),
+        "work_source": lambda: _read(store, lambda conn: _retired_ids(conn)),
+        "work_source_bounded": lambda: _read(
+            store, lambda conn: _retired_ids(conn, [WorkSourceId("k1"), WorkSourceId("k2")])
+        ),
     }
 
 

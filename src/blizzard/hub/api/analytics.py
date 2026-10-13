@@ -23,6 +23,7 @@ from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.project_params import QueryProject
+from blizzard.hub.api.work_source_params import QuerySource
 from blizzard.hub.domain.kernel.pagination import MalformedCursor
 from blizzard.hub.domain.observability.analytics.derivation import ReDeriveScope, ReDeriveScopeRefused
 from blizzard.hub.domain.observability.analytics.extraction import read_version
@@ -120,7 +121,7 @@ class ScopeFilters:
     def of(
         cls,
         graph_id: Annotated[str | None, Query()] = None,
-        source: Annotated[str | None, Query()] = None,
+        source: QuerySource = None,
         since: Annotated[datetime | None, Query()] = None,
         until: Annotated[datetime | None, Query()] = None,
         project: QueryProject = None,
@@ -164,7 +165,7 @@ class EventScopeFilters:
     def of(
         cls,
         graph_id: Annotated[str | None, Query()] = None,
-        source: Annotated[str | None, Query()] = None,
+        source: QuerySource = None,
         since: Annotated[datetime | None, Query()] = None,
         until: Annotated[datetime | None, Query()] = None,
         extractor_version: Annotated[str | None, Query()] = None,

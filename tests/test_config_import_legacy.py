@@ -154,6 +154,7 @@ def test_the_import_writes_the_expected_records_change_rows_and_one_fact(hub: Hu
         ("gadget", "https://api.github.com", "paul-gross", "gadget", "master", "bz-forge-token"),
     }
     ids = {str(r["slug"]): str(r["repository_id"]) for r in rows["repositories"]}
+    source_ids = {str(r["slug"]): str(r["work_source_id"]) for r in rows["work_sources"]}
     changes = rows["config_changes"]
     assert len(changes) == 10
     assert {(r["actor"], r["door"], r["op"]) for r in changes} == {("migration", "migration", "create")}
@@ -162,8 +163,8 @@ def test_the_import_writes_the_expected_records_change_rows_and_one_fact(hub: Hu
         [
             ("project_repository_link", ids["gadget"]),
             ("project_repository_link", ids["widget"]),
-            ("project_source_link", "blizzard"),
-            ("project_source_link", "infra"),
+            ("project_source_link", source_ids["blizzard"]),
+            ("project_source_link", source_ids["infra"]),
         ]
     )
     engine = create_engine_from_url(hub.db_url)
@@ -172,7 +173,7 @@ def test_the_import_writes_the_expected_records_change_rows_and_one_fact(hub: Hu
     finally:
         engine.dispose()
     assert {r["project_id"] for r in changes if r["project_id"] is not None} == {project}
-    assert sorted(str(r["source_name"]) for r in rows["project_source_links"]) == ["blizzard", "infra"]
+    assert sorted(str(r["work_source_id"]) for r in rows["project_source_links"]) == sorted(source_ids.values())
     assert sorted(str(r["repository_id"]) for r in rows["project_repository_links"]) == sorted(ids.values())
     (fact,) = rows["config_import_facts"]
     assert fact["actor"] == "migration"

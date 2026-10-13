@@ -24,7 +24,7 @@ from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.chunk_edit import ChunkPatchBody
-from blizzard.hub.api.chunk_views import ChunkView, blocked_view, project_label_fields
+from blizzard.hub.api.chunk_views import ChunkView, blocked_view, ingest_conflict_response, project_label_fields
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.graph_names import GraphNames, graph_by_ref
 from blizzard.hub.api.marker_auth import require_marker_authority
@@ -82,7 +82,6 @@ from blizzard.wire.chunk import (
     ChunkDeleteRequest,
     ChunkDeleteResponse,
     ChunkDetail,
-    ChunkIngestConflict,
     ChunkIngestRequest,
     ChunkIngestResponse,
     ChunkNeighborhoodView,
@@ -160,7 +159,10 @@ def ingest_project_refusal(
     if isinstance(exc, IngestSourceNotLinked):
         project = services.projects.get(exc.project) if exc.project is not None else None
         body: BaseModel = SourceNotLinkedBody(
-            message=str(exc), source=exc.source, project=project_ref(project) if project is not None else None
+            message=str(exc),
+            source=exc.source,
+            slug=services.work_sources.source_label(exc.source),
+            project=project_ref(project) if project is not None else None,
         )
     else:
         found = services.projects.get_many(list(exc.candidates))
@@ -214,10 +216,7 @@ def ingest_chunk(request: ChunkIngestRequest, services: Services) -> object:
     except IngestSourceNotLinked as exc:  # unlinked after the project was chosen
         return ingest_project_refusal(services, exc)
     except IngestConflict as exc:
-        conflict = ChunkIngestConflict(
-            existing_chunk_id=exc.existing_chunk_id, source=exc.pointer.source, ref=exc.pointer.ref
-        )
-        return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=conflict.model_dump())
+        return ingest_conflict_response(services, exc)
     chunk_events.ChunkChanged.of(services, chunk_id, prev_status=None).publish(cause="minted", key=f"chunks:{chunk_id}")
     services.events.publish_queue_changed()  # mint adds the chunk to the backlog list
     return ChunkIngestResponse(chunk_id=chunk_id, **project_label_fields(project, services.projects.get(project)))
@@ -846,57 +845,45 @@ def get_work_items(chunk_id: str, services: Services) -> WorkItemsView:
     entries: list[tuple[WorkItemEntry, AuthorView | None]] = []
     for pointer in chunk.work_refs:
         source = services.work_sources.get(pointer.source)
-        hub_source = pointer.source == RESERVED_HUB_SOURCE_NAME
+        named = WorkItemEntry(
+            source=pointer.source,
+            ref=pointer.ref,
+            slug=services.work_sources.source_label(pointer.source),
+            hub_source=pointer.source == RESERVED_HUB_SOURCE_NAME,
+            fetched_at=fetched_at,
+        )
         if source is None:
             entries.append(
                 (
-                    WorkItemEntry(
-                        source=pointer.source,
-                        ref=pointer.ref,
-                        hub_source=hub_source,
-                        label=None,
-                        web_url=None,
-                        fetched_at=fetched_at,
-                        error=f"no configured work source named {pointer.source!r}",
+                    named.model_copy(
+                        update={
+                            "label": services.work_sources.label(pointer),
+                            "error": f"no work source is configured under {pointer.source!r}",
+                        }
                     ),
                     None,
                 )
             )
             continue
-        label = source.label(pointer)
+        label = source.label(pointer) or services.work_sources.label(pointer)
         web_url = source.web_url(pointer, live_holder=holders.get(pointer))
         try:
             item = source.fetch(pointer)
             stated_priority = WorkItemPriority(item.stated_priority) if item.stated_priority is not None else None
         except (WorkSourceError, ValueError) as exc:
-            entries.append(
-                (
-                    WorkItemEntry(
-                        source=pointer.source,
-                        ref=pointer.ref,
-                        hub_source=hub_source,
-                        label=label,
-                        web_url=web_url,
-                        fetched_at=fetched_at,
-                        error=str(exc),
-                    ),
-                    None,
-                )
-            )
+            entries.append((named.model_copy(update={"label": label, "web_url": web_url, "error": str(exc)}), None))
         else:
             entries.append(
                 (
-                    WorkItemEntry(
-                        source=pointer.source,
-                        ref=pointer.ref,
-                        hub_source=hub_source,
-                        label=label,
-                        web_url=web_url,
-                        fetched_at=fetched_at,
-                        title=item.title,
-                        body=item.body,
-                        comments=item.comments,
-                        stated_priority=stated_priority,
+                    named.model_copy(
+                        update={
+                            "label": label,
+                            "web_url": web_url,
+                            "title": item.title,
+                            "body": item.body,
+                            "comments": item.comments,
+                            "stated_priority": stated_priority,
+                        }
                     ),
                     item.author,
                 )

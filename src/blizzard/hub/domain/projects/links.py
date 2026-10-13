@@ -1,9 +1,9 @@
 """A project's links to the tenant's work sources and repositories: the link records, their verbs, and the seams.
 
-A link is a configured record of its own, keyed by the linked record within its project — a source's name, a
-repository's id: it carries a revision and change facts, and unlinking is its retirement. Whether a link stands derives
-from its newest fact (``bzh:facts-not-status``). The built-in ``hub`` source is linked to every project without a stored
-link, and cannot be linked or unlinked."""
+A link is a configured record of its own, keyed by the linked record's id within its project: it carries a revision
+and change facts, and unlinking is its retirement. Whether a link stands derives from its newest fact
+(``bzh:facts-not-status``). The built-in ``hub`` source is linked to every project without a stored link, and cannot be
+linked or unlinked."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ from blizzard.hub.domain.config.changes import (
     Verdict,
 )
 from blizzard.hub.domain.config.repositories import RepositoryId
-from blizzard.hub.domain.config.work_sources import ConfigRevisionConflict, require_configurable
+from blizzard.hub.domain.config.work_sources import ConfigRevisionConflict, WorkSourceId, require_configurable
 from blizzard.hub.domain.projects.model import Project, ProjectId
 
 #: The wire name a link's change reports its standing under.
@@ -37,7 +37,7 @@ _TRANSITIONS: Mapping[RecordState, Mapping[ChangeOp, Verdict]] = FIELDED_RECORD_
 @domain_model
 @dataclass(frozen=True, kw_only=True)
 class _Link:
-    """What a source link and a repository link share; ``target`` is the linked record's name or id."""
+    """What a source link and a repository link share; ``target`` is the linked record's id."""
 
     KIND: ClassVar[RecordKind]
     LABEL: ClassVar[str]
@@ -84,22 +84,24 @@ _CREATED = (FieldChange(LINKED_FIELD, None, True),)
 @domain_model
 @dataclass(frozen=True, kw_only=True)
 class SourceLink(_Link):
-    """A project draws from ``source_name``. It never narrows what the project may ingest from the source."""
+    """A project draws from ``work_source_id``. It never narrows what the project may ingest from the source."""
 
     KIND: ClassVar[RecordKind] = RecordKind.PROJECT_SOURCE_LINK
     LABEL: ClassVar[str] = "source link"
 
-    source_name: str
+    work_source_id: WorkSourceId
 
     def target(self) -> str:
-        return self.source_name
+        return self.work_source_id
 
     @classmethod
-    def new(cls, project: Project, source_name: str, ctx: ChangeContext, *, at: datetime) -> tuple[Self, ConfigChange]:
-        """The first link of ``project`` to ``source_name``. The built-in hub source is refused: every project is
+    def new(
+        cls, project: Project, work_source_id: WorkSourceId, ctx: ChangeContext, *, at: datetime
+    ) -> tuple[Self, ConfigChange]:
+        """The first link of ``project`` to ``work_source_id``. The built-in hub source is refused: every project is
         linked to it already."""
-        require_configurable(source_name)
-        link = cls(project_id=project.project_id, source_name=source_name, revision=1)
+        require_configurable(work_source_id)
+        link = cls(project_id=project.project_id, work_source_id=work_source_id, revision=1)
         return link, link._change(ctx, ChangeOp.CREATE, _CREATED, at)
 
 
@@ -128,7 +130,7 @@ class RepositoryLink(_Link):
 class IReadProjectLinks(Protocol):
     """Read-only link operations, within one tenant."""
 
-    def source_link(self, project_id: ProjectId, source_name: str) -> SourceLink | None:
+    def source_link(self, project_id: ProjectId, work_source_id: WorkSourceId) -> SourceLink | None:
         """The stored link, linked or not; ``None`` when the project never linked the source."""
         ...
 
@@ -137,20 +139,21 @@ class IReadProjectLinks(Protocol):
         ...
 
     def sources_of(self, project_id: ProjectId) -> list[SourceLink]:
-        """The project's standing source links, ordered by source name. The built-in hub source has none."""
+        """The project's standing source links, ordered by source id. The built-in hub source has none."""
         ...
 
     def repositories_of(self, project_id: ProjectId) -> list[RepositoryLink]:
         """The project's standing repository links, ordered by repository id."""
         ...
 
-    def projects_linking_source(self, source_name: str) -> list[ProjectId]:
-        """The projects a standing link draws from ``source_name``, ordered by id."""
+    def projects_linking_source(self, work_source_id: str) -> list[ProjectId]:
+        """The projects a standing link draws from the configured source ``work_source_id`` — a pointer's ``source``,
+        so a :data:`WorkSourceId` held as a plain key — ordered by id."""
         ...
 
-    def linked_at(self, project_id: ProjectId, source_name: str, at: datetime) -> bool:
-        """Whether ``project_id`` drew from ``source_name`` at ``at``, by the newest link fact set by then. The
-        built-in hub source is always linked."""
+    def linked_at(self, project_id: ProjectId, source: str, at: datetime) -> bool:
+        """Whether ``project_id`` drew from ``source`` — a source id, or ``hub`` — at ``at``, by the newest link fact
+        set by then. The built-in hub source is always linked."""
         ...
 
 

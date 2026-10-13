@@ -30,11 +30,11 @@ def _create(client: TestClient, slug: str, name: str | None = None, **extra: obj
     return _ok(client.post("/api/projects", json={"slug": slug, "name": name or slug.title(), **extra}), 201)
 
 
-def _seed_records(client: TestClient) -> None:
-    """A secret, the work source ``acme`` and the repository ``acme-repo`` that name it."""
+def _seed_records(client: TestClient) -> str:
+    """A secret, the work source ``acme`` and the repository ``acme-repo`` that name it; the source's id."""
     _ok(client.post("/api/secrets", json={"name": "token", "value": "v"}), 201)
-    source = {"name": "acme", "provider": "github", "locator": "acme/widgets", "secret": "token"}
-    _ok(client.post("/api/work-sources", json=source), 201)
+    source = {"slug": "acme", "provider": "github", "locator": "acme/widgets", "secret": "token"}
+    source_id = _ok(client.post("/api/work-sources", json=source), 201)["work_source_id"]
     repository = {
         "slug": "acme-repo",
         "forge_api_url": "https://forge.example",
@@ -44,6 +44,7 @@ def _seed_records(client: TestClient) -> None:
         "secret_name": "token",
     }
     _ok(client.post("/api/repositories", json=repository), 201)
+    return source_id
 
 
 def _changes(client: TestClient, **params: str) -> list[dict]:
@@ -186,23 +187,23 @@ def test_a_path_naming_no_project_answers_404(hub: HubHarness, value: str) -> No
 def test_a_source_link_is_linked_unlinked_by_retiring_and_relinked_each_change_carrying_the_project(
     hub: HubHarness,
 ) -> None:
-    _seed_records(hub.client)
+    source_id = _seed_records(hub.client)
     project_id = _create(hub.client, "widgets")["project_id"]
 
     linked = _ok(hub.client.put("/api/projects/widgets/source-links/acme"))
     unlinked = _ok(hub.client.post("/api/projects/widgets/source-links/acme/retire"))
-    relinked = _ok(hub.client.put(f"/api/projects/{project_id}/source-links/acme"))
+    relinked = _ok(hub.client.put(f"/api/projects/{project_id}/source-links/{source_id}"))
 
-    assert [(v["name"], v["linked"], v["revision"]) for v in (linked, unlinked, relinked)] == [
-        ("acme", True, 1),
-        ("acme", False, 2),
-        ("acme", True, 3),
+    assert [(v["name"], v["slug"], v["linked"], v["revision"]) for v in (linked, unlinked, relinked)] == [
+        (source_id, "acme", True, 1),
+        (source_id, "acme", False, 2),
+        (source_id, "acme", True, 3),
     ]
     link_changes = [c for c in _changes(hub.client, project="widgets") if c["record_kind"] == "project_source_link"]
-    assert [(c["record_key"], c["op"], c["project_id"]) for c in link_changes] == [
-        ("acme", "enable", project_id),
-        ("acme", "retire", project_id),
-        ("acme", "create", project_id),
+    assert [(c["record_key"], c["record_label"], c["op"], c["project_id"]) for c in link_changes] == [
+        (source_id, "acme", "enable", project_id),
+        (source_id, "acme", "retire", project_id),
+        (source_id, "acme", "create", project_id),
     ]
 
 
@@ -218,16 +219,28 @@ def test_linking_a_standing_link_and_unlinking_an_unlinked_one_change_nothing(hu
 
 
 def test_the_source_links_listing_reports_the_built_in_hub_source_as_linked(hub: HubHarness) -> None:
-    _seed_records(hub.client)
+    source_id = _seed_records(hub.client)
     project_id = _create(hub.client, "widgets")["project_id"]
     _ok(hub.client.put("/api/projects/widgets/source-links/acme"))
 
     listed = _ok(hub.client.get("/api/projects/widgets/source-links"))["source_links"]
 
     assert listed == [
-        {"project_id": project_id, "name": "acme", "linked": True, "revision": 1, "built_in": False},
-        {"project_id": project_id, "name": "hub", "linked": True, "revision": None, "built_in": True},
+        {"project_id": project_id, "name": source_id, "slug": "acme", "linked": True, "revision": 1, "built_in": False},
+        {"project_id": project_id, "name": "hub", "slug": "hub", "linked": True, "revision": None, "built_in": True},
     ]
+
+
+def test_a_renamed_source_keeps_its_link_and_answers_to_its_former_slug(hub: HubHarness) -> None:
+    source_id = _seed_records(hub.client)
+    _create(hub.client, "widgets")
+    _ok(hub.client.put("/api/projects/widgets/source-links/acme"))
+    _ok(hub.client.patch("/api/work-sources/acme", json={"slug": "acme-core", "name": "Acme core"}))
+
+    listed = _ok(hub.client.get("/api/projects/widgets/source-links"))["source_links"]
+    assert [(link["name"], link["slug"]) for link in listed] == [(source_id, "acme-core"), ("hub", "hub")]
+    unlinked = _ok(hub.client.post("/api/projects/widgets/source-links/acme/retire"))
+    assert (unlinked["name"], unlinked["slug"], unlinked["linked"]) == (source_id, "acme-core", False)
 
 
 def test_an_unlinked_source_leaves_the_listing(hub: HubHarness) -> None:
@@ -238,7 +251,7 @@ def test_an_unlinked_source_leaves_the_listing(hub: HubHarness) -> None:
 
     listed = _ok(hub.client.get("/api/projects/widgets/source-links"))["source_links"]
 
-    assert [link["name"] for link in listed] == ["hub"]
+    assert [link["slug"] for link in listed] == ["hub"]
 
 
 def test_unlinking_the_hub_source_answers_422_and_linking_it_changes_nothing(hub: HubHarness) -> None:
@@ -248,7 +261,14 @@ def test_unlinking_the_hub_source_answers_422_and_linking_it_changes_nothing(hub
     linked = _ok(hub.client.put("/api/projects/widgets/source-links/hub"))
     refused = hub.client.post("/api/projects/widgets/source-links/hub/retire")
 
-    assert linked == {"project_id": project_id, "name": "hub", "linked": True, "revision": None, "built_in": True}
+    assert linked == {
+        "project_id": project_id,
+        "name": "hub",
+        "slug": "hub",
+        "linked": True,
+        "revision": None,
+        "built_in": True,
+    }
     assert refused.status_code == 422, refused.text
     assert refused.json()["detail"][0]["loc"] == ["path", "source"]
     assert refused.json()["detail"][0]["type"] == "built_in_source"
@@ -331,7 +351,7 @@ def test_a_link_belongs_to_its_project_alone(hub: HubHarness) -> None:
 
     other = _ok(hub.client.get("/api/projects/default/source-links"))["source_links"]
 
-    assert [link["name"] for link in other] == ["hub"]
+    assert [link["slug"] for link in other] == ["hub"]
 
 
 # --- Permissions -------------------------------------------------------------------------------------------------

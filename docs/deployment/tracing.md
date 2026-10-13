@@ -207,6 +207,10 @@ absent rather than empty when there is nothing to say.
 | `gen_ai.conversation.id`                   | `string`   | The harness session id, for a worker invocation.                                                                                                                                                              |
 | `gen_ai.request.model`                     | `string`   | The model the runner resolved for the session.                                                                                                                                                                |
 
+The hub renders each work ref in `blizzard.chunk.work_refs` under its work source's slug as it tells a span, so a span
+told after a source's slug changes carries the new slug. A runner's spans carry the labels its lease was handed when the
+lease was minted.
+
 Cost is in US dollars. When a subscription estimate stands in for a billed amount, `blizzard.step.cost.estimated` says
 so, and `blizzard.step.cost.partial` says some invocation reported no cost at all. `gen_ai.*` names follow the
 OpenTelemetry GenAI semantic conventions at version `1.44.0`; their input-token total counts cache reads and writes,

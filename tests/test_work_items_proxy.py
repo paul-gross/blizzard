@@ -25,6 +25,7 @@ _ITEMS: dict[str, object] = {
         {
             "source": "widget",
             "ref": "42",
+            "slug": "widget",
             "label": "widget#42",
             "web_url": "http://forge.local/repos/acme/widget/issues/42",
             "hub_source": False,

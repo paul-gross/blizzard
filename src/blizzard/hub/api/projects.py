@@ -21,8 +21,8 @@ from blizzard.hub.api.deps import Services
 from blizzard.hub.api.door import RequestDoor, change_context
 from blizzard.hub.api.project_params import PathProject
 from blizzard.hub.api.repository_params import PathRepository
+from blizzard.hub.api.work_source_params import resolved_work_source
 from blizzard.hub.auth.models import ResolvedIdentity
-from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.config.repositories import ConfiguredRepository
 from blizzard.hub.domain.config.work_sources import (
     ConfigFieldError,
@@ -65,12 +65,24 @@ def _view(record: Project) -> ProjectView:
     )
 
 
-def _source_view(link: SourceLink) -> SourceLinkView:
-    return SourceLinkView(project_id=link.project_id, name=link.source_name, linked=link.linked, revision=link.revision)
+def _source_view(link: SourceLink, source: ConfiguredWorkSource | None) -> SourceLinkView:
+    return SourceLinkView(
+        project_id=link.project_id,
+        name=link.work_source_id,
+        slug=source.slug if source is not None else None,
+        linked=link.linked,
+        revision=link.revision,
+    )
 
 
 def _built_in_view(project: Project) -> SourceLinkView:
-    return SourceLinkView(project_id=project.project_id, name=RESERVED_HUB_SOURCE_NAME, linked=True, built_in=True)
+    return SourceLinkView(
+        project_id=project.project_id,
+        name=RESERVED_HUB_SOURCE_NAME,
+        slug=RESERVED_HUB_SOURCE_NAME,
+        linked=True,
+        built_in=True,
+    )
 
 
 def _repository_view(link: RepositoryLink, repository: ConfiguredRepository) -> RepositoryLinkView:
@@ -166,13 +178,6 @@ def patch_project(
 # --- Source links ------------------------------------------------------------------------------------------------
 
 
-def _work_source(name: str, services: TenantServices) -> ConfiguredWorkSource:
-    record = services.work_source_records.get(name)
-    if record is None:
-        raise _not_found(f"unknown work source {name!r}")
-    return record
-
-
 def _built_in_source_refused(source: str) -> HTTPException:
     return _unprocessable(
         "source", f"work source {source} is built in: every project draws from it", "built_in_source", where="path"
@@ -181,11 +186,13 @@ def _built_in_source_refused(source: str) -> HTTPException:
 
 @router.get("/projects/{project}/source-links", response_model=SourceLinksView, dependencies=[_VIEW])
 def list_source_links(project: PathProject, services: Services) -> SourceLinksView:
-    """The project's standing source links by source name, the built-in ``hub`` source among them. 404 when the
-    project is unknown."""
-    views = [_source_view(link) for link in services.project_links.sources_of(project.project_id)]
+    """The project's standing source links by source id, each with the source's current slug, the built-in ``hub``
+    source among them. 404 when the project is unknown."""
+    links = services.project_links.sources_of(project.project_id)
+    held = services.work_source_records.get_many([link.work_source_id for link in links])
+    views = [_source_view(link, held.get(link.work_source_id)) for link in links]
     views.append(_built_in_view(project))
-    return SourceLinksView(source_links=sorted(views, key=lambda view: view.name))
+    return SourceLinksView(source_links=sorted(views, key=lambda view: view.slug or view.name))
 
 
 @router.put("/projects/{project}/source-links/{source}", response_model=SourceLinkView)
@@ -197,19 +204,19 @@ def link_source(
     services: Services,
     if_match: IfMatch = None,
 ) -> SourceLinkView:
-    """Link the project to a stored work source, retired or not — a first link, or a relink of one it unlinked; a
-    standing link, and the built-in ``hub`` source, are left as they are. 404 for an unknown project or source; 409
-    for a stale `If-Match` on a stored link."""
+    """Link the project to a stored work source, named by its id or slug (a slug it left included), retired or not —
+    a first link, or a relink of one it unlinked; a standing link, and the built-in ``hub`` source, are left as they
+    are. 404 for an unknown project or source; 409 for a stale `If-Match` on a stored link."""
     if is_built_in(source):
         return _built_in_view(project)
-    record = _work_source(source, services)
+    record = resolved_work_source(source, services)
     try:
         link = services.project_authoring.link_source(
             project, record, change_context(identity, door), if_match=if_match
         )
     except ConfigRevisionConflict as exc:
         raise _conflict(exc) from exc
-    return _source_view(link)
+    return _source_view(link, record)
 
 
 @router.post("/projects/{project}/source-links/{source}/retire", response_model=SourceLinkView)
@@ -221,19 +228,20 @@ def unlink_source(
     services: Services,
     if_match: IfMatch = None,
 ) -> SourceLinkView:
-    """Unlink the project from a work source by retiring the link; unlinking an unlinked link changes nothing. 422 for
-    the built-in ``hub`` source; 404 for an unknown project or a source it never linked; 409 for a stale
-    `If-Match`."""
+    """Unlink the project from a work source, named by its id or slug, by retiring the link; unlinking an unlinked
+    link changes nothing. 422 for the built-in ``hub`` source; 404 for an unknown project or source, or a source it
+    never linked; 409 for a stale `If-Match`."""
     if is_built_in(source):
         raise _built_in_source_refused(source)
-    link = services.project_links.source_link(project.project_id, source)
+    record = resolved_work_source(source, services)
+    link = services.project_links.source_link(project.project_id, record.work_source_id)
     if link is None:
-        raise _not_found(f"project {project.slug} has no link to work source {source!r}")
+        raise _not_found(f"project {project.slug} has no link to work source {record.slug!r}")
     try:
         unlinked = services.project_authoring.unlink_source(link, change_context(identity, door), if_match=if_match)
     except ConfigRevisionConflict as exc:
         raise _conflict(exc) from exc
-    return _source_view(unlinked)
+    return _source_view(unlinked, record)
 
 
 # --- Repository links --------------------------------------------------------------------------------------------

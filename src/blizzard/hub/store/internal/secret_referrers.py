@@ -20,11 +20,11 @@ from blizzard.hub.store.schema import (
 )
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
 
-#: Each referring kind: its record table, its lifecycle-fact table, the column keying both, and the column labelling
-#: a record keyed by an id (``None`` for a kind keyed by its name).
-_REFERRING: tuple[tuple[RecordKind, Table, Table, str, str | None], ...] = (
+#: Each referring kind: its record table, its lifecycle-fact table, the id column keying both, and the slug column
+#: labelling a record.
+_REFERRING: tuple[tuple[RecordKind, Table, Table, str, str], ...] = (
     (RecordKind.REPOSITORY, repositories, repository_lifecycle_facts, "repository_id", "slug"),
-    (RecordKind.WORK_SOURCE, work_sources, work_source_lifecycle_facts, "name", None),
+    (RecordKind.WORK_SOURCE, work_sources, work_source_lifecycle_facts, "work_source_id", "slug"),
 )
 
 
@@ -35,7 +35,7 @@ def active_referrers(conn: Connection, secret_names: list[str]) -> dict[str, lis
         return found
     stmts = statements_of(conn)
     for kind, table, facts, key, label in _REFERRING:
-        order = table.c[label or key]
+        order = table.c[label]
         rows = []
         for batch in id_batches(secret_names):
             rows.extend(
@@ -50,7 +50,7 @@ def active_referrers(conn: Connection, secret_names: list[str]) -> dict[str, lis
             )
         rows.sort(key=lambda row: row.label)
         for row in rows:
-            found[row.secret_name].append(RecordRef(kind, row[1], row.label if kind is RecordKind.REPOSITORY else None))
+            found[row.secret_name].append(RecordRef(kind, row[1], row.label))
     return found
 
 

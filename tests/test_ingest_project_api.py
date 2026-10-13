@@ -126,7 +126,12 @@ def test_an_item_a_live_chunk_of_another_project_holds_answers_409_naming_its_ho
     status, body = _ingest(hub, "shared:11", project="second")
 
     assert status == 409
-    assert body == ChunkIngestConflict(existing_chunk_id=held, source="shared", ref="11").model_dump()
+    assert (
+        body
+        == ChunkIngestConflict(
+            existing_chunk_id=held, source="shared", ref="11", slug="shared", label="shared#11"
+        ).model_dump()
+    )
     assert [c["chunk_id"] for c in hub.client.get("/api/chunks").json()["chunks"]] == [held]
 
 

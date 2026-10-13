@@ -7,6 +7,9 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Final, TypedDict
 
+from fastapi import status
+from fastapi.responses import JSONResponse
+
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES
 from blizzard.foundation.ids import Id
 from blizzard.foundation.store.utc import iso_utc
@@ -18,6 +21,7 @@ from blizzard.hub.delivery.hub_node import PollPolicy
 from blizzard.hub.domain.artifact.model import GitCommitArtifact, StoredArtifact
 from blizzard.hub.domain.chunk.delivery_read import DeliveryRead, DeliverySources
 from blizzard.hub.domain.chunk.dependencies import BlockedMarking
+from blizzard.hub.domain.chunk.ingest import IngestConflict
 from blizzard.hub.domain.chunk.model import (
     Chunk,
     ChunkFacts,
@@ -42,6 +46,7 @@ from blizzard.wire.chunk import (
     BounceView,
     ChunkDetail,
     ChunkEscalationView,
+    ChunkIngestConflict,
     ChunkNeighborhoodView,
     ChunkSummary,
     ChunkUsageTotalView,
@@ -129,6 +134,20 @@ def project_label_fields(project_id: str | None, project: Project | None) -> Pro
         "project_slug": project.slug if project is not None else None,
         "project_name": project.name if project is not None else None,
     }
+
+
+def ingest_conflict_response(services: TenantServices, exc: IngestConflict) -> JSONResponse:
+    """The ``409`` an ingest answers when a live chunk already holds one of its pointers: the pointer by its source's
+    key, with the source's current slug and the pointer's label beside it."""
+    pointer = exc.pointer
+    conflict = ChunkIngestConflict(
+        existing_chunk_id=exc.existing_chunk_id,
+        source=pointer.source,
+        slug=services.work_sources.source_label(pointer.source),
+        label=services.work_sources.label(pointer),
+        ref=pointer.ref,
+    )
+    return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=conflict.model_dump())
 
 
 class DeliveryWireFields(TypedDict):
@@ -316,10 +335,10 @@ class ChunkView:
         return node_id, self.names.node_name(self.chunk.graph_id, node_id)
 
     def pointer_views(self) -> list[WorkRefView]:
-        """Each pointer with its board-legible label and browser URL, both null when no
-        configured source names ``pointer.source``; each resolves to its own binding by
-        name, so a chunk's pointers need not all share one source. Liveness resolves via
-        :meth:`_resolved_live_holders`'s one bulk call."""
+        """Each pointer with its board-legible label and browser URL. The label renders under the source's current
+        slug, and falls back to ``{slug}#{ref}`` when no adapter is built for the source; the URL is null then. Each
+        resolves to its own binding by key, so a chunk's pointers need not all share one source. Liveness resolves
+        via :meth:`_resolved_live_holders`'s one bulk call."""
         holders = self._resolved_live_holders()
         views: list[WorkRefView] = []
         for p in self.chunk.work_refs:
@@ -330,7 +349,7 @@ class ChunkView:
                 WorkRefView(
                     source=p.source,
                     ref=p.ref,
-                    label=source.label(p) if source is not None else None,
+                    label=(source.label(p) if source is not None else None) or self.services.work_sources.label(p),
                     web_url=source.web_url(p, live_holder=holders.get(p)) if source is not None else None,
                 )
             )

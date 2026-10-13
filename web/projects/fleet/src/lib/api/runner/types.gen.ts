@@ -3521,8 +3521,9 @@ export type WorkItemAuthorView = {
  *
  * One pointer's pass-through work item, vendor-native — title, body, comments, and,
  * only when the source has them to give, ``author``/``stated_priority``.
- * ``label``/``web_url`` are the legible pointer label and browser address, both null when no
- * configured source names ``source``; a per-pointer failure nulls ``title``/``body`` into ``error``.
+ * ``source`` is the pointer's source key — ``hub`` or the source's id — and ``slug`` the source's current slug.
+ * ``label`` is the legible ``{slug}#{ref}``; ``web_url`` the browser address, null when no adapter is built for the
+ * source. A per-pointer failure nulls ``title``/``body`` into ``error``.
  */
 export type WorkItemEntry = {
     author?: WorkItemAuthorView | null;
@@ -3554,6 +3555,10 @@ export type WorkItemEntry = {
      * Ref
      */
     ref: string;
+    /**
+     * Slug
+     */
+    slug?: string | null;
     /**
      * Source
      */
@@ -3606,8 +3611,9 @@ export type WorkItemsView = {
  * WorkRefView
  *
  * A pointer as the views carry it — the raw pair plus its legible label and browser URL, both
- * resolved by the pointer's configured source binding. ``label`` is the legible ``{name}#{ref}``;
- * ``web_url`` is its browser-openable address. Both null when no configured source names ``source``.
+ * resolved by the pointer's configured source binding. ``source`` is ``hub`` or the source's id; ``label`` is the
+ * legible ``{slug}#{ref}``, rendered under the source's current slug; ``web_url`` is its browser-openable address,
+ * null when no adapter is built for the source; ``label`` then still renders under the current slug.
  */
 export type WorkRefView = {
     /**

@@ -54,6 +54,16 @@ blocks or its container environment keeps `BZ_FORGE_*` variables. Carry them int
 container — [`docs/deployment/install.md`](./deployment/install.md#work-sources-and-forge-settings-are-records) owns the
 step.
 
+### Work-source identity boundary
+
+A hub crossing into work sources keyed by id migrates each source's name to a slug and a display name, and rewrites
+every reference to the source, chunks' work refs included, to its id. A work ref naming no source of its tenant is left
+as stored and logged, and can never be reattached afterwards; create the missing sources, and carry any
+`[[work_source]]` blocks into records, before pulling.
+[`docs/deployment/work-sources.md`](./deployment/work-sources.md#upgrading-a-hub-with-existing-external-chunks) owns the
+check. A configuration document applied afterwards keys each work source by `slug`; one keyed by `name` alone is
+refused `422`.
+
 ### Capability-reporting boundary
 
 A runner that reports no capabilities is eligible for nothing. This is breaking on the hub↔runner wire, because the

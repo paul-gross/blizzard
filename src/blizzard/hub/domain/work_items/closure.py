@@ -20,7 +20,7 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.delivery_read import DeliverySources, DeliveryTrace, board_chunk_url
 from blizzard.hub.domain.chunk.event_log import EventLogService
-from blizzard.hub.domain.chunk.model import PendingCloseIntent, WorkItemCloseOutcome, WorkRef
+from blizzard.hub.domain.chunk.model import PendingCloseIntent, WorkItemCloseOutcome
 from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.delivery import IWriteChunkDeliveryRepository
 from blizzard.hub.tenancy import TenantClosed, TenantId, UnknownTenant
@@ -99,14 +99,14 @@ class CloseEvent:
     detail: dict[str, str | None] | None
 
 
-def close_event(ref: WorkRef, outcome: WorkItemCloseOutcome, reason: str | None) -> CloseEvent:
+def close_event(label: str, outcome: WorkItemCloseOutcome, reason: str | None) -> CloseEvent:
     """A closed ref announces ``work-item-closed``; a gone or failed one announces
-    ``work-item-close-failed`` with its outcome and reason."""
+    ``work-item-close-failed`` with its outcome and reason. ``label`` is the ref as its source displays it now."""
     if outcome is WorkItemCloseOutcome.CLOSED:
-        return CloseEvent(kind=_EVENT_CLOSED, message=f"closed {ref.source}#{ref.ref}", detail=None)
+        return CloseEvent(kind=_EVENT_CLOSED, message=f"closed {label}", detail=None)
     return CloseEvent(
         kind=_EVENT_CLOSE_FAILED,
-        message=f"failed to close {ref.source}#{ref.ref}: {reason}",
+        message=f"failed to close {label}: {reason}",
         detail={"outcome": outcome.value, "reason": reason},
     )
 
@@ -193,7 +193,7 @@ class CloseIntentDrainer:
             )  # retires the intent too, in the same transaction, when the outcome is terminal
             if not wrote:
                 continue  # a redelivered sweep already recorded this outcome
-            event = close_event(intent.ref, outcome, reason)
+            event = close_event(self._work_sources.label(intent.ref), outcome, reason)
             self._events.record(
                 kind=event.kind,
                 runner_id=None,

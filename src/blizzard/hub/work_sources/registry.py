@@ -6,10 +6,14 @@ process's :class:`~blizzard.hub.live_config.ConfigObjectCache`, so an edit, a re
 a secret replace reaches the next call with no restart. The built-in ``hub`` source is
 seated in-process, outside the cache — never configured, never retired.
 
-``resolve``, ``names`` and ``annotating_names`` read the active set, so ingest naming a
+Every source past the edge is named by its key: ``hub``, or a configured source's id. Only
+``resolve`` reads a slug — the prefix of an ingest token — and the labels render each source's
+current slug, so a rename reaches every displayed work ref with no stored ref rewritten.
+
+``resolve``, ``names`` and ``annotating_ids`` read the active set, so ingest naming a
 retired source is refused and the annotation sweep lets go of its labels; ``get``,
-``annotator``, ``closer`` and ``label_clearer`` reach retired records too, so items already
-ingested from one still label, close and annotate.
+``annotator``, ``closer``, ``label_clearer`` and the labels reach retired records too, so items
+already ingested from one still label, close and annotate.
 """
 
 from __future__ import annotations
@@ -20,7 +24,7 @@ from typing import Protocol, cast
 
 from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.config.changes import RecordKind
-from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, IReadWorkSourceRepository
+from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, IReadWorkSourceRepository, WorkSourceId
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.live_config import ConfigObjectCache
 from blizzard.hub.work_sources.annotator import IWorkAnnotator
@@ -66,66 +70,94 @@ class StoreWorkSourceRegistry:
         self._built_in = built_in
         self._close_forge_writes_enabled = close_forge_writes_enabled
 
-    def _built(self, name: str) -> BuiltWorkSource | None:
-        """The source's adapter, or ``None`` when it is unknown — or retired with a secret that no
-        longer reveals: nothing stops that secret being retired once the source is, and the read
-        paths over items already ingested must not fail on it. An active source that cannot be built raises."""
+    def _built(self, source: str) -> BuiltWorkSource | None:
+        """The adapter of the source keyed ``source``, or ``None`` when it is unknown — or retired with a secret that
+        no longer reveals: nothing stops that secret being retired once the source is, and the read paths over items
+        already ingested must not fail on it. An active source that cannot be built raises. The adapter is cached
+        under the id and rebuilt when the record's revision moves, a slug edit among them."""
         try:
-            return self._objects.get(RecordKind.WORK_SOURCE, name, lambda: self._build_current(name))
+            return self._objects.get(RecordKind.WORK_SOURCE, source, lambda: self._build_current(source))
         except WorkSourceError:
-            record = self._records.get(name)
+            record = self._records.get(WorkSourceId(source))
             if record is not None and record.retired:
                 return None
             raise
 
-    def _build_current(self, name: str) -> BuiltWorkSource:
-        record = self._records.get(name)
+    def _build_current(self, source: str) -> BuiltWorkSource:
+        record = self._records.get(WorkSourceId(source))
         # The revisions read just found it, and a configured record is never deleted.
         assert record is not None
         return self._build(record)
 
-    def get(self, name: str) -> IWorkSource | None:
-        if name == RESERVED_HUB_SOURCE_NAME:
+    def get(self, source: str) -> IWorkSource | None:
+        if source == RESERVED_HUB_SOURCE_NAME:
             return self._built_in
-        built = self._built(name)
+        built = self._built(source)
         return built.source if built is not None else None
 
     def names(self) -> list[str]:
-        return [record.name for record in self._records.list_all(include_retired=False)] + [RESERVED_HUB_SOURCE_NAME]
+        return [record.slug for record in self._records.list_all(include_retired=False)] + [RESERVED_HUB_SOURCE_NAME]
 
-    def annotator(self, name: str) -> IWorkAnnotator | None:
-        if name == RESERVED_HUB_SOURCE_NAME:
+    def source_label(self, source: str) -> str:
+        if source == RESERVED_HUB_SOURCE_NAME:
+            return source
+        record = self._records.get(WorkSourceId(source))
+        return record.slug if record is not None else source
+
+    def label(self, pointer: WorkRef) -> str:
+        source = self.get(pointer.source)
+        rendered = source.label(pointer) if source is not None else None
+        return rendered if rendered is not None else f"{self.source_label(pointer.source)}#{pointer.ref}"
+
+    def annotator(self, source: str) -> IWorkAnnotator | None:
+        if source == RESERVED_HUB_SOURCE_NAME:
             return None
-        built = self._built(name)
+        built = self._built(source)
         if built is None or not built.record.fields.annotate:
             return None
         return cast(IWorkAnnotator, built.source)
 
-    def annotating_names(self) -> list[str]:
-        return [record.name for record in self._records.list_all(include_retired=False) if record.fields.annotate]
+    def annotating_ids(self) -> list[str]:
+        return [
+            record.work_source_id for record in self._records.list_all(include_retired=False) if record.fields.annotate
+        ]
 
-    def label_clearer(self, name: str) -> IWorkAnnotator | None:
-        if name == RESERVED_HUB_SOURCE_NAME:
+    def label_clearer(self, source: str) -> IWorkAnnotator | None:
+        if source == RESERVED_HUB_SOURCE_NAME:
             return None
-        built = self._built(name)
+        built = self._built(source)
         return cast(IWorkAnnotator, built.source) if built is not None else None
 
-    def closer(self, name: str) -> IWorkCloser | None:
-        if name == RESERVED_HUB_SOURCE_NAME:
+    def closer(self, source: str) -> IWorkCloser | None:
+        if source == RESERVED_HUB_SOURCE_NAME:
             return self._built_in
         if not self._close_forge_writes_enabled:
             return None
-        built = self._built(name)
+        built = self._built(source)
         return cast(IWorkCloser, built.source) if built is not None else None
 
-    def editor(self, name: str) -> IWorkEditor | None:
-        return self._built_in if name == RESERVED_HUB_SOURCE_NAME else None
+    def editor(self, source: str) -> IWorkEditor | None:
+        return self._built_in if source == RESERVED_HUB_SOURCE_NAME else None
 
     def resolve(self, token: str) -> WorkRef | None:
-        """The first active binding's ``parse`` of ``token`` that claims it, the built-in
-        source last; ``None`` when none do."""
+        """The pointer ``token`` names, or ``None``. A ``{x}:{n}`` or ``{x}#{n}`` token whose ``x`` is ``hub`` goes to
+        the built-in source; one whose ``x`` names a configured source — by id, current slug or a slug it left — goes
+        to that source alone, rewritten to name its id, and is claimed by none when the source is retired. Any other
+        token is offered to every active source, the built-in last."""
+        for sep in (":", "#"):
+            prefix, found, ref = token.partition(sep)
+            if not found:
+                continue
+            if prefix == RESERVED_HUB_SOURCE_NAME:
+                return self._built_in.parse(token)
+            record = self._records.resolve(prefix)
+            if record is not None:
+                if record.retired:
+                    return None
+                built = self._built(record.work_source_id)
+                return built.source.parse(f"{record.work_source_id}{sep}{ref}") if built is not None else None
         for record in self._records.list_all(include_retired=False):
-            built = self._built(record.name)
+            built = self._built(record.work_source_id)
             pointer = built.source.parse(token) if built is not None else None
             if pointer is not None:
                 return pointer

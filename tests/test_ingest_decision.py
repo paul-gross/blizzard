@@ -10,6 +10,7 @@ import pytest
 from blizzard.hub.domain.chunk.ingest import (
     EmptyIngest,
     IngestConflict,
+    IngestSourceNotLinked,
     decide_ingest,
     ingest_work_refs,
     require_unheld,
@@ -69,3 +70,30 @@ def test_decide_ingest_refuses_a_batch_naming_a_held_pointer() -> None:
     with pytest.raises(IngestConflict) as exc_info:
         decide_ingest([_A, _B], live_holders={_B: "chk_holder"}, graph=_GRAPH, project_id=_PROJECT, at=_T0)
     assert exc_info.value.pointer == _B
+
+
+class _Labels:
+    """Renders a source key under a slug, as the work-source registry does once a source is renamed."""
+
+    def source_label(self, source: str) -> str:
+        return {"forge": "forge-core"}.get(source, source)
+
+    def label(self, pointer: WorkRef) -> str:
+        return f"{self.source_label(pointer.source)}#{pointer.ref}"
+
+
+def test_a_labelled_conflict_names_the_pointer_by_its_current_label() -> None:
+    with pytest.raises(IngestConflict) as exc_info:
+        require_unheld([_A], {_A: "chk_holder"})
+
+    labelled = exc_info.value.labelled(_Labels())
+
+    assert str(labelled) == "pointer forge-core#1 already held by live chunk chk_holder"
+    assert (labelled.pointer, labelled.existing_chunk_id) == (_A, "chk_holder")
+
+
+def test_a_labelled_not_linked_refusal_names_the_source_by_its_current_label() -> None:
+    refused = IngestSourceNotLinked("forge", _PROJECT).labelled(_Labels())
+
+    assert str(refused) == f"source forge-core is not linked to project {_PROJECT}"
+    assert refused.source == "forge"

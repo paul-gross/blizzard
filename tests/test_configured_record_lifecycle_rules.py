@@ -33,6 +33,7 @@ from blizzard.hub.domain.config.work_sources import (
     ConfiguredWorkSource,
     WorkSourceEdit,
     WorkSourceFields,
+    WorkSourceId,
     is_built_in,
     require_configurable,
 )
@@ -44,6 +45,7 @@ _CTX = ChangeContext(actor="ops", door=Door.CLI)
 _WS_FIELDS = WorkSourceFields(
     provider="github", locator="acme/demo", api_base=None, web_base=None, annotate=False, secret="gh"
 )
+_WS_ID = WorkSourceId("wsrc_demo")
 _REPO_ID = RepositoryId("repo_demo")
 _REPO_FIELDS = RepositoryFields(
     forge_api_url="https://api.github.com", owner="acme", repo="demo", base_branch="master", secret_name="gh"
@@ -52,7 +54,14 @@ _REPO_FIELDS = RepositoryFields(
 
 def _source(*, revision: int = 3, retired: bool = False) -> ConfiguredWorkSource:
     return ConfiguredWorkSource(
-        name="gh", fields=_WS_FIELDS, revision=revision, created_at=_AT, created_by="ops", retired=retired
+        work_source_id=_WS_ID,
+        slug="gh",
+        name="gh",
+        fields=_WS_FIELDS,
+        revision=revision,
+        created_at=_AT,
+        created_by="ops",
+        retired=retired,
     )
 
 
@@ -125,21 +134,29 @@ def test_a_retired_secret_refuses_a_replacement_and_a_redundant_brake_is_a_no_op
 
 
 def test_a_new_work_source_starts_at_revision_one_with_a_create_change_listing_every_set_field() -> None:
-    record, change = ConfiguredWorkSource.new("gh", _WS_FIELDS, _CTX, at=_AT)
+    record, change = ConfiguredWorkSource.new("gh", None, _WS_FIELDS, _CTX, at=_AT)
 
-    assert record == ConfiguredWorkSource(name="gh", fields=_WS_FIELDS, revision=1, created_at=_AT, created_by="ops")
+    assert record == ConfiguredWorkSource(
+        work_source_id=record.work_source_id,
+        slug="gh",
+        name="gh",
+        fields=_WS_FIELDS,
+        revision=1,
+        created_at=_AT,
+        created_by="ops",
+    )
     assert (change.record_kind, change.record_key, change.revision, change.op) == (
         RecordKind.WORK_SOURCE,
-        "gh",
+        record.work_source_id,
         1,
         ChangeOp.CREATE,
     )
-    assert [c.field for c in change.diff] == ["provider", "locator", "annotate", "secret"]
+    assert [c.field for c in change.diff] == ["slug", "name", "provider", "locator", "annotate", "secret"]
 
 
-def test_a_new_work_source_with_a_bad_name_is_refused() -> None:
+def test_a_new_work_source_slugged_hub_is_refused() -> None:
     with pytest.raises(ConfigFieldError):
-        ConfiguredWorkSource.new("hub", _WS_FIELDS, _CTX, at=_AT)
+        ConfiguredWorkSource.new("hub", None, _WS_FIELDS, _CTX, at=_AT)
 
 
 def test_a_work_source_edit_moves_the_revision_and_records_the_diff() -> None:
@@ -147,6 +164,8 @@ def test_a_work_source_edit_moves_the_revision_and_records_the_diff() -> None:
 
     assert decided == (
         ConfiguredWorkSource(
+            work_source_id=_WS_ID,
+            slug="gh",
             name="gh",
             fields=WorkSourceFields(
                 provider="github", locator="acme/demo", api_base=None, web_base=None, annotate=True, secret="gh"
@@ -155,7 +174,7 @@ def test_a_work_source_edit_moves_the_revision_and_records_the_diff() -> None:
             created_at=_AT,
             created_by="ops",
         ),
-        _change(RecordKind.WORK_SOURCE, "gh", 4, ChangeOp.EDIT, (FieldChange("annotate", False, True),)),
+        _change(RecordKind.WORK_SOURCE, _WS_ID, 4, ChangeOp.EDIT, (FieldChange("annotate", False, True),)),
     )
 
 
@@ -166,11 +185,13 @@ def test_a_work_source_edit_that_changes_nothing_writes_nothing() -> None:
 def test_a_stale_if_match_is_refused_even_for_an_edit_that_changes_nothing() -> None:
     with pytest.raises(ConfigRevisionConflict) as caught:
         _source().edit(WorkSourceEdit(), _CTX, if_match=2, at=_AT)
-    assert str(caught.value) == ConfigRevisionConflict("work source", "gh", current=3).args[0]
+    assert str(caught.value) == ConfigRevisionConflict("work source", _WS_ID, current=3).args[0]
 
 
 def test_an_edit_that_changes_nothing_never_revalidates_the_stored_fields() -> None:
     stored = ConfiguredWorkSource(
+        work_source_id=_WS_ID,
+        slug="gh",
         name="gh",
         fields=WorkSourceFields(
             provider="nowhere", locator="x", api_base=None, web_base=None, annotate=False, secret=None
@@ -195,7 +216,7 @@ def test_retiring_an_active_work_source_flips_it_at_the_next_revision() -> None:
 
     assert decided == (
         _source(revision=4, retired=True),
-        _change(RecordKind.WORK_SOURCE, "gh", 4, ChangeOp.RETIRE, (FieldChange("retired", False, True),)),
+        _change(RecordKind.WORK_SOURCE, _WS_ID, 4, ChangeOp.RETIRE, (FieldChange("retired", False, True),)),
     )
 
 
@@ -204,7 +225,7 @@ def test_enabling_a_retired_work_source_flips_it_back() -> None:
 
     assert decided == (
         _source(revision=4),
-        _change(RecordKind.WORK_SOURCE, "gh", 4, ChangeOp.ENABLE, (FieldChange("retired", True, False),)),
+        _change(RecordKind.WORK_SOURCE, _WS_ID, 4, ChangeOp.ENABLE, (FieldChange("retired", True, False),)),
     )
 
 

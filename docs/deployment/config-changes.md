@@ -13,10 +13,13 @@ blizzard hub config changes --kind work_source --key blizzard --all
 Rows come newest first. Each carries the acting user, the door, the kind and key of the record, the record's revision
 after the change, the operation, and the fields that changed. Without `--all` the verb prints the newest page; `--kind`
 is `work_source`, `repository`, `secret`, `scope`, `routine`, or `project`, and `--key` narrows to one record — a
-scope's slug, a routine's `name`, or a project's or repository's id or slug. `--json` prints the raw rows.
+scope's slug, a routine's `name`, or a project's, work source's or repository's id or slug. `--json` prints the raw
+rows.
 
-A project's and a repository's rows are keyed by its id, so they follow the record across slug changes; each row carries
-the record's current slug as `record_label`, which the listing shows.
+A project's, a work source's and a repository's rows are keyed by its id, as are a project link's rows by the linked
+record's id, so they follow the record across slug changes; each row carries the record's current slug as
+`record_label`, which the listing shows. A row's recorded fields stay as written: a slug edit lists the old and new
+slug.
 
 Over HTTP the same log is `GET /api/config/changes?record_kind=&record_key=&before=&limit=`, newest first, at most 200
 rows a page. Pass the response's `next_before` as `before` to read the next page; it is `null` on the last. Reading

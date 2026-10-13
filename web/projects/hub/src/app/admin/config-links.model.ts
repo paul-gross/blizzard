@@ -25,7 +25,7 @@ export function recordRoute(kind: string, key: string): readonly string[] | null
   return surface === undefined ? null : [...surface, key];
 }
 
-/** A link to the record `ref` names, shown by its label — a repository's current slug — when it has one. */
+/** A link to the record `ref` names, shown by its label — a repository's or work source's current slug — when it has one. */
 export function recordLink(ref: RecordRefView): ConfigLinkVm {
   return { kind: recordKindLabel(ref.kind), name: ref.label ?? ref.key, route: recordRoute(ref.kind, ref.key) };
 }

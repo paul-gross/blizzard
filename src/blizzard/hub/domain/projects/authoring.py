@@ -43,9 +43,9 @@ class ProjectAuthoring:
         """Link ``project`` to ``source`` — a first link, or a relink of one it unlinked; a standing link is left as
         it is. A retired source may be linked, and a linked source may be retired."""
         now = self._clock.now()
-        stored = self._links.source_link(project.project_id, source.name)
+        stored = self._links.source_link(project.project_id, source.work_source_id)
         if stored is None:
-            link, change = SourceLink.new(project, source.name, ctx, at=now)
+            link, change = SourceLink.new(project, source.work_source_id, ctx, at=now)
             return self._links.create_source_link(link, change=change)
         decided = stored.relink(ctx, if_match=if_match, at=now)
         if decided is None:

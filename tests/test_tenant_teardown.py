@@ -353,7 +353,16 @@ def test_a_delete_removes_the_tenants_projects_their_former_slugs_and_their_link
     rows = [
         (
             schema.work_sources,
-            {**t, **made, "name": "github", "provider": "github", "locator": "o/r", "annotate": False},
+            {
+                **t,
+                **made,
+                "work_source_id": "wsrc_01KXCCC100ZG1665XA1SDASTE5",
+                "slug": "github",
+                "name": "github",
+                "provider": "github",
+                "locator": "o/r",
+                "annotate": False,
+            },
         ),
         (
             schema.repositories,
@@ -371,8 +380,8 @@ def test_a_delete_removes_the_tenants_projects_their_former_slugs_and_their_link
             | {"secret_name": "token"},
         ),
         (schema.project_former_slugs, {**linked, "slug": "old", "left_at": at}),
-        (schema.project_source_links, {**linked, "source_name": "github", "revision": 1}),
-        (schema.project_source_link_facts, {**linked, **fact, "source_name": "github"}),
+        (schema.project_source_links, {**linked, "work_source_id": "wsrc_01KXCCC100ZG1665XA1SDASTE5", "revision": 1}),
+        (schema.project_source_link_facts, {**linked, **fact, "work_source_id": "wsrc_01KXCCC100ZG1665XA1SDASTE5"}),
         (
             schema.project_repository_links,
             {**linked, "repository_id": "repo_01KXCCC100ZG1665XA1SDASTE4", "revision": 1},

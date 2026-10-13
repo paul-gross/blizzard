@@ -1,7 +1,8 @@
 # Work sources
 
-The hub reads every chunk's work item through a configured work source: a named, credentialed binding to one forge repo,
-stored as a record and managed with `blizzard hub source`. Work sources are independent of delivery's forge access: a
+The hub reads every chunk's work item through a configured work source: a credentialed binding to one forge repo, stored
+as a record and managed with `blizzard hub source`. Like a [repository](./repositories.md), each record has a slug you
+type, a display name, and an id the hub mints. Work sources are independent of delivery's forge access: a
 [repository](./repositories.md) record controls where a chunk's PR is opened and landed, a work source record controls
 where its work item is read from, and each carries a stored [secret](./secrets.md) of its own.
 
@@ -23,53 +24,79 @@ blizzard hub source list
 blizzard hub source show blizzard
 ```
 
-- `name` is the source's identity: ingest tokens (`name:ref`, `name#ref`) and board pointer labels (`{source}#{ref}`)
-  key on it; it must not contain a colon (the token grammar splits on the first one), and `hub` is reserved for the
-  built-in source. For a repo that already has chunks in this hub, `name` is not a free choice — it must be the repo's
-  own tail, the part after the last slash: an earlier release's migration backfilled every existing pointer's source to
-  its repo tail, so a mismatched name strands those pointers — nothing 503s and the hub boots clean, but every
-  pre-existing chunk for that repo degrades silently, label null and its work-items entry carrying
-  `error="no configured work source named '<repo-tail>'"`. A repo with no chunks minted against it yet carries no
-  repo-tail constraint; any name is safe.
+- `slug` is the handle ingest tokens (`slug:ref`, `slug#ref`) and board pointer labels (`{slug}#{ref}`) use; `hub` is
+  reserved for the built-in source. [Naming a work source](#naming-a-work-source) owns the three names.
 - `locator` is the owner/name coordinate the source is pinned to; each (provider, locator) pair belongs to one record,
-  since two names for one repo would let an item be ingested twice under two identities.
+  since two records for one repo would let an item be ingested twice under two identities.
 - `provider` names the adapter grammar; only `github` exists.
 - `api_base` overrides the provider's API origin (needed for a self-hosted forge such as GitHub Enterprise); `web_base`
   overrides the web origin for the item's browsable URL and derives from `api_base` when omitted, so a GHE source needs
   only `api_base`.
 - `secret` names the stored secret holding the forge token, revealed only when the hub calls the forge.
 
-`create` stores the source at revision 1. Every later change moves the revision by one:
+`create <slug>` stores the source at revision 1, named `--name` (default: the slug). It is refused when another source
+holds the slug as its current one or the slug is `hub`. Taking a slug another source left moves it to the new source.
+Every later change moves the revision by one:
 
-- `edit <name>` changes only the flags given: `--provider`, `--locator`, `--secret`, `--api-base`, `--web-base`, and
-  `--annotate` or `--no-annotate`. `--clear api-base`, `--clear web-base`, or `--clear secret` unsets a field, and
-  `--clear secret` is refused for a provider that needs a credential, which includes `github`. An edit that leaves every
-  field as it is writes nothing and keeps the revision. The name never changes.
-- `retire <name>` hides the source from `list` unless `--include-retired` is given, and ingest naming it is refused with
-  a 422. Items already ingested from it keep their labels, close and annotate through it. A retired source keeps its
-  provider and locator, so `create` for another name on the same locator is refused with a message naming the holder;
-  `enable` the holder instead.
-- `enable <name>` lifts the retirement, and is refused while the source's secret is retired.
+- `edit <source>` changes only the flags given: `--slug`, `--name`, `--provider`, `--locator`, `--secret`, `--api-base`,
+  `--web-base`, and `--annotate` or `--no-annotate`. `--clear api-base`, `--clear web-base`, or `--clear secret` unsets
+  a field, and `--clear secret` is refused for a provider that needs a credential, which includes `github`. An edit that
+  leaves every field as it is writes nothing and keeps the revision.
+- `retire <source>` hides the source from `list` unless `--include-retired` is given, and ingest naming it is refused
+  with a 422. Items already ingested from it keep their labels, close and annotate through it. A retired source keeps
+  its provider and locator, so `create` for another slug on the same locator is refused with a message naming the
+  holder; `enable` the holder instead.
+- `enable <source>` lifts the retirement, and is refused while the source's secret is retired.
+
+`show`, `edit`, `retire` and `enable` take the source's id or its slug.
 
 `edit`, `retire`, and `enable` take `--if-match <revision>` and are refused, naming the current revision, when the
-source has moved on. A name may not contain `:` and may not be `hub`, which is the built-in source: `list` shows it as
-built-in, and every attempt to change it is refused. Every write is recorded in the [change log](./config-changes.md).
+source has moved on. `hub` is the built-in source: `list` shows it as built-in, and every attempt to change it is
+refused. Every write is recorded in the [change log](./config-changes.md).
 
 Writes need the `config:edit` permission and reads need `fleet:view`. The record fields are also served over
-`GET /api/work-sources` and `GET /api/work-sources/{name}`, and the document schema at
-`GET /api/config/schema/work-sources`. A source whose secret cannot be revealed is an error on every call through it,
-never an absent source.
+`GET /api/work-sources` and `GET /api/work-sources/{source}`, where `{source}` is an id or a slug, and the document
+schema at `GET /api/config/schema/work-sources`. A body carries `slug` and `name`; `name` defaults to `slug` on create.
+A source whose secret cannot be revealed is an error on every call through it, never an absent source.
 
 The board's Admin page lists work sources, with each record's revision, last change, and history. On a desktop, a user
 with `config:edit` can also create, edit, retire, and enable them there; an edit shows the fields that will change
 before it saves. On a phone the page is read-only and names the `blizzard hub source` command that makes the change. The
 built-in `hub` source is listed and cannot be changed.
 
+## Naming a work source
+
+A work source carries three names, each with one job, with the same rules as a
+[repository's](./repositories.md#naming-a-repository):
+
+| Name             | What it is                                                                                                                                                                                                                                                               |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `work_source_id` | `wsrc_` followed by a ULID. It never changes, and everything that refers to the source stores it, every chunk's work refs included                                                                                                                                       |
+| `slug`           | The handle you type: in ingest tokens, CLI arguments, API paths, project links and configuration documents. 1 to 64 lowercase letters, digits and hyphens, a hyphen only between two letters or digits, and never `hub`. Unique in the tenant; two tenants may share one |
+| `name`           | The display name: 1 to 128 characters with no leading or trailing whitespace, unique nowhere. Only ever shown, never looked up. It is the slug when `create` is not given one                                                                                            |
+
+Wherever a work source is accepted, its id or its slug names it; a display name never does. An id names its source
+whatever the slug is now.
+
+A source's slug and name may change, and nothing that refers to the source moves: its chunks' work refs, its project
+links, its pending closes and its change-log rows keep pointing at it. Every work ref is displayed under the source's
+current slug, so after `edit acme --slug acme-core` the board, `chunk show` and every refusal render `acme-core#42` for
+a ref ingested as `acme:42`. The slug a source leaves becomes its **former slug**: an ingest token, a URL, a script or a
+project link written against it keeps reaching the source, until another source takes that slug. From then on it names
+its new holder. The one place a former slug is refused is a configuration document, which answers `422` naming the
+source that left it ([config-documents.md](./config-documents.md)). A configuration that must survive any slug change
+names sources by id.
+
+A hub upgraded from a release whose work sources were named by `name` carries each name forward, as it does a
+repository's: a name that is a slug becomes the slug and the display name, and any other name becomes the display name
+with a slug derived from it. Ingest tokens typed under such a name keep working when the name was already a slug.
+
 ## Ingesting work items
 
 `blizzard hub chunk ingest` takes one or more source-native tokens and mints a chunk; each token is `<source>:<ref>`,
-`<source>#<ref>`, or a pasted work-item URL. The CLI parses nothing; the hub resolves each token against every
-configured source's own parse.
+`<source>#<ref>`, or a pasted work-item URL. The CLI parses nothing. When a token's `<source>` is an active source's id,
+slug or former slug, the hub hands the token to that source alone, and a token naming a retired source is refused `422`;
+`hub` goes to the built-in source. Any other token, a URL included, is resolved against every active source's own parse.
 
 The chunk is minted in one project. `--project <id|slug>` names it; without it, the hub uses the one project every
 token's source is linked to, and answers `422 project_required`, listing the tenant's projects, when the sources are
@@ -112,10 +139,10 @@ that reached stopped/done carries neither.
 The label sweep runs every `annotation_interval_seconds` (a top-level `blizzard-hub.toml` key, default 120). It keeps no
 label state: a full pass discovers the forge's actual labels afresh and writes only the difference from desired state.
 Each tick first checks, cheaply, whether anything the hub projects has changed (a chunk's status or work refs, or which
-sources annotate) and skips the forge reads when nothing has, running a full pass anyway once five intervals (ten minutes
-by default) have gone by. A change on the hub side shows on the forge within one interval; a hand-removed label, an edit
-by another actor, or a source's binding edit self-heals within that five-interval floor. Mid-sweep crashes, forge
-outages, and failed writes or clears are retried on the very next pass. A forge that is down, slow, or
+sources annotate) and skips the forge reads when nothing has, running a full pass anyway once five intervals (ten
+minutes by default) have gone by. A change on the hub side shows on the forge within one interval; a hand-removed label,
+an edit by another actor, or a source's binding edit self-heals within that five-interval floor. Mid-sweep crashes,
+forge outages, and failed writes or clears are retried on the very next pass. A forge that is down, slow, or
 rate-limiting degrades the label sweep to a logged skip; it never blocks a chunk transition, an ingest, or any other hub
 request.
 
@@ -184,16 +211,19 @@ failed attempt and a terminal gone one.
 
 ## Upgrading a hub with existing external chunks
 
-An existing hub with chunks pointing at external forge issues must hold a matching source record or their board pointer
-labels render null on the next deploy: `{source}#{ref}` needs a configured source by that name, and the built-in hub
-source covers only hub-authored items — `GET /chunks/{id}/work-items` never 503s, but an external chunk's entry degrades
-to a null label and an error until its source is configured. There is no backward-compatible default, because the source
-list also bounds which repos the hub will ingest from; create the record in the same maintenance window as the wheel,
-before migrate and restart ([install.md](./install.md) owns the sequence).
+A hub's oldest external chunks may hold a work ref whose source is a repo tail — the part of the repo's name after the
+last slash — written by an earlier release before work sources were records. The upgrade that keys sources by id
+rewrites every ref naming a source its tenant holds to that source's id. A ref naming no source of its tenant is
+**stranded**: the migration leaves it as stored, logs a warning per table with the count and up to five of them as
+`tenant/value`, and goes on. Creating a source afterwards does not reattach it, because refs now name sources by id,
+never by slug. So before pulling a release that crosses this upgrade, give every repo tail such a chunk names a source
+record whose name is that tail. A hub still configured by `[[work_source]]` blocks is the same case: `import-legacy`
+runs after `migrate` ([install.md](./install.md#work-sources-and-forge-settings-are-records)), so carry the blocks into
+records with a release from before this upgrade, or its existing chunks' refs are stranded.
 
-Verify after the upgrade by reading a pre-existing chunk's work items (`GET /api/chunks/<id>/work-items`) and confirming
-every entry's `error` is null; a non-null error naming a source means the name does not match the backfilled repo tail —
-fix it, or add a second record under the correct tail, and restart.
+A stranded ref degrades without failing anything: its label renders as `{stored value}#{ref}`, and its entry in
+`GET /api/chunks/<id>/work-items` carries `error="no work source is configured under '<stored value>'"`. Verify after
+the upgrade by reading a pre-existing chunk's work items and confirming every entry's `error` is null.
 
 ## Upgrading past the `close` flag
 

@@ -31,8 +31,9 @@ class WorkRefModel(BaseModel):
 
 class WorkRefView(BaseModel):
     """A pointer as the views carry it — the raw pair plus its legible label and browser URL, both
-    resolved by the pointer's configured source binding. ``label`` is the legible ``{name}#{ref}``;
-    ``web_url`` is its browser-openable address. Both null when no configured source names ``source``."""
+    resolved by the pointer's configured source binding. ``source`` is ``hub`` or the source's id; ``label`` is the
+    legible ``{slug}#{ref}``, rendered under the source's current slug; ``web_url`` is its browser-openable address,
+    null when no adapter is built for the source; ``label`` then still renders under the current slug."""
 
     source: str
     ref: str
@@ -75,11 +76,14 @@ class ChunkDeleteResponse(BaseModel):
 
 
 class ChunkIngestConflict(BaseModel):
-    """The 409 body: the pointer is already held by a live chunk."""
+    """The 409 body: the pointer is already held by a live chunk. ``source`` is the pointer's source key — ``hub`` or
+    the source's id — with the source's current ``slug`` and the pointer's ``label`` beside it."""
 
     existing_chunk_id: str
     source: str
     ref: str
+    slug: str | None = None
+    label: str | None = None
     detail: str = "pointer already held by a live chunk"
 
 
@@ -640,11 +644,13 @@ class ChunkStatusView(BaseModel):
 class WorkItemEntry(BaseModel):
     """One pointer's pass-through work item, vendor-native — title, body, comments, and,
     only when the source has them to give, ``author``/``stated_priority``.
-    ``label``/``web_url`` are the legible pointer label and browser address, both null when no
-    configured source names ``source``; a per-pointer failure nulls ``title``/``body`` into ``error``."""
+    ``source`` is the pointer's source key — ``hub`` or the source's id — and ``slug`` the source's current slug.
+    ``label`` is the legible ``{slug}#{ref}``; ``web_url`` the browser address, null when no adapter is built for the
+    source. A per-pointer failure nulls ``title``/``body`` into ``error``."""
 
     source: str
     ref: str
+    slug: str | None = None
     label: str | None = None
     web_url: str | None = None
     #: Whether ``source`` names the hub's own reserved work source rather than a configured one.

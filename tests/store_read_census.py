@@ -79,7 +79,13 @@ from blizzard.hub.domain.config.repositories import (
 )
 from blizzard.hub.domain.config.revisions import IReadConfigRevisions
 from blizzard.hub.domain.config.secrets import ISecretCatalog, SecretName
-from blizzard.hub.domain.config.work_sources import IReadWorkSourceRepository, WorkSourceFields
+from blizzard.hub.domain.config.work_sources import (
+    IReadWorkSourceRepository,
+    WorkSourceEdit,
+    WorkSourceFields,
+    WorkSourceId,
+    WorkSourceSlug,
+)
 from blizzard.hub.domain.garden.findings.model import IReadFindingRepository, IReadFindingSetRepository
 from blizzard.hub.domain.garden.findings.trend import IReadGardenTrendRepository
 from blizzard.hub.domain.garden.proposals.closure import IReadGardenProposalClosureRepository
@@ -931,6 +937,7 @@ def _trace_store_of(connections: ScopedConnections, hub: HubHarness) -> TraceSto
             names=hub.services.registry,
             projects=ProjectLabels(hub.services.projects),
             label=_label,
+            source_label=hub.services.work_sources.source_label,
         ),
         tenant_name=hub.hub_services.tenants.open_tenants.name,
     )
@@ -1101,9 +1108,11 @@ class HubWorld:
     transcript_chunk: str
     transcript_segment_id: str
     #: The tenant's one project, renamed ``default`` -> ``census``, linked to ``census-source`` (unlinked, then
-    #: relinked) and to the repository ``census-repo``, renamed to ``census-repository``.
+    #: relinked) and to the repository ``census-repo``, renamed to ``census-repository``; the work source is renamed
+    #: ``census-work-source`` after.
     project_id: ProjectId
     repository_id: RepositoryId
+    work_source_id: WorkSourceId
 
 
 def build_hub_world(tmp_path: Path) -> HubWorld:
@@ -1266,6 +1275,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     config.retire_secret(retired_secret, operator)
     config.create_work_source(
         "census-source",
+        None,
         WorkSourceFields(
             provider="github", locator="acme/census", api_base=None, web_base=None, annotate=False, secret="gh-token"
         ),
@@ -1905,7 +1915,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
 
     # --- projects and their links: last, so every write above lands in the tenant's one project ----
     [project] = hub.services.projects.list_all()
-    census_source = hub.services.work_source_records.get("census-source")
+    census_source = hub.services.work_source_records.resolve("census-source")
     census_repo = hub.services.repository_records.resolve("census-repo")
     assert census_source is not None and census_repo is not None
     source_link = hub.services.project_authoring.link_source(project, census_source, operator)
@@ -1913,6 +1923,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     hub.services.project_authoring.link_source(project, census_source, operator)
     hub.services.project_authoring.link_repository(project, census_repo, operator)
     hub.services.config_authoring.edit_repository(census_repo, RepositoryEdit(slug="census-repository"), operator)
+    hub.services.config_authoring.edit_work_source(census_source, WorkSourceEdit(slug="census-work-source"), operator)
     project = hub.services.project_authoring.edit(project, ProjectEdit(slug="census"), operator)
 
     return HubWorld(
@@ -1983,6 +1994,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         transcript_segment_id=transcript_segment_id,
         project_id=project.project_id,
         repository_id=census_repo.repository_id,
+        work_source_id=census_source.work_source_id,
     )
 
 
@@ -2374,8 +2386,15 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (ISecretCatalog, "is_retired"): lambda w: w.secrets.is_retired("old-token"),
     (ISecretCatalog, "retired_names"): lambda w: w.secrets.retired_names(),
     (ISecretCatalog, "key_ids_in_use"): lambda w: w.secrets.key_ids_in_use(),
-    (IReadWorkSourceRepository, "get"): lambda w: w.hub.services.work_source_records.get("census-source"),
-    (IReadWorkSourceRepository, "get_many"): lambda w: w.hub.services.work_source_records.get_many(["census-source"]),
+    (IReadWorkSourceRepository, "get"): lambda w: w.hub.services.work_source_records.get(w.work_source_id),
+    (IReadWorkSourceRepository, "get_many"): lambda w: w.hub.services.work_source_records.get_many([w.work_source_id]),
+    (IReadWorkSourceRepository, "get_by_slug"): lambda w: w.hub.services.work_source_records.get_by_slug(
+        WorkSourceSlug.parse("census-work-source")
+    ),
+    (IReadWorkSourceRepository, "get_by_former_slug"): lambda w: w.hub.services.work_source_records.get_by_former_slug(
+        WorkSourceSlug.parse("census-source")
+    ),
+    (IReadWorkSourceRepository, "resolve"): lambda w: w.hub.services.work_source_records.resolve("census-source"),
     (IReadWorkSourceRepository, "list_all"): lambda w: w.hub.services.work_source_records.list_all(
         include_retired=True
     ),
@@ -2404,7 +2423,7 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     ),
     (IReadProjectRepository, "resolve"): lambda w: w.hub.services.projects.resolve("default"),
     (IReadProjectLinks, "source_link"): lambda w: w.hub.services.project_links.source_link(
-        w.project_id, "census-source"
+        w.project_id, w.work_source_id
     ),
     (IReadProjectLinks, "repository_link"): lambda w: w.hub.services.project_links.repository_link(
         w.project_id, w.repository_id
@@ -2412,10 +2431,10 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadProjectLinks, "sources_of"): lambda w: w.hub.services.project_links.sources_of(w.project_id),
     (IReadProjectLinks, "repositories_of"): lambda w: w.hub.services.project_links.repositories_of(w.project_id),
     (IReadProjectLinks, "projects_linking_source"): lambda w: w.hub.services.project_links.projects_linking_source(
-        "census-source"
+        w.work_source_id
     ),
     (IReadProjectLinks, "linked_at"): lambda w: w.hub.services.project_links.linked_at(
-        w.project_id, "census-source", w.clock.now()
+        w.project_id, w.work_source_id, w.clock.now()
     ),
     (IReadConfigImports, "commit_coordinates"): lambda w: w.config_imports.commit_coordinates(),
     (IReadConfigChanges, "page"): lambda w: w.hub.services.config_changes.page(

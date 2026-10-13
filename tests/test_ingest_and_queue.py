@@ -105,7 +105,7 @@ def test_ingest_batches_multiple_pointers_into_one_chunk(tmp_path: Path) -> None
 
 def test_list_row_is_board_legible(tmp_path: Path) -> None:
     # Each pointer's `{source}#{ref}` label is resolved server-side. A pointer naming no
-    # configured source degrades to a null label/web_url, minted straight through the domain.
+    # configured source degrades to its raw `{source}#{ref}` label and a null web_url, minted straight through the domain.
     hub = build_hub(tmp_path)
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_P1)]}).json()["chunk_id"]
     graph = hub.services.graph_mint.ensure_default(
@@ -123,7 +123,9 @@ def test_list_row_is_board_legible(tmp_path: Path) -> None:
     assert rows[chunk_id]["work_refs"] == [
         {**_P1, "label": "default#1", "web_url": "http://forge.local/acme/widget/issues/1"}
     ]
-    assert rows[unconfigured_id]["work_refs"] == [{"source": "retired", "ref": "9", "label": None, "web_url": None}]
+    assert rows[unconfigured_id]["work_refs"] == [
+        {"source": "retired", "ref": "9", "label": "retired#9", "web_url": None}
+    ]
 
 
 def test_ingest_rests_not_ready_and_promote_makes_it_claimable(tmp_path: Path) -> None:

@@ -2104,6 +2104,7 @@ _PROJECT_INVARIANTS = frozenset(
         "hub:proposal-cites-own-project",
         "hub:work-item-project-in-tenant",
         "hub:slug-not-current-and-former",
+        "hub:work-source-references-in-tenant",
         "hub:chunk-sources-linked",
         "hub:landed-repository-linked",
     }
@@ -2399,6 +2400,68 @@ def test_a_slug_both_current_and_former_is_a_violation(tmp_path: Path) -> None:
     ]
 
 
+def test_a_work_source_reference_outside_its_tenant_is_a_violation(tmp_path: Path) -> None:
+    """A link, a work ref, or a change row naming another tenant's work source, or a source that is not stored at
+    all, is a breach; a ``hub`` ref and a reference to the tenant's own source are not."""
+    engine = _hub_engine(tmp_path)
+    tenant, home = default_tenant(engine), default_project(engine)
+    with engine.begin() as conn:
+        # Rows stamped by the store's only tenant go in before the second tenant exists.
+        _mint(conn, "ch_1", at=_NOW, refs=("hub:1", "wsrc_home:2", "wsrc_other:3", "wsrc_gone:4"), project_id=home)
+        conn.execute(
+            hub_scoped(insert(hub.tenants)).values(
+                tenant_id="tnt_other", name="other", created_at=_NOW, created_by="test"
+            )
+        )
+        for owner, source_id in ((tenant, "wsrc_home"), ("tnt_other", "wsrc_other")):
+            conn.execute(
+                hub_scoped(insert(hub.work_sources)).values(
+                    tenant_id=owner,
+                    work_source_id=source_id,
+                    slug="acme",
+                    name="acme",
+                    provider="github",
+                    locator="acme/app",
+                    annotate=False,
+                    revision=1,
+                    created_at=_NOW,
+                    created_by="test",
+                )
+            )
+        conn.execute(
+            insert(hub.project_source_links).values(
+                stamp(
+                    hub.project_source_links, tenant_id=tenant, project_id=home, work_source_id="wsrc_other", revision=1
+                )
+            )
+        )
+        change_id = conn.execute(
+            insert(hub.config_changes).values(
+                stamp(
+                    hub.config_changes,
+                    tenant_id=tenant,
+                    recorded_at=_NOW,
+                    actor="op",
+                    door="cli",
+                    record_kind="work_source",
+                    record_key="wsrc_other",
+                    revision=1,
+                    op="edit",
+                    diff="[]",
+                )
+            )
+        ).inserted_primary_key
+        assert change_id is not None
+
+    assert _project_breaches(engine, "hub:work-source-references-in-tenant") == [
+        f"project_source_links row {home} of tenant {tenant} names work source wsrc_other, not a work source of "
+        "its tenant",
+        f"chunk_work_refs row 3 of tenant {tenant} names work source wsrc_other, not a work source of its tenant",
+        f"chunk_work_refs row 4 of tenant {tenant} names work source wsrc_gone, not a work source of its tenant",
+        f"config_changes row {change_id[0]} of tenant {tenant} names work source wsrc_other, not a work source of its tenant",
+    ]
+
+
 def _hours(n: float) -> datetime:
     return _NOW + timedelta(hours=n)
 
@@ -2409,7 +2472,7 @@ def _source_fact(conn: sa.Connection, source: str, *, linked: bool, at: datetime
             stamp(
                 hub.project_source_link_facts,
                 project_id=project_id,
-                source_name=source,
+                work_source_id=source,
                 linked=linked,
                 set_at=at,
                 set_by="op",
@@ -2614,6 +2677,12 @@ def test_a_carried_over_store_keeps_every_project_invariant(tmp_path: Path) -> N
             )
     runner.upgrade("head")
     try:
-        assert {v.invariant for v in HubInvariants(engine).run()} & _PROJECT_INVARIANTS == set()
+        violations = HubInvariants(engine).run()
+        stranded = [v for v in violations if v.invariant == "hub:work-source-references-in-tenant"]
+        assert {v.invariant for v in violations} & _PROJECT_INVARIANTS == {"hub:work-source-references-in-tenant"}
+        # Only the ref naming a source never stored as a record is left as stored, and reported.
+        assert [v.detail.split(" names ")[1] for v in stranded] == [
+            "work source default, not a work source of its tenant"
+        ] * 2
     finally:
         engine.dispose()

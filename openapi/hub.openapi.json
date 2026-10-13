@@ -7479,7 +7479,8 @@
           "ten",
           "inv",
           "proj",
-          "repo"
+          "repo",
+          "wsrc"
         ],
         "title": "IdPrefix",
         "type": "string"
@@ -8565,7 +8566,7 @@
       },
       "ProjectDocument": {
         "additionalProperties": false,
-        "description": "A project as a document entry, named by its slug. A ``name`` or ``description`` the entry omits is left as\nstored; a project the document creates needs a ``name``. A ``sources`` or ``repositories`` list the entry states\nis the project's whole set of links of that kind \u2014 a source it leaves out is unlinked; a list it omits is left\nas stored. A repository is named by its id or its slug, a slug it left included. A slug a project left is refused:\nname that project by its current slug.",
+        "description": "A project as a document entry, named by its slug. A ``name`` or ``description`` the entry omits is left as\nstored; a project the document creates needs a ``name``. A ``sources`` or ``repositories`` list the entry states\nis the project's whole set of links of that kind \u2014 a record it leaves out is unlinked; a list it omits is left\nas stored. A source or repository is named by its id or its slug, a slug it left included. A slug a project left\nis refused: name that project by its current slug.",
         "properties": {
           "description": {
             "default": "",
@@ -9375,7 +9376,7 @@
         "type": "object"
       },
       "RecordKind": {
-        "description": "The kind of configured record a change row names. A project's and a repository's ``record_key`` is its id,\nnever its slug; a project link's is the linked source's name or repository's id. Linking, unlinking and re-linking\nare ``create``, ``retire`` and ``enable``.",
+        "description": "The kind of configured record a change row names. A project's, a repository's and a work source's\n``record_key`` is its id, never its slug; a project link's is the linked source's or repository's id. Linking,\nunlinking and re-linking are ``create``, ``retire`` and ``enable``.",
         "enum": [
           "work_source",
           "secret",
@@ -12384,7 +12385,7 @@
         "type": "object"
       },
       "SourceLinkView": {
-        "description": "A project's link to a work source, named ``name``. ``linked`` is false once the link is retired (unlinked).\nThe built-in ``hub`` source is linked to every project: it has no stored link, so no ``revision``, and cannot be\nunlinked.",
+        "description": "A project's link to a work source: ``name`` is the source's key \u2014 its id, or ``hub`` \u2014 and ``slug`` its current\nslug. ``linked`` is false once the link is retired (unlinked). The built-in ``hub`` source is linked to every\nproject: it has no stored link, so no ``revision``, and cannot be unlinked.",
         "properties": {
           "built_in": {
             "default": false,
@@ -12413,6 +12414,17 @@
               }
             ],
             "title": "Revision"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug"
           }
         },
         "required": [
@@ -12424,7 +12436,7 @@
         "type": "object"
       },
       "SourceLinksView": {
-        "description": "A project's standing source links by source name, the built-in ``hub`` source among them \u2014\n``GET /api/projects/{project}/source-links``.",
+        "description": "A project's standing source links by source key, the built-in ``hub`` source among them \u2014\n``GET /api/projects/{project}/source-links``.",
         "properties": {
           "source_links": {
             "default": [],
@@ -14082,6 +14094,17 @@
             "title": "Ref",
             "type": "string"
           },
+          "slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug"
+          },
           "source": {
             "title": "Source",
             "type": "string"
@@ -14131,7 +14154,7 @@
         "type": "object"
       },
       "WorkItemEntry": {
-        "description": "One pointer's pass-through work item, vendor-native \u2014 title, body, comments, and,\nonly when the source has them to give, ``author``/``stated_priority``.\n``label``/``web_url`` are the legible pointer label and browser address, both null when no\nconfigured source names ``source``; a per-pointer failure nulls ``title``/``body`` into ``error``.",
+        "description": "One pointer's pass-through work item, vendor-native \u2014 title, body, comments, and,\nonly when the source has them to give, ``author``/``stated_priority``.\n``source`` is the pointer's source key \u2014 ``hub`` or the source's id \u2014 and ``slug`` the source's current slug.\n``label`` is the legible ``{slug}#{ref}``; ``web_url`` the browser address, null when no adapter is built for the\nsource. A per-pointer failure nulls ``title``/``body`` into ``error``.",
         "properties": {
           "author": {
             "anyOf": [
@@ -14196,6 +14219,17 @@
           "ref": {
             "title": "Ref",
             "type": "string"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug"
           },
           "source": {
             "title": "Source",
@@ -14293,7 +14327,7 @@
         "type": "string"
       },
       "WorkItemView": {
-        "description": "One hub-owned work item in full \u2014 author, stated priority, closure, and the\nlast-edit instant, the vocabulary a pass-through ``WorkItemEntry`` cannot answer.",
+        "description": "One hub-owned work item in full \u2014 author, stated priority, closure, and the\nlast-edit instant, the vocabulary a pass-through ``WorkItemEntry`` cannot answer. ``source`` is the source's key \u2014\n``hub`` or its id \u2014 and ``slug`` its current slug; ``label`` is the rendered ``{slug}#{ref}``.",
         "properties": {
           "author": {
             "$ref": "#/components/schemas/WorkItemAuthorView"
@@ -14345,6 +14379,17 @@
           "ref": {
             "title": "Ref",
             "type": "string"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug"
           },
           "source": {
             "title": "Source",
@@ -14443,7 +14488,7 @@
         "type": "object"
       },
       "WorkRefView": {
-        "description": "A pointer as the views carry it \u2014 the raw pair plus its legible label and browser URL, both\nresolved by the pointer's configured source binding. ``label`` is the legible ``{name}#{ref}``;\n``web_url`` is its browser-openable address. Both null when no configured source names ``source``.",
+        "description": "A pointer as the views carry it \u2014 the raw pair plus its legible label and browser URL, both\nresolved by the pointer's configured source binding. ``source`` is ``hub`` or the source's id; ``label`` is the\nlegible ``{slug}#{ref}``, rendered under the source's current slug; ``web_url`` is its browser-openable address,\nnull when no adapter is built for the source; ``label`` then still renders under the current slug.",
         "properties": {
           "label": {
             "anyOf": [
@@ -14485,7 +14530,7 @@
       },
       "WorkSourceDocument": {
         "additionalProperties": false,
-        "description": "A work source as a document \u2014 the create body, and the model whose JSON Schema\n``GET /api/config/schema/work-sources`` serves. ``secret`` names a stored secret.",
+        "description": "A work source as a document \u2014 the create body, and the model whose JSON Schema\n``GET /api/config/schema/work-sources`` serves. ``slug`` names the source and ``name`` is its display label \u2014 the\nslug when omitted on create, left as stored on an edit. ``hub`` is never a slug: the built-in source holds it.\n``secret`` names a stored secret.",
         "properties": {
           "annotate": {
             "default": false,
@@ -14508,8 +14553,15 @@
             "type": "string"
           },
           "name": {
-            "title": "Name",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
           },
           "provider": {
             "title": "Provider",
@@ -14526,6 +14578,10 @@
             ],
             "title": "Secret"
           },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
           "web_base": {
             "anyOf": [
               {
@@ -14539,7 +14595,7 @@
           }
         },
         "required": [
-          "name",
+          "slug",
           "provider",
           "locator"
         ],
@@ -14548,7 +14604,7 @@
       },
       "WorkSourcePatchRequest": {
         "additionalProperties": false,
-        "description": "A sparse edit: an absent field is unchanged, a present one is set, and an explicit\n``null`` clears ``api_base``, ``web_base``, or ``secret`` and is refused elsewhere.\n``name`` is immutable, so a body carrying it is refused.",
+        "description": "A sparse edit: an absent field is unchanged, a present one is set, and an explicit\n``null`` clears ``api_base``, ``web_base``, or ``secret`` and is refused elsewhere. A slug that changes keeps\nresolving to the source until another claims it.",
         "properties": {
           "annotate": {
             "anyOf": [
@@ -14583,6 +14639,17 @@
             ],
             "title": "Locator"
           },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
           "provider": {
             "anyOf": [
               {
@@ -14605,6 +14672,17 @@
             ],
             "title": "Secret"
           },
+          "slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug"
+          },
           "web_base": {
             "anyOf": [
               {
@@ -14621,7 +14699,7 @@
         "type": "object"
       },
       "WorkSourceSummary": {
-        "description": "One work source \u2014 the ``GET /api/work-sources`` listing row and every record verb's\nview. ``readable`` is not a field: every source answers ``fetch``, so it carries no\ninformation; ``edit`` is the \"has browsable items\" signal the item routes gate on. The\nbuilt-in ``hub`` source is ``built_in`` and carries no record fields.",
+        "description": "One work source \u2014 the ``GET /api/work-sources`` listing row and every record verb's\nview. ``readable`` is not a field: every source answers ``fetch``, so it carries no\ninformation; ``edit`` is the \"has browsable items\" signal the item routes gate on.\n``work_source_id`` is what every stored reference holds; ``slug`` is the handle people type, and ``name`` a display\nlabel. The built-in ``hub`` source is ``built_in``, has slug and name ``hub``, and carries no id or record\nfields.",
         "properties": {
           "annotate": {
             "title": "Annotate",
@@ -14722,6 +14800,17 @@
             ],
             "title": "Secret"
           },
+          "slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug"
+          },
           "web_base": {
             "anyOf": [
               {
@@ -14732,6 +14821,17 @@
               }
             ],
             "title": "Web Base"
+          },
+          "work_source_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Source Id"
           }
         },
         "required": [
@@ -15303,22 +15403,6 @@
           },
           {
             "in": "query",
-            "name": "source",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Source"
-            }
-          },
-          {
-            "in": "query",
             "name": "since",
             "required": false,
             "schema": {
@@ -15429,6 +15513,22 @@
                 }
               ],
               "title": "Effort"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
             }
           },
           {
@@ -15547,22 +15647,6 @@
           },
           {
             "in": "query",
-            "name": "source",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Source"
-            }
-          },
-          {
-            "in": "query",
             "name": "since",
             "required": false,
             "schema": {
@@ -15673,6 +15757,22 @@
                 }
               ],
               "title": "Effort"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
             }
           },
           {
@@ -15801,22 +15901,6 @@
           },
           {
             "in": "query",
-            "name": "source",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Source"
-            }
-          },
-          {
-            "in": "query",
             "name": "since",
             "required": false,
             "schema": {
@@ -15927,6 +16011,22 @@
                 }
               ],
               "title": "Effort"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
             }
           },
           {
@@ -16013,22 +16113,6 @@
           },
           {
             "in": "query",
-            "name": "source",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Source"
-            }
-          },
-          {
-            "in": "query",
             "name": "since",
             "required": false,
             "schema": {
@@ -16143,6 +16227,22 @@
           },
           {
             "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
+            }
+          },
+          {
+            "in": "query",
             "name": "project",
             "required": false,
             "schema": {
@@ -16209,22 +16309,6 @@
           },
           {
             "in": "query",
-            "name": "source",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Source"
-            }
-          },
-          {
-            "in": "query",
             "name": "since",
             "required": false,
             "schema": {
@@ -16255,6 +16339,22 @@
                 }
               ],
               "title": "Until"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
             }
           },
           {
@@ -16325,22 +16425,6 @@
           },
           {
             "in": "query",
-            "name": "source",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Source"
-            }
-          },
-          {
-            "in": "query",
             "name": "since",
             "required": false,
             "schema": {
@@ -16371,6 +16455,22 @@
                 }
               ],
               "title": "Until"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
             }
           },
           {
@@ -16533,22 +16633,6 @@
           },
           {
             "in": "query",
-            "name": "source",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Source"
-            }
-          },
-          {
-            "in": "query",
             "name": "since",
             "required": false,
             "schema": {
@@ -16659,6 +16743,22 @@
                 }
               ],
               "title": "Effort"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
             }
           },
           {
@@ -16793,22 +16893,6 @@
           },
           {
             "in": "query",
-            "name": "source",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Source"
-            }
-          },
-          {
-            "in": "query",
             "name": "since",
             "required": false,
             "schema": {
@@ -16923,6 +17007,22 @@
           },
           {
             "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
+            }
+          },
+          {
+            "in": "query",
             "name": "project",
             "required": false,
             "schema": {
@@ -16989,22 +17089,6 @@
           },
           {
             "in": "query",
-            "name": "source",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Source"
-            }
-          },
-          {
-            "in": "query",
             "name": "since",
             "required": false,
             "schema": {
@@ -17035,6 +17119,22 @@
                 }
               ],
               "title": "Until"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
             }
           },
           {
@@ -17175,22 +17275,6 @@
           },
           {
             "in": "query",
-            "name": "source",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Source"
-            }
-          },
-          {
-            "in": "query",
             "name": "since",
             "required": false,
             "schema": {
@@ -17221,6 +17305,22 @@
                 }
               ],
               "title": "Until"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
             }
           },
           {
@@ -17291,22 +17391,6 @@
           },
           {
             "in": "query",
-            "name": "source",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Source"
-            }
-          },
-          {
-            "in": "query",
             "name": "since",
             "required": false,
             "schema": {
@@ -17337,6 +17421,22 @@
                 }
               ],
               "title": "Until"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
             }
           },
           {
@@ -17417,22 +17517,6 @@
           },
           {
             "in": "query",
-            "name": "source",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Source"
-            }
-          },
-          {
-            "in": "query",
             "name": "since",
             "required": false,
             "schema": {
@@ -17463,6 +17547,22 @@
                 }
               ],
               "title": "Until"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
             }
           },
           {
@@ -17543,22 +17643,6 @@
           },
           {
             "in": "query",
-            "name": "source",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Source"
-            }
-          },
-          {
-            "in": "query",
             "name": "since",
             "required": false,
             "schema": {
@@ -17589,6 +17673,22 @@
                 }
               ],
               "title": "Until"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
             }
           },
           {
@@ -25292,7 +25392,7 @@
     },
     "/api/projects/{project}/source-links": {
       "get": {
-        "description": "The project's standing source links by source name, the built-in ``hub`` source among them. 404 when the\nproject is unknown.",
+        "description": "The project's standing source links by source id, each with the source's current slug, the built-in ``hub``\nsource among them. 404 when the project is unknown.",
         "operationId": "list_source_links_api_projects__project__source_links_get",
         "parameters": [
           {
@@ -25335,7 +25435,7 @@
     },
     "/api/projects/{project}/source-links/{source}": {
       "put": {
-        "description": "Link the project to a stored work source, retired or not \u2014 a first link, or a relink of one it unlinked; a\nstanding link, and the built-in ``hub`` source, are left as they are. 404 for an unknown project or source; 409\nfor a stale `If-Match` on a stored link.",
+        "description": "Link the project to a stored work source, named by its id or slug (a slug it left included), retired or not \u2014\na first link, or a relink of one it unlinked; a standing link, and the built-in ``hub`` source, are left as they\nare. 404 for an unknown project or source; 409 for a stale `If-Match` on a stored link.",
         "operationId": "link_source_api_projects__project__source_links__source__put",
         "parameters": [
           {
@@ -25419,7 +25519,7 @@
     },
     "/api/projects/{project}/source-links/{source}/retire": {
       "post": {
-        "description": "Unlink the project from a work source by retiring the link; unlinking an unlinked link changes nothing. 422 for\nthe built-in ``hub`` source; 404 for an unknown project or a source it never linked; 409 for a stale\n`If-Match`.",
+        "description": "Unlink the project from a work source, named by its id or slug, by retiring the link; unlinking an unlinked\nlink changes nothing. 422 for the built-in ``hub`` source; 404 for an unknown project or source, or a source it\nnever linked; 409 for a stale `If-Match`.",
         "operationId": "unlink_source_api_projects__project__source_links__source__retire_post",
         "parameters": [
           {
@@ -28809,7 +28909,7 @@
         ]
       },
       "post": {
-        "description": "Store a new work source at revision 1. 422 naming the field for a bad name, provider,\nlocator, or a missing or retired secret; 409 for a taken name or a taken\n`(provider, locator)`, naming the holder.",
+        "description": "Store a new work source at revision 1; its `name` is its `slug` when omitted. 422 naming the field for a\nmalformed `slug` or `name` (`hub` among them, the built-in source's), a bad provider or locator, or a missing or\nretired secret; 409 for a slug some work source holds or a taken `(provider, locator)`, naming the holder.",
         "operationId": "create_work_source_api_work_sources_post",
         "parameters": [
           {
@@ -28869,7 +28969,7 @@
     },
     "/api/work-sources/{source}": {
       "get": {
-        "description": "One work source, retired or not; the built-in `hub` shows as `built_in`. 404 on an unknown name.",
+        "description": "One work source by id or slug \u2014 a slug it left included \u2014 retired or not; the built-in `hub` shows as\n`built_in`. 404 on an unknown source.",
         "operationId": "get_work_source_api_work_sources__source__get",
         "parameters": [
           {
@@ -28910,7 +29010,7 @@
         ]
       },
       "patch": {
-        "description": "Apply only the fields present; an explicit `null` clears `api_base`, `web_base`, or\n`secret` (the last only where the provider needs no credential). A patch that changes\nnothing writes nothing. 404 unknown, 409 for `hub`, a stale `If-Match` (naming the current\nrevision), or a taken `(provider, locator)`; 422 naming the field.",
+        "description": "Apply only the fields present; an explicit `null` clears `api_base`, `web_base`, or\n`secret` (the last only where the provider needs no credential). A patch that changes\nnothing writes nothing. A slug that changes keeps resolving to the source until another claims it. 404 unknown,\n409 for `hub`, a stale `If-Match` (naming the current revision), a slug some work source holds, or a taken\n`(provider, locator)`; 422 naming the field (`hub` refused as a slug).",
         "operationId": "patch_work_source_api_work_sources__source__patch",
         "parameters": [
           {
@@ -29197,19 +29297,19 @@
         "parameters": [
           {
             "in": "path",
-            "name": "source",
+            "name": "ref",
             "required": true,
             "schema": {
-              "title": "Source",
+              "title": "Ref",
               "type": "string"
             }
           },
           {
             "in": "path",
-            "name": "ref",
+            "name": "source",
             "required": true,
             "schema": {
-              "title": "Ref",
+              "title": "Source",
               "type": "string"
             }
           }
@@ -29247,19 +29347,19 @@
         "parameters": [
           {
             "in": "path",
-            "name": "source",
+            "name": "ref",
             "required": true,
             "schema": {
-              "title": "Source",
+              "title": "Ref",
               "type": "string"
             }
           },
           {
             "in": "path",
-            "name": "ref",
+            "name": "source",
             "required": true,
             "schema": {
-              "title": "Ref",
+              "title": "Source",
               "type": "string"
             }
           }
@@ -29297,19 +29397,19 @@
         "parameters": [
           {
             "in": "path",
-            "name": "source",
+            "name": "ref",
             "required": true,
             "schema": {
-              "title": "Source",
+              "title": "Ref",
               "type": "string"
             }
           },
           {
             "in": "path",
-            "name": "ref",
+            "name": "source",
             "required": true,
             "schema": {
-              "title": "Ref",
+              "title": "Source",
               "type": "string"
             }
           }

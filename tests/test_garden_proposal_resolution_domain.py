@@ -232,7 +232,7 @@ def test_no_closure_for_the_item_resolves_nothing() -> None:
     repo = _RecordingWriteRepo()
     resolution = _resolution(closures=_FakeClosures(), proposals=_FakeProposals(), findings=_FakeFindings(), repo=repo)
 
-    resolution.resolve_for_item(_POINTER)
+    resolution.resolve_for_item(_POINTER, label="hub:42")
 
     assert repo.batches == []
 
@@ -255,7 +255,7 @@ def test_a_passed_closure_resolves_nothing() -> None:
     repo = _RecordingWriteRepo()
     resolution = _resolution(closures=closures, proposals=_FakeProposals(), findings=_FakeFindings(), repo=repo)
 
-    resolution.resolve_for_item(_POINTER)
+    resolution.resolve_for_item(_POINTER, label="hub:42")
 
     assert repo.batches == []
 
@@ -271,7 +271,7 @@ def test_an_accepted_but_declined_mint_resolves_nothing() -> None:
     repo = _RecordingWriteRepo()
     resolution = _resolution(closures=closures, proposals=_FakeProposals(), findings=_FakeFindings(), repo=repo)
 
-    resolution.resolve_for_item(_POINTER)
+    resolution.resolve_for_item(_POINTER, label="hub:42")
 
     assert repo.batches == []
 
@@ -287,7 +287,7 @@ def test_an_accepted_minted_closure_naming_an_absent_proposal_resolves_nothing()
     repo = _RecordingWriteRepo()
     resolution = _resolution(closures=closures, proposals=_FakeProposals(), findings=_FakeFindings(), repo=repo)
 
-    resolution.resolve_for_item(_POINTER)
+    resolution.resolve_for_item(_POINTER, label="hub:42")
 
     assert repo.batches == []
 
@@ -305,7 +305,7 @@ def test_an_already_exited_finding_is_skipped_not_re_resolved() -> None:
     repo = _RecordingWriteRepo()
     resolution = _resolution(closures=closures, proposals=proposals, findings=findings, repo=repo)
 
-    resolution.resolve_for_item(_POINTER)
+    resolution.resolve_for_item(_POINTER, label="hub:42")
 
     assert repo.batches == []
 
@@ -329,7 +329,7 @@ def test_resolves_exactly_the_proposals_live_findings_attributed_to_it() -> None
     repo = _RecordingWriteRepo()
     resolution = _resolution(closures=closures, proposals=proposals, findings=findings, repo=repo)
 
-    resolution.resolve_for_item(_POINTER)
+    resolution.resolve_for_item(_POINTER, label="hub:42")
 
     assert len(repo.batches) == 1
     entries = repo.batches[0]
@@ -356,7 +356,7 @@ def test_a_gone_finding_the_proposal_cites_is_left_alone_when_its_item_is_delive
     repo = _RecordingWriteRepo()
     resolution = _resolution(closures=closures, proposals=proposals, findings=findings, repo=repo)
 
-    resolution.resolve_for_item(_POINTER)
+    resolution.resolve_for_item(_POINTER, label="hub:42")
 
     assert len(repo.batches) == 1
     assert [e.finding_id for e in repo.batches[0]] == ["fin_live"]
@@ -385,7 +385,7 @@ def test_a_proposal_already_delivered_once_is_never_delivered_again_even_after_a
     repo = _RecordingWriteRepo()
     resolution = _resolution(closures=closures, proposals=proposals, findings=findings, repo=repo)
 
-    resolution.resolve_for_item(_POINTER)
+    resolution.resolve_for_item(_POINTER, label="hub:42")
 
     assert repo.batches == []
 

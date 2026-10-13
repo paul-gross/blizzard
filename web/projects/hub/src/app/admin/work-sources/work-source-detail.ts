@@ -1,6 +1,6 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import {
   asyncState,
   errorMessage,
@@ -12,16 +12,17 @@ import {
 import { map } from 'rxjs';
 
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
+import { ProjectLens } from '../../core/project-lens';
 import { injectWorkSourceLifecycleMutation, injectEditWorkSourceMutation } from './work-sources.mutations';
 import { type ConfigFailure, configActions, failureFor } from '../config-actions.model';
 import { type ConfigFormValues, configEdit, shownFormValues } from '../config-edit.model';
 import { injectActorName } from '../actor-names';
 import { ConfigFormDialog } from '../config-form-dialog';
 import { detailCliCommand } from '../config-cli.model';
-import { historyRecordKey, lastChange, revisionRows } from '../config-history.model';
+import { lastChange, revisionRows } from '../config-history.model';
 import { injectConfigHistoryQuery } from '../config-history.query';
 import { ConfigRecordPanel } from '../config-record-panel';
-import { WORK_SOURCE_FIELDS, workSourceRecordVm } from './work-sources.model';
+import { WORK_SOURCE_FIELDS, workSourceCliName, workSourceRecordVm } from './work-sources.model';
 import { injectWorkSourceQuery } from './work-sources.query';
 
 /**
@@ -38,6 +39,8 @@ import { injectWorkSourceQuery } from './work-sources.query';
 })
 export class WorkSourceDetail {
   private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
+  private readonly lens = inject(ProjectLens);
   private readonly viewport = inject(ViewportService);
 
   private readonly key = toSignal(this.route.paramMap.pipe(map((params) => params.get('key'))), {
@@ -45,7 +48,7 @@ export class WorkSourceDetail {
   });
   private readonly sourceQuery = injectWorkSourceQuery(() => this.key());
   private readonly historyQuery = injectConfigHistoryQuery(RecordKind.WORK_SOURCE, () =>
-    historyRecordKey(this.sourceQuery.data()),
+    this.sourceQuery.data()?.work_source_id ?? null,
   );
 
   protected readonly vm = computed(() => workSourceRecordVm(this.sourceQuery.data()));
@@ -59,7 +62,7 @@ export class WorkSourceDetail {
     asyncState(this.historyQuery, this.revisions().length === 0),
   );
   protected readonly cliCommand = computed(() =>
-    detailCliCommand(this.viewport.mode(), RecordKind.WORK_SOURCE, this.sourceQuery.data()),
+    detailCliCommand(this.viewport.mode(), RecordKind.WORK_SOURCE, workSourceCliName(this.sourceQuery.data())),
   );
 
   private readonly meQuery = injectMeQuery();
@@ -79,6 +82,21 @@ export class WorkSourceDetail {
   protected readonly busy = computed(() => this.pendingKey() !== null && this.pendingKey() === this.key());
   protected readonly actionError = computed(() => failureFor(this.failure(), this.key()));
 
+  constructor() {
+    // A slug or former slug in the URL opens the work source; the URL then names it by id.
+    effect(() => {
+      const source = this.sourceQuery.data();
+      const key = this.key();
+      const id = source?.work_source_id;
+      if (id && key !== null && key !== id) {
+        void this.router.navigate(this.lens.link(['/admin', 'work-sources', id]), {
+          replaceUrl: true,
+          queryParamsHandling: 'preserve',
+        });
+      }
+    });
+  }
+
   protected onEdit(): void {
     this.editError.set(null);
     this.editOpen.set(true);
@@ -87,11 +105,12 @@ export class WorkSourceDetail {
   protected onSave(values: ConfigFormValues): void {
     const record = this.sourceQuery.data();
     const shown = this.shown();
-    if (!record || !shown || record.revision == null) return;
+    const id = record?.work_source_id;
+    if (!record || !id || !shown || record.revision == null) return;
     this.editError.set(null);
     this.editMutation.mutate(
       {
-        name: record.name,
+        workSourceId: id,
         revision: record.revision,
         body: configEdit(this.fields, shown, values).body,
       },
@@ -104,19 +123,20 @@ export class WorkSourceDetail {
 
   protected onLifecycle(verb: 'retire' | 'enable'): void {
     const record = this.sourceQuery.data();
-    if (!record || record.revision == null) return;
-    this.pendingKey.set(record.name);
+    const id = record?.work_source_id;
+    if (!record || !id || record.revision == null) return;
+    this.pendingKey.set(id);
     this.failure.set(null);
     this.lifecycleMutation.mutate(
       {
-        name: record.name,
+        workSourceId: id,
         revision: record.revision,
         retired: verb === 'retire',
       },
       {
         onError: (error) =>
           this.failure.set({
-            key: record.name,
+            key: id,
             message: errorMessage(error, `${verb} failed.`),
           }),
         onSettled: () => this.pendingKey.set(null),

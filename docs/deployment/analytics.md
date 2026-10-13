@@ -42,11 +42,11 @@ an inapplicable flag is refused with a does-not-apply error, never silently drop
 
 ## Filters
 
-Every dataset shares `--graph`, `--source`, `--since`, `--until`; `--extractor-version` defaults to the sweep's current
-version — an older one reads that version's rows alone, since mixing would double-count — and the event projection adds
-`--kind`, `--tool`, `--subject-prefix`, `--node`. `--since`/`--until` are read in the operator's local wall clock and
-converted to UTC before the wire — a bare 10:00 means the operator's 10am, whatever timezone the hub runs in. A time
-ending `Z` or `±hh:mm` is that instant instead.
+Every dataset shares `--graph`, `--source` (a work source's id or slug, or `hub`), `--since`, `--until`;
+`--extractor-version` defaults to the sweep's current version — an older one reads that version's rows alone, since
+mixing would double-count — and the event projection adds `--kind`, `--tool`, `--subject-prefix`, `--node`.
+`--since`/`--until` are read in the operator's local wall clock and converted to UTC before the wire — a bare 10:00
+means the operator's 10am, whatever timezone the hub runs in. A time ending `Z` or `±hh:mm` is that instant instead.
 
 Every analytics read takes `?project=<id|slug>` to read one project's chunks; without it, it reads the whole tenant
 ([projects.md](./projects.md#--project-on-the-cli)).

@@ -45,6 +45,14 @@ describe('recordLink by label', () => {
       route: ['/admin', 'repositories', 'repo_1'],
     });
   });
+
+  it('shows a work source by its current slug and routes it by its id', () => {
+    expect(recordLink({ kind: RecordKind.WORK_SOURCE, key: 'wsrc_1', label: 'jira' })).toEqual({
+      kind: 'work source',
+      name: 'jira',
+      route: ['/admin', 'work-sources', 'wsrc_1'],
+    });
+  });
 });
 
 describe('secretLinks', () => {

@@ -24,11 +24,11 @@ from blizzard.hub.domain.config.apply import (
 from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, Door, RecordKind, RecordState
 from blizzard.hub.domain.config.repositories import ConfiguredRepository, RepositoryEdit, RepositoryFields, RepositoryId
 from blizzard.hub.domain.config.work_sources import (
-    BuiltInWorkSource,
     ConfigFieldError,
     ConfiguredWorkSource,
     WorkSourceEdit,
     WorkSourceFields,
+    WorkSourceId,
 )
 from blizzard.hub.domain.garden.declarations import RoutineDeclaration, ScopeDeclaration
 from blizzard.hub.domain.garden.routines import Routine, RoutineEdit
@@ -50,7 +50,16 @@ _ACTIVE_GH = {"gh": RecordState.ACTIVE}
 
 
 def _source(name: str = "demo", *, retired: bool = False, fields: WorkSourceFields = _SOURCE) -> ConfiguredWorkSource:
-    return ConfiguredWorkSource(name=name, fields=fields, revision=3, created_at=_AT, created_by="bob", retired=retired)
+    return ConfiguredWorkSource(
+        work_source_id=WorkSourceId(f"wsrc_{name}"),
+        slug=name,
+        name=name,
+        fields=fields,
+        revision=3,
+        created_at=_AT,
+        created_by="bob",
+        retired=retired,
+    )
 
 
 def _repo(name: str = "blizzard", *, retired: bool = False) -> ConfiguredRepository:
@@ -76,17 +85,25 @@ def _declared_repo(slug: str = "blizzard", **stated: object) -> RepositoryDeclar
     )
 
 
-def _declared_source(name: str = "demo", fields: WorkSourceFields = _SOURCE, **stated: object) -> WorkSourceDeclaration:
-    return WorkSourceDeclaration(name=name, fields=fields, edit=WorkSourceEdit(**stated))  # type: ignore[arg-type]
+def _declared_source(slug: str = "demo", fields: WorkSourceFields = _SOURCE, **stated: object) -> WorkSourceDeclaration:
+    return WorkSourceDeclaration(
+        slug=slug,
+        name=None,
+        fields=fields,
+        edit=WorkSourceEdit(**stated),  # type: ignore[arg-type]
+        work_source_id=WorkSourceId(f"wsrc_{slug}"),
+    )
 
 
 def _stored(
     sources: tuple[ConfiguredWorkSource, ...] = (),
     repos: tuple[ConfiguredRepository, ...] = (),
     secrets: dict[str, RecordState] | None = None,
+    former_sources: dict[str, ConfiguredWorkSource] | None = None,
 ) -> StoredConfig:
     return StoredConfig(
-        work_sources={s.name: s for s in sources},
+        work_sources={s.slug: s for s in sources},
+        former_work_sources=former_sources or {},
         repositories={r.slug: r for r in repos},
         secrets=_ACTIVE_GH if secrets is None else secrets,
     )
@@ -183,13 +200,32 @@ def test_a_name_listed_twice_is_refused_at_the_second_entry() -> None:
     with pytest.raises(ApplyEntryRefused) as caught:
         _plan(ConfigDeclaration(work_sources=(_declared_source(), _declared_source())), _stored())
     assert (caught.value.section, caught.value.index) == ("work_sources", 1)
-    assert isinstance(caught.value.cause, ConfigFieldError) and caught.value.cause.field == "name"
+    assert isinstance(caught.value.cause, ConfigFieldError) and caught.value.cause.field == "slug"
 
 
-def test_the_built_in_hub_source_is_refused() -> None:
+def test_the_built_in_hub_slug_is_refused_on_slug() -> None:
     with pytest.raises(ApplyEntryRefused) as caught:
         _plan(ConfigDeclaration(work_sources=(_declared_source("hub"),)), _stored())
-    assert isinstance(caught.value.cause, BuiltInWorkSource)
+    assert isinstance(caught.value.cause, ConfigFieldError) and caught.value.cause.field == "slug"
+
+
+def test_a_slug_a_source_left_is_refused_naming_that_source() -> None:
+    left = replace(_source(), slug="renamed")
+    with pytest.raises(ApplyEntryRefused) as caught:
+        _plan(ConfigDeclaration(work_sources=(_declared_source(),)), _stored(former_sources={"demo": left}))
+    cause = caught.value.cause
+    assert isinstance(cause, ConfigFieldError) and cause.field == "slug"
+    assert "'renamed'" in cause.message and "wsrc_demo" in cause.message
+
+
+def test_a_declared_slug_held_by_a_record_edits_it_even_when_another_left_it() -> None:
+    held = _source()
+    plan = _plan(
+        ConfigDeclaration(work_sources=(_declared_source(annotate=False),)),
+        _stored(sources=(held,), former_sources={}),
+    )
+    assert [w.change.op for w in plan.writes] == [ChangeOp.EDIT]
+    assert plan.writes[0].change.record_key == "wsrc_demo"
 
 
 def test_an_invalid_create_names_its_entry_and_field() -> None:

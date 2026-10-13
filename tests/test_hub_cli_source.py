@@ -61,14 +61,33 @@ def test_create_list_and_show_with_and_without_json(client: TestClient) -> None:
 
     listed = _source(["list"])
     assert "hub  built-in" in listed.output
-    assert "demo  r1  enabled  github  acme/demo" in listed.output
     rows = json.loads(_source(["list", "--json"]).stdout)
-    assert {r["name"] for r in rows} == {"hub", "demo"}
+    assert {r["slug"] for r in rows} == {"hub", "demo"}
+    source_id = next(r["work_source_id"] for r in rows if r["slug"] == "demo")
+    assert f"demo  demo  {source_id}  r1  enabled  github  acme/demo" in listed.output
     shown = _source(["show", "demo"])
-    assert "revision 1" in shown.output
+    assert "demo  demo  revision 1" in shown.output
+    assert f"id {source_id}" in shown.output
     assert "secret gh-demo" in shown.output
     assert json.loads(_source(["show", "demo", "--json"]).stdout)["revision"] == 1
+    assert json.loads(_source(["show", source_id, "--json"]).stdout)["slug"] == "demo"
     assert _source(["show", "nope"]).exit_code != 0
+
+
+def test_create_takes_a_slug_and_a_name_and_edit_renames(client: TestClient) -> None:
+    assert _cli("secret", ["create", "gh-demo"], stdin=_SENTINEL).exit_code == 0
+    created = _source(
+        ["create", "acme", "--name", "Acme", "--provider", "github", "--locator", "acme/a", "--secret", "gh-demo"]
+    )
+    assert created.exit_code == 0, created.output
+    assert "work source acme created at revision 1 — id wsrc_" in created.output
+    renamed = _source(["edit", "acme", "--slug", "acme-core", "--name", "Acme core"])
+    assert renamed.exit_code == 0, renamed.output
+    assert "work source acme-core is at revision 2" in renamed.output
+    assert "acme-core  Acme core  revision 2" in _source(["show", "acme"]).output
+    assert _source(["edit", "acme-core", "--slug", "hub"]).exit_code != 0
+    refused = _source(["create", "hub", "--provider", "github", "--locator", "acme/h", "--secret", "gh-demo"])
+    assert refused.exit_code != 0
 
 
 def test_edit_sets_clears_and_refuses_a_stale_if_match(client: TestClient) -> None:
@@ -95,8 +114,9 @@ def test_retire_and_enable_and_the_secret_reference_guard(client: TestClient) ->
     assert refused.exit_code != 0
     assert "work_source demo" in refused.output
     assert "work_source demo" in _cli("secret", ["show", "gh-demo"]).output
+    source_id = json.loads(_source(["show", "demo", "--json"]).stdout)["work_source_id"]
     assert json.loads(_cli("secret", ["show", "gh-demo", "--json"]).stdout)["references"] == [
-        {"kind": "work_source", "key": "demo", "label": None}
+        {"kind": "work_source", "key": source_id, "label": "demo"}
     ]
 
     assert "retired" in _source(["retire", "demo"]).output
@@ -132,7 +152,7 @@ _APPLY_YAML = """\
 version: 1
 secrets: [gh-demo]
 work_sources:
-  - {name: demo, provider: github, locator: acme/demo, secret: gh-demo}
+  - {slug: demo, provider: github, locator: acme/demo, secret: gh-demo}
 repositories:
   - {slug: blizzard, forge_api_url: "https://api.github.com", owner: acme, repo: blizzard, base_branch: master, secret_name: gh-demo}
 """
@@ -154,7 +174,7 @@ def test_yaml_yml_and_json_files_apply(client: TestClient, tmp_path: Path) -> No
     assert _cli("secret", ["create", "gh-demo"], stdin=_SENTINEL).exit_code == 0
     as_json = {
         "version": 1,
-        "work_sources": [{"name": "from-json", "provider": "github", "locator": "acme/j", "secret": "gh-demo"}],
+        "work_sources": [{"slug": "from-json", "provider": "github", "locator": "acme/j", "secret": "gh-demo"}],
     }
     (tmp_path / "a.yaml").write_text(_APPLY_YAML)
     (tmp_path / "b.json").write_text(json.dumps(as_json))

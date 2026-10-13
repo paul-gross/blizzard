@@ -18,14 +18,14 @@ import {
 
 /** A work source edit — the sparse patch against the shown `revision`. */
 export interface WorkSourceEditVars {
-  readonly name: string;
+  readonly workSourceId: string;
   readonly revision: number;
   readonly body: WorkSourcePatchRequest;
 }
 
 /** Retire or re-enable a work source at the shown `revision`. */
 export interface WorkSourceLifecycleVars {
-  readonly name: string;
+  readonly workSourceId: string;
   readonly revision: number;
   readonly retired: boolean;
 }
@@ -55,7 +55,7 @@ export function injectEditWorkSourceMutation() {
     mutationKey: editWorkSourceMutationKey,
     mutationFn: async (vars: WorkSourceEditVars): Promise<void> => {
       const { error } = await patchWorkSourceApiWorkSourcesSourcePatch({
-        path: { source: vars.name },
+        path: { source: vars.workSourceId },
         headers: { 'if-match': vars.revision },
         body: vars.body,
         throwOnError: false,
@@ -77,7 +77,7 @@ export function injectWorkSourceLifecycleMutation() {
         ? retireWorkSourceApiWorkSourcesSourceRetirePost
         : enableWorkSourceApiWorkSourcesSourceEnablePost;
       const { error } = await call({
-        path: { source: vars.name },
+        path: { source: vars.workSourceId },
         headers: { 'if-match': vars.revision },
         throwOnError: false,
       });

@@ -141,7 +141,7 @@ class TenantAnnotation:
 
     def annotating(self) -> Sequence[str]:
         """The tenant's sources annotating now, read from its configuration."""
-        return self._work_sources.annotating_names()
+        return self._work_sources.annotating_ids()
 
     def reconcile(
         self,
@@ -163,7 +163,7 @@ class TenantAnnotation:
         failed_before = tally.failed
         for name in annotating:
             annotator = self._work_sources.annotator(name)
-            if annotator is None:  # pragma: no cover - annotating_names() only names built ones
+            if annotator is None:  # pragma: no cover - annotating_ids() only names built ones
                 continue
             if _reconcile(name, annotator, desired, tally) is None:
                 tally.sources_skipped.append(name)

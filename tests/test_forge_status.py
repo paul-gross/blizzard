@@ -337,14 +337,14 @@ def test_a_retired_source_has_its_labels_cleared_once(
     hosted: tuple[TestClient, HubServices, ForgeAnnotationStore, TestClient, str],
 ) -> None:
     client, services, memory, double, forge_url = hosted
-    _create(client, forge_url, annotate=True)
+    source_id = _create(client, services, forge_url, annotate=True)
     _promote(client, "widget:1")
     assert services.annotation is not None
     services.annotation.sweep()
     assert forge_state(double)["issue_labels"]["acme/widget#1"] == {"blizzard:ingested"}  # type: ignore[index]
-    assert memory.annotated_sources() == {"widget"}
+    assert memory.annotated_sources() == {source_id}
 
-    assert client.post("/api/work-sources/widget/retire").status_code == 200
+    assert client.post(f"/api/work-sources/{source_id}/retire").status_code == 200
     services.annotation.sweep()
 
     assert forge_state(double)["issue_labels"]["acme/widget#1"] == set()  # type: ignore[index]
@@ -363,13 +363,13 @@ def test_a_retired_source_whose_secret_is_also_retired_keeps_its_labels(
     """With no credential left there is no clearer to reach the forge: the departure is
     forgotten rather than retried forever, and the labels stay as they were."""
     client, services, memory, double, forge_url = hosted
-    _create(client, forge_url, annotate=True)
+    source_id = _create(client, services, forge_url, annotate=True)
     _promote(client, "widget:1")
     assert services.annotation is not None
     services.annotation.sweep()
-    assert memory.annotated_sources() == {"widget"}
+    assert memory.annotated_sources() == {source_id}
 
-    assert client.post("/api/work-sources/widget/retire").status_code == 200
+    assert client.post(f"/api/work-sources/{source_id}/retire").status_code == 200
     assert client.post("/api/secrets/gh/retire").status_code == 200
     services.annotation.sweep()
 
@@ -510,11 +510,11 @@ class _GrowingRegistry(WorkSourceRegistry):
         self._joiner = joiner
         self.joined = False
 
-    def annotating_names(self) -> list[str]:
-        return [*super().annotating_names(), *([self._joiner[0]] if self.joined else [])]
+    def annotating_ids(self) -> list[str]:
+        return [*super().annotating_ids(), *([self._joiner[0]] if self.joined else [])]
 
-    def annotator(self, name: str) -> FakeAnnotator | IWorkAnnotator | None:
-        return self._joiner[1] if self.joined and name == self._joiner[0] else super().annotator(name)
+    def annotator(self, source: str) -> FakeAnnotator | IWorkAnnotator | None:
+        return self._joiner[1] if self.joined and source == self._joiner[0] else super().annotator(source)
 
 
 class _FlakyRead(FakeAnnotator):

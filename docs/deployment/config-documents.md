@@ -16,7 +16,8 @@ blizzard hub config export --format json > config.json
 version: 1
 secrets: [gh-token]
 work_sources:
-  - name: blizzard
+  - slug: blizzard
+    name: Blizzard
     provider: github
     locator: paul-gross/blizzard
     secret: gh-token
@@ -59,18 +60,20 @@ names, as its `default_scope_slug` or in `scopes`, must be stored already or dec
 section, and its `graph_name` must name an enabled graph when the entry creates the routine or moves it to another
 graph; otherwise the entry is refused. An apply never creates a scope the document does not declare.
 
-A repository entry is keyed by its `slug`; its `name` is the display name, the slug when a new record's entry leaves it
-out and as stored when an existing record's does. An entry without a `slug` is refused `422` naming the field: the key
-that was a repository's `name` is its `slug` now. A slug a repository has left is refused `422`, naming that repository:
-name it by its current slug ([repositories.md](./repositories.md#naming-a-repository)).
+A work source entry and a repository entry are each keyed by its `slug`; its `name` is the display name, the slug when a
+new record's entry leaves it out and as stored when an existing record's does. An entry without a `slug` is refused
+`422` naming the field: the key that was a work source's or a repository's `name` is its `slug` now. A slug a record of
+the same kind has left is refused `422`, naming that record: name it by its current slug
+([work-sources.md](./work-sources.md#naming-a-work-source), [repositories.md](./repositories.md#naming-a-repository)). A
+work source entry whose slug is `hub`, the built-in source's, is refused `422` at its `slug`.
 
 A project entry is keyed by its `slug`; one the document creates needs a `name`. A `sources` or `repositories` list the
 entry states is the project's whole set of links of that kind, so a name it leaves out is unlinked; a list it leaves out
-keeps the stored links ([projects.md](./projects.md#links)). A project names a repository by its id, its slug, or a slug
-the repository left, among the repositories the apply leaves — those stored and those the document declares. A slug a
-project has left is refused `422`, naming that project: name it by its current slug. A scope or routine entry names its
-project with `project`, an id or a slug; an entry without one belongs to the tenant's only project, and is refused
-`project_required` when the tenant holds several.
+keeps the stored links ([projects.md](./projects.md#links)). A project names a work source or a repository by its id,
+its slug, or a slug the record left, among the records of that kind the apply leaves — those stored and those the
+document declares. A slug a project has left is refused `422`, naming that project: name it by its current slug. A scope
+or routine entry names its project with `project`, an id or a slug; an entry without one belongs to the tenant's only
+project, and is refused `project_required` when the tenant holds several.
 
 The file's extension picks the format: `.yaml` and `.yml` read as YAML, `.json` as JSON. Over HTTP the `Content-Type`
 does: `POST /api/config/apply` takes `application/yaml` or `application/json`, and any other type is refused with 415.
@@ -93,10 +96,10 @@ before the `edit` it precedes, as two rows.
 Every write commits in one transaction, so the first refusal leaves the hub exactly as it was. The refusals are the ones
 the per-record verbs give, each located at its entry:
 
-- **422** for an invalid entry, a missing or retired secret, a name listed twice, or a document that does not decode.
-  The error's `loc` names the entry and field, such as `body.work_sources.1.provider`.
-- **409** for a taken name, a taken provider and locator or forge coordinate, a record that changed while the apply ran,
-  or an entry naming the built-in `hub` work source.
+- **422** for an invalid entry, a missing or retired secret, a name listed twice, a work source slugged `hub`, or a
+  document that does not decode. The error's `loc` names the entry and field, such as `body.work_sources.1.provider`.
+- **409** for a taken name, a taken provider and locator or forge coordinate, or a record that changed while the apply
+  ran.
 
 ## Dry run
 
@@ -110,8 +113,8 @@ The response lists `outcomes`, each with a `kind`, `key`, `op` and the changed f
 
 `config export` prints every active work source, repository, scope, and routine with every field, and every active
 secret name, as a document that applies back as a no-op. `--format` is `yaml` (the default) or `json`. Retired records
-are left out, because applying one would enable it again. Each repository is written with its `slug` and `name`, and
-each project's `repositories` as slugs. The built-in `hub` work source is never exported.
+are left out, because applying one would enable it again. Each work source and repository is written with its `slug` and
+`name`, and each project's `sources` and `repositories` as slugs. The built-in `hub` work source is never exported.
 
 ## Recording
 

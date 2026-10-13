@@ -341,8 +341,9 @@ def _drainer(
     closers: dict[str, FakeCloser],
     clock: FixedClock | None = None,
     public_url: str | None = None,
+    slugs: dict[str, str] | None = None,
 ) -> CloseDrainSweep:
-    registry = WorkSourceRegistry({}, closers=closers)  # type: ignore[arg-type]
+    registry = WorkSourceRegistry({}, closers=closers, slugs=slugs)  # type: ignore[arg-type]
     clock = clock or FixedClock(_NOW)
     return _sweep_over(
         chunks,
@@ -443,6 +444,16 @@ def test_sweep_records_the_closed_and_failed_events_with_their_exact_message_and
             detail={"outcome": "failed", "reason": "boom closing 2"},
         ),
     ]
+
+
+def test_sweep_s_events_name_the_ref_by_its_source_s_current_slug() -> None:
+    """A close event renders the source's slug as it stands when the event is written, not the stored key."""
+    ref = WorkRef(source="wsrc_default", ref="1")
+    chunks = _FakeCloseChunks([PendingCloseIntent(chunk_id="ch_1", ref=ref)])
+
+    _drainer(chunks, {"wsrc_default": FakeCloser()}, slugs={"wsrc_default": "default-core"}).sweep()
+
+    assert [event.message for event in chunks.events] == ["closed default-core#1"]
 
 
 def test_sweep_builds_each_traces_board_url_through_the_shared_helper(monkeypatch: pytest.MonkeyPatch) -> None:

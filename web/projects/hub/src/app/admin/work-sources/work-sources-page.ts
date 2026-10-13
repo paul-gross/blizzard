@@ -18,7 +18,7 @@ import { ConfigMaster } from '../config-master';
 import { injectLensLinks, withinLens } from '../projects/lens-links';
 import { lensedListState } from '../projects/projects.model';
 import type { ConfigRowVm } from '../config-record-list';
-import { WORK_SOURCE_FIELDS, workSourceRows } from './work-sources.model';
+import { WORK_SOURCE_FIELDS, workSourceKey, workSourceRows } from './work-sources.model';
 import { injectWorkSourcesQuery } from './work-sources.query';
 import { ProjectLens } from '../../core/project-lens';
 
@@ -50,7 +50,7 @@ export class WorkSourcesPage {
 
   protected readonly selectedKey = injectChildRouteParam('key');
   protected readonly rows = computed<readonly ConfigRowVm[]>(() =>
-    workSourceRows(withinLens(this.sourcesQuery.data() ?? [], (source) => source.name, this.lensLinks.names()), this.lifecycle()),
+    workSourceRows(withinLens(this.sourcesQuery.data() ?? [], workSourceKey, this.lensLinks.names()), this.lifecycle()),
   );
   protected readonly state = computed<KitAsyncStateValue>(() =>
     lensedListState(
@@ -102,7 +102,7 @@ export class WorkSourcesPage {
     this.createMutation.mutate(body, {
       onSuccess: () => {
         this.createOpen.set(false);
-        void this.router.navigate(this.lens.link(['/admin', 'work-sources', body.name]), {
+        void this.router.navigate(this.lens.link(['/admin', 'work-sources', body.slug]), {
           queryParamsHandling: 'preserve',
         });
       },

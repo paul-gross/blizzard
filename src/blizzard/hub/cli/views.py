@@ -10,6 +10,12 @@ from blizzard.foundation.roles import collaborator, dto
 from blizzard.foundation.runner_connection import RunnerConnection
 
 
+def pointer_label(row: dict[str, Any]) -> str:
+    """A pointer a response carries, as people read it: its hub-rendered ``label``, else ``{slug}#{ref}`` under the
+    source's current slug, else the raw ``{source}#{ref}``."""
+    return row.get("label") or f"{row.get('slug') or row.get('source')}#{row.get('ref')}"
+
+
 @dto
 @dataclass(frozen=True)
 class Cost:

@@ -36,7 +36,7 @@ from blizzard.hub.domain.config.work_sources import (
     ConfiguredWorkSource,
     WorkSourceEdit,
     WorkSourceFields,
-    require_configurable,
+    WorkSourceId,
 )
 
 PROJECTS_SECTION = "projects"
@@ -67,15 +67,19 @@ class ApplyEntryRefused(Exception):
 @domain_model
 @dataclass(frozen=True)
 class WorkSourceDeclaration:
-    """A work source the document names: its create fields, and the sparse edit of only the fields it states."""
+    """A work source the document names by slug: its create fields, the display name it states (``None`` leaves a
+    stored record's, and a new one's is the slug), the sparse edit of only the fields it states, and the id a record
+    the document creates takes — minted at the edge, so the projects section can link to it."""
 
-    name: str
+    slug: str
+    name: str | None
     fields: WorkSourceFields
     edit: WorkSourceEdit
+    work_source_id: WorkSourceId
 
     @property
     def key(self) -> str:
-        return self.name
+        return self.slug
 
 
 @domain_model
@@ -205,13 +209,15 @@ class ConfigDeclaration:
 class StoredConfig:
     """What the edge loaded for the names the document mentions — retired records included."""
 
+    #: Stored work sources and repositories by their current slug.
     work_sources: Mapping[str, ConfiguredWorkSource]
-    #: Stored repositories by their current slug.
     repositories: Mapping[str, ConfiguredRepository]
     #: The lifecycle state of each listed secret that exists; an absent name is unknown.
     secrets: Mapping[str, RecordState]
     #: For each declared repository slug no repository holds, the repository that left it.
     former_repositories: Mapping[str, ConfiguredRepository] = field(default_factory=dict)
+    #: For each declared work-source slug no work source holds, the work source that left it.
+    former_work_sources: Mapping[str, ConfiguredWorkSource] = field(default_factory=dict)
     #: Stored scopes and routines, by their entries' ``key``.
     scopes: Mapping[tuple[str, str], DeclarableRecord] = field(default_factory=dict)
     routines: Mapping[tuple[str, str], DeclarableRecord] = field(default_factory=dict)
@@ -246,8 +252,14 @@ def reconcile(declaration: ConfigDeclaration, stored: StoredConfig, ctx: ChangeC
         at,
         writes,
         outcomes,
-        guard=lambda d, _: require_configurable(d.name),
-        create=lambda d: ConfiguredWorkSource.new(d.name, d.fields, ctx, at=at),
+        guard=lambda d, record: _require_unclaimed(
+            "work source", d.slug, record, stored.former_work_sources.get(d.slug)
+        ),
+        create=lambda d: ConfiguredWorkSource.new(
+            d.slug, d.name, d.fields, ctx, at=at, work_source_id=d.work_source_id
+        ),
+        label=lambda d: d.slug,
+        handle_field="slug",
     )
     _reconcile_section(
         REPOSITORIES_SECTION,
@@ -258,7 +270,9 @@ def reconcile(declaration: ConfigDeclaration, stored: StoredConfig, ctx: ChangeC
         at,
         writes,
         outcomes,
-        guard=lambda d, record: _require_unclaimed(d, record, stored.former_repositories),
+        guard=lambda d, record: _require_unclaimed(
+            "repository", d.slug, record, stored.former_repositories.get(d.slug)
+        ),
         create=lambda d: ConfiguredRepository.new(d.slug, d.name, d.fields, ctx, at=at, repository_id=d.repository_id),
         label=lambda d: d.slug,
         handle_field="slug",
@@ -336,16 +350,19 @@ def _reconcile_section(
 
 
 def _require_unclaimed(
-    declared: RepositoryDeclaration, record: ConfiguredRepository | None, former: Mapping[str, ConfiguredRepository]
+    kind: str,
+    slug: str,
+    record: ConfiguredRepository | ConfiguredWorkSource | None,
+    left: ConfiguredRepository | ConfiguredWorkSource | None,
 ) -> None:
-    """:class:`ConfigFieldError` when ``declared`` names a slug no repository holds but one left: name that repository
-    by its current slug, or choose another."""
-    left = former.get(declared.slug) if record is None else None
-    if left is not None:
+    """:class:`ConfigFieldError` when an entry names a ``slug`` no record of its ``kind`` holds but ``left`` left:
+    name that record by its current slug, or choose another."""
+    if record is None and left is not None:
+        left_id = left.repository_id if isinstance(left, ConfiguredRepository) else left.work_source_id
         raise ConfigFieldError(
             "slug",
-            f"{declared.slug!r} is a slug repository {left.slug!r} ({left.repository_id}) left; "
-            f"name that repository by its current slug, or choose another",
+            f"{slug!r} is a slug {kind} {left.slug!r} ({left_id}) left; "
+            f"name that {kind} by its current slug, or choose another",
         )
 
 
@@ -376,5 +393,5 @@ def _write(
     outcomes: list[EntryOutcome],
 ) -> None:
     writes.append(PlannedWrite(section, index, record, from_revision, change))
-    handle = record.slug if isinstance(record, ConfiguredRepository) else record.name
+    handle = record.slug if isinstance(record, ConfiguredRepository | ConfiguredWorkSource) else record.name
     outcomes.append(EntryOutcome(kind, handle, change.op, change.diff))

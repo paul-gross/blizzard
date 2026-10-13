@@ -178,19 +178,27 @@ describe('projects model', () => {
 
   it('lists the links in force — the built-in source first — and drops unlinked ones', () => {
     const sources = [
-      { name: 'jira', provider: 'jira', locator: 'acme.atlassian.net', annotate: false, edit: true },
+      {
+        work_source_id: 'wsrc_j',
+        slug: 'jira',
+        name: 'Acme Jira',
+        provider: 'jira',
+        locator: 'acme.atlassian.net',
+        annotate: false,
+        edit: true,
+      },
     ] as WorkSourceSummary[];
     const rows = sourceLinkRows(
       [
-        { project_id: 'proj_b', name: 'old', linked: false, revision: 2 },
-        { project_id: 'proj_b', name: 'jira', linked: true, revision: 1 },
-        { project_id: 'proj_b', name: 'hub', linked: true, built_in: true },
+        { project_id: 'proj_b', name: 'wsrc_o', slug: 'old', linked: false, revision: 2 },
+        { project_id: 'proj_b', name: 'wsrc_j', slug: 'jira', linked: true, revision: 1 },
+        { project_id: 'proj_b', name: 'hub', slug: 'hub', linked: true, built_in: true },
       ],
       sources,
     );
-    expect(rows.map((row) => [row.name, row.builtIn, row.detail])).toEqual([
-      ['hub', true, 'built-in · linked to every project'],
-      ['jira', false, 'jira · acme.atlassian.net'],
+    expect(rows.map((row) => [row.key, row.name, row.builtIn, row.detail])).toEqual([
+      ['hub', 'hub', true, 'built-in · linked to every project'],
+      ['wsrc_j', 'jira', false, 'Acme Jira · jira · acme.atlassian.net'],
     ]);
     const repositories = [
       { repository_id: 'repo_b', slug: 'blizzard', name: 'Blizzard', owner: 'acme', repo: 'blizzard', base_branch: 'main' },

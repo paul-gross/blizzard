@@ -74,8 +74,10 @@ class ConfigAuthoring:
 
     # --- Work sources ------------------------------------------------------------
 
-    def create_work_source(self, name: str, fields: WorkSourceFields, ctx: ChangeContext) -> ConfiguredWorkSource:
-        record, change = ConfiguredWorkSource.new(name, fields, ctx, at=self._clock.now())
+    def create_work_source(
+        self, slug: str, name: str | None, fields: WorkSourceFields, ctx: ChangeContext
+    ) -> ConfiguredWorkSource:
+        record, change = ConfiguredWorkSource.new(slug, name, fields, ctx, at=self._clock.now())
         return self._work_sources.create(record, change=change)
 
     def edit_work_source(
@@ -85,7 +87,9 @@ class ConfigAuthoring:
         if decided is None:
             return record
         edited, change = decided
-        return self._work_sources.update(edited, from_revision=record.revision, change=change)
+        return self._work_sources.update(
+            edited, from_revision=record.revision, left_slug=record.slug_left_for(edited), change=change
+        )
 
     def retire_work_source(
         self, record: ConfiguredWorkSource, ctx: ChangeContext, *, if_match: int | None = None
@@ -184,7 +188,7 @@ class ConfigAuthoring:
         at = self._clock.now()
         plan = plan_import(legacy, values, commits, existing, ctx=MIGRATION_CONTEXT, at=at)
         created = (
-            [source.name for source, _ in plan.work_sources],
+            [source.work_source_id for source, _ in plan.work_sources],
             [repo.repository_id for repo, _ in plan.repositories],
         )
         linked = links.links(*created, MIGRATION_CONTEXT, at=at) if any(created) else ()

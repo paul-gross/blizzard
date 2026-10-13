@@ -22,7 +22,7 @@ from blizzard.hub.domain.config.carry_over import (
 from blizzard.hub.domain.config.changes import Door, RecordKind
 from blizzard.hub.domain.config.legacy_keys import LegacyKeys, WorkSourceConfig
 from blizzard.hub.domain.config.repositories import ConfiguredRepository, RepositoryFields, RepositoryId
-from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, WorkSourceFields
+from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, WorkSourceFields, WorkSourceId
 
 pytestmark = pytest.mark.unit
 
@@ -61,6 +61,23 @@ def test_two_sources_naming_one_variable_share_one_secret() -> None:
     assert [secret.name.value for secret in plan.secrets] == ["bz-shared-token"]
     assert {record.fields.secret for record, _ in plan.work_sources} == {"bz-shared-token"}
     assert {record.fields.locator for record, _ in plan.work_sources} == {"acme/a", "acme/b"}
+
+
+def test_a_block_s_name_is_the_display_name_and_derives_the_slug() -> None:
+    plan = _plan(_legacy(_source("Acme Widgets", "acme/w"), _source("tools", "acme/t")), {"BZ_SHARED_TOKEN": "tok"})
+    assert [(record.slug, record.name) for record, _ in plan.work_sources] == [
+        ("acme-widgets", "Acme Widgets"),
+        ("tools", "tools"),
+    ]
+    assert [outcome.key for outcome in plan.outcomes if outcome.kind is RecordKind.WORK_SOURCE] == [
+        "acme-widgets",
+        "tools",
+    ]
+
+
+def test_a_block_whose_slug_would_be_hub_is_refused() -> None:
+    with pytest.raises(LegacyImportRefused, match="hub"):
+        _plan(_legacy(_source("HUB", "acme/h")), {"BZ_SHARED_TOKEN": "tok"})
 
 
 def test_every_change_is_the_migration_door_and_actor() -> None:
@@ -114,6 +131,8 @@ def test_coordinates_sharing_a_bare_name_each_take_owner_dash_repo() -> None:
 
 def test_records_the_store_already_holds_are_skipped() -> None:
     held_source = ConfiguredWorkSource(
+        work_source_id=WorkSourceId("wsrc_other"),
+        slug="other",
         name="other",
         fields=WorkSourceFields(
             provider="github", locator="acme/a", api_base=None, web_base=None, annotate=False, secret="x"

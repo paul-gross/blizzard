@@ -1043,7 +1043,7 @@ class HubNodeExecutor:
         items: list[dict[str, str | None]] = []
         for pointer in chunk.work_refs:
             source = self._work_sources.get(pointer.source) if self._work_sources is not None else None
-            label = source.label(pointer) if source is not None else None
+            label = self._work_sources.label(pointer) if self._work_sources is not None else None
             items.append(
                 {
                     "label": label or f"{pointer.source}:{pointer.ref}",

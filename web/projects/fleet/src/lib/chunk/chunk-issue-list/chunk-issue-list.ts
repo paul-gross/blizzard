@@ -75,10 +75,10 @@ export class ChunkIssueList {
     return `${item.source}:${item.ref}`;
   }
 
-  /** The ref half of the row, `source#ref` — {@link WorkItemEntry.label} when
-   * the pointer's source resolved one, else the raw pair assembled by hand. */
+  /** The ref half of the row, `slug#ref` — {@link WorkItemEntry.label} when
+   * the pointer's source resolved one, else the pair assembled under the source's slug. */
   protected refText(item: WorkItemEntry): string {
-    return item.label ?? `${item.source}#${item.ref}`;
+    return item.label ?? `${item.slug ?? item.source}#${item.ref}`;
   }
 
   /** The name half of the row. `'—'` — the app's own placeholder for a

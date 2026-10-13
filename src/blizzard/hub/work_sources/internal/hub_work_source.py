@@ -61,7 +61,7 @@ class HubWorkSource:
             stated_priority=item.stated_priority,
         )
 
-    def label(self, pointer: WorkRef) -> str | None:
+    def label(self, pointer: WorkRef) -> str:
         return f"{RESERVED_HUB_SOURCE_NAME}:{pointer.ref}"
 
     def web_url(self, pointer: WorkRef, *, live_holder: str | None) -> str | None:
@@ -84,7 +84,7 @@ class HubWorkSource:
         if item is None:
             raise WorkItemGoneError(f"no {RESERVED_HUB_SOURCE_NAME}:{pointer.ref} work item exists")
         self._edits.deliver(item)
-        self._resolution.resolve_for_item(pointer)
+        self._resolution.resolve_for_item(pointer, label=self.label(pointer))
 
     # -- IWorkEditor -------------------------------------------------------------
 

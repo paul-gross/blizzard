@@ -28,7 +28,7 @@ from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.config.repositories import RepositoryCoordinateTaken, RepositoryFields, RepositorySlugTaken
 from blizzard.hub.domain.config.secrets import SecretAlreadyExists, SecretName
-from blizzard.hub.domain.config.work_sources import WorkSourceFields, WorkSourceLocatorTaken, WorkSourceNameTaken
+from blizzard.hub.domain.config.work_sources import WorkSourceFields, WorkSourceLocatorTaken, WorkSourceSlugTaken
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.secrets import hub_key_provider, secret_cipher
 from blizzard.hub.store import schema
@@ -122,7 +122,7 @@ def _row(table: sa.Table, key: Mapping[str, object], n: int) -> dict[str, object
 
 _KEYS: list[tuple[str, dict[str, object]]] = [
     ("secrets", {"name": "gh"}),
-    ("work_sources", {"name": "acme"}),
+    ("work_sources", {"slug": "acme"}),
     ("work_sources", {"provider": "github", "locator": "acme/demo"}),
     ("repositories", {"slug": "demo"}),
     ("repositories", {"forge_api_url": "https://api.github.com", "owner": "acme", "repo": "demo"}),
@@ -185,16 +185,16 @@ def test_two_tenants_each_configure_a_same_named_secret_source_and_repository_on
     for tenant in (tenants.first, tenants.second):
         authoring = _authoring(tenants, tenant)
         authoring.create_secret(SecretName.parse("gh"), f"token-of-{tenant}", _CLI)
-        authoring.create_work_source("acme", _SOURCE, _CLI)
+        authoring.create_work_source("acme", None, _SOURCE, _CLI)
         authoring.create_repository("demo", None, _REPO, _CLI)
 
     first = _authoring(tenants, tenants.first)
     with pytest.raises(SecretAlreadyExists):
         first.create_secret(SecretName.parse("gh"), "again", _CLI)
-    with pytest.raises(WorkSourceNameTaken):
-        first.create_work_source("acme", _SOURCE, _CLI)
+    with pytest.raises(WorkSourceSlugTaken):
+        first.create_work_source("acme", None, _SOURCE, _CLI)
     with pytest.raises(WorkSourceLocatorTaken):
-        first.create_work_source("acme-again", _SOURCE, _CLI)
+        first.create_work_source("acme-again", None, _SOURCE, _CLI)
     with pytest.raises(RepositorySlugTaken):
         first.create_repository("demo", None, _REPO, _CLI)
     with pytest.raises(RepositoryCoordinateTaken):

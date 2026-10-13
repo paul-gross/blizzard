@@ -53,7 +53,7 @@ class _World:
         self.stores = self.core.open(StoreScope(default_tenant(self.engine)))
         self.authoring = config_authoring(self.engine, keys=self.keys, clock=clock)
         self.authoring.create_secret(SecretName.parse("gh"), "tok-a", OP)
-        self.authoring.create_work_source("demo", _FIELDS, OP)
+        self.source_id = self.authoring.create_work_source("demo", None, _FIELDS, OP).work_source_id
         self.live = self.second_process()
         self.builds = 0
 
@@ -65,15 +65,15 @@ class _World:
 
         def build() -> _Client:
             self.builds += 1
-            record = self.stores.work_source_records.get("demo")
+            record = self.stores.work_source_records.get(self.source_id)
             assert record is not None and record.fields.secret is not None
             token = live.secrets.reveal(SecretName.parse(record.fields.secret)).expose()
             return _Client(record.fields.locator, record.fields.annotate, token)
 
-        return live.objects.get(RecordKind.WORK_SOURCE, "demo", build)
+        return live.objects.get(RecordKind.WORK_SOURCE, self.source_id, build)
 
     def source(self):  # type: ignore[no-untyped-def]
-        record = self.stores.work_source_records.get("demo")
+        record = self.stores.work_source_records.get(self.source_id)
         assert record is not None
         return record
 
