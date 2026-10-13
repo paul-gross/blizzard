@@ -1,8 +1,6 @@
 """hosts — a tenant-scoped record above runners, with a bearer credential of its own.
 
-Creates ``hosts``, ``host_lifecycle_facts`` and ``host_token_revocations``, each tenant-keyed, and adds a nullable
-``runner_registrations.host_id`` with its key and a tenant-led index; existing runners stand alone. Each step inspects
-first and skips what a stopped run already did. The downgrade refuses, naming them, while any runner stands under a host.
+Adds three tenant-keyed host tables and `runner_registrations.host_id`; downgrade refuses while any runner is hosted.
 Revision ID: 20261012_1000_hosts
 Revises: 20261012_0900_repository_identity
 """
