@@ -67,9 +67,10 @@ class TraceStore:
 
     def step_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, StepFacts]:
         """The corpus's step facts, each completed in its chunk's own tenant: its work refs rendered by that
-        tenant's label, its work sources by their current slugs, the graphs, runner names and project its facts reference read through that tenant's
-        reads, and the tenant's current name beside them. A chunk of a tenant closed since the corpus read is left out:
-        a window or page holding it exports none of its rows, and the cursor still passes its closing facts."""
+        tenant's label, its work sources by their current slugs, the graphs, runner names and project its facts
+        reference read through that tenant's reads, and the tenant's current name beside them. A chunk of a tenant
+        closed since the corpus read is left out: a window or page holding it exports none of its rows, and the cursor
+        still passes its closing facts."""
         opened = _Opened(self._hydration)
         corpus = self._corpus.step_facts_for(chunk_ids, opened.label)
         by_tenant: dict[TenantId, dict[str, StepFacts]] = {}

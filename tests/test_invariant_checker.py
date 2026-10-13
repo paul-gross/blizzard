@@ -2450,14 +2450,15 @@ def test_a_work_source_reference_outside_its_tenant_is_a_violation(tmp_path: Pat
                     diff="[]",
                 )
             )
-        ).inserted_primary_key[0]
+        ).inserted_primary_key
+        assert change_id is not None
 
     assert _project_breaches(engine, "hub:work-source-references-in-tenant") == [
         f"project_source_links row {home} of tenant {tenant} names work source wsrc_other, not a work source of "
         "its tenant",
         f"chunk_work_refs row 3 of tenant {tenant} names work source wsrc_other, not a work source of its tenant",
         f"chunk_work_refs row 4 of tenant {tenant} names work source wsrc_gone, not a work source of its tenant",
-        f"config_changes row {change_id} of tenant {tenant} names work source wsrc_other, not a work source of its tenant",
+        f"config_changes row {change_id[0]} of tenant {tenant} names work source wsrc_other, not a work source of its tenant",
     ]
 
 
