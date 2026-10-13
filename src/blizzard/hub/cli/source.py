@@ -32,13 +32,16 @@ class SourceListing(Listing):
     def line(self, row: Any) -> str:
         if row.get("built_in"):
             return f"{row['name']}  built-in"
-        return f"{row['name']}  r{row['revision']}  {_state(row)}  {row['provider']}  {row['locator']}"
+        return (
+            f"{row['slug']}  {row['name']}  {row['work_source_id']}  r{row['revision']}  {_state(row)}  "
+            f"{row['provider']}  {row['locator']}"
+        )
 
 
-def _refusals(name: str) -> dict[int, str]:
+def _refusals(source: str) -> dict[int, str]:
     return {
-        404: f"unknown work source {name}",
-        409: f"work source {name} cannot be changed",
+        404: f"unknown work source {source}",
+        409: f"work source {source} cannot be changed",
         422: "invalid work source",
     }
 
@@ -49,7 +52,8 @@ def source_group() -> None:
 
 
 @source_group.command("create", cls=FleetCommand)
-@click.argument("name")
+@click.argument("slug")
+@click.option("--name", default=None, help="The source's display name (default: SLUG).")
 @click.option("--provider", required=True, help="The provider the source reads items from, e.g. github.")
 @click.option("--locator", required=True, help="Where the items live; for github, owner/name.")
 @click.option("--secret", "secret", default=None, help="The stored secret holding the provider credential.")
@@ -60,7 +64,8 @@ def source_group() -> None:
 )
 def source_create(
     cli: CliContext,
-    name: str,
+    slug: str,
+    name: str | None,
     provider: str,
     locator: str,
     secret: str | None,
@@ -68,12 +73,14 @@ def source_create(
     web_base: str | None,
     annotate: bool,
 ) -> None:
-    """Add work source NAME at revision 1.
+    """Add work source SLUG at revision 1, named NAME (default: SLUG).
 
-    Refused when the name or the provider and locator are already taken — a retired source keeps its claim —
-    or when the secret is missing or retired. The hub reads the record on its next use of the source."""
+    Refused when SLUG is another source's current slug or ``hub`` (the built-in source's), when the provider and
+    locator are already taken — a retired source keeps its claim — or when the secret is missing or retired. The hub
+    reads the record on its next use of the source."""
     body = {
-        "name": name,
+        "slug": slug,
+        "name": name if name is not None else slug,
         "provider": provider,
         "locator": locator,
         "secret": secret,
@@ -81,32 +88,37 @@ def source_create(
         "web_base": web_base,
         "annotate": annotate,
     }
-    resp = cli.post("/api/work-sources", "POST /work-sources", json_body=body, on_status=_refusals(name), door=True)
-    cli.show_lines(resp.json(), f"work source {name} created at revision 1")
+    resp = cli.post("/api/work-sources", "POST /work-sources", json_body=body, on_status=_refusals(slug), door=True)
+    out = resp.json()
+    cli.show_lines(out, f"work source {out['slug']} created at revision 1 — id {out['work_source_id']}")
 
 
 @source_group.command("list", cls=FleetCommand)
 @click.option("--include-retired", "include_retired", is_flag=True, default=False, help="Also list retired sources.")
 def source_list(cli: CliContext, include_retired: bool) -> None:
-    """List the built-in hub source and every work source — name, revision, state, provider, locator."""
+    """List the built-in hub source and every work source — slug, name, id, revision, state, provider, locator."""
     params = {"include_retired": "true"} if include_retired else None
     rows = cli.get("/api/work-sources", "GET /work-sources", params=params).json()["sources"]
     cli.show(rows, SourceListing(rows))
 
 
 @source_group.command("show", cls=FleetCommand)
-@click.argument("name")
-def source_show(cli: CliContext, name: str) -> None:
-    """Show NAME's fields, revision, and who created it and when."""
+@click.argument("source")
+def source_show(cli: CliContext, source: str) -> None:
+    """Show SOURCE — named by its id, its slug, or a slug it has left — with its fields, revision, and who created it
+    and when."""
     body = cli.get(
-        f"/api/work-sources/{name}", "GET /work-sources/{name}", on_status={404: f"unknown work source {name}"}
+        f"/api/work-sources/{source}",
+        "GET /work-sources/{source}",
+        on_status={404: f"unknown work source {source}"},
     ).json()
     if body["built_in"]:
-        cli.show_lines(body, f"{name}  built-in  annotate={str(body['annotate']).lower()}")
+        cli.show_lines(body, f"{body['name']}  built-in  annotate={str(body['annotate']).lower()}")
         return
     cli.show_lines(
         body,
-        f"{name}  revision {body['revision']}  {_state(body)}",
+        f"{body['slug']}  {body['name']}  revision {body['revision']}  {_state(body)}",
+        f"id {body['work_source_id']}",
         f"provider {body['provider']}  locator {body['locator']}",
         f"api_base {body['api_base'] or '-'}  web_base {body['web_base'] or '-'}",
         f"secret {body['secret'] or '-'}  annotate {str(body['annotate']).lower()}",
@@ -115,7 +127,9 @@ def source_show(cli: CliContext, name: str) -> None:
 
 
 @source_group.command("edit", cls=FleetCommand)
-@click.argument("name")
+@click.argument("source")
+@click.option("--slug", default=None, help="The new slug; the one it leaves keeps naming the source.")
+@click.option("--name", default=None, help="The new display name.")
 @click.option("--provider", default=None, help="The new provider.")
 @click.option("--locator", default=None, help="The new locator.")
 @click.option("--secret", default=None, help="The new credential secret.")
@@ -126,7 +140,9 @@ def source_show(cli: CliContext, name: str) -> None:
 @_IF_MATCH
 def source_edit(
     cli: CliContext,
-    name: str,
+    source: str,
+    slug: str | None,
+    name: str | None,
     provider: str | None,
     locator: str | None,
     secret: str | None,
@@ -136,11 +152,20 @@ def source_edit(
     clear: tuple[str, ...],
     if_match: int | None,
 ) -> None:
-    """Change only the fields given on NAME; every other field keeps its value.
+    """Change only the fields given on SOURCE; every other field keeps its value.
 
-    A change that leaves every field as it is writes nothing and keeps the revision. Refused when
-    --if-match names a stale revision, and for the built-in hub source."""
-    given = {"provider": provider, "locator": locator, "secret": secret, "api_base": api_base, "web_base": web_base}
+    A slug the source leaves keeps naming it until another source takes it. A change that leaves every field as it is
+    writes nothing and keeps the revision. Refused when the new slug is another source's or ``hub``, when --if-match
+    names a stale revision, and for the built-in hub source."""
+    given = {
+        "slug": slug,
+        "name": name,
+        "provider": provider,
+        "locator": locator,
+        "secret": secret,
+        "api_base": api_base,
+        "web_base": web_base,
+    }
     body: dict[str, Any] = {k: v for k, v in given.items() if v is not None}
     if annotate is not None:
         body["annotate"] = annotate
@@ -152,40 +177,40 @@ def source_edit(
     if not body:
         raise click.UsageError("nothing to change — give a field to set or --clear")
     resp = cli.patch(
-        f"/api/work-sources/{name}",
-        "PATCH /work-sources/{name}",
+        f"/api/work-sources/{source}",
+        "PATCH /work-sources/{source}",
         json_body=body,
-        on_status=_refusals(name),
+        on_status=_refusals(source),
         if_match=if_match,
         door=True,
     )
     out = resp.json()
-    cli.show_lines(out, f"work source {name} is at revision {out['revision']}")
+    cli.show_lines(out, f"work source {out['slug']} is at revision {out['revision']}")
 
 
 @source_group.command("retire", cls=FleetCommand)
-@click.argument("name")
+@click.argument("source")
 @_IF_MATCH
-def source_retire(cli: CliContext, name: str, if_match: int | None) -> None:
-    """Retire NAME: it leaves the default list and keeps its provider and locator, so no other source takes them."""
-    _set_lifecycle(cli, name, "retire", if_match)
+def source_retire(cli: CliContext, source: str, if_match: int | None) -> None:
+    """Retire SOURCE: it leaves the default list and keeps its provider and locator, so no other source takes them."""
+    _set_lifecycle(cli, source, "retire", if_match)
 
 
 @source_group.command("enable", cls=FleetCommand)
-@click.argument("name")
+@click.argument("source")
 @_IF_MATCH
-def source_enable(cli: CliContext, name: str, if_match: int | None) -> None:
-    """Re-enable a retired NAME. Refused while its secret is retired."""
-    _set_lifecycle(cli, name, "enable", if_match)
+def source_enable(cli: CliContext, source: str, if_match: int | None) -> None:
+    """Re-enable a retired SOURCE. Refused while its secret is retired."""
+    _set_lifecycle(cli, source, "enable", if_match)
 
 
-def _set_lifecycle(cli: CliContext, name: str, verb: str, if_match: int | None) -> None:
+def _set_lifecycle(cli: CliContext, source: str, verb: str, if_match: int | None) -> None:
     resp = cli.post(
-        f"/api/work-sources/{name}/{verb}",
-        f"POST /work-sources/{{name}}/{verb}",
-        on_status=_refusals(name),
+        f"/api/work-sources/{source}/{verb}",
+        f"POST /work-sources/{{source}}/{verb}",
+        on_status=_refusals(source),
         if_match=if_match,
         door=True,
     )
     body = resp.json()
-    cli.show_lines(body, f"work source {name} is now {_state(body)} at revision {body['revision']}")
+    cli.show_lines(body, f"work source {body['slug']} is now {_state(body)} at revision {body['revision']}")

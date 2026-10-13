@@ -133,7 +133,7 @@ def _graph_option(f: Any) -> Any:
 
 
 def _source_option(f: Any) -> Any:
-    return click.option("--source", default=None, help="Scope to one work source.")(f)
+    return click.option("--source", default=None, help="Scope to one work source, by id or slug, or hub.")(f)
 
 
 #: An unbounded window is legal here, so both flags stay optional.

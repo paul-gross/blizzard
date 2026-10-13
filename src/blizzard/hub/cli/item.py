@@ -9,6 +9,7 @@ from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.inputs import read_body_file
 from blizzard.hub.cli.project_option import project_option, project_query
+from blizzard.hub.cli.views import pointer_label
 
 
 class WorkToken(click.ParamType):
@@ -53,7 +54,7 @@ def item_group() -> None:
     "--source",
     "source",
     default=_DEFAULT_ITEM_SOURCE,
-    help=f"Work source to author at (default {_DEFAULT_ITEM_SOURCE!r}, the one source with an editor).",
+    help=f"Work source to author at, by id or slug (default {_DEFAULT_ITEM_SOURCE!r}, the one source with an editor).",
 )
 @project_option(required_by_hub=True)
 def item_create(cli: CliContext, title: str, body_file: str, priority: str, source: str, project: str | None) -> None:
@@ -72,8 +73,7 @@ def item_create(cli: CliContext, title: str, body_file: str, priority: str, sour
         conflict = resp.json()
         if "existing_chunk_id" in conflict:
             raise click.ClickException(
-                f"pointer {conflict.get('source')}#{conflict.get('ref')} already held by "
-                f"chunk {conflict.get('existing_chunk_id')}"
+                f"pointer {pointer_label(conflict)} already held by chunk {conflict.get('existing_chunk_id')}"
             )
     cli.check(
         resp,

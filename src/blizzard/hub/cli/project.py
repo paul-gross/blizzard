@@ -19,7 +19,7 @@ _IF_MATCH = click.option(
     help="Refuse the change unless it is still at this revision.",
 )
 
-_SOURCE = click.option("--source", "source", default=None, metavar="SOURCE", help="A work source, by name.")
+_SOURCE = click.option("--source", "source", default=None, metavar="SOURCE", help="A work source, by id or slug.")
 _REPOSITORY = click.option(
     "--repository", "repository", default=None, metavar="REPOSITORY", help="A repository, by name."
 )
@@ -37,7 +37,9 @@ def _refusals(project: str) -> dict[int, str]:
 
 
 def _linked(source_links: list[Any], repository_links: list[Any]) -> list[str]:
-    sources = [f"{row['name']} (built in)" if row.get("built_in") else row["name"] for row in source_links]
+    sources = [
+        f"{row['name']} (built in)" if row.get("built_in") else row.get("slug") or row["name"] for row in source_links
+    ]
     repositories = [row["slug"] for row in repository_links]
     return [f"sources {', '.join(sources) or '-'}", f"repositories {', '.join(repositories) or '-'}"]
 

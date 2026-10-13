@@ -73,7 +73,7 @@ def config_group() -> None:
     "--key",
     "key",
     default=None,
-    help="Only changes to the record with this name; a project or repository, by its id or slug.",
+    help="Only changes to the record with this name; a project, repository or work source, by its id or slug.",
 )
 @click.option(
     "--all", "everything", is_flag=True, default=False, help="Print every change rather than the newest page."

@@ -13,7 +13,7 @@ from blizzard.foundation.roles import dto
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.project_option import project_option, project_query
-from blizzard.hub.cli.views import ChunkLine, Cost, Listing
+from blizzard.hub.cli.views import ChunkLine, Cost, Listing, pointer_label
 
 
 class ChunkListing(Listing):
@@ -40,7 +40,7 @@ class ChunkDetail:
         yield f"  default harnesses: {harnesses}"
         pointers = body.get("work_refs") or []
         if pointers:
-            labels = ", ".join(p.get("label") or f"{p['source']}#{p['ref']}" for p in pointers)
+            labels = ", ".join(pointer_label(p) for p in pointers)
             yield f"  pointers: {labels}"
         route = body.get("route")
         if route:
@@ -90,7 +90,7 @@ class WorkItemListing(Listing):
     empty = "no work items"
 
     def line(self, row: Any) -> str:
-        label = row.get("label") or f"{row['source']}#{row['ref']}"
+        label = pointer_label(row)
         if row.get("error"):
             return f"{label}: error — {row['error']}"
         return f"{label}: {row.get('title') or '(no title)'}"
@@ -160,8 +160,7 @@ def chunk_ingest(cli: CliContext, pointers: tuple[str, ...], project: str | None
     if resp.status_code == httpx.codes.CONFLICT:
         conflict = resp.json()
         raise click.ClickException(
-            f"pointer {conflict.get('source')}#{conflict.get('ref')} already held by "
-            f"chunk {conflict.get('existing_chunk_id')}"
+            f"pointer {pointer_label(conflict)} already held by chunk {conflict.get('existing_chunk_id')}"
         )
     cli.check(resp, "POST /chunks", on_status={422: "at least one token required"})
     body = resp.json()

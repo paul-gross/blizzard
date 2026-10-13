@@ -38,7 +38,7 @@ def _seed_records(client: TestClient) -> None:
     _ok(client.post("/api/secrets", json={"name": "token", "value": "v"}))
     _ok(
         client.post(
-            "/api/work-sources", json={"name": "acme", "provider": "github", "locator": "a/w", "secret": "token"}
+            "/api/work-sources", json={"slug": "acme", "provider": "github", "locator": "a/w", "secret": "token"}
         )
     )
     repository = {
