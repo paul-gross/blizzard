@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.event_log import HubEventKind
+from blizzard.hub.domain.observability.egress.rows import step_row
 from blizzard.hub.domain.observability.tracing.assembly import assemble_step
 from blizzard.hub.domain.observability.tracing.attributes import RUNNER_ID, RUNNER_NAME
 from blizzard.hub.domain.observability.tracing.cursor import CursorKey
@@ -20,10 +21,12 @@ from blizzard.hub.domain.observability.tracing.facts import (
     TracedRouteRelease,
     TracedTransition,
 )
-from blizzard.hub.domain.observability.tracing.repository import TraceCheckpoint
+from blizzard.hub.domain.observability.tracing.repository import StepHydration, TraceCheckpoint
 from blizzard.hub.domain.observability.tracing.steps import StepOutcome, identify_steps
+from blizzard.hub.domain.observability.tracing.summary import summarize_step
 from blizzard.hub.domain.observability.tracing.window import read_window
-from blizzard.hub.store.internal.trace_store import TraceStore
+from blizzard.hub.store.internal.trace_store import ProjectLabels, TraceStore
+from blizzard.hub.tenancy import TenantId
 from tests.hub_event_rows import hub_event_log_of
 from tests.support import (
     SEEDED_CAPABILITIES,
@@ -82,6 +85,39 @@ def test_hydrated_facts_identify_the_same_steps_as_a_hand_built_fixture(tmp_path
     assert hydrated[moved].work_refs == ("default#1",)
     assert hydrated[moved].work_sources == ("default",)
     assert set(hydrated[moved].graphs) == {graph.graph_id}
+
+
+def test_a_rows_work_refs_and_sources_render_each_sources_slug_as_of_its_read(tmp_path: Path) -> None:
+    """The stored ref keeps its source's key; each read renders that source's slug then, so a read after a slug
+    change follows it and the summary and the egress ``sources`` column carry the slug, never the key."""
+    hub, graph = trace_hub(tmp_path)
+    moved, _ = transitioned_and_stopped(hub, graph, 1)
+    slugs = {"default": "acme"}
+
+    def hydration(tenant: TenantId) -> StepHydration:
+        services = hub.open_services(tenant)
+        return StepHydration(
+            graphs=services.graphs,
+            names=services.registry,
+            projects=ProjectLabels(services.projects),
+            label=lambda ref: f"{slugs[ref.source]}#{ref.ref}",
+            source_label=lambda source: slugs[source],
+        )
+
+    store = trace_store(hub, hydration=hydration)
+
+    def rendered() -> tuple[tuple[str, ...], tuple[str, ...]]:
+        facts = store.step_facts_for([moved])[moved]
+        steps = identify_steps(facts)
+        row = step_row(summarize_step(facts, steps[0], steps), hub.clock.now())
+        return facts.work_refs, row.sources
+
+    before = rendered()
+    slugs["default"] = "acme-core"
+    after = rendered()
+
+    assert before == (("acme#1",), ("acme",))
+    assert after == (("acme-core#1",), ("acme-core",))
 
 
 _RN = "rn_01JZ8Q4V6XK3M2N5P7R9T1W3Y5"

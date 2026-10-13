@@ -68,12 +68,14 @@ class IReadProjectLabels(Protocol):
 @dataclass(frozen=True)
 class StepHydration:
     """One tenant's reads a chunk's step facts are completed through: the graphs, runner names and
-    projects the facts name, and how the tenant renders a work ref."""
+    projects the facts name, how the tenant renders a work ref, and the handle each of its work sources displays
+    under — a configured source's current slug, keyed by the source a ref stores."""
 
     graphs: IReadManyGraphs
     names: IReadRunnerNames
     projects: IReadProjectLabels
     label: WorkRefLabel
+    source_label: Callable[[str], str]
 
 
 @domain_model

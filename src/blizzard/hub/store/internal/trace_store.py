@@ -67,7 +67,7 @@ class TraceStore:
 
     def step_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, StepFacts]:
         """The corpus's step facts, each completed in its chunk's own tenant: its work refs rendered by that
-        tenant's label, the graphs, runner names and project its facts reference read through that tenant's
+        tenant's label, its work sources by their current slugs, the graphs, runner names and project its facts reference read through that tenant's
         reads, and the tenant's current name beside them. A chunk of a tenant closed since the corpus read is left out:
         a window or page holding it exports none of its rows, and the cursor still passes its closing facts."""
         opened = _Opened(self._hydration)
@@ -86,7 +86,7 @@ class TraceStore:
             projects = reads.projects.labels_for(sorted({f.project for f in tenant_facts.values() if f.project}))
             name = self._tenant_name(tenant)
             built.update(
-                (chunk_id, _with_reads(facts, graphs, names, projects, name))
+                (chunk_id, _with_reads(facts, graphs, names, projects, name, reads.source_label))
                 for chunk_id, facts in tenant_facts.items()
             )
         return {chunk_id: built[chunk_id] for chunk_id in corpus if chunk_id in built}
@@ -159,10 +159,12 @@ def _with_reads(
     names: dict[str, str],
     projects: dict[str, ProjectLabel],
     tenant_name: str | None,
+    source_label: Callable[[str], str],
 ) -> StepFacts:
     project = projects.get(facts.project) if facts.project is not None else None
     return replace(
         facts,
+        work_sources=tuple(dict.fromkeys(source_label(source) for source in facts.work_sources)),
         graphs={g: graphs[g] for g in _graph_ids(facts) if g in graphs},
         runner_names={r: names[r] for r in _runner_ids(facts) if r in names},
         tenant_name=tenant_name,

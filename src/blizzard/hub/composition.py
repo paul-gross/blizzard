@@ -1272,6 +1272,7 @@ def build_services(
             names=services.registry,
             projects=ProjectLabels(services.projects),
             label=services.work_ref_label,
+            source_label=services.work_sources.source_label,
         )
 
     trace_store = TraceStore(

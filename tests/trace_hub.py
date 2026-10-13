@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -68,21 +69,25 @@ def label(ref: WorkRef) -> str | None:
     return f"{ref.source}#{ref.ref}"
 
 
-def trace_store(hub: HubHarness) -> TraceStore:
+def trace_store(hub: HubHarness, *, hydration: Callable[[TenantId], StepHydration] | None = None) -> TraceStore:
     """A trace store over ``hub`` that completes each chunk's facts in the chunk's own tenant, through
-    that tenant's services, rendering every work ref with :func:`label`."""
+    that tenant's services, rendering every work ref with :func:`label` — or through ``hydration`` when given."""
 
-    def hydration(tenant: TenantId) -> StepHydration:
+    def services_hydration(tenant: TenantId) -> StepHydration:
         services = hub.open_services(tenant)
         return StepHydration(
-            graphs=services.graphs, names=services.registry, projects=ProjectLabels(services.projects), label=label
+            graphs=services.graphs,
+            names=services.registry,
+            projects=ProjectLabels(services.projects),
+            label=label,
+            source_label=services.work_sources.source_label,
         )
 
     return TraceStore(
         hub_store_connections(hub.engine),
         hub_events=hub_events_of(hub.engine),
         corpus=build_hub_scoped_reads(hub_level_connections(hub.engine)).corpus,
-        hydration=hydration,
+        hydration=hydration or services_hydration,
         tenant_name=hub.hub_services.tenants.open_tenants.name,
     )
 

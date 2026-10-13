@@ -237,7 +237,8 @@ class StepFacts:
     usage: tuple[UsageFact, ...] = ()
     #: Source-native work-ref tokens (``acme#42``).
     work_refs: tuple[str, ...] = ()
-    #: The distinct work sources behind ``work_refs``, in ref order — read from the rows, never parsed from labels.
+    #: The distinct work sources behind ``work_refs``, in ref order — read from the rows, never parsed from labels:
+    #: each source's key as read, then its current slug once the facts are completed in their tenant.
     work_sources: tuple[str, ...] = ()
     #: Each named runner's registered name, keyed by runner id; one the hub holds no registration for is absent.
     runner_names: dict[str, str] = field(default_factory=dict)

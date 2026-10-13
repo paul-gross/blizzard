@@ -937,6 +937,7 @@ def _trace_store_of(connections: ScopedConnections, hub: HubHarness) -> TraceSto
             names=hub.services.registry,
             projects=ProjectLabels(hub.services.projects),
             label=_label,
+            source_label=hub.services.work_sources.source_label,
         ),
         tenant_name=hub.hub_services.tenants.open_tenants.name,
     )
