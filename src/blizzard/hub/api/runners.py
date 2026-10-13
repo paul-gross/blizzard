@@ -7,7 +7,7 @@ Controllers stay read-only over the store (``bzh:controller-read-only``);
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Annotated, ClassVar
@@ -26,9 +26,11 @@ from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.execution.fleet import RetireOutcome
 from blizzard.hub.domain.projects.model import Project, ProjectId
-from blizzard.hub.domain.runners.host import HostRetired
+from blizzard.hub.domain.runners.bindings import BindingFlags, flag_bindings
+from blizzard.hub.domain.runners.host import Host, HostRetired
 from blizzard.hub.domain.runners.registration import (
     PerSubscriptionUsageView,
+    RunnerBinding,
     RunnerHoldsRoutes,
     RunnerLiveness,
     RunnerNotEnrolled,
@@ -42,6 +44,7 @@ from blizzard.wire.runner import (
     ExternalSubscriptionUsageWindowView,
     RunnerAddRequest,
     RunnerAddResponse,
+    RunnerBindingView,
     RunnerEnrollmentResponse,
     RunnerLifecycleRequest,
     RunnerPauseRequest,
@@ -98,6 +101,7 @@ class RunnerBrake:
             self.services.fleet.get_liveness(refreshed),
             now=self.services.clock.now(),
             projects=served_projects(self.services, refreshed.served),
+            hosts=hosts_of(self.services, [refreshed]),
         )
 
 
@@ -111,10 +115,14 @@ class Resumed(RunnerBrake):
     kind = "resumed"
 
 
-def runner_view(liveness: RunnerLiveness, *, now: datetime, projects: Mapping[ProjectId, Project]) -> RunnerView:
+def runner_view(
+    liveness: RunnerLiveness, *, now: datetime, projects: Mapping[ProjectId, Project], hosts: Mapping[str, Host]
+) -> RunnerView:
     """The runner's own view of its registration — the fleet read, which only a runner that
-    has registered reaches."""
+    has registered reaches. ``hosts`` holds the host it stands under (:func:`hosts_of`), which its bindings are
+    flagged against."""
     r = liveness.registration
+    flags = flags_of(r, hosts)
     # A never-connected runner has no workspace, registration, or contact to render; the fleet
     # read refuses one before it gets here.
     assert r.workspace_id is not None and r.registered_at is not None and r.last_seen_at is not None
@@ -137,16 +145,21 @@ def runner_view(liveness: RunnerLiveness, *, now: datetime, projects: Mapping[Pr
         retired_by=r.retired_by,
         gates=list(r.gates),
         projects=served_views(r.served, projects),
+        bindings=binding_views(r.bindings, flags),
+        subscription=r.subscription,
+        subscription_unrostered=flags.subscription_unrostered,
     )
 
 
 def registry_view(
-    liveness: RunnerLiveness, *, now: datetime, projects: Mapping[ProjectId, Project]
+    liveness: RunnerLiveness, *, now: datetime, projects: Mapping[ProjectId, Project], hosts: Mapping[str, Host]
 ) -> RunnerRegistryView:
     """One runner as the operator registry shows it — a never-connected runner included, with
     no workspace, registration, contact or capabilities until it first registers. ``projects``
-    holds the projects its served declaration resolved to (:func:`served_projects`)."""
+    holds the projects its served declaration resolved to (:func:`served_projects`), and ``hosts`` the hosts the
+    runners stand under (:func:`hosts_of`), which their bindings are flagged against."""
     r = liveness.registration
+    flags = flags_of(r, hosts)
     return RunnerRegistryView(
         runner_id=r.runner_id,
         runner_name=r.name,
@@ -170,7 +183,44 @@ def registry_view(
         gates=list(r.gates),
         projects=served_views(r.served, projects),
         host_id=r.host_id,
+        bindings=binding_views(r.bindings, flags),
+        subscription=r.subscription,
+        subscription_unrostered=flags.subscription_unrostered,
     )
+
+
+def hosts_of(services: TenantServices, registrations: Sequence[RunnerRegistration]) -> Mapping[str, Host]:
+    """The hosts the registrations stand under, by id — one point read for a single host, one list read for several,
+    none for runners that stand alone."""
+    ids = {r.host_id for r in registrations if r.host_id is not None}
+    if len(ids) == 1:
+        (host_id,) = ids
+        host = services.hosts.get_host(host_id)
+        return {} if host is None else {host_id: host}
+    if not ids:
+        return {}
+    return {h.host_id: h for h in services.hosts.list_hosts(include_retired=True) if h.host_id in ids}
+
+
+def flags_of(registration: RunnerRegistration, hosts: Mapping[str, Host]) -> BindingFlags:
+    """The flags the runner's host raises against its declaration — none for a runner that stands alone."""
+    host = hosts.get(registration.host_id) if registration.host_id is not None else None
+    return flag_bindings(registration.bindings, registration.subscription, host)
+
+
+def binding_views(bindings: Iterable[RunnerBinding] | None, flags: BindingFlags) -> list[RunnerBindingView] | None:
+    """Each declared binding with its workspace flag; ``None`` when the runner declared none."""
+    if bindings is None:
+        return None
+    return [
+        RunnerBindingView(
+            project=b.project,
+            workspace_id=b.workspace_id,
+            agents=b.agents,
+            workspace_unreported=flags.workspace_unreported(b),
+        )
+        for b in bindings
+    ]
 
 
 def served_projects(services: TenantServices, served: Iterable[ServedEntry]) -> Mapping[ProjectId, Project]:
@@ -254,6 +304,7 @@ def _detail(services: TenantServices, registration: RunnerRegistration) -> Runne
         services.fleet.get_liveness(registration),
         now=services.clock.now(),
         projects=served_projects(services, registration.served),
+        hosts=hosts_of(services, [registration]),
     )
 
 
@@ -322,7 +373,10 @@ def list_runners(
     now = services.clock.now()
     listed = services.fleet.list_with_liveness(include_retired=include_retired)
     projects = served_projects(services, (e for item in listed for e in item.registration.served))
-    return RunnerRegistryListResponse(runners=[registry_view(item, now=now, projects=projects) for item in listed])
+    hosts = hosts_of(services, [item.registration for item in listed])
+    return RunnerRegistryListResponse(
+        runners=[registry_view(item, now=now, projects=projects, hosts=hosts) for item in listed]
+    )
 
 
 @router.get(

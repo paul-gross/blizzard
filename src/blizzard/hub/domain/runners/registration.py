@@ -199,6 +199,10 @@ class RunnerRegistration:
     served: tuple[ServedEntry, ...] = ()
     #: The host the runner stands under; ``None`` for a runner that stands alone.
     host_id: str | None = None
+    #: The bindings the runner last declared, as sent — ``None`` when it sent none.
+    bindings: tuple[RunnerBinding, ...] | None = None
+    #: The slug of the host subscription the bindings spend, as last sent; ``None`` when it named none.
+    subscription: str | None = None
 
     def serves(self, project_id: str) -> bool:
         """Whether some entry of the served declaration resolved to ``project_id``."""
@@ -305,6 +309,17 @@ class DeclaredSubscription:
     slug: str
     name: str
     provider: str
+
+
+@domain_model
+@dataclass(frozen=True)
+class RunnerBinding:
+    """One project a runner serves through one workspace of its host, as the runner declared it: ``project`` by id or
+    slug, the host ``workspace_id`` it works in, and the ``agents`` it runs there at once."""
+
+    project: str
+    workspace_id: str
+    agents: int
 
 
 @domain_model
@@ -597,13 +612,15 @@ class IWriteRunnerRegistry(IReadRunnerRegistry, Protocol):
         subscriptions: tuple[DeclaredSubscription, ...] | None = None,
         gates: tuple[str, ...] = (),
         projects: tuple[ServedEntry, ...] | None = None,
+        bindings: tuple[RunnerBinding, ...] | None = None,
+        subscription: str | None = None,
         at: datetime,
     ) -> bool:
         """Record a registration of the added runner ``runner_id``, refreshing ``last_seen_at``; returns
         True on its first one, which also stamps ``registered_at``. ``name`` replaces the held name
         unless ``None``, and ``projects`` the served declaration unless ``None``; every other field is
-        written on **every** registration, absent ones verbatim to null/empty, and ``subscriptions``
-        keeps ``None`` vs ``()`` distinct. A ``runner_id``
+        written on **every** registration, absent ones verbatim to null/empty, and ``subscriptions`` and
+        ``bindings`` keep ``None`` vs ``()`` distinct. A ``runner_id``
         with no row raises :class:`LookupError` — a registration only ever follows an add."""
         ...
 

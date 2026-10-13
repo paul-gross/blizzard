@@ -334,6 +334,8 @@ def test_register_runner_posts_registration() -> None:
     assert seen == {
         "name": "r-claude",
         "projects": None,
+        "bindings": None,
+        "subscription": None,
         "workspace_id": "ws1",
         "env_capacity": 4,
         "url": None,
@@ -361,6 +363,8 @@ def test_register_runner_sends_null_capacity_when_unset() -> None:
     assert seen == {
         "name": "r-claude",
         "projects": None,
+        "bindings": None,
+        "subscription": None,
         "workspace_id": "ws1",
         "env_capacity": None,
         "url": None,

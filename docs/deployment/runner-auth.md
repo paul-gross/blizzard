@@ -132,6 +132,11 @@ live hosts, `--all` adds the retired, and `show <host_id>` prints one with its r
 A host's report is recorded as it arrives and never refused over its content; a name the report carries that another
 live host holds is not recorded. The hub publishes a `host-changed` event only when a report changes what it holds.
 
+A hosted runner's bindings and subscription are checked against its host's latest report. A binding whose workspace the
+host has not reported, and a subscription outside the host's roster, are flagged on the runner's views and in the
+registration answer, never refused; the hub offers the runner no work through a flagged binding, and none at all under a
+flagged subscription.
+
 `runner-host revoke-token <host_id>` revokes the host's token and leaves the host recorded; `enroll <host_id>` mints a
 new one and records the token it replaces as revoked. A revoked hash stays dead, as for a runner.
 `runner-host retire

@@ -18,6 +18,7 @@ from blizzard.hub.domain.runners.registration import (
     DeclaredSubscription,
     IWriteRunnerRegistry,
     RetiredRunnerGuard,
+    RunnerBinding,
     RunnerCapability,
     RunnerLiveness,
     RunnerNotEnrolled,
@@ -52,6 +53,9 @@ class Registered:
     name: str
     projects: tuple[ServedEntry, ...]
     changed: bool
+    #: The bindings and subscription the runner now holds — what it sent, ``None`` included.
+    bindings: tuple[RunnerBinding, ...] | None = None
+    subscription: str | None = None
 
 
 @domain_model
@@ -106,18 +110,23 @@ class FleetService:
         subscriptions: tuple[DeclaredSubscription, ...] | None = None,
         gates: tuple[str, ...] = (),
         projects: Sequence[str] | None = None,
+        bindings: tuple[RunnerBinding, ...] | None = None,
+        subscription: str | None = None,
     ) -> Registered:
         """Register (or refresh) ``held``, a runner the hub added — the one its bearer token names.
 
         The runner's reported facts are overwritten on every registration; absent values store as
         null/empty. A declared ``name`` replaces the one held; none, or a blank one, keeps it. A sent
         ``projects`` replaces the served declaration (``[]`` clears it); ``None`` keeps it, re-resolving
-        only its unresolved entries. No entry is refused: a registration is also the runner's heartbeat. A
-        retired runner raises :class:`~blizzard.hub.domain.runners.registration.RunnerRetired` before any write."""
+        only its unresolved entries. Sent ``bindings`` replace ``projects`` as the declaration, each binding's project
+        in binding order; ``bindings`` and ``subscription`` are stored as sent. No entry is refused: a registration is
+        also the runner's heartbeat. A retired runner raises
+        :class:`~blizzard.hub.domain.runners.registration.RunnerRetired` before any write."""
         held.refuse_if_retired(action="registration")
         runner_id = held.runner_id
         recorded_name = declared_name(name)
-        served = declaration_at_registration(held.served, projects, self._served_projects)
+        declared = projects if bindings is None else [b.project for b in bindings]
+        served = declaration_at_registration(held.served, declared, self._served_projects)
         now = self._clock.now()
         changed = (
             not RunnerLiveness.of(held, now=now, threshold=self._stale_after).online
@@ -129,6 +138,8 @@ class FleetService:
             or capabilities != held.capabilities
             or subscriptions != held.declared_subscriptions
             or gates != held.gates
+            or bindings != held.bindings
+            or subscription != held.subscription
             or (served is not None and served != held.served)
         )
         created = self._registry.record_registration(
@@ -142,6 +153,8 @@ class FleetService:
             subscriptions=subscriptions,
             gates=gates,
             projects=served,
+            bindings=bindings,
+            subscription=subscription,
             at=now,
         )
         _log.info(
@@ -161,6 +174,8 @@ class FleetService:
             name=recorded_name or held.name,
             projects=held.served if served is None else served,
             changed=changed or created,
+            bindings=bindings,
+            subscription=subscription,
         )
 
     def heartbeat(self, runner_id: str) -> bool:

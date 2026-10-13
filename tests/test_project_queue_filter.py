@@ -116,7 +116,7 @@ def test_the_peek_serves_the_runners_stored_declaration_and_ignores_projects_in_
     own = _ingest(hub, "2", "default")
     token = seed_runner(hub, "r-default", projects=("default",))
 
-    claimed = {"project": beta, "project_id": beta, "projects": [beta], "served": [beta]}
+    claimed = {"project_id": beta, "projects": [beta], "served": [beta]}
     assert _peek(hub, token, **claimed) == [(own, 1)]
 
 

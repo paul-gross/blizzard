@@ -42,6 +42,9 @@ class QueuePeekRequest(BaseModel):
 
     capabilities: list[RunnerCapability] = []
     policy: str = "pass-over"
+    #: Narrows the peek to this one project of the runner's declaration, by the entry as declared or the project id it
+    #: resolved to; a project the runner does not serve is offered nothing. ``None`` peeks every project it serves.
+    project: str | None = None
 
 
 class QueuePageView(BaseModel):
