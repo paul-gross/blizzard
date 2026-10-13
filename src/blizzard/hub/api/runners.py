@@ -250,6 +250,11 @@ def _iso_or_none(value: datetime | None) -> str | None:
 
 
 def _subscription_views(r: RunnerRegistration, *, now: datetime) -> list[SubscriptionUsageViewWire]:
+    return usage_views(PerSubscriptionUsageView.every(r, now=now))
+
+
+def usage_views(views: Iterable[PerSubscriptionUsageView]) -> list[SubscriptionUsageViewWire]:
+    """The wire shape of each per-subscription usage view, in order — a runner's and a host's alike."""
     return [
         SubscriptionUsageViewWire(
             slug=view.slug,
@@ -268,7 +273,7 @@ def _subscription_views(r: RunnerRegistration, *, now: datetime) -> list[Subscri
             miss_reason=SampleMissReason.recognized(view.miss_reason),
             missed_at=_iso_or_none(view.missed_at),
         )
-        for view in PerSubscriptionUsageView.every(r, now=now)
+        for view in views
     ]
 
 

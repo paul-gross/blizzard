@@ -28,14 +28,10 @@ from blizzard.hub.domain.chunk.model import (
     TransitionFact,
 )
 from blizzard.hub.domain.execution.envelope import Envelope, NoCurrentNode
-from blizzard.hub.domain.execution.facts import (
-    LocalPause,
-    Payload,
-    admitted_event_kind,
-    requires_route_token,
-    subscription_identity,
-)
+from blizzard.hub.domain.execution.facts import LocalPause, admitted_event_kind, requires_route_token
+from blizzard.hub.domain.execution.payload import Payload
 from blizzard.hub.domain.execution.questions import parse_instant
+from blizzard.hub.domain.execution.usage_facts import subscription_identity
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, Node
 from tests.support import make_graph
 

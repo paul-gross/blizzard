@@ -17,7 +17,6 @@ from blizzard.foundation.store.batching import id_batches
 from blizzard.foundation.store.utc import as_utc
 from blizzard.hub.domain.runners.registration import (
     DeclaredSubscription,
-    ExternalSubscriptionUsageWindow,
     IWriteRunnerRegistry,
     RecordedPause,
     RunnerAddition,
@@ -30,6 +29,7 @@ from blizzard.hub.domain.runners.registration import (
     TokenRotation,
 )
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.internal.host_usage import read_host_rosters, read_host_usage, stored_usage_windows
 from blizzard.hub.store.internal.newest_fact import newest_fact_select
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
 
@@ -76,14 +76,16 @@ class RunnerRegistryStore:
         ).one_or_none()
         if row is None:
             return None
-        return self._registration(
+        hosted = row.host_id is not None
+        registration = self._registration(
             row,
             self._paused(conn, runner_id),
             self._local_pause_detail(conn, runner_id),
-            self._external_usage(conn, runner_id),
-            self._external_usage_misses(conn, runner_id),
+            [] if hosted else self._external_usage(conn, runner_id),
+            [] if hosted else self._external_usage_misses(conn, runner_id),
             self._lifecycle(conn, runner_id),
         )
+        return self._reading_hosts(conn, [registration])[0]
 
     def list_runners(self, *, include_retired: bool = False, host_id: str | None = None) -> list[RunnerRegistration]:
         with self._store.read("list_runners") as conn:
@@ -100,19 +102,39 @@ class RunnerRegistryStore:
                 runner_ids = [row.runner_id for row in rows]
             paused = self._paused_many(conn, runner_ids)
             local_pause = self._local_pause_detail_many(conn, runner_ids)
-            usage = self._external_usage_many(conn, runner_ids)
-            usage_misses = self._external_usage_misses_many(conn, runner_ids)
-            return [
-                self._registration(
-                    row,
-                    paused[row.runner_id],
-                    local_pause[row.runner_id],
-                    usage[row.runner_id],
-                    usage_misses[row.runner_id],
-                    lifecycle[row.runner_id],
-                )
-                for row in rows
-            ]
+            # A hosted runner's usage is its host's, so its own rows are not read.
+            alone = [row.runner_id for row in rows if row.host_id is None]
+            usage = self._external_usage_many(conn, alone)
+            usage_misses = self._external_usage_misses_many(conn, alone)
+            return self._reading_hosts(
+                conn,
+                [
+                    self._registration(
+                        row,
+                        paused[row.runner_id],
+                        local_pause[row.runner_id],
+                        usage.get(row.runner_id, []),
+                        usage_misses.get(row.runner_id, []),
+                        lifecycle[row.runner_id],
+                    )
+                    for row in rows
+                ],
+            )
+
+    def _reading_hosts(self, conn: Connection, registrations: list[RunnerRegistration]) -> list[RunnerRegistration]:
+        """Each hosted registration presenting its host's usage and roster, in two bulk reads however many hosts
+        stand behind the page; a registration standing alone is returned as hydrated."""
+        host_ids = sorted({r.host_id for r in registrations if r.host_id is not None})
+        if not host_ids:
+            return registrations
+        usage = read_host_usage(self._store, conn, host_ids)
+        rosters = read_host_rosters(self._store, conn, host_ids)
+        return [
+            r
+            if r.host_id is None
+            else r.reading_host_usage(usage[r.host_id].samples, usage[r.host_id].misses, rosters[r.host_id])
+            for r in registrations
+        ]
 
     def list_pause_facts_since(self, since: datetime, *, limit: int) -> list[RecordedPause]:
         with self._store.read("list_pause_facts_since") as conn:
@@ -601,7 +623,7 @@ class RunnerRegistryStore:
                 slug=slug,
                 name=name,
                 sampled_at=sampled_at,
-                windows=RunnerRegistryStore._usage_windows(windows_json),
+                windows=stored_usage_windows(windows_json),
             )
             for slug, name, sampled_at, windows_json in external_usage
         )
@@ -665,18 +687,6 @@ class RunnerRegistryStore:
                 for e in (json.loads(row.projects) if row.projects else [])
             ),
         )
-
-    @staticmethod
-    def _usage_windows(windows_json: str) -> tuple[ExternalSubscriptionUsageWindow, ...]:
-        """Valid windows from current or pre-validation stored samples."""
-        try:
-            entries = json.loads(windows_json)
-        except (TypeError, json.JSONDecodeError):
-            return ()
-        if not isinstance(entries, list):
-            return ()
-        admitted = (ExternalSubscriptionUsageWindow.admitted(entry) for entry in entries)
-        return tuple(window for window in admitted if not isinstance(window, str))
 
 
 def _served_json(served: tuple[ServedEntry, ...]) -> str:

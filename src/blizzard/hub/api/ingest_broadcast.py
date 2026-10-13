@@ -21,7 +21,7 @@ from blizzard.foundation.hub_event_types import ChunkChangeCause
 from blizzard.hub.api.chunk_events import ChunkChanged, ChunkFrameState, load_frame_states
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.execution.facts import FactIngestResult, PushedFact
-from blizzard.wire.facts import RunnerFact, RunnerFactBatch
+from blizzard.wire.facts import HostFactBatch, RunnerFact, RunnerFactBatch
 
 #: The ``chunk-changed`` cause for each chunk-scoped fact kind an ingest lands.
 _CAUSE_BY_FACT_KIND: dict[str, ChunkChangeCause] = {
@@ -56,7 +56,7 @@ _CHUNK_SCOPED_FACT_KINDS = frozenset(
 )
 
 
-def pushed_facts(batch: RunnerFactBatch) -> list[PushedFact]:
+def pushed_facts(batch: RunnerFactBatch | HostFactBatch) -> list[PushedFact]:
     """The batch's facts as the intake service reads them."""
     return [PushedFact(seq=fact.seq, kind=fact.kind, payload=fact.payload) for fact in batch.facts]
 

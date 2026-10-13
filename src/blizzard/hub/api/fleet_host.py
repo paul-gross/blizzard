@@ -17,12 +17,14 @@ from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import HostPrincipal, require_host_principal
 from blizzard.hub.api.auth_session import tenant_bound
 from blizzard.hub.api.deps import Services
+from blizzard.hub.api.ingest_broadcast import pushed_facts
 from blizzard.hub.api.runners import hosts_of, publish_retirement, registry_view, served_projects
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.execution.fleet import RetireOutcome
 from blizzard.hub.domain.runners.host import Host, HostReport, HostRetired, HostWorkspace
 from blizzard.hub.domain.runners.registration import DeclaredSubscription, RunnerHoldsRoutes
 from blizzard.hub.domain.runners.served import UnknownServedProject
+from blizzard.wire.facts import HostFactAck, HostFactBatch
 from blizzard.wire.host import HostRecordResponse, HostReportRequest, HostRunnerAddRequest, HostRunnerView
 from blizzard.wire.runner import RunnerAddResponse, RunnerRetireRequest, RunnerRetireResponse
 
@@ -139,4 +141,35 @@ def retire_host_runner(
             hosts=hosts_of(services, [refreshed]),
         ),
         released_chunk_ids=[r.chunk_id for r in outcome.released],
+    )
+
+
+def _publish_spenders(services: TenantServices, host: Host, slugs: frozenset[str]) -> None:
+    """The ``runner_changed(external-usage)`` frame for each live runner under ``host`` spending a slug the push wrote,
+    so boards reading those runners stay current — the frame the runner lane publishes for a runner's own sample."""
+    for runner in services.registry.list_runners(host_id=host.host_id):
+        if runner.subscription in slugs:
+            services.events.publish_runner_changed(runner.runner_id, kind="external-usage", runner_name=runner.name)
+
+
+@router.post("/events", response_model=HostFactAck)
+def ingest_host_facts(
+    batch: HostFactBatch, services: Services, principal: Annotated[HostPrincipal, Depends(require_host_principal)]
+) -> HostFactAck:
+    """Land the calling host's own facts — its subscription usage samples and misses — idempotent on the batch's
+    per-host ``seq`` high-water mark; 403 when the host is retired. A fact of any other kind is rejected in the ack
+    and holds the mark behind it."""
+    host = _held_host(services, principal)
+    try:
+        result = services.host_facts.ingest(host, pushed_facts(batch))
+    except HostRetired as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    if result.slugs:
+        _publish_spenders(services, host, result.slugs)
+    return HostFactAck(
+        host_id=host.host_id,
+        high_water=result.high_water,
+        applied=result.applied,
+        already_applied=result.already_applied,
+        rejected=result.rejected,
     )

@@ -77,6 +77,7 @@ from blizzard.hub.domain.execution.decisions import DecisionService, RequeueServ
 from blizzard.hub.domain.execution.detach import DetachService
 from blizzard.hub.domain.execution.facts import FactIngestService
 from blizzard.hub.domain.execution.fleet import FleetService
+from blizzard.hub.domain.execution.host_facts import HostFactIngestService
 from blizzard.hub.domain.execution.host_retirement import HostRetirementService
 from blizzard.hub.domain.execution.questions import QuestionService
 from blizzard.hub.domain.garden.delivery.materialize import GardenDelivery
@@ -256,6 +257,8 @@ class TenantServices:
     #: ``WorkItemEditService.withdraw`` also reaches through for an unacquired holder.
     delete: DeleteService
     facts: FactIngestService
+    #: The host's own fact lane — the host registry's mark and usage, apart from the runner lane's.
+    host_facts: HostFactIngestService
     #: The transcript lane's ingest policy — the write side; ``transcripts``
     #: above is the same store's read Protocol.
     transcript_ingest: TranscriptIngestService
@@ -1073,6 +1076,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         enrollment=enrollment,
         registry=registry_store,
         hosts=host_store,
+        host_facts=HostFactIngestService(hosts=host_store, clock=clock),
         host_enrollment=host_enrollment,
         host_report=host_report,
         host_retirement=host_retirement,

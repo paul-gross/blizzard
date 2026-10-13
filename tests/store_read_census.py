@@ -2351,6 +2351,8 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadHostRegistry, "list_hosts"): lambda w: w.hub.services.hosts.list_hosts(),
     (IReadHostRegistry, "live_names"): lambda w: w.hub.services.hosts.live_names(),
     (CredentialReads, "host_by_id"): lambda w: w.hub.hub_services.hub_scoped_reads.credentials.host_by_id(w.host_id),
+    (IReadHostRegistry, "high_water"): lambda w: w.hub.services.hosts.high_water(w.host_id),
+    (IReadHostRegistry, "usage_of"): lambda w: w.hub.services.hosts.usage_of([w.host_id]),
     (CredentialReads, "host_for_token_hash"): lambda w: (
         w.hub.hub_services.hub_scoped_reads.credentials.host_for_token_hash(w.host_token_hash)
     ),

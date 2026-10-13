@@ -7,7 +7,6 @@ lands on (``bzh:controller-read-only``) and stamps landing time from the injecte
 
 from __future__ import annotations
 
-import json
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
@@ -38,77 +37,19 @@ from blizzard.hub.domain.chunk.ports.route import IWriteChunkRouteRepository
 from blizzard.hub.domain.chunk.ports.usage import IWriteChunkUsageRepository
 from blizzard.hub.domain.execution.auth.route import ROUTE_TOKEN_WARN, RouteToken
 from blizzard.hub.domain.execution.fleet import FleetService
-from blizzard.hub.domain.execution.questions import parse_instant
-from blizzard.hub.domain.runners.registration import ExternalSubscriptionUsageWindow, RetiredRunnerGuard
+from blizzard.hub.domain.execution.payload import Payload
+from blizzard.hub.domain.execution.usage_facts import (
+    external_usage_windows_json,
+    subscription_identity,
+    usage_miss_reason,
+)
+from blizzard.hub.domain.runners.registration import RetiredRunnerGuard
 
 _log = get_logger("blizzard.hub.facts")
 
 # The chunk-scoped, fence-advancing kinds gated on intake: a fabricated one from a
 # non-holder must not advance the fence or open a decision. Runner-scoped kinds are never gated.
 _ROUTE_TOKEN_GATED_KINDS = frozenset({LEASE_MINTED, ESCALATION_RECORDED, QUESTION_ASKED})
-
-
-def _external_usage_windows_json(raw: object, *, runner_id: str, slug: str) -> str:
-    """The complete usage windows from a fact; malformed entries are omitted at intake.
-
-    Instants are normalized to UTC here, so a naive or offset ``resets_at`` is stored
-    already-UTC rather than repaired on every later read (``bzh:utc-instants``)."""
-    if not isinstance(raw, list):
-        _log.warning("external usage windows not a list", runner_id=runner_id, slug=slug)
-        return "[]"
-    windows = []
-    for entry in raw:
-        window = ExternalSubscriptionUsageWindow.admitted(entry)
-        if isinstance(window, str):
-            _log.warning("dropped malformed external usage window", runner_id=runner_id, slug=slug, reason=window)
-            continue
-        windows.append(window.stored)
-    return json.dumps(windows)
-
-
-@domain_model
-@dataclass(frozen=True)
-class Payload:
-    """One pushed fact's body, read through the coercions the intake shares.
-
-    An absent key and an explicit ``null`` are distinct: :meth:`text` reads both as
-    ``None``, while :meth:`string`'s default only covers the absent one."""
-
-    body: dict[str, object]
-
-    def get(self, key: str, default: object = None) -> object:
-        return self.body.get(key, default)
-
-    def text(self, key: str) -> str | None:
-        value = self.body.get(key)
-        return str(value) if value is not None else None
-
-    def string(self, key: str, default: str = "") -> str:
-        return str(self.body.get(key, default))
-
-    def require_text(self, key: str) -> str:
-        return str(self.body[key])
-
-    def require_number(self, key: str) -> int:
-        return int(self.body[key])  # type: ignore[arg-type]
-
-    def amount(self, key: str) -> float | None:
-        """A usage fact's dollar figure by ``key`` — ``cost_usd`` or ``estimated_cost_usd`` — ``None``
-        stays ``None`` (no such figure was reported), never fabricated."""
-        value = self.body.get(key)
-        return float(value) if value is not None else None  # type: ignore[arg-type]
-
-    def strings(self, key: str) -> list[str]:
-        return [str(item) for item in self.body.get(key, [])]  # type: ignore[union-attr]
-
-    def mapping(self, key: str) -> dict[str, object] | None:
-        value = self.body.get(key)
-        return value if isinstance(value, dict) else None
-
-    def instant(self, key: str, fallback: datetime) -> datetime:
-        """An ISO-8601 stamp, falling back on a malformed one and coerced to UTC
-        (``bzh:utc-instants``) — store-and-forward resends the naive stamp it buffered."""
-        return parse_instant(self.body.get(key), fallback)
 
 
 def requires_route_token(kind: str, chunk_id: str | None) -> bool | None:
@@ -126,23 +67,6 @@ def admitted_event_kind(kind: str, severity: str) -> EventLogKind | None:
     if narrowed is None or narrowed in PROJECTED_EVENT_KINDS or severity != EVENT_LOG_SEVERITY[narrowed]:
         return None
     return narrowed
-
-
-def subscription_identity(fact: Payload) -> tuple[str, str] | None:
-    """An external-subscription usage fact's ``(slug, name)`` — ``None`` without a non-empty
-    string slug; the name defaults to the slug."""
-    slug = fact.get("slug")
-    if not isinstance(slug, str) or not slug:
-        return None
-    return slug, fact.text("name") or slug
-
-
-def usage_miss_reason(fact: Payload) -> str | None:
-    """A usage miss's reason, kept raw whether or not the hub recognizes it; ``None`` unless a non-blank string."""
-    reason = fact.get("reason")
-    if not isinstance(reason, str) or not reason.strip():
-        return None
-    return reason
 
 
 @domain_model
@@ -414,7 +338,7 @@ class FactIngestService:
                 slug=slug,
                 name=name,
                 sampled_at=fact.instant("sampled_at", now),
-                windows_json=_external_usage_windows_json(fact.get("windows", []), runner_id=runner_id, slug=slug),
+                windows_json=external_usage_windows_json(fact.get("windows", []), owner_id=runner_id, slug=slug),
                 at=now,
             )
             return True, None

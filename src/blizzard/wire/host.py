@@ -11,7 +11,7 @@ from typing import Annotated
 from pydantic import BaseModel, Field, StringConstraints
 
 from blizzard.foundation.runner_connection import RunnerConnection
-from blizzard.wire.runner import RunnerSubscriptionDeclaration
+from blizzard.wire.runner import RunnerSubscriptionDeclaration, SubscriptionUsageView
 
 
 class HostWorkspace(BaseModel):
@@ -82,6 +82,14 @@ class HostAddResponse(BaseModel):
     adopted: list[str] = []
 
 
+class HostSubscriptionUsageView(SubscriptionUsageView):
+    """One of a host's subscriptions with its newest reported usage — as a runner's card shows it — and the runners
+    spending it."""
+
+    #: The ids of the live runners under the host whose registered subscription is this slug.
+    runners: list[str] = Field(default_factory=list)
+
+
 class HostRegistryView(BaseModel):
     """One host as an operator sees the registry — including one that has never connected."""
 
@@ -104,6 +112,8 @@ class HostRegistryView(BaseModel):
     retired_by: str | None = None
     #: The runners standing under the host, retired ones included, oldest added first.
     runner_ids: list[str] = []
+    #: Each subscription the host reports, once, with its newest usage and the runners spending it, by slug.
+    subscription_usage: list[HostSubscriptionUsageView] = []
 
 
 class HostRegistryListResponse(BaseModel):

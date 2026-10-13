@@ -4232,6 +4232,50 @@ export type HostEnrollmentResponse = {
 };
 
 /**
+ * HostFactAck
+ *
+ * The hub's per-batch acknowledgement against the host's own high-water mark.
+ *
+ * ``high_water`` is the new mark after this batch; ``applied``/``already_applied`` partition the pushed seqs, and
+ * ``rejected`` names seqs refused for a non-idempotency reason.
+ */
+export type HostFactAck = {
+    /**
+     * Already Applied
+     */
+    already_applied?: Array<number>;
+    /**
+     * Applied
+     */
+    applied?: Array<number>;
+    /**
+     * High Water
+     */
+    high_water: number;
+    /**
+     * Host Id
+     */
+    host_id: string;
+    /**
+     * Rejected
+     */
+    rejected?: Array<number>;
+};
+
+/**
+ * HostFactBatch
+ *
+ * A host's push of one-or-more buffered facts, ordered by seq — attributed to the host its bearer token names;
+ * the body carries no host id. The item shape is the runner lane's.
+ */
+export type HostFactBatch = {
+    /**
+     * Facts
+     */
+    facts: Array<RunnerFact>;
+};
+
+/**
  * HostLifecycleRequest
  *
  * Revoke a host's token — records who did it.
@@ -4347,6 +4391,10 @@ export type HostRegistryView = {
      * Runner Ids
      */
     runner_ids?: Array<string>;
+    /**
+     * Subscription Usage
+     */
+    subscription_usage?: Array<HostSubscriptionUsageView>;
     /**
      * Subscriptions
      */
@@ -4467,6 +4515,41 @@ export type HostRunnersRequest = {
      * Runner Ids
      */
     runner_ids: Array<string>;
+};
+
+/**
+ * HostSubscriptionUsageView
+ *
+ * One of a host's subscriptions with its newest reported usage — as a runner's card shows it — and the runners
+ * spending it.
+ */
+export type HostSubscriptionUsageView = {
+    condition?: SampleMissReason | null;
+    miss_reason?: SampleMissReason | null;
+    /**
+     * Missed At
+     */
+    missed_at?: string | null;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Runners
+     */
+    runners?: Array<string>;
+    /**
+     * Sampled At
+     */
+    sampled_at?: string | null;
+    /**
+     * Slug
+     */
+    slug: string;
+    /**
+     * Windows
+     */
+    windows: Array<ExternalSubscriptionUsageWindowView>;
 };
 
 /**
@@ -12978,6 +13061,31 @@ export type ReportHostApiFleetHostPostResponses = {
 };
 
 export type ReportHostApiFleetHostPostResponse = ReportHostApiFleetHostPostResponses[keyof ReportHostApiFleetHostPostResponses];
+
+export type IngestHostFactsApiFleetHostEventsPostData = {
+    body: HostFactBatch;
+    path?: never;
+    query?: never;
+    url: '/api/fleet/host/events';
+};
+
+export type IngestHostFactsApiFleetHostEventsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type IngestHostFactsApiFleetHostEventsPostError = IngestHostFactsApiFleetHostEventsPostErrors[keyof IngestHostFactsApiFleetHostEventsPostErrors];
+
+export type IngestHostFactsApiFleetHostEventsPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: HostFactAck;
+};
+
+export type IngestHostFactsApiFleetHostEventsPostResponse = IngestHostFactsApiFleetHostEventsPostResponses[keyof IngestHostFactsApiFleetHostEventsPostResponses];
 
 export type AddHostRunnerApiFleetHostRunnersPostData = {
     body: HostRunnerAddRequest;
