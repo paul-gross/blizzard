@@ -1,13 +1,8 @@
 """hosts — a tenant-scoped record above runners, with a bearer credential of its own.
 
-Three tables are created, each carrying ``tenant_id``: ``hosts`` (hub-unique ``host_id``, the host's reported address,
-sign-in callbacks, workspaces and subscriptions, and its current token hash), ``host_lifecycle_facts`` (retirement
-derives from the newest row) and ``host_token_revocations`` (every revoked hash, never cleared). ``runner_registrations``
-gains a nullable ``host_id`` with ``fk_runner_registrations_hosts`` and a tenant-led index over it; every existing runner
-stands alone. Each step inspects first and skips what a stopped run already did.
-
-The downgrade refuses while any runner stands under a host, naming them — an older hub cannot read the association, so
-dropping it silently would lose the adoption. Otherwise it drops the index, the column and its key, and the three tables.
+Creates ``hosts``, ``host_lifecycle_facts`` and ``host_token_revocations``, each tenant-keyed, and adds a nullable
+``runner_registrations.host_id`` with its key and a tenant-led index; existing runners stand alone. Each step inspects
+first and skips what a stopped run already did. The downgrade refuses, naming them, while any runner stands under a host.
 Revision ID: 20261012_1000_hosts
 Revises: 20261011_1300_chunk_recorded_at_indexes
 """
