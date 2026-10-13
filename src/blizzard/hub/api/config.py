@@ -47,13 +47,22 @@ from blizzard.hub.domain.config.repositories import (
     RepositoryRef,
     RepositorySlug,
 )
-from blizzard.hub.domain.config.work_sources import ConfigFieldError, WorkSourceEdit, WorkSourceFields
+from blizzard.hub.domain.config.work_sources import (
+    ConfigFieldError,
+    ConfiguredWorkSource,
+    WorkSourceEdit,
+    WorkSourceFields,
+    WorkSourceId,
+    WorkSourceRef,
+    WorkSourceSlug,
+)
 from blizzard.hub.domain.garden.declarations import RoutineDeclaration, ScopeDeclaration
 from blizzard.hub.domain.garden.routines import Routine, RoutineEdit
 from blizzard.hub.domain.garden.scopes import ScopeEdit
 from blizzard.hub.domain.projects.declarations import (
     EntryProjectRequired,
     PlannedRepositories,
+    PlannedWorkSources,
     ProjectDeclaration,
     ProjectsPlan,
     StoredProjects,
@@ -101,18 +110,23 @@ _SCHEMAS = {
 }
 
 
-#: The kinds whose ``record_key`` is a repository's id, and the kind whose is a project's.
+#: The kinds whose ``record_key`` is a repository's id, those whose is a work source's, and the kind whose is a
+#: project's.
 _REPOSITORY_KEYED = (RecordKind.REPOSITORY, RecordKind.PROJECT_REPOSITORY_LINK)
+_WORK_SOURCE_KEYED = (RecordKind.WORK_SOURCE, RecordKind.PROJECT_SOURCE_LINK)
 
 
 def _labels(changes: list[ConfigChange], services: TenantServices) -> dict[tuple[RecordKind, str], str]:
-    """The current slug of each slugged record a page of changes names: one read of the repositories and one of the
-    projects it keys (``bzh:bulk-reconstitution``)."""
+    """The current slug of each slugged record a page of changes names: one read each of the repositories, the work
+    sources and the projects it keys (``bzh:bulk-reconstitution``)."""
     repository_ids = list({RepositoryId(c.record_key) for c in changes if c.record_kind in _REPOSITORY_KEYED})
+    source_ids = list({WorkSourceId(c.record_key) for c in changes if c.record_kind in _WORK_SOURCE_KEYED})
     project_ids = list({ProjectId(c.record_key) for c in changes if c.record_kind is RecordKind.PROJECT})
     labels: dict[tuple[RecordKind, str], str] = {}
     for repository_id, repository in services.repository_records.get_many(repository_ids).items():
         labels.update({(kind, repository_id): repository.slug for kind in _REPOSITORY_KEYED})
+    for source_id, source in services.work_source_records.get_many(source_ids).items():
+        labels.update({(kind, source_id): source.slug for kind in _WORK_SOURCE_KEYED})
     for project_id, project in services.projects.get_many(project_ids).items():
         labels[(RecordKind.PROJECT, project_id)] = project.slug
     return labels
@@ -173,7 +187,8 @@ def list_changes(
 
 
 def _key_of(kind: RecordKind | None, key: str | None, services: TenantServices) -> str | None:
-    """The stored key a change-log filter names: the id of the project or repository an id or slug resolves to; the
+    """The stored key a change-log filter names: the id of the project, repository or work source an id or slug
+    resolves to; the
     value as given when it resolves to none (so the page is empty) or the kind is keyed by its name."""
     if key is None:
         return None
@@ -183,21 +198,26 @@ def _key_of(kind: RecordKind | None, key: str | None, services: TenantServices) 
     if kind in _REPOSITORY_KEYED:
         repository = services.repository_records.resolve(key)
         return key if repository is None else repository.repository_id
+    if kind in _WORK_SOURCE_KEYED:
+        source = services.work_source_records.resolve(key)
+        return key if source is None else source.work_source_id
     return key
 
 
 def _declaration(
-    document: ConfigDocument, clock: IClock, projects: ProjectsPlan, held: _Repositories
+    document: ConfigDocument, clock: IClock, projects: ProjectsPlan, held: _Repositories, sources_held: _WorkSources
 ) -> ConfigDeclaration:
     """The domain's declarations from a validated document: each entry's create fields, and a sparse edit
     of only the fields the entry states (``model_fields_set``); the planned ``projects`` section, and each
     scope and routine within the project it names, as the apply leaves the projects."""
     sources = []
     for entry in document.work_sources:
-        stated = {name: getattr(entry, name) for name in entry.model_fields_set if name != "name"}
+        stated = {name: getattr(entry, name) for name in entry.model_fields_set if name != "slug"}
         sources.append(
             WorkSourceDeclaration(
+                slug=entry.slug,
                 name=entry.name,
+                work_source_id=sources_held.ids[entry.slug],
                 fields=WorkSourceFields(
                     provider=entry.provider,
                     locator=entry.locator,
@@ -277,9 +297,12 @@ def _garden_declarations(
     return tuple(scopes), tuple(routines)
 
 
-def _stored(declaration: ConfigDeclaration, services: TenantServices, held: _Repositories) -> StoredConfig:
+def _stored(
+    declaration: ConfigDeclaration, services: TenantServices, held: _Repositories, sources_held: _WorkSources
+) -> StoredConfig:
     secrets = services.secret_catalog.get_many(list(declaration.secrets))
     declared_slugs = {d.slug for d in declaration.repositories if isinstance(d, RepositoryDeclaration)}
+    source_slugs = {d.slug for d in declaration.work_sources if isinstance(d, WorkSourceDeclaration)}
     retired = services.secret_catalog.retired_names()
     scopes: dict[tuple[str, str], DeclarableRecord] = {
         (scope.project_id, scope.slug): scope for scope in services.scopes.list_all()
@@ -300,7 +323,8 @@ def _stored(declaration: ConfigDeclaration, services: TenantServices, held: _Rep
     linked = {key: tuple(scope_links[routine_id]) for key, routine_id in ids.items()}
     declared_scopes = [d for d in declaration.scopes if isinstance(d, ScopeDeclaration)]
     return StoredConfig(
-        work_sources=services.work_source_records.get_many([d.name for d in declaration.work_sources]),
+        work_sources={slug: sources_held.stored[slug] for slug in source_slugs if slug in sources_held.stored},
+        former_work_sources={slug: sources_held.former[slug] for slug in source_slugs if slug in sources_held.former},
         repositories={slug: held.stored[slug] for slug in declared_slugs if slug in held.stored},
         former_repositories={slug: held.former[slug] for slug in declared_slugs if slug in held.former},
         secrets={name: RecordState.of(name in retired) for name in secrets},
@@ -355,8 +379,52 @@ class _Repositories:
         )
 
 
+@dto
+@dataclass(frozen=True)
+class _WorkSources:
+    """The work sources a document's apply meets, as :class:`_Repositories` holds the repositories: every stored one by
+    current slug (retired included); the one that left each slug the document declares or a project lists that none
+    holds; and the id each declared slug takes."""
+
+    stored: dict[str, ConfiguredWorkSource]
+    former: dict[str, ConfiguredWorkSource]
+    ids: dict[str, WorkSourceId] = field(default_factory=dict)
+
+    @classmethod
+    def of(cls, document: ConfigDocument, services: TenantServices) -> _WorkSources:
+        stored = {r.slug: r for r in services.work_source_records.list_all(include_retired=True)}
+        named = {entry.slug for entry in document.work_sources} | {
+            reference for entry in document.projects for reference in entry.sources
+        }
+        former: dict[str, ConfiguredWorkSource] = {}
+        for value in sorted(named - stored.keys()):
+            slug = WorkSourceSlug.of(value)
+            left = services.work_source_records.get_by_former_slug(slug) if slug is not None else None
+            if left is not None:
+                former[value] = left
+        ids = {
+            entry.slug: stored[entry.slug].work_source_id
+            if entry.slug in stored
+            else WorkSourceId(Id.mint(IdPrefix.WORK_SOURCE, services.clock).value)
+            for entry in document.work_sources
+        }
+        return cls(stored, former, ids)
+
+    def planned(self) -> tuple[tuple[WorkSourceRef, ...], dict[str, WorkSourceRef]]:
+        """The work sources as the apply leaves them — those stored, and those the document creates — and the one that
+        left each referenced slug."""
+        created = tuple(
+            WorkSourceRef(work_source_id, slug) for slug, work_source_id in self.ids.items() if slug not in self.stored
+        )
+        return (*(r.ref() for r in self.stored.values()), *created), {s: r.ref() for s, r in self.former.items()}
+
+
 def _projects(
-    document: ConfigDocument, services: TenantServices, ctx: ChangeContext, held_repositories: _Repositories
+    document: ConfigDocument,
+    services: TenantServices,
+    ctx: ChangeContext,
+    held_repositories: _Repositories,
+    held_sources: _WorkSources,
 ) -> ProjectsPlan:
     """The planned ``projects`` section, from what the store holds for the projects and links the document names."""
     projects = services.projects.list_all()
@@ -374,6 +442,8 @@ def _projects(
     source_links: dict[tuple[str, str], SourceLink] = {}
     repository_links: dict[tuple[str, str], RepositoryLink] = {}
     planned = held_repositories.planned()
+    planned_sources, former_sources = held_sources.planned()
+    source_lookup = PlannedWorkSources(planned_sources, former_sources)
     for entry in document.projects:
         project = current.get(entry.slug)
         if project is None:
@@ -381,7 +451,12 @@ def _projects(
         held = project.project_id
         # Every standing link may be unlinked, and a listed one in any state relinked.
         if "sources" in entry.model_fields_set:
-            listed = [link for name in entry.sources if (link := links.source_link(held, name)) is not None]
+            listed = [
+                link
+                for reference in entry.sources
+                if (ref := source_lookup.resolve(reference)) is not None
+                and (link := links.source_link(held, ref.work_source_id)) is not None
+            ]
             source_links.update({(held, link.work_source_id): link for link in [*links.sources_of(held), *listed]})
         if "repositories" in entry.model_fields_set:
             named_repos = [
@@ -393,15 +468,13 @@ def _projects(
             repository_links.update(
                 {(held, link.repository_id): link for link in [*links.repositories_of(held), *named_repos]}
             )
-    sources = {entry.name for entry in document.work_sources}
-    if any("sources" in entry.model_fields_set for entry in document.projects):
-        sources |= {record.name for record in services.work_source_records.list_all(include_retired=True)}
     stored = StoredProjects(
         projects=tuple(projects),
         former=former,
         source_links=source_links,
         repository_links=repository_links,
-        sources=frozenset(sources),
+        sources=planned_sources,
+        former_sources=former_sources,
         repositories=planned.repositories,
         former_repositories=dict(planned.former),
     )
@@ -492,9 +565,11 @@ def _apply(
     ctx = ChangeContext(actor=identity.user_id, door=Door.APPLY, apply_id=apply_id)
     try:
         held = _Repositories.of(document, services)
-        declaration = _declaration(document, services.clock, _projects(document, services, ctx, held), held)
+        sources = _WorkSources.of(document, services)
+        projects = _projects(document, services, ctx, held, sources)
+        declaration = _declaration(document, services.clock, projects, held, sources)
         outcomes = services.config_authoring.apply(
-            declaration, _stored(declaration, services, held), ctx, dry_run=dry_run
+            declaration, _stored(declaration, services, held, sources), ctx, dry_run=dry_run
         )
     except ApplyEntryRefused as exc:
         raise _refusal(exc) from exc
@@ -541,6 +616,7 @@ def export_config(services: Services) -> ConfigDocument:
     sources = services.work_source_records.list_all(include_retired=False)
     repositories = services.repository_records.list_all(include_retired=False)
     repository_slugs = {r.repository_id: r.slug for r in services.repository_records.list_all(include_retired=True)}
+    source_slugs = {r.work_source_id: r.slug for r in services.work_source_records.list_all(include_retired=True)}
     return ConfigDocument(
         version=1,
         projects=[
@@ -548,7 +624,9 @@ def export_config(services: Services) -> ConfigDocument:
                 slug=project.slug,
                 name=project.name,
                 description=project.description,
-                sources=sorted(link.work_source_id for link in services.project_links.sources_of(project.project_id)),
+                sources=sorted(
+                    source_slugs[link.work_source_id] for link in services.project_links.sources_of(project.project_id)
+                ),
                 repositories=sorted(
                     repository_slugs[link.repository_id]
                     for link in services.project_links.repositories_of(project.project_id)
@@ -557,7 +635,7 @@ def export_config(services: Services) -> ConfigDocument:
             for project in projects
         ],
         secrets=[s.name for s in services.secret_catalog.list_all() if s.name not in retired],
-        work_sources=[WorkSourceDocument(name=r.name, **vars(r.fields)) for r in sources],
+        work_sources=[WorkSourceDocument(slug=r.slug, name=r.name, **vars(r.fields)) for r in sources],
         repositories=[RepositoryDocument(slug=r.slug, name=r.name, **vars(r.fields)) for r in repositories],
         scopes=[
             ScopeEntry(slug=s.slug, description=s.description, project=slug_of[s.project_id])

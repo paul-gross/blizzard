@@ -63,6 +63,23 @@ def test_two_sources_naming_one_variable_share_one_secret() -> None:
     assert {record.fields.locator for record, _ in plan.work_sources} == {"acme/a", "acme/b"}
 
 
+def test_a_block_s_name_is_the_display_name_and_derives_the_slug() -> None:
+    plan = _plan(_legacy(_source("Acme Widgets", "acme/w"), _source("tools", "acme/t")), {"BZ_SHARED_TOKEN": "tok"})
+    assert [(record.slug, record.name) for record, _ in plan.work_sources] == [
+        ("acme-widgets", "Acme Widgets"),
+        ("tools", "tools"),
+    ]
+    assert [outcome.key for outcome in plan.outcomes if outcome.kind is RecordKind.WORK_SOURCE] == [
+        "acme-widgets",
+        "tools",
+    ]
+
+
+def test_a_block_whose_slug_would_be_hub_is_refused() -> None:
+    with pytest.raises(LegacyImportRefused, match="hub"):
+        _plan(_legacy(_source("HUB", "acme/h")), {"BZ_SHARED_TOKEN": "tok"})
+
+
 def test_every_change_is_the_migration_door_and_actor() -> None:
     plan = _plan(_legacy(_source("a", "acme/a")), {"BZ_SHARED_TOKEN": "tok", **_FORGE}, (CommitCoordinate(None, "w"),))
     changes = [s.change for s in plan.secrets] + [c for _, c in plan.work_sources] + [c for _, c in plan.repositories]

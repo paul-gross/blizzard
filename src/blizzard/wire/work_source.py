@@ -15,9 +15,13 @@ from blizzard.foundation.work_items import WorkItemClosure, WorkItemPriority
 class WorkSourceSummary(BaseModel):
     """One work source — the ``GET /api/work-sources`` listing row and every record verb's
     view. ``readable`` is not a field: every source answers ``fetch``, so it carries no
-    information; ``edit`` is the "has browsable items" signal the item routes gate on. The
-    built-in ``hub`` source is ``built_in`` and carries no record fields."""
+    information; ``edit`` is the "has browsable items" signal the item routes gate on.
+    ``work_source_id`` is what every stored reference holds; ``slug`` is the handle people type, and ``name`` a display
+    label. The built-in ``hub`` source is ``built_in``, has slug and name ``hub``, and carries no id or record
+    fields."""
 
+    work_source_id: str | None = None
+    slug: str | None = None
     name: str
     annotate: bool
     edit: bool
@@ -35,11 +39,14 @@ class WorkSourceSummary(BaseModel):
 
 class WorkSourceDocument(BaseModel):
     """A work source as a document — the create body, and the model whose JSON Schema
-    ``GET /api/config/schema/work-sources`` serves. ``secret`` names a stored secret."""
+    ``GET /api/config/schema/work-sources`` serves. ``slug`` names the source and ``name`` is its display label — the
+    slug when omitted on create, left as stored on an edit. ``hub`` is never a slug: the built-in source holds it.
+    ``secret`` names a stored secret."""
 
     model_config = ConfigDict(extra="forbid")
 
-    name: str
+    slug: str
+    name: str | None = None
     provider: str
     locator: str
     api_base: str | None = None
@@ -50,11 +57,13 @@ class WorkSourceDocument(BaseModel):
 
 class WorkSourcePatchRequest(BaseModel):
     """A sparse edit: an absent field is unchanged, a present one is set, and an explicit
-    ``null`` clears ``api_base``, ``web_base``, or ``secret`` and is refused elsewhere.
-    ``name`` is immutable, so a body carrying it is refused."""
+    ``null`` clears ``api_base``, ``web_base``, or ``secret`` and is refused elsewhere. A slug that changes keeps
+    resolving to the source until another claims it."""
 
     model_config = ConfigDict(extra="forbid")
 
+    slug: str | None = None
+    name: str | None = None
     provider: str | None = None
     locator: str | None = None
     api_base: str | None = None
@@ -86,9 +95,11 @@ class WorkItemAuthorView(BaseModel):
 
 class WorkItemView(BaseModel):
     """One hub-owned work item in full — author, stated priority, closure, and the
-    last-edit instant, the vocabulary a pass-through ``WorkItemEntry`` cannot answer."""
+    last-edit instant, the vocabulary a pass-through ``WorkItemEntry`` cannot answer. ``source`` is the source's key —
+    ``hub`` or its id — and ``slug`` its current slug; ``label`` is the rendered ``{slug}#{ref}``."""
 
     source: str
+    slug: str | None = None
     ref: str
     label: str | None
     web_url: str | None

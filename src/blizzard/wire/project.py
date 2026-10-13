@@ -59,19 +59,20 @@ class ProjectRef(BaseModel):
 
 
 class SourceLinkView(BaseModel):
-    """A project's link to a work source, named ``name``. ``linked`` is false once the link is retired (unlinked).
-    The built-in ``hub`` source is linked to every project: it has no stored link, so no ``revision``, and cannot be
-    unlinked."""
+    """A project's link to a work source: ``name`` is the source's key — its id, or ``hub`` — and ``slug`` its current
+    slug. ``linked`` is false once the link is retired (unlinked). The built-in ``hub`` source is linked to every
+    project: it has no stored link, so no ``revision``, and cannot be unlinked."""
 
     project_id: str
     name: str
+    slug: str | None = None
     linked: bool
     revision: int | None = None
     built_in: bool = False
 
 
 class SourceLinksView(BaseModel):
-    """A project's standing source links by source name, the built-in ``hub`` source among them —
+    """A project's standing source links by source key, the built-in ``hub`` source among them —
     ``GET /api/projects/{project}/source-links``."""
 
     source_links: list[SourceLinkView] = []
@@ -110,5 +111,7 @@ class SourceNotLinkedBody(BaseModel):
 
     code: Literal["source_not_linked"] = "source_not_linked"
     message: str
+    #: The source's key — its id; ``slug`` is its current slug.
     source: str
+    slug: str | None = None
     project: ProjectRef | None

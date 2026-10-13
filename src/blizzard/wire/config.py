@@ -51,9 +51,9 @@ class ConfigChangesPage(BaseModel):
 class ProjectDocument(BaseModel):
     """A project as a document entry, named by its slug. A ``name`` or ``description`` the entry omits is left as
     stored; a project the document creates needs a ``name``. A ``sources`` or ``repositories`` list the entry states
-    is the project's whole set of links of that kind — a source it leaves out is unlinked; a list it omits is left
-    as stored. A repository is named by its id or its slug, a slug it left included. A slug a project left is refused:
-    name that project by its current slug."""
+    is the project's whole set of links of that kind — a record it leaves out is unlinked; a list it omits is left
+    as stored. A source or repository is named by its id or its slug, a slug it left included. A slug a project left
+    is refused: name that project by its current slug."""
 
     model_config = ConfigDict(extra="forbid")
 

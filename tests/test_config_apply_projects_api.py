@@ -13,8 +13,8 @@ from tests.support import HubHarness, build_hub
 
 pytestmark = pytest.mark.component
 
-_SOURCE = {"name": "demo", "provider": "github", "locator": "acme/demo", "secret": "gh", "annotate": True}
-_OTHER_SOURCE = {**_SOURCE, "name": "infra", "locator": "acme/infra"}
+_SOURCE = {"slug": "demo", "provider": "github", "locator": "acme/demo", "secret": "gh", "annotate": True}
+_OTHER_SOURCE = {**_SOURCE, "slug": "infra", "locator": "acme/infra"}
 _REPO = {
     "slug": "blizzard",
     "forge_api_url": "https://api.github.com",
@@ -74,11 +74,19 @@ def _repository_slug(hub: HubHarness, repository_id: str) -> str:
     )
 
 
+def _source_slug(hub: HubHarness, work_source_id: str) -> str:
+    return next(
+        r.slug
+        for r in hub.services.work_source_records.list_all(include_retired=True)
+        if r.work_source_id == work_source_id
+    )
+
+
 def _linked(hub: HubHarness, slug: str) -> tuple[list[str], list[str]]:
     project_id = _project_id(hub, slug)
     links = hub.services.project_links
     return (
-        sorted(link.source_name for link in links.sources_of(project_id)),  # type: ignore[arg-type]
+        sorted(_source_slug(hub, link.work_source_id) for link in links.sources_of(project_id)),  # type: ignore[arg-type]
         sorted(_repository_slug(hub, link.repository_id) for link in links.repositories_of(project_id)),  # type: ignore[arg-type]
     )
 
@@ -238,3 +246,61 @@ def test_an_export_of_a_two_project_tenant_applies_back_as_a_byte_stable_no_op(h
     assert {op for _, _, op in _rows(_apply(hub, document))} == {"unchanged"}
     assert _changes(hub) == before
     assert hub.client.get("/api/config/export").content == exported.content
+
+
+def test_a_projects_sources_name_a_source_by_id_slug_or_former_slug(hub: HubHarness) -> None:
+    _rows(_apply(hub, {"work_sources": [_SOURCE, _OTHER_SOURCE], "projects": [{"slug": "web", "name": "Web"}]}))
+    infra_id = hub.client.get("/api/work-sources/infra").json()["work_source_id"]
+    renamed = hub.client.patch("/api/work-sources/demo", json={"slug": "demo-core"})
+    assert renamed.status_code == 200, renamed.text
+
+    linked = _apply(hub, {"projects": [{"slug": "web", "sources": ["demo", infra_id]}]})
+    assert _rows(linked) == [
+        ("project_source_link", "web/demo-core", "create"),
+        ("project_source_link", "web/infra", "create"),
+    ]
+    assert _linked(hub, "web") == (["demo-core", "infra"], [])
+    assert hub.client.get("/api/config/export").json()["projects"][1]["sources"] == ["demo-core", "infra"]
+
+
+def test_a_work_source_entry_keyed_by_a_slug_a_source_left_is_refused_naming_it(hub: HubHarness) -> None:
+    _rows(_apply(hub, {"work_sources": [_SOURCE]}))
+    source_id = hub.client.get("/api/work-sources/demo").json()["work_source_id"]
+    assert hub.client.patch("/api/work-sources/demo", json={"slug": "demo-core"}).status_code == 200
+
+    refused = _apply(hub, {"work_sources": [{**_SOURCE, "locator": "acme/fresh"}]})
+    assert refused.status_code == 422, refused.text
+    detail = refused.json()["detail"][0]
+    assert detail["loc"] == ["body", "work_sources", 0, "slug"]
+    assert "'demo-core'" in detail["msg"] and source_id in detail["msg"]
+
+    kept = _apply(hub, {"work_sources": [{**_SOURCE, "slug": "demo-core", "name": "Demo core"}]})
+    assert _rows(kept) == [("work_source", "demo-core", "edit")]
+    assert hub.client.get("/api/work-sources/demo").json()["name"] == "Demo core"
+
+
+def test_a_former_slug_another_source_reclaims_resolves_to_its_new_holder(hub: HubHarness) -> None:
+    _rows(_apply(hub, {"work_sources": [_SOURCE]}))
+    first = hub.client.get("/api/work-sources/demo").json()["work_source_id"]
+    assert hub.client.patch("/api/work-sources/demo", json={"slug": "demo-old"}).status_code == 200
+    assert hub.client.get("/api/work-sources/demo").json()["work_source_id"] == first
+
+    reclaimed = hub.client.post("/api/work-sources", json={**_SOURCE, "locator": "acme/fresh"})
+    assert reclaimed.status_code == 201, reclaimed.text
+    second = reclaimed.json()["work_source_id"]
+    assert second != first
+    assert hub.client.get("/api/work-sources/demo").json()["work_source_id"] == second
+    assert hub.client.get("/api/work-sources/demo-old").json()["work_source_id"] == first
+    assert hub.client.get(f"/api/work-sources/{first}").json()["slug"] == "demo-old"
+
+
+def test_an_id_never_resolves_as_a_slug_and_hub_is_never_a_slug(hub: HubHarness) -> None:
+    _rows(_apply(hub, {"work_sources": [_SOURCE]}))
+    source_id = hub.client.get("/api/work-sources/demo").json()["work_source_id"]
+    unknown_id = "wsrc_01JZZZZZZZZZZZZZZZZZZZZZZZ"
+    assert hub.client.get(f"/api/work-sources/{unknown_id}").status_code == 404
+    assert hub.client.post("/api/work-sources", json={**_SOURCE, "slug": source_id}).status_code == 422
+    assert hub.client.patch("/api/work-sources/demo", json={"slug": "hub"}).status_code == 422
+    assert hub.client.post("/api/work-sources", json={**_SOURCE, "slug": "hub"}).status_code == 422
+    refused = _apply(hub, {"work_sources": [{**_SOURCE, "slug": "hub", "locator": "acme/hub"}]})
+    assert refused.status_code == 422 and refused.json()["detail"][0]["loc"][-1] == "slug"

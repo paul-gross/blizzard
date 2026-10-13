@@ -379,6 +379,9 @@ def test_spend_honors_the_source_filter(tmp_path: Path) -> None:
     resp = hub.client.get("/api/analytics/spend/chunks", params={"source": "other"}, headers=_cookie(token))
 
     assert [r["chunk_id"] for r in resp.json()["spend"]] == [chunk_b]
+    unknown = hub.client.get("/api/analytics/spend/chunks", params={"source": "nowhere"}, headers=_cookie(token))
+    assert unknown.status_code == 422, unknown.text
+    assert unknown.json()["detail"][0]["loc"] == ["query", "source"]
 
 
 def test_spend_honors_the_graph_id_filter(tmp_path: Path) -> None:

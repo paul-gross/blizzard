@@ -49,3 +49,31 @@ def test_a_source_created_through_the_api_ingests_from_the_mock_forge_and_takes_
         assert poll_until(lambda: "blizzard:ingested" in _forge_labels(forge, number), timeout=15.0), (
             f"label never appeared after the edit: {_forge_labels(forge, number)}"
         )
+
+
+def test_a_renamed_source_keeps_its_refs_and_renders_them_under_its_new_slug(tmp_path: Path) -> None:
+    bin_dir = require_mock_fleet()
+    _workspace, origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    forge_port, hub_port = _free_port(), _free_port()
+    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+        issue = forge.post(f"/repos/{REPO}/issues", json={"title": "follow the rename", "body": "b"})
+        assert issue.status_code == 201, issue.text
+        number = issue.json()["number"]
+        ingested = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{number}"]})
+        assert ingested.status_code == 201, ingested.text
+        chunk_id = ingested.json()["chunk_id"]
+
+        renamed = hub.patch(f"/api/work-sources/{REPO_NAME}", json={"slug": "renamed", "name": "Renamed source"})
+        assert renamed.status_code == 200, renamed.text
+        source_id = renamed.json()["work_source_id"]
+
+        (pointer,) = hub.get(f"/api/chunks/{chunk_id}").json()["work_refs"]
+        assert (pointer["source"], pointer["label"]) == (source_id, f"renamed#{number}")
+        (item,) = hub.get(f"/api/chunks/{chunk_id}/work-items").json()["items"]
+        assert (item["slug"], item["title"]) == ("renamed", "follow the rename")
+
+        for token in (f"{REPO_NAME}:{number}", f"renamed:{number}", f"{source_id}:{number}"):
+            held = hub.post("/api/chunks", json={"tokens": [token]})
+            assert held.status_code == 409, (token, held.text)
+            assert (held.json()["existing_chunk_id"], held.json()["label"]) == (chunk_id, f"renamed#{number}")
+        assert hub.get(f"/api/work-sources/{REPO_NAME}").json()["work_source_id"] == source_id

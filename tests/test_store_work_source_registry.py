@@ -78,7 +78,7 @@ def _create(
     created = client.post(
         "/api/work-sources",
         json={
-            "name": slug,
+            "slug": slug,
             "provider": "github",
             "locator": locator,
             "api_base": forge_url,

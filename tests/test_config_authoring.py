@@ -45,6 +45,7 @@ from blizzard.hub.domain.config.work_sources import (
     ConfiguredWorkSource,
     WorkSourceEdit,
     WorkSourceFields,
+    WorkSourceId,
     WorkSourceLocatorTaken,
     WorkSourceSecretUnavailable,
     WorkSourceSlugTaken,
@@ -477,9 +478,11 @@ _APPLY = ChangeContext(actor="alice", door=Door.APPLY, apply_id="apl_ONE")
 
 def _source_declaration(name: str, locator: str, **stated: object) -> WorkSourceDeclaration:
     return WorkSourceDeclaration(
-        name=name,
+        slug=name,
+        name=None,
         fields=replace(_FIELDS, locator=locator),
         edit=WorkSourceEdit(**stated),  # type: ignore[arg-type]
+        work_source_id=WorkSourceId(f"wsrc_{name}"),
     )
 
 
@@ -498,7 +501,7 @@ def _apply(world: _World, declaration: ConfigDeclaration, ctx: ChangeContext = _
         work_sources={
             s.slug: s
             for s in world.sources.list_all(include_retired=True)
-            if s.slug in {d.name for d in declaration.work_sources}
+            if s.slug in {d.slug for d in declaration.work_sources}
         },
         repositories={
             r.slug: r

@@ -4,7 +4,8 @@
 The apply knows no project, so its ``projects`` section is planned here and handed to it already planned. Each entry
 declares a project by slug — its name and description, and the sources and repositories it links — and reconciles
 before the scopes and routines, so they may name a project the same document declares. A ``sources`` or
-``repositories`` list an entry states is the project's whole set: a name it leaves out is unlinked, which retires that
+``repositories`` list an entry states is the project's whole set, each named by id, slug or a slug it left: one it
+leaves out is unlinked, which retires that
 link; a list the entry omits leaves the stored links. A slug some project left is refused rather than taken, naming the
 project that left it."""
 
@@ -21,9 +22,11 @@ from blizzard.hub.domain.config.carry_over import LegacyImportRefused
 from blizzard.hub.domain.config.changes import ChangeContext, ConfigChange, RecordKind
 from blizzard.hub.domain.config.repositories import REPOSITORY_KIND, RepositoryId, RepositoryRef
 from blizzard.hub.domain.config.work_sources import (
+    WORK_SOURCE_KIND,
     BuiltInWorkSource,
     ConfigFieldError,
     WorkSourceId,
+    WorkSourceRef,
     require_configurable,
 )
 from blizzard.hub.domain.kernel import id_or_slug
@@ -60,9 +63,8 @@ class EntryProjectRequired(ConfigFieldError):
 @domain_model
 @dataclass(frozen=True)
 class ProjectDeclaration:
-    """A project the document names by slug: the sparse edit of the name and description it states, the source names
-    it links, and the repositories it links — each an id, a slug or a slug the repository left (``None`` leaves the
-    stored links)."""
+    """A project the document names by slug: the sparse edit of the name and description it states, and the sources
+    and repositories it links — each an id, a slug or a slug the record left (``None`` leaves the stored links)."""
 
     slug: str
     edit: ProjectEdit
@@ -74,15 +76,16 @@ class ProjectDeclaration:
 @dataclass(frozen=True)
 class StoredProjects:
     """What the edge loaded: every project of the tenant; the project that left each slug the document names that no
-    project holds; every stored link of a declared project, unlinked ones included, by ``(project id, linked source name
-    or repository id)``; the work source names stored or declared in the document; and the repositories stored or
-    declared in it — retired ones included — with the one that left each referenced slug no repository holds."""
+    project holds; every stored link of a declared project, unlinked ones included, by ``(project id, linked source id
+    or repository id)``; and the work sources and repositories stored or declared in the document — retired ones
+    included — each kind with the record that left each referenced slug no record of it holds."""
 
     projects: tuple[Project, ...]
     former: Mapping[str, Project] = field(default_factory=dict)
     source_links: Mapping[tuple[str, str], SourceLink] = field(default_factory=dict)
     repository_links: Mapping[tuple[str, str], RepositoryLink] = field(default_factory=dict)
-    sources: frozenset[str] = frozenset()
+    sources: tuple[WorkSourceRef, ...] = ()
+    former_sources: Mapping[str, WorkSourceRef] = field(default_factory=dict)
     repositories: tuple[RepositoryRef, ...] = ()
     former_repositories: Mapping[str, RepositoryRef] = field(default_factory=dict)
 
@@ -138,6 +141,28 @@ class PlannedRepositories:
 
 @collaborator
 @dataclass(frozen=True)
+class PlannedWorkSources:
+    """Resolves a work-source reference — an id, a current slug, or a slug the source left — against the work sources
+    as the apply leaves them: those stored plus those the document declares."""
+
+    sources: tuple[WorkSourceRef, ...]
+    former: Mapping[str, WorkSourceRef] = field(default_factory=dict)
+
+    def get(self, work_source_id: WorkSourceId) -> WorkSourceRef | None:
+        return next((r for r in self.sources if r.work_source_id == work_source_id), None)
+
+    def get_by_slug(self, slug: Slug) -> WorkSourceRef | None:
+        return next((r for r in self.sources if r.slug == slug.value), None)
+
+    def get_by_former_slug(self, slug: Slug) -> WorkSourceRef | None:
+        return self.former.get(slug.value)
+
+    def resolve(self, reference: str) -> WorkSourceRef | None:
+        return id_or_slug.resolve(reference, WORK_SOURCE_KIND, self)
+
+
+@collaborator
+@dataclass(frozen=True)
 class _PlannedLookup:
     """Resolves a reference against the projects as the apply leaves them."""
 
@@ -160,6 +185,7 @@ def plan_projects(
     the tenant then holds. :class:`ApplyEntryRefused` at the first entry that cannot be applied."""
     current = {project.slug: project for project in stored.projects}
     repositories = PlannedRepositories(stored.repositories, stored.former_repositories)
+    sources = PlannedWorkSources(stored.sources, stored.former_sources)
     writes: list[PlannedWrite] = []
     outcomes: list[EntryOutcome] = []
     seen: set[str] = set()
@@ -173,11 +199,12 @@ def plan_projects(
             current[record.slug] = record
             planned.links(
                 record,
-                _source_targets(entry.sources, stored.sources),
+                _source_targets(entry.sources, sources),
                 stored.source_links,
                 SourceLink.new,
                 ctx,
                 at,
+                {ref.work_source_id: ref.slug for ref in stored.sources},
             )
             planned.links(
                 record,
@@ -186,6 +213,7 @@ def plan_projects(
                 RepositoryLink.new,
                 ctx,
                 at,
+                {ref.repository_id: ref.slug for ref in stored.repositories},
             )
             if not planned.written:
                 outcomes.append(EntryOutcome(RecordKind.PROJECT, entry.slug, None))
@@ -246,10 +274,11 @@ class _Entry:
         new: Callable[..., tuple[_Link, ConfigChange]],
         ctx: ChangeContext,
         at: datetime,
+        slugs: Mapping[str, str],
     ) -> None:
         """Link every target listed, and unlink every standing link the list leaves out; nothing for an unstated list.
-        ``targets`` maps each listed link target — a source's name, a repository's id — to the name the outcome row
-        shows."""
+        ``targets`` maps each listed link target — a source's or a repository's id — to the slug the outcome row
+        shows; ``slugs`` names an unlinked target the same way."""
         if targets is None:
             return
         for target, shown in targets.items():
@@ -261,7 +290,7 @@ class _Entry:
             self._move(project, link, link.relink(ctx, if_match=None, at=at), shown)
         for (project_id, target), link in sorted(stored.items()):
             if project_id == project.project_id and target not in targets:
-                self._move(project, link, link.unlink(ctx, if_match=None, at=at), targets.get(target, target))
+                self._move(project, link, link.unlink(ctx, if_match=None, at=at), slugs.get(target, target))
 
     def _move(self, project: Project, link: _Link, decided: tuple[_Link, ConfigChange] | None, shown: str) -> None:
         if decided is not None:
@@ -276,20 +305,23 @@ class _Entry:
         self.written = True
 
 
-def _source_targets(names: tuple[str, ...] | None, known: frozenset[str]) -> dict[str, str] | None:
-    """The sources a project entry lists, each its own shown name. Every name is checked before any link is planned:
-    the built-in hub source links every project already, and a name must be stored or declared in the document."""
-    if names is None:
+def _source_targets(references: tuple[str, ...] | None, sources: PlannedWorkSources) -> dict[str, str] | None:
+    """The sources a project entry lists — each reference resolved to the source's id, shown as its current slug.
+    Every reference is checked before any link is planned: the built-in hub source links every project already, and a
+    reference must name a source stored or declared in the document."""
+    if references is None:
         return None
-    listed = dict.fromkeys(names)
-    for name in listed:
+    targets: dict[str, str] = {}
+    for reference in references:
         try:
-            require_configurable(name)
+            require_configurable(reference)
         except BuiltInWorkSource as exc:
             raise ConfigFieldError(SOURCES_FIELD, str(exc)) from exc
-        if name not in known:
-            raise ConfigFieldError(SOURCES_FIELD, f"{name!r} is neither stored nor declared in this document")
-    return {name: name for name in listed}
+        found = sources.resolve(reference)
+        if found is None:
+            raise ConfigFieldError(SOURCES_FIELD, f"{reference!r} is neither stored nor declared in this document")
+        targets[found.work_source_id] = found.slug
+    return targets
 
 
 def _repository_targets(references: tuple[str, ...] | None, repositories: PlannedRepositories) -> dict[str, str] | None:

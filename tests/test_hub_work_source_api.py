@@ -96,7 +96,7 @@ def test_sources_listing_renders_capability_booleans(tmp_path: Path) -> None:
     hub.client.post("/api/secrets", json={"name": "gh", "value": "v"})
     hub.client.post(
         "/api/work-sources",
-        json={"name": "stored", "provider": "github", "locator": "acme/stored", "secret": "gh", "annotate": True},
+        json={"slug": "stored", "provider": "github", "locator": "acme/stored", "secret": "gh", "annotate": True},
     )
 
     sources = {row["name"]: row for row in hub.client.get("/api/work-sources").json()["sources"]}

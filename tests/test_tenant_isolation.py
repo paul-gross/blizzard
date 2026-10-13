@@ -326,7 +326,7 @@ _PROBES: dict[tuple[str, str], _Probe] = {
     ("PUT", "/api/secrets/{name}/value"): _f({"value": "stolen"}),
     ("GET", "/api/work-sources"): _LIST,
     ("POST", "/api/work-sources"): _own(
-        {"name": "beta-extra", "provider": "github", "locator": "acme/beta-extra", "secret": "{secret}"}, status=201
+        {"slug": "beta-extra", "provider": "github", "locator": "acme/beta-extra", "secret": "{secret}"}, status=201
     ),
     ("GET", "/api/work-sources/{source}"): _f(),
     ("PATCH", "/api/work-sources/{source}"): _f({}),
@@ -610,8 +610,8 @@ def _seed(hub: HubHarness, harness: TenantHarness, label: str) -> _Tenant:
         "secret_name": f"{label}-secret",
     }
     t.keep("repository", _ok(c.post("/api/repositories", json=repository), 201)["repository_id"])
-    source = {"name": f"{label}-source", "provider": "github", "locator": f"acme/{label}", "secret": f"{label}-secret"}
-    t.keep("source", _ok(c.post("/api/work-sources", json=source), 201)["name"])
+    source = {"slug": f"{label}-source", "provider": "github", "locator": f"acme/{label}", "secret": f"{label}-secret"}
+    t.keep("source", _ok(c.post("/api/work-sources", json=source), 201)["work_source_id"])
     FindingStore(scoped_connections(hub.engine, harness.tenant)).add(
         t.keep("finding_id", f"fin_{label}"),
         project_id=default_project(hub.engine, harness.tenant),

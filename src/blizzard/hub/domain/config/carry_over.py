@@ -38,6 +38,7 @@ from blizzard.hub.domain.config.work_sources import (
     ConfiguredWorkSource,
     WorkSourceFields,
     WorkSourceId,
+    WorkSourceName,
 )
 from blizzard.hub.domain.kernel.slugs import derive_slug
 
@@ -205,12 +206,14 @@ def _value(values: Mapping[str, str], variable: str) -> str:
 def _work_sources(
     legacy: LegacyKeys, existing: ExistingConfig, ctx: ChangeContext, at: datetime, outcomes: list[ImportOutcome]
 ) -> tuple[tuple[ConfiguredWorkSource, ConfigChange], ...]:
-    names = {record.slug for record in existing.work_sources}
+    slugs = {record.slug for record in existing.work_sources}
     locators = {(record.fields.provider, record.fields.locator) for record in existing.work_sources}
     planned: list[tuple[ConfiguredWorkSource, ConfigChange]] = []
     for source in legacy.sources:
-        if source.name in names or (source.provider, source.repo) in locators:
-            outcomes.append(ImportOutcome(RecordKind.WORK_SOURCE, source.name, created=False))
+        # The block's name becomes the source's display name, and the slug derived from it its handle.
+        slug = derive_slug(source.name, fallback="source")
+        if slug in slugs or (source.provider, source.repo) in locators:
+            outcomes.append(ImportOutcome(RecordKind.WORK_SOURCE, slug, created=False))
             continue
         fields = WorkSourceFields(
             provider=source.provider,
@@ -221,10 +224,15 @@ def _work_sources(
             secret=secret_name_of(source.token_env),
         )
         try:
-            planned.append(ConfiguredWorkSource.new(source.name, None, fields, ctx, at=at))
+            planned.append(
+                ConfiguredWorkSource.new(
+                    slug, source.name if WorkSourceName.of(source.name) else None, fields, ctx, at=at
+                )
+            )
         except ConfigFieldError as exc:
             raise LegacyImportRefused(f'[[work_source]] "{source.name}": {exc}') from exc
-        outcomes.append(ImportOutcome(RecordKind.WORK_SOURCE, source.name, created=True))
+        slugs.add(slug)
+        outcomes.append(ImportOutcome(RecordKind.WORK_SOURCE, slug, created=True))
     return tuple(planned)
 
 

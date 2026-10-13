@@ -16,7 +16,6 @@ from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
-from fastapi.responses import JSONResponse
 
 from blizzard.auth_core import Permission
 from blizzard.foundation.garden_proposals import GardenProposalOrigin
@@ -24,7 +23,7 @@ from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
-from blizzard.hub.api.chunk_views import ProjectLabelFields
+from blizzard.hub.api.chunk_views import ProjectLabelFields, ingest_conflict_response
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.door import RequestDoor, change_context
 from blizzard.hub.api.project_labels import ProjectLabels
@@ -52,7 +51,6 @@ from blizzard.hub.domain.garden.runs.window import InvalidWindowError, require_u
 from blizzard.hub.domain.garden.scopes import Scope, ScopeSlug, ScopeSlugError
 from blizzard.hub.domain.graph.harnesses import InvalidHarnesses
 from blizzard.hub.domain.projects.model import Project
-from blizzard.wire.chunk import ChunkIngestConflict
 from blizzard.wire.garden_proposal_counts import GardenProposalCountsRowView, GardenProposalCountsView
 from blizzard.wire.garden_sweeps import GardenSweepsView, MeasurementReadingView, ScopeSweepView
 from blizzard.wire.garden_trend import TrendAgeView, TrendPeriodView, TrendView
@@ -648,10 +646,7 @@ def run_routine(
     except (RoutineGraphUnresolvedError, ScopeRetiredError, RoutineRetiredError) as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
     except IngestConflict as exc:
-        conflict = ChunkIngestConflict(
-            existing_chunk_id=exc.existing_chunk_id, source=exc.pointer.source, ref=exc.pointer.ref
-        )
-        return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=conflict.model_dump())
+        return ingest_conflict_response(services, exc)
     # The chunk is minted `not_ready`, so its post-write status reads `not_ready`.
     chunk_events.ChunkChanged.of(services, result.chunk_id, prev_status=None).publish(
         cause="minted", key=f"chunks:{result.chunk_id}"

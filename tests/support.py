@@ -1384,10 +1384,10 @@ def build_hub(
 FIXTURE_FORGE_SECRET = "fixture-forge-token"
 
 
-def fixture_work_source(name: str, locator: str, api_base: str, *, annotate: bool = False) -> WorkSourceDocument:
+def fixture_work_source(slug: str, locator: str, api_base: str, *, annotate: bool = False) -> WorkSourceDocument:
     """A GitHub-shaped source on a fixture forge, naming :data:`FIXTURE_FORGE_SECRET`."""
     return WorkSourceDocument(
-        name=name, provider="github", locator=locator, api_base=api_base, annotate=annotate, secret=FIXTURE_FORGE_SECRET
+        slug=slug, provider="github", locator=locator, api_base=api_base, annotate=annotate, secret=FIXTURE_FORGE_SECRET
     )
 
 
@@ -1447,7 +1447,7 @@ def create_work_sources(hub: httpx.Client, sources: Sequence[WorkSourceDocument]
     for source in sources:
         created = hub.post("/api/work-sources", json=source.model_dump())
         assert created.status_code == 201, created.text
-        linked = hub.put(f"/api/projects/{project['project_id']}/source-links/{source.name}")
+        linked = hub.put(f"/api/projects/{project['project_id']}/source-links/{source.slug}")
         assert linked.status_code == 200, linked.text
 
 

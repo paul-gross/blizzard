@@ -8,7 +8,6 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import JSONResponse
 
 from blizzard.auth_core import Permission
 from blizzard.foundation.garden_proposals import GardenProposalOrigin
@@ -16,7 +15,7 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
-from blizzard.hub.api.chunk_views import ProjectLabelFields
+from blizzard.hub.api.chunk_views import ProjectLabelFields, ingest_conflict_response
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.project_labels import ProjectLabels
 from blizzard.hub.api.project_params import PathProject, QueryProject, project_of_call
@@ -49,7 +48,6 @@ from blizzard.hub.domain.kernel.pagination import DEFAULT_LIMIT, MAX_LIMIT, Malf
 from blizzard.hub.domain.kernel.unset import UNSET
 from blizzard.hub.domain.projects.model import Project
 from blizzard.hub.domain.work_items.model import WorkItemFieldBlank
-from blizzard.wire.chunk import ChunkIngestConflict
 from blizzard.wire.garden_proposal import (
     GardenProposalAcceptRequest,
     GardenProposalAcceptResponse,
@@ -258,10 +256,7 @@ def accept_garden_proposal(
     except DefaultGraphRetired as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
     except IngestConflict as exc:
-        conflict = ChunkIngestConflict(
-            existing_chunk_id=exc.existing_chunk_id, source=exc.pointer.source, ref=exc.pointer.ref
-        )
-        return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=conflict.model_dump())
+        return ingest_conflict_response(services, exc)
     if accepted.chunk_id is not None:
         # A freshly minted chunk rests `not_ready`, exactly as a `POST
         # /work-sources/hub/items` mint does.

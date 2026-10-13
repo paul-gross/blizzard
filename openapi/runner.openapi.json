@@ -5553,7 +5553,7 @@
         "type": "object"
       },
       "WorkItemEntry": {
-        "description": "One pointer's pass-through work item, vendor-native \u2014 title, body, comments, and,\nonly when the source has them to give, ``author``/``stated_priority``.\n``label``/``web_url`` are the legible pointer label and browser address, both null when no\nconfigured source names ``source``; a per-pointer failure nulls ``title``/``body`` into ``error``.",
+        "description": "One pointer's pass-through work item, vendor-native \u2014 title, body, comments, and,\nonly when the source has them to give, ``author``/``stated_priority``.\n``source`` is the pointer's source key \u2014 ``hub`` or the source's id \u2014 and ``slug`` the source's current slug.\n``label`` is the legible ``{slug}#{ref}``; ``web_url`` the browser address, null when no adapter is built for the\nsource. A per-pointer failure nulls ``title``/``body`` into ``error``.",
         "properties": {
           "author": {
             "anyOf": [
@@ -5618,6 +5618,17 @@
           "ref": {
             "title": "Ref",
             "type": "string"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug"
           },
           "source": {
             "title": "Source",
@@ -5690,7 +5701,7 @@
         "type": "object"
       },
       "WorkRefView": {
-        "description": "A pointer as the views carry it \u2014 the raw pair plus its legible label and browser URL, both\nresolved by the pointer's configured source binding. ``label`` is the legible ``{name}#{ref}``;\n``web_url`` is its browser-openable address. Both null when no configured source names ``source``.",
+        "description": "A pointer as the views carry it \u2014 the raw pair plus its legible label and browser URL, both\nresolved by the pointer's configured source binding. ``source`` is ``hub`` or the source's id; ``label`` is the\nlegible ``{slug}#{ref}``, rendered under the source's current slug; ``web_url`` is its browser-openable address,\nnull when no adapter is built for the source; ``label`` then still renders under the current slug.",
         "properties": {
           "label": {
             "anyOf": [
