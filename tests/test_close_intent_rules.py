@@ -37,7 +37,7 @@ def test_closed_and_gone_are_the_terminal_outcomes() -> None:
 
 
 def test_a_closed_ref_announces_work_item_closed() -> None:
-    assert close_event(_REF, WorkItemCloseOutcome.CLOSED, None) == CloseEvent(
+    assert close_event("forge#12", WorkItemCloseOutcome.CLOSED, None) == CloseEvent(
         kind="work-item-closed", message="closed forge#12", detail=None
     )
 
@@ -46,7 +46,7 @@ def test_a_closed_ref_announces_work_item_closed() -> None:
 def test_a_gone_or_failed_ref_announces_close_failed_with_its_outcome_and_reason(
     outcome: WorkItemCloseOutcome,
 ) -> None:
-    assert close_event(_REF, outcome, "boom") == CloseEvent(
+    assert close_event("forge#12", outcome, "boom") == CloseEvent(
         kind="work-item-close-failed",
         message="failed to close forge#12: boom",
         detail={"outcome": outcome.value, "reason": "boom"},

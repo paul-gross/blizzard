@@ -8,12 +8,17 @@ whole ingest ``409`` — re-ingest is legal once its holder is finished.
 **One project.** :func:`choose_ingest_project` owns which project the chunk is minted into: the named
 one, else the one every configured source's links agree on — the built-in hub source sits out that
 inference, and an ingest of hub items alone follows the items' own project. Every configured source
-must be linked to the project chosen; ingest never links."""
+must be linked to the project chosen; ingest never links.
+
+**Keys, not slugs.** A pointer's ``source`` is ``hub`` or a configured source's id — the registry resolved any slug
+the token named before the pointer reached here. A refusal's text renders the source's current label, which the
+service is handed (``bzh:domain-orchestration-split``); a refusal raised outside the service renders the key."""
 
 from __future__ import annotations
 
 from collections.abc import Collection, Iterable, Mapping, Sequence
 from datetime import datetime
+from typing import Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.model import Chunk, IReadWorkItemRepository, WorkRef, mint_chunk
@@ -26,13 +31,33 @@ from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import ProjectId
 
 
-class IngestConflict(Exception):
-    """A submitted pointer is already held by a live chunk — the 409 carrier."""
+class IWorkRefLabels(Protocol):
+    """How a source and a pointer display — the work-source registry is one."""
 
-    def __init__(self, *, existing_chunk_id: str, pointer: WorkRef) -> None:
-        super().__init__(f"pointer {pointer.source}#{pointer.ref} already held by live chunk {existing_chunk_id}")
+    def source_label(self, source: str) -> str:
+        """The handle the source keyed ``source`` displays under."""
+        ...
+
+    def label(self, pointer: WorkRef) -> str:
+        """``pointer`` as displayed."""
+        ...
+
+
+class IngestConflict(Exception):
+    """A submitted pointer is already held by a live chunk — the 409 carrier. ``label`` is the pointer as displayed,
+    ``{source}#{ref}`` when none is given."""
+
+    def __init__(self, *, existing_chunk_id: str, pointer: WorkRef, label: str | None = None) -> None:
+        shown = label if label is not None else f"{pointer.source}#{pointer.ref}"
+        super().__init__(f"pointer {shown} already held by live chunk {existing_chunk_id}")
         self.existing_chunk_id = existing_chunk_id
         self.pointer = pointer
+
+    def labelled(self, labels: IWorkRefLabels) -> IngestConflict:
+        """This refusal with its pointer rendered through ``labels``."""
+        return IngestConflict(
+            existing_chunk_id=self.existing_chunk_id, pointer=self.pointer, label=labels.label(self.pointer)
+        )
 
 
 class EmptyIngest(Exception):
@@ -56,11 +81,15 @@ class IngestSourceNotLinked(Exception):
     """A pointer's configured source is not linked to the ingest's project — or, with ``project``
     ``None``, to any project, so no project could take the ingest."""
 
-    def __init__(self, source: str, project: ProjectId | None) -> None:
+    def __init__(self, source: str, project: ProjectId | None, *, label: str | None = None) -> None:
         target = f"project {project}" if project is not None else "any project"
-        super().__init__(f"source {source} is not linked to {target}")
+        super().__init__(f"source {label if label is not None else source} is not linked to {target}")
         self.source = source
         self.project = project
+
+    def labelled(self, labels: IWorkRefLabels) -> IngestSourceNotLinked:
+        """This refusal with its source rendered through ``labels``."""
+        return IngestSourceNotLinked(self.source, self.project, label=labels.source_label(self.source))
 
 
 class IngestProjectUnknown(Exception):
@@ -180,9 +209,11 @@ class IngestService:
         exclusive: IChunkExclusiveWrites,
         links: IReadProjectLinks,
         items: IReadWorkItemRepository,
+        labels: IWorkRefLabels,
         clock: IClock,
     ) -> None:
         self._record = record
+        self._labels = labels
         # The locked-transaction seam (``bzh:store-exclusive-write``): whether a pointer is held
         # is read under the pointer's lock, on the connection the mint then writes on.
         self._exclusive = exclusive
@@ -198,7 +229,12 @@ class IngestService:
         work_refs = ingest_work_refs(pointers)
         configured = configured_sources(work_refs)
         links = {source: self._links.projects_linking_source(source) for source in configured}
-        return choose_ingest_project(project, work_refs, links, self._recorded_projects(project, configured, work_refs))
+        try:
+            return choose_ingest_project(
+                project, work_refs, links, self._recorded_projects(project, configured, work_refs)
+            )
+        except IngestSourceNotLinked as exc:
+            raise exc.labelled(self._labels) from None
 
     def ingest(self, pointers: Sequence[WorkRef], *, graph: Graph, project: ProjectId | None) -> str:
         """Mint a chunk wrapping ``pointers`` into ``project`` — or, with ``None``, the project
@@ -211,16 +247,19 @@ class IngestService:
         rather than minting a chunk its project no longer draws from."""
         work_refs = ingest_work_refs(pointers)
         chosen = self.choose_project(work_refs, project)
-        with self._exclusive.locked_work_refs(work_refs, project=chosen) as handle:
-            choose_ingest_project(chosen, work_refs, handle.source_links(configured_sources(work_refs)), {})
-            chunk = decide_ingest(
-                work_refs,
-                live_holders=handle.live_holders(work_refs),
-                graph=graph,
-                project_id=chosen,
-                at=self._clock.now(),
-            )
-            self._record.mint_locked(handle, chunk)
+        try:
+            with self._exclusive.locked_work_refs(work_refs, project=chosen) as handle:
+                choose_ingest_project(chosen, work_refs, handle.source_links(configured_sources(work_refs)), {})
+                chunk = decide_ingest(
+                    work_refs,
+                    live_holders=handle.live_holders(work_refs),
+                    graph=graph,
+                    project_id=chosen,
+                    at=self._clock.now(),
+                )
+                self._record.mint_locked(handle, chunk)
+        except (IngestSourceNotLinked, IngestConflict) as exc:
+            raise exc.labelled(self._labels) from None
         return chunk.chunk_id
 
     def _recorded_projects(

@@ -31,8 +31,9 @@ class WorkRefModel(BaseModel):
 
 class WorkRefView(BaseModel):
     """A pointer as the views carry it — the raw pair plus its legible label and browser URL, both
-    resolved by the pointer's configured source binding. ``label`` is the legible ``{name}#{ref}``;
-    ``web_url`` is its browser-openable address. Both null when no configured source names ``source``."""
+    resolved by the pointer's configured source binding. ``source`` is ``hub`` or the source's id; ``label`` is the
+    legible ``{slug}#{ref}``, rendered under the source's current slug; ``web_url`` is its browser-openable address.
+    Both null when no configured source has the key ``source``."""
 
     source: str
     ref: str

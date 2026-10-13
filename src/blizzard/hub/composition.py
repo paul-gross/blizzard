@@ -993,6 +993,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             exclusive=chunk_exclusive,
             links=stores.project_links,
             items=work_item_store,
+            labels=work_sources,
             clock=clock,
         ),
         promote=PromoteService(

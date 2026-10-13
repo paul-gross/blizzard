@@ -56,9 +56,9 @@ def delivery_closure(
     closure: GardenProposalClosure,
     proposal: GardenProposal,
     by_id: Mapping[str, Finding],
-    pointer: WorkRef,
+    label: str,
 ) -> DeliveryClosure | None:
-    """What delivering `pointer`'s item closes: `proposal`'s still-live findings, in its own order,
+    """What delivering the item displayed as `label` closes: `proposal`'s still-live findings, in its own order,
     delivered on the accepter's behalf (`blizzard-context:/domain/findings-and-proposals.md` §Closing a
     proposal). `None` when `closure` is not the accept that minted the item, or no finding it names is
     still live; the model's own skip (:meth:`Finding.deliver_fact`) leaves the rest as they stand."""
@@ -69,7 +69,7 @@ def delivery_closure(
         return None
     return DeliveryClosure(
         findings=live,
-        note=f"delivered by {pointer.source}:{pointer.ref}",
+        note=f"delivered by {label}",
         actor=closure.closed_by,
         proposal_id=closure.proposal_id,
     )
@@ -93,11 +93,11 @@ class GardenProposalDeliveryResolution:
         self._findings = findings
         self._exits = exits
 
-    def resolve_for_item(self, pointer: WorkRef) -> None:
+    def resolve_for_item(self, pointer: WorkRef, *, label: str) -> None:
         """No-op unless `pointer` is the item an accepted, minting closure names — a
         pass, a declined accept, an item from no garden proposal at all, or a proposal
         this method has already closed once (`has_delivery_for_proposal`) all resolve
-        nothing."""
+        nothing. `label` is `pointer` as its source displays it, which the closing note names."""
         closure = self._closures.find_by_item(pointer.source, pointer.ref)
         if closure is None or not closure.mints_delivery:
             return
@@ -106,7 +106,7 @@ class GardenProposalDeliveryResolution:
         proposal = self._proposals.get(closure.proposal_id)
         if proposal is None:
             return
-        decided = delivery_closure(closure, proposal, self._findings.get_many(proposal.findings), pointer)
+        decided = delivery_closure(closure, proposal, self._findings.get_many(proposal.findings), label)
         if decided is None:
             return
         self._exits.deliver(decided.findings, note=decided.note, actor=decided.actor, proposal_id=decided.proposal_id)

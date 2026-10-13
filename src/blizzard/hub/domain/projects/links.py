@@ -146,8 +146,9 @@ class IReadProjectLinks(Protocol):
         """The project's standing repository links, ordered by repository id."""
         ...
 
-    def projects_linking_source(self, work_source_id: WorkSourceId) -> list[ProjectId]:
-        """The projects a standing link draws from ``work_source_id``, ordered by id."""
+    def projects_linking_source(self, work_source_id: str) -> list[ProjectId]:
+        """The projects a standing link draws from the configured source ``work_source_id`` — a pointer's ``source``,
+        so a :data:`WorkSourceId` held as a plain key — ordered by id."""
         ...
 
     def linked_at(self, project_id: ProjectId, source: str, at: datetime) -> bool:

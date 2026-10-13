@@ -272,7 +272,7 @@ class ProjectLinkStore:
             for name, revision in self._standing_of("repositories_of", _REPOSITORIES, project_id)
         ]
 
-    def projects_linking_source(self, work_source_id: WorkSourceId) -> list[ProjectId]:
+    def projects_linking_source(self, work_source_id: str) -> list[ProjectId]:
         with self._store.read("projects_linking_source") as conn:
             return projects_linking_source_conn(conn, work_source_id)
 

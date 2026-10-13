@@ -13,7 +13,7 @@ from blizzard.foundation.garden_proposals import (
     GardenProposalItemOutcome,
     GardenProposalOrigin,
 )
-from blizzard.hub.domain.chunk.model import HubWorkItem, WorkItemAuthor, WorkRef
+from blizzard.hub.domain.chunk.model import HubWorkItem, WorkItemAuthor
 from blizzard.hub.domain.garden.findings.model import Finding
 from blizzard.hub.domain.garden.proposals.closure import (
     GardenProposalBodyWithoutMint,
@@ -467,7 +467,7 @@ def test_delivery_closes_only_the_still_live_findings_on_the_accepters_behalf() 
         "fin_4": _finding("fin_4", state="wont-fix"),
     }
 
-    decided = delivery_closure(_MINTED, proposal, by_id, WorkRef(source="hub", ref="7"))
+    decided = delivery_closure(_MINTED, proposal, by_id, "hub:7")
 
     assert decided == DeliveryClosure(
         findings=[live_1, live_3], note="delivered by hub:7", actor="u0", proposal_id="gprop_1"
@@ -478,10 +478,10 @@ def test_delivery_closes_only_the_still_live_findings_on_the_accepters_behalf() 
 def test_delivery_reaches_nothing_through_a_closure_that_minted_no_item(closure: GardenProposalClosure) -> None:
     by_id = {"fin_1": _finding("fin_1")}
 
-    assert delivery_closure(closure, _proposal(), by_id, WorkRef(source="hub", ref="7")) is None
+    assert delivery_closure(closure, _proposal(), by_id, "hub:7") is None
 
 
 def test_delivery_with_no_live_finding_closes_nothing() -> None:
     by_id = {"fin_1": _finding("fin_1", state="gone")}
 
-    assert delivery_closure(_MINTED, _proposal(), by_id, WorkRef(source="hub", ref="7")) is None
+    assert delivery_closure(_MINTED, _proposal(), by_id, "hub:7") is None
