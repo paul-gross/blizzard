@@ -223,7 +223,8 @@ describe('FleetLiveUpdates', () => {
     expect(keys).toContainEqual(['hub', 'queue']);
     expect(keys).toContainEqual(['hub', 'backlog']);
     expect(keys).toContainEqual(['hub', 'runners']);
-    expect(keys).toHaveLength(3);
+    expect(keys).toContainEqual(['hub', 'hosts']);
+    expect(keys).toHaveLength(4);
   });
 
   it('flushes a lone event within the coalesce window bound on an otherwise quiet stream (issue #310)', () => {
@@ -444,7 +445,7 @@ describe('FleetLiveUpdates', () => {
     expect(keys).toContainEqual(['hub', 'backlog']);
   });
 
-  it('accepts a host-changed frame, keeping it out of the ring and invalidating nothing', () => {
+  it('re-reads the hosts and runners on a host-changed frame, keeping it out of the ring', () => {
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
     TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
     const live = TestBed.inject(FleetLiveUpdates);
@@ -455,7 +456,23 @@ describe('FleetLiveUpdates', () => {
     vi.advanceTimersByTime(INVALIDATION_COALESCE_WINDOW_MS);
 
     expect(live.log()).toHaveLength(0);
-    expect(invalidate).not.toHaveBeenCalled();
+    const keys = invalidate.mock.calls.map((call) => call[0]?.queryKey);
+    expect(keys).toEqual(expect.arrayContaining([['hub', 'hosts'], ['hub', 'runners']]));
+    expect(keys).toHaveLength(2);
+  });
+
+  it('re-reads the hosts on a runner-changed frame, since host usage samples arrive as spender frames', () => {
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
+
+    const source = FakeEventSource.instances[0];
+    source.open();
+    source.emitNamed('runner-changed', JSON.stringify({ runner_id: 'rn_1', kind: 'external-usage' }));
+    vi.advanceTimersByTime(INVALIDATION_COALESCE_WINDOW_MS);
+
+    const keys = invalidate.mock.calls.map((call) => call[0]?.queryKey);
+    expect(keys).toContainEqual(['hub', 'hosts']);
+    expect(keys).toContainEqual(['hub', 'runners']);
   });
 
   it('keeps one transition through lease and usage refreshes while invalidating every chunk fact', () => {

@@ -44,6 +44,7 @@ export class RunnersPage {
   /** The registry rows and their async state, from the shared {@link injectRunnerRows} fold. */
   private readonly runnerRows = injectRunnerRows(() => this.showRetired());
   protected readonly state = this.runnerRows.state;
+  protected readonly cards = this.runnerRows.cards;
 
   /** Every runner id the shared `pauseMutation` is currently in flight for — one
    * mutation instance fires once per toggled row, so this is scoped by `mutationKey`

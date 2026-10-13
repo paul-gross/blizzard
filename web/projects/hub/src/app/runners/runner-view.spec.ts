@@ -1,6 +1,7 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
+import type { HostCard } from './host-rows.model';
 import type { RunnerRow } from './runner-rows';
 import { RunnerPanelView } from './runner-view';
 
@@ -24,6 +25,8 @@ const row = (id: string, over: Partial<RunnerRow> = {}): RunnerRow => ({
   served: [],
   unassigned: false,
   unresolved: [],
+  bindingLines: [],
+  subscriptionName: null,
   ...over,
 });
 
@@ -454,5 +457,102 @@ describe('RunnerPanelView', () => {
       const el = fixture.nativeElement as HTMLElement;
       expect(el.querySelector('[data-testid="runner-seen"]')?.textContent).toBe('offline');
     });
+  });
+});
+
+describe('RunnerPanelView host cards', () => {
+  const CARD: HostCard = {
+    hostId: 'h1',
+    hostName: 'build-box',
+    online: true,
+    connection: 'online',
+    reportLabel: 'seen 4s ago',
+    workspaces: [
+      { workspaceId: 'ws-1', capacity: 3, inUse: 2, flag: null, environments: [] },
+      { workspaceId: 'ws-2', capacity: null, inUse: 0, flag: null, environments: [] },
+    ],
+    subscriptionPaces: [
+      {
+        slug: 'anthropic',
+        name: 'Anthropic',
+        paceBars: [],
+        condition: null,
+        sampledAt: null,
+        refreshedLabel: null,
+        freshness: null,
+        missReason: null,
+        spenders: ['rA-name'],
+      },
+    ],
+  };
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [RunnerPanelView],
+      providers: [provideZonelessChangeDetection()],
+    }).compileComponents();
+  });
+
+  async function renderCards(rows: readonly RunnerRow[], cards: readonly HostCard[]): Promise<HTMLElement> {
+    const fixture = TestBed.createComponent(RunnerPanelView);
+    fixture.componentRef.setInput('state', 'ready');
+    fixture.componentRef.setInput('rows', rows);
+    fixture.componentRef.setInput('cards', cards);
+    await fixture.whenStable();
+    return fixture.nativeElement as HTMLElement;
+  }
+
+  it('renders one card holding both of its runners, its workspaces, and each subscription once with its spenders', async () => {
+    const el = await renderCards(
+      [
+        row('rA', { host_id: 'h1', env_capacity: 2, bindingLines: [{ project: 'Default', workspaceId: 'ws-1', agents: 2, agentsInUse: 1, unreported: false }], subscriptionName: 'Anthropic' }),
+        row('rB', { host_id: 'h1', subscription_unrostered: true, subscriptionName: 'zzz' }),
+        row('rC'),
+      ],
+      [CARD],
+    );
+
+    const cards = el.querySelectorAll('[data-testid="host-card"]');
+    expect(cards).toHaveLength(1);
+    const card = cards[0];
+    expect(card.querySelector('[data-testid="host-name"]')?.textContent?.trim()).toBe('build-box');
+    expect(card.querySelector('[data-testid="host-report"]')?.textContent?.trim()).toBe('seen 4s ago');
+    expect([...card.querySelectorAll('[data-testid="runner"]')].map((li) => li.getAttribute('data-runner'))).toEqual(['rA', 'rB']);
+    expect([...card.querySelectorAll('[data-testid="workspace-row"]')].map((ws) => ws.getAttribute('data-workspace-id'))).toEqual(['ws-1', 'ws-2']);
+    expect(card.querySelector('[data-testid="workspace-in-use"]')?.textContent?.trim()).toBe('2 / 3 in use');
+    expect(card.querySelectorAll('[data-testid="host-subscriptions"]')).toHaveLength(1);
+    expect(card.querySelector('[data-testid="host-subscriptions"]')?.textContent).toContain('rA-name');
+
+    // A hosted row shows its bindings and subscription in place of its workspace line and slot bar.
+    const rA = card.querySelector('[data-runner="rA"]');
+    expect(rA?.querySelector('[data-testid="runner-binding-agents"]')?.textContent?.trim()).toBe('1 / 2 agents');
+    expect(rA?.querySelector('[data-testid="runner-subscription-name"]')?.textContent?.trim()).toBe('Anthropic');
+    expect(rA?.querySelector('[data-testid="runner-slot-bar"]')).toBeNull();
+    expect(card.querySelector('[data-runner="rB"] [data-testid="runner-subscription-unrostered"]')).not.toBeNull();
+  });
+
+  it('renders a host-less runner under its own heading, below the cards', async () => {
+    const el = await renderCards([row('rA', { host_id: 'h1' }), row('rC', { env_capacity: 2 })], [CARD]);
+
+    const heading = el.querySelector('[data-testid="hostless-heading"]');
+    expect(heading?.textContent?.trim()).toBe('No host');
+    const hostless = el.querySelector('[data-testid="runner-list"]');
+    expect([...(hostless?.querySelectorAll('[data-testid="runner"]') ?? [])].map((li) => li.getAttribute('data-runner'))).toEqual(['rC']);
+    expect(hostless?.querySelector('[data-testid="runner-served"]')).not.toBeNull();
+    expect(el.querySelector('[data-runner="rC"] [data-testid="runner-slot-bar"]')).not.toBeNull();
+  });
+
+  it('shows the host-less heading when no host is registered', async () => {
+    const el = await renderCards([row('rC')], []);
+
+    expect(el.querySelector('[data-testid="host-card"]')).toBeNull();
+    expect(el.querySelector('[data-testid="hostless-heading"]')).not.toBeNull();
+  });
+
+  it('renders a host holding no runner as a card with no rows', async () => {
+    const el = await renderCards([], [CARD]);
+
+    expect(el.querySelectorAll('[data-testid="host-card"]')).toHaveLength(1);
+    expect(el.querySelector('[data-testid="hostless-heading"]')).toBeNull();
   });
 });

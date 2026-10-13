@@ -1,9 +1,12 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
+import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
 import { type ChunkStatus, STATUS_TONE, KitAsyncState, type KitAsyncStateValue, KitBadge, KitButton, KitPanel, KitSlotBar, RunnerConnection, SubscriptionPaceGroup, type Tone } from 'fleet';
 import { CapabilityBadgeGroup } from './capability-badge-group';
 import { GateBadgeGroup } from './gate-badge-group';
 import { localPauseHint, runnerSeenLabel, runnerToggleHint, type RunnerRow } from './runner-rows';
+import { HostCardView } from './host-card';
+import { groupHostRows, type HostCard, type HostGroups } from './host-rows.model';
 import { ServedProjectGroup } from './served-project-group';
 
 /**
@@ -15,13 +18,20 @@ import { ServedProjectGroup } from './served-project-group';
 @Component({
   selector: 'app-runner-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CapabilityBadgeGroup, GateBadgeGroup, KitAsyncState, KitBadge, KitButton, KitPanel, KitSlotBar, ServedProjectGroup, SubscriptionPaceGroup],
+  imports: [HostCardView, NgTemplateOutlet, CapabilityBadgeGroup, GateBadgeGroup, KitAsyncState, KitBadge, KitButton, KitPanel, KitSlotBar, ServedProjectGroup, SubscriptionPaceGroup],
   templateUrl: './runner-view.html',
   styleUrl: './runner-view.css',
 })
 export class RunnerPanelView {
   /** The registry rows to render — each runner plus its pre-folded claims. */
   readonly rows = input.required<readonly RunnerRow[]>();
+
+  /** The host cards the rows group under — a row whose host has no card renders under the
+   * host-less heading, as every row does when there are no cards. */
+  readonly cards = input<readonly HostCard[]>([]);
+
+  /** {@link rows} partitioned under {@link cards}. */
+  protected readonly groups = computed<HostGroups<RunnerRow>>(() => groupHostRows(this.rows(), this.cards()));
 
   /** The registry query's async state (AC 3) — loading/error withhold the empty
    * copy until the read resolves. */

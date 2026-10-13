@@ -1,5 +1,6 @@
 import {
   type ChunkStatus,
+  type HostRegistryView,
   RunnerConnection,
   type RunnerRegistryView,
   type SubscriptionPace,
@@ -10,6 +11,7 @@ import {
 import type { ChunkSummary } from 'fleet/shell';
 
 import { isUnassigned, servedProjects, unresolvedEntries } from '../core/project-serving';
+import { type BindingLine, bindingLines, subscriptionName } from './host-rows.model';
 
 /** One claim line under a registry row: the chunk a runner holds, where it sits, and
  * how it is doing there — the node alone reads the same for a chunk actively
@@ -47,6 +49,11 @@ export interface RunnerRow extends RunnerRegistryView {
   readonly unassigned: boolean;
   /** The entries of the runner's declaration that name no project of the tenant, as the runner wrote them. */
   readonly unresolved: readonly string[];
+  /** Each binding the runner declares under its host, with its agents in use; empty for a host-less runner. */
+  readonly bindingLines: readonly BindingLine[];
+  /** The display name of the runner's one subscription, from its host's roster (the slug where the roster names
+   * none); `null` when it names no subscription. */
+  readonly subscriptionName: string | null;
   /** The registry's one clock reading (`injectNowSignal`), so every time-relative label on
    * the row — pace bars, "seen Ns ago" — ticks together rather than each reading `Date.now()`. */
   readonly nowMs: number;
@@ -103,15 +110,18 @@ function usedByRunner(chunks: readonly ChunkSummary[]): Map<string, number> {
   return used;
 }
 
-/** Each runner with its claims, slot-bar numerator, and subscription pace groups folded
- * on, every time-relative field read against the one `nowMs`. */
+/** Each runner with its claims, slot-bar numerator, subscription pace groups, and bindings
+ * folded on, every time-relative field read against the one `nowMs`; `hosts` is the roster
+ * each runner's subscription name resolves from. */
 export function foldRunnerRows(
   runners: readonly RunnerRegistryView[],
   chunks: readonly ChunkSummary[],
   nowMs: number,
+  hosts: readonly HostRegistryView[] = [],
 ): readonly RunnerRow[] {
   const claims = claimsByRunner(chunks);
   const used = usedByRunner(chunks);
+  const hostsById = new Map(hosts.map((host) => [host.host_id, host]));
   return runners.map((runner) => ({
     ...runner,
     claims: claims.get(runner.runner_id) ?? [],
@@ -120,6 +130,8 @@ export function foldRunnerRows(
     served: servedNames(runner),
     unassigned: isUnassigned(runner),
     unresolved: unresolvedEntries(runner),
+    bindingLines: bindingLines(runner, chunks),
+    subscriptionName: subscriptionName(runner, hostsById),
     nowMs,
   }));
 }
@@ -136,7 +148,7 @@ function servedNames(runner: RunnerRegistryView): readonly string[] {
  * declaration resolves to the lensed project (matched by its current slug, which the lens holds), and the unassigned
  * ones, which serve no project and so wait on every project alike.
  */
-export function lensRunners(runners: readonly RunnerRegistryView[], slug: string | null): readonly RunnerRegistryView[] {
+export function lensRunners<Runner extends RunnerRegistryView>(runners: readonly Runner[], slug: string | null): readonly Runner[] {
   if (slug === null) return runners;
   return runners.filter(
     (runner) =>

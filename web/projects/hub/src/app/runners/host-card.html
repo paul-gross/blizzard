@@ -1,0 +1,27 @@
+<section
+  class="host"
+  data-testid="host-card"
+  [attr.data-host]="card().hostId"
+  [attr.data-connection]="card().connection"
+  [attr.aria-label]="'Host ' + card().hostName"
+>
+  <div class="head">
+    <span class="name" data-testid="host-name">
+      <span
+        class="dot"
+        [class.online]="card().online"
+        [class.offline]="card().connection === connection.OFFLINE"
+        aria-hidden="true"
+      ></span>
+      {{ card().hostName }}
+    </span>
+    <span class="report" data-testid="host-report">{{ card().reportLabel }}</span>
+  </div>
+  @if (card().workspaces.length > 0) {
+    <fleet-workspace-table data-testid="host-workspaces" [workspaces]="card().workspaces" />
+  }
+  @if (card().subscriptionPaces.length > 0) {
+    <fleet-subscription-pace-group data-testid="host-subscriptions" [subscriptionPaces]="card().subscriptionPaces" />
+  }
+  <ng-content />
+</section>

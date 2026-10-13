@@ -16,6 +16,8 @@ export const hubQueueKey = ['hub', 'queue'] as const;
  * key rather than sharing {@link hubQueueKey}. */
 export const hubBacklogKey = ['hub', 'backlog'] as const;
 export const hubRunnersKey = ['hub', 'runners'] as const;
+/** The host registry read (`GET /api/hosts`) — the hosts the runners view groups its runners under. */
+export const hubHostsKey = ['hub', 'hosts'] as const;
 export const hubQuestionsKey = ['hub', 'questions'] as const;
 /** The fleet-wide open-decision read (`GET /api/decisions`) — every gate awaiting a person. */
 export const hubDecisionsKey = ['hub', 'decisions'] as const;

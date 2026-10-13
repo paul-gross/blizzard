@@ -55,6 +55,10 @@
  *     runner registry's rate-limit pace bars (issue #218): the stacked
  *     utilization/elapsed pair per sampled window genuinely stacks, with no
  *     horizontal overflow, at the board right rail's ~390px width.
+ *   - projects/hub/src/app/runners/host-card.shell-sweep.spec.ts — the runner
+ *     registry's host card: a two-runner card (long workspace id, binding
+ *     lines, flagged subscription) above a host-less row stays inside the
+ *     panel with its rows stacked at 390/1280px.
  *   - projects/runner/src/app/core/identity/session-recovery-view.shell-sweep.spec.ts —
  *     the runner's session-recovery surface (blizzard#312), which replaces the
  *     whole panel while a bounce could not be silently completed: the
@@ -236,7 +240,8 @@
  *     Fleet screen (the bottom-nav Fleet tab): each runner card genuinely stacks below
  *     the last with no horizontal overflow at 390/320px, and a card carrying claims, a
  *     slot bar, and a grouped subscription pace bar with a long name stays inside its
- *     own width.
+ *     own width; and a two-runner host card above a host-less row stays inside the
+ *     panel at 390/320px.
  *   - projects/fleet/src/lib/kit/kit-master-detail.shell-sweep.spec.ts — the
  *     `KitMasterDetail` shell's collapse rule: the list pane sits beside the detail
  *     pane, sized to `--master-list-col`, at 1024px, and genuinely stacks above it with
@@ -284,6 +289,7 @@ const SWEEPS = [
   { project: 'runner', spec: 'projects/runner/src/app/shell/nav/app-header.shell-sweep.spec.ts' },
   { project: 'runner', spec: 'projects/runner/src/app/board/app-panel-mobile.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/runners/runner-view.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/runners/host-card.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/chunk/chunk-detail/chunk-awaiting-human.shell-sweep.spec.ts' },
   { project: 'runner', spec: 'projects/runner/src/app/machine/app-info-view.shell-sweep.spec.ts' },
   { project: 'runner', spec: 'projects/runner/src/app/core/identity/session-recovery-view.shell-sweep.spec.ts' },
