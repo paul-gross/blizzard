@@ -5,6 +5,8 @@
   [canPause]="canPause()"
   [pendingRunnerIds]="pendingRunnerIds()"
   [actionError]="actionError()"
+  [hostVerbs]="hostVerbsVm()"
+  (hostVerb)="runHostVerb($event)"
   [showRetired]="showRetired()"
   (toggleShowRetired)="toggleShowRetired()"
   (togglePause)="toggle($event)"

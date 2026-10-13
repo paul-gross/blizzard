@@ -4,6 +4,8 @@ import { type RunnerRegistryView, errorMessage, injectPendingMutationVariables }
 import { hasPermission, injectMeQuery } from '../core/auth/me.query';
 import { runnerPauseMutationKey } from '../core/mutation-keys';
 import { RunnerPanelView } from './runner-view';
+import { injectHostVerbs } from './host-verbs';
+import type { HostVerbEvent } from './host-verbs.model';
 import { injectRunnerPauseMutation, type RunnerPauseVars } from './runners.mutations';
 import { injectRunnerRows, type RunnerRow } from './runner-rows';
 import { pendingRunnerIds, withPendingRunnerPauses } from './runner-pause-override.model';
@@ -73,6 +75,15 @@ export class RunnerPanel {
   /** The panel's last pause/resume failure, or `null` ("report, don't
    * swallow") — reset at the start of every new attempt. */
   protected readonly actionError = signal<string | null>(null);
+
+  /** The host verbs on each card — release, retire, revoke-token, enroll — behind
+   * `runner:retire`, their failures reported through {@link actionError}. */
+  private readonly hostVerbs = injectHostVerbs((message) => this.actionError.set(message));
+  protected readonly hostVerbsVm = this.hostVerbs.vm;
+
+  protected runHostVerb(event: HostVerbEvent): void {
+    this.hostVerbs.run(event);
+  }
 
   protected toggle(runner: RunnerRegistryView): void {
     this.actionError.set(null);

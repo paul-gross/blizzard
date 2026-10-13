@@ -5,5 +5,7 @@
   [canPause]="canPause()"
   [pendingRunnerIds]="pendingRunnerIds()"
   [actionError]="actionError()"
+  [hostVerbs]="hostVerbsVm()"
+  (hostVerb)="runHostVerb($event)"
   (togglePause)="toggle($event)"
 />
