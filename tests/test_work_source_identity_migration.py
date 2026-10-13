@@ -36,7 +36,7 @@ from tests.test_store_migrations import _schema_snapshot
 
 pytestmark = pytest.mark.component
 
-_BEFORE = "20261012_0900_repository_identity"
+_BEFORE = "20261012_1000_hosts"
 _IDENTITY = "20261012_1500_work_source_identity"
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 _NOW = datetime(2026, 10, 12, 15, 0, tzinfo=UTC)
