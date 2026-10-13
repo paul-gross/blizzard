@@ -2184,6 +2184,9 @@ def _conforms_in_memory_egress_writer(x: InMemoryEgressWriter) -> IEgressWriter:
     return x
 
 
+_DRAINABLE_SOURCE = "wsrc_github"
+
+
 def seed_drainable_history(
     conn: sa.Connection, tenant: TenantId, *, graph_id: str, node_id: str, at: datetime, open_refs: int = 1
 ) -> None:
@@ -2192,11 +2195,25 @@ def seed_drainable_history(
     owns), migrated by that runner's landing — which released the route — restarted at a hub-owned epoch, and completed
     with one work ref whose close was enqueued and retired; chunk ``ch_open`` holds ``open_refs`` work refs and nothing
     else. Both chunks pin ``graph_id``, the tenant's own, whose ``node_id`` a runner executes, and name the source
-    ``github``, which the tenant's only project linked at ``at``.
+    the work source ``github`` (id ``wsrc_github``), which the tenant's only project linked at ``at``.
     Partway through a drain the epoch owners, route facts and close intents are gone while the restart, the migration,
     the completion and some work refs are not. Chunk ids are global: one store holds one such history."""
     later = at + timedelta(seconds=1)
     rows: list[tuple[sa.Table, dict[str, Any]]] = [
+        (
+            schema.work_sources,
+            {
+                "work_source_id": _DRAINABLE_SOURCE,
+                "slug": "github",
+                "name": "github",
+                "provider": "github",
+                "locator": "acme/app",
+                "annotate": False,
+                "revision": 1,
+                "created_at": at,
+                "created_by": "seed",
+            },
+        ),
         (schema.chunks, {"chunk_id": "ch_ran", "graph_id": graph_id, "minted_at": at, "model": "m"}),
         (schema.chunks, {"chunk_id": "ch_open", "graph_id": graph_id, "minted_at": at, "model": "m"}),
         (schema.epoch_owners, {"chunk_id": "ch_ran", "epoch": 1, "runner_id": "r1", "recorded_at": at}),
@@ -2240,10 +2257,10 @@ def seed_drainable_history(
             },
         ),
         (schema.chunk_completed, {"chunk_id": "ch_ran", "completed_at": later, "completed_by": "op"}),
-        (schema.chunk_work_refs, {"chunk_id": "ch_ran", "source": "github", "ref": "1"}),
+        (schema.chunk_work_refs, {"chunk_id": "ch_ran", "source": _DRAINABLE_SOURCE, "ref": "1"}),
         (
             schema.close_intents,
-            {"chunk_id": "ch_ran", "source": "github", "ref": "1", "enqueued_at": later, "retired_at": later},
+            {"chunk_id": "ch_ran", "source": _DRAINABLE_SOURCE, "ref": "1", "enqueued_at": later, "retired_at": later},
         ),
     ]
     for table, values in rows:
@@ -2252,7 +2269,7 @@ def seed_drainable_history(
     project_id = conn.execute(
         hub_scoped(sa.select(projects.project_id).where(projects.tenant_id == tenant))
     ).scalar_one()
-    link = {"tenant_id": tenant, "project_id": project_id, "work_source_id": "github"}
+    link = {"tenant_id": tenant, "project_id": project_id, "work_source_id": _DRAINABLE_SOURCE}
     conn.execute(hub_scoped(sa.insert(schema.project_source_links)).values(**link, revision=1))
     conn.execute(
         hub_scoped(sa.insert(schema.project_source_link_facts)).values(**link, linked=True, set_at=at, set_by="seed")
@@ -2261,7 +2278,7 @@ def seed_drainable_history(
         conn.execute(
             hub_scoped(sa.insert(schema.chunk_work_refs)),
             [
-                {"tenant_id": tenant, "chunk_id": "ch_open", "source": "github", "ref": f"o{n}"}
+                {"tenant_id": tenant, "chunk_id": "ch_open", "source": _DRAINABLE_SOURCE, "ref": f"o{n}"}
                 for n in range(open_refs)
             ],
         )

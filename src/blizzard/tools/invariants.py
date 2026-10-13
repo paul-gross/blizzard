@@ -1426,6 +1426,61 @@ class RepositoryReferencesInTenant(HubQueryCheck):
         )
 
 
+class WorkSourceReferencesInTenant(HubQueryCheck):
+    """``hub:work-source-references-in-tenant`` — every stored reference to a work source names one of the
+    reference's own tenant: its lifecycle facts, its links and their facts, its forge annotations, the change rows
+    keyed by a work-source id (a source's and a project link's), and every work ref's source, which is ``hub`` or a
+    source id. The foreign keys say only that the source exists, not whose it is, and a work ref's source has no
+    foreign key at all, so a ref left naming no source — one stranded before sources were records — is reported
+    here too."""
+
+    #: Each referring table, its key column for a message, and its column naming the work source.
+    REFERRING: ClassVar[tuple[tuple[Table, str, str], ...]] = (
+        (hub.work_source_lifecycle_facts, "id", "work_source_id"),
+        (hub.project_source_links, "project_id", "work_source_id"),
+        (hub.project_source_link_facts, "id", "work_source_id"),
+        (hub.forge_annotation_facts, "id", "work_source_id"),
+        (hub.chunk_work_refs, "id", "source"),
+        (hub.work_item_closures, "id", "source"),
+        (hub.close_intents, "id", "source"),
+        (hub.garden_proposal_closures, "id", "source"),
+    )
+
+    def run(self) -> list[Violation]:
+        sources = hub.work_sources
+        tenant_of = {
+            row.work_source_id: row.tenant_id
+            for row in self.rows(select(sources.c.work_source_id, sources.c.tenant_id))
+        }
+        violations: list[Violation] = []
+        for table, key, column in self.REFERRING:
+            query = select(table.c[key], table.c.tenant_id, table.c[column]).where(
+                table.c[column].is_not(None), table.c[column] != RESERVED_HUB_SOURCE_NAME
+            )
+            violations.extend(
+                self._violation(table.name, row[0], row.tenant_id, row[2])
+                for row in self.rows(query.order_by(table.c[key]))
+                if tenant_of.get(row[2]) != row.tenant_id
+            )
+        changes = hub.config_changes
+        keyed = select(changes.c.id, changes.c.tenant_id, changes.c.record_key).where(
+            changes.c.record_kind.in_(("work_source", "project_source_link"))
+        )
+        violations.extend(
+            self._violation("config_changes", row.id, row.tenant_id, row.record_key)
+            for row in self.rows(keyed.order_by(changes.c.id))
+            if tenant_of.get(row.record_key) != row.tenant_id
+        )
+        return violations
+
+    @staticmethod
+    def _violation(table: str, key: object, tenant: str, work_source_id: str) -> Violation:
+        return Violation(
+            "hub:work-source-references-in-tenant",
+            f"{table} row {key} of tenant {tenant} names work source {work_source_id}, not a work source of its tenant",
+        )
+
+
 def _earliest_links(check: HubQueryCheck, facts: Table, name: str) -> dict[tuple[str, str], datetime]:
     """Each (project, name) a link fact ever linked, to its earliest linking instant: a link linked by an instant
     is one with a ``linked`` fact set at or before it, whatever later facts say."""
@@ -1550,6 +1605,7 @@ class HubInvariants:
                 WorkItemProjectInTenant(conn),
                 SlugNotCurrentAndFormer(conn),
                 RepositoryReferencesInTenant(conn),
+                WorkSourceReferencesInTenant(conn),
                 ChunkSourcesLinked(conn),
                 LandedRepositoryLinked(conn),
             )
