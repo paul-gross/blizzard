@@ -50,6 +50,25 @@ class ServedProjectView(BaseModel):
     name: str | None = None
 
 
+class RunnerBinding(BaseModel):
+    """One project a runner serves through one of its host's workspaces: the ``project`` by id or slug, the host
+    ``workspace_id`` it works in, and the ``agents`` it runs there at once."""
+
+    project: str
+    workspace_id: str
+    agents: int
+
+
+class RunnerBindingView(BaseModel):
+    """A runner's binding as the hub holds it. ``workspace_unreported`` is derived on read: the runner's host has not
+    reported the workspace, so the hub offers the runner no work through the binding."""
+
+    project: str
+    workspace_id: str
+    agents: int
+    workspace_unreported: bool = False
+
+
 class RunnerRegistrationRequest(BaseModel):
     """Register the calling runner — the one its bearer token was issued to; a stray ``runner_id``
     in the body is ignored. ``env_capacity`` is the runner's configured environment-pool size,
@@ -74,6 +93,12 @@ class RunnerRegistrationRequest(BaseModel):
     #: The projects the runner serves, each by id or slug — ``None`` keeps the declaration the hub holds, ``[]``
     #: serves none.
     projects: list[str] | None = None
+    #: The projects the runner serves through its host's workspaces. Sent, it replaces ``projects`` as the served
+    #: declaration, in binding order (``[]`` serves none); ``None`` leaves ``projects`` in charge. Stored as sent,
+    #: ``None`` included, on every registration.
+    bindings: list[RunnerBinding] | None = None
+    #: The slug of the host subscription every binding spends; ``None`` names none.
+    subscription: str | None = None
 
 
 class RunnerRegistrationResponse(BaseModel):
@@ -93,6 +118,11 @@ class RunnerRegistrationResponse(BaseModel):
     #: The projects the runner serves, as the hub resolved its declaration; ``None`` from a hub that predates
     #: projects.
     projects: list[ServedProjectView] | None = None
+    #: The bindings the hub now holds, each flagged against the host's latest report; ``None`` when none were sent.
+    bindings: list[RunnerBindingView] | None = None
+    subscription: str | None = None
+    #: Whether the host's roster lacks ``subscription`` — the hub then offers the runner no work.
+    subscription_unrostered: bool = False
 
 
 class RunnerEnrollmentResponse(BaseModel):
@@ -214,6 +244,10 @@ class RunnerView(BaseModel):
     gates: list[str] = []
     # The projects the runner serves, as declared and resolved; empty when it serves none.
     projects: list[ServedProjectView] = []
+    # The bindings the runner declared, flagged against its host's latest report; `None` when it declared none.
+    bindings: list[RunnerBindingView] | None = None
+    subscription: str | None = None
+    subscription_unrostered: bool = False
 
 
 class RunnerRegistryView(BaseModel):
@@ -252,6 +286,10 @@ class RunnerRegistryView(BaseModel):
     gates: list[str] = []
     # The projects the runner serves, as declared and resolved; empty when it serves none.
     projects: list[ServedProjectView] = []
+    # The bindings the runner declared, flagged against its host's latest report; `None` when it declared none.
+    bindings: list[RunnerBindingView] | None = None
+    subscription: str | None = None
+    subscription_unrostered: bool = False
     # The host the runner stands under; `None` for a runner that stands alone.
     host_id: str | None = None
 

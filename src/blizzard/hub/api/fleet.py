@@ -70,8 +70,10 @@ from blizzard.hub.domain.graph.model import FollowLatest, Graph
 from blizzard.hub.domain.kernel.pagination import DEFAULT_LIMIT, MAX_LIMIT, MalformedCursor
 from blizzard.hub.domain.observability.transcripts import LeaseSegmentsNotOwned, refuse_foreign_lease_read
 from blizzard.hub.domain.projects.model import ProjectId
+from blizzard.hub.domain.runners.bindings import flag_bindings, offered_projects
 from blizzard.hub.domain.runners.registration import (
     DeclaredSubscription,
+    RunnerBinding,
     RunnerCapability,
     RunnerNeverConnected,
     RunnerRetired,
@@ -243,11 +245,14 @@ def peek_matched_queue(
     """The matched fleet peek — at most one ready entry of a project the calling principal
     serves that it can both work (its declared capabilities admit the entry) and claim (not
     dependency-blocked), with the request's match policy applied to both. The served set is
-    the principal's stored declaration; a runner serving nothing is offered nothing."""
+    the principal's stored declaration less what its host's report withholds (a binding whose workspace the host has
+    not reported, or every binding under an unrostered subscription), narrowed to ``project`` when sent; a runner
+    serving nothing is offered nothing."""
     registration = services.registry.get_runner(principal.runner_id)
-    served = frozenset(
-        entry.project_id for entry in (registration.served if registration is not None else ()) if entry.project_id
-    )
+    host = None
+    if registration is not None and registration.host_id is not None:
+        host = services.hosts.get_host(registration.host_id)
+    served = frozenset() if registration is None else offered_projects(registration, host, project=request.project)
     statuses = services.chunks.facts.load_live_statuses()
     return queue_api.MatchedPeek.of(services, statuses, request, served=served).view
 
@@ -931,9 +936,18 @@ def register_runner(
         subscriptions=subscriptions,
         gates=tuple(request.gates),
         projects=request.projects,
+        bindings=(
+            None
+            if request.bindings is None
+            else tuple(RunnerBinding(b.project, b.workspace_id, b.agents) for b in request.bindings)
+        ),
+        subscription=request.subscription,
     )
     if registered.changed:
         services.events.publish_runner_changed(runner_id, kind="registered", runner_name=registered.name)
+    hosts = runners_api.hosts_of(services, [registration])
+    host = None if registration.host_id is None else hosts.get(registration.host_id)
+    flags = flag_bindings(registered.bindings, registered.subscription, host)
     return RunnerRegistrationResponse(
         runner_id=runner_id,
         runner_name=registered.name,
@@ -943,6 +957,9 @@ def register_runner(
         projects=runners_api.served_views(
             registered.projects, runners_api.served_projects(services, registered.projects)
         ),
+        bindings=runners_api.binding_views(registered.bindings, flags),
+        subscription=registered.subscription,
+        subscription_unrostered=flags.subscription_unrostered,
     )
 
 
@@ -982,4 +999,5 @@ def get_runner(
         services.fleet.own_liveness(registration),
         now=services.clock.now(),
         projects=runners_api.served_projects(services, registration.served),
+        hosts=runners_api.hosts_of(services, [registration]),
     )

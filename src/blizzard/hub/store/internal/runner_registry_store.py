@@ -21,6 +21,7 @@ from blizzard.hub.domain.runners.registration import (
     IWriteRunnerRegistry,
     RecordedPause,
     RunnerAddition,
+    RunnerBinding,
     RunnerCapability,
     RunnerRegistration,
     ServedEntry,
@@ -198,6 +199,8 @@ class RunnerRegistryStore:
         subscriptions: tuple[DeclaredSubscription, ...] | None = None,
         gates: tuple[str, ...] = (),
         projects: tuple[ServedEntry, ...] | None = None,
+        bindings: tuple[RunnerBinding, ...] | None = None,
+        subscription: str | None = None,
         at: datetime,
     ) -> bool:
         # Written unconditionally on every registration, `None`/empty verbatim included: the
@@ -236,6 +239,8 @@ class RunnerRegistryStore:
             "capabilities": capabilities_json,
             "subscriptions": subscriptions_json,
             "gates": gates_json,
+            "bindings": _bindings_json(bindings),
+            "subscription": subscription,
         }
         if name is not None:
             refreshed["name"] = name
@@ -649,6 +654,12 @@ class RunnerRegistryStore:
             retired_by=retired_by,
             gates=tuple(json.loads(row.gates)) if row.gates else (),
             host_id=row.host_id,
+            bindings=(
+                tuple(RunnerBinding(b["project"], b["workspace_id"], b["agents"]) for b in json.loads(row.bindings))
+                if row.bindings is not None
+                else None
+            ),
+            subscription=row.subscription,
             served=tuple(
                 ServedEntry(entry=e["entry"], project_id=e.get("project_id"))
                 for e in (json.loads(row.projects) if row.projects else [])
@@ -671,6 +682,14 @@ class RunnerRegistryStore:
 def _served_json(served: tuple[ServedEntry, ...]) -> str:
     """The served declaration as stored: a JSON list of ``{entry, project_id}``, ``[]`` when it serves nothing."""
     return json.dumps([{"entry": e.entry, "project_id": e.project_id} for e in served])
+
+
+def _bindings_json(bindings: tuple[RunnerBinding, ...] | None) -> str | None:
+    """The declared bindings as stored: a JSON list of ``{project, workspace_id, agents}``; ``NULL`` for none sent,
+    kept distinct from ``[]``."""
+    if bindings is None:
+        return None
+    return json.dumps([{"project": b.project, "workspace_id": b.workspace_id, "agents": b.agents} for b in bindings])
 
 
 def _conforms_registry(x: RunnerRegistryStore) -> IWriteRunnerRegistry:

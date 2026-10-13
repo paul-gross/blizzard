@@ -1873,6 +1873,11 @@ runner_registrations = Table(
     Column("projects", Text, nullable=True),
     # The host the runner stands under; null for a runner that stands alone.
     Column("host_id", String, ForeignKey("hosts.host_id", name="fk_runner_registrations_hosts"), nullable=True),
+    # The bindings the runner last declared, JSON `list[dict]` of `{project, workspace_id, agents}`; `NULL` (none sent)
+    # is kept distinct from `[]`. The flags against the host's report are derived on read, never stored.
+    Column("bindings", Text, nullable=True),
+    # The slug of the host subscription the bindings spend; null when the runner named none.
+    Column("subscription", Text, nullable=True),
     Column(
         "tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_runner_registrations_tenant_id"), nullable=False
     ),

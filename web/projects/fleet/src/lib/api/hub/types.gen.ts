@@ -5794,6 +5794,10 @@ export type QueuePeekRequest = {
      * Policy
      */
     policy?: string;
+    /**
+     * Project
+     */
+    project?: string | null;
 };
 
 /**
@@ -6868,6 +6872,52 @@ export type RunnerAddResponse = {
 };
 
 /**
+ * RunnerBinding
+ *
+ * One project a runner serves through one of its host's workspaces: the ``project`` by id or slug, the host
+ * ``workspace_id`` it works in, and the ``agents`` it runs there at once.
+ */
+export type RunnerBinding = {
+    /**
+     * Agents
+     */
+    agents: number;
+    /**
+     * Project
+     */
+    project: string;
+    /**
+     * Workspace Id
+     */
+    workspace_id: string;
+};
+
+/**
+ * RunnerBindingView
+ *
+ * A runner's binding as the hub holds it. ``workspace_unreported`` is derived on read: the runner's host has not
+ * reported the workspace, so the hub offers the runner no work through the binding.
+ */
+export type RunnerBindingView = {
+    /**
+     * Agents
+     */
+    agents: number;
+    /**
+     * Project
+     */
+    project: string;
+    /**
+     * Workspace Id
+     */
+    workspace_id: string;
+    /**
+     * Workspace Unreported
+     */
+    workspace_unreported?: boolean;
+};
+
+/**
  * RunnerCapability
  *
  * One harness binding this runner can execute — the id, its observed
@@ -7135,6 +7185,10 @@ export type RunnerPauseRequest = {
  */
 export type RunnerRegistrationRequest = {
     /**
+     * Bindings
+     */
+    bindings?: Array<RunnerBinding> | null;
+    /**
      * Capabilities
      */
     capabilities?: Array<RunnerCapability>;
@@ -7159,6 +7213,10 @@ export type RunnerRegistrationRequest = {
      */
     redirect_uris?: Array<string>;
     /**
+     * Subscription
+     */
+    subscription?: string | null;
+    /**
      * Subscriptions
      */
     subscriptions?: Array<RunnerSubscriptionDeclaration> | null;
@@ -7181,6 +7239,10 @@ export type RunnerRegistrationRequest = {
  */
 export type RunnerRegistrationResponse = {
     /**
+     * Bindings
+     */
+    bindings?: Array<RunnerBindingView> | null;
+    /**
      * First Registration
      */
     first_registration: boolean;
@@ -7196,6 +7258,14 @@ export type RunnerRegistrationResponse = {
      * Runner Name
      */
     runner_name?: string | null;
+    /**
+     * Subscription
+     */
+    subscription?: string | null;
+    /**
+     * Subscription Unrostered
+     */
+    subscription_unrostered?: boolean;
     /**
      * Tenant Id
      */
@@ -7236,6 +7306,10 @@ export type RunnerRegistryView = {
      * Added By
      */
     added_by?: string | null;
+    /**
+     * Bindings
+     */
+    bindings?: Array<RunnerBindingView> | null;
     /**
      * Capabilities
      */
@@ -7305,6 +7379,14 @@ export type RunnerRegistryView = {
      * Runner Name
      */
     runner_name: string;
+    /**
+     * Subscription
+     */
+    subscription?: string | null;
+    /**
+     * Subscription Unrostered
+     */
+    subscription_unrostered?: boolean;
     /**
      * Subscriptions
      */
@@ -7409,6 +7491,10 @@ export type RunnerTokenRevocationResponse = {
  */
 export type RunnerView = {
     /**
+     * Bindings
+     */
+    bindings?: Array<RunnerBindingView> | null;
+    /**
      * Capabilities
      */
     capabilities?: Array<RunnerCapability>;
@@ -7472,6 +7558,14 @@ export type RunnerView = {
      * Runner Name
      */
     runner_name?: string | null;
+    /**
+     * Subscription
+     */
+    subscription?: string | null;
+    /**
+     * Subscription Unrostered
+     */
+    subscription_unrostered?: boolean;
     /**
      * Subscriptions
      */

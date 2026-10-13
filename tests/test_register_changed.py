@@ -8,7 +8,12 @@ from pathlib import Path
 import pytest
 
 from blizzard.hub.domain.execution.fleet import Registered
-from blizzard.hub.domain.runners.registration import STALE_AFTER, DeclaredSubscription, RunnerCapability
+from blizzard.hub.domain.runners.registration import (
+    STALE_AFTER,
+    DeclaredSubscription,
+    RunnerBinding,
+    RunnerCapability,
+)
 from tests.support import HubHarness, build_hub, seed_runner
 
 pytestmark = pytest.mark.component
@@ -55,6 +60,8 @@ _CHANGES: dict[str, dict[str, object]] = {
     "subscriptions": {"subscriptions": None},
     "gates": {"gates": ()},
     "projects": {"projects": ()},
+    "bindings": {"bindings": (RunnerBinding("proj", "w1", 2),)},
+    "subscription": {"subscription": "s"},
 }
 
 
