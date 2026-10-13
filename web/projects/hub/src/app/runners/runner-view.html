@@ -107,7 +107,7 @@
             <!-- The rate-limit pacing bars: one group per reported subscription sample, keyed
                  by slug, so two subscriptions sharing a window label never collide. -->
             @if (row.subscriptionPaces.length > 0) {
-              <app-subscription-pace-group
+              <fleet-subscription-pace-group
                 data-testid="runner-subscription-groups"
                 [attr.data-runner-subscription-groups]="row.runner_id"
                 [subscriptionPaces]="row.subscriptionPaces"

@@ -1,15 +1,73 @@
-import type { runnerApi } from 'fleet';
-
+import type * as runnerApi from '../api/runner';
+import { compactRef } from '../core/compact-ref';
 import {
   conditionLabel,
+  heldForLabel,
   MISS_REASON_TEXT,
   RENEWAL_FAILURE_TEXT,
   renewalLabel,
+  runnerEnvironmentRows,
+  runnerSubscriptionPaces,
+  runnerWorkspaceRows,
   sampledAgoLabel,
-  subscriptionRows,
-} from './app-subscriptions.model';
+} from './runner-host.model';
 
 const NOW = Date.parse('2026-07-16T12:00:00.000Z');
+
+describe('heldForLabel', () => {
+  it('renders blank for an unheld environment', () => {
+    expect(heldForLabel(null, NOW)).toBe('');
+    expect(heldForLabel(undefined, NOW)).toBe('');
+  });
+
+  it('renders the held-for duration since the binding fact', () => {
+    expect(heldForLabel('2026-07-16T11:18:00.000Z', NOW)).toBe('42m');
+  });
+
+  it('renders an em dash for a skew-broken timestamp', () => {
+    expect(heldForLabel('2026-07-16T13:00:00.000Z', NOW)).toBe('—');
+    expect(heldForLabel('not-a-timestamp', NOW)).toBe('—');
+  });
+});
+
+describe('runnerEnvironmentRows', () => {
+  it('maps a held and an unheld environment in wire order', () => {
+    const envs: runnerApi.EnvironmentView[] = [
+      { environment_id: 'e1', chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9', held_since: '2026-07-16T11:59:18.000Z' },
+      { environment_id: 'e2', chunk_id: null, held_since: null },
+    ];
+    expect(runnerEnvironmentRows(envs, NOW)).toEqual([
+      { environmentId: 'e1', isHeld: true, chunkRef: compactRef('ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9'), heldFor: '42s', holder: null },
+      { environmentId: 'e2', isHeld: false, chunkRef: '', heldFor: '', holder: null },
+    ]);
+  });
+
+  it('treats an absent chunk_id as unheld', () => {
+    expect(runnerEnvironmentRows([{ environment_id: 'e3' }], NOW)).toEqual([
+      { environmentId: 'e3', isHeld: false, chunkRef: '', heldFor: '', holder: null },
+    ]);
+  });
+
+  it('maps an empty pool to no rows', () => {
+    expect(runnerEnvironmentRows([], NOW)).toEqual([]);
+  });
+});
+
+describe('runnerWorkspaceRows', () => {
+  it('folds the pool into one workspace with no heading, counting its held environments', () => {
+    const rows = runnerWorkspaceRows(
+      [
+        { environment_id: 'e1', chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9', held_since: '2026-07-16T11:59:18.000Z' },
+        { environment_id: 'e2', chunk_id: null, held_since: null },
+      ],
+      NOW,
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ workspaceId: null, capacity: 2, inUse: 1, flag: null });
+    expect(rows[0].environments.map((env) => env.environmentId)).toEqual(['e1', 'e2']);
+  });
+});
+
 
 describe('sampledAgoLabel', () => {
   it('renders the age of the newest attempt', () => {
@@ -67,7 +125,10 @@ describe('renewalLabel', () => {
   });
 });
 
-describe('subscriptionRows', () => {
+describe('runnerSubscriptionPaces', () => {
+  /** The hub's pace facts a runner row leaves empty — its sample line renders in their place. */
+  const UNPACED = { paceBars: [], condition: null, sampledAt: null, refreshedLabel: null, freshness: null, missReason: null };
+
   it('maps each subscription to its row, defaulting absent optionals to null', () => {
     const subs: runnerApi.SubscriptionView[] = [
       {
@@ -83,24 +144,22 @@ describe('subscriptionRows', () => {
       },
       { slug: 'chatgpt', name: 'ChatGPT', provider: 'openai' },
     ];
-    expect(subscriptionRows(subs, NOW)).toEqual([
+    expect(runnerSubscriptionPaces(subs, NOW)).toEqual([
       {
         slug: 'claude-max',
         name: 'Claude Max',
         provider: 'anthropic',
-        conditionLabel: 'miss: endpoint unreachable',
-        sampledAgo: '-34s ago',
+        ...UNPACED,
+        sample: { conditionLabel: 'miss: endpoint unreachable', sampledAgo: '-34s ago', ok: false },
         renewalLabel: 'failed (vendor refused) -34s ago',
-        ok: false,
       },
       {
         slug: 'chatgpt',
         name: 'ChatGPT',
         provider: 'openai',
-        conditionLabel: 'never sampled',
-        sampledAgo: 'never',
+        ...UNPACED,
+        sample: { conditionLabel: 'never sampled', sampledAgo: 'never', ok: null },
         renewalLabel: null,
-        ok: null,
       },
     ]);
   });

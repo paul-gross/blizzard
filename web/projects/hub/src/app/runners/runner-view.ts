@@ -1,11 +1,10 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import { type ChunkStatus, STATUS_TONE, KitAsyncState, type KitAsyncStateValue, KitBadge, KitButton, KitPanel, KitSlotBar, RunnerConnection, type Tone } from 'fleet';
+import { type ChunkStatus, STATUS_TONE, KitAsyncState, type KitAsyncStateValue, KitBadge, KitButton, KitPanel, KitSlotBar, RunnerConnection, SubscriptionPaceGroup, type Tone } from 'fleet';
 import { CapabilityBadgeGroup } from './capability-badge-group';
 import { GateBadgeGroup } from './gate-badge-group';
 import { localPauseHint, runnerSeenLabel, runnerToggleHint, type RunnerRow } from './runner-rows';
 import { ServedProjectGroup } from './served-project-group';
-import { SubscriptionPaceGroup } from './subscription-pace-group';
 
 /**
  * The runner registry's presentational half — the registry

@@ -30,6 +30,7 @@ export * from './lib/chunk/chunk-issue-list';
 export * from './lib/sse';
 export * from './lib/core/mutation-pending';
 export * from './lib/transcripts';
+export * from './lib/host';
 export * from './lib/core/url-selection';
 export * from './lib/core/viewport';
 export * from './lib/core/query-state';

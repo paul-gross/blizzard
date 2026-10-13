@@ -99,7 +99,7 @@
                desktop runner registry — no inline copy here. -->
           @if (row.subscriptionPaces.length > 0) {
             <div class="paces" data-testid="mobile-fleet-runner-subscriptions">
-              <app-subscription-pace-group
+              <fleet-subscription-pace-group
                 [attr.data-runner-subscription-groups]="row.runner_id"
                 [subscriptionPaces]="row.subscriptionPaces"
               />

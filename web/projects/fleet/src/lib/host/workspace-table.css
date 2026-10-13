@@ -26,3 +26,29 @@ fleet-kit-beacon {
   color: var(--label);
   font-size: var(--fs-xs);
 }
+.ws {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--line);
+  font-size: var(--fs-sm);
+}
+.ws-id {
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.ws-use {
+  color: var(--label);
+  font-size: var(--fs-xs);
+}
+.ws-flag {
+  color: var(--amber);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.08em;
+}
+.holder {
+  grid-column: 3 / -1;
+  color: var(--label-dim);
+  font-size: var(--fs-xs);
+}

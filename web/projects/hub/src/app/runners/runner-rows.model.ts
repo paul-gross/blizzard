@@ -1,4 +1,12 @@
-import { type ChunkStatus, type hubApi, type ExternalSubscriptionUsageWindowView, RunnerConnection, type RunnerRegistryView, compactRef, ageMs, formatRefreshedAgo, formatSeenAgo } from 'fleet';
+import {
+  type ChunkStatus,
+  RunnerConnection,
+  type RunnerRegistryView,
+  type SubscriptionPace,
+  compactRef,
+  formatSeenAgo,
+  hubSubscriptionPaces,
+} from 'fleet';
 import type { ChunkSummary } from 'fleet/shell';
 
 import { isUnassigned, servedProjects, unresolvedEntries } from '../core/project-serving';
@@ -11,59 +19,6 @@ export interface ClaimLine {
   readonly shortId: string;
   readonly node: string;
   readonly status: ChunkStatus;
-}
-
-/** One rate-limit window's pacing pair for the registry row's pace bar —
- * `window` is the harness-native label (`"5h"`/`"7d"`), `utilizationPct` is read
- * straight off the sample, `elapsedPct` is derived (see {@link windowElapsedPct}). */
-export interface PaceBar {
-  readonly window: string;
-  readonly utilizationPct: number;
-  readonly elapsedPct: number;
-}
-
-/** The board's own age tiers for a declared subscription's last good sample —
- * `bzh:frontend-formatters`: one classifier, read by the fold below and by nothing
- * else (not the template, the CSS, or the mobile view). */
-export type SubscriptionFreshness = 'fresh' | 'aging' | 'stale';
-
-/** `sampledAt` at or under this age is `'fresh'`. */
-export const FRESHNESS_AGING_AFTER_MS = 15 * 60_000;
-/** `sampledAt` at or under this age (and past {@link FRESHNESS_AGING_AFTER_MS}) is
- * `'aging'`; past it, `'stale'`. */
-export const FRESHNESS_STALE_AFTER_MS = 60 * 60_000;
-
-/** Maps an exact age in ms to its display tier — boundaries are measured on the exact
- * `ageMs`, never on the rounded "refreshed … ago" label, so a sample at precisely
- * 15m0s reads `'fresh'` even though its label already rounds to `15m`. */
-export function classifySubscriptionFreshness(sampleAgeMs: number): SubscriptionFreshness {
-  if (sampleAgeMs <= FRESHNESS_AGING_AFTER_MS) return 'fresh';
-  if (sampleAgeMs <= FRESHNESS_STALE_AFTER_MS) return 'aging';
-  return 'stale';
-}
-
-/** One reported subscription sample's pace bars, grouped under its slug and name. Two
- * subscriptions can share a window label (both report a `"5h"` window), so grouping
- * by slug is what keeps them distinct. */
-export interface SubscriptionPace {
-  readonly slug: string;
-  readonly name: string;
-  readonly paceBars: readonly PaceBar[];
-  /** {@link hubApi.SampleMissReason.CREDENTIAL_LAPSED} when the newest reported miss outranks the newest sample;
-   * `null` otherwise. */
-  readonly condition: hubApi.SampleMissReason | null;
-  /** The last good sample's raw instant, or `null` when the slug has never been
-   * sampled — presence, not `paceBars.length`, is what tells a zero-window sample
-   * apart from no sample at all. */
-  readonly sampledAt: string | null;
-  /** "refreshed 5m ago" against {@link sampledAt}, or `null` alongside it. */
-  readonly refreshedLabel: string | null;
-  /** {@link sampledAt}'s age tier, or `null` alongside it — `null` too for a stamp
-   * unparseable or beyond the clock-skew tolerance in the future
-   * (`bzh:utc-instants`): never a confident tier for a reading the clock can't trust. */
-  readonly freshness: SubscriptionFreshness | null;
-  /** The newest reported miss's own reason, or `null` when there is none. */
-  readonly missReason: hubApi.SampleMissReason | null;
 }
 
 /**
@@ -113,37 +68,6 @@ export function runnerToggleHint(row: RunnerRow): string {
   return row.hub_paused ? 'Resume this runner at the hub' : 'Pause this runner at the hub';
 }
 
-/**
- * How far a rate-limit window has elapsed toward its own reset, `0-100`.
- * Derived **backward** from `resetsAt`/`windowSeconds` rather than assumed clock-aligned
- * — the 5h window is session-anchored, not aligned to any fixed clock boundary, so a
- * window's start is never assumed, only computed as `resetsAt - windowSeconds`. Clamped
- * to `[0, 100]`: a `resetsAt` more than a full window out (not yet started) reads 0, one
- * already passed (a stale sample) reads 100 rather than overshooting.
- *
- * `nowMs` is the caller's own clock reading (`injectNowSignal()`'s value in the
- * container) — this function does no clock reads of its own, so it stays directly
- * testable against a fixed instant.
- */
-export function windowElapsedPct(nowMs: number, resetsAt: string, windowSeconds: number): number {
-  const resetsAtMs = Date.parse(resetsAt);
-  if (Number.isNaN(resetsAtMs) || windowSeconds <= 0) return 0;
-  const windowMs = windowSeconds * 1000;
-  const startMs = resetsAtMs - windowMs;
-  const fraction = (nowMs - startMs) / windowMs;
-  return Math.min(100, Math.max(0, fraction * 100));
-}
-
-/** A subscription's windows folded to pace bars against `now`. */
-function toPaceBars(now: number, windows: readonly ExternalSubscriptionUsageWindowView[]): readonly PaceBar[] {
-  return windows.map((w) => ({
-    window: w.window,
-    utilizationPct: w.utilization_pct,
-    elapsedPct: windowElapsedPct(now, w.resets_at, w.window_seconds),
-  }));
-}
-
-
 /** Every routed chunk grouped by the runner holding it — each as a claim line
  * (short name + current node + status) for the registry rows.
  *
@@ -179,25 +103,6 @@ function usedByRunner(chunks: readonly ChunkSummary[]): Map<string, number> {
   return used;
 }
 
-/** A runner's reported subscription samples, grouped by slug. A runner that has
- * reported none yields an empty list. */
-function toSubscriptionPaces(runner: RunnerRegistryView, nowMs: number): readonly SubscriptionPace[] {
-  return (runner.subscriptions ?? []).map((s) => {
-    const sampledAt = s.sampled_at ?? null;
-    const delta = sampledAt === null ? null : ageMs(sampledAt, nowMs);
-    return {
-      slug: s.slug,
-      name: s.name,
-      paceBars: toPaceBars(nowMs, s.windows),
-      condition: s.condition ?? null,
-      sampledAt,
-      refreshedLabel: delta === null ? null : formatRefreshedAgo(delta),
-      freshness: delta === null ? null : classifySubscriptionFreshness(delta),
-      missReason: s.miss_reason ?? null,
-    };
-  });
-}
-
 /** Each runner with its claims, slot-bar numerator, and subscription pace groups folded
  * on, every time-relative field read against the one `nowMs`. */
 export function foldRunnerRows(
@@ -211,7 +116,7 @@ export function foldRunnerRows(
     ...runner,
     claims: claims.get(runner.runner_id) ?? [],
     used: used.get(runner.runner_id) ?? 0,
-    subscriptionPaces: toSubscriptionPaces(runner, nowMs),
+    subscriptionPaces: hubSubscriptionPaces(runner.subscriptions ?? [], nowMs),
     served: servedNames(runner),
     unassigned: isUnassigned(runner),
     unresolved: unresolvedEntries(runner),

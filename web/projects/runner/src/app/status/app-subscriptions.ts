@@ -1,8 +1,13 @@
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
-import { asyncState, injectNowSignal, KitAsyncState } from 'fleet';
+import {
+  asyncState,
+  injectNowSignal,
+  KitAsyncState,
+  runnerSubscriptionPaces,
+  type SubscriptionPace,
+  SubscriptionPaceGroup,
+} from 'fleet';
 
-import { type SubscriptionRow, LocalSubscriptionsView } from './app-subscriptions-view';
-import { subscriptionRows } from './app-subscriptions.model';
 import { injectRunnerDashboardQuery } from '../core/status.query';
 
 /**
@@ -11,15 +16,15 @@ import { injectRunnerDashboardQuery } from '../core/status.query';
  * the closed-set reason distinguishing a lapsed credential ("log in again") from an
  * unreachable endpoint or an unparseable response. Owns the shared dashboard query's
  * `subscriptions` section, the resolved async-state triad, and the ticking clock
- * {@link SubscriptionRow.sampledAgo} is derived from; the presentational
- * {@link LocalSubscriptionsView} owns the row template (`bzh:frontend-container-presentational`).
+ * each row's sampled-ago text is derived from; the shared presentational
+ * {@link SubscriptionPaceGroup} owns the row template (`bzh:frontend-container-presentational`).
  * Read-only, like every other rail on this panel — it only shows the newest
  * renewal and its outcome, and offers no operator action.
  */
 @Component({
   selector: 'app-subscriptions',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, LocalSubscriptionsView],
+  imports: [KitAsyncState, SubscriptionPaceGroup],
   templateUrl: './app-subscriptions.html',
   styleUrl: './app-subscriptions.css',
 })
@@ -36,7 +41,7 @@ export class LocalSubscriptions {
    * sitting frozen at whatever age the last read carried. */
   private readonly now = injectNowSignal(1000);
 
-  protected readonly rows = computed<readonly SubscriptionRow[]>(() =>
-    subscriptionRows(this.subscriptions(), this.now()),
+  protected readonly rows = computed<readonly SubscriptionPace[]>(() =>
+    runnerSubscriptionPaces(this.subscriptions(), this.now()),
   );
 }
