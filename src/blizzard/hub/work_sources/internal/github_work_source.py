@@ -63,24 +63,28 @@ class GitHubWorkSource:
     Also implements :class:`~blizzard.hub.work_sources.annotator.IWorkAnnotator` and
     :class:`~blizzard.hub.work_sources.closer.IWorkCloser` over the same client."""
 
-    def __init__(self, client: httpx.Client, *, name: str, repo: str, web_base: str) -> None:
+    def __init__(self, client: httpx.Client, *, source_id: str, slug: str, repo: str, web_base: str) -> None:
+        """``source_id`` is the key every pointer it parses holds; ``slug`` is the source's current slug, which its
+        labels and error text render — the adapter is rebuilt when the record's revision moves."""
         self._client = client
-        self._name = name
+        self._id = source_id
+        self._name = slug
         self._repo = repo
         self._web_base = web_base.rstrip("/")
         self._labels_bootstrapped = False
 
     def parse(self, token: str) -> WorkRef | None:
         """This source's own ingest-token forms into a pointer, or ``None`` when ``token``
-        isn't shaped for it: ``{name}:{number}``, ``{name}#{number}``, or an issue URL
-        (full or schemeless) naming *this binding's own configured* ``repo``."""
+        isn't shaped for it: ``{id}:{number}``, ``{id}#{number}``, or an issue URL
+        (full or schemeless) naming *this binding's own configured* ``repo``. A slug is never matched here: the
+        registry resolves a slug prefix to the id before it hands the token over."""
         for sep_char in (":", "#"):
             prefix, sep, ref = token.partition(sep_char)
-            if sep and prefix == self._name and ref.isdigit():
-                return WorkRef(source=self._name, ref=ref)
+            if sep and prefix == self._id and ref.isdigit():
+                return WorkRef(source=self._id, ref=ref)
         match = _ISSUE_URL_RE.search(token)
         if match is not None and f"{match['owner']}/{match['repo']}" == self._repo:
-            return WorkRef(source=self._name, ref=match["number"])
+            return WorkRef(source=self._id, ref=match["number"])
         return None
 
     def fetch(self, pointer: WorkRef) -> WorkItem:
@@ -100,7 +104,7 @@ class GitHubWorkSource:
         )
 
     def label(self, pointer: WorkRef) -> str | None:
-        """``{name}#{ref}`` — always renders; ``ref`` is opaque here."""
+        """``{slug}#{ref}`` — always renders; ``ref`` is opaque here."""
         return f"{self._name}#{pointer.ref}"
 
     def web_url(self, pointer: WorkRef, *, live_holder: str | None) -> str | None:
@@ -109,7 +113,7 @@ class GitHubWorkSource:
         return f"{self._web_base}/{self._repo}/issues/{pointer.ref}"
 
     def forge_reference(self, pointer: WorkRef) -> str | None:
-        """``{owner}/{repo}#{ref}`` from the configured ``repo``, not the ``name`` alias."""
+        """``{owner}/{repo}#{ref}`` from the configured ``repo``, not the slug."""
         return f"{self._repo}#{pointer.ref}"
 
     # -- IWorkAnnotator ------------------------------------------------------
@@ -180,7 +184,7 @@ class GitHubWorkSource:
                     for item in resp.json():
                         if "pull_request" in item:
                             continue
-                        ref = WorkRef(source=self._name, ref=str(item["number"]))
+                        ref = WorkRef(source=self._id, ref=str(item["number"]))
                         found.setdefault(ref, set()).add(marker)
                     next_link = resp.links.get("next")
                     url = next_link["url"] if next_link else None

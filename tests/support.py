@@ -79,7 +79,7 @@ from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.config.repositories import RepositoryFields
 from blizzard.hub.domain.config.secrets import IHubKeyProvider, SecretAlreadyExists, SecretName
-from blizzard.hub.domain.config.work_sources import WorkSourceFields
+from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, WorkSourceFields, WorkSourceId
 from blizzard.hub.domain.execution.auth.produces import PRODUCES_WARN
 from blizzard.hub.domain.execution.auth.route import ROUTE_TOKEN_WARN
 from blizzard.hub.domain.garden.scopes import Scope, ScopeSlug
@@ -583,8 +583,9 @@ def _conforms_fake_work_source(x: FakeWorkSource) -> IWorkSource:
 class WorkSourceRegistry:
     """A dict-backed work-source registry — the test double for the store-backed one.
 
-    ``annotators``/``closers``/``editors`` are each a subset of ``sources``, so an absent name has no
-    write half; ``label_clearers`` holds every forge source's annotator, reached only to clear labels."""
+    ``annotators``/``closers``/``editors`` are each a subset of ``sources``, so an absent key has no
+    write half; ``label_clearers`` holds every forge source's annotator, reached only to clear labels. ``slugs`` maps
+    a key to the slug it displays under, the key itself when absent."""
 
     def __init__(
         self,
@@ -593,33 +594,43 @@ class WorkSourceRegistry:
         closers: Mapping[str, IWorkCloser] | None = None,
         editors: Mapping[str, IWorkEditor] | None = None,
         label_clearers: Mapping[str, IWorkAnnotator] | None = None,
+        slugs: Mapping[str, str] | None = None,
     ) -> None:
+        self._slugs = dict(slugs or {})
         self._sources = dict(sources or {})
         self._annotators = dict(annotators or {})
         self._closers = dict(closers or {})
         self._editors = dict(editors or {})
         self._label_clearers = {**dict(label_clearers or {}), **self._annotators}
 
-    def get(self, name: str) -> IWorkSource | None:
-        return self._sources.get(name)
+    def get(self, source: str) -> IWorkSource | None:
+        return self._sources.get(source)
 
     def names(self) -> list[str]:
-        return list(self._sources.keys())
+        return [self.source_label(key) for key in self._sources]
 
-    def annotator(self, name: str) -> IWorkAnnotator | None:
-        return self._annotators.get(name)
+    def source_label(self, source: str) -> str:
+        return self._slugs.get(source, source)
 
-    def annotating_names(self) -> list[str]:
+    def label(self, pointer: WorkRef) -> str:
+        source = self._sources.get(pointer.source)
+        rendered = source.label(pointer) if source is not None else None
+        return rendered if rendered is not None else f"{self.source_label(pointer.source)}#{pointer.ref}"
+
+    def annotator(self, source: str) -> IWorkAnnotator | None:
+        return self._annotators.get(source)
+
+    def annotating_ids(self) -> list[str]:
         return list(self._annotators.keys())
 
-    def label_clearer(self, name: str) -> IWorkAnnotator | None:
-        return self._label_clearers.get(name)
+    def label_clearer(self, source: str) -> IWorkAnnotator | None:
+        return self._label_clearers.get(source)
 
-    def closer(self, name: str) -> IWorkCloser | None:
-        return self._closers.get(name)
+    def closer(self, source: str) -> IWorkCloser | None:
+        return self._closers.get(source)
 
-    def editor(self, name: str) -> IWorkEditor | None:
-        return self._editors.get(name)
+    def editor(self, source: str) -> IWorkEditor | None:
+        return self._editors.get(source)
 
     def resolve(self, token: str) -> WorkRef | None:
         for source in self._sources.values():
@@ -1207,8 +1218,12 @@ def seed_repositories(
 def seed_fake_work_sources(engine: Engine, names: Iterable[str], *, tmp_path: Path, link: bool = True) -> None:
     """Store a configured work source for each of ``names`` — the record an operator's ``blizzard hub source
     create`` writes, on a locator of its own — and, with ``link``, link it to the tenant's only project, so an
-    ingest from the fake registry's source of that name resolves a project. A no-op for a name already stored."""
+    ingest from the fake registry's source of that name resolves a project. A no-op for a name already stored.
+
+    Each record's id is its name, not a minted ``wsrc_`` id: a fake source's pointers carry its name as their
+    ``source``, and that must be the stored source's key for the links, labels and invariants that read it."""
     stores = WorkSourceRecordStore(hub_store_connections(engine))
+    at = datetime(2026, 7, 12, tzinfo=UTC)
     authoring = config_authoring(
         engine, keys=hub_key_provider({}, data_dir=tmp_path), clock=FixedClock(datetime(2026, 7, 12, tzinfo=UTC))
     )
@@ -1225,7 +1240,8 @@ def seed_fake_work_sources(engine: Engine, names: Iterable[str], *, tmp_path: Pa
             annotate=False,
             secret=FIXTURE_FORGE_SECRET,
         )
-        authoring.create_work_source(name, None, fields, OP)
+        record, change = ConfiguredWorkSource.new(name, None, fields, OP, at=at, work_source_id=WorkSourceId(name))
+        stores.create(record, change=change)
         if link:
             link_project(engine, source=name)
 

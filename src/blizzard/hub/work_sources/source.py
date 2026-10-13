@@ -102,50 +102,56 @@ class IWorkSource(Protocol):
 
 
 class IWorkSourceRegistry(Protocol):
-    """The hub's configured work sources, looked up by their declared ``name``."""
+    """The hub's work sources, each looked up by its key — ``hub`` for the built-in source, a configured source's id
+    otherwise; only :meth:`resolve` reads a slug."""
 
-    def get(self, name: str) -> IWorkSource | None:
-        """The binding declared under ``name``, or ``None`` when none is configured."""
+    def get(self, source: str) -> IWorkSource | None:
+        """The binding keyed ``source``, or ``None`` when none is configured."""
         ...
 
     def names(self) -> list[str]:
-        """Every configured source's name."""
+        """Every active source's current slug, and ``hub`` — the handles an ingest token may name."""
         ...
 
-    def annotator(self, name: str) -> IWorkAnnotator | None:
-        """The binding declared under ``name``'s write half, or ``None`` when
-        that source is unconfigured or not opted into annotation — the
-        structural "never written to" a non-opted source gets."""
+    def source_label(self, source: str) -> str:
+        """The handle the source keyed ``source`` displays under: a configured source's current slug, ``hub`` for the
+        built-in one, and ``source`` itself when it names no source."""
         ...
 
-    def annotating_names(self) -> list[str]:
-        """Every source name with an annotator built — the opted-in subset of
-        :meth:`names`."""
+    def label(self, pointer: WorkRef) -> str:
+        """``pointer`` as displayed: its binding's :meth:`IWorkSource.label`, else ``{source label}#{ref}`` — always
+        the source's current slug, never the stored key."""
         ...
 
-    def label_clearer(self, name: str) -> IWorkAnnotator | None:
-        """The write half of the source configured under ``name`` whether or not it annotates,
-        used only to clear the labels it carries once it leaves annotation; ``None`` when no
-        configured source carries ``name`` or the source has no forge labels."""
+    def annotator(self, source: str) -> IWorkAnnotator | None:
+        """The write half of the binding keyed ``source``, or ``None`` when that source is unconfigured or not opted
+        into annotation — the structural "never written to" a non-opted source gets."""
         ...
 
-    def closer(self, name: str) -> IWorkCloser | None:
-        """The binding declared under ``name``'s close half, unconditional for every
-        configured source — ``None`` only when ``name`` names no source
-        at all, which a pending intent can still outlive if its source is later removed
-        from config."""
+    def annotating_ids(self) -> list[str]:
+        """Every active source with an annotator built, by id — the opted-in subset of the configured sources."""
         ...
 
-    def editor(self, name: str) -> IWorkEditor | None:
-        """The binding declared under ``name``'s editor half, or ``None`` when that
-        source has no browsable item surface — the structural "never edited" a
-        non-editing source gets."""
+    def label_clearer(self, source: str) -> IWorkAnnotator | None:
+        """The write half of the source keyed ``source`` whether or not it annotates, used only to clear the labels it
+        carries once it leaves annotation; ``None`` when no configured source has that key or the source has no forge
+        labels."""
+        ...
+
+    def closer(self, source: str) -> IWorkCloser | None:
+        """The close half of the binding keyed ``source``, unconditional for every configured source — ``None`` only
+        when ``source`` names no source at all, which a pending intent can still outlive."""
+        ...
+
+    def editor(self, source: str) -> IWorkEditor | None:
+        """The editor half of the binding keyed ``source``, or ``None`` when that source has no browsable item
+        surface — the structural "never edited" a non-editing source gets."""
         ...
 
     def resolve(self, token: str) -> WorkRef | None:
-        """The first configured binding's :meth:`IWorkSource.parse` of ``token`` that
-        claims it, or ``None`` when none do. Exactly one binding can ever
-        claim a token — config rejects a duplicate ``name`` (unambiguous
-        ``name:ref``/``name#ref``) and a duplicate ``(provider, repo)`` (a URL maps to
-        at most one source) — so which binding is tried first never matters."""
+        """The pointer an ingest token names, or ``None`` when no binding claims it. A ``{x}:{n}`` or ``{x}#{n}``
+        token is resolved at the registry first: ``x`` naming a configured source by id, current slug or former slug
+        reaches that source's :meth:`IWorkSource.parse` alone, rewritten to name its id. Any other token — an issue
+        URL among them — is offered to every active binding; config rejects a duplicate ``(provider, locator)``, so at
+        most one claims it."""
         ...

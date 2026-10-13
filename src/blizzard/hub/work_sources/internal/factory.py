@@ -47,7 +47,7 @@ class WorkSourceEntry:
         kinds: dict[str, type[WorkSourceEntry]] = {"github": GithubEntry}
         kind = kinds.get(record.fields.provider)
         if kind is None:
-            raise WorkSourceError(f"work source {record.name} has unknown provider {record.fields.provider!r}")
+            raise WorkSourceError(f"work source {record.slug} has unknown provider {record.fields.provider!r}")
         return kind(record, secret) if instrument is None else kind(record, secret, instrument)
 
     @classmethod
@@ -65,7 +65,7 @@ class WorkSourceEntry:
             try:
                 secret = secrets.reveal(SecretName.parse(record.fields.secret))
             except (SecretNotFound, SecretRetired) as exc:
-                raise WorkSourceError(f"work source {record.name}: {exc}") from exc
+                raise WorkSourceError(f"work source {record.slug}: {exc}") from exc
         entry = cls.of(record, secret, instrument)
         client = entry.client
         return BuiltWorkSource(record=record, source=entry.source(client), release=client.close)
@@ -99,7 +99,7 @@ class WorkSourceEntry:
     @property
     def token(self) -> str:  # ast-grep-ignore: bzh:property-delegates
         if self.secret is None:
-            raise WorkSourceError(f"work source {self.record.name} names no secret")
+            raise WorkSourceError(f"work source {self.record.slug} names no secret")
         return self.secret.expose()
 
     @property
@@ -130,4 +130,10 @@ class GithubEntry(WorkSourceEntry):
         return self.record.fields.web_base or web_origin(self.api_base)
 
     def source(self, client: httpx.Client) -> IWorkSource:
-        return GitHubWorkSource(client, name=self.record.name, repo=self.record.fields.locator, web_base=self.web_base)
+        return GitHubWorkSource(
+            client,
+            source_id=self.record.work_source_id,
+            slug=self.record.slug,
+            repo=self.record.fields.locator,
+            web_base=self.web_base,
+        )

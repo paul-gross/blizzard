@@ -37,6 +37,7 @@ from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.hub.app import Sweep
 from blizzard.hub.composition import TenantStores, build_hub_core
 from blizzard.hub.domain.config.repositories import RepositoryId
+from blizzard.hub.domain.config.work_sources import WorkSourceId
 from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.projects.authoring import ProjectAuthoring
 from blizzard.hub.domain.projects.model import ProjectEdit, ProjectId
@@ -896,7 +897,7 @@ def _project_answers(stores: TenantStores, project_id: ProjectId, owner: _Tenant
     return (
         stores.projects.get(project_id),
         stores.projects.get_many([project_id]),
-        links.source_link(project_id, source),
+        links.source_link(project_id, WorkSourceId(source)),
         links.repository_link(project_id, RepositoryId(repository)),
         links.sources_of(project_id),
         links.repositories_of(project_id),
@@ -915,7 +916,7 @@ def test_a_tenants_projects_and_links_answer_only_in_their_own_tenant(two: _Two)
         authoring = ProjectAuthoring(projects=own.projects, links=own.project_links, clock=two.hub.clock)
         [project] = own.projects.list_all()
         source, repository = (
-            own.work_source_records.get(t.ids["source"]),
+            own.work_source_records.get(WorkSourceId(t.ids["source"])),
             own.repository_records.get(RepositoryId(t.ids["repository"])),
         )
         assert source is not None and repository is not None

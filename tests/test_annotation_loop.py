@@ -85,13 +85,13 @@ async def test_loop_returns_promptly_when_shutdown_fires_mid_wait() -> None:
 
 
 class _FakeWorkSources:
-    """A minimal stand-in for ``IWorkSourceRegistry`` — only ``annotating_names()``,
+    """A minimal stand-in for ``IWorkSourceRegistry`` — only ``annotating_ids()``,
     the one method ``Sweep.all`` still consults to decide whether to start a loop."""
 
     def __init__(self, *, annotating: tuple[str, ...] = ()) -> None:
         self._annotating = annotating
 
-    def annotating_names(self) -> list[str]:
+    def annotating_ids(self) -> list[str]:
         return list(self._annotating)
 
 
