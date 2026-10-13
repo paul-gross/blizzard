@@ -278,6 +278,25 @@ def runner_signing_in(services: HubServices, client: str) -> RunnerSigningIn | N
     return None if registration is None else RunnerSigningIn(resolved.tenant, registration)
 
 
+@dto
+@dataclass(frozen=True)
+class HostSigningIn:
+    """The host a sign-in names, read in the tenant it was added in."""
+
+    tenant: TenantId
+    host: Host
+
+
+def host_signing_in(services: HubServices, client: str) -> HostSigningIn | None:
+    """The host a sign-in names as its ``client``, read in the host's own tenant, or ``None`` when no open tenant
+    holds a host of that id. A host id is hub-minted, so the client alone settles the tenant."""
+    resolved = services.hub_scoped_reads.credentials.host_by_id(client)
+    if resolved is None:
+        return None
+    host = _host_in_tenant(services, resolved.tenant, resolved.host_id)
+    return None if host is None else HostSigningIn(resolved.tenant, host)
+
+
 def require_runner_principal(request: Request, services: Hub) -> RunnerPrincipal:
     return RunnerAuth.of(request, services).demand()
 

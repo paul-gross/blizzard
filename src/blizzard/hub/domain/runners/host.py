@@ -21,6 +21,7 @@ from blizzard.hub.domain.runners.registration import (
     DeclaredSubscription,
     RunnerRegistration,
     RunnerRetired,
+    UnregisteredRedirect,
     declared_name,
 )
 from blizzard.hub.domain.runners.route import Route
@@ -216,6 +217,18 @@ class Host:
             or reported.subscriptions != self.subscriptions
         )
         return ReportDecision(name=name, changed=changed)
+
+    def refuse_federation(self, redirect_uri: str) -> None:
+        """Refuse an IdP bounce to ``redirect_uri`` for this host: :class:`UnregisteredRedirect` unless the URI is
+        one it reported (the open-redirect guard), then :class:`HostRetired`. In that order, so only a caller
+        already holding a reported redirect URI can tell a retired host apart."""
+        if not self.is_federation_target(redirect_uri):
+            raise UnregisteredRedirect(self.host_id)
+        self.refuse_if_retired(action="federation")
+
+    def is_federation_target(self, redirect_uri: str) -> bool:
+        """Whether the IdP may bounce to ``redirect_uri`` for this host — the URI must be one it reported."""
+        return redirect_uri in self.redirect_uris
 
     def enroll(self, token_hash: str, *, by: str, at: datetime) -> HostTokenRotation:
         """Mint (or rotate to) ``token_hash``. A retired host raises :class:`HostRetired`: retirement is final."""
