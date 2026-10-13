@@ -4,7 +4,7 @@ Creates ``hosts``, ``host_lifecycle_facts`` and ``host_token_revocations``, each
 ``runner_registrations.host_id`` with its key and a tenant-led index; existing runners stand alone. Each step inspects
 first and skips what a stopped run already did. The downgrade refuses, naming them, while any runner stands under a host.
 Revision ID: 20261012_1000_hosts
-Revises: 20261011_1300_chunk_recorded_at_indexes
+Revises: 20261012_0900_repository_identity
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from alembic import op
 from blizzard.foundation.store.utc import UtcDateTime
 
 revision: str = "20261012_1000_hosts"
-down_revision: str | None = "20261011_1300_chunk_recorded_at_indexes"
+down_revision: str | None = "20261012_0900_repository_identity"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

@@ -17,7 +17,7 @@ from tests.test_store_migrations import _schema_snapshot
 
 pytestmark = pytest.mark.component
 
-_PARENT = "20261011_1300_chunk_recorded_at_indexes"
+_PARENT = "20261012_0900_repository_identity"
 _HOSTS = "20261012_1000_hosts"
 _AT = datetime(2026, 10, 12, tzinfo=UTC)
 _NEW_TABLES = {"hosts", "host_lifecycle_facts", "host_token_revocations"}
