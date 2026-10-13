@@ -157,6 +157,17 @@ draws a fresh secret each start, logs that sessions will not survive a restart, 
 Each runner needs its own secret. A secret shared across runners lets a session minted on one verify on another and
 carry a role resolved under the first runner's config.
 
+## A host as a sign-in client
+
+A runner host serves one panel for every runner it runs, so it signs the operator in once, as its own client.
+`authorize` accepts a host id as `client`, exact-matches `redirect_uri` against the `redirect_uris` the host reported,
+and mints a token whose audience is the host id and whose role is the person's role in the host's tenant. A runner with
+no host keeps signing in as its own client.
+
+An unknown host id, a callback the host has not reported, and a person with no membership in the host's tenant all get
+the one undifferentiated 400 a runner client gets. Only a member who presents a reported callback can tell a retired
+host apart, by a 403.
+
 ## Runner-local roles
 
 Runner-local role resolution is a separate `[auth]` table living only on the runner, never in the hub store or its admin

@@ -17,6 +17,7 @@ from blizzard.auth_core import Role
 from blizzard.hub.api.auth_session import TENANT_HEADER
 from blizzard.hub.auth.models import User
 from blizzard.hub.config import AUTH_MODE_NONE, AUTH_MODE_OAUTH
+from blizzard.hub.domain.runners.host import HostAddition, HostLifecycleFact, HostReport, IWriteHostRegistry
 from blizzard.hub.domain.runners.registration import IWriteRunnerRegistry
 from tests.support import (
     HubHarness,
@@ -336,3 +337,56 @@ def test_a_retired_runner_is_told_apart_only_to_a_member_of_its_tenant(tmp_path:
 
     assert _sign_in(hub, member, _BRAVO_RUNNER, _BRAVO_REDIRECT).status_code == 403
     assert _sign_in(hub, stranger, _BRAVO_RUNNER, _BRAVO_REDIRECT).status_code == 400
+
+
+_HOST_ID = "hs_bravo"
+_HOST_REDIRECT = "https://host.example/api/auth/callback"
+
+
+def _bravo_host(hub: HubHarness, bravo: TenantHarness) -> IWriteHostRegistry:
+    """The host ``_HOST_ID`` in ``bravo``, having reported ``_HOST_REDIRECT``."""
+    hosts = cast(IWriteHostRegistry, bravo.services.hosts)
+    hosts.add(HostAddition(_HOST_ID, "host-bravo", "host-hash", at=hub.clock.now(), by="op"))
+    report = HostReport(
+        name=None, url="https://host.example", redirect_uris=(_HOST_REDIRECT,), workspaces=(), subscriptions=()
+    )
+    hosts.record_report(_HOST_ID, report, name=None, at=hub.clock.now())
+    return hosts
+
+
+def test_a_host_is_a_client_whose_token_audience_is_the_host_and_role_the_hosts_tenant_membership(
+    tmp_path: Path,
+) -> None:
+    hub = build_hub(tmp_path, auth_mode=AUTH_MODE_OAUTH)
+    bravo = hub.add_tenant("bravo")
+    _bravo_host(hub, bravo)
+    alice = seed_user(hub, username="alice", role=Role.ADMIN, email="alice@example.com")
+    seed_membership(hub.engine, bravo.tenant, alice.user_id, Role.GUEST)
+
+    claims = _claims(hub, _sign_in(hub, alice, _HOST_ID, _HOST_REDIRECT), _HOST_ID)
+
+    assert (claims["aud"], claims["role"], claims["sub"]) == (_HOST_ID, "guest", alice.user_id)
+
+
+def test_a_host_sign_in_is_refused_as_a_runners_is(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, auth_mode=AUTH_MODE_OAUTH)
+    bravo = hub.add_tenant("bravo")
+    hosts = _bravo_host(hub, bravo)
+    member = seed_user(hub, username="member", role=Role.GUEST, email="member@example.com")
+    seed_membership(hub.engine, bravo.tenant, member.user_id, Role.GUEST)
+    stranger = seed_user(hub, username="stranger", role=Role.ADMIN, email="stranger@example.com")
+
+    unknown = _sign_in(hub, member, "hs_ghost", _HOST_REDIRECT)
+    unreported = _sign_in(hub, member, _HOST_ID, "https://elsewhere.example/cb")
+    not_a_member = _sign_in(hub, stranger, _HOST_ID, _HOST_REDIRECT)
+    assert {(r.status_code, r.text) for r in (unknown, unreported, not_a_member)} == {(400, unknown.text)}
+
+    hosts.record_retirement(
+        _HOST_ID, fact=HostLifecycleFact(_HOST_ID, True, hub.clock.now(), "op"), at=hub.clock.now(), by="op"
+    )
+
+    retired = _sign_in(hub, member, _HOST_ID, _HOST_REDIRECT)
+    assert retired.status_code == 403
+    assert "retired" in retired.json()["detail"]
+    assert _sign_in(hub, member, _HOST_ID, "https://elsewhere.example/cb").text == unknown.text
+    assert _sign_in(hub, stranger, _HOST_ID, _HOST_REDIRECT).text == unknown.text

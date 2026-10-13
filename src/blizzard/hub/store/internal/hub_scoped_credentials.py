@@ -43,7 +43,7 @@ class TenantHost:
 
 class CredentialReads:
     """Resolving a runner's or a host's credential — its bearer token's hash, a revoked hash, or a
-    runner's id at sign-in — to the runner or host and its tenant."""
+    runner's or a host's id at sign-in — to the runner or host and its tenant."""
 
     def __init__(self, read: MarkedRead) -> None:
         self._read = read
@@ -81,6 +81,15 @@ class CredentialReads:
                 )
             ).one_or_none()
         return _tenant_runner(row)
+
+    def host_by_id(self, host_id: str) -> TenantHost | None:
+        """The host ``host_id`` names — a hub-minted id, so at most one tenant holds it — or ``None`` when no
+        tenant does; how a sign-in naming a host as its client finds the host's tenant."""
+        with self._read("resolve a host id") as conn:
+            row = conn.execute(
+                select(hosts.c.tenant_id, hosts.c.host_id).where(hosts.c.host_id == host_id)
+            ).one_or_none()
+        return _tenant_host(row)
 
     def host_for_token_hash(self, token_hash: str) -> TenantHost | None:
         """The host whose current token hashes to ``token_hash``, or ``None`` when none does."""

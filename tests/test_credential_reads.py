@@ -115,6 +115,16 @@ def test_a_revoked_host_token_names_the_host_and_tenant_it_was_issued_in(tmp_pat
     assert credentials.revoked_token_runner("host-hash-a") is None
 
 
+def test_a_host_id_resolves_to_the_tenant_holding_it(tmp_path: Path) -> None:
+    core, _, first = _two_tenants(tmp_path)
+    credentials = core.hub_scoped_reads.credentials
+
+    assert credentials.host_by_id("hs_a") == TenantHost(first, "hs_a")
+    assert credentials.host_by_id("hs_b") == TenantHost(_SECOND, "hs_b")
+    assert credentials.host_by_id("hs_ghost") is None
+    assert credentials.runner_by_id("hs_a") is None
+
+
 def test_a_runner_id_resolves_to_the_tenant_holding_it(tmp_path: Path) -> None:
     core, _, first = _two_tenants(tmp_path)
     credentials = core.hub_scoped_reads.credentials

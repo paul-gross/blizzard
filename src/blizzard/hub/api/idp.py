@@ -21,13 +21,21 @@ from pydantic import BaseModel
 
 from blizzard.auth_core import Permission
 from blizzard.foundation.roles import dto
-from blizzard.hub.api.auth import RunnerSigningIn, reject_runner_principal, runner_signing_in
+from blizzard.hub.api.auth import (
+    HostSigningIn,
+    RunnerSigningIn,
+    host_signing_in,
+    reject_runner_principal,
+    runner_signing_in,
+)
 from blizzard.hub.api.auth_session import require_hub, resolve_identity
 from blizzard.hub.api.hub_level import hub_services
 from blizzard.hub.auth.service import CLI_CLIENT_ID
 from blizzard.hub.auth.signing import SigningKeyService
 from blizzard.hub.composition import HubServices
 from blizzard.hub.config import AUTH_MODE_NONE
+from blizzard.hub.domain.runners.host import Host
+from blizzard.hub.domain.runners.registration import RunnerRegistration
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -196,7 +204,7 @@ def authorize(
     signing = surface.signing
 
     is_cli = client == CLI_CLIENT_ID
-    signing_in: RunnerSigningIn | None = None
+    signing_in: RunnerSigningIn | HostSigningIn | None = None
     if is_cli:
         if not CliRedirect(redirect_uri).valid:
             raise HTTPException(
@@ -211,8 +219,9 @@ def authorize(
     else:
         # One undifferentiated 400 for an unknown client and an unregistered redirect URI, so a caller cannot
         # fingerprint client ids by probing.
-        signing_in = runner_signing_in(services, client)
-        if signing_in is None or not signing_in.registration.is_federation_target(redirect_uri):
+        # A runner id and a host id are both hub-minted, so the client alone settles which it names.
+        signing_in = runner_signing_in(services, client) or host_signing_in(services, client)
+        if signing_in is None or not _federation_client(signing_in).is_federation_target(redirect_uri):
             raise _unknown_client()
 
     identity = resolve_identity(request, services)
@@ -241,14 +250,14 @@ def authorize(
         code = services.auth.mint_cli_code(user, code_challenge=code_challenge, redirect_uri=redirect_uri)
         return Delivery.cli_code(redirect_uri=redirect_uri, code=code, state=state).response()
 
-    assert signing_in is not None  # every client but cli resolved its runner above
-    # The runner's tenant settles the sign-in, never a header; a person with no membership there — a hub
+    assert signing_in is not None  # every client but cli resolved its runner or host above
+    # The client's tenant settles the sign-in, never a header; a person with no membership there — a hub
     # administrator included — is answered as an unknown client, so probing reveals nothing about it.
     role = services.memberships.role_in(signing_in.tenant, identity.user_id)
     if role is None:
         raise _unknown_client()
-    # Past the membership: only a member can tell a retired runner apart (403, the app handler's).
-    signing_in.registration.refuse_federation(redirect_uri)
+    # Past the membership: only a member can tell a retired client apart (403, the app handler's).
+    _federation_client(signing_in).refuse_federation(redirect_uri)
     email = user.email if user is not None else None
     claims = {
         "sub": identity.user_id,
@@ -265,8 +274,13 @@ def authorize(
     return delivery.response()
 
 
+def _federation_client(signing_in: RunnerSigningIn | HostSigningIn) -> RunnerRegistration | Host:
+    """The registration or host record a sign-in names — both judge a redirect URI and their own retirement."""
+    return signing_in.registration if isinstance(signing_in, RunnerSigningIn) else signing_in.host
+
+
 def _unknown_client() -> HTTPException:
-    """The one answer for every runner client a sign-in cannot reach: unknown, an unregistered
+    """The one answer for every runner or host client a sign-in cannot reach: unknown, an unregistered
     redirect URI, or a runner in a tenant the person holds no membership in."""
     return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="unknown client or unregistered redirect_uri")
 
