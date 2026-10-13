@@ -30,7 +30,7 @@ The downgrade restores the name keys: a source's name is its slug again — its 
 former slugs — every name reference and work ref is filled from the source the id names, the change rows' keys return
 to names, and the ids and ``work_source_former_slugs`` are dropped.
 Revision ID: 20261012_1500_work_source_identity
-Revises: 20261012_1000_hosts
+Revises: 20261012_1100_runner_bindings
 """
 
 from __future__ import annotations
@@ -47,7 +47,7 @@ from alembic import op
 from blizzard.foundation.store.utc import UtcDateTime
 
 revision: str = "20261012_1500_work_source_identity"
-down_revision: str | None = "20261012_1000_hosts"
+down_revision: str | None = "20261012_1100_runner_bindings"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
