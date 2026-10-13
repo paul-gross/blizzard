@@ -186,7 +186,7 @@ def test_scenario_board_status_composition_agrees_with_the_hub_and_survives_a_co
         assert len(multi_question_detail["questions"]) == 3, multi_question_detail["questions"]
         assert all(not q["answered"] for q in multi_question_detail["questions"]), multi_question_detail["questions"]
 
-        # The explicit chunk above: work refs render with null label/web_url (no
+        # The explicit chunk above: work refs render their raw `{source}#{ref}` label and a null web_url (no
         # configured work source), and its question trail shows answer -> delivery.
         explicit_detail = _chunk_detail(hub, chunk_id)
         assert explicit_detail["status"] == "ready", explicit_detail
@@ -194,7 +194,7 @@ def test_scenario_board_status_composition_agrees_with_the_hub_and_survives_a_co
         assert [r["ref"] for r in work_refs] == ["101", "202"], work_refs
         for ref in work_refs:
             assert ref["source"] == "demo-src", ref
-            assert ref["label"] is None, ref
+            assert ref["label"] == f"demo-src#{ref['ref']}", ref
             assert ref["web_url"] is None, ref
         delivered_questions = [q for q in explicit_detail["questions"] if q["question"] == question_text]
         assert len(delivered_questions) == 1, explicit_detail["questions"]
