@@ -6835,6 +6835,66 @@
         "title": "HostEnrollmentResponse",
         "type": "object"
       },
+      "HostFactAck": {
+        "description": "The hub's per-batch acknowledgement against the host's own high-water mark.\n\n``high_water`` is the new mark after this batch; ``applied``/``already_applied`` partition the pushed seqs, and\n``rejected`` names seqs refused for a non-idempotency reason.",
+        "properties": {
+          "already_applied": {
+            "default": [],
+            "items": {
+              "type": "integer"
+            },
+            "title": "Already Applied",
+            "type": "array"
+          },
+          "applied": {
+            "default": [],
+            "items": {
+              "type": "integer"
+            },
+            "title": "Applied",
+            "type": "array"
+          },
+          "high_water": {
+            "title": "High Water",
+            "type": "integer"
+          },
+          "host_id": {
+            "title": "Host Id",
+            "type": "string"
+          },
+          "rejected": {
+            "default": [],
+            "items": {
+              "type": "integer"
+            },
+            "title": "Rejected",
+            "type": "array"
+          }
+        },
+        "required": [
+          "host_id",
+          "high_water"
+        ],
+        "title": "HostFactAck",
+        "type": "object"
+      },
+      "HostFactBatch": {
+        "description": "A host's push of one-or-more buffered facts, ordered by seq \u2014 attributed to the host its bearer token names;\nthe body carries no host id. The item shape is the runner lane's.",
+        "properties": {
+          "facts": {
+            "items": {
+              "$ref": "#/components/schemas/RunnerFact"
+            },
+            "title": "Facts",
+            "type": "array"
+          }
+        },
+        "required": [
+          "facts"
+        ],
+        "title": "HostFactBatch",
+        "type": "object"
+      },
       "HostLifecycleRequest": {
         "description": "Revoke a host's token \u2014 records who did it.",
         "properties": {
@@ -7016,6 +7076,14 @@
               "type": "string"
             },
             "title": "Runner Ids",
+            "type": "array"
+          },
+          "subscription_usage": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/HostSubscriptionUsageView"
+            },
+            "title": "Subscription Usage",
             "type": "array"
           },
           "subscriptions": {
@@ -7217,6 +7285,82 @@
           "runner_ids"
         ],
         "title": "HostRunnersRequest",
+        "type": "object"
+      },
+      "HostSubscriptionUsageView": {
+        "description": "One of a host's subscriptions with its newest reported usage \u2014 as a runner's card shows it \u2014 and the runners\nspending it.",
+        "properties": {
+          "condition": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SampleMissReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "miss_reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SampleMissReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "missed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Missed At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "runners": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Runners",
+            "type": "array"
+          },
+          "sampled_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sampled At"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "windows": {
+            "items": {
+              "$ref": "#/components/schemas/ExternalSubscriptionUsageWindowView"
+            },
+            "title": "Windows",
+            "type": "array"
+          }
+        },
+        "required": [
+          "slug",
+          "name",
+          "windows"
+        ],
+        "title": "HostSubscriptionUsageView",
         "type": "object"
       },
       "HostTokenRevocationResponse": {
@@ -21923,6 +22067,48 @@
           }
         },
         "summary": "Report Host",
+        "tags": [
+          "fleet-host"
+        ]
+      }
+    },
+    "/api/fleet/host/events": {
+      "post": {
+        "description": "Land the calling host's own facts \u2014 its subscription usage samples and misses \u2014 idempotent on the batch's\nper-host ``seq`` high-water mark; 403 when the host is retired. A fact of any other kind is rejected in the ack\nand holds the mark behind it.",
+        "operationId": "ingest_host_facts_api_fleet_host_events_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HostFactBatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostFactAck"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ingest Host Facts",
         "tags": [
           "fleet-host"
         ]

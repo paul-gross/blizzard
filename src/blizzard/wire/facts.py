@@ -56,3 +56,23 @@ class RunnerFactAck(BaseModel):
     already_applied: list[int] = []
     rejected: list[int] = []
     route_ended: list[int] = []
+
+
+class HostFactBatch(BaseModel):
+    """A host's push of one-or-more buffered facts, ordered by seq — attributed to the host its bearer token names;
+    the body carries no host id. The item shape is the runner lane's."""
+
+    facts: list[RunnerFact]
+
+
+class HostFactAck(BaseModel):
+    """The hub's per-batch acknowledgement against the host's own high-water mark.
+
+    ``high_water`` is the new mark after this batch; ``applied``/``already_applied`` partition the pushed seqs, and
+    ``rejected`` names seqs refused for a non-idempotency reason."""
+
+    host_id: str
+    high_water: int
+    applied: list[int] = []
+    already_applied: list[int] = []
+    rejected: list[int] = []

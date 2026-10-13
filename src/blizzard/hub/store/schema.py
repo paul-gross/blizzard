@@ -2026,6 +2026,62 @@ runner_external_usage_misses = Table(
 )
 Index("ix_runner_external_usage_misses_tenant_id", runner_external_usage_misses.c.tenant_id)
 
+# --- The host's fact lane ------------------------------------------------------
+# A host's own facts ride a lane of their own, de-duplicated against a mark of the host's own — never the runner's
+# `runner_high_water`. No ForeignKey on host_id in any of the three: the upsert must not depend on a row it cannot
+# already see, as the runner usage tables.
+
+host_high_water = Table(
+    "host_high_water",
+    metadata,
+    Column("host_id", String, nullable=False, info={"hub_unique": True}),
+    Column("seq", Integer, nullable=False),  # greatest applied per-host seq
+    Column("updated_at", UtcDateTime, nullable=False),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_host_high_water_tenant_id"), nullable=False),
+    PrimaryKeyConstraint("host_id", name="pk_host_high_water"),
+)
+Index("ix_host_high_water_tenant_id", host_high_water.c.tenant_id)
+
+# The host's newest sampled external-usage snapshot per subscription slug — advisory, refreshed in place.
+host_external_usage = Table(
+    "host_external_usage",
+    metadata,
+    Column("host_id", String, nullable=False, info={"hub_unique": True}),
+    Column("slug", String, nullable=False),
+    # The declaration's operator-facing label, reported alongside `slug`.
+    Column("name", String, nullable=False),
+    Column("sampled_at", UtcDateTime, nullable=False),
+    # JSON array of {window, utilization_pct, resets_at, window_seconds} — rewritten wholesale on every sample.
+    Column("windows", Text, nullable=False),
+    Column("updated_at", UtcDateTime, nullable=False),
+    Column(
+        "tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_host_external_usage_tenant_id"), nullable=False
+    ),
+    PrimaryKeyConstraint("host_id", "slug", name="pk_host_external_usage"),
+)
+Index("ix_host_external_usage_tenant_id", host_external_usage.c.tenant_id)
+
+# The host's newest external-usage *miss* per slug — sibling to `host_external_usage`.
+host_external_usage_misses = Table(
+    "host_external_usage_misses",
+    metadata,
+    Column("host_id", String, nullable=False, info={"hub_unique": True}),
+    Column("slug", String, nullable=False),
+    Column("name", String, nullable=False),
+    Column("missed_at", UtcDateTime, nullable=False),
+    # The sampler's own closed-set miss reason — never a token, a refresh token, or a path.
+    Column("reason", String, nullable=False),
+    Column("updated_at", UtcDateTime, nullable=False),
+    Column(
+        "tenant_id",
+        String,
+        ForeignKey("tenants.tenant_id", name="fk_host_external_usage_misses_tenant_id"),
+        nullable=False,
+    ),
+    PrimaryKeyConstraint("host_id", "slug", name="pk_host_external_usage_misses"),
+)
+Index("ix_host_external_usage_misses_tenant_id", host_external_usage_misses.c.tenant_id)
+
 # --- The identity spine: users, provider identities, sessions -----
 # An account carries no role: what a user may do is their memberships and the hub administrator facts.
 

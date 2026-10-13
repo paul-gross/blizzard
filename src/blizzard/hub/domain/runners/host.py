@@ -21,6 +21,8 @@ from blizzard.hub.domain.runners.registration import (
     DeclaredSubscription,
     RunnerRegistration,
     RunnerRetired,
+    SubscriptionUsageMiss,
+    SubscriptionUsageSample,
     UnregisteredRedirect,
     declared_name,
 )
@@ -277,6 +279,15 @@ class Host:
         return HostLifecycleFact(host_id=self.host_id, retired=True, at=at, by=by)
 
 
+@domain_model
+@dataclass(frozen=True)
+class HostUsage:
+    """A host's newest reported sample and miss per subscription slug, raw — staleness is applied at derive time."""
+
+    samples: tuple[SubscriptionUsageSample, ...] = ()
+    misses: tuple[SubscriptionUsageMiss, ...] = ()
+
+
 class IReadHostRegistry(Protocol):
     """Read-only host registry access."""
 
@@ -288,6 +299,14 @@ class IReadHostRegistry(Protocol):
 
     def live_names(self, *, excluding: str | None = None) -> frozenset[str]:
         """The names of the tenant's hosts that are not retired, ``excluding`` one host's own."""
+        ...
+
+    def high_water(self, host_id: str) -> int:
+        """The greatest per-host fact seq already applied; ``0`` for a host that has pushed none."""
+        ...
+
+    def usage_of(self, host_ids: Sequence[str]) -> dict[str, HostUsage]:
+        """Each listed host's newest sample and miss per slug, one entry per id, in one read per id batch."""
         ...
 
 
@@ -309,6 +328,22 @@ class IWriteHostRegistry(IReadHostRegistry, Protocol):
     def adopt(self, host_id: str, runner_ids: Sequence[str]) -> None:
         """Place the runners under ``host_id``, in one transaction. Raises :class:`RunnerAlreadyHosted` when one
         came to stand under a host first."""
+        ...
+
+    def set_high_water(self, host_id: str, *, seq: int, at: datetime) -> None:
+        """Record ``seq`` as the greatest per-host fact seq applied."""
+        ...
+
+    def record_external_usage(
+        self, host_id: str, *, slug: str, name: str, sampled_at: datetime, windows_json: str, at: datetime
+    ) -> None:
+        """Upsert the host's newest sample for ``slug``; no row for ``host_id`` is required."""
+        ...
+
+    def record_external_usage_miss(
+        self, host_id: str, *, slug: str, name: str, missed_at: datetime, reason: str, at: datetime
+    ) -> None:
+        """Upsert the host's newest miss for ``slug``, in its own table; no row for ``host_id`` is required."""
         ...
 
     def release(self, host_id: str, runner_ids: Sequence[str]) -> None:

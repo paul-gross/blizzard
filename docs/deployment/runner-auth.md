@@ -118,7 +118,8 @@ followed by a ULID — a name, and its own bearer token, separate from every run
 host daemon. Host names are unique among a tenant's live hosts, and a taken name refuses the add.
 
 The host token reaches only the host's own routes, under `/api/fleet/host`: reporting the machine's workspace, reading
-its record back, adding a runner under the host, and retiring one of its runners. It is refused on every runner route,
+its record back, adding a runner under the host, retiring one of its runners, and pushing the host's own facts (its
+subscription usage samples and misses) to `/api/fleet/host/events`, de-duplicated against a mark of the host's own. It is refused on every runner route,
 and a runner's token is refused on the host routes. A host acts only on runners it holds; another tenant's runner is
 refused as unknown.
 

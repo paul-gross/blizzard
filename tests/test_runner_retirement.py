@@ -270,6 +270,7 @@ def test_every_fleet_route_is_gated_or_a_named_exception(tmp_path: Path) -> None
         ("POST", "/api/fleet/host"),
         ("POST", "/api/fleet/host/runners"),
         ("POST", "/api/fleet/host/runners/{runner_id}/retire"),
+        ("POST", "/api/fleet/host/events"),
     }
 
 

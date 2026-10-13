@@ -8,7 +8,7 @@ usage**. ``token_hash`` is the one mutable exception; a revoked hash is kept as 
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Protocol
@@ -188,6 +188,9 @@ class RunnerRegistration:
     capabilities: tuple[RunnerCapability, ...] = ()
     #: The declared subscription roster — ``None`` for no roster, ``()`` for none declared.
     declared_subscriptions: tuple[DeclaredSubscription, ...] | None = None
+    #: The roster a hosted runner's usage is rendered against — its host's entry for the slug it registered — in place
+    #: of ``declared_subscriptions``, which stays the runner's own declaration; ``None`` for a runner standing alone.
+    usage_roster: tuple[DeclaredSubscription, ...] | None = None
     #: Derived from the newest lifecycle fact; ``retired_at``/``retired_by`` populate only while retired.
     retired: bool = False
     retired_at: datetime | None = None
@@ -203,6 +206,23 @@ class RunnerRegistration:
     bindings: tuple[RunnerBinding, ...] | None = None
     #: The slug of the host subscription the bindings spend, as last sent; ``None`` when it named none.
     subscription: str | None = None
+
+    def reading_host_usage(
+        self,
+        samples: Iterable[SubscriptionUsageSample],
+        misses: Iterable[SubscriptionUsageMiss],
+        roster: Iterable[DeclaredSubscription],
+    ) -> RunnerRegistration:
+        """This registration as a hosted runner presents it: the usage of the host subscription it registered
+        (:attr:`subscription`) read off its host's ``samples``, ``misses`` and ``roster``, in place of any rows of its
+        own. A runner that registered no slug presents none."""
+        slug = self.subscription
+        return replace(
+            self,
+            subscription_usage=tuple(r for r in samples if r.slug == slug),
+            subscription_usage_misses=tuple(r for r in misses if r.slug == slug),
+            usage_roster=tuple(d for d in roster if d.slug == slug),
+        )
 
     def serves(self, project_id: str) -> bool:
         """Whether some entry of the served declaration resolved to ``project_id``."""
@@ -456,11 +476,29 @@ class PerSubscriptionUsageView:
         """Every subscription's usage view, sorted by slug: a declared roster switches
         membership from age-gated to roster-gated — every declared slug, whatever its
         sample or miss age. Without a roster, see :meth:`_rosterless_views`."""
-        samples = {record.slug: record for record in registration.subscription_usage}
-        misses = {record.slug: record for record in registration.subscription_usage_misses}
-        if registration.declared_subscriptions is not None:
-            return cls._roster_views(registration.declared_subscriptions, samples, misses)
-        return cls._rosterless_views(samples, misses, now=now)
+        return cls.over(
+            registration.subscription_usage,
+            registration.subscription_usage_misses,
+            registration.declared_subscriptions if registration.usage_roster is None else registration.usage_roster,
+            now=now,
+        )
+
+    @classmethod
+    def over(
+        cls,
+        samples: Iterable[SubscriptionUsageSample],
+        misses: Iterable[SubscriptionUsageMiss],
+        roster: tuple[DeclaredSubscription, ...] | None,
+        *,
+        now: datetime,
+    ) -> tuple[PerSubscriptionUsageView, ...]:
+        """:meth:`every` over any owner's newest ``samples`` and ``misses`` per slug and its declared ``roster`` —
+        ``None`` for none, which switches to the rosterless fallback."""
+        by_slug = {record.slug: record for record in samples}
+        miss_by_slug = {record.slug: record for record in misses}
+        if roster is not None:
+            return cls._roster_views(roster, by_slug, miss_by_slug)
+        return cls._rosterless_views(by_slug, miss_by_slug, now=now)
 
     @classmethod
     def _roster_views(

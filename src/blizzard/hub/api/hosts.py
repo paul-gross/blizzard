@@ -18,7 +18,7 @@ from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
-from blizzard.hub.api.runners import publish_retirement
+from blizzard.hub.api.runners import publish_retirement, usage_views
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.runners.host import (
@@ -27,11 +27,12 @@ from blizzard.hub.domain.runners.host import (
     HostNameTaken,
     HostNotEnrolled,
     HostRetired,
+    HostUsage,
     RunnerAlreadyHosted,
     RunnerNotUnderHost,
     UnknownRunner,
 )
-from blizzard.hub.domain.runners.registration import RunnerRetired
+from blizzard.hub.domain.runners.registration import PerSubscriptionUsageView, RunnerRegistration, RunnerRetired
 from blizzard.wire.host import (
     HostAddRequest,
     HostAddResponse,
@@ -42,6 +43,7 @@ from blizzard.wire.host import (
     HostRetireRequest,
     HostRetireResponse,
     HostRunnersRequest,
+    HostSubscriptionUsageView,
     HostTokenRevocationResponse,
     HostWorkspace,
 )
@@ -56,10 +58,29 @@ def _iso_or_none(value: datetime | None) -> str | None:
     return iso_utc(value) if value is not None else None
 
 
-def registry_view(services: TenantServices, host: Host) -> HostRegistryView:
-    """One host as the operator registry shows it, the runners standing under it read alongside."""
+def _subscription_usage(
+    host: Host, usage: HostUsage, under: list[RunnerRegistration], *, now: datetime
+) -> list[HostSubscriptionUsageView]:
+    """Each subscription the host reports, once, through the rules a runner's card follows with the host's reported
+    roster as the declaration — so the two agree — naming the live runners under the host spending its slug."""
+    spending: dict[str, list[str]] = {}
+    for runner in under:
+        if not runner.retired and runner.subscription is not None:
+            spending.setdefault(runner.subscription, []).append(runner.runner_id)
+    views = PerSubscriptionUsageView.over(usage.samples, usage.misses, host.subscriptions, now=now)
+    return [
+        HostSubscriptionUsageView(**wire.model_dump(), runners=spending.get(wire.slug, []))
+        for wire in usage_views(views)
+    ]
+
+
+def registry_view(services: TenantServices, host: Host, usage: HostUsage | None = None) -> HostRegistryView:
+    """One host as the operator registry shows it, the runners standing under it read alongside. ``usage`` is the
+    host's reported usage when the caller read it in bulk across several hosts, else it is read here."""
     now = services.clock.now()
     under = services.registry.list_runners(include_retired=True, host_id=host.host_id)
+    if usage is None:
+        usage = services.hosts.usage_of([host.host_id])[host.host_id]
     return HostRegistryView(
         host_id=host.host_id,
         host_name=host.name,
@@ -80,6 +101,7 @@ def registry_view(services: TenantServices, host: Host) -> HostRegistryView:
         retired_at=_iso_or_none(host.retired_at),
         retired_by=host.retired_by,
         runner_ids=[r.runner_id for r in under],
+        subscription_usage=_subscription_usage(host, usage, under, now=now),
     )
 
 
@@ -130,9 +152,9 @@ def add_host(
 def list_hosts(services: Services, include_retired: Annotated[bool, Query()] = False) -> HostRegistryListResponse:
     """The host registry — every added host, oldest first; a retired host excluded by default, included and marked when
     ``include_retired``."""
-    return HostRegistryListResponse(
-        hosts=[registry_view(services, h) for h in services.hosts.list_hosts(include_retired=include_retired)]
-    )
+    hosts = services.hosts.list_hosts(include_retired=include_retired)
+    usage = services.hosts.usage_of([h.host_id for h in hosts])
+    return HostRegistryListResponse(hosts=[registry_view(services, h, usage[h.host_id]) for h in hosts])
 
 
 @router.get("/hosts/{host_id}", response_model=HostRegistryView, dependencies=[Depends(require(Permission.FLEET_VIEW))])

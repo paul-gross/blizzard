@@ -367,13 +367,14 @@ _ADMITTING: dict[tuple[str, str], Permission] = {
 #: refused in-domain with the paused-denial body older runners parse.
 _FLEET_CLAIM: tuple[str, str] = ("POST", "/api/fleet/routes")
 
-#: Host plane — the four ``/api/fleet/host*`` routes a host's bearer token reaches, and nothing else. Mounted on a
+#: Host plane — the five ``/api/fleet/host*`` routes a host's bearer token reaches, and nothing else. Mounted on a
 #: router of their own, because the fleet router's runner-principal gate cannot be lifted per route.
 _HOST: set[tuple[str, str]] = {
     ("POST", "/api/fleet/host"),
     ("GET", "/api/fleet/host"),
     ("POST", "/api/fleet/host/runners"),
     ("POST", "/api/fleet/host/runners/{runner_id}/retire"),
+    ("POST", "/api/fleet/host/events"),
 }
 
 

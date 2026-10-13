@@ -1,6 +1,6 @@
 """The host record, its credential, and the host verbs at the hub (component tier).
 
-A host's bearer token reaches exactly the four ``/api/fleet/host*`` routes; a runner's token reaches none of them, and
+A host's bearer token reaches exactly the five ``/api/fleet/host*`` routes; a runner's token reaches none of them, and
 every other ``/api/fleet`` route refuses a host's. The operator verbs live under ``/api/hosts``."""
 
 from __future__ import annotations
