@@ -8,12 +8,13 @@ from __future__ import annotations
 
 from blizzard.foundation.event_log import EventLogSeverity
 from blizzard.foundation.events.broker import EventBroker as _EventBroker
-from blizzard.foundation.hub_event_types import ChunkChangeCause, HubEventType, RunnerChangeKind
+from blizzard.foundation.hub_event_types import ChunkChangeCause, HostChangeKind, HubEventType, RunnerChangeKind
 from blizzard.wire.sse import (
     ChunkChangedPayload,
     DecisionOpenedPayload,
     DecisionResolvedPayload,
     EventLoggedPayload,
+    HostChangedPayload,
     QuestionAnsweredPayload,
     QuestionAskedPayload,
     QueueChangedPayload,
@@ -129,6 +130,23 @@ class EventBroker(_EventBroker):
             runner_id=runner_id, runner_name=runner_name, kind=kind, by=by, reason=reason, key=key
         ).to_payload()
         return self.publish(HubEventType.RUNNER_CHANGED, payload)
+
+    def publish_host_changed(
+        self,
+        host_id: str,
+        *,
+        kind: HostChangeKind,
+        host_name: str | None = None,
+        by: str | None = None,
+        key: str | None = None,
+    ) -> int:
+        """A host's registry state changed — ``kind`` names which change.
+
+        A host is tenant-wide, so the frame names no project. ``by`` rides every operator kind, ``key`` the
+        retirement fact's identity; ``reported`` and ``added`` have no fact table to name. A host reports on every
+        tick, so ``reported`` is published only when the report changed what the hub holds."""
+        payload = HostChangedPayload(host_id=host_id, host_name=host_name, kind=kind, by=by, key=key).to_payload()
+        return self.publish(HubEventType.HOST_CHANGED, payload)
 
     def publish_event_logged(
         self,

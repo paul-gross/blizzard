@@ -1,0 +1,26 @@
+{
+  "added": {
+    "host_id": "hs_01J9Z3QK7M4X8V2N5R6T1W0YAB",
+    "kind": "added",
+    "by": "operator"
+  },
+  "reported": {
+    "host_id": "hs_01J9Z3QK7M4X8V2N5R6T1W0YAB",
+    "host_name": "box",
+    "kind": "reported"
+  },
+  "token-revoked": {
+    "host_id": "hs_01J9Z3QK7M4X8V2N5R6T1W0YAB",
+    "host_name": "box",
+    "kind": "token-revoked",
+    "by": "operator",
+    "key": "host_token_revocations:1"
+  },
+  "retired": {
+    "host_id": "hs_01J9Z3QK7M4X8V2N5R6T1W0YAB",
+    "host_name": "box",
+    "kind": "retired",
+    "by": "operator",
+    "key": "host_lifecycle_facts:1"
+  }
+}

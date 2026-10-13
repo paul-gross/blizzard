@@ -406,7 +406,9 @@ class HttpHubRunnerAdmin:
             headers[TENANT_HEADER] = tenant_id
         request = RunnerAddRequest(name=name, projects=list(projects) if projects is not None else None)
         try:
-            resp = self._client.post(_RUNNERS_API, json=request.model_dump(mode="json"), headers=headers)
+            resp = self._client.post(
+                _RUNNERS_API, json=request.model_dump(mode="json", exclude={"host_id"}), headers=headers
+            )
         except httpx.HTTPError as exc:
             _log.error("hub unreachable", operation=operation, detail=str(exc))
             raise HubClientError(f"{operation} failed: {exc}") from exc

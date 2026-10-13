@@ -374,6 +374,15 @@ _PROBES: dict[tuple[str, str], _Probe] = {
     ("POST", "/api/runners/{runner_id}/resume"): _f({}),
     ("POST", "/api/runners/{runner_id}/retire"): _f({}),
     ("POST", "/api/runners/{runner_id}/token-revocations"): _f({}),
+    # -- hosts (people) --------------------------------------------------------------------------------------
+    ("POST", "/api/hosts"): _own({"name": "beta-extra"}, status=201),
+    ("GET", "/api/hosts"): _LIST,
+    ("GET", "/api/hosts/{host_id}"): _f(),
+    ("POST", "/api/hosts/{host_id}/adoptions"): _f({"runner_ids": ["{runner_id}"]}),
+    ("POST", "/api/hosts/{host_id}/enrollments"): _f(),
+    ("POST", "/api/hosts/{host_id}/releases"): _f({"runner_ids": ["{runner_id}"]}),
+    ("POST", "/api/hosts/{host_id}/retire"): _f({}),
+    ("POST", "/api/hosts/{host_id}/token-revocations"): _f({}),
     # -- the fleet plane: the second tenant's runner, the first tenant's records -----------------------------
     ("GET", "/api/fleet/chunk-statuses"): _f(
         status=200,
@@ -632,6 +641,7 @@ def _seed(hub: HubHarness, harness: TenantHarness, label: str) -> _Tenant:
     t.keep("invitation_id", invitation["invitation"]["invitation_id"])
     added = _ok(c.post("/api/runners", json={"name": f"{label}-added"}), 201)
     t.keep("runner_id", added["runner_id"])
+    t.keep("host_id", _ok(c.post("/api/hosts", json={"name": f"{label}-box"}), 201)["host_id"])
     member = seed_user(hub, username=f"{label}-member", role=Role.PENDING)
     seed_membership(hub.engine, harness.tenant, member.user_id, Role.GUEST)
     t.keep("user_id", member.user_id)
@@ -804,6 +814,7 @@ def test_a_tenant_sees_its_own_records_in_its_listings(two: _Two) -> None:
             ("/api/garden-proposals", t.ids["proposal_id"]),
             ("/api/invitations", t.ids["invitation_id"]),
             ("/api/runners", t.ids["runner_id"]),
+            ("/api/hosts", t.ids["host_id"]),
             ("/api/members", t.ids["user_id"]),
             ("/api/questions", t.ids["question_id"]),
             ("/api/projects", t.ids["project"]),

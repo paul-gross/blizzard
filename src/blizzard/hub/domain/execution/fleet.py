@@ -177,7 +177,7 @@ class FleetService:
         pre-lock holdings read."""
         runner_id = registration.runner_id
         now = self._clock.now()
-        fact = registration.retire(self._holdings(runner_id), force=force, by=by, at=now)
+        fact = registration.retire(self.holdings(runner_id), force=force, by=by, at=now)
         fact_id = None
         if fact is not None:
             fact_id = self._registry.record_lifecycle(runner_id, retired=fact.retired, at=fact.at, by=fact.by)
@@ -196,7 +196,8 @@ class FleetService:
         )
         return outcome
 
-    def _holdings(self, runner_id: str) -> list[Route]:
+    def holdings(self, runner_id: str) -> list[Route]:
+        """The runner's live routes on chunks that still hold a claim."""
         routes = self._routes.live_routes_of_runner(runner_id)
         facts = self._facts.status_facts_for([route.chunk_id for route in routes])
         return held_routes(routes, {chunk_id: f.status() for chunk_id, f in facts.items()})

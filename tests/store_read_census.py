@@ -120,6 +120,7 @@ from blizzard.hub.domain.observability.tracing.repository import (
 from blizzard.hub.domain.observability.transcripts import IReadTranscriptSegments
 from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import IReadProjectRepository, ProjectEdit, ProjectId, ProjectSlug
+from blizzard.hub.domain.runners.host import IReadHostRegistry
 from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
 from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.domain.tenancy.administration import IReadTenantDirectory
@@ -1063,6 +1064,9 @@ class HubWorld:
     session_id_hash: str
     auth_state_value: str
     runner_token_hash: str
+    host_id: str
+    host_token_hash: str
+    revoked_host_token_hash: str
     invitation_id: str
     invitation_token_hash: str
     routine_id: str
@@ -1220,6 +1224,15 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     assert registration is not None
     runner_token = hub.services.enrollment.enroll(registration)
     runner_token_hash = TokenHash(runner_token).hex
+
+    # --- hosts ------------------------------------------------------------------------------
+    added_host = hub.services.host_enrollment.add("census-box", by="operator")
+    host_token_hash = TokenHash(added_host.token).hex
+    revoked_host = hub.services.host_enrollment.add("census-revoked", by="operator")
+    revoked_host_token_hash = TokenHash(revoked_host.token).hex
+    revoked_record = hub.services.hosts.get_host(revoked_host.host_id)
+    assert revoked_record is not None
+    hub.services.host_enrollment.revoke_token(revoked_record, by="operator")
     hub.services.fleet.set_paused(registration, paused=True, by="operator")
     hub.services.fleet.record_local_pause(HUB_RUNNER_ID_2, paused=True, at=_ht(6), by="runner", reason="disk full")
 
@@ -1932,6 +1945,9 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         session_id_hash=session_id_hash,
         auth_state_value=auth_state_value,
         runner_token_hash=runner_token_hash,
+        host_id=added_host.host_id,
+        host_token_hash=host_token_hash,
+        revoked_host_token_hash=revoked_host_token_hash,
         invitation_id="inv_census_1",
         invitation_token_hash=invitation_token_hash,
         routine_id=routine.routine_id,
@@ -2318,6 +2334,15 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     ),
     (CredentialReads, "runner_by_id"): lambda w: w.hub.hub_services.hub_scoped_reads.credentials.runner_by_id(
         HUB_RUNNER_ID
+    ),
+    (IReadHostRegistry, "get_host"): lambda w: w.hub.services.hosts.get_host(w.host_id),
+    (IReadHostRegistry, "list_hosts"): lambda w: w.hub.services.hosts.list_hosts(),
+    (IReadHostRegistry, "live_names"): lambda w: w.hub.services.hosts.live_names(),
+    (CredentialReads, "host_for_token_hash"): lambda w: (
+        w.hub.hub_services.hub_scoped_reads.credentials.host_for_token_hash(w.host_token_hash)
+    ),
+    (CredentialReads, "revoked_token_host"): lambda w: (
+        w.hub.hub_services.hub_scoped_reads.credentials.revoked_token_host(w.revoked_host_token_hash)
     ),
     (IReadRunnerRegistry, "list_pause_facts_since"): lambda w: w.hub.services.registry.list_pause_facts_since(
         _HUB_BASE, limit=50

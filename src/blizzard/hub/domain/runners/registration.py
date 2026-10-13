@@ -136,6 +136,8 @@ class RunnerAddition:
     at: datetime
     by: str
     served: tuple[ServedEntry, ...] = ()
+    #: The host the runner is added under; ``None`` for a runner that stands alone.
+    host_id: str | None = None
 
 
 def declared_name(name: str | None) -> str | None:
@@ -195,6 +197,8 @@ class RunnerRegistration:
     #: The served declaration: every entry the runner declared, each with the project it resolved to. Empty serves
     #: nothing, and so does an entry that resolved to no project.
     served: tuple[ServedEntry, ...] = ()
+    #: The host the runner stands under; ``None`` for a runner that stands alone.
+    host_id: str | None = None
 
     def serves(self, project_id: str) -> bool:
         """Whether some entry of the served declaration resolved to ``project_id``."""
@@ -552,8 +556,9 @@ class IReadRunnerRegistry(Protocol):
         facts (or never added) is not retired."""
         ...
 
-    def list_runners(self, *, include_retired: bool = False) -> list[RunnerRegistration]:
-        """Every registration, oldest added first — retired runners only when ``include_retired``."""
+    def list_runners(self, *, include_retired: bool = False, host_id: str | None = None) -> list[RunnerRegistration]:
+        """Every registration, oldest added first — retired runners only when ``include_retired``, and only
+        those standing under ``host_id`` when it is given."""
         ...
 
     def names_for(self, runner_ids: Iterable[str]) -> dict[str, str]:

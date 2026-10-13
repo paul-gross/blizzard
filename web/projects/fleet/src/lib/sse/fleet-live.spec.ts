@@ -444,6 +444,20 @@ describe('FleetLiveUpdates', () => {
     expect(keys).toContainEqual(['hub', 'backlog']);
   });
 
+  it('accepts a host-changed frame, keeping it out of the ring and invalidating nothing', () => {
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
+    const live = TestBed.inject(FleetLiveUpdates);
+
+    const source = FakeEventSource.instances[0];
+    source.open();
+    source.emitNamed('host-changed', JSON.stringify({ host_id: 'hs_a', host_name: 'box', kind: 'reported' }));
+    vi.advanceTimersByTime(INVALIDATION_COALESCE_WINDOW_MS);
+
+    expect(live.log()).toHaveLength(0);
+    expect(invalidate).not.toHaveBeenCalled();
+  });
+
   it('keeps one transition through lease and usage refreshes while invalidating every chunk fact', () => {
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
     TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());

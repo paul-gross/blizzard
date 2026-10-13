@@ -22,6 +22,7 @@ from blizzard.hub.api.bearer import presented_bearer
 from blizzard.hub.api.hub_level import Hub
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.observability.tracing.attributes import RUNNER_ID, RUNNER_NAME
+from blizzard.hub.domain.runners.host import Host
 from blizzard.hub.domain.runners.registration import RunnerRegistration, RunnerTokenRefused, refuse_runner_token
 from blizzard.hub.tenancy import TenantClosed, TenantId, UnknownTenant
 
@@ -35,8 +36,18 @@ _PRINCIPAL_SCOPE_KEY = "blizzard.runner_principal"
 #: loaded model whether it is retired rather than reading the registry a second time.
 _REGISTRATION_SCOPE_KEY = "blizzard.runner_registration"
 
+#: ASGI-scope key holding the host principal the request's bearer token already resolved to.
+_HOST_PRINCIPAL_SCOPE_KEY = "blizzard.host_principal"
+
+#: ASGI-scope key holding the host that principal was resolved from, so the gate asks the loaded model whether it is
+#: retired rather than reading the registry a second time.
+_HOST_SCOPE_KEY = "blizzard.host"
+
 #: Why a fleet call is refused when its bearer token names no runner the hub can serve.
 UNRESOLVED_RUNNER_TOKEN = "bearer token does not resolve to a known runner"
+
+#: Why a host call is refused when its bearer token names no host the hub can serve.
+UNRESOLVED_HOST_TOKEN = "bearer token does not resolve to a known host"
 
 
 @dto
@@ -157,6 +168,86 @@ class RunnerAuth:
         )
 
 
+@dto
+@dataclass(frozen=True)
+class HostPrincipal:
+    """A bearer token resolved to the host it belongs to: its id, the name it holds, and the tenant it was added in,
+    which is the tenant of every call it makes."""
+
+    host_id: str
+    host_name: str
+    tenant_id: TenantId
+
+
+@dataclass(frozen=True)
+class HostAuth:
+    """One request's host-bearer decision — the host router demands a principal; a runner's token resolves no host."""
+
+    request: Request
+    services: HubServices
+
+    @classmethod
+    def of(cls, request: Request, services: HubServices) -> HostAuth:
+        return cls(request, services)
+
+    @property
+    def principal(self) -> HostPrincipal | None:  # ast-grep-ignore: bzh:property-delegates
+        """The presented token resolved to its host, or ``None`` when the header is missing/malformed or the token
+        does not resolve — no rejection."""
+        scope = self.request.scope
+        if _HOST_PRINCIPAL_SCOPE_KEY not in scope:
+            scope[_HOST_PRINCIPAL_SCOPE_KEY] = self._resolve()
+        return scope[_HOST_PRINCIPAL_SCOPE_KEY]
+
+    def _resolve(self) -> HostPrincipal | None:
+        token = presented_bearer(self.request)
+        if token is None:
+            return None
+        resolved = self.services.hub_scoped_reads.credentials.host_for_token_hash(TokenHash(token).hex)
+        if resolved is None:
+            return None
+        host = _host_in_tenant(self.services, resolved.tenant, resolved.host_id)
+        if host is None:
+            return None
+        self.request.scope[_HOST_SCOPE_KEY] = host
+        return HostPrincipal(host_id=host.host_id, host_name=host.name, tenant_id=resolved.tenant)
+
+    def demand(self) -> HostPrincipal:
+        """The resolved principal; a missing/malformed header, a revoked token, or one that resolves to no host raises
+        401 — there is no tokenless host call. A principal whose host is retired raises
+        :class:`~blizzard.hub.domain.runners.host.HostRetired` (403)."""
+        principal = self.principal
+        if principal is not None:
+            host = self.request.scope.get(_HOST_SCOPE_KEY)
+            if host is not None:
+                host.refuse_if_retired(action="host call")
+            return principal
+        token = presented_bearer(self.request)
+        credentials = self.services.hub_scoped_reads.credentials
+        if token is not None and credentials.revoked_token_host(TokenHash(token).hex) is not None:
+            _log.warning("revoked host token presented", path=self.request.url.path)
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="bearer token has been revoked")
+        reason = "missing or malformed Authorization header" if token is None else UNRESOLVED_HOST_TOKEN
+        _log.warning("host auth failed", reason=reason, path=self.request.url.path)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=reason)
+
+    def host(self) -> Host:
+        """The loaded host the demanded principal names — read once by the resolution."""
+        host = self.request.scope.get(_HOST_SCOPE_KEY)
+        assert host is not None  # demand() resolved a principal first
+        return host
+
+
+def _host_in_tenant(services: HubServices, tenant: TenantId, host_id: str) -> Host | None:
+    """``host_id``'s record, read through the host registry of ``tenant`` — the tenant a credential resolved it to —
+    or ``None`` when that tenant has no such host or no stores to open."""
+    try:
+        registry = services.tenant_hosts(tenant)
+    except (UnknownTenant, TenantClosed):
+        return None
+    return registry.get_host(host_id)
+
+
 def _registration_in_tenant(services: HubServices, tenant: TenantId, runner_id: str) -> RunnerRegistration | None:
     """``runner_id``'s registration, read through the registry of ``tenant`` — the tenant a credential
     resolved it to — or ``None`` when that tenant has no registration of it or no stores to open."""
@@ -199,3 +290,7 @@ def require_runner_principal_even_if_retired(request: Request, services: Hub) ->
 
 def reject_runner_principal(request: Request, services: Hub) -> None:
     RunnerAuth.of(request, services).refuse_runner()
+
+
+def require_host_principal(request: Request, services: Hub) -> HostPrincipal:
+    return HostAuth.of(request, services).demand()

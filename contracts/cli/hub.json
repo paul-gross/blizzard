@@ -7655,6 +7655,18 @@
               "type": "text"
             },
             {
+              "help": "Add the runner under this host (an `hs_` id from `blizzard hub runner-host list`); refused when it is unknown or retired.",
+              "hidden": false,
+              "kind": "option",
+              "name": "host_id",
+              "opts": [
+                "--host"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
@@ -8204,6 +8216,541 @@
       "params": [],
       "path": "hub runner",
       "short_help": "Operator verbs over one runner: adding it, its liveness, its pause brake, and retirement."
+    },
+    "runner-host": {
+      "commands": {
+        "add": {
+          "help": "Add a host under NAME; prints its hub-minted id and bearer token exactly once.\n\nThe host stays never connected until it first reports with that token. A name a live host already holds is\nrefused.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "name",
+              "opts": [
+                "name"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "A runner to place under the host (repeatable): refused when it is another tenant's, already under a host, or retired \u2014 and then no host is added.",
+              "hidden": false,
+              "kind": "option",
+              "name": "adopt",
+              "opts": [
+                "--adopt"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub runner-host add",
+          "short_help": "Add a host under NAME; prints its hub-minted id and bearer token exactly once."
+        },
+        "adopt": {
+          "help": "Place existing runners RUNNER_IDS under host HOST_ID, all or none.\n\nRefused for a runner of another tenant (as unknown), one already under a host, and a retired one.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "host_id",
+              "opts": [
+                "host_id"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "runner_ids",
+              "opts": [
+                "runner_ids"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Who is adopting (recorded in the log).",
+              "hidden": false,
+              "kind": "option",
+              "name": "by",
+              "opts": [
+                "--by"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub runner-host adopt",
+          "short_help": "Place existing runners RUNNER_IDS under host HOST_ID, all or none."
+        },
+        "enroll": {
+          "help": "Issue host HOST_ID a new bearer token; prints the plaintext exactly once.\n\nA thin client of ``POST /hosts/{id}/enrollments``. The token it replaces stops resolving immediately. HOST_ID\nmust already be added (404 otherwise) and not retired (409).",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "host_id",
+              "opts": [
+                "host_id"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub runner-host enroll",
+          "short_help": "Issue host HOST_ID a new bearer token; prints the plaintext exactly once."
+        },
+        "list": {
+          "help": "The host registry \u2014 every added host, oldest first: its id, name, connection and runner count.\n\nA host added but never reported shows as never-connected. Excludes a retired host unless --all.",
+          "params": [
+            {
+              "help": "Include retired hosts, marked.",
+              "hidden": false,
+              "kind": "option",
+              "name": "include_retired",
+              "opts": [
+                "--all"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub runner-host list",
+          "short_help": "The host registry \u2014 every added host, oldest first: its id, name, connection and runner count."
+        },
+        "release": {
+          "help": "Return runners RUNNER_IDS under host HOST_ID to standing alone, keeping their ids and tokens.\n\nA registered host then halts each one, as a runner the hub no longer holds under it.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "host_id",
+              "opts": [
+                "host_id"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "runner_ids",
+              "opts": [
+                "runner_ids"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Who is releasing (recorded in the log).",
+              "hidden": false,
+              "kind": "option",
+              "name": "by",
+              "opts": [
+                "--by"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub runner-host release",
+          "short_help": "Return runners RUNNER_IDS under host HOST_ID to standing alone, keeping their ids and tokens."
+        },
+        "retire": {
+          "help": "Retire host HOST_ID \u2014 revoke its token and retire every runner under it.\n\nRefused (409) while any of them holds chunks unless --force, which releases them. Re-running finishes a partial\nretirement. Stop the host process too: the hub refuses it from here on.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "host_id",
+              "opts": [
+                "host_id"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Release every chunk the runners under the host hold.",
+              "hidden": false,
+              "kind": "option",
+              "name": "force",
+              "opts": [
+                "--force"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Who is retiring (recorded on the fact).",
+              "hidden": false,
+              "kind": "option",
+              "name": "by",
+              "opts": [
+                "--by"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub runner-host retire",
+          "short_help": "Retire host HOST_ID \u2014 revoke its token and retire every runner under it."
+        },
+        "revoke-token": {
+          "help": "Revoke host HOST_ID's token and issue none \u2014 it stays added, and is refused until `enroll` issues a new one.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "host_id",
+              "opts": [
+                "host_id"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Who is revoking (recorded on the revocation).",
+              "hidden": false,
+              "kind": "option",
+              "name": "by",
+              "opts": [
+                "--by"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub runner-host revoke-token",
+          "short_help": "Revoke host HOST_ID's token and issue none \u2014 it stays added, and is refused until `enroll` issues a new one."
+        },
+        "show": {
+          "help": "One host's connection, reported facts and runners, by HOST_ID \u2014 symmetric with ``runner-host list``.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "host_id",
+              "opts": [
+                "host_id"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub runner-host show",
+          "short_help": "One host's connection, reported facts and runners, by HOST_ID \u2014 symmetric with ``runner-host list``."
+        }
+      },
+      "help": "Operator verbs over one host: adding it, the runners under it, its credential, and retirement.\n\nEvery verb but `add` and `list` takes a host's hub-minted id, which `list` shows beside each name. A name is\ndisplay-only and never resolves to a host. (`blizzard hub host` is the hub daemon's launcher.)",
+      "params": [],
+      "path": "hub runner-host",
+      "short_help": "Operator verbs over one host: adding it, the runners under it, its credential, and retirement."
     },
     "scope": {
       "commands": {

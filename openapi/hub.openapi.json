@@ -6697,6 +6697,566 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "HostAddRequest": {
+        "description": "Add a host under a name unique among the tenant's live hosts. The hub mints the host's id and bearer token\ntogether; ``adopt`` places existing runners under it in the same write.",
+        "properties": {
+          "adopt": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Adopt",
+            "type": "array"
+          },
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "HostAddRequest",
+        "type": "object"
+      },
+      "HostAddResponse": {
+        "description": "The added host \u2014 its hub-minted id, its name, and its plaintext bearer token.\n\n``token`` is visible only here, once \u2014 only its sha256 hash is kept. The host is added but never connected until\nit first reports with this token.",
+        "properties": {
+          "adopted": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Adopted",
+            "type": "array"
+          },
+          "host_id": {
+            "title": "Host Id",
+            "type": "string"
+          },
+          "host_name": {
+            "title": "Host Name",
+            "type": "string"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "host_id",
+          "host_name",
+          "token"
+        ],
+        "title": "HostAddResponse",
+        "type": "object"
+      },
+      "HostChangedPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "By"
+          },
+          "host_id": {
+            "title": "Host Id",
+            "type": "string"
+          },
+          "host_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Host Name"
+          },
+          "key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Key"
+          },
+          "kind": {
+            "enum": [
+              "added",
+              "reported",
+              "adopted",
+              "released",
+              "token-enrolled",
+              "token-revoked",
+              "retired"
+            ],
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "host_id",
+          "kind"
+        ],
+        "title": "HostChangedPayload",
+        "type": "object"
+      },
+      "HostEnrollmentResponse": {
+        "description": "A rotated bearer token for an existing host id.\n\n``token`` is the plaintext, visible only here \u2014 only its sha256 hash is kept. The old token stops resolving the\nmoment this response lands.",
+        "properties": {
+          "host_id": {
+            "title": "Host Id",
+            "type": "string"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "host_id",
+          "token"
+        ],
+        "title": "HostEnrollmentResponse",
+        "type": "object"
+      },
+      "HostLifecycleRequest": {
+        "description": "Revoke a host's token \u2014 records who did it.",
+        "properties": {
+          "by": {
+            "default": "operator",
+            "title": "By",
+            "type": "string"
+          }
+        },
+        "title": "HostLifecycleRequest",
+        "type": "object"
+      },
+      "HostRecordResponse": {
+        "description": "A host's own record: its id, tenant, held name, and the runners the hub holds under it that are not retired \u2014\na runner retired or released is one the host should halt.",
+        "properties": {
+          "host_id": {
+            "title": "Host Id",
+            "type": "string"
+          },
+          "host_name": {
+            "title": "Host Name",
+            "type": "string"
+          },
+          "last_seen_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen At"
+          },
+          "registered_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Registered At"
+          },
+          "runners": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/HostRunnerView"
+            },
+            "title": "Runners",
+            "type": "array"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "host_id",
+          "tenant_id",
+          "host_name"
+        ],
+        "title": "HostRecordResponse",
+        "type": "object"
+      },
+      "HostRegistryListResponse": {
+        "description": "The host registry as operators list it \u2014 every added host, oldest first.",
+        "properties": {
+          "hosts": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/HostRegistryView"
+            },
+            "title": "Hosts",
+            "type": "array"
+          }
+        },
+        "title": "HostRegistryListResponse",
+        "type": "object"
+      },
+      "HostRegistryView": {
+        "description": "One host as an operator sees the registry \u2014 including one that has never connected.",
+        "properties": {
+          "added_at": {
+            "title": "Added At",
+            "type": "string"
+          },
+          "added_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Added By"
+          },
+          "connection": {
+            "$ref": "#/components/schemas/RunnerConnection"
+          },
+          "enrolled": {
+            "title": "Enrolled",
+            "type": "boolean"
+          },
+          "host_id": {
+            "title": "Host Id",
+            "type": "string"
+          },
+          "host_name": {
+            "title": "Host Name",
+            "type": "string"
+          },
+          "last_seen_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen At"
+          },
+          "online": {
+            "title": "Online",
+            "type": "boolean"
+          },
+          "redirect_uris": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Redirect Uris",
+            "type": "array"
+          },
+          "registered_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Registered At"
+          },
+          "retired": {
+            "default": false,
+            "title": "Retired",
+            "type": "boolean"
+          },
+          "retired_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retired At"
+          },
+          "retired_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retired By"
+          },
+          "runner_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Runner Ids",
+            "type": "array"
+          },
+          "subscriptions": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/RunnerSubscriptionDeclaration"
+            },
+            "title": "Subscriptions",
+            "type": "array"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "workspaces": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/HostWorkspace"
+            },
+            "title": "Workspaces",
+            "type": "array"
+          }
+        },
+        "required": [
+          "host_id",
+          "host_name",
+          "connection",
+          "online",
+          "added_at",
+          "enrolled"
+        ],
+        "title": "HostRegistryView",
+        "type": "object"
+      },
+      "HostReportRequest": {
+        "description": "What the calling host reports about itself on every tick \u2014 the host its bearer token was issued to. The\n``workspaces`` and ``subscriptions`` replace what the hub holds, whole. A report is never refused over its\ncontent: a ``name`` that is blank, or that another live host holds, leaves the held name.",
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "redirect_uris": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Redirect Uris",
+            "type": "array"
+          },
+          "subscriptions": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/RunnerSubscriptionDeclaration"
+            },
+            "title": "Subscriptions",
+            "type": "array"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "workspaces": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/HostWorkspace"
+            },
+            "title": "Workspaces",
+            "type": "array"
+          }
+        },
+        "title": "HostReportRequest",
+        "type": "object"
+      },
+      "HostRetireRequest": {
+        "description": "Retire a host and every runner under it \u2014 ``force`` releases every chunk they still hold.",
+        "properties": {
+          "by": {
+            "default": "operator",
+            "title": "By",
+            "type": "string"
+          },
+          "force": {
+            "default": false,
+            "title": "Force",
+            "type": "boolean"
+          }
+        },
+        "title": "HostRetireRequest",
+        "type": "object"
+      },
+      "HostRetireResponse": {
+        "description": "The retired host, plus every chunk the retire released from the runners under it.",
+        "properties": {
+          "host": {
+            "$ref": "#/components/schemas/HostRegistryView"
+          },
+          "released_chunk_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Released Chunk Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "host"
+        ],
+        "title": "HostRetireResponse",
+        "type": "object"
+      },
+      "HostRunnerAddRequest": {
+        "description": "Add a runner under the calling host, under an initial display name \u2014 as ``RunnerAddRequest`` adds one, with the\nhost fixed to the caller. ``projects`` is what the runner serves until a registration declares otherwise.",
+        "properties": {
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "projects": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Projects"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "HostRunnerAddRequest",
+        "type": "object"
+      },
+      "HostRunnerView": {
+        "description": "One runner standing under a host.",
+        "properties": {
+          "runner_id": {
+            "title": "Runner Id",
+            "type": "string"
+          },
+          "runner_name": {
+            "title": "Runner Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "runner_id",
+          "runner_name"
+        ],
+        "title": "HostRunnerView",
+        "type": "object"
+      },
+      "HostRunnersRequest": {
+        "description": "Place runners under a host, or return them to standing alone \u2014 records who did it.",
+        "properties": {
+          "by": {
+            "default": "operator",
+            "title": "By",
+            "type": "string"
+          },
+          "runner_ids": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Runner Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "runner_ids"
+        ],
+        "title": "HostRunnersRequest",
+        "type": "object"
+      },
+      "HostTokenRevocationResponse": {
+        "description": "The host after its token was revoked \u2014 still added, now unenrolled.",
+        "properties": {
+          "host": {
+            "$ref": "#/components/schemas/HostRegistryView"
+          }
+        },
+        "required": [
+          "host"
+        ],
+        "title": "HostTokenRevocationResponse",
+        "type": "object"
+      },
+      "HostWorkspace": {
+        "description": "One workspace a host reports: its id and how many environments it holds, ``None`` when it reports none.",
+        "properties": {
+          "env_capacity": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Env Capacity"
+          },
+          "workspace_id": {
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_id"
+        ],
+        "title": "HostWorkspace",
+        "type": "object"
+      },
       "HubAdminView": {
         "description": "One hub administrator.",
         "properties": {
@@ -6793,6 +7353,7 @@
           "decision-resolved",
           "queue-changed",
           "runner-changed",
+          "host-changed",
           "event-logged"
         ],
         "title": "HubEventType",
@@ -6914,6 +7475,7 @@
           "dep",
           "apl",
           "rn",
+          "hs",
           "ten",
           "inv",
           "proj",
@@ -10164,6 +10726,17 @@
       "RunnerAddRequest": {
         "description": "Add a runner under an initial display name. The hub mints the runner's id and bearer\ntoken together; the runner's own registrations set its name from then on.",
         "properties": {
+          "host_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Host Id"
+          },
           "name": {
             "minLength": 1,
             "title": "Name",
@@ -10791,6 +11364,17 @@
             },
             "title": "Gates",
             "type": "array"
+          },
+          "host_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Host Id"
           },
           "hub_paused": {
             "title": "Hub Paused",
@@ -21003,6 +21587,163 @@
         ]
       }
     },
+    "/api/fleet/host": {
+      "get": {
+        "description": "The calling host's own record, and the runners the hub holds under it that are not retired.",
+        "operationId": "get_host_record_api_fleet_host_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostRecordResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Host Record",
+        "tags": [
+          "fleet-host"
+        ]
+      },
+      "post": {
+        "description": "Report the calling host \u2014 the one its bearer token names \u2014 and answer its record.\n\nThe hub never rejects a report over its content \u2014 it doubles as the heartbeat every tick. A ``name`` another live\nhost holds is not recorded, and the answer carries the name the hub holds. The ``host-changed`` frame is published\nonly when the report changed what the hub held, or found the host offline. A retired host is refused 403.",
+        "operationId": "report_host_api_fleet_host_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HostReportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostRecordResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Report Host",
+        "tags": [
+          "fleet-host"
+        ]
+      }
+    },
+    "/api/fleet/host/runners": {
+      "post": {
+        "description": "Add a runner under the calling host, in the host's tenant, as an operator's add would \u2014 its id and bearer token\nare minted together and the plaintext token is returned once. An entry of ``projects`` naming no project of the\ntenant is refused 422, and nothing is added.",
+        "operationId": "add_host_runner_api_fleet_host_runners_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HostRunnerAddRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerAddResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Add Host Runner",
+        "tags": [
+          "fleet-host"
+        ]
+      }
+    },
+    "/api/fleet/host/runners/{runner_id}/retire": {
+      "post": {
+        "description": "Retire a runner under the calling host, as ``POST /api/runners/{runner_id}/retire`` does \u2014 409 naming each held\nchunk unless ``force``. A runner that does not stand under the calling host is refused as unknown (404).",
+        "operationId": "retire_host_runner_api_fleet_host_runners__runner_id__retire_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "title": "Runner Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerRetireRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerRetireResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retire Host Runner",
+        "tags": [
+          "fleet-host"
+        ]
+      }
+    },
     "/api/fleet/identity": {
       "get": {
         "description": "The id and name of the runner the presented bearer token names, and the tenant it was added\nin, or a 401 saying why the hub refuses it: ``missing``, ``unknown``, ``revoked`` or\n``retired``, the last two naming the runner the token was issued to. Registers nothing and\nrecords no liveness.",
@@ -22304,6 +23045,388 @@
         "summary": "Health",
         "tags": [
           "meta"
+        ]
+      }
+    },
+    "/api/hosts": {
+      "get": {
+        "description": "The host registry \u2014 every added host, oldest first; a retired host excluded by default, included and marked when\n``include_retired``.",
+        "operationId": "list_hosts_api_hosts_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "include_retired",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Retired",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostRegistryListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Hosts",
+        "tags": [
+          "hosts"
+        ]
+      },
+      "post": {
+        "description": "Add a host under ``name`` \u2014 the hub mints its id and bearer token together, and the plaintext token is returned\nonce. ``adopt`` places existing runners under it in the same write: a runner of another tenant is refused as\nunknown (404), one already under a host or a retired one 409, and nothing is added. A name a live host holds is\nrefused 409.",
+        "operationId": "add_host_api_hosts_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HostAddRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostAddResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Add Host",
+        "tags": [
+          "hosts"
+        ]
+      }
+    },
+    "/api/hosts/{host_id}": {
+      "get": {
+        "description": "One host's connection condition and the runners under it \u2014 the operator's detail read. 404 on unknown.",
+        "operationId": "get_host_api_hosts__host_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "host_id",
+            "required": true,
+            "schema": {
+              "title": "Host Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostRegistryView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Host",
+        "tags": [
+          "hosts"
+        ]
+      }
+    },
+    "/api/hosts/{host_id}/adoptions": {
+      "post": {
+        "description": "Place existing runners under the host, all or none. A runner of another tenant is refused as unknown (404), one\nalready under a host or a retired one 409, and so is a retired host.",
+        "operationId": "adopt_runners_api_hosts__host_id__adoptions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "host_id",
+            "required": true,
+            "schema": {
+              "title": "Host Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HostRunnersRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostRegistryView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Adopt Runners",
+        "tags": [
+          "hosts"
+        ]
+      }
+    },
+    "/api/hosts/{host_id}/enrollments": {
+      "post": {
+        "description": "Rotate ``host_id``'s bearer token, or issue one after a revocation \u2014 the plaintext is returned once, and the\ntoken it replaces stops resolving. A retired host is refused 409.",
+        "operationId": "enroll_host_api_hosts__host_id__enrollments_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "host_id",
+            "required": true,
+            "schema": {
+              "title": "Host Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostEnrollmentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Enroll Host",
+        "tags": [
+          "hosts"
+        ]
+      }
+    },
+    "/api/hosts/{host_id}/releases": {
+      "post": {
+        "description": "Return runners under the host to standing alone, keeping their ids and tokens, all or none. A runner not under\nthe host is refused as unknown (404).",
+        "operationId": "release_runners_api_hosts__host_id__releases_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "host_id",
+            "required": true,
+            "schema": {
+              "title": "Host Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HostRunnersRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostRegistryView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Release Runners",
+        "tags": [
+          "hosts"
+        ]
+      }
+    },
+    "/api/hosts/{host_id}/retire": {
+      "post": {
+        "description": "Retire a host \u2014 its token is revoked and every runner under it retired; 409 naming each runner's held chunks\nunless ``force``, which releases them. Re-running on a retired host re-runs each runner's release pass.",
+        "operationId": "retire_host_api_hosts__host_id__retire_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "host_id",
+            "required": true,
+            "schema": {
+              "title": "Host Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HostRetireRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostRetireResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retire Host",
+        "tags": [
+          "hosts"
+        ]
+      }
+    },
+    "/api/hosts/{host_id}/token-revocations": {
+      "post": {
+        "description": "Revoke a host's token and issue none \u2014 it stays added and must be enrolled afresh; 409 when unenrolled.",
+        "operationId": "revoke_host_token_api_hosts__host_id__token_revocations_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "host_id",
+            "required": true,
+            "schema": {
+              "title": "Host Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HostLifecycleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostTokenRevocationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke Host Token",
+        "tags": [
+          "hosts"
         ]
       }
     },

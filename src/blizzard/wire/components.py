@@ -40,6 +40,7 @@ from blizzard.wire.sse import (
     DecisionOpenedPayload,
     DecisionResolvedPayload,
     EventLoggedPayload,
+    HostChangedPayload,
     QuestionAnsweredPayload,
     QuestionAskedPayload,
     QueueChangedPayload,
@@ -78,6 +79,7 @@ HUB_SCHEMA_COMPONENTS = SchemaComponents(
         DecisionResolvedPayload,
         QueueChangedPayload,
         RunnerChangedPayload,
+        HostChangedPayload,
         EventLoggedPayload,
     ),
     enums={

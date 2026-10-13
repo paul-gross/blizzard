@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict
 from blizzard.foundation.event_log import EventLogSeverity
 from blizzard.foundation.hub_event_types import (
     ChunkChangeCause,
+    HostChangeKind,
     HubEventType,
     RunnerChangeKind,
 )
@@ -103,6 +104,15 @@ class RunnerChangedPayload(SseFramePayload):
     key: str | None = None
 
 
+class HostChangedPayload(SseFramePayload):
+    host_id: str
+    #: The host's name at publish time.
+    host_name: str | None = None
+    kind: HostChangeKind
+    by: str | None = None
+    key: str | None = None
+
+
 class EventLoggedPayload(SseFramePayload):
     severity: EventLogSeverity
     kind: str
@@ -127,5 +137,6 @@ SSE_FRAME_MODELS: dict[str, type[SseFramePayload]] = {
     HubEventType.DECISION_RESOLVED: DecisionResolvedPayload,
     HubEventType.QUEUE_CHANGED: QueueChangedPayload,
     HubEventType.RUNNER_CHANGED: RunnerChangedPayload,
+    HubEventType.HOST_CHANGED: HostChangedPayload,
     HubEventType.EVENT_LOGGED: EventLoggedPayload,
 }

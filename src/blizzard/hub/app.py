@@ -56,6 +56,7 @@ from blizzard.hub.api.findings import project_router as project_findings_router
 from blizzard.hub.api.findings import router as findings_router
 from blizzard.hub.api.fleet import claim_router as fleet_claim_router
 from blizzard.hub.api.fleet import router as fleet_router
+from blizzard.hub.api.fleet_host import router as fleet_host_router
 from blizzard.hub.api.fleet_identity import router as fleet_identity_router
 from blizzard.hub.api.garden_proposals import project_router as project_garden_proposals_router
 from blizzard.hub.api.garden_proposals import router as garden_proposals_router
@@ -63,6 +64,7 @@ from blizzard.hub.api.garden_runs import project_router as project_garden_runs_r
 from blizzard.hub.api.garden_runs import router as garden_runs_router
 from blizzard.hub.api.graphs import router as graphs_router
 from blizzard.hub.api.health import router as health_router
+from blizzard.hub.api.hosts import router as hosts_router
 from blizzard.hub.api.hub_admins import router as hub_admins_router
 from blizzard.hub.api.idp import router as idp_router
 from blizzard.hub.api.invitations import router as invitations_router
@@ -111,6 +113,7 @@ from blizzard.hub.domain.observability.tracing.attributes import (
 from blizzard.hub.domain.observability.transcripts import TranscriptCaps
 from blizzard.hub.domain.projects.declarations import ImportLinks
 from blizzard.hub.domain.projects.model import ProjectRequired
+from blizzard.hub.domain.runners.host import HostRetired
 from blizzard.hub.domain.runners.registration import RunnerRetired
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.secrets import KeyCoverage, hub_key_provider, require_hub_key
@@ -271,6 +274,11 @@ def _refuse_retired_runner(_request: Request, exc: Exception) -> JSONResponse:
     return JSONResponse(status_code=status.HTTP_403_FORBIDDEN, content={"detail": str(exc)})
 
 
+def _refuse_retired_host(_request: Request, exc: Exception) -> JSONResponse:
+    """Map the domain's :class:`HostRetired` to a 403 carrying its message."""
+    return JSONResponse(status_code=status.HTTP_403_FORBIDDEN, content={"detail": str(exc)})
+
+
 def open_hub_engine(db_url: str) -> Engine:
     """The hub process's engine, opened after the tenant statement guard is installed — so a hub started with
     ``BLIZZARD_TENANT_GUARD=1`` checks every statement it runs."""
@@ -391,6 +399,7 @@ def create_app(
     app.state.shutdown = asyncio.Event()
 
     app.add_exception_handler(RunnerRetired, _refuse_retired_runner)
+    app.add_exception_handler(HostRetired, _refuse_retired_host)
     app.add_exception_handler(RequestValidationError, _validation_error)
     app.add_exception_handler(TenantClosed, refuse_closed_tenant)
     app.add_exception_handler(UnknownTenant, refuse_closed_tenant)
@@ -417,6 +426,7 @@ def create_app(
     app.include_router(queue_router)
     app.include_router(questions_router)
     app.include_router(runners_router)
+    app.include_router(hosts_router)
     app.include_router(spend_router)
     app.include_router(users_router)
     app.include_router(members_router)
@@ -442,6 +452,7 @@ def create_app(
     app.include_router(fleet_identity_router)
     # The runner-authenticated fleet router — a fleet verb is authenticated
     # *because of where it is mounted*; see `blizzard.hub.api.fleet`.
+    app.include_router(fleet_host_router)
     app.include_router(fleet_router)
     # The claim route is the other `/api/fleet` path outside that gate's retirement refusal.
     app.include_router(fleet_claim_router)

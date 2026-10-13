@@ -1768,6 +1768,69 @@ Index(
     chunk_grouped.c.id,
 )
 
+# --- Hosts (a tenant-scoped record above runners, with a bearer credential of its own) ---
+# A row is inserted when a host is added and refreshed in place by each report. Retirement is a lifecycle fact.
+
+hosts = Table(
+    "hosts",
+    metadata,
+    # The hub-minted id — the host's one identity.
+    Column("host_id", String, nullable=False, info={"hub_unique": True}),  # hs_<ulid>
+    # The operator's label. Unique among the tenant's live hosts, which liveness derives, so no constraint holds it.
+    Column("name", String, nullable=False),
+    Column("added_at", UtcDateTime, nullable=False),
+    Column("added_by", String, nullable=True),
+    # All null for a host that was added but has never reported.
+    Column("registered_at", UtcDateTime, nullable=True),
+    Column("last_seen_at", UtcDateTime, nullable=True),  # liveness derives from this
+    # The panel's canonical origin, as reported.
+    Column("url", Text, nullable=True),
+    # The panel's sign-in callbacks, JSON `list[str]`, replaced whole on each report.
+    Column("redirect_uris", Text, nullable=True),
+    # JSON `list[dict]` of `{workspace_id, env_capacity}`, replaced whole on each report.
+    Column("workspaces", Text, nullable=True),
+    # The subscription roster, JSON `list[dict]` of `{slug, name, provider}`, replaced whole on each report.
+    Column("subscriptions", Text, nullable=True),
+    # The bearer token's sha256 hex digest — null while none is enrolled.
+    Column("token_hash", Text, nullable=True, index=True),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_hosts_tenant_id"), nullable=False),
+    PrimaryKeyConstraint("host_id", name="pk_hosts"),
+)
+Index("ix_hosts_tenant_id", hosts.c.tenant_id)
+
+# Retirement — ``retired`` derives from the newest row.
+host_lifecycle_facts = Table(
+    "host_lifecycle_facts",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("host_id", String, ForeignKey("hosts.host_id", name="fk_host_lifecycle_facts_hosts"), nullable=False),
+    Column("retired", Boolean, nullable=False),  # retired derives from the newest fact
+    Column("set_at", UtcDateTime, nullable=False),
+    Column("set_by", String, nullable=False),
+    Column(
+        "tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_host_lifecycle_facts_tenant_id"), nullable=False
+    ),
+)
+Index("ix_host_lifecycle_facts_tenant_id", host_lifecycle_facts.c.tenant_id)
+
+# Every revoked host token hash, never cleared — a revoked token is refused, not merely unresolved.
+host_token_revocations = Table(
+    "host_token_revocations",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("host_id", String, ForeignKey("hosts.host_id", name="fk_host_token_revocations_hosts"), nullable=False),
+    Column("token_hash", Text, nullable=False, index=True),
+    Column("revoked_at", UtcDateTime, nullable=False),
+    Column("revoked_by", String, nullable=False),
+    Column(
+        "tenant_id",
+        String,
+        ForeignKey("tenants.tenant_id", name="fk_host_token_revocations_tenant_id"),
+        nullable=False,
+    ),
+)
+Index("ix_host_token_revocations_tenant_id", host_token_revocations.c.tenant_id)
+
 # --- The fleet registry (runner.added / registered / paused / resumed) --------
 # A row is inserted when a runner is added and refreshed in place by each registration.
 
@@ -1808,11 +1871,14 @@ runner_registrations = Table(
     # The projects the runner serves, JSON `list[dict]` of `{entry, project_id}`: each entry as declared and the
     # project it resolved to; `NULL` reads as serving nothing.
     Column("projects", Text, nullable=True),
+    # The host the runner stands under; null for a runner that stands alone.
+    Column("host_id", String, ForeignKey("hosts.host_id", name="fk_runner_registrations_hosts"), nullable=True),
     Column(
         "tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_runner_registrations_tenant_id"), nullable=False
     ),
 )
 Index("ix_runner_registrations_tenant_id", runner_registrations.c.tenant_id)
+Index("ix_runner_registrations_tenant_host_id", runner_registrations.c.tenant_id, runner_registrations.c.host_id)
 
 runner_pause_facts = Table(
     "runner_pause_facts",

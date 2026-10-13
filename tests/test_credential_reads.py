@@ -19,9 +19,10 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.api.auth import runner_signing_in
 from blizzard.hub.composition import HubCore, HubServices, build_hub_core
+from blizzard.hub.domain.runners.host import HostAddition, HostTokenRotation
 from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, RunnerAddition, TokenRotation
 from blizzard.hub.store import schema
-from blizzard.hub.store.internal.hub_scoped_credentials import TenantRunner
+from blizzard.hub.store.internal.hub_scoped_credentials import TenantHost, TenantRunner
 from blizzard.hub.store.tenant_guard import (
     GUARD_ENVIRONMENT_VARIABLE,
     UnscopedTenantStatement,
@@ -58,6 +59,8 @@ def _two_tenants(tmp_path: Path) -> tuple[HubCore, Engine, TenantId]:
     core = build_hub_core(engine, clock=FixedClock(_AT))
     core.open(StoreScope(first)).registry.add(RunnerAddition("rn_a", "alpha", "hash-a", at=_AT, by="admin"))
     core.open(StoreScope(_SECOND)).registry.add(RunnerAddition("rn_b", "bravo", "hash-b", at=_AT, by="admin"))
+    core.open(StoreScope(first)).hosts.add(HostAddition("hs_a", "alpha", "host-hash-a", at=_AT, by="admin"))
+    core.open(StoreScope(_SECOND)).hosts.add(HostAddition("hs_b", "bravo", "host-hash-b", at=_AT, by="admin"))
     return core, engine, first
 
 
@@ -87,6 +90,29 @@ def test_a_revoked_token_names_the_runner_and_tenant_it_was_issued_in(tmp_path: 
     assert credentials.revoked_token_runner("hash-b") == TenantRunner(_SECOND, "rn_b")
     assert credentials.revoked_token_runner("hash-a2") is None
     assert credentials.runner_for_token_hash("hash-b") is None
+
+
+def test_a_host_token_resolves_to_its_own_tenants_host_and_never_to_a_runner(tmp_path: Path) -> None:
+    core, _, first = _two_tenants(tmp_path)
+    credentials = core.hub_scoped_reads.credentials
+
+    assert credentials.host_for_token_hash("host-hash-a") == TenantHost(first, "hs_a")
+    assert credentials.host_for_token_hash("host-hash-b") == TenantHost(_SECOND, "hs_b")
+    assert credentials.host_for_token_hash("hash-a") is None
+    assert credentials.runner_for_token_hash("host-hash-a") is None
+
+
+def test_a_revoked_host_token_names_the_host_and_tenant_it_was_issued_in(tmp_path: Path) -> None:
+    core, _, first = _two_tenants(tmp_path)
+    core.open(StoreScope(first)).hosts.rotate_token(HostTokenRotation("hs_a", "host-hash-a2", at=_AT, by="admin"))
+    core.open(StoreScope(_SECOND)).hosts.revoke_token("hs_b", at=_AT, by="admin")
+    credentials = core.hub_scoped_reads.credentials
+
+    assert credentials.revoked_token_host("host-hash-a") == TenantHost(first, "hs_a")
+    assert credentials.revoked_token_host("host-hash-b") == TenantHost(_SECOND, "hs_b")
+    assert credentials.revoked_token_host("host-hash-a2") is None
+    assert credentials.host_for_token_hash("host-hash-b") is None
+    assert credentials.revoked_token_runner("host-hash-a") is None
 
 
 def test_a_runner_id_resolves_to_the_tenant_holding_it(tmp_path: Path) -> None:
@@ -128,12 +154,20 @@ def test_every_credential_read_is_marked_hub_scoped_and_passes_the_guard(tmp_pat
             credentials.runner_for_token_hash("hash-b"),
             credentials.revoked_token_runner("hash-b"),
             credentials.runner_by_id("rn_a"),
+            credentials.host_for_token_hash("host-hash-b"),
+            credentials.revoked_token_host("host-hash-b"),
         )
     finally:
         event.remove(engine, "before_execute", record)
 
-    assert resolved == (TenantRunner(_SECOND, "rn_b"), None, TenantRunner(first, "rn_a"))
-    assert len(seen) == 3
+    assert resolved == (
+        TenantRunner(_SECOND, "rn_b"),
+        None,
+        TenantRunner(first, "rn_a"),
+        TenantHost(_SECOND, "hs_b"),
+        None,
+    )
+    assert len(seen) == 5
     assert all(options.get(HUB_SCOPED_OPTION) for options in seen)
     # The same read, unmarked, is one the guard refuses.
     with engine.connect() as conn, pytest.raises(UnscopedTenantStatement, match="runner_registrations"):

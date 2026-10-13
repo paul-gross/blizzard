@@ -24,7 +24,9 @@ from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import TenantServices
+from blizzard.hub.domain.execution.fleet import RetireOutcome
 from blizzard.hub.domain.projects.model import Project, ProjectId
+from blizzard.hub.domain.runners.host import HostRetired
 from blizzard.hub.domain.runners.registration import (
     PerSubscriptionUsageView,
     RunnerHoldsRoutes,
@@ -167,6 +169,7 @@ def registry_view(
         retired_by=r.retired_by,
         gates=list(r.gates),
         projects=served_views(r.served, projects),
+        host_id=r.host_id,
     )
 
 
@@ -270,9 +273,19 @@ def add_runner(
     ``projects`` is what it serves until a registration declares otherwise; an entry that names no
     project of the tenant is refused 422, and nothing is added."""
     try:
-        added = services.enrollment.add(request.name, by=identity.username, projects=request.projects)
+        if request.host_id is None:
+            added = services.enrollment.add(request.name, by=identity.username, projects=request.projects)
+        else:
+            host = services.hosts.get_host(request.host_id)
+            if host is None:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown host {request.host_id}")
+            added = services.host_enrollment.add_runner(
+                host, request.name, by=identity.username, projects=request.projects
+            )
     except UnknownServedProject as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    except HostRetired as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     services.events.publish_runner_changed(added.runner_id, kind="added", runner_name=added.name, by=identity.username)
     return RunnerAddResponse(runner_id=added.runner_id, runner_name=added.name, token=added.token)
 
@@ -357,6 +370,23 @@ def retire_runner(runner_id: str, request: RunnerRetireRequest, services: Servic
         outcome = services.fleet.retire(registration, by=request.by, force=request.force)
     except RunnerHoldsRoutes as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    publish_retirement(services, registration, outcome, by=request.by, changes=changes)
+    return RunnerRetireResponse(
+        runner=_reread(services, runner_id), released_chunk_ids=[r.chunk_id for r in outcome.released]
+    )
+
+
+def publish_retirement(
+    services: TenantServices,
+    registration: RunnerRegistration,
+    outcome: RetireOutcome,
+    *,
+    by: str,
+    changes: Mapping[str, chunk_events.ChunkChanged],
+) -> None:
+    """Publish what one runner retire wrote: a ``detached`` frame per released chunk (``changes`` holds each one read
+    before the retire), the queue's change when any was released, and the runner's ``retired`` frame unless the retire
+    was a re-run."""
     for released in outcome.released:
         change = changes.get(released.chunk_id) or chunk_events.ChunkChanged.before(services, released.chunk_id)
         change.publish(cause="detached", key=f"route_released:{released.released_id}")
@@ -364,15 +394,12 @@ def retire_runner(runner_id: str, request: RunnerRetireRequest, services: Servic
         services.events.publish_queue_changed()  # released chunks re-enter the ready queue
     if outcome.fact_id is not None:
         services.events.publish_runner_changed(
-            runner_id,
+            registration.runner_id,
             kind="retired",
             runner_name=registration.name,
-            by=request.by,
+            by=by,
             key=f"runner_lifecycle_facts:{outcome.fact_id}",
         )
-    return RunnerRetireResponse(
-        runner=_reread(services, runner_id), released_chunk_ids=[r.chunk_id for r in outcome.released]
-    )
 
 
 @router.post(

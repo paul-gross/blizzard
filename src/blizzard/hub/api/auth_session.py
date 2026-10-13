@@ -6,7 +6,7 @@ write is delegated to the domain (``bzh:controller-read-only``). ``auth.mode = "
 default) short-circuits a person to the implicit operator identity.
 
 :func:`resolve_tenant` is the one place a request's tenant is resolved, by the first rule that
-applies: a machine credential (a runner bearer token, a marker token) decides; else the
+applies: a machine credential (a runner or host bearer token, a marker token) decides; else the
 ``X-Blizzard-Tenant`` header names it, checked against the caller's memberships; else the caller's
 one membership settles it; else the request answers ``409 tenant_required``. Every people and fleet
 router depends on it through :func:`tenant_bound`; :func:`require` checks a permission in the
@@ -30,7 +30,14 @@ from fastapi.routing import APIRoute
 from blizzard.auth_core import HUB_PERMISSIONS, Permission, Role, permissions_for
 from blizzard.foundation.platform_tracing.attributes import Caller, annotate_caller, annotate_tenant
 from blizzard.foundation.roles import collaborator
-from blizzard.hub.api.auth import UNRESOLVED_RUNNER_TOKEN, RunnerAuth, RunnerPrincipal, resolved_runner
+from blizzard.hub.api.auth import (
+    UNRESOLVED_RUNNER_TOKEN,
+    HostAuth,
+    HostPrincipal,
+    RunnerAuth,
+    RunnerPrincipal,
+    resolved_runner,
+)
 from blizzard.hub.api.bearer import presented_bearer
 from blizzard.hub.api.hub_level import Hub, hub_services
 from blizzard.hub.auth.hashing import SessionId
@@ -73,7 +80,7 @@ OPERATOR = "operator"
 _NO_SUCH_TENANT = "no such tenant"
 
 #: Whoever a request's tenant was resolved for: a person, a runner, or a hub node's marker write.
-Principal = ResolvedIdentity | RunnerPrincipal | MarkerPrincipal
+Principal = ResolvedIdentity | RunnerPrincipal | HostPrincipal | MarkerPrincipal
 
 
 def implicit_operator(tenant: TenantId | None) -> ResolvedIdentity:
@@ -263,11 +270,14 @@ def _named_tenant(request: Request) -> TenantId | None:
     return TenantId(named) if named else None
 
 
-def _machine_credential(request: Request, hub: HubServices) -> RunnerPrincipal | MarkerPrincipal | None:
-    """The runner bearer or marker token ``request`` carries, verified — in every auth mode."""
+def _machine_credential(request: Request, hub: HubServices) -> RunnerPrincipal | HostPrincipal | MarkerPrincipal | None:
+    """The runner or host bearer or marker token ``request`` carries, verified — in every auth mode."""
     runner = RunnerAuth.of(request, hub).principal
     if runner is not None:
         return runner
+    host = HostAuth.of(request, hub).principal
+    if host is not None:
+        return host
     token = request.headers.get(MARKER_TOKEN_HEADER)
     if not token:
         return None

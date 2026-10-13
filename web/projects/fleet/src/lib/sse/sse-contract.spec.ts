@@ -8,6 +8,7 @@ import {
   type ChunkChanged,
   type DecisionEvent,
   type EventLoggedEvent,
+  type HostEvent,
   type HubEventPayload,
   type KeyedEvent,
   type QuestionEvent,
@@ -40,6 +41,7 @@ import manifestJson from '../../../../../../contracts/sse/manifest.json';
 import queueChangedGolden from '../../../../../../contracts/sse/queue-changed.json';
 import questionAnsweredGolden from '../../../../../../contracts/sse/question-answered.json';
 import questionAskedGolden from '../../../../../../contracts/sse/question-asked.json';
+import hostChangedGolden from '../../../../../../contracts/sse/host-changed.json';
 import runnerChangedGolden from '../../../../../../contracts/sse/runner-changed.json';
 import runnerAskChangedGolden from '../../../../../../contracts/sse/runner/ask-changed.json';
 import runnerEnvironmentChangedGolden from '../../../../../../contracts/sse/runner/environment-changed.json';
@@ -113,6 +115,7 @@ const HUB_GOLDENS: Readonly<Record<string, GoldenCases>> = {
   'decision-resolved': decisionResolvedGolden as GoldenCases,
   'queue-changed': queueChangedGolden as GoldenCases,
   'runner-changed': runnerChangedGolden as GoldenCases,
+  'host-changed': hostChangedGolden as GoldenCases,
   'event-logged': eventLoggedGolden as GoldenCases,
 };
 const HUB_CASES = casesOf(hubManifest, HUB_GOLDENS);
@@ -162,6 +165,7 @@ type QuestionFrame = QuestionEvent & KeyedEvent;
 type DecisionFrame = DecisionEvent & KeyedEvent;
 type QueueChangedFrame = Record<never, never>;
 type RunnerFrame = RunnerEvent & KeyedEvent;
+type HostFrame = HostEvent & KeyedEvent;
 type EventLoggedFrame = EventLoggedEvent & KeyedEvent;
 
 interface HubFrameFieldSpecs {
@@ -172,6 +176,7 @@ interface HubFrameFieldSpecs {
   'decision-resolved': FrameFieldSpec<DecisionFrame>;
   'queue-changed': FrameFieldSpec<QueueChangedFrame>;
   'runner-changed': FrameFieldSpec<RunnerFrame>;
+  'host-changed': FrameFieldSpec<HostFrame>;
   'event-logged': FrameFieldSpec<EventLoggedFrame>;
 }
 
@@ -214,6 +219,10 @@ const HUB_FRAME_FIELD_SPECS: HubFrameFieldSpecs = {
   'runner-changed': {
     required: exactRequired<RunnerFrame>()({ runner_id: true, kind: true }),
     optional: exactOptional<RunnerFrame>()({ runner_name: true, by: true, reason: true, key: true }),
+  },
+  'host-changed': {
+    required: exactRequired<HostFrame>()({ host_id: true, kind: true }),
+    optional: exactOptional<HostFrame>()({ host_name: true, by: true, key: true }),
   },
   'event-logged': {
     required: exactRequired<EventLoggedFrame>()({

@@ -17,6 +17,7 @@ class HubEventType(StrEnum):
     DECISION_RESOLVED = "decision-resolved"
     QUEUE_CHANGED = "queue-changed"
     RUNNER_CHANGED = "runner-changed"
+    HOST_CHANGED = "host-changed"
     EVENT_LOGGED = "event-logged"
 
 
@@ -62,4 +63,15 @@ RunnerChangeKind = Literal[
     "retired",
     "reinstated",
     "token-revoked",
+]
+
+#: What a ``host-changed`` frame reports — see the hub event broker's ``publish_host_changed``.
+HostChangeKind = Literal[
+    "added",
+    "reported",
+    "adopted",
+    "released",
+    "token-enrolled",
+    "token-revoked",
+    "retired",
 ]
