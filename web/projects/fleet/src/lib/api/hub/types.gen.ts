@@ -4678,7 +4678,8 @@ export const IdPrefix = {
     TEN: 'ten',
     INV: 'inv',
     PROJ: 'proj',
-    REPO: 'repo'
+    REPO: 'repo',
+    WSRC: 'wsrc'
 } as const;
 
 /**
@@ -5426,9 +5427,9 @@ export type ProjectCreateRequest = {
  *
  * A project as a document entry, named by its slug. A ``name`` or ``description`` the entry omits is left as
  * stored; a project the document creates needs a ``name``. A ``sources`` or ``repositories`` list the entry states
- * is the project's whole set of links of that kind — a source it leaves out is unlinked; a list it omits is left
- * as stored. A repository is named by its id or its slug, a slug it left included. A slug a project left is refused:
- * name that project by its current slug.
+ * is the project's whole set of links of that kind — a record it leaves out is unlinked; a list it omits is left
+ * as stored. A source or repository is named by its id or its slug, a slug it left included. A slug a project left
+ * is refused: name that project by its current slug.
  */
 export type ProjectDocument = {
     /**
@@ -5939,9 +5940,9 @@ export type ReceiverStatus = {
 /**
  * RecordKind
  *
- * The kind of configured record a change row names. A project's and a repository's ``record_key`` is its id,
- * never its slug; a project link's is the linked source's name or repository's id. Linking, unlinking and re-linking
- * are ``create``, ``retire`` and ``enable``.
+ * The kind of configured record a change row names. A project's, a repository's and a work source's
+ * ``record_key`` is its id, never its slug; a project link's is the linked source's or repository's id. Linking,
+ * unlinking and re-linking are ``create``, ``retire`` and ``enable``.
  */
 export const RecordKind = {
     WORK_SOURCE: 'work_source',
@@ -5957,9 +5958,9 @@ export const RecordKind = {
 /**
  * RecordKind
  *
- * The kind of configured record a change row names. A project's and a repository's ``record_key`` is its id,
- * never its slug; a project link's is the linked source's name or repository's id. Linking, unlinking and re-linking
- * are ``create``, ``retire`` and ``enable``.
+ * The kind of configured record a change row names. A project's, a repository's and a work source's
+ * ``record_key`` is its id, never its slug; a project link's is the linked source's or repository's id. Linking,
+ * unlinking and re-linking are ``create``, ``retire`` and ``enable``.
  */
 export type RecordKind = typeof RecordKind[keyof typeof RecordKind];
 
@@ -7892,9 +7893,9 @@ export type SidechainSegmentViewOutput = {
 /**
  * SourceLinkView
  *
- * A project's link to a work source, named ``name``. ``linked`` is false once the link is retired (unlinked).
- * The built-in ``hub`` source is linked to every project: it has no stored link, so no ``revision``, and cannot be
- * unlinked.
+ * A project's link to a work source: ``name`` is the source's key — its id, or ``hub`` — and ``slug`` its current
+ * slug. ``linked`` is false once the link is retired (unlinked). The built-in ``hub`` source is linked to every
+ * project: it has no stored link, so no ``revision``, and cannot be unlinked.
  */
 export type SourceLinkView = {
     /**
@@ -7917,12 +7918,16 @@ export type SourceLinkView = {
      * Revision
      */
     revision?: number | null;
+    /**
+     * Slug
+     */
+    slug?: string | null;
 };
 
 /**
  * SourceLinksView
  *
- * A project's standing source links by source name, the built-in ``hub`` source among them —
+ * A project's standing source links by source key, the built-in ``hub`` source among them —
  * ``GET /api/projects/{project}/source-links``.
  */
 export type SourceLinksView = {
@@ -8947,6 +8952,10 @@ export type WorkItemCreateResponse = {
      */
     ref: string;
     /**
+     * Slug
+     */
+    slug?: string | null;
+    /**
      * Source
      */
     source: string;
@@ -8966,8 +8975,9 @@ export type WorkItemCreateResponse = {
  *
  * One pointer's pass-through work item, vendor-native — title, body, comments, and,
  * only when the source has them to give, ``author``/``stated_priority``.
- * ``label``/``web_url`` are the legible pointer label and browser address, both null when no
- * configured source names ``source``; a per-pointer failure nulls ``title``/``body`` into ``error``.
+ * ``source`` is the pointer's source key — ``hub`` or the source's id — and ``slug`` the source's current slug.
+ * ``label`` is the legible ``{slug}#{ref}``; ``web_url`` the browser address, null when no adapter is built for the
+ * source. A per-pointer failure nulls ``title``/``body`` into ``error``.
  */
 export type WorkItemEntry = {
     author?: WorkItemAuthorView | null;
@@ -8999,6 +9009,10 @@ export type WorkItemEntry = {
      * Ref
      */
     ref: string;
+    /**
+     * Slug
+     */
+    slug?: string | null;
     /**
      * Source
      */
@@ -9055,7 +9069,8 @@ export type WorkItemPriority = typeof WorkItemPriority[keyof typeof WorkItemPrio
  * WorkItemView
  *
  * One hub-owned work item in full — author, stated priority, closure, and the
- * last-edit instant, the vocabulary a pass-through ``WorkItemEntry`` cannot answer.
+ * last-edit instant, the vocabulary a pass-through ``WorkItemEntry`` cannot answer. ``source`` is the source's key —
+ * ``hub`` or its id — and ``slug`` its current slug; ``label`` is the rendered ``{slug}#{ref}``.
  */
 export type WorkItemView = {
     author: WorkItemAuthorView;
@@ -9084,6 +9099,10 @@ export type WorkItemView = {
      * Ref
      */
     ref: string;
+    /**
+     * Slug
+     */
+    slug?: string | null;
     /**
      * Source
      */
@@ -9147,8 +9166,9 @@ export type WorkRefModel = {
  * WorkRefView
  *
  * A pointer as the views carry it — the raw pair plus its legible label and browser URL, both
- * resolved by the pointer's configured source binding. ``label`` is the legible ``{name}#{ref}``;
- * ``web_url`` is its browser-openable address. Both null when no configured source names ``source``.
+ * resolved by the pointer's configured source binding. ``source`` is ``hub`` or the source's id; ``label`` is the
+ * legible ``{slug}#{ref}``, rendered under the source's current slug; ``web_url`` is its browser-openable address,
+ * null when no adapter is built for the source; ``label`` then still renders under the current slug.
  */
 export type WorkRefView = {
     /**
@@ -9173,7 +9193,9 @@ export type WorkRefView = {
  * WorkSourceDocument
  *
  * A work source as a document — the create body, and the model whose JSON Schema
- * ``GET /api/config/schema/work-sources`` serves. ``secret`` names a stored secret.
+ * ``GET /api/config/schema/work-sources`` serves. ``slug`` names the source and ``name`` is its display label — the
+ * slug when omitted on create, left as stored on an edit. ``hub`` is never a slug: the built-in source holds it.
+ * ``secret`` names a stored secret.
  */
 export type WorkSourceDocument = {
     /**
@@ -9191,7 +9213,7 @@ export type WorkSourceDocument = {
     /**
      * Name
      */
-    name: string;
+    name?: string | null;
     /**
      * Provider
      */
@@ -9200,6 +9222,10 @@ export type WorkSourceDocument = {
      * Secret
      */
     secret?: string | null;
+    /**
+     * Slug
+     */
+    slug: string;
     /**
      * Web Base
      */
@@ -9210,8 +9236,8 @@ export type WorkSourceDocument = {
  * WorkSourcePatchRequest
  *
  * A sparse edit: an absent field is unchanged, a present one is set, and an explicit
- * ``null`` clears ``api_base``, ``web_base``, or ``secret`` and is refused elsewhere.
- * ``name`` is immutable, so a body carrying it is refused.
+ * ``null`` clears ``api_base``, ``web_base``, or ``secret`` and is refused elsewhere. A slug that changes keeps
+ * resolving to the source until another claims it.
  */
 export type WorkSourcePatchRequest = {
     /**
@@ -9227,6 +9253,10 @@ export type WorkSourcePatchRequest = {
      */
     locator?: string | null;
     /**
+     * Name
+     */
+    name?: string | null;
+    /**
      * Provider
      */
     provider?: string | null;
@@ -9234,6 +9264,10 @@ export type WorkSourcePatchRequest = {
      * Secret
      */
     secret?: string | null;
+    /**
+     * Slug
+     */
+    slug?: string | null;
     /**
      * Web Base
      */
@@ -9245,8 +9279,10 @@ export type WorkSourcePatchRequest = {
  *
  * One work source — the ``GET /api/work-sources`` listing row and every record verb's
  * view. ``readable`` is not a field: every source answers ``fetch``, so it carries no
- * information; ``edit`` is the "has browsable items" signal the item routes gate on. The
- * built-in ``hub`` source is ``built_in`` and carries no record fields.
+ * information; ``edit`` is the "has browsable items" signal the item routes gate on.
+ * ``work_source_id`` is what every stored reference holds; ``slug`` is the handle people type, and ``name`` a display
+ * label. The built-in ``hub`` source is ``built_in``, has slug and name ``hub``, and carries no id or record
+ * fields.
  */
 export type WorkSourceSummary = {
     /**
@@ -9298,9 +9334,17 @@ export type WorkSourceSummary = {
      */
     secret?: string | null;
     /**
+     * Slug
+     */
+    slug?: string | null;
+    /**
      * Web Base
      */
     web_base?: string | null;
+    /**
+     * Work Source Id
+     */
+    work_source_id?: string | null;
 };
 
 /**
@@ -9657,10 +9701,6 @@ export type CountsByAgentTypeApiAnalyticsCountsAgentTypesGetData = {
          */
         graph_id?: string | null;
         /**
-         * Source
-         */
-        source?: string | null;
-        /**
          * Since
          */
         since?: string | null;
@@ -9688,6 +9728,10 @@ export type CountsByAgentTypeApiAnalyticsCountsAgentTypesGetData = {
          * Effort
          */
         effort?: string | null;
+        /**
+         * Source
+         */
+        source?: string | null;
         /**
          * Project
          */
@@ -9735,10 +9779,6 @@ export type CountsByFileApiAnalyticsCountsFilesGetData = {
          */
         graph_id?: string | null;
         /**
-         * Source
-         */
-        source?: string | null;
-        /**
          * Since
          */
         since?: string | null;
@@ -9766,6 +9806,10 @@ export type CountsByFileApiAnalyticsCountsFilesGetData = {
          * Effort
          */
         effort?: string | null;
+        /**
+         * Source
+         */
+        source?: string | null;
         /**
          * Project
          */
@@ -9817,10 +9861,6 @@ export type CountsByNodeApiAnalyticsCountsNodesGetData = {
          */
         graph_id?: string | null;
         /**
-         * Source
-         */
-        source?: string | null;
-        /**
          * Since
          */
         since?: string | null;
@@ -9848,6 +9888,10 @@ export type CountsByNodeApiAnalyticsCountsNodesGetData = {
          * Effort
          */
         effort?: string | null;
+        /**
+         * Source
+         */
+        source?: string | null;
         /**
          * Project
          */
@@ -9887,10 +9931,6 @@ export type CountsBySkillApiAnalyticsCountsSkillsGetData = {
          */
         graph_id?: string | null;
         /**
-         * Source
-         */
-        source?: string | null;
-        /**
          * Since
          */
         since?: string | null;
@@ -9918,6 +9958,10 @@ export type CountsBySkillApiAnalyticsCountsSkillsGetData = {
          * Effort
          */
         effort?: string | null;
+        /**
+         * Source
+         */
+        source?: string | null;
         /**
          * Project
          */
@@ -9953,10 +9997,6 @@ export type DurationsByGraphApiAnalyticsDurationsGraphsGetData = {
          */
         graph_id?: string | null;
         /**
-         * Source
-         */
-        source?: string | null;
-        /**
          * Since
          */
         since?: string | null;
@@ -9964,6 +10004,10 @@ export type DurationsByGraphApiAnalyticsDurationsGraphsGetData = {
          * Until
          */
         until?: string | null;
+        /**
+         * Source
+         */
+        source?: string | null;
         /**
          * Project
          */
@@ -9999,10 +10043,6 @@ export type DurationsByNodeApiAnalyticsDurationsNodesGetData = {
          */
         graph_id?: string | null;
         /**
-         * Source
-         */
-        source?: string | null;
-        /**
          * Since
          */
         since?: string | null;
@@ -10010,6 +10050,10 @@ export type DurationsByNodeApiAnalyticsDurationsNodesGetData = {
          * Until
          */
         until?: string | null;
+        /**
+         * Source
+         */
+        source?: string | null;
         /**
          * Project
          */
@@ -10069,10 +10113,6 @@ export type ListEventsApiAnalyticsEventsGetData = {
          */
         graph_id?: string | null;
         /**
-         * Source
-         */
-        source?: string | null;
-        /**
          * Since
          */
         since?: string | null;
@@ -10100,6 +10140,10 @@ export type ListEventsApiAnalyticsEventsGetData = {
          * Effort
          */
         effort?: string | null;
+        /**
+         * Source
+         */
+        source?: string | null;
         /**
          * Project
          */
@@ -10151,10 +10195,6 @@ export type StreamEventsApiAnalyticsEventsNdjsonGetData = {
          */
         graph_id?: string | null;
         /**
-         * Source
-         */
-        source?: string | null;
-        /**
          * Since
          */
         since?: string | null;
@@ -10182,6 +10222,10 @@ export type StreamEventsApiAnalyticsEventsNdjsonGetData = {
          * Effort
          */
         effort?: string | null;
+        /**
+         * Source
+         */
+        source?: string | null;
         /**
          * Project
          */
@@ -10217,10 +10261,6 @@ export type OutcomesByNodeApiAnalyticsOutcomesNodesGetData = {
          */
         graph_id?: string | null;
         /**
-         * Source
-         */
-        source?: string | null;
-        /**
          * Since
          */
         since?: string | null;
@@ -10228,6 +10268,10 @@ export type OutcomesByNodeApiAnalyticsOutcomesNodesGetData = {
          * Until
          */
         until?: string | null;
+        /**
+         * Source
+         */
+        source?: string | null;
         /**
          * Project
          */
@@ -10296,10 +10340,6 @@ export type SpendByChunkApiAnalyticsSpendChunksGetData = {
          */
         graph_id?: string | null;
         /**
-         * Source
-         */
-        source?: string | null;
-        /**
          * Since
          */
         since?: string | null;
@@ -10307,6 +10347,10 @@ export type SpendByChunkApiAnalyticsSpendChunksGetData = {
          * Until
          */
         until?: string | null;
+        /**
+         * Source
+         */
+        source?: string | null;
         /**
          * Project
          */
@@ -10342,10 +10386,6 @@ export type StreamChunkSpendApiAnalyticsSpendChunksNdjsonGetData = {
          */
         graph_id?: string | null;
         /**
-         * Source
-         */
-        source?: string | null;
-        /**
          * Since
          */
         since?: string | null;
@@ -10353,6 +10393,10 @@ export type StreamChunkSpendApiAnalyticsSpendChunksNdjsonGetData = {
          * Until
          */
         until?: string | null;
+        /**
+         * Source
+         */
+        source?: string | null;
         /**
          * Project
          */
@@ -10392,10 +10436,6 @@ export type SpendByGraphApiAnalyticsSpendGraphsGetData = {
          */
         graph_id?: string | null;
         /**
-         * Source
-         */
-        source?: string | null;
-        /**
          * Since
          */
         since?: string | null;
@@ -10403,6 +10443,10 @@ export type SpendByGraphApiAnalyticsSpendGraphsGetData = {
          * Until
          */
         until?: string | null;
+        /**
+         * Source
+         */
+        source?: string | null;
         /**
          * Project
          */
@@ -10442,10 +10486,6 @@ export type SpendByNodeApiAnalyticsSpendNodesGetData = {
          */
         graph_id?: string | null;
         /**
-         * Source
-         */
-        source?: string | null;
-        /**
          * Since
          */
         since?: string | null;
@@ -10453,6 +10493,10 @@ export type SpendByNodeApiAnalyticsSpendNodesGetData = {
          * Until
          */
         until?: string | null;
+        /**
+         * Source
+         */
+        source?: string | null;
         /**
          * Project
          */
@@ -17193,13 +17237,13 @@ export type WithdrawWorkItemApiWorkSourcesSourceItemsRefDeleteData = {
     body?: never;
     path: {
         /**
-         * Source
-         */
-        source: string;
-        /**
          * Ref
          */
         ref: string;
+        /**
+         * Source
+         */
+        source: string;
     };
     query?: never;
     url: '/api/work-sources/{source}/items/{ref}';
@@ -17227,13 +17271,13 @@ export type GetWorkItemApiWorkSourcesSourceItemsRefGetData = {
     body?: never;
     path: {
         /**
-         * Source
-         */
-        source: string;
-        /**
          * Ref
          */
         ref: string;
+        /**
+         * Source
+         */
+        source: string;
     };
     query?: never;
     url: '/api/work-sources/{source}/items/{ref}';
@@ -17261,13 +17305,13 @@ export type PatchWorkItemApiWorkSourcesSourceItemsRefPatchData = {
     body: WorkItemPatchRequest;
     path: {
         /**
-         * Source
-         */
-        source: string;
-        /**
          * Ref
          */
         ref: string;
+        /**
+         * Source
+         */
+        source: string;
     };
     query?: never;
     url: '/api/work-sources/{source}/items/{ref}';

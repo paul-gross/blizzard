@@ -8,7 +8,7 @@ import { injectProjectRepositoryLinksQuery, injectProjectSourceLinksQuery } from
 
 /** A tenant list under the project lens: on All every record, under a project the ones it links. */
 export interface LensLinks {
-  /** The keys the lensed project links — a source's name, a repository's id, or `null` on All, where nothing is narrowed. */
+  /** The keys the lensed project links — a source's or a repository's id, or `null` on All, where nothing is narrowed. */
   readonly names: Signal<ReadonlySet<string> | null>;
   /** Whether the lensed project's links are still loading, so the narrowed list is not known yet. */
   readonly pending: Signal<boolean>;

@@ -1,9 +1,11 @@
 import type { WorkSourceSummary } from 'fleet';
 import { describe, expect, it } from 'vitest';
 
-import { workSourceBadges, workSourceRecordVm, workSourceRows } from './work-sources.model';
+import { workSourceBadges, workSourceCliName, workSourceRecordVm, workSourceRows } from './work-sources.model';
 
 const WINTER: WorkSourceSummary = {
+  work_source_id: 'wsrc_w',
+  slug: 'winter',
   name: 'winter',
   provider: 'github',
   locator: 'paul-gross/winter',
@@ -13,8 +15,8 @@ const WINTER: WorkSourceSummary = {
   revision: 2,
   created_by: 'pgross',
 };
-const OLD: WorkSourceSummary = { ...WINTER, name: 'old', annotate: false, retired: true, revision: 3 };
-const HUB: WorkSourceSummary = { name: 'hub', annotate: false, edit: true, built_in: true };
+const OLD: WorkSourceSummary = { ...WINTER, work_source_id: 'wsrc_o', slug: 'old', name: 'Old one', annotate: false, retired: true, revision: 3 };
+const HUB: WorkSourceSummary = { name: 'hub', slug: 'hub', work_source_id: null, annotate: false, edit: true, built_in: true };
 
 describe('workSourceBadges', () => {
   it('badges the built-in source and a retired one', () => {
@@ -27,9 +29,9 @@ describe('workSourceBadges', () => {
 describe('workSourceRows', () => {
   it('filters by lifecycle and maps each source', () => {
     const rows = workSourceRows([WINTER, OLD, HUB], 'active');
-    expect(rows.map((r) => r.key)).toEqual(['winter', 'hub']);
+    expect(rows.map((r) => r.key)).toEqual(['wsrc_w', 'hub']);
     expect(rows[0]).toEqual({
-      key: 'winter',
+      key: 'wsrc_w',
       title: 'winter',
       sub: ['github', 'paul-gross/winter', 'annotates'],
       badges: [],
@@ -40,7 +42,11 @@ describe('workSourceRows', () => {
   });
 
   it('shows only retired sources under retired', () => {
-    expect(workSourceRows([WINTER, OLD], 'retired').map((r) => r.key)).toEqual(['old']);
+    expect(workSourceRows([WINTER, OLD], 'retired').map((r) => r.key)).toEqual(['wsrc_o']);
+  });
+
+  it('titles a row by slug and shows a name that differs from it', () => {
+    expect(workSourceRows([OLD], 'all')[0]).toMatchObject({ title: 'old', sub: ['Old one', 'github', 'paul-gross/winter'] });
   });
 });
 
@@ -60,6 +66,12 @@ describe('workSourceRecordVm', () => {
     expect(vm.note).toBeNull();
   });
 
+  it('titles the record by slug and shows the display name as a fact', () => {
+    const vm = workSourceRecordVm(OLD)!;
+    expect(vm.name).toBe('old');
+    expect(vm.facts[0]).toEqual({ label: 'Name', value: 'Old one' });
+  });
+
   it('notes a retired source', () => {
     expect(workSourceRecordVm(OLD)?.note).toContain('Retired');
   });
@@ -71,5 +83,13 @@ describe('workSourceRecordVm', () => {
     expect(vm.revision).toBeNull();
     expect(vm.links).toBeNull();
     expect(vm.hasHistory).toBe(false);
+  });
+});
+
+describe('workSourceCliName', () => {
+  it('names a configured source by its slug, and the built-in one not at all', () => {
+    expect(workSourceCliName(OLD)).toBe('old');
+    expect(workSourceCliName(HUB)).toBeNull();
+    expect(workSourceCliName(undefined)).toBeNull();
   });
 });

@@ -14,6 +14,7 @@ import type {
 
 import { servingRunners } from '../../core/project-serving';
 import type { ConfigFieldDef, ConfigFormValues } from '../config-edit.model';
+import { workSourceKey, workSourceSlug } from '../work-sources/work-sources.model';
 
 /** A project's form: its handle, its display name and what it is for. Every field stays
  * editable — a slug change keeps the old one resolving until another project takes it. A create
@@ -179,9 +180,9 @@ export function formerSlugs(
 
 /** One stored link a project holds, as its panel lists it. */
 export interface ProjectLinkRowVm {
-  /** What a link call names: a source's name, a repository's id. */
+  /** What a link call names: a source's or a repository's id (`hub` for the built-in source). */
   readonly key: string;
-  /** What the row shows: a source's name, a repository's slug. */
+  /** What the row shows: the linked record's current slug. */
   readonly name: string;
   /** What the linked record is, in a few words. */
   readonly detail: string;
@@ -190,7 +191,7 @@ export interface ProjectLinkRowVm {
   readonly revision: number | null;
 }
 
-/** What a link names its record by: a repository's id, a work source's name. */
+/** What a link names its record by: a repository's id, a work source's id (or `hub`). */
 export function linkKey(link: SourceLinkView | RepositoryLinkView): string {
   return 'repository_id' in link ? link.repository_id : link.name;
 }
@@ -203,7 +204,8 @@ export function linkedKeys(links: readonly (SourceLinkView | RepositoryLinkView)
 /** A source as its link row describes it. */
 export function sourceDetail(source: WorkSourceSummary | undefined): string {
   if (!source) return '';
-  return [source.provider, source.locator].filter((part) => !!part).join(' · ');
+  const name = source.name === workSourceSlug(source) ? null : source.name;
+  return [name, source.provider, source.locator].filter((part) => !!part).join(' · ');
 }
 
 /** A repository as its link row describes it. */
@@ -212,18 +214,18 @@ export function repositoryDetail(repository: RepositorySummary | undefined): str
   return `${repository.name} · ${repository.owner}/${repository.repo} · ${repository.base_branch}`;
 }
 
-/** The source links in force, built-in first, then by name. */
+/** The source links in force, built-in first, then by slug. */
 export function sourceLinkRows(
   links: readonly SourceLinkView[],
   sources: readonly WorkSourceSummary[],
 ): readonly ProjectLinkRowVm[] {
-  const byName = new Map(sources.map((source) => [source.name, source]));
+  const byKey = new Map(sources.map((source) => [workSourceKey(source), source]));
   return links
     .filter((link) => link.linked)
     .map((link) => ({
       key: link.name,
-      name: link.name,
-      detail: link.built_in ? 'built-in · linked to every project' : sourceDetail(byName.get(link.name)),
+      name: link.slug ?? link.name,
+      detail: link.built_in ? 'built-in · linked to every project' : sourceDetail(byKey.get(link.name)),
       builtIn: link.built_in === true,
       revision: link.revision ?? null,
     }))
@@ -338,11 +340,11 @@ export function sourceChoices(
   sources: readonly WorkSourceSummary[] | undefined,
   links: readonly SourceLinkView[] | undefined,
 ): readonly LinkChoiceVm[] {
-  const byName = new Map((sources ?? []).map((source) => [source.name, source]));
+  const byKey = new Map((sources ?? []).map((source) => [workSourceKey(source), source]));
   return linkChoices(
-    (sources ?? []).map((source) => ({ ...source, key: source.name })),
+    (sources ?? []).map((source) => ({ ...source, key: workSourceKey(source), name: workSourceSlug(source) })),
     linkedKeys(links ?? []),
-    (name) => sourceDetail(byName.get(name)),
+    (key) => sourceDetail(byKey.get(key)),
   );
 }
 

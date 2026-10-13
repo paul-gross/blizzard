@@ -14,12 +14,29 @@ export function workSourceBadges(source: WorkSourceSummary): readonly ConfigBadg
   return badges;
 }
 
+/** What a work source is addressed by — its id, or `hub` for the built-in source, which has none. */
+export function workSourceKey(source: WorkSourceSummary): string {
+  return source.work_source_id ?? source.name;
+}
+
+/** The handle a work source shows — its current slug. */
+export function workSourceSlug(source: WorkSourceSummary): string {
+  return source.slug ?? source.name;
+}
+
+/** What the CLI change verb names a work source by — its slug; none for the built-in source, which takes no change. */
+export function workSourceCliName(source: WorkSourceSummary | undefined): string | null {
+  return source && !source.built_in ? workSourceSlug(source) : null;
+}
+
 /** The work source list's rows under `filter`. */
 export function workSourceRows(sources: readonly WorkSourceSummary[], filter: LifecycleFilter): readonly ConfigRowVm[] {
   return filterByLifecycle(sources, filter).map((source) => ({
-    key: source.name,
-    title: source.name,
-    sub: [source.provider, source.locator, source.annotate ? 'annotates' : null].filter(
+    key: workSourceKey(source),
+    title: workSourceSlug(source),
+    sub: [
+      source.name === workSourceSlug(source) ? null : source.name,
+      source.provider, source.locator, source.annotate ? 'annotates' : null].filter(
       (fact): fact is string => !!fact,
     ),
     badges: workSourceBadges(source),
@@ -34,7 +51,7 @@ export function workSourceRecordVm(source: WorkSourceSummary | undefined): Confi
   if (!source) return null;
   if (source.built_in) {
     return {
-      name: source.name,
+      name: workSourceSlug(source),
       badges: workSourceBadges(source),
       facts: [],
       revision: null,
@@ -44,9 +61,10 @@ export function workSourceRecordVm(source: WorkSourceSummary | undefined): Confi
     };
   }
   return {
-    name: source.name,
+    name: workSourceSlug(source),
     badges: workSourceBadges(source),
     facts: [
+      { label: 'Name', value: factText(source.name) },
       { label: 'Provider', value: factText(source.provider) },
       { label: 'Locator', value: factText(source.locator) },
       { label: 'API base', value: factText(source.api_base) },
@@ -66,15 +84,11 @@ export function workSourceRecordVm(source: WorkSourceSummary | undefined): Confi
   };
 }
 
-/** A work source's form fields. The name is set on create alone. */
+/** A work source's form fields. The slug is the handle people type and may be renamed; the
+ * name is its display label, and left blank on create it takes the slug. */
 export const WORK_SOURCE_FIELDS: readonly ConfigFieldDef[] = [
-  {
-    key: 'name',
-    label: 'Name',
-    kind: 'text',
-    required: true,
-    createOnly: true,
-  },
+  { key: 'slug', label: 'Slug', kind: 'text', required: true },
+  { key: 'name', label: 'Name', kind: 'text' },
   { key: 'provider', label: 'Provider', kind: 'text', required: true },
   { key: 'locator', label: 'Locator', kind: 'text', required: true },
   { key: 'api_base', label: 'API base', kind: 'text' },

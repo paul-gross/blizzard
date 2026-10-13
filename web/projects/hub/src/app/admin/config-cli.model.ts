@@ -12,7 +12,7 @@ const CLI_CHANGE_PATH: Record<AdminRecordKind, string> = {
 };
 
 /** The command that changes the record `kind` + `name` names — `name` is what the verb takes: a
- * repository's slug, a source's or secret's name. */
+ * repository's or work source's slug, a secret's name. */
 export function cliChangeCommand(kind: AdminRecordKind, name: string): string {
   return `${CLI_CHANGE_PATH[kind]} ${name}`;
 }

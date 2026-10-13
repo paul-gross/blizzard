@@ -29,10 +29,10 @@ export function injectWorkSourcesQuery(includeRetired: () => boolean) {
   });
 }
 
-/** `GET /api/work-sources/{source}` — one work source, at rest while `name()` is `null`. */
-export function injectWorkSourceQuery(name: () => string | null) {
+/** `GET /api/work-sources/{source}` — one work source by its id or slug, at rest while `key()` is `null`. */
+export function injectWorkSourceQuery(key: () => string | null) {
   return injectQuery(() => {
-    const source = name();
+    const source = key();
     return {
       queryKey: hubConfigRecordKey(NOUN, source),
       enabled: source !== null,

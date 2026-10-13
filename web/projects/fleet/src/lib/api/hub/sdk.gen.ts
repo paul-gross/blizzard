@@ -1964,26 +1964,26 @@ export const listProjectScopeRoutinesApiProjectsProjectScopesSlugRoutinesGet = <
 /**
  * List Source Links
  *
- * The project's standing source links by source name, the built-in ``hub`` source among them. 404 when the
- * project is unknown.
+ * The project's standing source links by source id, each with the source's current slug, the built-in ``hub``
+ * source among them. 404 when the project is unknown.
  */
 export const listSourceLinksApiProjectsProjectSourceLinksGet = <ThrowOnError extends boolean = false>(options: Options<ListSourceLinksApiProjectsProjectSourceLinksGetData, ThrowOnError>): RequestResult<ListSourceLinksApiProjectsProjectSourceLinksGetResponses, ListSourceLinksApiProjectsProjectSourceLinksGetErrors, ThrowOnError> => (options.client ?? client).get<ListSourceLinksApiProjectsProjectSourceLinksGetResponses, ListSourceLinksApiProjectsProjectSourceLinksGetErrors, ThrowOnError>({ url: '/api/projects/{project}/source-links', ...options });
 
 /**
  * Link Source
  *
- * Link the project to a stored work source, retired or not — a first link, or a relink of one it unlinked; a
- * standing link, and the built-in ``hub`` source, are left as they are. 404 for an unknown project or source; 409
- * for a stale `If-Match` on a stored link.
+ * Link the project to a stored work source, named by its id or slug (a slug it left included), retired or not —
+ * a first link, or a relink of one it unlinked; a standing link, and the built-in ``hub`` source, are left as they
+ * are. 404 for an unknown project or source; 409 for a stale `If-Match` on a stored link.
  */
 export const linkSourceApiProjectsProjectSourceLinksSourcePut = <ThrowOnError extends boolean = false>(options: Options<LinkSourceApiProjectsProjectSourceLinksSourcePutData, ThrowOnError>): RequestResult<LinkSourceApiProjectsProjectSourceLinksSourcePutResponses, LinkSourceApiProjectsProjectSourceLinksSourcePutErrors, ThrowOnError> => (options.client ?? client).put<LinkSourceApiProjectsProjectSourceLinksSourcePutResponses, LinkSourceApiProjectsProjectSourceLinksSourcePutErrors, ThrowOnError>({ url: '/api/projects/{project}/source-links/{source}', ...options });
 
 /**
  * Unlink Source
  *
- * Unlink the project from a work source by retiring the link; unlinking an unlinked link changes nothing. 422 for
- * the built-in ``hub`` source; 404 for an unknown project or a source it never linked; 409 for a stale
- * `If-Match`.
+ * Unlink the project from a work source, named by its id or slug, by retiring the link; unlinking an unlinked
+ * link changes nothing. 422 for the built-in ``hub`` source; 404 for an unknown project or source, or a source it
+ * never linked; 409 for a stale `If-Match`.
  */
 export const unlinkSourceApiProjectsProjectSourceLinksSourceRetirePost = <ThrowOnError extends boolean = false>(options: Options<UnlinkSourceApiProjectsProjectSourceLinksSourceRetirePostData, ThrowOnError>): RequestResult<UnlinkSourceApiProjectsProjectSourceLinksSourceRetirePostResponses, UnlinkSourceApiProjectsProjectSourceLinksSourceRetirePostErrors, ThrowOnError> => (options.client ?? client).post<UnlinkSourceApiProjectsProjectSourceLinksSourceRetirePostResponses, UnlinkSourceApiProjectsProjectSourceLinksSourceRetirePostErrors, ThrowOnError>({ url: '/api/projects/{project}/source-links/{source}/retire', ...options });
 
@@ -2678,9 +2678,9 @@ export const listWorkSourcesApiWorkSourcesGet = <ThrowOnError extends boolean = 
 /**
  * Create Work Source
  *
- * Store a new work source at revision 1. 422 naming the field for a bad name, provider,
- * locator, or a missing or retired secret; 409 for a taken name or a taken
- * `(provider, locator)`, naming the holder.
+ * Store a new work source at revision 1; its `name` is its `slug` when omitted. 422 naming the field for a
+ * malformed `slug` or `name` (`hub` among them, the built-in source's), a bad provider or locator, or a missing or
+ * retired secret; 409 for a slug some work source holds or a taken `(provider, locator)`, naming the holder.
  */
 export const createWorkSourceApiWorkSourcesPost = <ThrowOnError extends boolean = false>(options: Options<CreateWorkSourceApiWorkSourcesPostData, ThrowOnError>): RequestResult<CreateWorkSourceApiWorkSourcesPostResponses, CreateWorkSourceApiWorkSourcesPostErrors, ThrowOnError> => (options.client ?? client).post<CreateWorkSourceApiWorkSourcesPostResponses, CreateWorkSourceApiWorkSourcesPostErrors, ThrowOnError>({
     url: '/api/work-sources',
@@ -2694,7 +2694,8 @@ export const createWorkSourceApiWorkSourcesPost = <ThrowOnError extends boolean 
 /**
  * Get Work Source
  *
- * One work source, retired or not; the built-in `hub` shows as `built_in`. 404 on an unknown name.
+ * One work source by id or slug — a slug it left included — retired or not; the built-in `hub` shows as
+ * `built_in`. 404 on an unknown source.
  */
 export const getWorkSourceApiWorkSourcesSourceGet = <ThrowOnError extends boolean = false>(options: Options<GetWorkSourceApiWorkSourcesSourceGetData, ThrowOnError>): RequestResult<GetWorkSourceApiWorkSourcesSourceGetResponses, GetWorkSourceApiWorkSourcesSourceGetErrors, ThrowOnError> => (options.client ?? client).get<GetWorkSourceApiWorkSourcesSourceGetResponses, GetWorkSourceApiWorkSourcesSourceGetErrors, ThrowOnError>({ url: '/api/work-sources/{source}', ...options });
 
@@ -2703,8 +2704,9 @@ export const getWorkSourceApiWorkSourcesSourceGet = <ThrowOnError extends boolea
  *
  * Apply only the fields present; an explicit `null` clears `api_base`, `web_base`, or
  * `secret` (the last only where the provider needs no credential). A patch that changes
- * nothing writes nothing. 404 unknown, 409 for `hub`, a stale `If-Match` (naming the current
- * revision), or a taken `(provider, locator)`; 422 naming the field.
+ * nothing writes nothing. A slug that changes keeps resolving to the source until another claims it. 404 unknown,
+ * 409 for `hub`, a stale `If-Match` (naming the current revision), a slug some work source holds, or a taken
+ * `(provider, locator)`; 422 naming the field (`hub` refused as a slug).
  */
 export const patchWorkSourceApiWorkSourcesSourcePatch = <ThrowOnError extends boolean = false>(options: Options<PatchWorkSourceApiWorkSourcesSourcePatchData, ThrowOnError>): RequestResult<PatchWorkSourceApiWorkSourcesSourcePatchResponses, PatchWorkSourceApiWorkSourcesSourcePatchErrors, ThrowOnError> => (options.client ?? client).patch<PatchWorkSourceApiWorkSourcesSourcePatchResponses, PatchWorkSourceApiWorkSourcesSourcePatchErrors, ThrowOnError>({
     url: '/api/work-sources/{source}',

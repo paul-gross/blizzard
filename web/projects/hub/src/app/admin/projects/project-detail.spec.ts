@@ -20,9 +20,27 @@ const BLIZZARD: ProjectView = {
 };
 const SOURCES = {
   sources: [
-    { name: 'hub', built_in: true, annotate: false, edit: false },
-    { name: 'jira', provider: 'jira', locator: 'acme.atlassian.net', annotate: false, edit: true, revision: 1 },
-    { name: 'gh', provider: 'github', locator: 'acme/blizzard', annotate: false, edit: true, revision: 1 },
+    { name: 'hub', slug: 'hub', work_source_id: null, built_in: true, annotate: false, edit: false },
+    {
+      work_source_id: 'wsrc_j',
+      slug: 'jira',
+      name: 'jira',
+      provider: 'jira',
+      locator: 'acme.atlassian.net',
+      annotate: false,
+      edit: true,
+      revision: 1,
+    },
+    {
+      work_source_id: 'wsrc_g',
+      slug: 'gh',
+      name: 'gh',
+      provider: 'github',
+      locator: 'acme/blizzard',
+      annotate: false,
+      edit: true,
+      revision: 1,
+    },
   ],
 };
 const REPOSITORIES = {
@@ -40,8 +58,8 @@ const REPOSITORIES = {
 };
 const SOURCE_LINKS = {
   source_links: [
-    { project_id: 'proj_b', name: 'hub', linked: true, built_in: true },
-    { project_id: 'proj_b', name: 'jira', linked: true, revision: 2 },
+    { project_id: 'proj_b', name: 'hub', slug: 'hub', linked: true, built_in: true },
+    { project_id: 'proj_b', name: 'wsrc_j', slug: 'jira', linked: true, revision: 2 },
   ],
 };
 const HISTORY = {
@@ -220,11 +238,11 @@ describe('ProjectDetail', () => {
     expect(dialog.textContent).not.toContain('Narrow');
     document.querySelector<HTMLElement>('[data-testid="admin-projects-link-source-submit"]')!.click();
     await settle(harness.fixture);
-    expect(stub.forRoute('/api/projects/proj_b/source-links/gh', 'PUT')).toHaveLength(1);
+    expect(stub.forRoute('/api/projects/proj_b/source-links/wsrc_g', 'PUT')).toHaveLength(1);
 
     el.querySelector<HTMLElement>('[data-testid="admin-projects-sources-unlink-jira"]')!.click();
     await settle(harness.fixture);
-    const retire = stub.forRoute('/api/projects/proj_b/source-links/jira/retire', 'POST');
+    const retire = stub.forRoute('/api/projects/proj_b/source-links/wsrc_j/retire', 'POST');
     expect(retire).toHaveLength(1);
     expect(retire[0].headers['if-match']).toBe('2');
   });
